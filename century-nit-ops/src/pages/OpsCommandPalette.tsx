@@ -51,18 +51,18 @@ export function OpsCommandPalette() {
 
 	// Build search results across all entities
 	const navItems = [
-		{ type: "Module", title: "Dashboard", subtitle: "Mission Control View", path: "/ops/dashboard", module: "dashboard" },
-		{ type: "Module", title: "Applications", subtitle: "Active Cases & Approvals", path: "/ops/applications", module: "applications" },
-		{ type: "Module", title: "Consultations", subtitle: "Meetings & Eligibility Assessments", path: "/ops/consultations", module: "consultations" },
-		{ type: "Module", title: "Applicants", subtitle: "Confirmed Dossiers & Timelines", path: "/ops/applicants", module: "applicants" },
-		{ type: "Module", title: "Workflow Pipeline", subtitle: "Kanban Board", path: "/ops/workflow", module: "workflow" },
-		{ type: "Module", title: "Finance & Invoices", subtitle: "Revenue Analytics & Ledger", path: "/ops/finance", module: "finance" },
-		{ type: "Module", title: "Universities", subtitle: "Institutions & Programs", path: "/ops/universities", module: "universities" },
-		{ type: "Module", title: "Service Packages", subtitle: "Pricing & Tiers", path: "/ops/packages", module: "packages" },
-		{ type: "Module", title: "Helpdesk", subtitle: "Support tickets & inquiries", path: "/ops/helpdesk", module: "helpdesk" },
-		{ type: "Module", title: "Marketing", subtitle: "Email & SMS campaigns", path: "/ops/marketing", module: "marketing" },
-		{ type: "Module", title: "Notifications", subtitle: "Templates & Delivery Logs", path: "/ops/notifications", module: "notifications" },
-		{ type: "Module", title: "System Settings", subtitle: "Configuration & Preferences", path: "/ops/settings", module: "settings" },
+		{ type: "Module", title: "Dashboard", subtitle: "Mission Control View", path: "/dashboard", module: "dashboard" },
+		{ type: "Module", title: "Applications", subtitle: "Active Cases & Approvals", path: "/applications", module: "applications" },
+		{ type: "Module", title: "Consultations", subtitle: "Meetings & Eligibility Assessments", path: "/consultations", module: "consultations" },
+		{ type: "Module", title: "Applicants", subtitle: "Confirmed Dossiers & Timelines", path: "/applicants", module: "applicants" },
+		{ type: "Module", title: "Workflow Pipeline", subtitle: "Kanban Board", path: "/workflow", module: "workflow" },
+		{ type: "Module", title: "Finance & Invoices", subtitle: "Revenue Analytics & Ledger", path: "/finance", module: "finance" },
+		{ type: "Module", title: "Universities", subtitle: "Institutions & Programs", path: "/universities", module: "universities" },
+		{ type: "Module", title: "Service Packages", subtitle: "Pricing & Tiers", path: "/packages", module: "packages" },
+		{ type: "Module", title: "Helpdesk", subtitle: "Support tickets & inquiries", path: "/helpdesk", module: "helpdesk" },
+		{ type: "Module", title: "Marketing", subtitle: "Email & SMS campaigns", path: "/marketing", module: "marketing" },
+		{ type: "Module", title: "Notifications", subtitle: "Templates & Delivery Logs", path: "/notifications", module: "notifications" },
+		{ type: "Module", title: "System Settings", subtitle: "Configuration & Preferences", path: "/settings", module: "settings" },
 	].filter((item) => hasPermission(item.module as OpsModule));
 
 	const consultationResults = consultations
@@ -71,7 +71,7 @@ export function OpsCommandPalette() {
 			type: "Consultation",
 			title: `${c.applicantName} (${c.ref})`,
 			subtitle: `Targeting ${c.targetCountry} · ${c.dateTime} · ${c.status}`,
-			path: "/ops/consultations",
+			path: "/consultations",
 		}));
 
 	const applicationResults = applications
@@ -80,7 +80,7 @@ export function OpsCommandPalette() {
 			type: "Application",
 			title: `${a.applicantName} - ${a.appId}`,
 			subtitle: `${a.university} (${a.program}) · ${a.status}`,
-			path: "/ops/applications",
+			path: "/applications",
 		}));
 
 	const applicantResults = applicants
@@ -89,7 +89,7 @@ export function OpsCommandPalette() {
 			type: "Applicant",
 			title: `${ap.name} (${ap.applicantId})`,
 			subtitle: `${ap.university} · Stage: ${ap.currentStage} · ${ap.status}`,
-			path: "/ops/applicants",
+			path: "/applicants",
 		}));
 
 	const allResults = [...navItems, ...consultationResults, ...applicationResults, ...applicantResults].filter((res) => {

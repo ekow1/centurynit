@@ -45,6 +45,8 @@ const schema = z.object({
 	),
 	BETTER_AUTH_URL: devDefault(z.string().url(), "http://localhost:3000"),
 	FRONTEND_URL: devDefault(z.string().url(), "http://localhost:5173"),
+	/** Operations Center URL — separate Cloudflare Worker ("console"). */
+	CONSOLE_URL: devDefault(z.string().url(), "http://localhost:5174"),
 
 	/**
 	 * Encrypts OAuth tokens at rest (lib/crypto.ts). Required in production for
@@ -65,10 +67,19 @@ const schema = z.object({
 	// ── Optional integrations — the app degrades gracefully without them ──
 	RESEND_API_KEY: z.string().optional(),
 	RESEND_FROM: z.string().email().default("noreply@centurynit.com"),
-	R2_ENDPOINT: z.string().url().optional(),
-	R2_ACCESS_KEY_ID: z.string().optional(),
-	R2_SECRET_ACCESS_KEY: z.string().optional(),
-	R2_BUCKET: z.string().default("century-nit"),
+	/*
+	 * Supabase Storage — applicant documents and file uploads.
+	 *
+	 * The service-role key bypasses row-level security, which is correct here
+	 * because this server decides who may touch which document from the session
+	 * before it ever calls storage. It must never reach the browser.
+	 *
+	 * Optional: without it, document endpoints refuse rather than accepting a
+	 * file they cannot store.
+	 */
+	SUPABASE_URL: z.string().url().optional(),
+	SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+	SUPABASE_STORAGE_BUCKET: z.string().default("applicant-documents"),
 
 	/*
 	 * Google Calendar / Meet. All optional: without them the scheduling feature

@@ -115,7 +115,7 @@ export function AcceptInvite() {
 				<div className="invite-card">
 					<h1 className="invite-card__title">{failure.title}</h1>
 					<p className="invite-card__body">{failure.body}</p>
-					<Link className="btn btn--ghost btn--sm" to="/ops/login">
+					<Link className="btn btn--ghost btn--sm" to="/login">
 						Go to sign in
 					</Link>
 				</div>
@@ -140,7 +140,7 @@ export function AcceptInvite() {
 					<button
 						type="button"
 						className="btn btn--primary"
-						onClick={() => navigate("/ops/login")}
+						onClick={() => navigate("/login")}
 					>
 						Sign in
 					</button>

@@ -54,7 +54,7 @@ export function EnterpriseInbox() {
 					title: `Unassigned consultation: ${c.applicantName}`,
 					detail: `Booked for ${c.dateTime} · ${c.targetCountry}`,
 					time: c.dateTime,
-					link: "/ops/consultations",
+					link: "/consultations",
 					unread: true,
 				});
 			}
@@ -65,7 +65,7 @@ export function EnterpriseInbox() {
 					title: `Confirm your slot: ${c.applicantName}`,
 					detail: `Scheduled for ${c.dateTime}`,
 					time: c.dateTime,
-					link: "/ops/consultations",
+					link: "/consultations",
 					unread: true,
 				});
 			}
@@ -76,7 +76,7 @@ export function EnterpriseInbox() {
 					title: `Assessment pending: ${c.applicantName}`,
 					detail: `In assessment · ${c.targetCountry}`,
 					time: c.dateTime,
-					link: "/ops/consultations",
+					link: "/consultations",
 					unread: false,
 				});
 			}
@@ -91,7 +91,7 @@ export function EnterpriseInbox() {
 					title: `Application under review: ${a.applicantName}`,
 					detail: `${a.appId} · ${a.university} · ${a.stage}`,
 					time: a.submittedDate,
-					link: "/ops/applications",
+					link: "/applications",
 					unread: false,
 				});
 			}
@@ -103,7 +103,7 @@ export function EnterpriseInbox() {
 					title: `${unchecked} checklist items open: ${a.applicantName}`,
 					detail: `${a.appId} · ${a.university}`,
 					time: a.submittedDate,
-					link: "/ops/applications",
+					link: "/applications",
 					unread: false,
 				});
 			}
@@ -119,7 +119,7 @@ export function EnterpriseInbox() {
 					title: `Document pending review: ${d.name}`,
 					detail: `${a.name} · ${a.applicantId}`,
 					time: d.date,
-					link: "/ops/documents",
+					link: "/documents",
 					unread: true,
 				});
 			}
@@ -131,7 +131,7 @@ export function EnterpriseInbox() {
 					title: `Outstanding balance: ${a.name}`,
 					detail: `${a.financials.outstanding} · ${a.financials.plan}`,
 					time: a.enrolledDate,
-					link: "/ops/finance",
+					link: "/finance",
 					unread: false,
 				});
 			}
@@ -146,7 +146,7 @@ export function EnterpriseInbox() {
 					title: `Lead needs follow-up: ${l.name}`,
 					detail: `${LEAD_STAGE_LABELS[l.stage]} · ${l.country} · ${l.degreeLevel}`,
 					time: l.lastContactAt,
-					link: "/ops/crm",
+					link: "/crm",
 					unread: l.stage === "new",
 				});
 			}
@@ -159,7 +159,7 @@ export function EnterpriseInbox() {
 				title: `${e.action} - ${e.actor}`,
 				detail: e.detail,
 				time: relativeTime(e.at),
-				link: "/ops/workflow",
+				link: "/workflow",
 				unread: false,
 			});
 		}

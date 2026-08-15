@@ -80,12 +80,12 @@ export function EnterpriseDashboard() {
 	const funnel = useMemo(() => {
 		const byStage = (stage: LeadStage) => scoped.leads.filter((l) => l.stage === stage).length;
 		return [
-			{ label: LEAD_STAGE_LABELS.new, value: byStage("new"), to: "/ops/crm" },
-			{ label: LEAD_STAGE_LABELS.contacted, value: byStage("contacted"), to: "/ops/crm" },
-			{ label: LEAD_STAGE_LABELS.interested, value: byStage("interested"), to: "/ops/crm" },
-			{ label: "Consultations", value: stats.consultations, to: "/ops/consultations" },
-			{ label: "Applications", value: stats.applications, to: "/ops/applications" },
-			{ label: "Applicants", value: stats.applicants, to: "/ops/applicants" },
+			{ label: LEAD_STAGE_LABELS.new, value: byStage("new"), to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.contacted, value: byStage("contacted"), to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.interested, value: byStage("interested"), to: "/crm" },
+			{ label: "Consultations", value: stats.consultations, to: "/consultations" },
+			{ label: "Applications", value: stats.applications, to: "/applications" },
+			{ label: "Applicants", value: stats.applicants, to: "/applicants" },
 		];
 	}, [scoped, stats]);
 
@@ -143,7 +143,7 @@ export function EnterpriseDashboard() {
 							</p>
 						</div>
 						<Link
-							to={opsRole === "finance" ? "/ops/invoices" : "/ops/consultations"}
+							to={opsRole === "finance" ? "/invoices" : "/consultations"}
 							className="btn btn--sm"
 							style={{ background: "var(--background)", color: "var(--foreground)", whiteSpace: "nowrap" }}
 						>
@@ -155,19 +155,19 @@ export function EnterpriseDashboard() {
 			{/* Quick Actions - filtered by permission */}
 			<div style={{ display: "flex", gap: "1rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
 				{hasPermission("consultations") && (
-					<Link to="/ops/consultations" className="btn btn--primary btn--sm">Review Consultations</Link>
+					<Link to="/consultations" className="btn btn--primary btn--sm">Review Consultations</Link>
 				)}
 				{hasPermission("crm") && (
-					<Link to="/ops/crm" className="btn btn--ghost btn--sm">Lead Pipeline</Link>
+					<Link to="/crm" className="btn btn--ghost btn--sm">Lead Pipeline</Link>
 				)}
 				{hasPermission("workflow") && (
-					<Link to="/ops/workflow" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
+					<Link to="/workflow" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
 				)}
 				{hasPermission("finance") && (
-					<Link to="/ops/finance" className="btn btn--ghost btn--sm">Issue Invoice</Link>
+					<Link to="/finance" className="btn btn--ghost btn--sm">Issue Invoice</Link>
 				)}
 				{hasPermission("packages") && (
-					<Link to="/ops/packages" className="btn btn--ghost btn--sm">Service Packages</Link>
+					<Link to="/packages" className="btn btn--ghost btn--sm">Service Packages</Link>
 				)}
 			</div>
 
@@ -257,12 +257,12 @@ function ManagerView({
 					value={String(stats.unassignedConsultations + stats.unassignedApplications)}
 					note={`${stats.unassignedConsultations} consultations · ${stats.unassignedApplications} cases`}
 					inverted
-					to="/ops/consultations"
+					to="/consultations"
 				/>
-				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/ops/consultations" />
-				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/ops/applications" />
-				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/ops/applicants" />
-				<KPICard label="Active Cases" value={String(stats.appsUnderReview)} note={`${stats.accepted} accepted`} to="/ops/workflow" />
+				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
+				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
+				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/applicants" />
+				<KPICard label="Active Cases" value={String(stats.appsUnderReview)} note={`${stats.accepted} accepted`} to="/workflow" />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
@@ -278,13 +278,13 @@ function ManagerView({
 				<div className="card">
 					<h2 className="section-title mb-3">Needs Attention</h2>
 					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/ops/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/ops/applications" />
-						<ActivityItem title="Consultations to assess" time={`${stats.inAssessment} in assessment`} to="/ops/consultations" />
+						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/applications" />
+						<ActivityItem title="Consultations to assess" time={`${stats.inAssessment} in assessment`} to="/consultations" />
 						<ActivityItem
 							title="Lead → applicant rate"
 							time={stats.leads ? `${Math.round((stats.applicants / stats.leads) * 100)}%` : "-"}
-							to="/ops/crm"
+							to="/crm"
 						/>
 					</ul>
 				</div>
@@ -304,7 +304,7 @@ function ManagerView({
 									key={e.id}
 									title={`${e.action} - ${e.actor}`}
 									time={`${e.detail} · ${relativeTime(e.at)}`}
-									to="/ops/workflow"
+									to="/workflow"
 								/>
 							))}
 						</ul>
@@ -321,7 +321,7 @@ function ManagerView({
 									key={a.id}
 									title={`${a.name} - ${fmtFin(a.financials.outstanding)} outstanding`}
 									time={`${a.applicantId} · ${a.financials.plan}`}
-									to="/ops/applicants"
+									to="/applicants"
 								/>
 							))}
 						</ul>
@@ -360,12 +360,12 @@ function CoordinatorView({
 					value={String(stats.unassignedConsultations)}
 					note="Awaiting consultant assignment"
 					inverted
-					to="/ops/consultations"
+					to="/consultations"
 				/>
-				<KPICard label="Open Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/ops/crm" />
-				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/ops/consultations" />
-				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/ops/applications" />
-				<KPICard label="Pending Docs" value={String(stats.pendingDocs)} note="Awaiting verification" to="/ops/documents" />
+				<KPICard label="Open Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/crm" />
+				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
+				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
+				<KPICard label="Pending Docs" value={String(stats.pendingDocs)} note="Awaiting verification" to="/documents" />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
@@ -381,10 +381,10 @@ function CoordinatorView({
 				<div className="card">
 					<h2 className="section-title mb-3">Workflow Status</h2>
 					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/ops/consultations" />
-						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/ops/applications" />
-						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/ops/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/ops/applications" />
+						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/consultations" />
+						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/applications" />
+						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/applications" />
 					</ul>
 				</div>
 			</div>
@@ -402,7 +402,7 @@ function CoordinatorView({
 								key={e.id}
 								title={`${e.action} - ${e.actor}`}
 								time={`${e.detail} · ${relativeTime(e.at)}`}
-								to="/ops/workflow"
+								to="/workflow"
 							/>
 						))}
 					</ul>
@@ -428,10 +428,10 @@ function ConsultantView({
 	return (
 		<>
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard label="My Consultations" value={String(stats.consultations)} note={`${toAssess.length} awaiting assessment`} inverted to="/ops/consultations" />
-				<KPICard label="My Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review`} to="/ops/applications" />
-				<KPICard label="My Applicants" value={String(stats.activeApplicants)} note="Active across all stages" to="/ops/applicants" />
-				<KPICard label="My Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/ops/crm" />
+				<KPICard label="My Consultations" value={String(stats.consultations)} note={`${toAssess.length} awaiting assessment`} inverted to="/consultations" />
+				<KPICard label="My Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review`} to="/applications" />
+				<KPICard label="My Applicants" value={String(stats.activeApplicants)} note="Active across all stages" to="/applicants" />
+				<KPICard label="My Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/crm" />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
@@ -446,7 +446,7 @@ function ConsultantView({
 									key={c.id}
 									title={`${c.applicantName} - ${c.dateTime}`}
 									time={`${c.targetCountry} · ${c.status}`}
-									to="/ops/consultations"
+									to="/consultations"
 								/>
 							))}
 						</ul>
@@ -463,7 +463,7 @@ function ConsultantView({
 									key={a.id}
 									title={`${a.appId} - ${a.applicantName}`}
 									time={`${a.stage} · ${a.university}`}
-									to="/ops/applications"
+									to="/applications"
 								/>
 							))}
 						</ul>
@@ -495,10 +495,10 @@ function FinanceView({
 	return (
 		<>
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ≈ ${fmtUsd(stats.outstanding)}`} inverted to="/ops/finance" />
-				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ≈ ${fmtUsd(stats.collected)}`} to="/ops/finance" />
-				<KPICard label="Settled Accounts" value={String(settled)} note={`${stats.applicants - settled} with a balance`} to="/ops/finance" />
-				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note="Currently billable" to="/ops/applicants" />
+				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ≈ ${fmtUsd(stats.outstanding)}`} inverted to="/finance" />
+				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ≈ ${fmtUsd(stats.collected)}`} to="/finance" />
+				<KPICard label="Settled Accounts" value={String(settled)} note={`${stats.applicants - settled} with a balance`} to="/finance" />
+				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note="Currently billable" to="/applicants" />
 			</div>
 
 			<div className="card">
@@ -523,7 +523,7 @@ function FinanceView({
 									<tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
 										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600 }}>{a.applicantId}</td>
 										<td style={{ padding: "1rem" }}>
-											<Link to="/ops/applicants" style={{ textDecoration: "underline" }}>{a.name}</Link>
+											<Link to="/applicants" style={{ textDecoration: "underline" }}>{a.name}</Link>
 										</td>
 										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.totalAmount)}</td>
 										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.paidAmount)}</td>

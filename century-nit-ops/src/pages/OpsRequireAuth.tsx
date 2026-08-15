@@ -47,17 +47,17 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 	if (authInitializing) return <Spinner />;
 
 	if (!opsUser) {
-		return <Navigate to="/ops/login" replace />;
+		return <Navigate to="/login" replace />;
 	}
 
 	// The setup route is itself protected, so exempt it or enrolment is
 	// unreachable for exactly the people who need it.
-	if (location.pathname === "/ops/mfa-setup") {
+	if (location.pathname === "/mfa-setup") {
 		return <>{children}</>;
 	}
 
 	if (mfaOk === null) return <Spinner />;
-	if (!mfaOk) return <Navigate to="/ops/mfa-setup" replace />;
+	if (!mfaOk) return <Navigate to="/mfa-setup" replace />;
 
 	return <>{children}</>;
 }
@@ -67,7 +67,7 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
  *
  * `ROLE_PERMISSIONS` used to filter only the sidebar and the command palette,
  * which meant typing a URL reached any module — a consultant could open
- * `/ops/system` and get the full platform administration console. The sidebar is
+ * `/system` and get the full platform administration console. The sidebar is
  * a convenience; this is the check.
  *
  * It is still a client-side check and therefore still bypassable from devtools.
@@ -91,11 +91,11 @@ export function OpsRequireModule({
 	}
 
 	if (!opsUser) {
-		return <Navigate to="/ops/login" replace />;
+		return <Navigate to="/login" replace />;
 	}
 
 	if (!hasPermission(module)) {
-		const home = opsRole ? ROLE_HOME[opsRole] : "/ops/login";
+		const home = opsRole ? ROLE_HOME[opsRole] : "/login";
 		return (
 			<div className="ops-forbidden" role="alert">
 				<h1 className="ops-forbidden__title">Not available to your role</h1>

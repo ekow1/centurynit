@@ -94,48 +94,4 @@ app.all("/api/*", async (c) => {
 	});
 });
 
-/**
- * Serve the Operations Center, which is a **separate application**
- * (`century-nit-ops`) with its own build, emitted into `dist/client/ops/`.
- *
- * Two SPAs share one assets directory, so the built-in
- * `not_found_handling: "single-page-application"` is not enough on its own: for
- * an unmatched path it falls back to the root `/index.html`, which would hand a
- * staff member the public site's bundle. `run_worker_first` routes `/ops/*`
- * here instead, and this picks the right shell.
- *
- * Same origin is the whole point. Every link between the two apps — the live
- * portal case, ops directives, the CMS overlay, shared support tickets — is a
- * `localStorage` handshake, and `localStorage` is scoped per origin. A separate
- * hostname for ops severs all four at once.
- */
-app.all("/ops/*", serveOpsApp);
-app.all("/ops", serveOpsApp);
-
-async function serveOpsApp(c: { req: { url: string; raw: Request }; env: Env }) {
-	const url = new URL(c.req.url);
-
-	// A path with a file extension is a real asset (/ops/assets/index-a1b2.js).
-	// Anything else is a client route, so it gets the ops shell.
-	if (/\.[a-z0-9]+$/i.test(url.pathname)) {
-		return c.env.ASSETS.fetch(c.req.raw);
-	}
-
-	const shell = new URL("/ops/index.html", url.origin);
-	const response = await c.env.ASSETS.fetch(new Request(shell, { headers: c.req.raw.headers }));
-
-	// The shell is one file behind many URLs; let the browser revalidate it so a
-	// deploy is picked up rather than pinned. Also keep the staff tool out of
-	// search indexes even if a route is ever linked publicly.
-	const headers = new Headers(response.headers);
-	headers.set("cache-control", "no-cache");
-	headers.set("x-robots-tag", "noindex, nofollow");
-
-	return new Response(response.body, {
-		status: response.status,
-		statusText: response.statusText,
-		headers,
-	});
-}
-
 export default app;

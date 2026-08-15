@@ -5,20 +5,8 @@ import { OpsRequireAuth, OpsRequireModule } from "./pages/OpsRequireAuth";
 import { OpsStateProvider } from "./pages/OpsStateContext";
 
 /**
- * Operations Center — a separate app from the public site and applicant portal,
- * built and deployed independently.
- *
- * It is served from `/ops/` on the *same origin* as the public app. That is
- * deliberate and load-bearing: every link between the two halves (the live
- * portal case, ops directives, the CMS overlay, shared tickets) is a
- * `localStorage` handshake, and `localStorage` is scoped per origin. Moving this
- * app to its own hostname severs all four at once, and there is no API to
- * replace them yet — see `century-nit-web/docs/API_MIGRATION_PLAN.md`.
- *
- * There is no router `basename`. Vite's `base: "/ops/"` handles asset URLs,
- * while routes and every internal `<Link>` keep their literal `/ops/...` paths.
- * A basename would have meant rewriting the links in all 41 files this app is
- * made of, for no behavioural gain.
+ * Operations Center — a standalone app deployed as its own Cloudflare
+ * Worker ("console"), separate from the public web app.
  */
 
 /** `React.lazy` wants a default export; these pages are all named exports. */
@@ -63,7 +51,7 @@ const Ops = OpsRequireModule;
 /** Sends each role to its own landing page - admins never see the ops dashboard. */
 function OpsHome() {
 	const { opsRole } = useOpsAuth();
-	return <Navigate to={opsRole ? ROLE_HOME[opsRole] : "/ops/login"} replace />;
+	return <Navigate to={opsRole ? ROLE_HOME[opsRole] : "/login"} replace />;
 }
 
 function ScrollToTop() {
@@ -97,10 +85,10 @@ export default function App() {
 							<Routes>
 								{/* Unprotected: reached before an account exists or before a
 								    second factor is enrolled, so neither can sit behind the guard. */}
-								<Route path="/ops/login" element={<OpsLogin />} />
-								<Route path="/ops/accept-invite" element={<AcceptInvite />} />
+								<Route path="/login" element={<OpsLogin />} />
+								<Route path="/accept-invite" element={<AcceptInvite />} />
 								<Route
-									path="/ops/mfa-setup"
+									path="/mfa-setup"
 									element={
 										<OpsRequireAuth>
 											<MfaSetup />
@@ -109,7 +97,7 @@ export default function App() {
 								/>
 
 								<Route
-									path="/ops"
+									path="/"
 									element={
 										<OpsRequireAuth>
 											<EnterpriseLayout />
@@ -162,11 +150,8 @@ export default function App() {
 									<Route path="*" element={<OpsHome />} />
 								</Route>
 
-								{/* Anything outside /ops belongs to the public app, which is a
-								    separate deployment on this same origin. A full page load
-								    hands the request back to it rather than client-routing to
-								    a page this bundle does not contain. */}
-								<Route path="*" element={<LeaveOps />} />
+								{/* Unknown routes fall back to the role home page. */}
+								<Route path="*" element={<OpsHome />} />
 							</Routes>
 						</Suspense>
 					</main>
@@ -174,12 +159,4 @@ export default function App() {
 			</OpsAuthProvider>
 		</BrowserRouter>
 	);
-}
-
-/** Hard-navigates out of the ops bundle to the public app. */
-function LeaveOps() {
-	useEffect(() => {
-		window.location.replace("/");
-	}, []);
-	return null;
 }

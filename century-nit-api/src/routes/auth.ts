@@ -21,7 +21,7 @@ export const authInstance = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	baseURL: env.BETTER_AUTH_URL,
 	basePath: "/api/auth",
-	trustedOrigins: [env.BETTER_AUTH_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+	trustedOrigins: [env.BETTER_AUTH_URL, env.FRONTEND_URL, env.CONSOLE_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema: {
@@ -60,10 +60,13 @@ export const authInstance = betterAuth({
 	 */
 	plugins: [
 		/**
-		 * Documents every auth route — including the plugin ones below, which are
-		 * served by Better Auth and so do not appear in the app's own OpenAPI
-		 * document. Reference UI at /api/auth/reference, spec at
-		 * /api/auth/open-api/generate-schema.
+		 * Documents every auth route — the plugin routes below are served by Better
+		 * Auth and so never appear in this app's own OpenAPI document. Reference UI
+		 * at /api/auth/reference.
+		 *
+		 * Safe to include now that `lib/resend.ts` imports the Resend SDK lazily:
+		 * the React server renderer that broke module loading came from there, not
+		 * from here.
 		 */
 		openAPI(),
 

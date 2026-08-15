@@ -17,23 +17,37 @@ export { buildConsentUrl, googleConfigured, GOOGLE_SCOPES, createOAuthClient } f
 /**
  * The calendar client the application uses.
  *
- * Resolved once, and overridable so tests can substitute `FakeCalendarClient`
+ * Resolved lazily on first call (credentials may come from the settings
+ * service), and overridable so tests can substitute `FakeCalendarClient`
  * without touching the code under test.
  */
-let client: CalendarClient = googleConfigured()
-	? new GoogleCalendarClient()
-	: new DisabledCalendarClient();
+let client: CalendarClient | null = null;
+let clientInitPromise: Promise<CalendarClient> | null = null;
 
-export function getCalendarClient(): CalendarClient {
-	return client;
+async function resolveClient(): Promise<CalendarClient> {
+	if (client) return client;
+	if (!clientInitPromise) {
+		clientInitPromise = (async () => {
+			const configured = await googleConfigured();
+			client = configured ? new GoogleCalendarClient() : new DisabledCalendarClient();
+			return client;
+		})();
+	}
+	return clientInitPromise;
+}
+
+export async function getCalendarClient(): Promise<CalendarClient> {
+	return resolveClient();
 }
 
 /** Test seam. Returns a restore function so suites can clean up after themselves. */
 export function setCalendarClient(next: CalendarClient): () => void {
 	const previous = client;
 	client = next;
+	clientInitPromise = Promise.resolve(next);
 	return () => {
 		client = previous;
+		clientInitPromise = previous ? Promise.resolve(previous) : null;
 	};
 }
 
@@ -71,7 +85,8 @@ export async function loadCredentials(
 
 	if (expiringSoon && refreshToken) {
 		try {
-			const refreshed = await client.refreshAccessToken(refreshToken);
+			const calClient = await getCalendarClient();
+			const refreshed = await calClient.refreshAccessToken(refreshToken);
 			if (refreshed) {
 				accessToken = refreshed.accessToken;
 				expiresAt = refreshed.expiresAt;

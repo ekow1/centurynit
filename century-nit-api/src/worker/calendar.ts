@@ -93,7 +93,7 @@ export async function refreshBusyBlocks(opsUserId: string): Promise<void> {
 
 	let intervals;
 	try {
-		intervals = await getCalendarClient().listBusy(account.credentials, {
+		intervals = await (await getCalendarClient()).listBusy(account.credentials, {
 			calendarId: account.calendarId,
 			from,
 			to,

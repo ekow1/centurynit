@@ -93,7 +93,7 @@ calendarRouter.openapi(
 			.limit(1);
 
 		return c.json({
-			configured: googleConfigured(),
+			configured: await googleConfigured(),
 			connected: Boolean(account) && !account?.needsReconnect,
 			needsReconnect: account?.needsReconnect ?? false,
 			googleAccountEmail: account?.googleAccountEmail ?? null,
@@ -119,7 +119,7 @@ calendarRouter.openapi(
 		},
 	}),
 	async (c) => {
-		if (!googleConfigured()) {
+		if (!(await googleConfigured())) {
 			throw new HttpError(
 				503,
 				"CALENDAR_NOT_CONFIGURED",
@@ -127,7 +127,7 @@ calendarRouter.openapi(
 			);
 		}
 		const staff = c.get("staff")!;
-		return c.json({ url: buildConsentUrl(issueState(staff.opsUserId)) });
+		return c.json({ url: await buildConsentUrl(issueState(staff.opsUserId)) });
 	},
 );
 
@@ -159,7 +159,7 @@ calendarRouter.openapi(
 		const { code, state, error } = c.req.valid("query");
 		// Personal calendar page, reachable by every role that carries a caseload —
 		// /ops/settings is admin-only and consultants are exactly who connect here.
-		const settings = `${env.FRONTEND_URL}/ops/my-calendar`;
+		const settings = `${env.CONSOLE_URL}/my-calendar`;
 
 		if (error || !code || !state) {
 			return c.redirect(`${settings}?calendar=denied`, 302);
@@ -171,7 +171,7 @@ calendarRouter.openapi(
 		}
 
 		try {
-			const oauth = createOAuthClient();
+			const oauth = await createOAuthClient();
 			const { tokens } = await oauth.getToken(code);
 
 			if (!tokens.refresh_token) {

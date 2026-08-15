@@ -125,7 +125,7 @@ export async function createInvitation(input: {
 		throw err;
 	}
 
-	const acceptUrl = `${env.FRONTEND_URL}/ops/accept-invite?token=${token}`;
+	const acceptUrl = `${env.CONSOLE_URL}/accept-invite?token=${token}`;
 
 	await queueEmail({
 		to: email,

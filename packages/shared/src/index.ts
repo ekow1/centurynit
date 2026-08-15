@@ -5,3 +5,4 @@ export * from "./schemas/health.js";
 export * from "./schemas/booking.js";
 export * from "./schemas/invoice.js";
 export * from "./schemas/auth.js";
+export * from "./schemas/document.js";

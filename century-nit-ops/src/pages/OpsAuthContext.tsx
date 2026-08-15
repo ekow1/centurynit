@@ -32,15 +32,15 @@ const EDIT_PACKAGES: readonly OpsRole[] = EDIT_PACKAGES_ROLES;
 const EDIT_UNIVERSITIES: readonly OpsRole[] = EDIT_UNIVERSITIES_ROLES;
 const ASSIGN_WORK: readonly OpsRole[] = ASSIGN_WORK_ROLES;
 
-/** Where each role lands when they open /ops. */
+/** Where each role lands when they open the console. */
 export const ROLE_HOME: Record<OpsRole, string> = {
 	// Spans both halves, so the platform console is the sensible landing page.
-	super_admin: "/ops/system",
-	manager: "/ops/dashboard",
-	coordinator: "/ops/dashboard",
-	consultant: "/ops/dashboard",
-	finance: "/ops/dashboard",
-	admin: "/ops/system",
+	super_admin: "/system",
+	manager: "/dashboard",
+	coordinator: "/dashboard",
+	consultant: "/dashboard",
+	finance: "/dashboard",
+	admin: "/system",
 };
 
 /* ─── Mock User Profiles ─── */

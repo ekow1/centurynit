@@ -348,7 +348,7 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 		);
 	}
 
-	const client = getCalendarClient();
+	const client = await getCalendarClient();
 	try {
 		const event = await client.createEvent(account.credentials, {
 			calendarId: account.calendarId,
@@ -553,7 +553,7 @@ async function updateCalendarForBooking(bookingId: string): Promise<BookingRow> 
 	}
 
 	try {
-		const event = await getCalendarClient().updateEvent(account.credentials, {
+		const event = await (await getCalendarClient()).updateEvent(account.credentials, {
 			calendarId: booking.calendarId ?? account.calendarId,
 			eventId: booking.calendarEventId,
 			startsAt: booking.startsAt,
@@ -637,7 +637,7 @@ export async function cancelCalendarForBooking(bookingId: string): Promise<void>
 	const account = await loadCredentials(booking.employeeId);
 	if (!account) return;
 
-	await getCalendarClient().cancelEvent(account.credentials, {
+	await (await getCalendarClient()).cancelEvent(account.credentials, {
 		calendarId: booking.calendarId ?? account.calendarId,
 		eventId: booking.calendarEventId,
 	});

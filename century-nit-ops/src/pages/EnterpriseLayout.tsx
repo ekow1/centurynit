@@ -26,18 +26,18 @@ function Icon({ name }: { name: string }) {
 
 /** Business operations - manager and consultant. */
 const OPERATIONS_NAV: NavEntry[] = [
-	{ to: "/ops/dashboard", module: "dashboard", label: "Dashboard", blurb: "Mission control", icon: "dashboard" },
+	{ to: "/dashboard", module: "dashboard", label: "Dashboard", blurb: "Mission control", icon: "dashboard" },
 	{
 		group: "Cases",
 		icon: "applications",
 		blurb: "Client work & progression",
 		children: [
-			{ to: "/ops/applications", module: "applications", label: "Applications", blurb: "Active applications", icon: "applications" },
-			{ to: "/ops/consultations", module: "consultations", label: "Consultations", blurb: "Meetings & assessments", icon: "consultations" },
-			{ to: "/ops/visa", module: "visa", label: "Visa Processing", blurb: "Visa tracking & sub-steps", icon: "applications" },
-			{ to: "/ops/travel", module: "travel", label: "Travel Assistance", blurb: "Pre-departure & clearance", icon: "applications" },
-			{ to: "/ops/applicants", module: "applicants", label: "Applicants", blurb: "Client records", icon: "applicants" },
-			{ to: "/ops/workflow", module: "workflow", label: "Workflow", blurb: "Visual pipeline", icon: "workflow" },
+			{ to: "/applications", module: "applications", label: "Applications", blurb: "Active applications", icon: "applications" },
+			{ to: "/consultations", module: "consultations", label: "Consultations", blurb: "Meetings & assessments", icon: "consultations" },
+			{ to: "/visa", module: "visa", label: "Visa Processing", blurb: "Visa tracking & sub-steps", icon: "applications" },
+			{ to: "/travel", module: "travel", label: "Travel Assistance", blurb: "Pre-departure & clearance", icon: "applications" },
+			{ to: "/applicants", module: "applicants", label: "Applicants", blurb: "Client records", icon: "applicants" },
+			{ to: "/workflow", module: "workflow", label: "Workflow", blurb: "Visual pipeline", icon: "workflow" },
 		],
 	},
 	{
@@ -45,10 +45,10 @@ const OPERATIONS_NAV: NavEntry[] = [
 		icon: "crm",
 		blurb: "Leads, internal tickets & marketing",
 		children: [
-			{ to: "/ops/leads", module: "leads", label: "Leads", blurb: "Lead management", icon: "leads" },
-			{ to: "/ops/appointments", module: "appointments", label: "Appointments", blurb: "Calendar", icon: "appointments" },
-			{ to: "/ops/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Support tickets & requests", icon: "helpdesk" },
-			{ to: "/ops/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
+			{ to: "/leads", module: "leads", label: "Leads", blurb: "Lead management", icon: "leads" },
+			{ to: "/appointments", module: "appointments", label: "Appointments", blurb: "Calendar", icon: "appointments" },
+			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Support tickets & requests", icon: "helpdesk" },
+			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
 		],
 	},
 	{
@@ -56,9 +56,9 @@ const OPERATIONS_NAV: NavEntry[] = [
 		icon: "universities",
 		blurb: "Schools, programs & tiers",
 		children: [
-			{ to: "/ops/universities", module: "universities", label: "Universities", blurb: "Schools & countries", icon: "universities" },
-			{ to: "/ops/programs", module: "programs", label: "Programs", blurb: "Study programs", icon: "programs" },
-			{ to: "/ops/packages", module: "packages", label: "Packages", blurb: "Service tiers", icon: "packages" },
+			{ to: "/universities", module: "universities", label: "Universities", blurb: "Schools & countries", icon: "universities" },
+			{ to: "/programs", module: "programs", label: "Programs", blurb: "Study programs", icon: "programs" },
+			{ to: "/packages", module: "packages", label: "Packages", blurb: "Service tiers", icon: "packages" },
 		],
 	},
 	{
@@ -66,27 +66,27 @@ const OPERATIONS_NAV: NavEntry[] = [
 		icon: "reports",
 		blurb: "Finance & analytics",
 		children: [
-			{ to: "/ops/invoices", module: "invoices", label: "Invoices", blurb: "Raise, chase & settle", icon: "finance" },
-			{ to: "/ops/ledger", module: "ledger", label: "Client Ledger", blurb: "Per-client journal & installments", icon: "finance" },
-			{ to: "/ops/payments", module: "payments", label: "Payments Log", blurb: "All incoming payments", icon: "finance" },
-			{ to: "/ops/payment-config", module: "payment-config", label: "Payment Config", blurb: "Schedule options & plans", icon: "finance" },
-			{ to: "/ops/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
-			{ to: "/ops/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
+			{ to: "/invoices", module: "invoices", label: "Invoices", blurb: "Raise, chase & settle", icon: "finance" },
+			{ to: "/ledger", module: "ledger", label: "Client Ledger", blurb: "Per-client journal & installments", icon: "finance" },
+			{ to: "/payments", module: "payments", label: "Payments Log", blurb: "All incoming payments", icon: "finance" },
+			{ to: "/payment-config", module: "payment-config", label: "Payment Config", blurb: "Schedule options & plans", icon: "finance" },
+			{ to: "/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
+			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
 		],
 	},
-	{ to: "/ops/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
+	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
 ];
 
 /** Running the platform - administrator only. No applicant data here. */
 const PLATFORM_NAV: NavEntry[] = [
-	{ to: "/ops/system", module: "system", label: "System Overview", blurb: "Platform health", icon: "system" },
+	{ to: "/system", module: "system", label: "System Overview", blurb: "Platform health", icon: "system" },
 	{
 		group: "Access & Security",
 		icon: "users",
 		blurb: "Staff & sign-in",
 		children: [
-			{ to: "/ops/users", module: "users", label: "Users & Roles", blurb: "Staff & access", icon: "users" },
-			{ to: "/ops/auth", module: "auth", label: "Authentication", blurb: "Sign-in & sessions", icon: "auth" },
+			{ to: "/users", module: "users", label: "Users & Roles", blurb: "Staff & access", icon: "users" },
+			{ to: "/auth", module: "auth", label: "Authentication", blurb: "Sign-in & sessions", icon: "auth" },
 		],
 	},
 	{
@@ -94,8 +94,8 @@ const PLATFORM_NAV: NavEntry[] = [
 		icon: "cms",
 		blurb: "Pages & branding",
 		children: [
-			{ to: "/ops/cms", module: "cms", label: "Content (CMS)", blurb: "Pages & posts", icon: "cms" },
-			{ to: "/ops/site", module: "site", label: "Site & UI", blurb: "Branding & nav", icon: "site" },
+			{ to: "/cms", module: "cms", label: "Content (CMS)", blurb: "Pages & posts", icon: "cms" },
+			{ to: "/site", module: "site", label: "Site & UI", blurb: "Branding & nav", icon: "site" },
 		],
 	},
 	{
@@ -103,8 +103,8 @@ const PLATFORM_NAV: NavEntry[] = [
 		icon: "settings",
 		blurb: "Integrations & defaults",
 		children: [
-			{ to: "/ops/notifications", module: "notifications", label: "Notifications", blurb: "Templates & triggers", icon: "notifications" },
-			{ to: "/ops/settings", module: "settings", label: "System Config", blurb: "Integrations & defaults", icon: "settings" },
+			{ to: "/notifications", module: "notifications", label: "Notifications", blurb: "Templates & triggers", icon: "notifications" },
+			{ to: "/settings", module: "settings", label: "System Config", blurb: "Integrations & defaults", icon: "settings" },
 		],
 	},
 ];
@@ -201,30 +201,30 @@ function LiveCaseSync() {
 
 /** Path → module mapping for permission checks on role switch. */
 const PATH_MODULE: Record<string, OpsModule> = {
-	"/ops/dashboard": "dashboard",
-	"/ops/applications": "applications",
-	"/ops/consultations": "consultations",
-	"/ops/applicants": "applicants",
-	"/ops/leads": "leads",
-	"/ops/workflow": "workflow",
-	"/ops/documents": "documents",
-	"/ops/invoices": "invoices",
-	"/ops/finance": "finance",
-	"/ops/appointments": "appointments",
-	"/ops/universities": "universities",
-	"/ops/programs": "programs",
-	"/ops/packages": "packages",
-	"/ops/reports": "reports",
-	"/ops/helpdesk": "helpdesk",
-	"/ops/marketing": "marketing",
-	"/ops/inbox": "dashboard",
-	"/ops/system": "system",
-	"/ops/users": "users",
-	"/ops/auth": "auth",
-	"/ops/cms": "cms",
-	"/ops/site": "site",
-	"/ops/notifications": "notifications",
-	"/ops/settings": "settings",
+	"/dashboard": "dashboard",
+	"/applications": "applications",
+	"/consultations": "consultations",
+	"/applicants": "applicants",
+	"/leads": "leads",
+	"/workflow": "workflow",
+	"/documents": "documents",
+	"/invoices": "invoices",
+	"/finance": "finance",
+	"/appointments": "appointments",
+	"/universities": "universities",
+	"/programs": "programs",
+	"/packages": "packages",
+	"/reports": "reports",
+	"/helpdesk": "helpdesk",
+	"/marketing": "marketing",
+	"/inbox": "dashboard",
+	"/system": "system",
+	"/users": "users",
+	"/auth": "auth",
+	"/cms": "cms",
+	"/site": "site",
+	"/notifications": "notifications",
+	"/settings": "settings",
 };
 
 export function EnterpriseLayout() {
@@ -266,7 +266,7 @@ export function EnterpriseLayout() {
 				return;
 			}
 		}
-		if (currentPath === "/ops/inbox" && role === "admin") {
+		if (currentPath === "/inbox" && role === "admin") {
 			navigate(ROLE_HOME[role], { replace: true });
 		}
 	}
@@ -278,7 +278,7 @@ export function EnterpriseLayout() {
 
 			<aside className="portal__aside">
 				<div className="portal__brand">
-					<Link to={opsRole ? ROLE_HOME[opsRole] : "/ops"} className="nav__logo">
+					<Link to={opsRole ? ROLE_HOME[opsRole] : "/"} className="nav__logo">
 						Century NIT <span>Operations</span>
 					</Link>
 					<p className="portal__tagline">Mission Control</p>
@@ -408,7 +408,7 @@ export function EnterpriseLayout() {
 
 						{/* Notification bell */}
 						{opsRole !== "admin" && (
-							<Link to="/ops/inbox" className="ops-bell-btn" aria-label="Notifications">
+							<Link to="/inbox" className="ops-bell-btn" aria-label="Notifications">
 								<span dangerouslySetInnerHTML={{ __html: ICONS.notifications }} />
 								{unreadCount > 0 && <span className="ops-bell-badge">{unreadCount}</span>}
 							</Link>

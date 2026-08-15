@@ -199,6 +199,73 @@ export const staffInvitations = pgTable(
 	}),
 );
 
+export const documentStatusEnum = pgEnum("document_status", [
+	"PENDING_UPLOAD",
+	"UPLOADED",
+	"VERIFIED",
+	"REJECTED",
+]);
+
+/**
+ * Applicant documents.
+ *
+ * The row is created *before* the file exists, at PENDING_UPLOAD, and is only
+ * marked UPLOADED once the browser reports the signed PUT succeeded and the
+ * server has confirmed the object is actually there. Creating the row after the
+ * upload would leave orphaned objects whenever a browser died mid-request, with
+ * nothing in the database pointing at them.
+ *
+ * `storageKey` is a path inside a private bucket, never a URL. Every read is a
+ * fresh short-lived signed URL, so a link copied out of the browser stops
+ * working instead of exposing a passport indefinitely.
+ */
+export const applicantDocuments = pgTable(
+	"applicant_documents",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+
+		/** Owner. Ownership checks compare the session user against this. */
+		ownerUserId: text("owner_user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+
+		/** Which required document this satisfies, e.g. "passport". */
+		documentType: varchar("document_type", { length: 64 }).notNull(),
+
+		/** As the applicant named it — display only, never used as a path. */
+		fileName: text("file_name").notNull(),
+		contentType: varchar("content_type", { length: 128 }).notNull(),
+		sizeBytes: integer("size_bytes"),
+
+		/** Path within the private bucket. Server-generated, never client-supplied. */
+		storageKey: text("storage_key").notNull().unique(),
+
+		status: documentStatusEnum("status").notNull().default("PENDING_UPLOAD"),
+
+		/* Review */
+		reviewedBy: uuid("reviewed_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+		reviewNote: text("review_note"),
+
+		uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byOwner: index("applicant_documents_owner_idx").on(t.ownerUserId, t.documentType),
+		byStatus: index("applicant_documents_status_idx").on(t.status, t.createdAt),
+		/*
+		 * One live document per type per applicant. Re-uploading a passport should
+		 * replace the previous one rather than silently accumulating copies that
+		 * reviewers then have to disambiguate. Rejected documents are excluded so a
+		 * rejection can be corrected by uploading again.
+		 */
+		oneCurrentPerType: uniqueIndex("applicant_documents_current_unique")
+			.on(t.ownerUserId, t.documentType)
+			.where(sql`status <> 'REJECTED'`),
+	}),
+);
+
 /* ══════════════════════════════════════════════════════════════════════════
  * Scheduling
  *
@@ -523,5 +590,49 @@ export const bookingEvents = pgTable(
 	},
 	(t) => ({
 		byBooking: index("booking_events_booking_idx").on(t.bookingId, t.at),
+	}),
+);
+
+/**
+ * Platform-level settings — integration credentials managed from the ops UI.
+ *
+ * Stores encrypted values (AES-256-GCM via lib/crypto.ts) for things like
+ * Resend, Supabase Storage, and Google OAuth. The ENCRYPTION_KEY env var
+ * encrypts at rest; the API reads and decrypts on demand with an in-memory
+ * cache. Infrastructure secrets (DATABASE_URL, BETTER_AUTH_SECRET, etc.) stay
+ * in environment variables and are never stored here.
+ */
+export const platformSettings = pgTable(
+	"platform_settings",
+	{
+		key: varchar("key", { length: 64 }).primaryKey(),
+	 /** Encrypted ciphertext (v1.<iv>.<authTag>.<data>). Null means "unset, fall back to env". */
+		encryptedValue: text("encrypted_value"),
+		/** Who last changed this, for the audit trail. */
+		updatedBy: uuid("updated_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+);
+
+/**
+ * Append-only audit log for platform settings changes.
+ *
+ * Every write records who changed what and when. Old and new values are stored
+ * masked (never plaintext) so the log is safe to display in the UI.
+ */
+export const settingsAudit = pgTable(
+	"settings_audit",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		key: varchar("key", { length: 64 }).notNull(),
+		actorId: uuid("actor_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		actorEmail: varchar("actor_email", { length: 255 }),
+	 /** Masked representation, e.g. "re_••••••••a8c1" — never the real value. */
+		oldValueMasked: text("old_value_masked"),
+		newValueMasked: text("new_value_masked"),
+		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byKey: index("settings_audit_key_idx").on(t.key, t.at),
 	}),
 );

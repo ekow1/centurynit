@@ -1,7 +1,24 @@
-import { Resend } from "resend";
 import { env } from "../env.js";
+import { getSetting } from "../services/settings.js";
 
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+/**
+ * Email delivery via Resend.
+ *
+ * The API key and from address are read from the platform settings service
+ * (DB-stored, encrypted, managed from the ops UI) with a fallback to the
+ * `RESEND_*` env vars. The client is created lazily on each send so a key
+ * changed from the UI takes effect without a restart.
+ *
+ * The SDK itself is imported lazily too, and that is load-bearing rather than an
+ * optimisation. `resend` depends on `@react-email/render`, which pulls in
+ * `react-dom/server` as an import side effect; that renderer reaches for React 18
+ * internals (`ReactCurrentDispatcher`) while this workspace pins React 19, so
+ * merely importing it throws. A static import here made every module that
+ * transitively reaches this one unloadable — which is most of the API, since
+ * `routes/auth.ts` sends password-reset and OTP mail and everything reaches
+ * `routes/auth.ts` for the session. Deferring it keeps React out of the process
+ * unless an email is genuinely being sent.
+ */
 
 export async function sendEmail({
 	to,
@@ -14,7 +31,10 @@ export async function sendEmail({
 	html?: string;
 	text?: string;
 }) {
-	if (!resend) {
+	const apiKey = await getSetting("RESEND_API_KEY");
+	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
+
+	if (!apiKey) {
 		/*
 		 * No provider configured — print the message instead of dropping it.
 		 *
@@ -40,8 +60,10 @@ export async function sendEmail({
 		return null;
 	}
 
+	const { Resend } = await import("resend");
+	const resend = new Resend(apiKey);
 	return resend.emails.send({
-		from: env.RESEND_FROM,
+		from,
 		to,
 		subject,
 		...(html ? { html } : {}),

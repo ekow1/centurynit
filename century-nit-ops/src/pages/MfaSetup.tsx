@@ -207,7 +207,7 @@ export function MfaSetup() {
 							onClick={() => {
 								// Full reload so every context re-reads the session, which now
 								// carries a verified second factor.
-								window.location.assign("/ops");
+								window.location.assign("/");
 							}}
 						>
 							I have saved them — continue
@@ -220,7 +220,7 @@ export function MfaSetup() {
 				<button
 					type="button"
 					className="btn btn--ghost btn--sm mfa-signout"
-					onClick={() => navigate("/ops/login")}
+					onClick={() => navigate("/login")}
 				>
 					Back to sign in
 				</button>

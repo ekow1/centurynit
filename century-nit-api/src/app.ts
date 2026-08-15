@@ -12,6 +12,8 @@ import { bookingsRouter } from "./routes/bookings.js";
 import { calendarRouter } from "./routes/calendar.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { staffRouter } from "./routes/staff.js";
+import { documentsRouter } from "./routes/documents.js";
+import { settingsRouter } from "./routes/settings.js";
 
 export function createApp() {
 	const app = new OpenAPIHono<{ Variables: { requestId: string } }>();
@@ -21,7 +23,7 @@ export function createApp() {
 	app.use(secureHeaders());
 	app.use(
 		cors({
-			origin: env.FRONTEND_URL,
+			origin: [env.FRONTEND_URL, env.CONSOLE_URL],
 			credentials: true,
 		}),
 	);
@@ -35,6 +37,8 @@ export function createApp() {
 	app.route("/api/calendar", calendarRouter);
 	app.route("/api/invoices", invoicesRouter);
 	app.route("/api/staff", staffRouter);
+	app.route("/api/documents", documentsRouter);
+	app.route("/api/settings", settingsRouter);
 
 	app.doc("/api/openapi.json", {
 		openapi: "3.1.0",

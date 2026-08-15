@@ -1,5 +1,6 @@
 import { google, type calendar_v3 } from "googleapis";
 import { env } from "../../env.js";
+import { getSetting } from "../settings.js";
 import {
 	CalendarAuthError,
 	CalendarUnavailableError,
@@ -28,8 +29,11 @@ export const GOOGLE_SCOPES = [
 	"https://www.googleapis.com/auth/userinfo.email",
 ];
 
-export function googleConfigured(): boolean {
-	return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REDIRECT_URI);
+export async function googleConfigured(): Promise<boolean> {
+	const id = await getSetting("GOOGLE_CLIENT_ID");
+	const secret = await getSetting("GOOGLE_CLIENT_SECRET");
+	const redirect = await getSetting("GOOGLE_REDIRECT_URI");
+	return Boolean(id && secret && redirect);
 }
 
 /**
@@ -40,11 +44,14 @@ export function googleConfigured(): boolean {
  */
 export type OAuthClient = InstanceType<typeof google.auth.OAuth2>;
 
-export function createOAuthClient(): OAuthClient {
+export async function createOAuthClient(): Promise<OAuthClient> {
+	const clientId = await getSetting("GOOGLE_CLIENT_ID");
+	const clientSecret = await getSetting("GOOGLE_CLIENT_SECRET");
+	const redirectUri = await getSetting("GOOGLE_REDIRECT_URI");
 	return new google.auth.OAuth2(
-		env.GOOGLE_CLIENT_ID,
-		env.GOOGLE_CLIENT_SECRET,
-		env.GOOGLE_REDIRECT_URI,
+		clientId ?? env.GOOGLE_CLIENT_ID,
+		clientSecret ?? env.GOOGLE_CLIENT_SECRET,
+		redirectUri ?? env.GOOGLE_REDIRECT_URI,
 	);
 }
 
@@ -55,8 +62,9 @@ export function createOAuthClient(): OAuthClient {
  * a refresh token. Without them a reconnect yields only a short-lived access
  * token and the integration breaks an hour later.
  */
-export function buildConsentUrl(state: string): string {
-	return createOAuthClient().generateAuthUrl({
+export async function buildConsentUrl(state: string): Promise<string> {
+	const client = await createOAuthClient();
+	return client.generateAuthUrl({
 		access_type: "offline",
 		prompt: "consent",
 		scope: GOOGLE_SCOPES,
@@ -80,8 +88,8 @@ function classify(err: unknown): never {
 export class GoogleCalendarClient implements CalendarClient {
 	readonly enabled = true;
 
-	private client(creds: CalendarCredentials): calendar_v3.Calendar {
-		const auth = createOAuthClient();
+	private async client(creds: CalendarCredentials): Promise<calendar_v3.Calendar> {
+		const auth = await createOAuthClient();
 		auth.setCredentials({
 			access_token: creds.accessToken ?? undefined,
 			refresh_token: creds.refreshToken ?? undefined,
@@ -95,7 +103,7 @@ export class GoogleCalendarClient implements CalendarClient {
 		input: CreateEventInput,
 	): Promise<CalendarEvent> {
 		try {
-			const res = await this.client(creds).events.insert({
+			const res = await (await this.client(creds)).events.insert({
 				calendarId: input.calendarId,
 				// Required for conferenceData to be honoured.
 				conferenceDataVersion: input.withMeet ? 1 : 0,
@@ -144,7 +152,7 @@ export class GoogleCalendarClient implements CalendarClient {
 		try {
 			// patch, not update: update replaces the whole resource and would drop
 			// the conference, invalidating a Meet link the client already has.
-			const res = await this.client(creds).events.patch({
+			const res = await (await this.client(creds)).events.patch({
 				calendarId: input.calendarId,
 				eventId: input.eventId,
 				sendUpdates: "all",
@@ -171,7 +179,7 @@ export class GoogleCalendarClient implements CalendarClient {
 		input: { calendarId: string; eventId: string },
 	): Promise<void> {
 		try {
-			await this.client(creds).events.delete({
+			await (await this.client(creds)).events.delete({
 				calendarId: input.calendarId,
 				eventId: input.eventId,
 				sendUpdates: "all",
@@ -189,7 +197,7 @@ export class GoogleCalendarClient implements CalendarClient {
 		input: { calendarId: string; from: Date; to: Date },
 	): Promise<BusyInterval[]> {
 		try {
-			const res = await this.client(creds).events.list({
+			const res = await (await this.client(creds)).events.list({
 				calendarId: input.calendarId,
 				timeMin: input.from.toISOString(),
 				timeMax: input.to.toISOString(),
@@ -222,7 +230,7 @@ export class GoogleCalendarClient implements CalendarClient {
 
 	async refreshAccessToken(refreshToken: string) {
 		try {
-			const auth = createOAuthClient();
+			const auth = await createOAuthClient();
 			auth.setCredentials({ refresh_token: refreshToken });
 			const { credentials } = await auth.refreshAccessToken();
 			if (!credentials.access_token) return null;

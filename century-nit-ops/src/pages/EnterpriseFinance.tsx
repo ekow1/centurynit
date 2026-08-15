@@ -143,7 +143,7 @@ export function EnterpriseFinance() {
 								{liveCase.schools.length ? ` · ${liveCase.schools.length} school(s)` : ""}
 							</p>
 						</div>
-						<Link to="/ops/invoices" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
+						<Link to="/invoices" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
 							Open invoices →
 						</Link>
 					</div>
@@ -350,7 +350,7 @@ export function EnterpriseFinance() {
 							Manage post-arrival payment schedule options available to applicants.
 						</p>
 					</div>
-					<Link to="/ops/payment-config" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
+					<Link to="/payment-config" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
 						Configure →
 					</Link>
 				</div>

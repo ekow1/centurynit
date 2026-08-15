@@ -43,6 +43,34 @@
       "when": 1786752004391,
       "tag": "0005_early_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786763849526,
+      "tag": "0006_quick_loners",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786764692642,
+      "tag": "0007_lock_down_data_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786767198209,
+      "tag": "0008_platform_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786782402662,
+      "tag": "0009_rls_sweep_all_tables",
+      "breakpoints": true
     }
   ]
 }

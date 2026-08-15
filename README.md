@@ -5,41 +5,46 @@ Monorepo for Century NIT Consult.
 ```
 century-nit-suite/
 ├── century-nit-web/     Public site + applicant portal (React + Vite)
-│                        Also hosts the Cloudflare Worker that fronts both apps
+│                        Deployed as its own Cloudflare Worker
 ├── century-nit-ops/     Operations Center — staff admin (React + Vite)
+│                        Deployed as a separate Cloudflare Worker ("console")
 ├── century-nit-api/     Hono + Drizzle + Better Auth backend (Node)
 └── packages/
     ├── core/            Domain data, types and UI shared by web and ops
     └── shared/          Zod schemas shared by web and api
 ```
 
-## Two front-end apps, one origin
+## Two front-end apps, two origins
 
 The public app and the Operations Center are **separate applications with
-separate builds**. A visitor to the marketing site never downloads a byte of
-the admin app.
-
-They are served from **one origin**, and that is load-bearing rather than
-incidental. Every link between the two halves — the live applicant case, ops
-directives, the CMS overlay, shared support tickets — is a `localStorage`
-handshake, and `localStorage` is scoped per origin. Moving the Operations
-Center to its own hostname severs all four at once, and there is no API yet to
-replace them.
+separate builds, deployed as separate Cloudflare Workers**. A visitor to the
+marketing site never downloads a byte of the admin app.
 
 ```
-                    centurynit.com
-                          │
-              ┌───────────┴───────────┐
-              │   Cloudflare Worker   │
-              └───────────┬───────────┘
-         /api/*           │            /ops/*        everything else
-            │             │               │                │
-            ▼             │               ▼                ▼
-     century-nit-api      │      dist/client/ops/      dist/client/
-     (proxied to VPS)     │      century-nit-ops       century-nit-web
-                          │
-                    same origin ⇒ localStorage bridge intact
+  century-nit-web.*.workers.dev          console.*.workers.dev
+          │                                      │
+  ┌───────┴────────┐                ┌─────────────┴────────────┐
+  │  Web Worker    │                │  Console Worker          │
+  │  (ASSETS)      │                │  (ASSETS)                │
+  └───────┬────────┘                └─────────────┬────────────┘
+          │                                       │
+   /api/* │ everything else                SPA routes
+          ▼                                       │
+   century-nit-api (EC2/Dokploy)                  ▼
+                                          React Router
 ```
+
+The web Worker reverse-proxies `/api/*` to the API on `API_BASE_URL`, so the
+public SPA and the API share an origin for cookies. The console Worker is
+standalone — it has no `/api` proxy, so ops-side API calls go directly to the
+API origin (CORS must allow it).
+
+> **Note on the `localStorage` bridge.** The live applicant case, ops
+directives, the CMS overlay and shared support tickets were originally
+`localStorage` handshakes, which are scoped per origin. With the two apps now
+on separate origins, those bridges do not work cross-origin. They will need to
+be replaced with an API-based channel; until then, those features only work
+when both apps share an origin (e.g., local dev through a single Worker).
 
 ## Where the product actually lives
 
@@ -94,16 +99,14 @@ and tracks progress per phase. Read it before adding endpoints.
    npm run dev:ops   # Operations Center on :5174
    ```
 
-   In development the two front ends are on different ports, which means
-   **different origins, so the localStorage bridge between them does not work**.
-   To exercise the two-window demo, build and serve them through the Worker
-   instead:
+   In development the two front ends are on different ports (different
+   origins), so the `localStorage` bridge between them does not work. To
+   exercise the two-window demo, build and serve each through its own Worker:
 
    ```bash
    npm run build:frontend
-   cd century-nit-web && npx wrangler dev
-   # public site  http://localhost:8787/
-   # ops          http://localhost:8787/ops
+   cd century-nit-web && npx wrangler dev   # http://localhost:8787/
+   cd century-nit-ops  && npx wrangler dev   # http://localhost:8787/ (separate)
    ```
 
 Copy `century-nit-api/.env.example` to `century-nit-api/.env` to override
@@ -211,22 +214,25 @@ account. That console output is suppressed in production.
 Better Auth serves its own routes outside the app's OpenAPI document, so they
 are documented separately at `/api/auth/reference`.
 
-> ⚠️ **Before the first real deploy**, `API_BASE_URL` in
-> `century-nit-web/wrangler.json` is still `http://localhost:3000`. Deployed
-> as-is, the Worker proxies every `/api/*` request to a host that does not
-> exist from the edge, and the whole API surface 5xx's. Override it per
-> environment (`wrangler.json` `env.*.vars`, or `wrangler deploy --var`).
+`API_BASE_URL` in `century-nit-web/wrangler.json` is set to
+`http://54.171.185.242:3000` — the EC2/Dokploy host running the API. The web
+Worker proxies all `/api/*` requests there.
 
-### Build order matters
+### Build order
 
-`century-nit-ops` emits into `century-nit-web/dist/client/ops/`, and the web
-build empties `dist/client`. **Web must build before ops**, or the admin app is
-deleted from the output. `npm run build:frontend` does them in the right order —
-prefer it over calling the workspace builds directly.
+Each frontend builds into its own `dist/client/` directory, so the order no
+longer matters. `npm run build:frontend` builds both. Deploy each separately:
+
+```bash
+npm run build:frontend
+cd century-nit-web && npx wrangler deploy   # public site
+cd century-nit-ops  && npx wrangler deploy   # console
+```
 
 Verify a build before deploying:
 
 ```bash
 npm run build:all                                   # packages -> api -> web -> ops
 cd century-nit-web && npx wrangler deploy --dry-run # worker + assets
+cd century-nit-ops  && npx wrangler deploy --dry-run # worker + assets
 ```

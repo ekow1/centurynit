@@ -1,13 +1,18 @@
 /**
  * Thin fetch wrapper for the ops app.
  *
- * All requests go to same-origin `/api/*` paths. In development the Vite proxy
- * forwards them to the API server (see vite.config.ts). In production both
- * builds are served from one Workers deployment.
+ * In development, requests go to same-origin `/api/*` paths and the Vite proxy
+ * forwards them to the API server (see vite.config.ts).
+ *
+ * In production, the console Worker has no `/api` proxy, so requests go to the
+ * absolute API origin from `VITE_API_BASE_URL`. Cookies are sent cross-origin
+ * (credentials: "include") and the API's CORS allows the console URL.
  *
  * Cookies are included automatically — Better Auth's session cookie is all the
  * auth this client needs.
  */
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
 	constructor(
@@ -23,7 +28,8 @@ export async function apiFetch<T>(
 	path: string,
 	init: RequestInit = {},
 ): Promise<T> {
-	const res = await fetch(path, {
+	const url = `${API_BASE}${path}`;
+	const res = await fetch(url, {
 		...init,
 		credentials: "include",
 		headers: {

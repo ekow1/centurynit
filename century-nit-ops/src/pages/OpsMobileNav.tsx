@@ -35,12 +35,12 @@ function NavIcon({ name }: { name: string }) {
 const TAB_PREFERENCE: Record<OpsRole, string[]> = {
 	// Reaches everything, so lead with the platform console and the two views a
 	// super admin actually opens: who has access, and what the system is doing.
-	super_admin: ["/ops/system", "/ops/users", "/ops/dashboard", "/ops/settings"],
-	manager: ["/ops/dashboard", "/ops/consultations", "/ops/applications", "/ops/workflow"],
-	coordinator: ["/ops/dashboard", "/ops/consultations", "/ops/appointments", "/ops/applicants"],
-	consultant: ["/ops/dashboard", "/ops/consultations", "/ops/applicants", "/ops/documents"],
-	finance: ["/ops/dashboard", "/ops/finance", "/ops/packages", "/ops/reports"],
-	admin: ["/ops/system", "/ops/users", "/ops/cms", "/ops/settings"],
+	super_admin: ["/system", "/users", "/dashboard", "/settings"],
+	manager: ["/dashboard", "/consultations", "/applications", "/workflow"],
+	coordinator: ["/dashboard", "/consultations", "/appointments", "/applicants"],
+	consultant: ["/dashboard", "/consultations", "/applicants", "/documents"],
+	finance: ["/dashboard", "/finance", "/packages", "/reports"],
+	admin: ["/system", "/users", "/cms", "/settings"],
 };
 
 /** Pick up to four permitted tabs, falling back to whatever the role can reach */
@@ -88,7 +88,7 @@ export function OpsAppBar({
 	return (
 		<header className="pbar pbar--ops">
 			<Link
-				to={opsRole ? ROLE_HOME[opsRole] : "/ops"}
+				to={opsRole ? ROLE_HOME[opsRole] : "/"}
 				className="pbar__mark"
 				aria-label="Operations home"
 			>
@@ -116,7 +116,7 @@ export function OpsAppBar({
 				</button>
 
 				{opsRole !== "admin" ? (
-					<Link to="/ops/inbox" className="pbar__icon-btn pbar__icon-btn--badge" aria-label="Notifications">
+					<Link to="/inbox" className="pbar__icon-btn pbar__icon-btn--badge" aria-label="Notifications">
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 							<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 							<path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -292,7 +292,7 @@ export function OpsTabBar({
 							onClick={() => {
 								opsSignOut();
 								setMoreOpen(false);
-								navigate("/ops/login");
+								navigate("/login");
 							}}
 						>
 							Sign out

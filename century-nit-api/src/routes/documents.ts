@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
 	DOCUMENT_ERROR_CODES,
@@ -12,9 +12,14 @@ import {
 	uploadTicketSchema,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applicantDocuments, users } from "../db/schema.js";
+import { applicantDocuments, bookings, users } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
-import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
+import {
+	requireAuth,
+	requireModule,
+	type AuthVariables,
+	type StaffContext,
+} from "../middleware/auth.js";
 import { getDocumentStorage, StorageNotConfiguredError } from "../services/storage/index.js";
 
 /**
@@ -45,11 +50,52 @@ function toResponse(row: DocumentRow, ownerEmail?: string) {
 	};
 }
 
-/** Staff who may review documents. Consultants see their own caseload's. */
+/** Staff who may review documents at all. Matches ROLE_PERMISSIONS.documents. */
 function canReview(role: string | undefined): boolean {
 	return (
 		role === "manager" || role === "coordinator" || role === "consultant" || role === "super_admin"
 	);
+}
+
+/**
+ * Which applicants this caller may reach, beyond themselves.
+ *
+ * `null` means every applicant: managers, coordinators and super admins route
+ * work across the whole operation and need the full queue to do it. A
+ * consultant gets a list — the applicants actually assigned to them — which is
+ * the same row-level rule `canViewBooking` applies to appointments. Anyone else
+ * gets an empty list and can only ever see their own documents.
+ *
+ * This existed as a comment ("Consultants see their own caseload's") long
+ * before it existed as code: the listing applied no caseload filter at all, so
+ * any consultant could read every applicant's passport scan and bank statement.
+ * The ops UI never offered a way to do it, which is exactly why it went
+ * unnoticed — a UI is not an access control.
+ *
+ * Caseload is derived from bookings rather than stored, because assignment is
+ * already modelled there and a second copy would drift.
+ */
+async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] | null> {
+	if (!staff || !canReview(staff.role)) return [];
+	if (staff.role !== "consultant") return null;
+
+	const rows = await db
+		.selectDistinct({ ownerUserId: bookings.clientUserId })
+		.from(bookings)
+		.where(eq(bookings.employeeId, staff.opsUserId));
+
+	return rows.map((r) => r.ownerUserId);
+}
+
+/** Whether this caller may act on a document owned by `ownerUserId`. */
+async function mayReachOwner(
+	ownerUserId: string,
+	user: { id: string },
+	staff: StaffContext | null,
+): Promise<boolean> {
+	if (ownerUserId === user.id) return true;
+	const reachable = await reachableOwnerIds(staff);
+	return reachable === null || reachable.includes(ownerUserId);
 }
 
 async function storageOrThrow() {
@@ -275,12 +321,32 @@ documentsRouter.openapi(
 		const staff = c.get("staff");
 		const { ownerUserId } = c.req.valid("query");
 
-		// Only staff may look at somebody else's documents.
-		if (ownerUserId && ownerUserId !== user.id && !canReview(staff?.role)) {
-			throw new HttpError(403, "FORBIDDEN", "You can only view your own documents");
+		const reachable = await reachableOwnerIds(staff);
+
+		// Asking for a named applicant: it must be you, or one you may reach.
+		if (ownerUserId && ownerUserId !== user.id) {
+			if (reachable !== null && !reachable.includes(ownerUserId)) {
+				throw new HttpError(403, "FORBIDDEN", "You can only view your own documents");
+			}
 		}
 
-		const scopeToOwner = ownerUserId ?? (canReview(staff?.role) ? undefined : user.id);
+		/*
+		 * No applicant named, so this is a listing rather than a lookup:
+		 *   - not a reviewer → your own documents
+		 *   - consultant     → your caseload, and nothing if you have none
+		 *   - manager and up → the whole queue
+		 */
+		let ownerScope;
+		if (ownerUserId) {
+			ownerScope = eq(applicantDocuments.ownerUserId, ownerUserId);
+		} else if (!canReview(staff?.role)) {
+			ownerScope = eq(applicantDocuments.ownerUserId, user.id);
+		} else if (reachable !== null) {
+			// An empty caseload must mean no documents, not every document — which
+			// is what an unfiltered query would have returned.
+			if (reachable.length === 0) return c.json({ documents: [] });
+			ownerScope = inArray(applicantDocuments.ownerUserId, reachable);
+		}
 
 		const rows = await db
 			.select({ doc: applicantDocuments, ownerEmail: users.email })
@@ -288,7 +354,7 @@ documentsRouter.openapi(
 			.leftJoin(users, eq(users.id, applicantDocuments.ownerUserId))
 			.where(
 				and(
-					scopeToOwner ? eq(applicantDocuments.ownerUserId, scopeToOwner) : undefined,
+					ownerScope,
 					// A pending row has no file behind it yet; it is bookkeeping.
 					ne(applicantDocuments.status, "PENDING_UPLOAD"),
 				),
@@ -324,7 +390,6 @@ documentsRouter.openapi(
 		const user = c.get("user");
 		const staff = c.get("staff");
 		const { id } = c.req.valid("param");
-		const storage = await storageOrThrow();
 
 		const [row] = await db
 			.select()
@@ -335,7 +400,7 @@ documentsRouter.openapi(
 		if (!row) {
 			throw new HttpError(404, DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND, "Document not found");
 		}
-		if (row.ownerUserId !== user.id && !canReview(staff?.role)) {
+		if (!(await mayReachOwner(row.ownerUserId, user, staff))) {
 			throw new HttpError(403, "FORBIDDEN", "You cannot view this document");
 		}
 		if (row.status === "PENDING_UPLOAD") {
@@ -345,6 +410,18 @@ documentsRouter.openapi(
 				"That upload never completed",
 			);
 		}
+
+		/*
+		 * Storage last, after authorisation.
+		 *
+		 * It used to be first, which meant a server with no storage configured
+		 * answered 503 to everyone — including someone asking for a document that
+		 * is not theirs. That is a request that should be refused on its merits
+		 * regardless of how the server happens to be configured, and answering
+		 * otherwise leaks a little about the deployment to exactly the caller who
+		 * should learn nothing.
+		 */
+		const storage = await storageOrThrow();
 
 		const ticket = await storage.createDownloadUrl({
 			key: row.storageKey,
@@ -379,9 +456,26 @@ documentsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		const user = c.get("user");
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
+
+		/*
+		 * `requireModule("documents")` establishes that this role reviews documents
+		 * at all; it says nothing about *whose*. Read the row first so a consultant
+		 * cannot verify an applicant outside their caseload by posting an id they
+		 * guessed or kept from an earlier assignment.
+		 */
+		const [existing] = await db
+			.select({ ownerUserId: applicantDocuments.ownerUserId })
+			.from(applicantDocuments)
+			.where(eq(applicantDocuments.id, id))
+			.limit(1);
+
+		if (existing && !(await mayReachOwner(existing.ownerUserId, user, staff))) {
+			throw new HttpError(403, "FORBIDDEN", "That applicant is not on your caseload");
+		}
 
 		const [updated] = await db
 			.update(applicantDocuments)
@@ -438,7 +532,7 @@ documentsRouter.openapi(
 		if (!row) {
 			throw new HttpError(404, DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND, "Document not found");
 		}
-		if (row.ownerUserId !== user.id && !canReview(staff?.role)) {
+		if (!(await mayReachOwner(row.ownerUserId, user, staff))) {
 			throw new HttpError(403, "FORBIDDEN", "You cannot delete this document");
 		}
 		// A verified document is evidence in a live application; withdrawing it

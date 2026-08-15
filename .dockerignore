@@ -16,10 +16,13 @@
 **/.env.*.local
 **/.dev.vars
 
-# The web app is not needed to build or run the API — but its manifest is,
-# because npm resolves the whole workspace graph from the root lockfile.
+# The front-end apps are not needed to build or run the API — but their
+# manifests are, because npm resolves the whole workspace graph from the root
+# lockfile and `npm ci` fails if a workspace named there is missing.
 century-nit-web/
 !century-nit-web/package.json
+century-nit-ops/
+!century-nit-ops/package.json
 
 **/*.md
 **/*.log

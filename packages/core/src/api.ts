@@ -13,6 +13,7 @@ import type {
 	UpdateWorkingHours,
 	WorkingHoursResponse,
 } from "century-nit-shared";
+import { API_PREFIX } from "century-nit-shared";
 
 /**
  * Typed client for the scheduling API, shared by the portal and the Operations
@@ -102,11 +103,11 @@ export const bookingsApi = {
 			durationMinutes: String(params.durationMinutes ?? 45),
 			...(params.employeeId ? { employeeId: params.employeeId } : {}),
 		});
-		return request(`/api/bookings/availability?${query}`);
+		return request(`${API_PREFIX}/bookings/availability?${query}`);
 	},
 
 	create(input: CreateBooking): Promise<Booking> {
-		return request("/api/bookings", { method: "POST", ...json(input) });
+		return request(`${API_PREFIX}/bookings`, { method: "POST", ...json(input) });
 	},
 
 	list(filter: { status?: BookingStatus; branchId?: string; employeeId?: string } = {}): Promise<{
@@ -117,11 +118,11 @@ export const bookingsApi = {
 			Object.entries(filter).filter(([, v]) => v != null) as [string, string][],
 		);
 		const suffix = query.toString() ? `?${query}` : "";
-		return request(`/api/bookings${suffix}`);
+		return request(`${API_PREFIX}/bookings${suffix}`);
 	},
 
 	get(id: string): Promise<Booking> {
-		return request(`/api/bookings/${id}`);
+		return request(`${API_PREFIX}/bookings/${id}`);
 	},
 
 	/** Employees for the assign dialog, each flagged available or busy. */
@@ -137,12 +138,12 @@ export const bookingsApi = {
 				.filter(([, v]) => v != null)
 				.map(([k, v]) => [k, String(v)]),
 		);
-		return request(`/api/bookings/employees?${query}`);
+		return request(`${API_PREFIX}/bookings/employees?${query}`);
 	},
 
 	/** Manager/coordinator only. The server enforces that, not the caller. */
 	assign(bookingId: string, employeeId: string): Promise<Booking> {
-		return request(`/api/bookings/${bookingId}/assign`, {
+		return request(`${API_PREFIX}/bookings/${bookingId}/assign`, {
 			method: "PATCH",
 			...json({ employeeId }),
 		});
@@ -152,14 +153,14 @@ export const bookingsApi = {
 		bookingId: string,
 		input: { date: string; time: string; timezone?: string; reason?: string },
 	): Promise<Booking> {
-		return request(`/api/bookings/${bookingId}/reschedule`, {
+		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule`, {
 			method: "PATCH",
 			...json(input),
 		});
 	},
 
 	cancel(bookingId: string, reason?: string): Promise<Booking> {
-		return request(`/api/bookings/${bookingId}/cancel`, {
+		return request(`${API_PREFIX}/bookings/${bookingId}/cancel`, {
 			method: "PATCH",
 			...json({ reason }),
 		});
@@ -176,7 +177,7 @@ export const staffApi = {
 	 * already told them, and never echoes the token back.
 	 */
 	previewInvitation(token: string): Promise<InvitationPreview> {
-		return request(`/api/staff/invitations/preview?token=${encodeURIComponent(token)}`);
+		return request(`${API_PREFIX}/staff/invitations/preview?token=${encodeURIComponent(token)}`);
 	},
 
 	/** Creates the login and staff profile. The invitee chooses the password. */
@@ -185,24 +186,24 @@ export const staffApi = {
 		role: string;
 		mfaRequired: boolean;
 	}> {
-		return request("/api/staff/invitations/accept", { method: "POST", ...json(input) });
+		return request(`${API_PREFIX}/staff/invitations/accept`, { method: "POST", ...json(input) });
 	},
 
 	createInvitation(input: CreateInvitation): Promise<CreatedInvitation> {
-		return request("/api/staff/invitations", { method: "POST", ...json(input) });
+		return request(`${API_PREFIX}/staff/invitations`, { method: "POST", ...json(input) });
 	},
 
 	listInvitations(): Promise<{ invitations: Invitation[] }> {
-		return request("/api/staff/invitations");
+		return request(`${API_PREFIX}/staff/invitations`);
 	},
 
 	revokeInvitation(id: string): Promise<Invitation> {
-		return request(`/api/staff/invitations/${id}`, { method: "DELETE" });
+		return request(`${API_PREFIX}/staff/invitations/${id}`, { method: "DELETE" });
 	},
 
 	/** Whether the caller holds a second factor, and whether they must. */
 	mfaStatus(): Promise<TwoFactorStatus> {
-		return request("/api/staff/mfa");
+		return request(`${API_PREFIX}/staff/mfa`);
 	},
 
 	list(): Promise<{
@@ -217,7 +218,7 @@ export const staffApi = {
 			mfaEnabled: boolean;
 		}[];
 	}> {
-		return request("/api/staff");
+		return request(`${API_PREFIX}/staff`);
 	},
 };
 
@@ -233,16 +234,16 @@ export type CalendarStatus = {
 
 export const calendarApi = {
 	status(): Promise<CalendarStatus> {
-		return request("/api/calendar/status");
+		return request(`${API_PREFIX}/calendar/status`);
 	},
 
 	/** Returns the Google consent URL to send the employee to. */
 	connect(): Promise<{ url: string }> {
-		return request("/api/calendar/connect");
+		return request(`${API_PREFIX}/calendar/connect`);
 	},
 
 	disconnect(): Promise<{ disconnected: boolean }> {
-		return request("/api/calendar/connection", { method: "DELETE" });
+		return request(`${API_PREFIX}/calendar/connection`, { method: "DELETE" });
 	},
 
 	/**
@@ -252,7 +253,7 @@ export const calendarApi = {
 	 * is the session user; there is no id to pass, and none is accepted.
 	 */
 	updateWorkingHours(input: UpdateWorkingHours): Promise<WorkingHoursResponse> {
-		return request("/api/calendar/working-hours", {
+		return request(`${API_PREFIX}/calendar/working-hours`, {
 			method: "PUT",
 			...json(input),
 		});

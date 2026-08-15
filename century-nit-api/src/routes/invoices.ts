@@ -45,7 +45,7 @@ function actorFrom(staff: StaffContext) {
 	return { opsUserId: staff.opsUserId, name: staff.name, email: staff.email };
 }
 
-/* ── POST /api/invoices ──────────────────────────────────────────────────── */
+/* ── POST /api/v1/invoices ──────────────────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({
@@ -74,7 +74,7 @@ invoicesRouter.openapi(
 	},
 );
 
-/* ── GET /api/invoices ───────────────────────────────────────────────────── */
+/* ── GET /api/v1/invoices ───────────────────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({
@@ -122,7 +122,7 @@ invoicesRouter.openapi(
 	},
 );
 
-/* ── GET /api/invoices/:id ───────────────────────────────────────────────── */
+/* ── GET /api/v1/invoices/:id ───────────────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({
@@ -155,7 +155,7 @@ invoicesRouter.openapi(
 	},
 );
 
-/* ── POST /api/invoices/:id/payments ─────────────────────────────────────── */
+/* ── POST /api/v1/invoices/:id/payments ─────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({
@@ -193,7 +193,7 @@ invoicesRouter.openapi(
 	},
 );
 
-/* ── POST /api/invoices/:id/void ─────────────────────────────────────────── */
+/* ── POST /api/v1/invoices/:id/void ─────────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({
@@ -224,7 +224,7 @@ invoicesRouter.openapi(
 	},
 );
 
-/* ── POST /api/invoices/:id/credit ───────────────────────────────────────── */
+/* ── POST /api/v1/invoices/:id/credit ───────────────────────────────────────── */
 
 invoicesRouter.openapi(
 	createRoute({

@@ -76,7 +76,7 @@ const auditResponseSchema = z.object({
 	entries: z.array(auditEntrySchema),
 });
 
-/* ── GET /api/settings ──────────────────────────────────────────────────── */
+/* ── GET /api/v1/settings ──────────────────────────────────────────────────── */
 
 settingsRouter.openapi(
 	createRoute({
@@ -103,7 +103,7 @@ settingsRouter.openapi(
 	},
 );
 
-/* ── PUT /api/settings ──────────────────────────────────────────────────── */
+/* ── PUT /api/v1/settings ──────────────────────────────────────────────────── */
 
 settingsRouter.openapi(
 	createRoute({
@@ -174,7 +174,7 @@ settingsRouter.openapi(
 	},
 );
 
-/* ── GET /api/settings/audit ────────────────────────────────────────────── */
+/* ── GET /api/v1/settings/audit ────────────────────────────────────────────── */
 
 settingsRouter.openapi(
 	createRoute({

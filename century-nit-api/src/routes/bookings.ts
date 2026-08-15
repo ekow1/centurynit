@@ -109,7 +109,7 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 	};
 }
 
-/* ── GET /api/bookings/availability ──────────────────────────────────────── */
+/* ── GET /api/v1/bookings/availability ──────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -148,7 +148,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── POST /api/bookings ──────────────────────────────────────────────────── */
+/* ── POST /api/v1/bookings ──────────────────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -186,7 +186,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── GET /api/bookings ───────────────────────────────────────────────────── */
+/* ── GET /api/v1/bookings ───────────────────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -242,7 +242,7 @@ bookingsRouter.openapi(
  * segment declared after a parameterised one is unreachable — `/employees`
  * was being matched as `/:id` with id="employees" and failing uuid validation.
  */
-/* ── GET /api/bookings/employees ─────────────────────────────────────────── */
+/* ── GET /api/v1/bookings/employees ─────────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -308,7 +308,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── GET /api/bookings/:id ───────────────────────────────────────────────── */
+/* ── GET /api/v1/bookings/:id ───────────────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -338,7 +338,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── PATCH /api/bookings/:id/cancel ──────────────────────────────────────── */
+/* ── PATCH /api/v1/bookings/:id/cancel ──────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -381,7 +381,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── PATCH /api/bookings/:id/reschedule ──────────────────────────────────── */
+/* ── PATCH /api/v1/bookings/:id/reschedule ──────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({
@@ -427,7 +427,7 @@ bookingsRouter.openapi(
 	},
 );
 
-/* ── PATCH /api/bookings/:id/assign ──────────────────────────────────────── */
+/* ── PATCH /api/v1/bookings/:id/assign ──────────────────────────────────────── */
 
 bookingsRouter.openapi(
 	createRoute({

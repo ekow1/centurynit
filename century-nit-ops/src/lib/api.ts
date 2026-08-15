@@ -1,7 +1,10 @@
+import { API_PREFIX } from "century-nit-shared";
 /**
  * Thin fetch wrapper for the ops app.
  *
- * Requests are always same-origin `/api/*`. In development Vite proxies them to
+ * Requests are always same-origin `/api/*`. Resource routes carry the version
+ * prefix (API_PREFIX); `/api/auth` and `/api/health` deliberately do not.
+ * In development Vite proxies them to
  * the API; in production the console Worker does (see src/worker/index.ts).
  *
  * Never call the API's origin directly from here. Better Auth's session cookie
@@ -140,11 +143,11 @@ export function listInvoices(params?: {
 	if (params?.limit) qs.set("limit", String(params.limit));
 	if (params?.offset) qs.set("offset", String(params.offset));
 	const query = qs.toString();
-	return apiFetch<InvoiceListResponse>(`/api/invoices${query ? `?${query}` : ""}`);
+	return apiFetch<InvoiceListResponse>(`${API_PREFIX}/invoices${query ? `?${query}` : ""}`);
 }
 
 export function getInvoice(id: string): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`/api/invoices/${id}`);
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}`);
 }
 
 export function createInvoice(body: {
@@ -155,7 +158,7 @@ export function createInvoice(body: {
 	note?: string;
 	dueAt?: string;
 }): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>("/api/invoices", {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices`, {
 		method: "POST",
 		body: JSON.stringify(body),
 	});
@@ -170,7 +173,7 @@ export function recordPayment(
 		reference?: string;
 	},
 ): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`/api/invoices/${id}/payments`, {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}/payments`, {
 		method: "POST",
 		body: JSON.stringify(body),
 	});
@@ -180,7 +183,7 @@ export function voidInvoice(
 	id: string,
 	reason: string,
 ): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`/api/invoices/${id}/void`, {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}/void`, {
 		method: "POST",
 		body: JSON.stringify({ reason }),
 	});
@@ -190,7 +193,7 @@ export function creditInvoice(
 	id: string,
 	body: { amountCents: number; reason: string },
 ): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`/api/invoices/${id}/credit`, {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}/credit`, {
 		method: "POST",
 		body: JSON.stringify(body),
 	});

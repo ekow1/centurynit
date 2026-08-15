@@ -9,7 +9,7 @@
 	},
 	"upload_source_maps": true,
 	"vars": {
-		"API_BASE_URL": "http://54.171.185.242:3000"
+		"API_BASE_URL": "https://api.softclicksolutions.com"
 	},
 	"assets": {
 		"directory": "./dist/client",

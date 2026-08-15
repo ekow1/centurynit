@@ -165,7 +165,7 @@ export function requireRole(
  * copy hides UI, this one is the authority. Use it on every staff-facing
  * resource route:
  *
- *   app.use("/api/invoices/*", requireAuth, requireModule("invoices"));
+ *   app.use("/api/v1/invoices/*", requireAuth, requireModule("invoices"));
  */
 export function requireModule(
 	module: OpsModule,

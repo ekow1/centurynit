@@ -215,7 +215,7 @@ Better Auth serves its own routes outside the app's OpenAPI document, so they
 are documented separately at `/api/auth/reference`.
 
 `API_BASE_URL` in `century-nit-web/wrangler.json` is set to
-`http://54.171.185.242:3000` — the EC2/Dokploy host running the API. The web
+`https://api.softclicksolutions.com` — the API behind Dokploy on EC2. The web
 Worker proxies all `/api/*` requests there.
 
 ### Build order

@@ -71,7 +71,7 @@ const statusSchema = z.object({
 	),
 });
 
-/* ── GET /api/calendar/status ────────────────────────────────────────────── */
+/* ── GET /api/v1/calendar/status ────────────────────────────────────────────── */
 
 calendarRouter.openapi(
 	createRoute({
@@ -102,7 +102,7 @@ calendarRouter.openapi(
 	},
 );
 
-/* ── GET /api/calendar/connect ───────────────────────────────────────────── */
+/* ── GET /api/v1/calendar/connect ───────────────────────────────────────────── */
 
 calendarRouter.openapi(
 	createRoute({
@@ -131,7 +131,7 @@ calendarRouter.openapi(
 	},
 );
 
-/* ── GET /api/calendar/callback ──────────────────────────────────────────── */
+/* ── GET /api/v1/calendar/callback ──────────────────────────────────────────── */
 
 /**
  * OAuth redirect target.
@@ -231,7 +231,7 @@ calendarRouter.openapi(
 	},
 );
 
-/* ── PUT /api/calendar/working-hours ─────────────────────────────────────── */
+/* ── PUT /api/v1/calendar/working-hours ─────────────────────────────────────── */
 
 /**
  * Set the signed-in staff member's own working hours (§3).
@@ -278,7 +278,7 @@ calendarRouter.openapi(
 	},
 );
 
-/* ── DELETE /api/calendar/connection ─────────────────────────────────────── */
+/* ── DELETE /api/v1/calendar/connection ─────────────────────────────────────── */
 
 calendarRouter.openapi(
 	createRoute({
@@ -303,7 +303,7 @@ calendarRouter.openapi(
 	},
 );
 
-/* ── POST /api/calendar/webhook ──────────────────────────────────────────── */
+/* ── POST /api/v1/calendar/webhook ──────────────────────────────────────────── */
 
 /**
  * Google push notification receiver (§12).

@@ -59,7 +59,7 @@ function toInvitationResponse(row: InvitationRow) {
 	};
 }
 
-/* ── POST /api/staff/invitations ─────────────────────────────────────────── */
+/* ── POST /api/v1/staff/invitations ─────────────────────────────────────────── */
 
 staffRouter.openapi(
 	createRoute({
@@ -99,7 +99,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── GET /api/staff/invitations ──────────────────────────────────────────── */
+/* ── GET /api/v1/staff/invitations ──────────────────────────────────────────── */
 
 staffRouter.openapi(
 	createRoute({
@@ -125,7 +125,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── DELETE /api/staff/invitations/:id ───────────────────────────────────── */
+/* ── DELETE /api/v1/staff/invitations/:id ───────────────────────────────────── */
 
 staffRouter.openapi(
 	createRoute({
@@ -149,7 +149,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── GET /api/staff/invitations/preview ──────────────────────────────────── */
+/* ── GET /api/v1/staff/invitations/preview ──────────────────────────────────── */
 
 /**
  * What the invitee sees before choosing a password.
@@ -186,7 +186,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── POST /api/staff/invitations/accept ──────────────────────────────────── */
+/* ── POST /api/v1/staff/invitations/accept ──────────────────────────────────── */
 
 staffRouter.openapi(
 	createRoute({
@@ -231,7 +231,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── POST /api/staff/bootstrap ───────────────────────────────────────────── */
+/* ── POST /api/v1/staff/bootstrap ───────────────────────────────────────────── */
 
 /**
  * Create the first super administrator.
@@ -354,7 +354,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── GET /api/staff/mfa ──────────────────────────────────────────────────── */
+/* ── GET /api/v1/staff/mfa ──────────────────────────────────────────────────── */
 
 /**
  * Whether the caller has a second factor, and whether their role obliges one.
@@ -394,7 +394,7 @@ staffRouter.openapi(
 	},
 );
 
-/* ── GET /api/staff ──────────────────────────────────────────────────────── */
+/* ── GET /api/v1/staff ──────────────────────────────────────────────────────── */
 
 staffRouter.openapi(
 	createRoute({

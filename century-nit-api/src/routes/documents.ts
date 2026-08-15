@@ -78,7 +78,7 @@ function buildStorageKey(ownerUserId: string, documentType: string, fileName: st
 	return `${ownerUserId}/${safeType}/${randomUUID()}.${extension}`;
 }
 
-/* ── POST /api/documents/upload-url ──────────────────────────────────────── */
+/* ── POST /api/v1/documents/upload-url ──────────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({
@@ -88,7 +88,7 @@ documentsRouter.openapi(
 		summary: "Request a signed URL to upload a document",
 		description:
 			"Creates the document record at PENDING_UPLOAD and returns a short-lived URL. " +
-			"PUT the file to that URL, then call /api/documents/{id}/complete.",
+			"PUT the file to that URL, then call /api/v1/documents/{id}/complete.",
 		middleware: [requireAuth] as const,
 		request: {
 			body: {
@@ -167,7 +167,7 @@ documentsRouter.openapi(
 	},
 );
 
-/* ── POST /api/documents/{id}/complete ───────────────────────────────────── */
+/* ── POST /api/v1/documents/{id}/complete ───────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({
@@ -246,7 +246,7 @@ documentsRouter.openapi(
 	},
 );
 
-/* ── GET /api/documents ──────────────────────────────────────────────────── */
+/* ── GET /api/v1/documents ──────────────────────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({
@@ -303,7 +303,7 @@ documentsRouter.openapi(
 	},
 );
 
-/* ── GET /api/documents/{id}/download ────────────────────────────────────── */
+/* ── GET /api/v1/documents/{id}/download ────────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({
@@ -355,7 +355,7 @@ documentsRouter.openapi(
 	},
 );
 
-/* ── POST /api/documents/{id}/review ─────────────────────────────────────── */
+/* ── POST /api/v1/documents/{id}/review ─────────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({
@@ -407,7 +407,7 @@ documentsRouter.openapi(
 	},
 );
 
-/* ── DELETE /api/documents/{id} ──────────────────────────────────────────── */
+/* ── DELETE /api/v1/documents/{id} ──────────────────────────────────────────── */
 
 documentsRouter.openapi(
 	createRoute({

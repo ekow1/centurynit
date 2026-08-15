@@ -3,6 +3,7 @@ import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { BranchScopeFilter } from "./BranchScopeFilter";
+import { DocumentReviewQueue } from "./DocumentReviewQueue";
 
 type DocRow = {
 	key: string;
@@ -298,6 +299,17 @@ export function EnterpriseDocuments() {
 					<p className="stat-cell__label">Verified</p>
 					<p className="stat-cell__value">{verifiedCount}</p>
 				</div>
+			</div>
+
+			{/*
+			 * Real uploads first, demo folders below.
+			 *
+			 * The counters above and the folders below are the localStorage demo
+			 * dataset. This is the live queue — files applicants actually sent, which
+			 * are the ones a reviewer is accountable for.
+			 */}
+			<div style={{ marginBottom: "1.5rem" }}>
+				<DocumentReviewQueue />
 			</div>
 
 			{visibleFolders.length === 0 ? (

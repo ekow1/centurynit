@@ -1,7 +1,31 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppState } from "../../context/AppState";
 import { REQUIRED_DOCUMENTS } from "century-nit-core";
+import { ApiError, documentsApi } from "century-nit-core/api";
+import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
+import type { ApplicantDocument } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
+
+/**
+ * The applicant's document vault.
+ *
+ * Two modes, and which one is running depends entirely on whether the visitor
+ * is signed in.
+ *
+ * Signed in, files are real: the browser takes a signed URL from the API, PUTs
+ * the file straight to storage, and the API confirms it landed. Nothing passes
+ * through Node, and the consultant sees it in the ops review queue.
+ *
+ * Signed out, this is the marketing demo — the same screen backed by
+ * localStorage, so a prospective client can click through the portal without an
+ * account. That path used to be the only one, and it did not even open a file
+ * picker: it fabricated `passport_scan_0001.pdf` and moved the status to
+ * "uploaded". The button said "Upload (simulated)", which was at least honest.
+ *
+ * The demo path is kept deliberately rather than replaced, but it now takes the
+ * real file the visitor chose, so the two modes differ in where the bytes go
+ * rather than in how the screen behaves.
+ */
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
 	missing: { label: "Not uploaded", pill: "portal-pill--needs_info" },
@@ -10,23 +34,164 @@ const STATUS_META: Record<string, { label: string; pill: string }> = {
 	rejected: { label: "Rejected - resubmit", pill: "portal-pill--needs_info" },
 };
 
+/** API vocabulary → the vault's. PENDING_UPLOAD never reaches a listing. */
+const LIVE_STATUS: Record<string, string> = {
+	UPLOADED: "uploaded",
+	VERIFIED: "verified",
+	REJECTED: "rejected",
+};
+
+const ACCEPT = ALLOWED_DOCUMENT_TYPES.join(",");
+
+function readableError(err: unknown, fallback: string): string {
+	if (err instanceof ApiError) {
+		if (err.code === "STORAGE_NOT_CONFIGURED") {
+			return "Uploads are temporarily unavailable. Please try again shortly.";
+		}
+		return err.message;
+	}
+	return fallback;
+}
+
 export function PortalDocumentVault() {
 	const { documents, uploadDocument, removeDocument } = useAppState();
 	const [previewDoc, setPreviewDoc] = useState<string | null>(null);
 	const uploadCounter = useRef(0);
 
-	const uploadedCount = documents.filter((d) => d.status !== "missing").length;
-	const verifiedCount = documents.filter((d) => d.status === "verified").length;
-	const allUploaded = uploadedCount === documents.length;
+	/**
+	 * Live records keyed by document type, which is the same id the checklist
+	 * uses — that shared key is what lets a live upload light up the right row.
+	 *
+	 * `null` means "not signed in, or the API is unreachable": the demo path.
+	 * An empty map means signed in with nothing uploaded yet, which is a
+	 * different thing and must not fall back.
+	 */
+	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
+	const [busyId, setBusyId] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const fileInput = useRef<HTMLInputElement | null>(null);
+	const pendingTarget = useRef<string | null>(null);
 
-	const previewing = previewDoc
-		? documents.find((d) => d.id === previewDoc)
-		: null;
+	const loadLive = useCallback(() => {
+		documentsApi
+			.list()
+			.then((res) => setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d]))))
+			.catch(() => {
+				// Signed out is the common case here, not an error worth showing.
+				setLiveDocs(null);
+			});
+	}, []);
 
+	useEffect(loadLive, [loadLive]);
+
+	const isLive = liveDocs !== null;
+
+	/**
+	 * One row per required document, live record folded in where there is one.
+	 *
+	 * The checklist is the source of what is *required*; the API is the source of
+	 * what has been *sent*. Neither alone can render this screen.
+	 */
+	const rows = documents.map((doc) => {
+		const live = liveDocs?.get(doc.id);
+		if (!live) return { ...doc, live: null };
+		return {
+			...doc,
+			live,
+			fileName: live.fileName,
+			status: LIVE_STATUS[live.status] ?? doc.status,
+			uploadedAt: live.uploadedAt ?? live.createdAt,
+		};
+	});
+
+	const uploadedCount = rows.filter((d) => d.status !== "missing").length;
+	const verifiedCount = rows.filter((d) => d.status === "verified").length;
+	const allUploaded = uploadedCount === rows.length;
+
+	const previewing = previewDoc ? rows.find((d) => d.id === previewDoc) : null;
+
+	/** Open the picker; the work happens in the change handler below. */
 	function handleUpload(id: string) {
-		uploadCounter.current += 1;
-		const fakeName = `${id}_scan_${uploadCounter.current.toString().padStart(4, "0")}.pdf`;
-		uploadDocument(id, fakeName);
+		setError(null);
+		pendingTarget.current = id;
+		fileInput.current?.click();
+	}
+
+	async function onFileChosen(file: File) {
+		const id = pendingTarget.current;
+		pendingTarget.current = null;
+		if (!id) return;
+
+		// Checked here as well as server-side, so the applicant learns before
+		// waiting for a 15 MB upload to be refused at the end of it.
+		if (file.size > MAX_DOCUMENT_BYTES) {
+			setError(`${file.name} is larger than 15 MB. Please upload a smaller scan.`);
+			return;
+		}
+		if (!(ALLOWED_DOCUMENT_TYPES as readonly string[]).includes(file.type)) {
+			setError("Upload a PDF or an image (JPEG, PNG, HEIC, WebP).");
+			return;
+		}
+
+		if (!isLive) {
+			// Demo path: no account, so nothing to upload to. Record the real name
+			// the visitor picked rather than inventing one.
+			uploadCounter.current += 1;
+			uploadDocument(id, file.name);
+			return;
+		}
+
+		setBusyId(id);
+		setError(null);
+		try {
+			const saved = await documentsApi.upload(file, id);
+			setLiveDocs((current) => new Map(current ?? []).set(saved.documentType, saved));
+		} catch (err) {
+			setError(readableError(err, `Could not upload ${file.name}. Please try again.`));
+		} finally {
+			setBusyId(null);
+		}
+	}
+
+	/** Live files open through a short-lived signed URL; demo files use the drawer. */
+	async function handlePreview(row: (typeof rows)[number]) {
+		if (!row.live) {
+			setPreviewDoc(row.id);
+			return;
+		}
+		setBusyId(row.id);
+		setError(null);
+		try {
+			const ticket = await documentsApi.downloadUrl(row.live.id);
+			window.open(ticket.url, "_blank", "noopener,noreferrer");
+		} catch (err) {
+			setError(readableError(err, "Could not open that document."));
+		} finally {
+			setBusyId(null);
+		}
+	}
+
+	async function handleRemove(row: (typeof rows)[number]) {
+		if (!row.live) {
+			removeDocument(row.id);
+			return;
+		}
+		setBusyId(row.id);
+		setError(null);
+		try {
+			await documentsApi.remove(row.live.id);
+			setLiveDocs((current) => {
+				const next = new Map(current ?? []);
+				next.delete(row.live!.documentType);
+				return next;
+			});
+		} catch (err) {
+			// A verified document is refused with 409 — that rule is the server's,
+			// and its message already explains what to do instead.
+			setError(readableError(err, "Could not remove that document."));
+		} finally {
+			setBusyId(null);
+		}
 	}
 
 	return (
@@ -61,12 +226,38 @@ export function PortalDocumentVault() {
 				</div>
 			</div>
 
+			{/*
+			 * One hidden input for the whole list. Which row it is acting on is held
+			 * in `pendingTarget` — rendering an input per row would mean a dozen of
+			 * them on screen for a control the applicant never sees.
+			 */}
+			<input
+				ref={fileInput}
+				type="file"
+				accept={ACCEPT}
+				hidden
+				onChange={(e) => {
+					const file = e.target.files?.[0];
+					// Reset first: choosing the same file twice must fire again, and it
+					// will not if the value still matches.
+					e.target.value = "";
+					if (file) void onFileChosen(file);
+				}}
+			/>
+
+			{error ? (
+				<div className="card card--pad mt-4" role="alert">
+					<p className="muted">{error}</p>
+				</div>
+			) : null}
+
 			<section className="mt-6">
 				<p className="eyebrow mb-3">Required documents</p>
 				<div className="ledger">
-					{documents.map((doc) => {
+					{rows.map((doc) => {
 						const meta = REQUIRED_DOCUMENTS.find((r) => r.id === doc.id);
 						const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
+						const busy = busyId === doc.id;
 						return (
 							<div key={doc.id} className="ledger-item">
 								<div className="ledger-item__head">
@@ -82,6 +273,11 @@ export function PortalDocumentVault() {
 										{meta?.hint ?? ""}
 									</span>
 								</div>
+								{doc.live?.reviewNote ? (
+									<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
+										{doc.live.reviewNote}
+									</p>
+								) : null}
 								{doc.fileName ? (
 									<div className="row mt-2" style={{ alignItems: "center", gap: "0.75rem" }}>
 										<span className="mono" style={{ fontSize: "0.8rem" }}>
@@ -96,7 +292,8 @@ export function PortalDocumentVault() {
 											<button
 												type="button"
 												className="btn btn--ghost btn--sm"
-												onClick={() => setPreviewDoc(doc.id)}
+												onClick={() => void handlePreview(doc)}
+												disabled={busy}
 											>
 												Preview
 											</button>
@@ -104,13 +301,15 @@ export function PortalDocumentVault() {
 												type="button"
 												className="btn btn--ghost btn--sm"
 												onClick={() => handleUpload(doc.id)}
+												disabled={busy}
 											>
-												Replace
+												{busy ? "Uploading…" : "Replace"}
 											</button>
 											<button
 												type="button"
 												className="btn btn--ghost btn--sm"
-												onClick={() => removeDocument(doc.id)}
+												onClick={() => void handleRemove(doc)}
+												disabled={busy}
 											>
 												Remove
 											</button>
@@ -122,8 +321,9 @@ export function PortalDocumentVault() {
 											type="button"
 											variant="secondary"
 											onClick={() => handleUpload(doc.id)}
+											disabled={busy}
 										>
-											Upload (simulated)
+											{busy ? "Uploading…" : isLive ? "Upload" : "Upload (demo)"}
 										</Button>
 									</div>
 								)}

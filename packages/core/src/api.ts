@@ -1,16 +1,21 @@
 import type {
 	AssignableEmployee,
 	AvailabilityResponse,
+	ApplicantDocument,
 	Booking,
 	BookingStatus,
 	CreateBooking,
 	AcceptInvitation,
 	CreateInvitation,
+	DownloadTicket,
 	Invitation,
 	CreatedInvitation,
 	InvitationPreview,
+	RequestUpload,
+	ReviewDocument,
 	TwoFactorStatus,
 	UpdateWorkingHours,
+	UploadTicket,
 	WorkingHoursResponse,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
@@ -257,5 +262,88 @@ export const calendarApi = {
 			method: "PUT",
 			...json(input),
 		});
+	},
+};
+
+/* ── Documents ───────────────────────────────────────────────────────────── */
+
+export const documentsApi = {
+	/**
+	 * Applicants get their own; staff with the documents module get the review
+	 * queue. Passing `ownerUserId` as an applicant is refused by the server — the
+	 * scope is decided from the session, not from this argument.
+	 */
+	list(params: { ownerUserId?: string } = {}): Promise<{ documents: ApplicantDocument[] }> {
+		const query = params.ownerUserId
+			? `?${new URLSearchParams({ ownerUserId: params.ownerUserId })}`
+			: "";
+		return request(`${API_PREFIX}/documents${query}`);
+	},
+
+	requestUpload(input: RequestUpload): Promise<UploadTicket> {
+		return request(`${API_PREFIX}/documents/upload-url`, { method: "POST", ...json(input) });
+	},
+
+	completeUpload(documentId: string): Promise<ApplicantDocument> {
+		return request(`${API_PREFIX}/documents/${documentId}/complete`, { method: "POST" });
+	},
+
+	/** A signed, expiring link. Fetch it at the moment of use; do not store it. */
+	downloadUrl(documentId: string): Promise<DownloadTicket> {
+		return request(`${API_PREFIX}/documents/${documentId}/download`);
+	},
+
+	review(documentId: string, input: ReviewDocument): Promise<ApplicantDocument> {
+		return request(`${API_PREFIX}/documents/${documentId}/review`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	remove(documentId: string): Promise<{ deleted: boolean }> {
+		return request(`${API_PREFIX}/documents/${documentId}`, { method: "DELETE" });
+	},
+
+	/**
+	 * The whole upload, as one call.
+	 *
+	 * Three steps that must happen in order and must not be reordered by a caller:
+	 * take a ticket, PUT the bytes straight to storage, then tell the server they
+	 * landed. Stopping after the PUT leaves a document stuck at PENDING_UPLOAD
+	 * that no listing will ever show, so getting this wrong is invisible rather
+	 * than loud — which is exactly why it lives here instead of in each screen.
+	 *
+	 * The PUT goes to storage, not to us, so it deliberately bypasses `request`:
+	 * no session cookie should be sent to a third-party host, the signed URL is
+	 * the entire authorisation, and the response is not our JSON error envelope.
+	 */
+	async upload(
+		file: File,
+		documentType: string,
+		options: { signal?: AbortSignal } = {},
+	): Promise<ApplicantDocument> {
+		const ticket = await documentsApi.requestUpload({
+			documentType,
+			fileName: file.name,
+			contentType: file.type as RequestUpload["contentType"],
+			sizeBytes: file.size,
+		});
+
+		const put = await fetch(ticket.uploadUrl, {
+			method: "PUT",
+			body: file,
+			headers: { "Content-Type": file.type, ...ticket.headers },
+			signal: options.signal,
+		});
+
+		if (!put.ok) {
+			throw new ApiError(
+				put.status,
+				"UPLOAD_FAILED",
+				`Could not upload ${file.name}. The link may have expired — try again.`,
+			);
+		}
+
+		return documentsApi.completeUpload(ticket.documentId);
 	},
 };

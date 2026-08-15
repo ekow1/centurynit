@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
+.dev.vars
+!.env.example
+!.dev.vars.example
+
+# Cloudflare
+.wrangler/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# NOTE: century-nit-api/drizzle/ is deliberately NOT ignored.
+# Generated SQL migrations and their journal are source of truth for the
+# database and must travel with the code — the Docker build copies them.
+
+# curl cookie jars from local API testing — these hold live session tokens.
+# Broad on purpose: the narrow `cookies.txt` pattern let `staff-cookies.txt`
+# through, and a session token in git history is not something you can un-commit.
+*cookies*.txt
+*.cookies
+*.jar

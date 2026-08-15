@@ -1,0 +1,34 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2022"],
+		"outDir": "./dist",
+		"rootDir": "./src",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		/*
+		 * No declaration emit: this is an application, not a library — nothing
+		 * imports its types. Emitting them also forces TypeScript to name every
+		 * inferred type portably, which Better Auth's plugin inference cannot
+		 * satisfy (it reaches into a nested zod copy). Turning it off is the
+		 * honest fix; annotating `authInstance` by hand would throw away the
+		 * plugin-aware `api` types that middleware relies on.
+		 */
+		"declaration": false,
+		"declarationMap": false,
+		"sourceMap": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true
+	},
+	"include": ["src/**/*"],
+	// Tests are typechecked by tsconfig.test.json, not compiled into dist —
+	// the runtime image should not ship test files or need vitest at runtime.
+	"exclude": ["node_modules", "dist", "src/**/*.test.ts"]
+}

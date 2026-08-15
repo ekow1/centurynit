@@ -1,0 +1,774 @@
+<title>Century NIT API Migration</title>
+<style>
+  /* ---- tokens: light is the base, both dark states redefine only these ---- */
+  :root {
+    --paper: #FBFBF9;
+    --raise: #F3F2EE;
+    --ink: #0B0B0C;
+    --muted: #6E6E69;
+    --rule: #DDDCD7;
+    --rule-firm: #0B0B0C;
+    --gate: #8B2B20;
+    --gate-wash: #F6EAE8;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+
+    --col: 68ch;
+    --step: 1.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0E0E10;
+      --raise: #17171A;
+      --ink: #EDEDEA;
+      --muted: #9A9A95;
+      --rule: #2B2B2F;
+      --rule-firm: #EDEDEA;
+      --gate: #D98577;
+      --gate-wash: #241715;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0E0E10;
+    --raise: #17171A;
+    --ink: #EDEDEA;
+    --muted: #9A9A95;
+    --rule: #2B2B2F;
+    --rule-firm: #EDEDEA;
+    --gate: #D98577;
+    --gate-wash: #241715;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3rem;
+    max-width: 1180px;
+    margin-inline: auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.15rem, 4vw, 3rem) 6rem;
+  }
+
+  @media (min-width: 1100px) {
+    .shell { grid-template-columns: 13rem minmax(0, 1fr); gap: 4rem; }
+  }
+
+  /* ---- contents rail ---- */
+  .rail { display: none; }
+
+  @media (min-width: 1100px) {
+    .rail {
+      display: block;
+      position: sticky;
+      top: 3rem;
+      align-self: start;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      line-height: 1.5;
+    }
+  }
+
+  .rail__label {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+  .rail a { color: var(--muted); text-decoration: none; display: flex; gap: 0.6rem; }
+  .rail a:hover, .rail a:focus-visible { color: var(--ink); }
+  .rail a span:first-child { color: var(--rule-firm); opacity: 0.45; }
+
+  main { min-width: 0; max-width: var(--col); }
+
+  /* ---- masthead ---- */
+  .mast { border-bottom: 3px solid var(--rule-firm); padding-bottom: 1.75rem; margin-bottom: 3rem; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+  }
+
+  h1 {
+    font-size: clamp(2.1rem, 6vw, 3.1rem);
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+    font-weight: 600;
+    margin: 0.7rem 0 0;
+    text-wrap: balance;
+  }
+
+  .standfirst { color: var(--muted); margin: 0.9rem 0 0; max-width: 52ch; }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.6rem;
+    margin-top: 1.4rem;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  /* ---- sections ---- */
+  section { margin-bottom: 3.75rem; scroll-margin-top: 2rem; }
+
+  h2 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.85rem;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    margin: 0 0 1.15rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px solid var(--rule);
+    text-wrap: balance;
+  }
+
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  h3 {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 2rem 0 0.7rem;
+  }
+
+  p { margin: 0 0 1.05rem; }
+  main > section > p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--raise); padding: 0.1em 0.34em; }
+
+  ul { margin: 0 0 1.05rem; padding-left: 1.15rem; }
+  li { margin-bottom: 0.45rem; }
+  li::marker { color: var(--muted); }
+
+  /* ---- tables ---- */
+  .scroll { overflow-x: auto; margin-bottom: 1.4rem; }
+  table { border-collapse: collapse; width: 100%; min-width: 26rem; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 0.62rem 1rem 0.62rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    font-weight: 600;
+    border-bottom-color: var(--rule-firm);
+  }
+  td:first-child { font-weight: 600; padding-right: 1.6rem; }
+  .num-col { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---- code / endpoints ---- */
+  pre {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.75;
+    background: var(--raise);
+    border-left: 2px solid var(--rule-firm);
+    padding: 1rem 1.15rem;
+    overflow-x: auto;
+    margin: 0 0 1.4rem;
+  }
+  pre b { font-weight: 600; color: var(--ink); }
+  pre i { font-style: normal; color: var(--muted); }
+
+  /* ---- architecture stack ---- */
+  .stack { display: grid; gap: 0.4rem; margin-bottom: 1.4rem; }
+  .tier { border: 1px solid var(--rule); padding: 0.85rem 1.1rem; background: var(--raise); }
+  .tier__name {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.3rem;
+  }
+  .tier__body { font-size: 0.88rem; color: var(--muted); }
+  .tier__link {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    padding: 0.1rem 0;
+  }
+
+  /* ---- callout: the one accent ---- */
+  .gate {
+    border-left: 3px solid var(--gate);
+    background: var(--gate-wash);
+    padding: 1rem 1.15rem;
+    margin: 0 0 1.4rem;
+  }
+  .gate__label {
+    font-family: var(--mono);
+    font-size: 0.64rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--gate);
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+  .gate p { margin: 0; font-size: 0.95rem; }
+  .gate p + p { margin-top: 0.7rem; }
+
+  /* ---- phase spine: numbered because order genuinely carries meaning ---- */
+  .phases { list-style: none; margin: 0; padding: 0; }
+  .phase {
+    display: grid;
+    grid-template-columns: 3.1rem minmax(0, 1fr);
+    gap: 0 1.1rem;
+    padding: 1.05rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .phase:first-child { border-top: 1px solid var(--rule); }
+  .phase__n {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    padding-top: 0.28rem;
+  }
+  .phase__name { font-weight: 600; font-size: 1.02rem; }
+  .phase__body { color: var(--muted); font-size: 0.92rem; margin-top: 0.2rem; }
+  .phase__exit {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-top: 0.45rem;
+    padding-left: 0.7rem;
+    border-left: 1px solid var(--rule);
+  }
+  .phase--gate .phase__n { color: var(--gate); }
+  .phase--gate .phase__name::after {
+    content: "GATE";
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+    color: var(--gate);
+    border: 1px solid var(--gate);
+    padding: 0.1rem 0.34rem;
+    margin-left: 0.6rem;
+    vertical-align: 0.14em;
+  }
+
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--gate); outline-offset: 2px; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Contents">
+    <div class="rail__label">Contents</div>
+    <ol>
+      <li><a href="#now"><span>01</span> Where we are</a></li>
+      <li><a href="#arch"><span>02</span> Architecture</a></li>
+      <li><a href="#model"><span>03</span> Data model</a></li>
+      <li><a href="#api"><span>04</span> Endpoints</a></li>
+      <li><a href="#auth"><span>05</span> Auth</a></li>
+      <li><a href="#phases"><span>06</span> Phasing</a></li>
+      <li><a href="#risks"><span>07</span> Risks</a></li>
+      <li><a href="#first"><span>08</span> First commit</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="mast">
+      <div class="kicker">Migration Plan · Proposed</div>
+      <h1>Century NIT API Migration</h1>
+      <p class="standfirst">
+        Moving a complete, working product from eighteen localStorage keys onto a
+        documented HTTP API — without rewriting the interface that proved it.
+      </p>
+      <div class="meta">
+        <span>Stack <b>Hono · Zod/OpenAPI · Workers</b></span>
+        <span>Store <b>Neon Postgres</b></span>
+        <span>Docs <b>Scalar at /api/docs</b></span>
+      </div>
+    </header>
+
+    <section id="now">
+      <h2><span class="num">01</span> Where we are</h2>
+      <p>
+        The application is finished and functional with <strong>no server</strong>.
+        Every piece of state lives in the browser.
+      </p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">Surface</th><th scope="col">Today</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Worker</td><td>5 lines — one stub returning <code>{name:"Cloudflare"}</code></td></tr>
+            <tr><td>Hono</td><td>Already a dependency (4.11.1)</td></tr>
+            <tr><td>API routing</td><td><code>wrangler.json</code> already sets <code>run_worker_first: ["/api/*"]</code></td></tr>
+            <tr><td>Persistence</td><td class="num-col">18 localStorage keys</td></tr>
+            <tr><td>Mutations</td><td class="num-col">104 — 62 ops, 42 portal</td></tr>
+            <tr><td>Domain types</td><td class="num-col">~70 exported TypeScript types</td></tr>
+            <tr><td>Auth</td><td>None — role switching only</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        <strong>The schema already exists.</strong> <code>Invoice</code>,
+        <code>SchoolApplicationTrack</code>, <code>Lead</code>,
+        <code>MockConsultation</code>, <code>InternalTicket</code> and some sixty-five
+        others are fully specified and proven through the UI. This is a persistence
+        and authorization exercise, not a data-modelling one.
+      </p>
+
+      <div class="gate">
+        <div class="gate__label">Not a migration task — a live exposure</div>
+        <p>
+          <code>ROLE_PERMISSIONS</code> is enforced <strong>in React only</strong>.
+          Anyone can open devtools and grant themselves <code>admin</code>. That is
+          fine for a prototype and unacceptable the moment a server holds real data.
+        </p>
+        <p>
+          Phase 2 exists to close this. No phase that exposes applicant data should
+          ship before it.
+        </p>
+      </div>
+    </section>
+
+    <section id="arch">
+      <h2><span class="num">02</span> Architecture</h2>
+
+      <div class="stack">
+        <div class="tier">
+          <div class="tier__name">React SPA</div>
+          <div class="tier__body">Interface unchanged. A <code>repositories/</code> seam calls localStorage today, <code>fetch</code> tomorrow.</div>
+        </div>
+        <div class="tier__link">↓ /api/*</div>
+        <div class="tier">
+          <div class="tier__name">Cloudflare Worker · Hono</div>
+          <div class="tier__body">Routes, Zod validation, generated OpenAPI, Scalar docs, JWT and role middleware, audit trail.</div>
+        </div>
+        <div class="tier__link">↓ Hyperdrive pooling</div>
+        <div class="tier">
+          <div class="tier__name">Neon Postgres · Cloudflare R2</div>
+          <div class="tier__body">Fourteen tables. R2 holds document uploads.</div>
+        </div>
+      </div>
+
+      <h3>Swagger is generated, never written</h3>
+      <p>
+        One Zod schema per resource produces four artefacts from a single definition:
+      </p>
+      <pre>Zod schema ──┬─→ <b>runtime validation</b>   request + response
+             ├─→ <b>TypeScript types</b>    z.infer
+             ├─→ <b>OpenAPI 3.1</b>         /api/openapi.json
+             └─→ <b>Scalar docs</b>         /api/docs</pre>
+      <p>
+        Hand-written OpenAPI is a second source of truth that nobody updates.
+        Generated OpenAPI cannot drift, because the object serving the request is the
+        object describing it.
+      </p>
+      <p>
+        Schemas live in <code>src/shared/schemas/</code> and are imported by
+        <em>both</em> the worker and the React app. A breaking API change then
+        surfaces as a TypeScript error at build time rather than a runtime bug in
+        production.
+      </p>
+    </section>
+
+    <section id="model">
+      <h2><span class="num">03</span> Data model</h2>
+      <p>Fourteen tables. Bracketed names are the existing types they derive from.</p>
+
+      <h3>Identity &amp; staff</h3>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>users</td><td>Both audiences. <code>kind: 'applicant' | 'staff'</code>, email, password hash</td></tr>
+            <tr><td>staff_profiles</td><td>[Assignee] — role and branch; role drives the permission matrix</td></tr>
+            <tr><td>sessions</td><td>Refresh tokens, revocation, device and IP for audit</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Applicant journey</h3>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>applicants</td><td>[MockApplicant] — profile, branch, target country</td></tr>
+            <tr><td>consultations</td><td>[MockConsultation] — booking, assignment, assessment, slot</td></tr>
+            <tr><td>applications</td><td>[ApplicationData] — stage, package, funding track, plan</td></tr>
+            <tr><td>school_applications</td><td>[SchoolApplicationTrack] — one row per school, plus offer terms</td></tr>
+            <tr><td>school_track_events</td><td>[SchoolTrackEvent] — the per-school timeline</td></tr>
+            <tr><td>documents</td><td>[PortalDocument] — R2 object key, verification verdict</td></tr>
+            <tr><td>pre_departure_tasks</td><td>[PreDepartureTask] — the travel checklist</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Money</h3>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>invoices</td><td>[Invoice] — subtotal, due date, status, credited amount</td></tr>
+            <tr><td>invoice_lines</td><td>[OpsInvoiceLine]</td></tr>
+            <tr><td>invoice_payments</td><td>[InvoicePayment] — part-payments</td></tr>
+            <tr><td>invoice_events</td><td>[InvoiceEvent] — audit trail</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Operations</h3>
+      <div class="scroll">
+        <table>
+          <tbody>
+            <tr><td>leads</td><td>[Lead] — CRM pipeline</td></tr>
+            <tr><td>tickets · ticket_messages</td><td>[InternalTicket] — internal and external</td></tr>
+            <tr><td>activity_log</td><td>[OpsActivityEntry] — append-only</td></tr>
+            <tr><td>cms_overrides</td><td>[CmsOverlay] — keyed <code>collection:id</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Decisions worth stating</h3>
+      <p>
+        <strong>Money is integer cents in USD.</strong> <code>GHS_RATE</code> stays a
+        presentation concern. Never store a formatted string — that exact mistake
+        already produced the <code>"GH₵45,000 / $3,000"</code> → <code>450003000</code>
+        bug that inflated every finance total into the billions.
+      </p>
+      <p>
+        <strong>Enums become Postgres enums</strong>, not free text:
+        <code>ApplicationStatus</code>, <code>VisaStage</code>,
+        <code>InvoiceStatus</code>, <code>DocUploadStatus</code>,
+        <code>ProcessStageId</code>, <code>SchoolTrackStatus</code>,
+        <code>LeadStage</code>, <code>TicketStatus</code>.
+      </p>
+      <p>
+        <strong>Seed content stays in <code>content.ts</code> for now.</strong>
+        Destinations, universities, programmes and scholarships are read-mostly, and
+        the CMS overlay already anticipates the swap — <code>resolveRecord()</code>
+        reads <code>override ?? seed</code>, so moving the seed into tables later
+        changes one function rather than every page.
+      </p>
+      <p>
+        <strong><code>OpsDirectives</code> and <code>liveOverlay</code> do not become
+        tables.</strong> They are artefacts of the localStorage simulation bridge.
+        Once ops and portal read the same database they disappear entirely.
+      </p>
+    </section>
+
+    <section id="api">
+      <h2><span class="num">04</span> Endpoints</h2>
+      <p>
+        104 mutations do not become 104 endpoints. Grouped by resource, with state
+        transitions modelled as commands rather than a generic <code>PATCH</code>.
+      </p>
+
+      <h3>Why commands, not CRUD</h3>
+      <p>
+        <code>voidInvoice</code>, <code>recordInvoicePayment</code>,
+        <code>assignConsultation</code> and <code>rescheduleConsultation</code> each
+        carry intent, validation rules and an audit entry.
+        <code>PATCH /invoices/:id {status:"void"}</code> discards all of that and lets
+        any client write any state. Commands keep the invariants on the server.
+        <strong>CRUD for records, commands for transitions.</strong>
+      </p>
+
+      <h3>Auth</h3>
+      <pre><b>POST</b>   /api/auth/login          <i>applicant + staff</i>
+<b>POST</b>   /api/auth/refresh
+<b>POST</b>   /api/auth/logout
+<b>GET</b>    /api/auth/me</pre>
+
+      <h3>Applicant portal</h3>
+      <pre><b>GET</b>    /api/me/application
+<b>PATCH</b>  /api/me/application       <i>profile fields only</i>
+<b>POST</b>   /api/me/application/package
+<b>GET</b>    /api/me/schools
+<b>POST</b>   /api/me/schools
+<b>DELETE</b> /api/me/schools/:id
+<b>POST</b>   /api/me/schools/lock      <i>raises the application invoice</i>
+<b>GET</b>    /api/me/documents
+<b>POST</b>   /api/me/documents         <i>presigned R2 upload</i>
+<b>GET</b>    /api/me/invoices
+<b>POST</b>   /api/me/invoices/:id/pay
+<b>GET</b>    /api/me/pre-departure
+<b>POST</b>   /api/me/pre-departure/:id/toggle
+<b>GET</b>    /api/me/notifications
+<b>GET</b>    /api/me/tickets
+<b>POST</b>   /api/me/tickets · :id/reply</pre>
+
+      <h3>Consultations</h3>
+      <pre><b>GET</b>    /api/consultations        <i>role-scoped</i>
+<b>GET</b>    /api/consultations/:id
+<b>POST</b>   /api/consultations/:id/assign
+<b>POST</b>   /api/consultations/:id/confirm-slot
+<b>POST</b>   /api/consultations/:id/reschedule
+<b>POST</b>   /api/consultations/:id/start-assessment
+<b>POST</b>   /api/consultations/:id/complete-assessment
+<b>POST</b>   /api/consultations/:id/comments
+<b>POST</b>   /api/consultations/:id/request-documents</pre>
+
+      <h3>Applications</h3>
+      <pre><b>GET</b>    /api/applications
+<b>POST</b>   /api/applications/:id/assign
+<b>POST</b>   /api/applications/:id/stage
+<b>POST</b>   /api/applications/:id/accept
+<b>POST</b>   /api/applications/:id/checklist/:item
+<b>POST</b>   /api/applications/:id/eligibility
+<b>POST</b>   /api/applications/:id/visa-stage
+<b>POST</b>   /api/applications/:id/travel-clearance</pre>
+
+      <h3>Invoices</h3>
+      <pre><b>GET</b>    /api/invoices             <i>?status= &amp;applicantId=</i>
+<b>POST</b>   /api/invoices
+<b>GET</b>    /api/invoices/:id
+<b>POST</b>   /api/invoices/:id/payments
+<b>POST</b>   /api/invoices/:id/void
+<b>POST</b>   /api/invoices/:id/credit
+<b>POST</b>   /api/invoices/:id/resend
+<b>GET</b>    /api/accounts             <i>per-applicant roll-up</i></pre>
+
+      <h3>Documents · tickets · leads · CMS · reports</h3>
+      <pre><b>GET</b>    /api/documents            <i>review queue</i>
+<b>POST</b>   /api/documents/:id/verdict
+<b>GET</b>    /api/tickets              <i>?source=internal|external</i>
+<b>POST</b>   /api/tickets · :id/assign · :id/status · :id/escalate · :id/reply
+<b>GET</b>    /api/leads
+<b>POST</b>   /api/leads · :id/move
+<b>GET</b>    /api/cms/:collection
+<b>PUT</b>    /api/cms/:collection/:id
+<b>POST</b>   /api/cms/:collection/:id/status
+<b>GET</b>    /api/reports/revenue      <i>?from= &amp;to= &amp;branch=</i>
+<b>GET</b>    /api/reports/operations
+<b>GET</b>    /api/activity</pre>
+
+      <p>
+        Roughly <strong>70 endpoints</strong>. About thirty are pure reads and could
+        ship before auth hardening, provided they expose no applicant data.
+      </p>
+    </section>
+
+    <section id="auth">
+      <h2><span class="num">05</span> Authentication &amp; authorization</h2>
+
+      <h3>Tokens</h3>
+      <p>
+        Short-lived access JWT (15 minutes) plus a refresh token, both in
+        <code>HttpOnly; Secure; SameSite=Lax</code> cookies —
+        <strong>not localStorage</strong>, where a single XSS is a total compromise.
+      </p>
+
+      <h3>Two audiences</h3>
+      <p>
+        <code>applicant</code> tokens are scoped to their own rows and reach only
+        <code>/api/me/*</code>. <code>staff</code> tokens carry a role and are checked
+        against the permission matrix.
+      </p>
+
+      <h3>Reuse the existing matrix</h3>
+      <p>
+        <code>ROLE_PERMISSIONS</code> moves out of <code>OpsAuthContext.tsx</code> into
+        shared code and becomes Hono middleware. Its structure is already right — five
+        roles, explicit module lists, deliberately disjoint so admin has no window into
+        applicant data. It only needs to run where the user cannot reach it.
+      </p>
+      <pre>app.use("/api/invoices/*", <b>requireStaff</b>, <b>requireModule</b>("invoices"));</pre>
+      <p>
+        The React copy stays, but only to hide UI. The server becomes the authority.
+      </p>
+
+      <h3>Row-level scoping</h3>
+      <p>
+        Consultants see only cases assigned to them; managers and coordinators see
+        all. That predicate exists today as <code>roleScopedConsultations</code> and
+        must be reimplemented as a SQL <code>WHERE</code>, not a client-side filter.
+      </p>
+    </section>
+
+    <section id="phases">
+      <h2><span class="num">06</span> Phasing</h2>
+      <p>
+        Each phase is independently shippable. The order matters: Phase 2 gates
+        everything that touches applicant data.
+      </p>
+
+      <ol class="phases">
+        <li class="phase">
+          <div class="phase__n">00</div>
+          <div>
+            <div class="phase__name">Repository seam</div>
+            <div class="phase__body">
+              Frontend only, no backend. Interfaces the UI calls instead of touching
+              context state directly — localStorage on day one, <code>fetch</code> per
+              module later.
+            </div>
+            <div class="phase__exit">Ships nothing visible. Makes every later phase a small diff.</div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">01</div>
+          <div>
+            <div class="phase__name">Foundation</div>
+            <div class="phase__body">
+              <code>@hono/zod-openapi</code> and Scalar, <code>src/shared/schemas/</code>,
+              <code>/api/health</code>, error envelope, request IDs, and a CI step that
+              publishes the spec.
+            </div>
+            <div class="phase__exit">Exit: /api/docs renders, one endpoint validated end to end.</div>
+          </div>
+        </li>
+        <li class="phase phase--gate">
+          <div class="phase__n">02</div>
+          <div>
+            <div class="phase__name">Auth</div>
+            <div class="phase__body">
+              Neon schema for users and sessions, login, refresh, JWT middleware,
+              <code>ROLE_PERMISSIONS</code> server-side, row scoping.
+            </div>
+            <div class="phase__exit">Exit: a staff token cannot read a module its role lacks.</div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">03</div>
+          <div>
+            <div class="phase__name">Content</div>
+            <div class="phase__body">
+              CMS overlay and published content. Read-mostly, lowest risk, and it
+              proves the whole pattern including overlay resolution.
+            </div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">04</div>
+          <div>
+            <div class="phase__name">Invoices &amp; payments</div>
+            <div class="phase__body">
+              Highest business value, cleanest boundaries, and freshly refactored — the
+              command surface is already correct.
+            </div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">05</div>
+          <div>
+            <div class="phase__name">Consultations &amp; applications</div>
+            <div class="phase__body">
+              The largest surface, including school-application tracks and offer terms.
+            </div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">06</div>
+          <div>
+            <div class="phase__name">Tickets, notifications, documents</div>
+            <div class="phase__body">
+              Documents need R2 and presigned uploads — today
+              <code>updateAssessmentDoc</code> stores only <code>file.name</code>, so no
+              real file has ever been uploaded.
+            </div>
+          </div>
+        </li>
+        <li class="phase">
+          <div class="phase__n">07</div>
+          <div>
+            <div class="phase__name">Retire the simulation</div>
+            <div class="phase__body">
+              Delete <code>OpsDirectiveBridge</code>, the autopilot timers,
+              <code>resetOpsState</code> and the <code>OPS_STATE_VERSION</code> guard.
+              Replace cross-tab sync with SSE against the real source of truth.
+            </div>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="risks">
+      <h2><span class="num">07</span> Risks</h2>
+
+      <p>
+        <strong>The simulation timers are load-bearing.</strong> <code>AppState</code>
+        advances consultations and school tracks on <code>setInterval</code>. Real
+        backends do not self-advance. Phase 5 must replace them with genuine ops
+        actions, or the demo silently stops working.
+      </p>
+      <p>
+        <strong>Two naming conventions already disagree.</strong>
+        <code>OpsDirectiveBridge</code> translates <code>"installments"</code> ↔
+        <code>"installment"</code> and <code>VisaStage</code> ↔
+        <code>VisaStatus</code>. Reconcile these in the shared schemas rather than
+        porting the translation layer forward.
+      </p>
+      <p>
+        <strong><code>content.ts</code> is 2,500 lines of seed.</strong> Do not migrate
+        it wholesale in one pass.
+      </p>
+      <p>
+        <strong>Version-bump resets have no equivalent in Postgres.</strong>
+        <code>OPS_STATE_VERSION</code> currently discards saved state whenever the
+        shape changes. Migrations must be additive once data is real — there is no
+        escape hatch.
+      </p>
+    </section>
+
+    <section id="first">
+      <h2><span class="num">08</span> First commit</h2>
+      <pre>src/shared/schemas/{invoice,consultation,application,common}.ts
+src/worker/index.ts            <i>mount /api/docs + /api/openapi.json</i>
+src/worker/routes/health.ts
+src/worker/middleware/{error,request-id}.ts
+package.json                   <i>+@hono/zod-openapi +@scalar/hono-api-reference +zod</i></pre>
+      <p>
+        Small, reviewable, and it makes the documentation URL real before a single
+        table exists.
+      </p>
+    </section>
+
+    <footer>Century NIT · API migration plan · proposed</footer>
+  </main>
+</div>

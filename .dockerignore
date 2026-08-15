@@ -1,0 +1,26 @@
+# Build context is the monorepo root — keep it small and keep local artefacts
+# from leaking into the image.
+
+**/node_modules
+**/dist
+**/.wrangler
+**/*.tsbuildinfo
+
+.git
+.gitignore
+.gitattributes
+
+# Never bake real secrets into an image layer.
+**/.env
+**/.env.local
+**/.env.*.local
+**/.dev.vars
+
+# The web app is not needed to build or run the API — but its manifest is,
+# because npm resolves the whole workspace graph from the root lockfile.
+century-nit-web/
+!century-nit-web/package.json
+
+**/*.md
+**/*.log
+docker-compose.yml

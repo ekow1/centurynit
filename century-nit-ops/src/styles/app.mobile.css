@@ -1,0 +1,312 @@
+/*
+ century-nit-ops only, mobile refinements.
+ */
+
+.sheet-account--static {
+	grid-template-columns: auto 1fr;
+}
+
+.pbar__avatar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+}
+
+.pbar__avatar:active {
+	transform: scale(0.92);
+}
+
+/* Horizontal rails: swipeable, snapped, no visible scrollbar */
+
+.scroll-x {
+	display: flex;
+	gap: 0.6rem;
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	scroll-snap-type: x proximity;
+	scrollbar-width: none;
+	padding-bottom: 0.25rem;
+}
+
+.scroll-x::-webkit-scrollbar {
+	display: none;
+}
+
+.scroll-x > * {
+	scroll-snap-align: start;
+	flex-shrink: 0;
+}
+
+@media (max-width: 959.98px) {
+table:not(.ops-table-wrap > table) {
+		display: block;
+		width: 100%;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		white-space: nowrap;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+.pbar__avatar:active {
+		transform: none;
+	}
+}
+
+.pbar__icon-btn--badge {
+	position: relative;
+}
+
+.pbar__badge {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	min-width: 15px;
+	height: 15px;
+	padding: 0 3px;
+	border-radius: 999px;
+	background: var(--foreground);
+	color: var(--background);
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	font-weight: 700;
+	line-height: 15px;
+	text-align: center;
+}
+
+/* Ops keeps the same tab-bar breakpoint as its sidebar */
+
+.tabbar--ops {
+	display: none;
+	z-index: 901;
+}
+
+@media (max-width: 959.98px) {
+.tabbar--ops {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 1fr;
+	}
+}
+
+/* The ops icon set is authored at 16px; match the portal's 22px tabs */
+
+.ops-tab-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ops-tab-icon svg {
+	width: 20px;
+	height: 20px;
+}
+
+/* Module names need a second line in the More sheet */
+
+.sheet-link__text {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	min-width: 0;
+}
+
+.sheet-link__blurb {
+	font-family: var(--font-body);
+	font-size: 0.78rem;
+	font-weight: 400;
+	color: var(--muted-foreground);
+	line-height: 1.3;
+}
+
+.sheet-select {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	min-height: 52px;
+	padding: 0.5rem 0;
+	font-size: 1.05rem;
+	border-bottom: 1px solid var(--border-light);
+}
+
+.sheet-select select {
+	flex: 0 1 12rem;
+	padding: 0.5rem 0.6rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	font-size: 16px; /* keeps iOS from zooming on focus */
+}
+
+@media (max-width: 959.98px) {
+/* --- Split panes stack --- *//* Consultations: list over detail, each scrolling in its own right,
+	   instead of a 40/60 split squeezed into a phone. */
+
+.ops-split {
+		flex-direction: column;
+		height: auto !important;
+		min-height: 0 !important;
+	}
+
+.ops-split > * {
+		flex: 1 1 auto !important;
+		min-width: 0 !important;
+		width: 100%;
+	}
+
+.ops-split__list {
+		max-height: 22rem;
+	}
+
+.ops-split__detail {
+		min-height: 28rem;
+	}
+
+/* Kanban and pipeline rails are handled in §10 alongside the tables *//* Stat/KPI grids collapse rather than shrinking to unreadable columns */
+
+.ops-stats {
+		grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)) !important;
+		gap: 0.75rem !important;
+	}
+}
+
+@media (max-width: 599.98px) {
+.ops-stats {
+		grid-template-columns: 1fr 1fr !important;
+	}
+}
+
+@media (max-width: 767.98px) {
+.ops-grid {
+		grid-template-columns: 1fr !important;
+		gap: 1rem !important;
+	}
+}
+
+/* ---------------------------------------------------------
+   10. Horizontal scroll surfaces — tables, kanban, leads
+   --------------------------------------------------------- *//* Table wrapper. `width: max-content` + `min-width: 100%` lets the table size
+   to its own content and scroll, while still filling a wide container —
+   unlike `display:block` on the table itself, which reflows the table box. */
+
+.ops-table-wrap {
+	overflow-x: auto;
+	overflow-y: hidden;
+	-webkit-overflow-scrolling: touch;
+	overscroll-behavior-x: contain;
+	/* Shadows pinned to the edges reveal there is more to scroll; the pair with
+	   `local` attachment fades them out when you reach either end. */
+	background:
+		linear-gradient(to right, var(--card) 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
+		linear-gradient(to left, var(--card) 30%, rgba(255, 255, 255, 0)) right center / 28px 100% no-repeat local,
+		radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) left center / 12px 100% no-repeat scroll,
+		radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) right center / 12px 100% no-repeat scroll;
+}
+
+.ops-table-wrap > table {
+	width: max-content;
+	min-width: 100%;
+}
+
+@media (max-width: 959.98px) {
+/* Cells stop wrapping so columns keep their shape and the row scrolls */
+
+.ops-table-wrap > table {
+		white-space: nowrap;
+	}
+}
+
+@media (max-width: 959.98px) {
+.ops-board {
+		display: flex !important;
+		grid-template-columns: none !important;
+		gap: 0.75rem !important;
+		overflow-x: auto !important;
+		scroll-snap-type: x mandatory;
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior-x: contain;
+		scroll-padding-left: var(--page-pad-x);
+		padding-bottom: 1rem;
+	}
+
+/* !important throughout: the workflow columns carry inline `flex: 1 0 280px`
+	   and `overflow: hidden`, which would otherwise win and leave the column
+	   both the wrong width and unable to scroll its cards. */
+
+.ops-board > * {
+		flex: 0 0 min(80vw, 19rem) !important;
+		min-width: 0 !important;
+		scroll-snap-align: start;
+		/* A long stage scrolls inside its column instead of stretching the board */
+		max-height: 62vh !important;
+		overflow-y: auto !important;
+		overscroll-behavior-y: contain;
+	}
+
+/* Keep the sticky column header readable while its cards scroll */
+
+.ops-board > * > *:first-child {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+	}
+}
+
+/* Scrollbars: visible enough to signal, thin enough not to intrude */
+
+.ops-table-wrap::-webkit-scrollbar,
+.ops-board::-webkit-scrollbar {
+	height: 6px;
+}
+
+.ops-table-wrap::-webkit-scrollbar-thumb,
+.ops-board::-webkit-scrollbar-thumb {
+	background: var(--border-light);
+	border-radius: 3px;
+}
+
+.ops-table-wrap::-webkit-scrollbar-thumb:hover,
+.ops-board::-webkit-scrollbar-thumb:hover {
+	background: var(--muted-foreground);
+}
+
+@media (max-width: 767.98px) {
+.cms-tabs {
+		scroll-snap-type: x mandatory;
+		scroll-padding-left: 0.35rem;
+		padding-bottom: 0.5rem;
+	}
+
+.cms-tab {
+		scroll-snap-align: start;
+		min-width: max-content;
+	}
+}
+
+@media (max-width: 599.98px) {
+.ops-case-comment-form {
+		flex-direction: column !important;
+	}
+
+.ops-case-comment-form > select {
+		width: 100% !important;
+	}
+
+.ops-case-comment-form > textarea {
+		width: 100%;
+	}
+
+.ops-case-comment-form > button {
+		align-self: flex-end;
+	}
+}

@@ -1,0 +1,26 @@
+{
+	"name": "century-nit-shared",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Shared Zod schemas and types for Century NIT web and api",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"lint": "tsc --noEmit",
+		"dev": "tsc --watch"
+	},
+	"dependencies": {
+		"zod": "^3.23.0"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.0"
+	}
+}

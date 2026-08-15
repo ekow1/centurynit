@@ -1,0 +1,474 @@
+/*
+ century-nit-web only, mobile refinements.
+ */
+
+@media (max-width: 767.98px) {
+/* Section heads stack instead of squeezing the "view all" link */
+
+.section__head {
+		align-items: flex-start;
+		gap: 0.75rem;
+		margin-bottom: 1.5rem;
+	}
+
+/* Cards: less padding, tighter headings */
+
+.media-card__body {
+		padding: var(--card-pad) var(--card-pad) 1.35rem;
+		gap: 0.6rem;
+	}
+
+.media-card__body--text {
+		padding: var(--card-pad-lg) var(--card-pad);
+		min-height: 11rem;
+	}
+
+.media-card__title {
+		font-size: 1.2rem;
+	}
+
+.media-card__text {
+		font-size: 0.9rem;
+		line-height: 1.45;
+	}
+
+.media-card--cover {
+		min-height: 17rem;
+	}
+
+.stat-cell__value--sm {
+		font-size: 1.2rem;
+	}
+}
+
+@media (max-width: 959.98px) {
+.hero-carousel__viewport {
+		height: clamp(30rem, 82dvh, 44rem);
+	}
+
+.hero-slide {
+		display: block;
+	}
+
+/* Image fills the slide */
+
+.hero-slide__media {
+		position: absolute;
+		inset: 0;
+		min-height: 0;
+		border-top: none;
+		z-index: 0;
+	}
+
+.hero-slide__media img {
+		filter: grayscale(60%) brightness(0.82);
+	}
+
+/* Also neutralise the desktop hover rule — :hover sticks after a tap */
+
+.hero-slide--active .hero-slide__media img,
+.hero-carousel:hover .hero-slide--active .hero-slide__media img {
+		filter: grayscale(45%) brightness(0.8);
+	}
+
+/* Scrim: dark enough at the bottom to carry body text over any photo */
+
+.hero-slide__media::after {
+		background: linear-gradient(
+			180deg,
+			rgba(0, 0, 0, 0.55) 0%,
+			rgba(0, 0, 0, 0.3) 32%,
+			rgba(0, 0, 0, 0.72) 72%,
+			rgba(0, 0, 0, 0.88) 100%
+		);
+	}
+
+/* Copy sits on the image, anchored to the bottom.
+	   `margin-top:auto` on the first child rather than justify-content:flex-end —
+	   the latter makes overflowing content unscrollable in flex containers. */
+
+.hero-slide__copy {
+		position: absolute;
+		inset: 0;
+		z-index: 2;
+		background: transparent;
+		justify-content: flex-start;
+		overflow-y: auto;
+		color: #fff;
+		padding: 2rem var(--page-pad-x) 6.25rem;
+	}
+
+.hero-slide__kicker {
+		margin-top: auto;
+		margin-bottom: 1rem;
+	}
+
+.hero-slide__index,
+.hero-slide__title,
+.hero-slide__lead,
+.hero-slide__meta dt,
+.hero-slide__meta dd {
+		color: #fff;
+	}
+
+.hero-slide__lead {
+		color: #ffffff;
+	}
+
+.hero-slide__rule {
+		background: rgba(255, 255, 255, 0.7);
+	}
+
+.hero-slide__title {
+		max-width: 14ch;
+		text-shadow: 0 2px 24px rgba(0, 0, 0, 0.4);
+	}
+
+.hero-slide__meta {
+		border-top-color: rgba(255, 255, 255, 0.25);
+	}
+
+.hero-slide__meta dt {
+		color: #ffffff;
+	}
+
+/* The control bar rides on the image instead of a white slab */
+
+.hero-carousel__controls {
+		background: transparent;
+		-webkit-backdrop-filter: none;
+		backdrop-filter: none;
+		border-top: none;
+	}
+
+.hero-carousel__btn {
+		background: rgba(0, 0, 0, 0.35);
+		-webkit-backdrop-filter: blur(6px);
+		backdrop-filter: blur(6px);
+		border-color: rgba(255, 255, 255, 0.55);
+		color: #fff;
+	}
+
+.hero-carousel__progress-label {
+		color: #ffffff;
+	}
+
+.hero-carousel__progress {
+		background: rgba(255, 255, 255, 0.28);
+	}
+
+.hero-carousel__progress-bar {
+		background: #fff;
+	}
+}
+
+@media (max-width: 767.98px) {
+/* Kicker + title + lead + two buttons is already a full phone screen */
+
+.hero-slide__meta {
+		display: none;
+	}
+
+.hero-slide__title {
+		font-size: clamp(2.1rem, 10.5vw, 3.25rem);
+		line-height: 1;
+		max-width: 12ch;
+	}
+
+.hero-slide__lead {
+		margin-top: 0.85rem;
+		font-size: 0.95rem;
+		line-height: 1.5;
+	}
+
+/* Stacked full-width. Side by side, labels like "Explore destinations"
+	   or "Continue · Package" get clipped by .btn's white-space:nowrap. */
+
+.hero-slide__actions {
+		margin-top: 1.35rem;
+		gap: 0.55rem;
+		flex-direction: column;
+		align-items: stretch;
+		flex-wrap: nowrap;
+	}
+
+.hero-slide__copy {
+		padding: 1.5rem var(--page-pad-x) 5.75rem;
+	}
+
+/* "01 / 04" must not break across two lines */
+
+.hero-slide__index {
+		white-space: nowrap;
+	}
+
+.hero-carousel__controls-inner {
+		padding: 0.75rem var(--page-pad-x);
+	}
+
+/* Swipe and the arrows are the controls on a phone; the autoplay meter
+	   only collides with the chat FAB in this corner */
+
+.hero-carousel__progress-wrap {
+		display: none;
+	}
+}
+
+/* The portal swaps to its sidebar earlier than the public site does */
+
+.tabbar--portal {
+	z-index: 901;
+}
+
+@media (min-width: 960px) {
+.tabbar--portal {
+		display: none;
+	}
+}
+
+/* Raised centre CTA */
+
+.tabbar__item--cta {
+	color: var(--foreground);
+}
+
+.tabbar__item--cta::before {
+	display: none;
+}
+
+/* Bottom-aligned to the icon row and allowed to break upward out of it —
+   the disc reads as raised without adding height to the item. */
+
+.tabbar__cta-disc {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.15rem;
+	height: 2.15rem;
+	align-self: end;
+	margin-top: -0.55rem;
+	border-radius: 50%;
+	background: var(--foreground);
+	color: var(--accent-foreground);
+}
+
+/* Profile avatar tab — the top bar's account dropdown, moved into the tab bar */
+
+.tabbar__profile {
+	position: relative;
+	display: flex;
+}
+
+.tabbar__avatar {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.625rem;
+	height: 1.625rem;
+	border-radius: 50%;
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+}
+
+/* The dropdown floats above the bar, centred, always inside the viewport */
+
+.nav__dropdown--tabbar {
+	position: fixed;
+	top: auto;
+	right: auto;
+	bottom: calc(var(--tabbar-total) + 0.75rem);
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(21rem, calc(100vw - 1.5rem));
+	max-width: none;
+}
+
+.sheet__cta {
+	margin-bottom: 1.5rem;
+}
+
+.sheet-account__go {
+	color: var(--muted-foreground);
+}
+
+.sheet-footer {
+	margin-top: 1.75rem;
+	padding-top: 0.25rem;
+	border-top: 2px solid var(--border);
+}
+
+@media (max-width: 1023.98px) {
+/* The bottom bar owns mobile navigation — no hamburger duplication */
+
+.nav__toggle,
+.nav__mobile {
+		display: none !important;
+	}
+
+/* The tab bar's Profile / Sign in tab owns the account affordance too */
+
+.nav__profile,
+.nav__signin {
+		display: none !important;
+	}
+
+.nav__inner {
+		height: var(--nav-h);
+	}
+}
+
+@media (max-width: 767.98px) {
+.nav__actions {
+		gap: 0.4rem;
+	}
+
+.nav__bell,
+.nav__avatar {
+		width: 38px;
+		height: 38px;
+	}
+
+/* Anchored dropdowns must never exceed the viewport.
+	   Kept absolute — .nav's backdrop-filter would make `fixed` resolve
+	   against the nav box anyway, so clamping the width is the honest fix. */
+
+.nav__dropdown {
+		min-width: 0;
+		width: min(21rem, calc(100vw - 1.5rem));
+		max-width: none;
+		max-height: 70dvh;
+		overflow-y: auto;
+	}
+
+.nav__dropdown-link {
+		min-height: var(--tap);
+		display: flex;
+		align-items: center;
+	}
+}
+
+@media (max-width: 959.98px) {
+/* The dark sidebar is replaced by the app bar + tab bar */
+
+.portal__bottombar {
+		display: none;
+	}
+}
+
+@media (max-width: 599.98px) {
+.notif__panel {
+		width: min(21.5rem, calc(100vw - 1.5rem)) !important;
+		max-height: 70dvh !important;
+	}
+}
+
+/* ---------------------------------------------------------
+   6. Floating action buttons & chat panels
+   --------------------------------------------------------- */
+
+.fab {
+	position: fixed;
+	right: max(1.25rem, var(--safe-r));
+	bottom: calc(1.25rem + var(--shell-bottom));
+	z-index: 890;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 3.25rem;
+	height: 3.25rem;
+	border: none;
+	border-radius: 50%;
+	background: var(--foreground);
+	color: var(--background);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+	cursor: pointer;
+	transition: transform var(--t-instant);
+}
+
+.fab:active {
+	transform: scale(0.92);
+}
+
+.chat-panel {
+	position: fixed;
+	right: max(1.25rem, var(--safe-r));
+	bottom: calc(5.25rem + var(--shell-bottom));
+	z-index: 1000;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	width: 380px;
+	height: 540px;
+	max-height: calc(100dvh - 8rem);
+	background: var(--card);
+	border: 1px solid var(--border);
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+	animation: sheet-pop 180ms ease-out;
+}
+
+@media (max-width: 599.98px) {
+.chat-panel {
+		inset: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 2100;
+		width: auto;
+		height: auto;
+		max-height: none;
+		padding-top: var(--safe-t);
+		padding-bottom: var(--safe-b);
+		border: none;
+		animation: sheet-up 240ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+}
+
+@media (hover: none) {
+/* Hover styling is meaningless on touch and leaves states stuck after a tap */
+
+.card--hover:hover,
+.media-card:hover {
+		transform: none;
+	}
+
+.card--hover:active,
+.media-card:active {
+		opacity: 0.85;
+	}
+}
+
+@media (max-width: 767.98px) {
+.portal-page {
+		overflow-wrap: break-word;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+.chat-panel {
+		animation: none;
+	}
+
+.fab:active {
+		transform: none;
+	}
+}
+
+@media (max-width: 599.98px) {
+/* Label above value — a 6rem label column starves the value on a phone */
+
+.appt__row {
+		grid-template-columns: 1fr;
+		gap: 0.2rem;
+	}
+
+.appt__label {
+		padding-top: 0;
+	}
+
+.money__secondary {
+		font-size: 0.62em;
+	}
+}

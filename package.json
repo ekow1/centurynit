@@ -1,0 +1,41 @@
+{
+	"name": "century-nit-suite",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Century NIT — web, api and shared packages",
+	"workspaces": [
+		"century-nit-api",
+		"century-nit-web",
+		"century-nit-ops",
+		"packages/core",
+		"packages/shared"
+	],
+	"scripts": {
+		"dev": "docker compose up -d db redis && npm run dev:api",
+		"dev:api": "npm run dev --workspace=century-nit-api",
+		"dev:web": "npm run dev --workspace=century-nit-web",
+		"dev:ops": "npm run dev --workspace=century-nit-ops",
+		"build:packages": "npm run build --workspace=packages/shared --workspace=packages/core",
+		"build:shared": "npm run build:packages",
+		"build": "npm run build:packages && npm run build --workspace=century-nit-api",
+		"//build:frontend": "century-nit-ops emits into century-nit-web/dist/client/ops, so web MUST build first — its build empties that directory.",
+		"build:frontend": "npm run build:packages && npm run build --workspace=century-nit-web && npm run build --workspace=century-nit-ops",
+		"build:web": "npm run build:frontend",
+		"build:all": "npm run build && npm run build --workspace=century-nit-web && npm run build --workspace=century-nit-ops",
+		"test": "npm run build:packages && npm run test --workspace=packages/core",
+		"lint": "npm run build:packages && npm run lint --workspace=packages/shared --workspace=packages/core --workspace=century-nit-api",
+		"lint:web": "npm run lint --workspace=century-nit-web",
+		"lint:ops": "npm run lint --workspace=century-nit-ops",
+		"db:generate": "npm run db:generate --workspace=century-nit-api",
+		"db:migrate": "npm run db:migrate --workspace=century-nit-api",
+		"db:studio": "npm run db:studio --workspace=century-nit-api",
+		"worker:email": "npm run worker:email --workspace=century-nit-api"
+	},
+	"devDependencies": {
+		"drizzle-orm": "^0.45.2",
+		"pg": "^8.13.0"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

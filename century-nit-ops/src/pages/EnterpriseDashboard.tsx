@@ -1,0 +1,608 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
+import { useOpsState } from "./OpsStateContext";
+import { BranchScopeFilter } from "./BranchScopeFilter";
+import { LEAD_STAGE_LABELS, type LeadStage } from "century-nit-core";
+import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
+import { UnassignedBookings } from "./UnassignedBookings";
+
+/**
+ * Every figure on this page is derived from the ops store, so drilling into a
+ * module always matches the number that sent you there. Manager and finance
+ * see every branch (optionally filtered); coordinator and consultant are
+ * auto-scoped to their branch / assignments - no filter shown.
+ */
+export function EnterpriseDashboard() {
+	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { consultations, applications, applicants, leads, activityLog, liveCase, liveOverlay } = useOpsState();
+	const [branchFilter, setBranchFilter] = useState("all");
+
+	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
+
+	const scoped = useMemo(() => {
+		const scopedConsultations = scopeRecords(
+			consultations,
+			(c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
+		);
+		const scopedApplications = scopeRecords(
+			applications,
+			(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
+		);
+		const scopedApplicants = scopeRecords(
+			applicants,
+			(a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name,
+		);
+		const scopedLeads = scopeRecords(leads, (l) => l.assignedTo === opsUser?.name);
+		const inBranch = <T extends { branch: string }>(list: T[]) =>
+			branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter);
+		return {
+			consultations: inBranch(scopedConsultations),
+			applications: inBranch(scopedApplications),
+			applicants: inBranch(scopedApplicants),
+			leads: inBranch(scopedLeads),
+		};
+	}, [scopeRecords, consultations, applications, applicants, leads, opsUser, branchFilter]);
+
+	const stats = useMemo(() => {
+		const pendingDocs = scoped.applicants.reduce(
+			(n, a) => n + a.documents.filter((d) => d.status === "Pending Review").length,
+			0,
+		);
+		const openChecklistItems = scoped.applications.reduce(
+			(n, a) => n + a.checklist.filter((c) => !c.checked).length,
+			0,
+		);
+		const outstanding = scoped.applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
+		const collected = scoped.applicants.reduce((n, a) => n + money(a.financials.paidAmount), 0);
+
+		return {
+			consultations: scoped.consultations.length,
+			underReview: scoped.consultations.filter((c) => c.status === "Under Review").length,
+			inAssessment: scoped.consultations.filter((c) => c.status === "In Assessment").length,
+			completedConsults: scoped.consultations.filter((c) => c.status === "Completed").length,
+			applications: scoped.applications.length,
+			appsUnderReview: scoped.applications.filter((a) => a.status === "Under Review").length,
+			accepted: scoped.applications.filter((a) => a.status === "Accepted").length,
+			applicants: scoped.applicants.length,
+			activeApplicants: scoped.applicants.filter((a) => a.status === "Active").length,
+			leads: scoped.leads.length,
+			convertedLeads: scoped.leads.filter((l) => l.stage === "converted").length,
+			unassignedConsultations: scoped.consultations.filter((c) => !c.assignedOfficer).length,
+			unassignedApplications: scoped.applications.filter((a) => !a.assignedStaff).length,
+			pendingDocs,
+			openChecklistItems,
+			outstanding,
+			collected,
+		};
+	}, [scoped]);
+
+	const funnel = useMemo(() => {
+		const byStage = (stage: LeadStage) => scoped.leads.filter((l) => l.stage === stage).length;
+		return [
+			{ label: LEAD_STAGE_LABELS.new, value: byStage("new"), to: "/ops/crm" },
+			{ label: LEAD_STAGE_LABELS.contacted, value: byStage("contacted"), to: "/ops/crm" },
+			{ label: LEAD_STAGE_LABELS.interested, value: byStage("interested"), to: "/ops/crm" },
+			{ label: "Consultations", value: stats.consultations, to: "/ops/consultations" },
+			{ label: "Applications", value: stats.applications, to: "/ops/applications" },
+			{ label: "Applicants", value: stats.applicants, to: "/ops/applicants" },
+		];
+	}, [scoped, stats]);
+
+	const funnelMax = Math.max(1, ...funnel.map((f) => f.value));
+
+	return (
+		<div className="page-content fade-in">
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem" }}>
+				<div>
+					<h1 className="page-title">Mission Control</h1>
+					<p className="lead mt-2">
+						{opsUser ? `Welcome back, ${opsUser.name.split(" ")[0]}.` : "Operations overview."} Here is
+						what needs your attention.
+					</p>
+				</div>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+					<span className="portal-pill">{roleName}</span>
+					{canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
+				</div>
+			</div>
+
+			{/* Live portal session callout - visible to manager/coordinator/finance, hidden from admin */}
+			{liveCase?.present &&
+				opsRole &&
+				opsRole !== "admin" &&
+				(opsRole === "manager" ||
+					opsRole === "coordinator" ||
+					opsRole === "finance" ||
+					!liveOverlay.assignedOfficerEmail ||
+					liveOverlay.assignedOfficerEmail === opsUser?.email) && (
+					<div
+						style={{
+							padding: "1rem 1.25rem",
+							background: "var(--foreground)",
+							color: "var(--background)",
+							marginBottom: "2rem",
+							display: "flex",
+							justifyContent: "space-between",
+							alignItems: "center",
+							gap: "1rem",
+							flexWrap: "wrap",
+						}}
+					>
+						<div>
+							<p className="eyebrow" style={{ color: "var(--muted)" }}>
+								Live applicant session
+							</p>
+							<p style={{ fontWeight: 600, marginTop: "0.2rem" }}>
+								{liveCase.name} · {liveCase.stageLabel}
+							</p>
+							<p style={{ fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "0.15rem" }}>
+								{liveCase.email}
+								{liveCase.consultationRef ? ` · ${liveCase.consultationRef}` : ""}
+								{liveCase.schools.length ? ` · ${liveCase.schools.length} school(s) selected` : ""}
+							</p>
+						</div>
+						<Link
+							to={opsRole === "finance" ? "/ops/invoices" : "/ops/consultations"}
+							className="btn btn--sm"
+							style={{ background: "var(--background)", color: "var(--foreground)", whiteSpace: "nowrap" }}
+						>
+							{opsRole === "finance" ? "Open billing →" : "Open their case →"}
+						</Link>
+					</div>
+				)}
+
+			{/* Quick Actions - filtered by permission */}
+			<div style={{ display: "flex", gap: "1rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
+				{hasPermission("consultations") && (
+					<Link to="/ops/consultations" className="btn btn--primary btn--sm">Review Consultations</Link>
+				)}
+				{hasPermission("crm") && (
+					<Link to="/ops/crm" className="btn btn--ghost btn--sm">Lead Pipeline</Link>
+				)}
+				{hasPermission("workflow") && (
+					<Link to="/ops/workflow" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
+				)}
+				{hasPermission("finance") && (
+					<Link to="/ops/finance" className="btn btn--ghost btn--sm">Issue Invoice</Link>
+				)}
+				{hasPermission("packages") && (
+					<Link to="/ops/packages" className="btn btn--ghost btn--sm">Service Packages</Link>
+				)}
+			</div>
+
+			{/* Role-specific dashboard view */}
+			{opsRole === "manager" && (
+				<ManagerView
+					stats={stats}
+					funnel={funnel}
+					funnelMax={funnelMax}
+					applicants={scoped.applicants}
+					activityLog={activityLog}
+				/>
+			)}
+			{opsRole === "coordinator" && (
+				<CoordinatorView
+					stats={stats}
+					funnel={funnel}
+					funnelMax={funnelMax}
+					activityLog={activityLog}
+				/>
+			)}
+			{opsRole === "consultant" && (
+				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} />
+			)}
+			{opsRole === "finance" && <FinanceView stats={stats} applicants={scoped.applicants} />}
+		</div>
+	);
+}
+
+type Stats = {
+	consultations: number;
+	underReview: number;
+	inAssessment: number;
+	completedConsults: number;
+	applications: number;
+	appsUnderReview: number;
+	accepted: number;
+	applicants: number;
+	activeApplicants: number;
+	leads: number;
+	convertedLeads: number;
+	unassignedConsultations: number;
+	unassignedApplications: number;
+	pendingDocs: number;
+	openChecklistItems: number;
+	outstanding: number;
+	collected: number;
+};
+
+type ActivityLog = { id: string; at: string; actor: string; action: string; detail: string }[];
+
+function relativeTime(iso: string) {
+	const diff = Date.now() - new Date(iso).getTime();
+	const mins = Math.round(diff / 60000);
+	if (mins < 1) return "just now";
+	if (mins < 60) return `${mins} min ago`;
+	const hours = Math.round(mins / 60);
+	if (hours < 24) return `${hours}h ago`;
+	return `${Math.round(hours / 24)}d ago`;
+}
+
+/* ─── Manager - full operational oversight ─── */
+
+function ManagerView({
+	stats,
+	funnel,
+	funnelMax,
+	applicants,
+	activityLog,
+}: {
+	stats: Stats;
+	funnel: { label: string; value: number; to?: string }[];
+	funnelMax: number;
+	applicants: {
+		id: string;
+		applicantId: string;
+		name: string;
+		financials: { outstanding: string; plan: string };
+	}[];
+	activityLog: ActivityLog;
+}) {
+	return (
+		<>
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
+				<KPICard
+					label="Awaiting Assignment"
+					value={String(stats.unassignedConsultations + stats.unassignedApplications)}
+					note={`${stats.unassignedConsultations} consultations · ${stats.unassignedApplications} cases`}
+					inverted
+					to="/ops/consultations"
+				/>
+				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/ops/consultations" />
+				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/ops/applications" />
+				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/ops/applicants" />
+				<KPICard label="Active Cases" value={String(stats.appsUnderReview)} note={`${stats.accepted} accepted`} to="/ops/workflow" />
+			</div>
+
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+				<div className="card">
+					<h2 className="section-title mb-3">Conversion Funnel</h2>
+					<p className="muted mb-2" style={{ fontSize: "var(--text-xs)" }}>Click a stage to drill into the module.</p>
+					<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+						{funnel.map((f) => (
+							<FunnelBar key={f.label} label={f.label} value={f.value} max={funnelMax} to={f.to} />
+						))}
+					</div>
+				</div>
+				<div className="card">
+					<h2 className="section-title mb-3">Needs Attention</h2>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/ops/documents" />
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/ops/applications" />
+						<ActivityItem title="Consultations to assess" time={`${stats.inAssessment} in assessment`} to="/ops/consultations" />
+						<ActivityItem
+							title="Lead → applicant rate"
+							time={stats.leads ? `${Math.round((stats.applicants / stats.leads) * 100)}%` : "-"}
+							to="/ops/crm"
+						/>
+					</ul>
+				</div>
+			</div>
+
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+				<div className="card">
+					<h2 className="section-title mb-3">Team Activity</h2>
+					{activityLog.length === 0 ? (
+						<p className="muted" style={{ padding: "1rem 0", fontSize: "var(--text-sm)" }}>
+							No activity yet. Complete an assessment or issue an invoice and it appears here.
+						</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+							{activityLog.slice(0, 6).map((e) => (
+								<ActivityItem
+									key={e.id}
+									title={`${e.action} - ${e.actor}`}
+									time={`${e.detail} · ${relativeTime(e.at)}`}
+									to="/ops/workflow"
+								/>
+							))}
+						</ul>
+					)}
+				</div>
+				<div className="card">
+					<h2 className="section-title mb-3">Balances</h2>
+					{applicants.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+							{applicants.slice(0, 6).map((a) => (
+								<ActivityItem
+									key={a.id}
+									title={`${a.name} - ${fmtFin(a.financials.outstanding)} outstanding`}
+									time={`${a.applicantId} · ${a.financials.plan}`}
+									to="/ops/applicants"
+								/>
+							))}
+						</ul>
+					)}
+				</div>
+			</div>
+		</>
+	);
+}
+
+/* ─── Coordinator - CRM leads, assignments, workflow tracking ─── */
+
+function CoordinatorView({
+	stats,
+	funnel,
+	funnelMax,
+	activityLog,
+}: {
+	stats: Stats;
+	funnel: { label: string; value: number; to?: string }[];
+	funnelMax: number;
+	activityLog: ActivityLog;
+}) {
+	return (
+		<>
+			{/*
+			 * Real bookings from the API, above the seeded KPI cards. This is the
+			 * manager's actual queue: clients book, nothing is auto-assigned, and
+			 * assigning here is what creates the calendar event and meeting link.
+			 */}
+			<UnassignedBookings />
+
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
+				<KPICard
+					label="Unassigned Bookings"
+					value={String(stats.unassignedConsultations)}
+					note="Awaiting consultant assignment"
+					inverted
+					to="/ops/consultations"
+				/>
+				<KPICard label="Open Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/ops/crm" />
+				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/ops/consultations" />
+				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/ops/applications" />
+				<KPICard label="Pending Docs" value={String(stats.pendingDocs)} note="Awaiting verification" to="/ops/documents" />
+			</div>
+
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+				<div className="card">
+					<h2 className="section-title mb-3">Lead Pipeline Funnel</h2>
+					<p className="muted mb-2" style={{ fontSize: "var(--text-xs)" }}>Click a stage to drill into the module.</p>
+					<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+						{funnel.map((f) => (
+							<FunnelBar key={f.label} label={f.label} value={f.value} max={funnelMax} to={f.to} />
+						))}
+					</div>
+				</div>
+				<div className="card">
+					<h2 className="section-title mb-3">Workflow Status</h2>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/ops/consultations" />
+						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/ops/applications" />
+						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/ops/documents" />
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/ops/applications" />
+					</ul>
+				</div>
+			</div>
+
+			<div className="card">
+				<h2 className="section-title mb-3">Recent Activity</h2>
+				{activityLog.length === 0 ? (
+					<p className="muted" style={{ padding: "1rem 0", fontSize: "var(--text-sm)" }}>
+						No activity yet. Assign a consultant or move a lead and it appears here.
+					</p>
+				) : (
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						{activityLog.slice(0, 8).map((e) => (
+							<ActivityItem
+								key={e.id}
+								title={`${e.action} - ${e.actor}`}
+								time={`${e.detail} · ${relativeTime(e.at)}`}
+								to="/ops/workflow"
+							/>
+						))}
+					</ul>
+				)}
+			</div>
+		</>
+	);
+}
+
+/* ─── Consultant - their own caseload ─── */
+
+function ConsultantView({
+	stats,
+	consultations,
+	applications,
+}: {
+	stats: Stats;
+	consultations: { id: string; applicantName: string; dateTime: string; targetCountry: string; status: string }[];
+	applications: { id: string; appId: string; applicantName: string; stage: string; university: string }[];
+}) {
+	const toAssess = consultations.filter((c) => c.status !== "Completed");
+
+	return (
+		<>
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
+				<KPICard label="My Consultations" value={String(stats.consultations)} note={`${toAssess.length} awaiting assessment`} inverted to="/ops/consultations" />
+				<KPICard label="My Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review`} to="/ops/applications" />
+				<KPICard label="My Applicants" value={String(stats.activeApplicants)} note="Active across all stages" to="/ops/applicants" />
+				<KPICard label="My Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/ops/crm" />
+			</div>
+
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+				<div className="card">
+					<h2 className="section-title mb-3">Awaiting My Assessment</h2>
+					{toAssess.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Nothing waiting on you.</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+							{toAssess.slice(0, 6).map((c) => (
+								<ActivityItem
+									key={c.id}
+									title={`${c.applicantName} - ${c.dateTime}`}
+									time={`${c.targetCountry} · ${c.status}`}
+									to="/ops/consultations"
+								/>
+							))}
+						</ul>
+					)}
+				</div>
+				<div className="card">
+					<h2 className="section-title mb-3">My Cases</h2>
+					{applications.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No cases assigned to you.</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+							{applications.slice(0, 6).map((a) => (
+								<ActivityItem
+									key={a.id}
+									title={`${a.appId} - ${a.applicantName}`}
+									time={`${a.stage} · ${a.university}`}
+									to="/ops/applications"
+								/>
+							))}
+						</ul>
+					)}
+				</div>
+			</div>
+		</>
+	);
+}
+
+/* ─── Finance - money and the package catalogue ─── */
+
+function FinanceView({
+	stats,
+	applicants,
+}: {
+	stats: Stats;
+	applicants: {
+		id: string;
+		applicantId: string;
+		name: string;
+		financials: { totalAmount: string; paidAmount: string; outstanding: string; plan: string };
+	}[];
+}) {
+	const settled = applicants.filter(
+		(a) => money(a.financials.outstanding) === 0,
+	).length;
+
+	return (
+		<>
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
+				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ≈ ${fmtUsd(stats.outstanding)}`} inverted to="/ops/finance" />
+				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ≈ ${fmtUsd(stats.collected)}`} to="/ops/finance" />
+				<KPICard label="Settled Accounts" value={String(settled)} note={`${stats.applicants - settled} with a balance`} to="/ops/finance" />
+				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note="Currently billable" to="/ops/applicants" />
+			</div>
+
+			<div className="card">
+				<h2 className="section-title mb-3">Applicant Balances</h2>
+				{applicants.length === 0 ? (
+					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
+				) : (
+					<div className="ops-table-wrap">
+						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+							<thead>
+								<tr style={{ borderBottom: "2px solid var(--border)" }}>
+									<th style={{ padding: "1rem" }}>Applicant ID</th>
+									<th style={{ padding: "1rem" }}>Name</th>
+									<th style={{ padding: "1rem" }}>Total</th>
+									<th style={{ padding: "1rem" }}>Paid</th>
+									<th style={{ padding: "1rem" }}>Outstanding</th>
+									<th style={{ padding: "1rem" }}>Plan</th>
+								</tr>
+							</thead>
+							<tbody>
+								{applicants.map((a) => (
+									<tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600 }}>{a.applicantId}</td>
+										<td style={{ padding: "1rem" }}>
+											<Link to="/ops/applicants" style={{ textDecoration: "underline" }}>{a.name}</Link>
+										</td>
+										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.totalAmount)}</td>
+										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.paidAmount)}</td>
+										<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.outstanding)}</td>
+										<td style={{ padding: "1rem" }} className="muted">{a.financials.plan}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
+		</>
+	);
+}
+
+/* ─── Shared Components ─── */
+
+function KPICard({ label, value, note, inverted, to }: { label: string; value: string; note: string; inverted?: boolean; to?: string }) {
+	const card = (
+		<div
+			className="card"
+			style={{
+				...(inverted ? { background: "var(--foreground)", color: "var(--background)" } : undefined),
+				height: "100%",
+				display: "flex",
+				flexDirection: "column",
+			}}
+		>
+			<p className="eyebrow" style={inverted ? { color: "var(--muted-foreground)" } : undefined}>{label}</p>
+			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
+			<p className="muted mt-2" style={{ ...(inverted ? { color: "var(--muted-foreground)" } : undefined), marginTop: "auto" }}>{note}</p>
+		</div>
+	);
+	if (!to) return card;
+	return (
+		<Link
+			to={to}
+			className="card-link"
+			style={{ display: "block", height: "100%" }}
+			aria-label={`Open ${label}`}
+		>
+			{card}
+		</Link>
+	);
+}
+
+function ActivityItem({ title, time, to }: { title: string; time: string; to?: string }) {
+	const item = (
+		<li style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+			<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{title}</p>
+			<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>{time}</p>
+		</li>
+	);
+	if (!to) return item;
+	return (
+		<Link to={to} className="card-link" style={{ display: "block" }}>
+			{item}
+		</Link>
+	);
+}
+
+function FunnelBar({ label, value, max, to }: { label: string; value: number; max: number; to?: string }) {
+	const pct = Math.round((value / max) * 100);
+	const bar = (
+		<div>
+			<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+				<span style={{ fontSize: "var(--text-sm)" }}>{label}</span>
+				<span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)" }}>{value}</span>
+			</div>
+			<div style={{ width: "100%", height: "8px", background: "var(--muted)", border: "1px solid var(--border-light)" }}>
+				<div style={{ width: `${pct}%`, height: "100%", background: "var(--foreground)", transition: "width 0.6s ease" }} />
+			</div>
+		</div>
+	);
+	if (!to) return bar;
+	return (
+		<Link to={to} className="card-link" aria-label={`Open ${label}`}>
+			{bar}
+		</Link>
+	);
+}

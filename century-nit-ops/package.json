@@ -1,0 +1,32 @@
+{
+	"name": "century-nit-ops",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Century NIT Operations Center — staff admin app, built and deployed separately from the public site",
+	"scripts": {
+		"dev": "vite",
+		"build": "tsc -b && vite build",
+		"preview": "npm run build && vite preview",
+		"lint": "eslint ."
+	},
+	"dependencies": {
+		"century-nit-core": "*",
+		"react": "19.2.1",
+		"react-dom": "19.2.1",
+		"react-router-dom": "^7.18.2",
+		"century-nit-shared": "*"
+	},
+	"devDependencies": {
+		"@eslint/js": "9.39.1",
+		"@types/react": "19.2.7",
+		"@types/react-dom": "19.2.3",
+		"@vitejs/plugin-react": "5.1.1",
+		"eslint": "9.39.2",
+		"eslint-plugin-react-hooks": "7.0.1",
+		"eslint-plugin-react-refresh": "0.4.24",
+		"globals": "16.5.0",
+		"typescript": "5.9.3",
+		"vite": "^7.0.0"
+	}
+}

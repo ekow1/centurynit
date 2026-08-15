@@ -1,0 +1,472 @@
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { eq, inArray } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "../db/index.js";
+import { opsUsers } from "../db/schema.js";
+import { HttpError } from "../middleware/error.js";
+import { canModifyBooking, canViewBooking, requireAuth, type AuthVariables } from "../middleware/auth.js";
+import { zonedTimeToUtc } from "../lib/time.js";
+import { assignableEmployees, branchAvailability, sameBranch } from "../services/availability.js";
+import {
+	assignBooking,
+	cancelBooking,
+	createBooking,
+	getBooking,
+	listBookings,
+	listBookingsForClient,
+	rescheduleBooking,
+	type BookingRow,
+} from "../services/booking.js";
+import {
+	assignBookingSchema,
+	assignableEmployeeSchema,
+	availabilityQuerySchema,
+	availabilityResponseSchema,
+	bookingListSchema,
+	bookingSchema,
+	bookingStatusSchema,
+	cancelBookingSchema,
+	createBookingSchema,
+	rescheduleBookingSchema,
+} from "century-nit-shared";
+import type { Booking } from "century-nit-shared";
+import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
+
+const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+
+const idParams = z.object({
+	id: z.string().uuid(),
+});
+
+const listQuerySchema = z.object({
+	status: bookingStatusSchema.optional(),
+	branchId: z.string().min(1).optional(),
+	employeeId: z.string().uuid().optional(),
+});
+
+const employeesQuerySchema = z.object({
+	bookingId: z.string().uuid().optional(),
+	branchId: z.string().min(1).optional(),
+	date: z
+		.string()
+		.regex(/^\d{4}-\d{2}-\d{2}$/)
+		.optional(),
+	time: z
+		.string()
+		.regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+		.optional(),
+	durationMinutes: z.coerce.number().int().min(15).max(240).optional(),
+});
+
+function resolveServiceName(serviceId: string): string {
+	const pkg = servicePackages.find((p) => p.id === serviceId);
+	if (pkg) return pkg.name;
+	const type = consultationTypes.find((t) => t.id === serviceId);
+	if (type) return type.name;
+	return serviceId;
+}
+
+function getBranchOrThrow(branchId: string) {
+	const branch = branches.find((b) => b.id === branchId);
+	if (!branch) throw new HttpError(404, "BRANCH_NOT_FOUND", `Unknown branch: ${branchId}`);
+	return branch;
+}
+
+async function loadEmployee(employeeId: string | null) {
+	if (!employeeId) return null;
+	const [row] = await db.select().from(opsUsers).where(eq(opsUsers.id, employeeId)).limit(1);
+	return row ?? null;
+}
+
+function toBookingResponse(row: BookingRow, employee?: { name: string; email: string } | null): Booking {
+	return {
+		id: row.id,
+		reference: row.reference,
+		status: row.status,
+		serviceId: row.serviceId,
+		serviceName: row.serviceName,
+		branchId: row.branchId,
+		type: row.type,
+		startsAt: row.startsAt.toISOString(),
+		endsAt: row.endsAt.toISOString(),
+		timezone: row.timezone,
+		durationMinutes: row.durationMinutes,
+		clientName: row.clientName,
+		clientEmail: row.clientEmail,
+		clientPhone: row.clientPhone ?? null,
+		employeeId: row.employeeId ?? null,
+		employeeName: employee?.name ?? null,
+		employeeEmail: employee?.email ?? null,
+		assignedAt: row.assignedAt?.toISOString() ?? null,
+		meetingUrl: row.meetingUrl ?? null,
+		calendarEventId: row.calendarEventId ?? null,
+		calendarSyncStatus: row.calendarSyncStatus,
+		rescheduledAt: row.rescheduledAt?.toISOString() ?? null,
+		cancelledAt: row.cancelledAt?.toISOString() ?? null,
+		cancellationReason: row.cancellationReason ?? null,
+		createdAt: row.createdAt.toISOString(),
+		updatedAt: row.updatedAt.toISOString(),
+	};
+}
+
+/* ── GET /api/bookings/availability ──────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/availability",
+		request: { query: availabilityQuerySchema },
+		responses: {
+			200: {
+				description: "Available slots",
+				content: { "application/json": { schema: availabilityResponseSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const query = c.req.valid("query");
+		const branch = getBranchOrThrow(query.branchId);
+		const slots = await branchAvailability({
+			branchId: query.branchId,
+			date: query.date,
+			durationMinutes: query.durationMinutes,
+			timezone: branch.timezone,
+			employeeId: query.employeeId,
+		});
+		return c.json({
+			branchId: branch.id,
+			date: query.date,
+			timezone: branch.timezone,
+			durationMinutes: query.durationMinutes,
+			slots: slots.map((s) => ({
+				time: s.time,
+				startsAt: s.startsAt.toISOString(),
+				available: s.available,
+				reason: s.reason,
+			})),
+		});
+	},
+);
+
+/* ── POST /api/bookings ──────────────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/",
+		middleware: requireAuth,
+		request: {
+			body: {
+				content: { "application/json": { schema: createBookingSchema } },
+				description: "Booking to create",
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				description: "Booking created",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const serviceName = resolveServiceName(body.serviceId);
+		const booking = await createBooking({
+			data: body,
+			client: {
+				id: user.id,
+				name: user.name ?? user.email,
+				email: user.email,
+			},
+			serviceName,
+		});
+		return c.json(toBookingResponse(booking), 201);
+	},
+);
+
+/* ── GET /api/bookings ───────────────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/",
+		middleware: requireAuth,
+		request: { query: listQuerySchema },
+		responses: {
+			200: {
+				description: "List of bookings",
+				content: { "application/json": { schema: bookingListSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const staff = c.get("staff");
+		const query = c.req.valid("query");
+
+		let rows: BookingRow[] = [];
+		if (!staff) {
+			rows = await listBookingsForClient(user.id);
+		} else if (staff.role === "manager" || staff.role === "coordinator" || staff.role === "finance") {
+			rows = await listBookings({
+				status: query.status ? [query.status] : undefined,
+				branchId: query.branchId,
+				employeeId: query.employeeId,
+			});
+		} else {
+			const [mine, assigned] = await Promise.all([
+				listBookingsForClient(user.id),
+				listBookings({ employeeId: staff.opsUserId }),
+			]);
+			const byId = new Map<string, BookingRow>();
+			for (const row of mine) byId.set(row.id, row);
+			for (const row of assigned) byId.set(row.id, row);
+			rows = Array.from(byId.values());
+		}
+
+		const employeeIds = Array.from(new Set(rows.map((r) => r.employeeId).filter(Boolean)));
+		const employees = employeeIds.length
+			? await db.select().from(opsUsers).where(inArray(opsUsers.id, employeeIds as string[]))
+			: [];
+		const byEmployee = new Map(employees.map((e) => [e.id, e]));
+
+		const list = rows.map((r) => toBookingResponse(r, r.employeeId ? byEmployee.get(r.employeeId) ?? null : null));
+		return c.json({ bookings: list, total: list.length });
+	},
+);
+
+/*
+ * Registered BEFORE `/:id`. Hono matches in registration order, so a static
+ * segment declared after a parameterised one is unreachable — `/employees`
+ * was being matched as `/:id` with id="employees" and failing uuid validation.
+ */
+/* ── GET /api/bookings/employees ─────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/employees",
+		middleware: requireAuth,
+		request: { query: employeesQuerySchema },
+		responses: {
+			200: {
+				description: "Assignable employees",
+				content: { "application/json": { schema: z.array(assignableEmployeeSchema) } },
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
+
+		const query = c.req.valid("query");
+		let startsAt: Date;
+		let durationMinutes: number;
+		let timezone: string;
+		let branchId: string | undefined;
+		let excludeBookingId: string | undefined;
+
+		if (query.bookingId) {
+			const row = await getBooking(query.bookingId);
+			if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+			startsAt = row.startsAt;
+			durationMinutes = row.durationMinutes;
+			timezone = row.timezone;
+			branchId = row.branchId;
+			excludeBookingId = row.id;
+		} else if (query.branchId && query.date && query.time && query.durationMinutes) {
+			const branch = getBranchOrThrow(query.branchId);
+			startsAt = zonedTimeToUtc(query.date, query.time, branch.timezone);
+			durationMinutes = query.durationMinutes;
+			timezone = branch.timezone;
+			branchId = query.branchId;
+		} else {
+			throw new HttpError(400, "VALIDATION_ERROR", "Provide bookingId or branchId+date+time+durationMinutes");
+		}
+
+		const options = await assignableEmployees({
+			startsAt,
+			durationMinutes,
+			timezone,
+			branchId,
+			excludeBookingId,
+		});
+		/*
+		 * Branch labels are compared canonically: ops_users.branch says "accra"
+		 * while the catalogue says "accra-hq", so a raw !== drops every employee
+		 * and the manager's dialog comes back empty.
+		 *
+		 * Unavailable staff are deliberately kept — §2 wants "✕ Kwame - Busy"
+		 * shown, not hidden. The assign endpoint is what refuses them.
+		 */
+		const filtered = options.filter((o) =>
+			branchId && o.branch ? sameBranch(o.branch, branchId) : true,
+		);
+		return c.json(filtered);
+	},
+);
+
+/* ── GET /api/bookings/:id ───────────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/:id",
+		middleware: requireAuth,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canViewBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this booking");
+		}
+		const employee = await loadEmployee(row.employeeId);
+		return c.json(toBookingResponse(row, employee));
+	},
+);
+
+/* ── PATCH /api/bookings/:id/cancel ──────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/:id/cancel",
+		middleware: requireAuth,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: cancelBookingSchema } },
+				description: "Cancel reason",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Cancelled booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to cancel this booking");
+		}
+		const updated = await cancelBooking({
+			bookingId: id,
+			reason: body.reason,
+			actor: staff ? { name: staff.name, email: staff.email } : { name: user.name ?? user.email, email: user.email },
+		});
+		const employee = await loadEmployee(updated.employeeId);
+		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+/* ── PATCH /api/bookings/:id/reschedule ──────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/:id/reschedule",
+		middleware: requireAuth,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: rescheduleBookingSchema } },
+				description: "Reschedule details",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Rescheduled booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to reschedule this booking");
+		}
+		const updated = await rescheduleBooking({
+			bookingId: id,
+			date: body.date,
+			time: body.time,
+			timezone: body.timezone,
+			reason: body.reason,
+			actor: staff ? { name: staff.name, email: staff.email } : { name: user.name ?? user.email, email: user.email },
+		});
+		const employee = await loadEmployee(updated.employeeId);
+		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+/* ── PATCH /api/bookings/:id/assign ──────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/:id/assign",
+		middleware: requireAuth,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: assignBookingSchema } },
+				description: "Employee to assign",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Assigned booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff");
+
+		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
+		if (staff.role !== "manager" && staff.role !== "coordinator") {
+			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign bookings");
+		}
+
+		const updated = await assignBooking({
+			bookingId: id,
+			employeeId: body.employeeId,
+			actor: { opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
+		});
+		const employee = await loadEmployee(updated.employeeId);
+		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+export { bookingsRouter };

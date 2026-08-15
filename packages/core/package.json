@@ -1,0 +1,53 @@
+{
+	"name": "century-nit-core",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Domain data, types and UI primitives shared by century-nit-web and century-nit-ops",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./ops": {
+			"types": "./dist/opsTypes.d.ts",
+			"import": "./dist/opsTypes.js"
+		},
+		"./content": {
+			"types": "./dist/content.d.ts",
+			"import": "./dist/content.js"
+		},
+		"./ui": {
+			"types": "./dist/ui/index.d.ts",
+			"import": "./dist/ui/index.js"
+		},
+		"./styles/base.css": "./styles/base.css",
+		"./styles/base.mobile.css": "./styles/base.mobile.css",
+		"./api": {
+			"types": "./dist/api.d.ts",
+			"import": "./dist/api.js"
+		}
+	},
+	"files": [
+		"dist",
+		"styles"
+	],
+	"scripts": {
+		"build": "tsc",
+		"lint": "tsc --noEmit",
+		"dev": "tsc --watch",
+		"test": "node test/availability.test.mjs"
+	},
+	"peerDependencies": {
+		"react": "^18.0.0 || ^19.0.0"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.7",
+		"typescript": "^5.9.0"
+	},
+	"dependencies": {
+		"century-nit-shared": "*"
+	}
+}

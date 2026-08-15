@@ -1,0 +1,175 @@
+/*
+ * Server-backed appointments in the applicant portal.
+ *
+ * Web-only, so it sits in this app's layer rather than the shared base. Built
+ * from the existing tokens so it reads as part of the portal rather than a
+ * bolted-on module.
+ */
+
+.appt-page__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+	margin-bottom: 1.5rem;
+}
+
+.appt-section {
+	margin: 2rem 0;
+}
+
+.appt-muted {
+	color: var(--text-muted, #666);
+	font-size: var(--text-sm, 0.875rem);
+	margin: 0.5rem 0;
+}
+
+.appt-error {
+	border-left: 3px solid #b00020;
+	padding: 0.6rem 0.9rem;
+	margin: 0.75rem 0;
+	font-size: var(--text-sm, 0.875rem);
+}
+
+/* Confirmation after booking. Deliberately states that nobody is assigned yet. */
+.appt-confirm {
+	border: var(--medium);
+	padding: 1.25rem;
+	margin-bottom: 2rem;
+}
+
+.appt-confirm__title {
+	margin: 0 0 0.5rem;
+	font-size: var(--text-lg, 1.125rem);
+}
+
+.appt-confirm p {
+	margin: 0.35rem 0;
+	font-size: var(--text-sm, 0.875rem);
+}
+
+/* ── Slot picker ── */
+
+.appt-slots {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.appt-slot {
+	padding: 0.5rem 0.85rem;
+	border: var(--thin);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: var(--text-sm, 0.875rem);
+	cursor: pointer;
+}
+
+.appt-slot:hover:not(:disabled) {
+	background: var(--border);
+	color: var(--background);
+}
+
+.appt-slot--on {
+	background: var(--border);
+	color: var(--background);
+}
+
+/* A taken slot stays visible but plainly unusable. */
+.appt-slot:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+	text-decoration: line-through;
+}
+
+/* ── Cards ── */
+
+.appt-card {
+	border: var(--medium);
+	padding: 1.25rem;
+	margin-bottom: 1.25rem;
+	background: var(--background);
+}
+
+.appt-card--over {
+	opacity: 0.6;
+}
+
+.appt-card__head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 1rem;
+	margin-bottom: 0.75rem;
+}
+
+.appt-card__title {
+	margin: 0;
+	font-size: var(--text-base, 1rem);
+}
+
+.appt-card__when {
+	margin: 0.2rem 0 0;
+	color: var(--text-muted, #666);
+	font-size: var(--text-sm, 0.875rem);
+}
+
+.appt-status {
+	padding: 0.15rem 0.55rem;
+	border: 1px solid var(--border);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	white-space: nowrap;
+}
+
+.appt-status--unassigned { background: var(--border); color: var(--background); }
+.appt-status--cancelled,
+.appt-status--no_show { text-decoration: line-through; }
+
+.appt-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.5rem;
+	margin: 0 0 0.75rem;
+}
+
+.appt-meta dt {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted, #666);
+}
+
+.appt-meta dd {
+	margin: 0.15rem 0 0;
+	font-size: var(--text-sm, 0.875rem);
+}
+
+.appt-note {
+	margin: 0 0 1rem;
+	font-size: var(--text-sm, 0.875rem);
+	line-height: 1.5;
+}
+
+.appt-actions {
+	display: flex;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+	margin-top: 1rem;
+}
+
+.appt-form--inline {
+	margin-top: 1.25rem;
+	padding-top: 1.25rem;
+	border-top: var(--hairline);
+}
+
+.appt-subhead {
+	margin: 0 0 0.75rem;
+	font-size: var(--text-sm, 0.875rem);
+	font-family: var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}

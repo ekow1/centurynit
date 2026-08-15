@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+
+# drizzle/ is intentionally tracked — see the note in the root .gitignore.
+# Only drizzle-kit's local scratch output is ignored.
+drizzle/.drizzle/

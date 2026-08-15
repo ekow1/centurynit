@@ -19,8 +19,8 @@ import { env } from "../env.js";
  *    the lower tiers. Two processes connect (the API and the worker), so each
  *    takes a modest slice rather than the driver's default of 10.
  *
- * 3. Pooling mode. See the note on `usesTransactionPooler` below — this is the
- *    one that silently breaks transactions if you get it wrong.
+ * 3. Pooling mode. See the note on `usesTransactionPooler` below — session mode
+ *    is required because migrations rely on a session-scoped advisory lock.
  */
 
 const url = env.DATABASE_URL;
@@ -30,24 +30,27 @@ function isSupabase(connectionString: string): boolean {
 }
 
 /**
- * Supabase offers the same database on three ports, and they are not
- * interchangeable:
+ * Supabase serves the same database three ways, and they are not equivalent:
  *
- *   5432 direct         — full Postgres. Required for migrations (DDL, CREATE
- *                         EXTENSION, advisory locks).
- *   5432 session pooler — one server connection per client connection. Safe for
- *                         everything this API does, including transactions.
- *   6543 transaction    — a server connection per *statement*. Cheap and highly
- *                         concurrent, but a multi-statement transaction can be
- *                         split across different backends, which quietly breaks
- *                         the atomicity this codebase depends on: booking
- *                         creation, invoice writes and `setWorkingHours` are all
- *                         `db.transaction`, and §11's double-booking guard
- *                         assumes the insert and its constraint check are one
- *                         unit.
+ *   :5432 direct        — full Postgres, but IPv6-only without the paid add-on.
+ *   :5432 session pool  — IPv4. One server connection per client connection.
+ *   :6543 transaction   — IPv4. One server connection per *transaction*.
  *
- * So the transaction pooler is refused rather than tolerated. Failing at startup
- * with an explanation beats a race that appears only under load.
+ * Transaction mode does hold a transaction on a single backend, so BEGIN…COMMIT
+ * stays atomic and ordinary reads and writes here would work. What it drops is
+ * session-scoped state, and that is what makes it wrong for this process:
+ *
+ *   - `drizzle-kit migrate` takes a session-scoped `pg_advisory_lock` to
+ *     serialise concurrent deploys. That lock cannot outlive a transaction under
+ *     transaction pooling, so migrations are unreliable against :6543 —
+ *     and 0001 also runs CREATE EXTENSION btree_gist.
+ *   - Named prepared statements are per-backend, the long-standing footgun of
+ *     transaction pooling.
+ *
+ * Supabase's own guidance says the same: transaction mode for serverless and
+ * short-lived clients, session mode for persistent servers. This is a persistent
+ * server holding a connection pool, so it wants session mode — equally IPv4,
+ * differing only in the port.
  */
 function usesTransactionPooler(connectionString: string): boolean {
 	return isSupabase(connectionString) && /:6543(\/|\?|$)/.test(connectionString);
@@ -55,10 +58,20 @@ function usesTransactionPooler(connectionString: string): boolean {
 
 if (usesTransactionPooler(url)) {
 	console.error(
-		"\nDATABASE_URL points at Supabase's transaction pooler (port 6543).\n" +
-			"This API runs multi-statement transactions, which that pooler can split\n" +
-			"across backends — booking and invoice writes would lose atomicity.\n\n" +
-			"Use the session pooler or the direct connection (port 5432) instead.\n",
+		[
+			"",
+			"DATABASE_URL points at Supabase's transaction pooler (port 6543).",
+			"",
+			"That mode drops session-scoped state, which this process needs:",
+			"drizzle-kit's migration advisory lock cannot survive it, and named",
+			"prepared statements are per-backend. Supabase recommends transaction",
+			"mode for serverless clients and session mode for persistent servers —",
+			"this is a persistent server with a connection pool.",
+			"",
+			"Use the session pooler. It is equally IPv4; only the port differs:",
+			"  ...pooler.supabase.com:6543  ->  ...pooler.supabase.com:5432",
+			"",
+		].join("\n"),
 	);
 	process.exit(1);
 }

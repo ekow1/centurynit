@@ -198,6 +198,13 @@ curl -X POST http://localhost:3000/api/v1/staff/bootstrap   -H 'Content-Type: ap
 `bootstrap` refuses as soon as any staff member exists, so it cannot be replayed.
 Remove `BOOTSTRAP_TOKEN` from the environment afterwards.
 
+`BOOTSTRAP_TOKEN` is the developer's setup secret — it is only ever typed by a
+person, so a passphrase you will remember works as well as `openssl rand -hex 16`.
+Anything 16 characters or longer is accepted; five wrong attempts lock the
+endpoint for fifteen minutes. It is a different thing from the `password` in the
+same request body, which is the login password for the administrator being
+created.
+
 ### API reference
 
 `/api/docs` is one page covering the whole surface. Better Auth serves its routes

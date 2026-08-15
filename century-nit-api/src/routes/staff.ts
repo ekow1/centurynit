@@ -247,7 +247,36 @@ staffRouter.openapi(
  *
  * Once the first super_admin exists this endpoint is permanently inert, and the
  * token can be removed from the environment.
+ *
+ * BOOTSTRAP_TOKEN is a developer-held secret, not a machine credential — a long
+ * passphrase is as valid as `openssl rand -hex 16`, and anything of 16
+ * characters or more is accepted. That is precisely why the lockout below
+ * exists: a secret somebody can remember is a secret somebody can guess.
  */
+
+/**
+ * Failed-attempt lockout.
+ *
+ * There is no rate limiting anywhere else in this API, and everywhere else that
+ * is defensible — the other routes need a session, and Better Auth guards its
+ * own sign-in. This one is different: it is unauthenticated by necessity,
+ * publicly documented, and what it hands out is the highest privilege in the
+ * system.
+ *
+ * The window is narrow, since a single successful bootstrap closes it forever.
+ * But that window is a freshly deployed server with no staff yet, which is
+ * exactly when nobody is watching.
+ *
+ * Counted globally rather than per IP, because per-IP counting is defeated by
+ * rotating IPs and the honest threat here is an automated sweep. The cost is
+ * that anyone who can reach the endpoint can lock the real operator out for
+ * fifteen minutes — an annoyance answered by waiting or restarting the
+ * container, and a far better trade than a guessable super admin.
+ */
+const BOOTSTRAP_MAX_FAILURES = 5;
+const BOOTSTRAP_LOCKOUT_MS = 15 * 60_000;
+let bootstrapFailures = 0;
+let bootstrapLockedUntil = 0;
 staffRouter.openapi(
 	createRoute({
 		method: "post",
@@ -255,16 +284,43 @@ staffRouter.openapi(
 		tags: ["Staff"],
 		summary: "Create the first super administrator",
 		description:
-			"One-time setup. Refuses once any staff member exists. Requires the BOOTSTRAP_TOKEN configured on the server.",
+			"One-time setup, and the only way to create a staff account without an " +
+			"inviter. Refuses as soon as any staff member exists.\n\n" +
+			"**Two different secrets go in this body.** `token` is the server's " +
+			"`BOOTSTRAP_TOKEN` — the developer's setup secret, which proves you are " +
+			"entitled to claim this deployment. `password` is the login password for " +
+			"the administrator being created, and is what they will sign in with " +
+			"afterwards. They are not the same value and should not be.\n\n" +
+			"Five wrong tokens lock the endpoint for fifteen minutes. Remove " +
+			"`BOOTSTRAP_TOKEN` from the environment once setup is done.",
 		request: {
 			body: {
 				content: {
 					"application/json": {
 						schema: z.object({
-							token: z.string().min(16),
-							email: z.string().email(),
-							name: z.string().min(1).max(120),
-							password: z.string().min(12),
+							/*
+							 * Named and described at the field level because both of these
+							 * are secrets in one small JSON body, and the reference is where
+							 * somebody decides which is which.
+							 */
+							token: z.string().min(16).openapi({
+								description:
+									"The server's BOOTSTRAP_TOKEN. A developer-held secret — a long passphrase is fine, it does not have to be random. Minimum 16 characters.",
+								example: "the-setup-secret-you-configured",
+							}),
+							email: z.string().email().openapi({
+								description: "Email for the administrator being created.",
+								example: "you@example.com",
+							}),
+							name: z.string().min(1).max(120).openapi({
+								description: "Their display name.",
+								example: "Your Name",
+							}),
+							password: z.string().min(12).openapi({
+								description:
+									"The login password for the NEW administrator — not the bootstrap token. Minimum 12 characters.",
+								example: "at-least-twelve-characters",
+							}),
 						}),
 					},
 				},
@@ -280,6 +336,10 @@ staffRouter.openapi(
 				},
 				description: "Super administrator created",
 			},
+			403: { description: "Wrong bootstrap token" },
+			409: { description: "Staff already exist — invite further members instead" },
+			429: { description: "Locked after repeated wrong tokens" },
+			503: { description: "BOOTSTRAP_TOKEN is not configured on the server" },
 		},
 	}),
 	async (c) => {
@@ -293,11 +353,33 @@ staffRouter.openapi(
 			);
 		}
 
+		const now = Date.now();
+		if (now < bootstrapLockedUntil) {
+			const minutes = Math.ceil((bootstrapLockedUntil - now) / 60_000);
+			throw new HttpError(
+				429,
+				"BOOTSTRAP_LOCKED",
+				`Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+			);
+		}
+
 		const expected = Buffer.from(env.BOOTSTRAP_TOKEN);
 		const presented = Buffer.from(body.token);
 		if (expected.length !== presented.length || !timingSafeEqual(expected, presented)) {
+			bootstrapFailures += 1;
+			if (bootstrapFailures >= BOOTSTRAP_MAX_FAILURES) {
+				bootstrapLockedUntil = now + BOOTSTRAP_LOCKOUT_MS;
+				bootstrapFailures = 0;
+				// Loud on purpose: on a server with no staff yet, this is either the
+				// operator fumbling the secret or somebody trying to take the system.
+				console.warn(
+					`[bootstrap] ${BOOTSTRAP_MAX_FAILURES} failed attempts — locked for ${BOOTSTRAP_LOCKOUT_MS / 60_000} minutes`,
+				);
+			}
 			throw new HttpError(403, "FORBIDDEN", "Invalid bootstrap token");
 		}
+
+		bootstrapFailures = 0;
 
 		const [{ count }] = await db
 			.select({ count: sql<number>`count(*)::int` })

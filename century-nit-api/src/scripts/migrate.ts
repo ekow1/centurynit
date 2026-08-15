@@ -23,7 +23,8 @@
  * to wire into CI or a deploy hook.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 
 type Args = { envFile: string };
@@ -110,7 +111,19 @@ function assertSessionPooler(url: string): void {
 const args = parseArgs(process.argv.slice(2));
 const env = loadEnvFile(args.envFile);
 
-const dbUrl = process.env.DATABASE_URL_MIGRATIONS ?? process.env.DATABASE_URL ?? env.DATABASE_URL_MIGRATIONS ?? env.DATABASE_URL;
+/*
+ * First non-empty wins, rather than `??`. An exported-but-empty DATABASE_URL is
+ * common — a CI job that declares the variable without a value, or a shell
+ * where it was cleared — and `??` treats "" as a real answer, so the env file
+ * is never consulted and the failure reads as "no URL found" while one sits in
+ * the file being pointed at.
+ */
+const dbUrl = [
+	process.env.DATABASE_URL_MIGRATIONS,
+	process.env.DATABASE_URL,
+	env.DATABASE_URL_MIGRATIONS,
+	env.DATABASE_URL,
+].find((value) => value && value.trim() !== "");
 if (!dbUrl) {
 	console.error(
 		`[migrate] No database URL found. Checked process.env.DATABASE_URL_MIGRATIONS, ` +
@@ -124,13 +137,49 @@ assertSessionPooler(dbUrl);
 // Hand the URL to drizzle-kit via the environment so drizzle.config.ts picks it up.
 process.env.DATABASE_URL = dbUrl;
 
+/*
+ * Run drizzle-kit's entry point directly under this Node binary, rather than
+ * shelling out to `npx drizzle-kit`.
+ *
+ * On Windows there is no bare `npx` on disk — it is `npx.cmd`, and without a
+ * shell Node does not apply PATHEXT, so `spawnSync("npx", ...)` fails outright
+ * with ENOENT. (Even given the full path, Node has refused to execute `.cmd`
+ * and `.bat` without a shell since the CVE-2024-27980 fix in 18.20 and 20.12.)
+ * The usual patch is `shell: platform === "win32"`, which works but routes the
+ * whole command line through cmd.exe and leaves a platform branch to remember.
+ *
+ * Resolving the binary ourselves removes both problems: no shell, no platform
+ * branch, and no npx resolution step. `require.resolve` is aimed at the package
+ * root because drizzle-kit's `exports` map does not publish `./bin.cjs`, so
+ * only the main entry can be resolved by specifier — its directory is what we
+ * actually want.
+ */
+const drizzleKitBin = resolve(
+	dirname(createRequire(import.meta.url).resolve("drizzle-kit")),
+	"bin.cjs",
+);
+
+if (!existsSync(drizzleKitBin)) {
+	console.error(
+		`[migrate] could not find drizzle-kit's entry point at ${drizzleKitBin}. ` +
+			`Run \`npm install\` in century-nit-api, or check whether drizzle-kit has ` +
+			`moved its binary.`,
+	);
+	process.exit(1);
+}
+
 console.log(`[migrate] running drizzle-kit migrate (env: ${args.envFile})`);
-const result = spawnSync("npx", ["drizzle-kit", "migrate"], {
+const result = spawnSync(process.execPath, [drizzleKitBin, "migrate"], {
 	stdio: "inherit",
-	shell: process.platform === "win32",
 	env: process.env,
 });
 
+if (result.error) {
+	// A spawn failure leaves status null, which the check below would report as
+	// "exited with status null" — true but useless for working out what happened.
+	console.error(`[migrate] could not start drizzle-kit: ${result.error.message}`);
+	process.exit(1);
+}
 if (result.status !== 0) {
 	console.error(`[migrate] drizzle-kit exited with status ${result.status}`);
 	process.exit(result.status ?? 1);

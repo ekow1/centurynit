@@ -19,9 +19,9 @@ import {
  *
  * Strict security:
  *   - `super_admin` only. Not even `admin` can change these.
- *   - Every write requires the caller's current password, re-verified against
- *     Better Auth. A stolen session (e.g. an unattended laptop) cannot change
- *     API keys without the password.
+ *   - Every write requires a fresh TOTP code from the caller's authenticator.
+ *     A stolen session (an unattended laptop) cannot rotate API keys without
+ *     the physical second factor.
  *   - Values are never returned in plaintext. Secrets are masked; non-secrets
  *     (URLs, bucket names) are shown in full since they are not credentials.
  *   - Every change is recorded in `settings_audit` with masked old/new values.
@@ -37,8 +37,15 @@ const updateBodySchema = z.object({
 	key: settingKeySchema,
 	/** Plaintext value to store. Pass null to clear (revert to env fallback). */
 	value: z.string().nullable(),
-	/** Caller's current password, re-verified before the write is accepted. */
-	password: z.string().min(1),
+	/**
+	 * A current code from the caller's authenticator.
+	 *
+	 * Step-up authentication: a session cookie alone must not be enough to
+	 * rotate an API key, so the caller proves possession of their second factor
+	 * at the moment of the change. Every staff role already has TOTP enrolled
+	 * (`requireMfa`), so this asks for something they always have.
+	 */
+	totpCode: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator"),
 });
 
 const settingResponseSchema = z.object({
@@ -119,27 +126,41 @@ settingsRouter.openapi(
 				content: { "application/json": { schema: settingResponseSchema } },
 				description: "The updated setting (masked)",
 			},
-			403: { description: "Not super_admin or wrong password" },
+			403: { description: "Not super_admin, or the authenticator code was rejected" },
 		},
 	}),
 	async (c) => {
 		const body = c.req.valid("json" as never) as z.infer<typeof updateBodySchema>;
-		const user = c.get("user");
 		const staff = c.get("staff");
 
 		if (!staff) {
 			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
 
-		// Re-verify the caller's password before accepting any change.
-		// A session cookie alone is not enough — an unattended browser should
-		// not be able to rotate API keys.
+		/*
+		 * Step up before accepting the change.
+		 *
+		 * Deliberately NOT a password re-check via `signInEmail`. That is a full
+		 * sign-in used as a comparison: it writes a session row per settings save,
+		 * and — the real problem — failed attempts count against Better Auth's
+		 * sign-in rate limiter, so an admin who mistypes while editing settings can
+		 * lock themselves out of signing in at all.
+		 *
+		 * A TOTP code is the right primitive here: it proves possession, it is
+		 * inherently fresh and single-use, and every staff role already has one
+		 * enrolled.
+		 */
 		try {
-			await authInstance.api.signInEmail({
-				body: { email: user.email, password: body.password },
+			await authInstance.api.verifyTOTP({
+				body: { code: body.totpCode },
+				headers: c.req.raw.headers,
 			});
 		} catch {
-			throw new HttpError(403, "PASSWORD_REQUIRED", "Current password is incorrect");
+			throw new HttpError(
+				403,
+				"MFA_REQUIRED",
+				"That code was not accepted. Use the current code from your authenticator.",
+			);
 		}
 
 		await writeSetting(body.key, body.value, {

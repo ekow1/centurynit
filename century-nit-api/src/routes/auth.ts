@@ -13,14 +13,59 @@ import { env } from "../env.js";
 import { allowedOrigins } from "../lib/origins.js";
 import { sendEmail } from "../lib/resend.js";
 import { getSmsSender } from "../lib/sms.js";
+import { getSetting } from "../services/settings.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
  * rather than a second auth system growing alongside it.
  */
-export const authInstance = betterAuth({
+type GoogleSocialConfig = {
+	clientId?: string;
+	clientSecret?: string;
+	callbackUrl?: string;
+};
+
+function callbackHost(callbackUrl: string | undefined): string | null {
+	if (!callbackUrl) return null;
+	try {
+		const parsed = new URL(callbackUrl);
+		if (parsed.pathname !== "/api/auth/callback/google" || parsed.search || parsed.hash) return null;
+		return parsed.host;
+	} catch {
+		return null;
+	}
+}
+
+function configuredHosts(callbackUrl: string | undefined): string[] {
+	const hosts = new Set<string>();
+	for (const origin of allowedOrigins) {
+		try {
+			hosts.add(new URL(origin).host);
+		} catch {
+			// allowedOrigins only contains validated URLs; preserve a safe fallback.
+		}
+	}
+	const socialHost = callbackHost(callbackUrl);
+	if (socialHost) hosts.add(socialHost);
+	return [...hosts];
+}
+
+function createAuth(config: GoogleSocialConfig) {
+	const socialHost = callbackHost(config.callbackUrl);
+	const googleConfigured = Boolean(config.clientId && config.clientSecret && socialHost);
+
+	return betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
-	baseURL: env.BETTER_AUTH_URL,
+	/*
+	 * The Web and Ops Workers pass their public host in trusted proxy headers.
+	 * Resolve the callback from that host, so Google returns through the same
+	 * Worker that initiated login and the session cookie stays first-party.
+	 */
+	baseURL: {
+		allowedHosts: configuredHosts(config.callbackUrl),
+		protocol: env.NODE_ENV === "production" ? "https" : "auto",
+		fallback: env.BETTER_AUTH_URL,
+	},
 	basePath: "/api/auth",
 	/*
 	 * The same list Hono's CORS middleware uses (lib/origins.ts).
@@ -153,15 +198,60 @@ export const authInstance = betterAuth({
 	// Only register Google when it is actually configured. Passing undefined
 	// credentials advertises a provider that fails at the redirect instead.
 	socialProviders:
-		env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+		googleConfigured
 			? {
 					google: {
-						clientId: env.GOOGLE_CLIENT_ID,
-						clientSecret: env.GOOGLE_CLIENT_SECRET,
+						clientId: config.clientId!,
+						clientSecret: config.clientSecret!,
 					},
 				}
 			: {},
 });
+}
+
+const legacySocialCallback = `${env.FRONTEND_URL}/api/auth/callback/google`;
+let authConfigFingerprint = "";
+
+/**
+ * Mutable only through getAuthInstance(): its credentials come from the
+ * encrypted platform settings and refresh after the settings cache TTL.
+ * Keeping this export preserves the typed direct API used by setup scripts.
+ */
+export let authInstance = createAuth({
+	clientId: env.GOOGLE_AUTH_CLIENT_ID ?? env.GOOGLE_CLIENT_ID,
+	clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET ?? env.GOOGLE_CLIENT_SECRET,
+	callbackUrl: env.GOOGLE_AUTH_REDIRECT_URI ?? legacySocialCallback,
+});
+
+/** Return Better Auth configured from the live Ops-managed Google Sign-In settings. */
+export async function getAuthInstance() {
+	const [configuredId, configuredSecret, configuredCallback] = await Promise.all([
+		getSetting("GOOGLE_AUTH_CLIENT_ID"),
+		getSetting("GOOGLE_AUTH_CLIENT_SECRET"),
+		getSetting("GOOGLE_AUTH_REDIRECT_URI"),
+	]);
+	// Never mix a newly saved credential with a legacy fallback credential.
+	// A partial UI save leaves Google sign-in disabled until all three values are
+	// present, which is safer and much easier to diagnose than an invalid pair.
+	const hasDedicatedConfig = Boolean(configuredId || configuredSecret || configuredCallback);
+	const config: GoogleSocialConfig = hasDedicatedConfig
+		? {
+				clientId: configuredId,
+				clientSecret: configuredSecret,
+				callbackUrl: configuredCallback,
+			}
+		: {
+				clientId: env.GOOGLE_CLIENT_ID,
+				clientSecret: env.GOOGLE_CLIENT_SECRET,
+				callbackUrl: legacySocialCallback,
+			};
+	const fingerprint = JSON.stringify(config);
+	if (fingerprint !== authConfigFingerprint) {
+		authInstance = createAuth(config);
+		authConfigFingerprint = fingerprint;
+	}
+	return authInstance;
+}
 
 const auth = new Hono();
 
@@ -170,6 +260,7 @@ const auth = new Hono();
  * The ops app uses this after sign-in to learn its role and branch.
  */
 auth.get("/me", async (c) => {
+	const authInstance = await getAuthInstance();
 	const session = await authInstance.api.getSession({ headers: c.req.raw.headers });
 	if (!session?.user) {
 		return c.json({ user: null, staff: null }, 200);
@@ -201,7 +292,7 @@ auth.get("/me", async (c) => {
 });
 
 auth.all("/*", async (c) => {
-	return authInstance.handler(c.req.raw);
+	return (await getAuthInstance()).handler(c.req.raw);
 });
 
 export { auth };

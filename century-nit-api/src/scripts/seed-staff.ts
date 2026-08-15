@@ -3,7 +3,7 @@ import { SUPPORT_ROSTER } from "century-nit-core/ops";
 import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
 import { env } from "../env.js";
-import { authInstance } from "../routes/auth.js";
+import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "../services/availability.js";
 
 /**
@@ -68,6 +68,7 @@ async function seed() {
 
 		if (!user) {
 			try {
+				const authInstance = await getAuthInstance();
 				await authInstance.api.signUpEmail({
 					body: { email: person.email, password, name: person.name },
 				});

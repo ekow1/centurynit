@@ -121,6 +121,11 @@ const schema = z.object({
 	GOOGLE_CLIENT_SECRET: z.string().optional(),
 	/** Must exactly match an authorised redirect URI in the Google Cloud console. */
 	GOOGLE_REDIRECT_URI: z.string().url().optional(),
+	/** Applicant Google sign-in. Falls back to the legacy GOOGLE_CLIENT_* pair. */
+	GOOGLE_AUTH_CLIENT_ID: z.string().optional(),
+	GOOGLE_AUTH_CLIENT_SECRET: z.string().optional(),
+	/** Must be the public Better Auth Google callback, ending /api/auth/callback/google. */
+	GOOGLE_AUTH_REDIRECT_URI: z.string().url().optional(),
 	/** Public HTTPS URL Google posts calendar change notifications to (§12). */
 	GOOGLE_WEBHOOK_URL: z.string().url().optional(),
 	/** Shared secret echoed in the webhook channel token, to reject forgeries. */

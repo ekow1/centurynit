@@ -8,7 +8,7 @@ import {
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
-import { authInstance } from "../routes/auth.js";
+import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
 
 /**
@@ -51,6 +51,7 @@ export type AuthVariables = {
  * can cheaply branch on whether the caller is staff without a second query.
  */
 export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = async (c, next) => {
+	const authInstance = await getAuthInstance();
 	const session = await authInstance.api.getSession({ headers: c.req.raw.headers });
 
 	if (!session?.user) {

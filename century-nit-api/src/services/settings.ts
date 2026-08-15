@@ -29,6 +29,9 @@ export type SettingKey =
 	| "GOOGLE_CLIENT_ID"
 	| "GOOGLE_CLIENT_SECRET"
 	| "GOOGLE_REDIRECT_URI"
+	| "GOOGLE_AUTH_CLIENT_ID"
+	| "GOOGLE_AUTH_CLIENT_SECRET"
+	| "GOOGLE_AUTH_REDIRECT_URI"
 	| "GOOGLE_WEBHOOK_URL"
 	| "GOOGLE_WEBHOOK_TOKEN"
 	| "BOOKING_BUFFER_MINUTES"
@@ -70,22 +73,40 @@ export const SETTING_DEFS: Record<
 		description: "Bucket name for applicant document uploads.",
 	},
 	GOOGLE_CLIENT_ID: {
-		label: "Google Client ID",
-		group: "Google",
+		label: "Google Calendar Client ID",
+		group: "Google Calendar",
 		secret: false,
-		description: "OAuth 2.0 Client ID from Google Cloud Console.",
+		description: "OAuth 2.0 client ID used to connect staff calendars.",
 	},
 	GOOGLE_CLIENT_SECRET: {
-		label: "Google Client Secret",
-		group: "Google",
+		label: "Google Calendar Client Secret",
+		group: "Google Calendar",
 		secret: true,
-		description: "OAuth 2.0 Client Secret from Google Cloud Console.",
+		description: "OAuth 2.0 client secret used to connect staff calendars.",
 	},
 	GOOGLE_REDIRECT_URI: {
-		label: "Google Redirect URI",
-		group: "Google",
+		label: "Google Calendar Callback URL",
+		group: "Google Calendar",
 		secret: false,
-		description: "Must match an authorized redirect URI in Google Cloud Console.",
+		description: "Must end in /api/v1/calendar/callback and match Google Cloud Console.",
+	},
+	GOOGLE_AUTH_CLIENT_ID: {
+		label: "Google Sign-In Client ID",
+		group: "Google Sign-In",
+		secret: false,
+		description: "OAuth 2.0 client ID used for applicant Google sign-in.",
+	},
+	GOOGLE_AUTH_CLIENT_SECRET: {
+		label: "Google Sign-In Client Secret",
+		group: "Google Sign-In",
+		secret: true,
+		description: "OAuth 2.0 client secret used for applicant Google sign-in.",
+	},
+	GOOGLE_AUTH_REDIRECT_URI: {
+		label: "Google Sign-In Callback URL",
+		group: "Google Sign-In",
+		secret: false,
+		description: "Must end in /api/auth/callback/google and match Google Cloud Console.",
 	},
 	GOOGLE_WEBHOOK_URL: {
 		label: "Google Calendar Webhook URL",
@@ -256,6 +277,7 @@ export async function writeSetting(
 	await loadCache();
 	const def = SETTING_DEFS[key];
 	if (!def) throw new Error(`Unknown setting key: ${key}`);
+	validateSettingValue(key, plaintext);
 
 	const oldValue = cache.get(key) ?? null;
 	const oldMasked = oldValue ? mask(oldValue, def.secret) : null;
@@ -290,6 +312,31 @@ export async function writeSetting(
 	 * look like the save had failed.
 	 */
 	cache.set(key, plaintext);
+}
+
+function validateSettingValue(key: SettingKey, value: string | null): void {
+	if (value == null) return;
+
+	if (key === "GOOGLE_REDIRECT_URI" || key === "GOOGLE_AUTH_REDIRECT_URI") {
+		let url: URL;
+		try {
+			url = new URL(value);
+		} catch {
+			throw new Error("Enter a valid HTTPS callback URL");
+		}
+
+		if (url.protocol !== "https:" && env.NODE_ENV === "production") {
+			throw new Error("Google callback URLs must use HTTPS in production");
+		}
+
+		const expectedPath =
+			key === "GOOGLE_AUTH_REDIRECT_URI"
+				? "/api/auth/callback/google"
+				: "/api/v1/calendar/callback";
+		if (url.pathname !== expectedPath || url.search || url.hash) {
+			throw new Error(`Callback URL must be exactly ${expectedPath}`);
+		}
+	}
 }
 
 /** Recent audit entries, newest first. */

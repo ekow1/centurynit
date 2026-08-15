@@ -6,7 +6,7 @@ import { opsUsers, staffInvitations, users } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import { isUniqueViolation } from "../lib/db-errors.js";
-import { authInstance } from "../routes/auth.js";
+import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "./availability.js";
 import { queueEmail } from "../worker/queues.js";
 
@@ -244,6 +244,7 @@ export async function acceptInvitation(input: {
 		// same person can be both an applicant and a member of staff.
 		userId = existingUser.id;
 	} else {
+		const authInstance = await getAuthInstance();
 		await authInstance.api.signUpEmail({
 			body: { email: invitation.email, password: input.password, name: invitation.name },
 		});

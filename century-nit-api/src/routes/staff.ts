@@ -23,7 +23,7 @@ import {
 	requireRole,
 	type AuthVariables,
 } from "../middleware/auth.js";
-import { authInstance } from "./auth.js";
+import { getAuthInstance } from "./auth.js";
 import {
 	acceptInvitation,
 	createInvitation,
@@ -404,6 +404,7 @@ staffRouter.openapi(
 		if (existing) {
 			userId = existing.id;
 		} else {
+			const authInstance = await getAuthInstance();
 			await authInstance.api.signUpEmail({
 				body: { email, password: body.password, name: body.name },
 			});

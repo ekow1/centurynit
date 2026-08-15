@@ -30,24 +30,26 @@ let sessionUserId = "";
  */
 vi.mock("../routes/auth.js", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../routes/auth.js")>();
+	const mockedAuthInstance = {
+		...actual.authInstance,
+		api: {
+			...actual.authInstance.api,
+			getSession: async () =>
+				sessionUserId
+					? {
+							user: {
+								id: sessionUserId,
+								email: `${sessionUserId}${SUFFIX}`,
+								name: sessionUserId,
+							},
+						}
+					: null,
+		},
+	};
 	return {
 		...actual,
-		authInstance: {
-			...actual.authInstance,
-			api: {
-				...actual.authInstance.api,
-				getSession: async () =>
-					sessionUserId
-						? {
-								user: {
-									id: sessionUserId,
-									email: `${sessionUserId}${SUFFIX}`,
-									name: sessionUserId,
-								},
-							}
-						: null,
-			},
-		},
+		authInstance: mockedAuthInstance,
+		getAuthInstance: async () => mockedAuthInstance,
 	};
 });
 

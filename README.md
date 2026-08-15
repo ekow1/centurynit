@@ -186,10 +186,11 @@ conference request and Google returns the Meet URL. There is no direct Meet API.
 
 The feature works before Google is configured. An assignment is saved with
 `calendarSyncStatus = FAILED` and the applicant is told the link is being
-prepared, rather than being shown a link that does not work. Once you set
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`, each
-employee connects their own calendar at `/ops/my-calendar`, and connecting
-re-queues any of their bookings that are still missing a link.
+prepared, rather than being shown a link that does not work. In Operations
+Center → Platform Settings, enter the **Google Calendar** client ID, client
+secret and callback URL (`/api/v1/calendar/callback`). Each employee then
+connects their own calendar at `/ops/my-calendar`, and connecting re-queues
+any of their bookings that are still missing a link.
 
 ## Authentication
 
@@ -200,6 +201,12 @@ and branch live.
 **Clients** self-register and may sign in by email + password, phone + SMS code,
 a one-time email code, or Google. MFA is available to them but never required —
 an applicant is not made to install an authenticator app before booking.
+
+Configure Google applicant sign-in separately in Operations Center → Platform
+Settings → **Google Sign-In**. Its callback URL must end in
+`/api/auth/callback/google`; register that exact public Web Worker URL in Google
+Cloud Console. The sign-in and Calendar integrations can use separate OAuth
+clients, or one client with both callback URLs registered.
 
 **Staff never self-register.** There is no staff sign-up endpoint anywhere in
 the API. An account exists only because somebody with the authority invited it,

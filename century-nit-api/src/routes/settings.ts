@@ -6,7 +6,7 @@ import {
 	SETTING_DEFS,
 	type SettingKey,
 } from "../services/settings.js";
-import { authInstance } from "./auth.js";
+import { getAuthInstance } from "./auth.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
@@ -151,6 +151,7 @@ settingsRouter.openapi(
 		 * enrolled.
 		 */
 		try {
+			const authInstance = await getAuthInstance();
 			await authInstance.api.verifyTOTP({
 				body: { code: body.totpCode },
 				headers: c.req.raw.headers,
@@ -163,10 +164,18 @@ settingsRouter.openapi(
 			);
 		}
 
-		await writeSetting(body.key, body.value, {
-			opsUserId: staff.opsUserId,
-			email: staff.email,
-		});
+		try {
+			await writeSetting(body.key, body.value, {
+				opsUserId: staff.opsUserId,
+				email: staff.email,
+			});
+		} catch (err) {
+			throw new HttpError(
+				400,
+				"VALIDATION_ERROR",
+				err instanceof Error ? err.message : "Could not save this setting",
+			);
+		}
 
 		const all = await listSettingsForDisplay();
 		const updated = all.find((s) => s.key === body.key)!;

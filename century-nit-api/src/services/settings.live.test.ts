@@ -69,6 +69,24 @@ afterAll(async () => {
 });
 
 describe("a saved setting takes effect", () => {
+	maybe()("rejects Google callback URLs for the wrong flow", async () => {
+		await expect(
+			writeSetting(
+				"GOOGLE_AUTH_REDIRECT_URI",
+				"https://portal.example.com/api/v1/calendar/callback",
+				ACTOR,
+			),
+		).rejects.toThrow("/api/auth/callback/google");
+
+		await expect(
+			writeSetting(
+				"GOOGLE_REDIRECT_URI",
+				"https://api.example.com/api/auth/callback/google",
+				ACTOR,
+			),
+		).rejects.toThrow("/api/v1/calendar/callback");
+	});
+
 	maybe()("is readable immediately by the process that wrote it", async () => {
 		// The ops console reloads the list straight after saving; reading back the
 		// previous value would look like the save had failed.

@@ -34,7 +34,7 @@ interface AuditEntry {
 
 type LoadState = "idle" | "loading" | "error" | "ready";
 
-const GROUP_ORDER = ["Email", "Storage", "Google", "Booking"] as const;
+const GROUP_ORDER = ["Email", "Storage", "Google Sign-In", "Google Calendar", "Booking"] as const;
 
 function groupRank(group: string): number {
 	const i = (GROUP_ORDER as readonly string[]).indexOf(group);

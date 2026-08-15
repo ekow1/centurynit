@@ -8,7 +8,7 @@ import { isAllowedOrigin } from "./lib/origins.js";
 import { requestId } from "./middleware/requestId.js";
 import { errorHandler } from "./middleware/error.js";
 import { health } from "./routes/health.js";
-import { auth, authInstance } from "./routes/auth.js";
+import { auth, getAuthInstance } from "./routes/auth.js";
 import { bookingsRouter } from "./routes/bookings.js";
 import { calendarRouter } from "./routes/calendar.js";
 import { invoicesRouter } from "./routes/invoices.js";
@@ -193,7 +193,7 @@ export function createApp() {
 		};
 
 		try {
-			const authSchemaRaw: unknown = await authInstance.api.generateOpenAPISchema();
+			const authSchemaRaw: unknown = await (await getAuthInstance()).api.generateOpenAPISchema();
 			const authSchema = authSchemaRaw as OpenApiish;
 
 			for (const [path, operations] of Object.entries(authSchema.paths ?? {})) {

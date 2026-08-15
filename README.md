@@ -190,13 +190,21 @@ inviter. Either way works:
 # Option A — seed the whole demo roster
 npm run seed:staff --workspace=century-nit-api
 
-# Option B — one-time bootstrap, visible in the API reference at /api/docs
+# Option B — one-time bootstrap, under "Staff" in the API reference at /api/docs
 #   set BOOTSTRAP_TOKEN first, then:
-curl -X POST http://localhost:3000/api/staff/bootstrap   -H 'Content-Type: application/json'   -d '{"token":"<BOOTSTRAP_TOKEN>","email":"you@example.com","name":"Your Name","password":"at-least-12-chars"}'
+curl -X POST http://localhost:3000/api/v1/staff/bootstrap   -H 'Content-Type: application/json'   -d '{"token":"<BOOTSTRAP_TOKEN>","email":"you@example.com","name":"Your Name","password":"at-least-12-chars"}'
 ```
 
 `bootstrap` refuses as soon as any staff member exists, so it cannot be replayed.
 Remove `BOOTSTRAP_TOKEN` from the environment afterwards.
+
+### API reference
+
+`/api/docs` is one page covering the whole surface. Better Auth serves its routes
+and its schema separately, so the reference merges the two at request time: sign-in,
+sign-up, email and phone one-time codes and two-factor enrolment appear under
+**Authentication** alongside the versioned resource routes, each with a working
+"Test request". The raw document is at `/api/openapi.json`.
 
 Both paths create the Better Auth login, link it to `ops_users`, and seed
 Mon–Fri 09:00–17:00 working hours — without which nobody is assignable.

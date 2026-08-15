@@ -115,6 +115,7 @@ bookingsRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/availability",
+		tags: ["Bookings"],
 		request: { query: availabilityQuerySchema },
 		responses: {
 			200: {
@@ -154,6 +155,7 @@ bookingsRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: {
 			body: {
@@ -192,6 +194,7 @@ bookingsRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: { query: listQuerySchema },
 		responses: {
@@ -248,6 +251,7 @@ bookingsRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/employees",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: { query: employeesQuerySchema },
 		responses: {
@@ -313,7 +317,8 @@ bookingsRouter.openapi(
 bookingsRouter.openapi(
 	createRoute({
 		method: "get",
-		path: "/:id",
+		path: "/{id}",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: { params: idParams },
 		responses: {
@@ -343,7 +348,8 @@ bookingsRouter.openapi(
 bookingsRouter.openapi(
 	createRoute({
 		method: "patch",
-		path: "/:id/cancel",
+		path: "/{id}/cancel",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: {
 			params: idParams,
@@ -386,7 +392,8 @@ bookingsRouter.openapi(
 bookingsRouter.openapi(
 	createRoute({
 		method: "patch",
-		path: "/:id/reschedule",
+		path: "/{id}/reschedule",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: {
 			params: idParams,
@@ -432,7 +439,8 @@ bookingsRouter.openapi(
 bookingsRouter.openapi(
 	createRoute({
 		method: "patch",
-		path: "/:id/assign",
+		path: "/{id}/assign",
+		tags: ["Bookings"],
 		middleware: requireAuth,
 		request: {
 			params: idParams,

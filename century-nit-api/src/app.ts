@@ -8,13 +8,28 @@ import { env } from "./env.js";
 import { requestId } from "./middleware/requestId.js";
 import { errorHandler } from "./middleware/error.js";
 import { health } from "./routes/health.js";
-import { auth } from "./routes/auth.js";
+import { auth, authInstance } from "./routes/auth.js";
 import { bookingsRouter } from "./routes/bookings.js";
 import { calendarRouter } from "./routes/calendar.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
 import { settingsRouter } from "./routes/settings.js";
+
+/**
+ * Just enough of the OpenAPI shape to merge two documents.
+ *
+ * Both sides have precise types of their own that disagree in the details, and
+ * nothing here needs those details — only paths, their operations' tags, and the
+ * component schemas.
+ */
+type OpenApiish = {
+	paths?: Record<string, Record<string, { tags?: string[] }>>;
+	components?: {
+		schemas?: Record<string, unknown>;
+		securitySchemes?: Record<string, unknown>;
+	};
+};
 
 export function createApp() {
 	const app = new OpenAPIHono<{ Variables: { requestId: string } }>();
@@ -72,18 +87,122 @@ export function createApp() {
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
 
-	app.doc("/api/openapi.json", {
-		openapi: "3.1.0",
+	const openApiInfo = {
+		openapi: "3.1.0" as const,
 		info: {
 			title: "Century NIT API",
 			version: `${API_VERSION}.0.0`,
 			description:
 				`Backend API for Century NIT web and ops applications.\n\n` +
-				`Resource routes are served under \`${API_PREFIX}\`. ` +
-				`\`/api/health\` and \`/api/auth\` are deliberately unversioned — ` +
-				`health is monitoring rather than contract, and \`/api/auth\` is Better Auth's ` +
-				`own surface with its own compatibility story.`,
+				`Resource routes are served under \`${API_PREFIX}\`. \`/api/health\` and ` +
+				`\`/api/auth\` are deliberately unversioned — health is monitoring rather ` +
+				`than contract, and \`/api/auth\` is Better Auth's own surface with its own ` +
+				`compatibility story.\n\n` +
+				`**First run:** create the first super administrator with ` +
+				`\`POST ${API_PREFIX}/staff/bootstrap\` using the server's \`BOOTSTRAP_TOKEN\`. ` +
+				`It refuses once any staff member exists. Every later account arrives by ` +
+				`invitation — there is no staff sign-up endpoint.`,
 		},
+		/*
+		 * Declared explicitly so the reference lists groups in a deliberate order
+		 * rather than in whatever order the routers happen to be mounted.
+		 * Authentication leads because it is the first thing an integrator needs.
+		 */
+		tags: [
+			{
+				name: "Authentication",
+				description:
+					"Better Auth. Email/password, Google, and one-time codes by email or " +
+					"phone for clients; two-factor enrolment and verification for staff, " +
+					"who are required to hold a second factor. Served unversioned at " +
+					"`/api/auth`.",
+			},
+			{
+				name: "Bookings",
+				description: "Appointment booking, assignment, rescheduling and cancellation.",
+			},
+			{
+				name: "Calendar",
+				description:
+					"Staff Google Calendar connection, working hours and change notifications.",
+			},
+			{
+				name: "Staff",
+				description:
+					"Super-admin bootstrap, invitations and the staff directory. " +
+					"`POST /staff/bootstrap` is the only way to create the first account.",
+			},
+			{
+				name: "Documents",
+				description: "Applicant document upload, review and download via signed URLs.",
+			},
+			{ name: "Invoices", description: "Invoicing, payments, voids and credit notes." },
+			{
+				name: "Settings",
+				description: "Platform integration credentials, managed from the ops console.",
+			},
+			{
+				name: "Health",
+				description: "Liveness and readiness. Unversioned — monitoring, not contract.",
+			},
+		],
+	};
+
+	/**
+	 * One document covering both halves of the API.
+	 *
+	 * Better Auth serves its own routes and its own schema, so sign-in, sign-up,
+	 * phone and email one-time codes, and two-factor enrolment were absent from
+	 * this document entirely — 52 endpoints that exist and work but could not be
+	 * found or tried from `/api/docs`. Anyone reading the reference to integrate
+	 * would conclude the API had no authentication at all.
+	 *
+	 * So the two are merged at request time rather than maintained by hand: this
+	 * app's routes from `getOpenAPIDocument`, Better Auth's from its generator,
+	 * with its paths prefixed onto the basePath it is actually mounted at and its
+	 * operations tagged so they group separately in the UI.
+	 *
+	 * Generated per request, not cached — this is a documentation endpoint hit by
+	 * humans, and staleness would be a worse trade than the cost.
+	 */
+	app.get("/api/openapi.json", async (c) => {
+		const doc = app.getOpenAPIDocument(openApiInfo) as unknown as OpenApiish & {
+			paths: NonNullable<OpenApiish["paths"]>;
+		};
+
+		try {
+			const authSchemaRaw: unknown = await authInstance.api.generateOpenAPISchema();
+			const authSchema = authSchemaRaw as OpenApiish;
+
+			for (const [path, operations] of Object.entries(authSchema.paths ?? {})) {
+				for (const operation of Object.values(operations)) {
+					// Better Auth tags everything "Default"; retag so the reference does
+					// not present 52 auth endpoints as untagged siblings of ours.
+					operation.tags = ["Authentication"];
+				}
+				doc.paths[`/api/auth${path}`] = operations;
+			}
+
+			if (authSchema.components) {
+				doc.components ??= {};
+				doc.components.schemas = {
+					...authSchema.components.schemas,
+					// Ours win on a name collision — this document describes our contract.
+					...(doc.components.schemas ?? {}),
+				};
+				// Its operations carry `security` referencing these by name; without
+				// them the auth half of the document has dangling references.
+				doc.components.securitySchemes = {
+					...authSchema.components.securitySchemes,
+					...(doc.components.securitySchemes ?? {}),
+				};
+			}
+		} catch (err) {
+			// A docs page must not be the thing that takes the API down.
+			console.error("[openapi] could not merge the Better Auth schema:", err);
+		}
+
+		return c.json(doc);
 	});
 
 	app.get(

@@ -8,6 +8,7 @@ const health = new OpenAPIHono();
 const route = createRoute({
 	method: "get",
 	path: "/",
+	tags: ["Health"],
 	responses: {
 		200: {
 			description: "API health status",

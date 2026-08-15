@@ -51,6 +51,7 @@ invoicesRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/",
+		tags: ["Invoices"],
 		middleware: [requireAuth, requireModule("invoices")] as const,
 		request: {
 			body: {
@@ -80,6 +81,7 @@ invoicesRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/",
+		tags: ["Invoices"],
 		middleware: requireAuth,
 		request: { query: listInvoicesQuerySchema },
 		responses: {
@@ -127,7 +129,8 @@ invoicesRouter.openapi(
 invoicesRouter.openapi(
 	createRoute({
 		method: "get",
-		path: "/:id",
+		path: "/{id}",
+		tags: ["Invoices"],
 		middleware: requireAuth,
 		request: { params: idParams },
 		responses: {
@@ -160,7 +163,8 @@ invoicesRouter.openapi(
 invoicesRouter.openapi(
 	createRoute({
 		method: "post",
-		path: "/:id/payments",
+		path: "/{id}/payments",
+		tags: ["Invoices"],
 		middleware: [requireAuth, requireModule("payments")] as const,
 		request: {
 			params: idParams,
@@ -198,7 +202,8 @@ invoicesRouter.openapi(
 invoicesRouter.openapi(
 	createRoute({
 		method: "post",
-		path: "/:id/void",
+		path: "/{id}/void",
+		tags: ["Invoices"],
 		middleware: [requireAuth, requireModule("invoices")] as const,
 		request: {
 			params: idParams,
@@ -229,7 +234,8 @@ invoicesRouter.openapi(
 invoicesRouter.openapi(
 	createRoute({
 		method: "post",
-		path: "/:id/credit",
+		path: "/{id}/credit",
+		tags: ["Invoices"],
 		middleware: [requireAuth, requireModule("invoices")] as const,
 		request: {
 			params: idParams,

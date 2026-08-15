@@ -9,24 +9,36 @@ export * from "./types.js";
 export { supabaseStorageConfigured } from "./supabase.js";
 
 let storage: DocumentStorage | null = null;
-let storageInitPromise: Promise<DocumentStorage> | null = null;
+let storageOverride: DocumentStorage | null = null;
 
 /**
- * Lazily resolve storage on first call. Reads from the settings service (which
- * may fall back to env vars), so the client is created only when credentials
- * are available. A settings change requires a process restart to pick up —
- * storage is long-lived and re-reading on every call would be wasteful.
+ * Resolve storage against the credentials that are configured *now*.
+ *
+ * This used to decide once, on the first call, and hold that decision for the
+ * life of the process. So a deployment that started without Supabase keys was
+ * permanently disabled: an administrator could save the keys in the ops console
+ * and every upload would still answer STORAGE_NOT_CONFIGURED, telling them to
+ * go and set the keys they had just set.
+ *
+ * The check is cheap — `supabaseStorageConfigured` reads two values from the
+ * settings cache — and the Supabase client behind it is reused unless the
+ * credentials themselves change. What is re-decided here is only *which kind*
+ * of storage is in play, disabled or real, which is exactly the thing that
+ * changes when somebody finishes configuring the system.
  */
 async function resolveStorage(): Promise<DocumentStorage> {
-	if (storage) return storage;
-	if (!storageInitPromise) {
-		storageInitPromise = (async () => {
-			const configured = await supabaseStorageConfigured();
-			storage = configured ? new SupabaseDocumentStorage() : new DisabledDocumentStorage();
-			return storage;
-		})();
+	if (storageOverride) return storageOverride;
+
+	const configured = await supabaseStorageConfigured();
+
+	if (!configured) {
+		// Deliberately not remembered: keys can arrive at any moment.
+		return new DisabledDocumentStorage();
 	}
-	return storageInitPromise;
+
+	// Reused so the underlying client, and its connection pool, survive.
+	storage ??= new SupabaseDocumentStorage();
+	return storage;
 }
 
 export async function getDocumentStorage(): Promise<DocumentStorage> {
@@ -35,12 +47,10 @@ export async function getDocumentStorage(): Promise<DocumentStorage> {
 
 /** Test seam. Returns a restore function. */
 export function setDocumentStorage(next: DocumentStorage): () => void {
-	const previous = storage;
-	storage = next;
-	storageInitPromise = Promise.resolve(next);
+	const previous = storageOverride;
+	storageOverride = next;
 	return () => {
-		storage = previous;
-		storageInitPromise = previous ? Promise.resolve(previous) : null;
+		storageOverride = previous;
 	};
 }
 

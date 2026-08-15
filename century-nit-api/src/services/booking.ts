@@ -7,11 +7,11 @@ import {
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { bookingEvents, bookings, opsUsers } from "../db/schema.js";
-import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import { isConflictError } from "../lib/db-errors.js";
 import { addMinutes, isValidTimeZone, zonedTimeToUtc } from "../lib/time.js";
 import { branchAvailability, isEmployeeAvailable } from "./availability.js";
+import { defaultTimezone } from "./settings.js";
 import {
 	getCalendarClient,
 	loadCredentials,
@@ -98,13 +98,16 @@ async function loadEmployee(employeeId: string) {
 	return row ?? null;
 }
 
-function notificationContext(booking: BookingRow, employee?: { name: string; email: string } | null) {
+async function notificationContext(
+	booking: BookingRow,
+	employee?: { name: string; email: string } | null,
+) {
 	return {
 		reference: booking.reference,
 		serviceName: booking.serviceName,
 		startsAt: booking.startsAt,
 		clientTimezone: booking.timezone,
-		employeeTimezone: env.DEFAULT_TIMEZONE,
+		employeeTimezone: await defaultTimezone(),
 		durationMinutes: booking.durationMinutes,
 		clientName: booking.clientName,
 		clientEmail: booking.clientEmail,
@@ -188,7 +191,7 @@ export async function createBooking(input: {
 		await audit(booking.id, "created", client.email, { source: "portal" });
 
 		// Queued, never inline: a failed email must not undo a real booking (§13).
-		const ctx = notificationContext(booking);
+		const ctx = await notificationContext(booking);
 		const managers = await db
 			.select({ email: opsUsers.email })
 			.from(opsUsers)
@@ -308,7 +311,7 @@ export async function assignBooking(input: {
 		updated = await syncCalendarForBooking(updated.id);
 	}
 
-	const ctx = notificationContext(updated, employee);
+	const ctx = await notificationContext(updated, employee);
 	await queueEmails([mail.bookingAssignedForClient(ctx), mail.bookingAssignedForEmployee(ctx)]);
 	await scheduleReminders(updated, employee);
 
@@ -528,7 +531,7 @@ export async function rescheduleBooking(input: {
 	}
 
 	const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
-	const ctx = { ...notificationContext(updated, employee), reason: input.reason ?? null };
+	const ctx = { ...(await notificationContext(updated, employee)), reason: input.reason ?? null };
 
 	// The old reminder points at a time that no longer exists.
 	await cancelQueued(`notify:reminder:client:${booking.reference}`);
@@ -620,7 +623,7 @@ export async function cancelBooking(input: {
 	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
 
 	const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
-	const ctx = { ...notificationContext(updated, employee), reason: input.reason ?? null };
+	const ctx = { ...(await notificationContext(updated, employee)), reason: input.reason ?? null };
 	await queueEmails([
 		mail.bookingCancelled(ctx, "client"),
 		...(employee ? [mail.bookingCancelled(ctx, "employee")] : []),
@@ -657,7 +660,7 @@ async function scheduleReminders(
 ): Promise<void> {
 	const sendAt = addMinutes(booking.startsAt, -24 * 60);
 	if (sendAt.getTime() <= Date.now()) return;
-	const ctx = notificationContext(booking, employee);
+	const ctx = await notificationContext(booking, employee);
 	await queueReminder(mail.bookingReminder(ctx, "client"), sendAt);
 	await queueReminder(mail.bookingReminder(ctx, "employee"), sendAt);
 }

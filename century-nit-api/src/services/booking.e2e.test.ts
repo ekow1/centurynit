@@ -31,6 +31,7 @@ import {
 	listWorkingHours,
 	setWorkingHours,
 } from "./availability.js";
+import { clearSettingsCache, writeSetting } from "./settings.js";
 
 /**
  * The end-to-end scenario from the brief, run against a real Postgres.
@@ -94,6 +95,8 @@ function nextWeekday(dow: number): string {
 const CLIENT_ID = "e2e-client-user";
 const CLIENT_2_ID = "e2e-client-user-2";
 let employeeA: string;
+/** Any staff member will do — the audit row just needs a real actor. */
+const ACTOR = { opsUserId: "", email: "e2e-buffer@example.com" };
 let employeeB: string;
 
 async function seed() {
@@ -127,6 +130,7 @@ async function seed() {
 		.returning();
 
 	employeeA = a.id;
+	ACTOR.opsUserId = a.id;
 	employeeB = b.id;
 
 	// Mon–Fri 09:00–17:00 for both (§3).
@@ -710,5 +714,52 @@ describe("§3 working hours", () => {
 		);
 		expect(result.available).toBe(false);
 		expect(result.reason).toBe("no-working-hours");
+	});
+});
+
+describe("booking buffer, set from the ops console", () => {
+	/**
+	 * The buffer is a platform setting, and every consumer used to read
+	 * `process.env` instead — so the field in the Settings screen was inert, then
+	 * and after any restart. Asserting on `bookingBufferMinutes()` alone would
+	 * not have caught that: the accessor was correct, nothing called it.
+	 *
+	 * So this goes through `isEmployeeAvailable`, which is the check every write
+	 * path runs before committing.
+	 */
+	maybe()("protects the gap after an existing booking", async () => {
+		const date = futureWeekday(21);
+		const startsAt = zonedTimeToUtc(date, "10:00", TZ);
+		// Immediately after the 45-minute booking above ends.
+		const backToBack = zonedTimeToUtc(date, "10:45", TZ);
+
+		await db.insert(bookings).values({
+			reference: "CNS-BUFFER-1",
+			clientUserId: CLIENT_ID,
+			clientName: "John Doe",
+			clientEmail: "e2e-client@example.com",
+			serviceId: "consultation",
+			serviceName: "Consultation",
+			branchId: BRANCH,
+			startsAt,
+			endsAt: addMinutes(startsAt, 45),
+			timezone: TZ,
+			durationMinutes: 45,
+			status: "ASSIGNED",
+			employeeId: employeeA,
+		});
+
+		// No buffer configured: back-to-back is allowed.
+		await writeSetting("BOOKING_BUFFER_MINUTES", "0", ACTOR);
+		clearSettingsCache();
+		expect((await isEmployeeAvailable(employeeA, backToBack, 45, { timezone: TZ })).available).toBe(
+			true,
+		);
+
+		// Save 30 minutes in the console; the very next check must honour it.
+		await writeSetting("BOOKING_BUFFER_MINUTES", "30", ACTOR);
+		const guarded = await isEmployeeAvailable(employeeA, backToBack, 45, { timezone: TZ });
+		expect(guarded.available).toBe(false);
+		expect(guarded.reason).toBe("booked");
 	});
 });

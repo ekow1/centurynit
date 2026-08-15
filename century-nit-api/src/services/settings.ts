@@ -117,18 +117,44 @@ const ALL_KEYS = Object.keys(SETTING_DEFS) as SettingKey[];
 
 /** In-memory cache of decrypted values. Null = unset (fall back to env). */
 const cache = new Map<SettingKey, string | null>();
-let cacheLoaded = false;
+let cacheLoadedAt = 0;
 
-async function loadCache(): Promise<void> {
-	if (cacheLoaded) return;
+/**
+ * How long a cached value may be trusted before it is re-read.
+ *
+ * The cache was previously loaded once and kept forever, which is correct only
+ * if one process ever reads these values. There are at least two — the API and
+ * the background worker — and there can be several API replicas. A credential
+ * saved from the ops console updated the cache of whichever process handled
+ * that request; every other process kept serving the old value until it was
+ * restarted, with nothing to indicate why.
+ *
+ * Thirty seconds is chosen against what these values are: integration
+ * credentials, changed by hand, a few times in a system's life. Half a minute
+ * of staleness after saving one is not a cost anybody notices, whereas "email
+ * still uses the old key until you redeploy" very much is.
+ *
+ * Cross-process invalidation over Redis would be tighter and is not worth it
+ * here: the read is one small indexed query per process per half-minute, and
+ * this path must keep working when Redis does not.
+ */
+const CACHE_TTL_MS = 30_000;
+
+async function loadCache(force = false): Promise<void> {
+	if (!force && Date.now() - cacheLoadedAt < CACHE_TTL_MS) return;
+
 	const rows = await db.select().from(platformSettings);
+	// Rebuilt rather than merged, so a key deleted from the table stops being
+	// served from memory.
+	cache.clear();
 	for (const row of rows) {
 		const key = row.key as SettingKey;
 		if (!SETTING_DEFS[key]) continue;
 		cache.set(key, row.encryptedValue ? decrypt(row.encryptedValue) : null);
 	}
-	cacheLoaded = true;
+	cacheLoadedAt = Date.now();
 }
+
 
 /**
  * Read a setting value. Returns the DB value if set, else the env var fallback,
@@ -140,6 +166,34 @@ export async function getSetting(key: SettingKey): Promise<string | undefined> {
 	if (dbValue != null) return dbValue;
 	// Fall back to env var. `undefined` from env means "not configured".
 	return env[key as keyof typeof env] as string | undefined;
+}
+
+/*
+ * Typed accessors for the two settings that are not credentials.
+ *
+ * These appear in the ops Settings screen alongside the API keys, but every
+ * consumer read `env.BOOKING_BUFFER_MINUTES` and `env.DEFAULT_TIMEZONE`
+ * directly — so editing either one in the console did nothing at all, then or
+ * ever, and there was no restart that would have made it take. An editable
+ * field that cannot change anything is worse than no field.
+ */
+
+/** Protected gap either side of a booking, in minutes. */
+export async function bookingBufferMinutes(): Promise<number> {
+	const raw = await getSetting("BOOKING_BUFFER_MINUTES");
+	const parsed = Number(raw);
+	// A bad value must not silently become a zero buffer: that would quietly
+	// double-book people, which is the exact thing the buffer exists to prevent.
+	if (raw == null || raw === "" || !Number.isFinite(parsed) || parsed < 0) {
+		return env.BOOKING_BUFFER_MINUTES;
+	}
+	return Math.floor(parsed);
+}
+
+/** Fallback IANA zone for branches and working hours. */
+export async function defaultTimezone(): Promise<string> {
+	const value = await getSetting("DEFAULT_TIMEZONE");
+	return value && value.trim() ? value.trim() : env.DEFAULT_TIMEZONE;
 }
 
 /** Read all settings with masked values, for the UI. */
@@ -229,6 +283,12 @@ export async function writeSetting(
 		newValueMasked: newMasked,
 	});
 
+	/*
+	 * This process sees its own write at once; the others pick it up within the
+	 * cache TTL. The immediate update matters because the ops console reloads
+	 * the settings list right after saving, and reading back the old value would
+	 * look like the save had failed.
+	 */
 	cache.set(key, plaintext);
 }
 
@@ -273,5 +333,5 @@ export function mask(value: string, secret: boolean): string {
 /** Clear the in-memory cache. Used by tests. */
 export function clearSettingsCache(): void {
 	cache.clear();
-	cacheLoaded = false;
+	cacheLoadedAt = 0;
 }

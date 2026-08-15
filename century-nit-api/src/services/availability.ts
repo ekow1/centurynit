@@ -15,7 +15,7 @@ import {
 	staffCalendarAccounts,
 	staffWorkingHours,
 } from "../db/schema.js";
-import { env } from "../env.js";
+import { bookingBufferMinutes, defaultTimezone } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	addMinutes,
@@ -204,8 +204,7 @@ export async function workingHoursFor(
 }
 
 /** Widen an interval by the configured buffer on both sides. */
-function withBuffer(interval: Interval): Interval {
-	const buffer = env.BOOKING_BUFFER_MINUTES;
+function withBuffer(interval: Interval, buffer: number): Interval {
 	if (buffer === 0) return interval;
 	return {
 		startsAt: addMinutes(interval.startsAt, -buffer),
@@ -213,9 +212,17 @@ function withBuffer(interval: Interval): Interval {
 	};
 }
 
-function conflicts(candidate: Interval, existing: Interval[]): boolean {
+/*
+ * The buffer is passed in rather than read here.
+ *
+ * It is a setting now, so reading it is async, and this runs inside `.some()`.
+ * Each caller resolves it once for the whole check — which is also the correct
+ * semantics: one availability decision should use one buffer value throughout,
+ * not re-read it per interval.
+ */
+function conflicts(candidate: Interval, existing: Interval[], buffer: number): boolean {
 	return existing.some((e) => {
-		const b = withBuffer(e);
+		const b = withBuffer(e, buffer);
 		return overlaps(candidate.startsAt, candidate.endsAt, b.startsAt, b.endsAt);
 	});
 }
@@ -240,7 +247,7 @@ export async function isEmployeeAvailable(
 		return { available: false, reason: "past" };
 	}
 
-	const timezone = options.timezone ?? env.DEFAULT_TIMEZONE;
+	const timezone = options.timezone ?? (await defaultTimezone());
 	const dow = dayOfWeekInZone(startsAt, timezone);
 	const hours = await workingHoursFor(employeeId, dow);
 	if (!hours) return { available: false, reason: "no-working-hours" };
@@ -257,8 +264,9 @@ export async function isEmployeeAvailable(
 		employeeBusyBlocks(employeeId, addMinutes(startsAt, -240), addMinutes(endsAt, 240)),
 	]);
 
-	if (conflicts({ startsAt, endsAt }, booked)) return { available: false, reason: "booked" };
-	if (conflicts({ startsAt, endsAt }, busy)) return { available: false, reason: "conflict" };
+	const buffer = await bookingBufferMinutes();
+	if (conflicts({ startsAt, endsAt }, booked, buffer)) return { available: false, reason: "booked" };
+	if (conflicts({ startsAt, endsAt }, busy, buffer)) return { available: false, reason: "conflict" };
 
 	return { available: true };
 }
@@ -296,6 +304,9 @@ export async function branchAvailability(input: {
 }): Promise<SlotAvailability[]> {
 	const { branchId, date, durationMinutes, timezone } = input;
 	const times = slotTimesFor(durationMinutes);
+	// Resolved once for the whole grid: every slot in one answer must be judged
+	// against the same buffer.
+	const buffer = await bookingBufferMinutes();
 
 	getBranchOrThrow(branchId); // reject unknown branch ids from client input
 
@@ -359,7 +370,7 @@ export async function branchAvailability(input: {
 			if (localStart < hours.startMinute || localStart + durationMinutes > hours.endMinute) {
 				return { ...slot, available: false, reason: "outside-hours" };
 			}
-			if (conflicts({ startsAt, endsAt }, employeeIntervals)) {
+			if (conflicts({ startsAt, endsAt }, employeeIntervals, buffer)) {
 				return { ...slot, available: false, reason: "conflict" };
 			}
 		}
@@ -440,8 +451,9 @@ export async function assignableEmployees(input: {
 /** Default 09:00–17:00, Monday to Friday — seeded for a new employee. */
 export async function ensureDefaultWorkingHours(
 	opsUserId: string,
-	timezone = env.DEFAULT_TIMEZONE,
+	timezone?: string,
 ): Promise<void> {
+	const zone = timezone ?? (await defaultTimezone());
 	const existing = await db
 		.select({ id: staffWorkingHours.id })
 		.from(staffWorkingHours)
@@ -455,7 +467,7 @@ export async function ensureDefaultWorkingHours(
 			dayOfWeek,
 			startMinute: 9 * 60,
 			endMinute: 17 * 60,
-			timezone,
+			timezone: zone,
 		})),
 	);
 }

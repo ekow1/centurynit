@@ -100,6 +100,117 @@ pool.on("error", (err) => {
 
 export const db = drizzle(pool, { schema });
 
+/**
+ * What the connection string says, minus the password.
+ *
+ * When authentication fails, the useful question is "which user, against which
+ * host?" — and that is exactly what nobody can read off a URL held in a
+ * deployment platform's secret field.
+ */
+function describeTarget(connectionString: string): string {
+	try {
+		const parsed = new URL(connectionString);
+		return `${parsed.username || "(no user)"}@${parsed.hostname}:${parsed.port || "5432"}${parsed.pathname}`;
+	} catch {
+		return "(DATABASE_URL is not a valid URL)";
+	}
+}
+
+/**
+ * A description of a connection failure that is never blank.
+ *
+ * A refused connection reaches us as an AggregateError with an empty `message`
+ * and the real detail in `errors`, so the obvious `err.message` renders as
+ * nothing at all — the one line meant to explain the failure explaining
+ * nothing.
+ */
+function describeError(err: unknown): string {
+	if (err instanceof AggregateError && err.errors.length > 0) {
+		const inner = err.errors
+			.map((e) => (e instanceof Error ? e.message : String(e)))
+			.filter(Boolean);
+		if (inner.length > 0) return [...new Set(inner)].join("; ");
+	}
+	const message = err instanceof Error ? err.message : String(err);
+	if (message) return message;
+	const code = (err as { code?: string }).code;
+	return code ? `connection failed (${code})` : "connection failed";
+}
+
+/**
+ * Prove the database is reachable before the process starts serving.
+ *
+ * Without this, a wrong password produces a container that starts cleanly,
+ * passes its health check, accepts traffic, and fails on the first request that
+ * touches Postgres — surfacing as a 500 with a masked message, which is the
+ * least informative thing the stack can say. The credential was wrong the whole
+ * time; nothing looked until a person clicked something.
+ *
+ * Retried a few times because a database can be slower to accept connections
+ * than a container is to boot, and a deploy should not fail over a few seconds.
+ * An authentication failure is not retried: the password will not become correct
+ * on the third attempt, and repeating it only delays the error.
+ */
+export async function assertDatabaseReachable(attempts = 5): Promise<void> {
+	for (let attempt = 1; attempt <= attempts; attempt++) {
+		try {
+			const client = await pool.connect();
+			client.release();
+			return;
+		} catch (err) {
+			const code = (err as { code?: string }).code;
+			const message = describeError(err);
+			const fatal = code === "28P01" || code === "28000" || code === "3D000";
+
+			if (!fatal && attempt < attempts) {
+				console.warn(
+					`[db] not reachable (attempt ${attempt}/${attempts}): ${message} — retrying`,
+				);
+				await new Promise((resolve) => setTimeout(resolve, 2000));
+				continue;
+			}
+
+			console.error(
+				[
+					"",
+					"Cannot connect to the database. The server will not start.",
+					"",
+					`  target: ${describeTarget(url)}`,
+					`  error:  ${message}${code ? ` (${code})` : ""}`,
+					"",
+				].join("\n"),
+			);
+
+			if (code === "28P01") {
+				console.error(
+					[
+						"28P01 means Postgres rejected the credentials. On Supabase this is",
+						"almost always one of three things:",
+						"",
+						"  1. The pooler needs a project-qualified username. Against",
+						"     *.pooler.supabase.com the user must be `postgres.<project-ref>`,",
+						"     not plain `postgres`. Plain `postgres` is only correct for the",
+						"     direct db.<project-ref>.supabase.co host.",
+						"",
+						"  2. The password contains characters that must be percent-encoded",
+						"     in a URL: @ : / ? # & all change how the string is parsed.",
+						"     A password of `p@ss/word` has to be written `p%40ss%2Fword`.",
+						"",
+						"  3. The placeholder was never replaced, or the value was pasted",
+						"     with surrounding quotes, which become part of the password.",
+						"",
+						"Reset the database password in the Supabase dashboard and copy the",
+						"connection string it gives you rather than assembling one by hand.",
+						"",
+					].join("\n"),
+				);
+			}
+
+			process.exit(1);
+		}
+	}
+}
+
 /** Close the pool on shutdown so the worker and API release their connections. */
 export async function closeDb(): Promise<void> {
 	await pool.end();

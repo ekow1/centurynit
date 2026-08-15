@@ -43,10 +43,40 @@ const schema = z.object({
 			),
 		"dev-only-insecure-secret-do-not-use-in-production",
 	),
+	/**
+	 * Where this API is publicly reachable.
+	 *
+	 * Better Auth derives every URL it issues from this — the Google callback,
+	 * password-reset links, verification links — so it must be the address a
+	 * browser uses, not the container's own. Getting it wrong does not fail at
+	 * startup; it fails later, as an OAuth redirect_uri mismatch or a reset link
+	 * nobody outside the network can open.
+	 */
 	BETTER_AUTH_URL: devDefault(z.string().url(), "http://localhost:3000"),
 	FRONTEND_URL: devDefault(z.string().url(), "http://localhost:5173"),
 	/** Operations Center URL — separate Cloudflare Worker ("console"). */
 	CONSOLE_URL: devDefault(z.string().url(), "http://localhost:5174"),
+
+	/**
+	 * Extra browser origins allowed to call this API, comma-separated.
+	 *
+	 * The three URLs above are always allowed; this is for the ones that do not
+	 * fit in a single variable — an apex and its www twin, a staging deployment,
+	 * a preview URL:
+	 *
+	 *   ALLOWED_ORIGINS=https://centurynit.com,https://www.centurynit.com
+	 *
+	 * Origins only: scheme, host and port, never a path. See lib/origins.ts.
+	 */
+	ALLOWED_ORIGINS: z
+		.string()
+		.default("")
+		.transform((v) =>
+			v
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean),
+		),
 
 	/**
 	 * Encrypts OAuth tokens at rest (lib/crypto.ts). Required in production for

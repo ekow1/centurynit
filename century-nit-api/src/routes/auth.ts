@@ -10,6 +10,7 @@ import { toE164 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import { env } from "../env.js";
+import { allowedOrigins } from "../lib/origins.js";
 import { sendEmail } from "../lib/resend.js";
 import { getSmsSender } from "../lib/sms.js";
 
@@ -21,7 +22,15 @@ export const authInstance = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	baseURL: env.BETTER_AUTH_URL,
 	basePath: "/api/auth",
-	trustedOrigins: [env.BETTER_AUTH_URL, env.FRONTEND_URL, env.CONSOLE_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
+	/*
+	 * The same list Hono's CORS middleware uses (lib/origins.ts).
+	 *
+	 * This used to append localhost:5173, :5174 and :3000 unconditionally, so a
+	 * production deployment accepted callback URLs pointing at a developer's own
+	 * machine. Those origins are still present in development — they are just no
+	 * longer compiled in.
+	 */
+	trustedOrigins: allowedOrigins,
 	database: drizzleAdapter(db, {
 		provider: "pg",
 		schema: {

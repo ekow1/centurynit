@@ -34,10 +34,40 @@ marketing site never downloads a byte of the admin app.
                                           React Router
 ```
 
-The web Worker reverse-proxies `/api/*` to the API on `API_BASE_URL`, so the
-public SPA and the API share an origin for cookies. The console Worker is
-standalone — it has no `/api` proxy, so ops-side API calls go directly to the
-API origin (CORS must allow it).
+Both Workers reverse-proxy `/api/*` to the API on `API_BASE_URL`, so each SPA
+shares an origin with the API as far as the browser is concerned, and the
+session cookie is first-party on both.
+
+### Allowed origins (CORS)
+
+Because of that proxy, ordinary app traffic is same-origin and never triggers a
+preflight. CORS still matters for the requests that are genuinely cross-origin —
+the API reference's "Test request" button, and local development pointed at a
+deployed API.
+
+One list serves both the CORS middleware and Better Auth's `trustedOrigins`, so
+the two cannot drift ([lib/origins.ts](century-nit-api/src/lib/origins.ts)). It
+is built from `BETTER_AUTH_URL`, `FRONTEND_URL` and `CONSOLE_URL`, plus anything
+in `ALLOWED_ORIGINS`:
+
+```bash
+ALLOWED_ORIGINS=https://centurynit.com,https://www.centurynit.com
+```
+
+Origins only — scheme, host and port, never a path. Apex and `www` are different
+origins and both need naming. Matching is exact: no wildcards and no suffix
+matching, because `endsWith(".example.com")` is how an allowlist quietly starts
+trusting `evil-example.com`. localhost origins are added automatically outside
+production and are not present in a production build.
+
+A rejected origin reaches the browser as an opaque network error with nothing
+logged server-side, so the accepted list is printed at startup — check it there
+first when a frontend "cannot reach the API".
+
+`BETTER_AUTH_URL` must be the URL a **browser** uses, not the container's own
+address. Better Auth builds the Google callback and every password-reset and
+verification link from it, and in production it must be `https` or the browser
+will refuse the `Secure` cookie the session depends on.
 
 > **Note on the `localStorage` bridge.** The live applicant case, ops
 directives, the CMS overlay and shared support tickets were originally

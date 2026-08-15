@@ -4,7 +4,7 @@ import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { API_PREFIX, API_VERSION } from "century-nit-shared";
-import { env } from "./env.js";
+import { isAllowedOrigin } from "./lib/origins.js";
 import { requestId } from "./middleware/requestId.js";
 import { errorHandler } from "./middleware/error.js";
 import { health } from "./routes/health.js";
@@ -37,10 +37,32 @@ export function createApp() {
 	app.use(requestId);
 	app.use(logger());
 	app.use(secureHeaders());
+	/*
+	 * CORS.
+	 *
+	 * The origin list is shared with Better Auth's `trustedOrigins` so the two
+	 * cannot drift (lib/origins.ts). It previously named only FRONTEND_URL and
+	 * CONSOLE_URL, which left no way to allow an apex and its www twin, or a
+	 * staging deployment, without changing source.
+	 *
+	 * `credentials: true` is the reason this has to be an explicit list: a
+	 * browser refuses to send cookies to a response that answers `*`, and the
+	 * session here is a cookie. `allowHeaders` is named rather than reflected —
+	 * echoing whatever a caller asks for makes the preflight a formality.
+	 *
+	 * In normal use the frontends reach the API same-origin, through each
+	 * Worker's `/api/*` proxy, so no preflight happens at all. This matters for
+	 * the cases that are genuinely cross-origin: the API reference's "Test
+	 * request" button, and local development against a deployed API.
+	 */
 	app.use(
 		cors({
-			origin: [env.FRONTEND_URL, env.CONSOLE_URL],
+			origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
 			credentials: true,
+			allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+			allowHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+			exposeHeaders: ["X-Request-Id"],
+			maxAge: 86_400,
 		}),
 	);
 

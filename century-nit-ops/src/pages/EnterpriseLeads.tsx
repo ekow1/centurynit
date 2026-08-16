@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -10,6 +10,41 @@ import {
 	type LeadStage,
 } from "century-nit-core";
 import { fmtBoth } from "./currency";
+import { API_PREFIX } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
+
+interface ApiLead {
+	id: string;
+	name: string;
+	email: string;
+	phone: string | null;
+	source: string;
+	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+	targetCountry: string | null;
+	assignedStaffId: string | null;
+	notes: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+const STAGE_MAP_FROM_API: Record<string, LeadStage> = {
+	"New Lead": "new",
+	"Contacted": "contacted",
+	"Consultation Booked": "consultation_scheduled",
+	"Assessment Complete": "interested",
+	"Enrolled": "converted",
+	"Lost": "lost",
+};
+
+const STAGE_MAP_TO_API: Record<LeadStage, string> = {
+	new: "New Lead",
+	contacted: "Contacted",
+	consultation_scheduled: "Consultation Booked",
+	interested: "Assessment Complete",
+	consulted: "Assessment Complete",
+	converted: "Enrolled",
+	lost: "Lost",
+};
 
 const STAGE_COLORS: Record<LeadStage, string> = {
 	new: "#3b82f6",
@@ -58,124 +93,74 @@ function LeadCard({
 	const [expanded, setExpanded] = useState(false);
 	const currentIdx = LEAD_STAGE_ORDER.indexOf(lead.stage);
 	const nextStage = LEAD_STAGE_ORDER[currentIdx + 1];
-	const prevStage = LEAD_STAGE_ORDER[currentIdx - 1];
-	const color = STAGE_COLORS[lead.stage];
 
 	return (
 		<div
+			className={`lead-card${expanded ? " lead-card--expanded" : ""}${dragging ? " lead-card--dragging" : ""}`}
 			draggable={canMove}
-			onDragStart={(e) => {
-				if (!canMove) return;
-				e.dataTransfer.effectAllowed = "move";
-				onDragStart();
-			}}
+			onDragStart={onDragStart}
 			onDragEnd={onDragEnd}
+			onClick={() => setExpanded(!expanded)}
 			style={{
 				background: "var(--card)",
 				border: "1px solid var(--border-light)",
-				borderLeft: `3px solid ${color}`,
+				borderLeft: `3px solid ${STAGE_COLORS[lead.stage]}`,
 				padding: "0.85rem 0.9rem",
 				cursor: canMove ? "grab" : "pointer",
 				opacity: dragging ? 0.4 : 1,
 				transition: "border-color 120ms, box-shadow 120ms, opacity 120ms",
 			}}
-			onClick={() => setExpanded((v) => !v)}
-			onMouseEnter={(e) => {
-				e.currentTarget.style.borderColor = "var(--border)";
-				e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
-			}}
-			onMouseLeave={(e) => {
-				e.currentTarget.style.borderColor = "var(--border-light)";
-				e.currentTarget.style.boxShadow = "none";
-			}}
 		>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-				<div style={{ minWidth: 0, flex: 1 }}>
-					<p style={{ fontWeight: 600, fontSize: "0.85rem" }}>{lead.name}</p>
-					<p className="muted" style={{ fontSize: "0.72rem", marginTop: "0.15rem" }}>
-						{lead.country} · {lead.degreeLevel}
-					</p>
-				</div>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+				<strong style={{ fontSize: "var(--text-sm)" }}>{lead.name}</strong>
 				<span
 					style={{
-						fontSize: "0.62rem",
+						fontSize: "var(--text-xs)",
 						fontFamily: "var(--font-mono)",
-						color: "var(--muted-foreground)",
-						flexShrink: 0,
-						whiteSpace: "nowrap",
+						color: STAGE_COLORS[lead.stage],
+						fontWeight: 600,
 					}}
 				>
-					{timeAgo(lead.lastContactAt)}
+					{STAGE_ICONS[lead.stage]} {lead.country}
 				</span>
 			</div>
 
-			<div style={{ display: "flex", gap: "0.35rem", marginTop: "0.55rem", flexWrap: "wrap" }}>
-				<span
-					style={{
-						fontSize: "0.62rem",
-						padding: "0.12rem 0.45rem",
-						background: "var(--muted)",
-						borderRadius: "3px",
-						fontWeight: 500,
-					}}
-				>
-					{lead.source}
-				</span>
-				<span
-					style={{
-						fontSize: "0.62rem",
-						padding: "0.12rem 0.45rem",
-						background: "var(--muted)",
-						borderRadius: "3px",
-					}}
-				>
-					{lead.assignedTo}
-				</span>
-				{lead.value > 0 ? (
-					<span
-						style={{
-							fontSize: "0.62rem",
-							padding: "0.12rem 0.45rem",
-							fontFamily: "var(--font-mono)",
-							borderRadius: "3px",
-							background: "var(--foreground)",
-							color: "var(--background)",
-							fontWeight: 600,
-						}}
-					>
-						{fmtBoth(lead.value)}
-					</span>
-				) : null}
+			<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0 0 0.5rem" }}>
+				{lead.email}
+			</p>
+
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--text-xs)" }}>
+				<span className="mono" style={{ fontWeight: 600 }}>{fmtBoth(lead.value)}</span>
+				<span className="muted">{timeAgo(lead.lastContactAt)}</span>
 			</div>
 
 			{expanded ? (
-				<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)" }}>
-					<p className="muted" style={{ fontSize: "0.78rem", lineHeight: 1.5 }}>
-						{lead.notes}
-					</p>
-					<p className="mono" style={{ fontSize: "0.65rem", marginTop: "0.4rem", opacity: 0.6 }}>
-						{lead.email} · {lead.phone}
-					</p>
+				<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)", fontSize: "var(--text-xs)" }}>
+					<p style={{ margin: "0 0 0.25rem" }}><strong>Phone:</strong> {lead.phone}</p>
+					<p style={{ margin: "0 0 0.25rem" }}><strong>Source:</strong> {lead.source}</p>
+					<p style={{ margin: "0 0 0.25rem" }}><strong>Branch:</strong> {branchName(lead.branch)}</p>
+					<p style={{ margin: "0 0 0.5rem" }}><strong>Assigned:</strong> {lead.assignedTo}</p>
+					<p className="muted" style={{ margin: "0 0 0.75rem", fontStyle: "italic" }}>{lead.notes}</p>
+
 					{canMove && (
-						<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem" }}>
-							{prevStage && prevStage !== "lost" ? (
+						<div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap" }}>
+							{currentIdx > 0 ? (
 								<button
 									type="button"
-									className="btn btn--ghost btn--sm"
-									style={{ fontSize: "0.7rem" }}
+									className="btn btn--ghost btn--xs"
 									onClick={(e) => {
 										e.stopPropagation();
+										const prevStage = LEAD_STAGE_ORDER[currentIdx - 1];
 										onMove(lead.id, prevStage);
 									}}
 								>
-									← {LEAD_STAGE_LABELS[prevStage]}
+									← {LEAD_STAGE_LABELS[LEAD_STAGE_ORDER[currentIdx - 1]]}
 								</button>
 							) : null}
 							{nextStage ? (
 								<button
 									type="button"
-									className="btn btn--primary btn--sm"
-									style={{ fontSize: "0.7rem" }}
+									className="btn btn--primary btn--xs"
 									onClick={(e) => {
 										e.stopPropagation();
 										onMove(lead.id, nextStage);
@@ -193,24 +178,89 @@ function LeadCard({
 }
 
 export function EnterpriseLeads() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { leads, moveLead } = useOpsState();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { leads: localLeads, moveLead } = useOpsState();
+	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
+	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
 	const [branchFilter, setBranchFilter] = useState("all");
 
 	const canSeeAll = canSeeAllBranches;
-	/**
-	 * Manager and coordinator work any lead; the assigned owner works their own.
-	 * Dragging was absent entirely before - stages could only be changed by
-	 * expanding a card and clicking the arrow buttons.
-	 */
-	const canMoveAny = opsRole === "manager" || opsRole === "coordinator";
+	const canMoveAny = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager" || opsRole === "coordinator";
 	const canMoveLead = (l: Lead) => canMoveAny || l.assignedTo === opsUser?.name;
 
 	const [dragging, setDragging] = useState<string | null>(null);
 	const [dragOver, setDragOver] = useState<LeadStage | null>(null);
 
-	const roleScopedLeads = scopeRecords(leads, (l) => l.assignedTo === opsUser?.name);
+	const loadApiLeads = useCallback(async () => {
+		try {
+			const res = await apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`);
+			if (res && Array.isArray(res.leads)) {
+				setApiLeads(res.leads);
+			}
+		} catch (err) {
+			console.warn("[CRM] Could not fetch live leads from server API:", err);
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadApiLeads();
+		const interval = setInterval(loadApiLeads, 10000);
+		return () => clearInterval(interval);
+	}, [loadApiLeads]);
+
+	const mergedLeads = useMemo<Lead[]>(() => {
+		const emailSet = new Set<string>();
+		const result: Lead[] = [];
+
+		for (const al of apiLeads) {
+			emailSet.add(al.email.toLowerCase());
+			result.push({
+				id: al.id,
+				name: al.name,
+				email: al.email,
+				phone: al.phone || "-",
+				country: al.targetCountry || "Canada",
+				degreeLevel: "Master's",
+				branch: "accra",
+				stage: STAGE_MAP_FROM_API[al.stage] ?? "new",
+				source: al.source || "Website Registration",
+				value: 3000,
+				createdAt: al.createdAt.slice(0, 10),
+				lastContactAt: al.updatedAt || al.createdAt,
+				notes: al.notes || "Captured automatically from client sign-in.",
+				assignedTo: "Unassigned",
+			});
+		}
+
+		for (const ll of localLeads) {
+			if (!emailSet.has(ll.email.toLowerCase())) {
+				emailSet.add(ll.email.toLowerCase());
+				result.push(ll);
+			}
+		}
+		return result;
+	}, [apiLeads, localLeads]);
+
+	const handleLeadMove = useCallback(
+		async (id: string, stage: LeadStage) => {
+			moveLead(id, stage);
+			setApiLeads((prev) =>
+				prev.map((l) => (l.id === id ? { ...l, stage: (STAGE_MAP_TO_API[stage] as ApiLead["stage"]) } : l)),
+			);
+			try {
+				await apiFetch(`${API_PREFIX}/leads/${id}`, {
+					method: "PATCH",
+					body: JSON.stringify({ stage: STAGE_MAP_TO_API[stage] }),
+				});
+			} catch (err) {
+				console.warn("[CRM] Stage update not persisted to API:", err);
+			}
+		},
+		[moveLead],
+	);
+
+	const roleScopedLeads = scopeRecords(mergedLeads, (l) => l.assignedTo === opsUser?.name);
 
 	const branchScopedLeads = useMemo(
 		() =>
@@ -248,8 +298,19 @@ export function EnterpriseLeads() {
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						onClick={() => {
+							setLoading(true);
+							void loadApiLeads().finally(() => setLoading(false));
+						}}
+						title="Refresh leads from database"
+					>
+						{loading ? "Refreshing…" : "↻ Refresh"}
+					</button>
 					<span className="portal-pill" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-						{canSeeAll ? "All leads · Auto-populated" : "Assigned to you"}
+						{canSeeAll ? `All leads (${mergedLeads.length}) · Live Synced` : "Assigned to you"}
 					</span>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
@@ -270,21 +331,19 @@ export function EnterpriseLeads() {
 					<span style={{ fontSize: "1rem" }}>{canSeeAll ? "◱" : "◎"}</span>
 					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
 						{canSeeAll
-							? `All ${roleScopedLeads.length} leads · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
-							: requiresAssignmentScope
-								? `${roleScopedLeads.length} leads assigned to you`
-								: `${branchName(opsUser?.branch ?? "")} branch · ${roleScopedLeads.length} leads`}
+							? `All ${mergedLeads.length} leads · Live database synced · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+							: `${roleScopedLeads.length} leads assigned to you`}
 					</p>
 				</div>
-				<span className="portal-pill" style={canSeeAll ? { background: "var(--background)", color: "var(--foreground)", border: "none" } : undefined}>
-					{opsRole ? ROLE_LABELS[opsRole] : "Staff"}
+				<span className="mono" style={{ fontSize: "var(--text-xs)", opacity: 0.8 }}>
+					{branchName(branchFilter)}
 				</span>
 			</div>
 
-			{/* Stats */}
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.75rem" }}>
-				<StatTile label="Total Leads" value={String(roleScopedLeads.length)} />
-				<StatTile label="Active" value={String(activeCount)} accent="#3b82f6" />
+			{/* KPI Summary Tiles */}
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+				<StatTile label="Total Leads" value={String(branchScopedLeads.length)} accent="var(--foreground)" />
+				<StatTile label="Active Leads" value={String(activeCount)} accent="#3b82f6" />
 				<StatTile label="Converted" value={String(convertedCount)} accent="#22c55e" />
 				<StatTile label="Conversion Rate" value={`${conversionRate}%`} accent="#8b5cf6" />
 				<StatTile label="Pipeline Value" value={fmtBoth(totalValue)} accent="#f59e0b" />
@@ -294,17 +353,16 @@ export function EnterpriseLeads() {
 			<div style={{ marginBottom: "1.5rem" }}>
 				<input
 					type="search"
-					placeholder="Search leads by name, email, or country..."
-					className="input input--sm"
-					style={{ maxWidth: "420px" }}
+					placeholder="Search leads by client name, email or country..."
+					className="input input--sm input--full-border"
+					style={{ maxWidth: "360px" }}
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
 				/>
 			</div>
 
 			{/* Kanban Board */}
-			<div
-				className="ops-board"
+			<div className="leads-board"
 				style={{
 					display: "grid",
 					gridTemplateColumns: `repeat(${LEAD_STAGE_ORDER.length}, minmax(230px, 1fr))`,
@@ -328,7 +386,7 @@ export function EnterpriseLeads() {
 							onDragLeave={() => setDragOver((s) => (s === stage ? null : s))}
 							onDrop={(e) => {
 								e.preventDefault();
-								if (dragging) moveLead(dragging, stage);
+								if (dragging) handleLeadMove(dragging, stage);
 								setDragging(null);
 								setDragOver(null);
 							}}
@@ -409,7 +467,7 @@ export function EnterpriseLeads() {
 										<LeadCard
 											key={lead.id}
 											lead={lead}
-											onMove={moveLead}
+											onMove={handleLeadMove}
 											canMove={canMoveLead(lead)}
 											dragging={dragging === lead.id}
 											onDragStart={() => setDragging(lead.id)}

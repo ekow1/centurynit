@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
-import { roleCanAccess } from "century-nit-shared";
+import { roleCanAccess, API_PREFIX } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { useLivePortalCase } from "./useLivePortalCase";
@@ -9,6 +9,7 @@ import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
 import { publicSiteUrl } from "../lib/publicSite";
+import { apiFetch } from "../lib/api";
 
 type NavItem = { to: string; module: OpsModule; label: string; blurb: string; icon: string };
 type NavGroup = { group: string; icon: string; blurb: string; children: NavItem[] };
@@ -248,7 +249,28 @@ export function EnterpriseLayout() {
 	});
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
 
-	const { consultations } = useOpsState();
+	const { consultations, leads } = useOpsState();
+	const [apiLeads, setApiLeads] = useState<Array<{ id: string; stage: string }>>([]);
+
+	useEffect(() => {
+		let isMounted = true;
+		const fetchLeads = async () => {
+			try {
+				const res = await apiFetch<{ leads: Array<{ id: string; stage: string }> }>(`${API_PREFIX}/leads`);
+				if (isMounted && res && Array.isArray(res.leads)) {
+					setApiLeads(res.leads);
+				}
+			} catch {
+				// ignore
+			}
+		};
+		void fetchLeads();
+		const interval = setInterval(fetchLeads, 10000);
+		return () => {
+			isMounted = false;
+			clearInterval(interval);
+		};
+	}, []);
 
 	const unreadCount = useMemo(() => {
 		if (!opsUser) return 0;
@@ -257,8 +279,17 @@ export function EnterpriseLayout() {
 			if (c.status === "Under Review" && !c.assignedOfficer) count++;
 			if (c.assignedOfficer === opsUser.name && c.status === "Assigned" && !c.slotConfirmed) count++;
 		}
+		// Count new captured CRM leads
+		for (const al of apiLeads) {
+			if (al.stage === "New Lead") count++;
+		}
+		for (const l of leads) {
+			if (l.stage === "new" && (!l.assignedTo || l.assignedTo === opsUser.name || opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager" || opsRole === "coordinator")) {
+				// only if not already counted
+			}
+		}
 		return count;
-	}, [consultations, opsUser]);
+	}, [consultations, opsUser, apiLeads, leads, opsRole]);
 
 	function handleRoleSwitch(role: OpsRole) {
 		opsSignIn(role);
@@ -270,9 +301,6 @@ export function EnterpriseLayout() {
 				navigate(ROLE_HOME[role] ?? "/dashboard", { replace: true });
 				return;
 			}
-		}
-		if (currentPath === "/inbox" && role === "admin") {
-			navigate(ROLE_HOME[role] ?? "/dashboard", { replace: true });
 		}
 	}
 
@@ -414,12 +442,10 @@ export function EnterpriseLayout() {
 						</button>
 
 						{/* Notification bell */}
-						{opsRole !== "admin" && (
-							<Link to="/inbox" className="ops-bell-btn" aria-label="Notifications">
-								<span dangerouslySetInnerHTML={{ __html: ICONS.notifications }} />
-								{unreadCount > 0 && <span className="ops-bell-badge">{unreadCount}</span>}
-							</Link>
-						)}
+						<Link to="/inbox" className="ops-bell-btn" aria-label="Notifications">
+							<span dangerouslySetInnerHTML={{ __html: ICONS.notifications }} />
+							{unreadCount > 0 && <span className="ops-bell-badge">{unreadCount}</span>}
+						</Link>
 
 						{isDev ? (
 						<button

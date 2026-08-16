@@ -1,9 +1,25 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { money } from "./currency";
+import { API_PREFIX } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
+
+interface ApiLead {
+	id: string;
+	name: string;
+	email: string;
+	phone: string | null;
+	source: string;
+	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+	targetCountry: string | null;
+	assignedStaffId: string | null;
+	notes: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
 
 type NotificationItem = {
 	id: string;
@@ -38,7 +54,25 @@ const TYPE_META: Record<NotificationItem["type"], { label: string; color: string
 export function EnterpriseInbox() {
 	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
 	const { consultations, applications, applicants, leads, activityLog } = useOpsState();
+	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [filter, setFilter] = useState<"all" | "unread">("all");
+
+	const loadApiLeads = useCallback(async () => {
+		try {
+			const res = await apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`);
+			if (res && Array.isArray(res.leads)) {
+				setApiLeads(res.leads);
+			}
+		} catch {
+			// ignore if offline
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadApiLeads();
+		const timer = setInterval(loadApiLeads, 10000);
+		return () => clearInterval(timer);
+	}, [loadApiLeads]);
 
 	const me = opsUser?.name ?? "";
 
@@ -137,6 +171,21 @@ export function EnterpriseInbox() {
 			}
 		}
 
+		// Real-time captured CRM leads from PostgreSQL database
+		for (const al of apiLeads) {
+			if (al.stage === "New Lead" || al.stage === "Contacted") {
+				items.push({
+					id: `api-lead-${al.id}`,
+					type: "lead",
+					title: `New client lead: ${al.name}`,
+					detail: `${al.source || "Portal Sign-In"} · ${al.email}${al.phone && al.phone !== "-" ? ` · ${al.phone}` : ""}`,
+					time: relativeTime(al.createdAt || al.updatedAt),
+					link: "/leads",
+					unread: al.stage === "New Lead",
+				});
+			}
+		}
+
 		const scopedLeads = scopeRecords(leads, (l) => l.assignedTo === me);
 		for (const l of scopedLeads) {
 			if (l.stage === "new" || l.stage === "contacted") {
@@ -146,7 +195,7 @@ export function EnterpriseInbox() {
 					title: `Lead needs follow-up: ${l.name}`,
 					detail: `${LEAD_STAGE_LABELS[l.stage]} · ${l.country} · ${l.degreeLevel}`,
 					time: l.lastContactAt,
-					link: "/crm",
+					link: "/leads",
 					unread: l.stage === "new",
 				});
 			}
@@ -168,7 +217,7 @@ export function EnterpriseInbox() {
 			if (a.unread !== b.unread) return a.unread ? -1 : 1;
 			return 0;
 		});
-	}, [consultations, applications, applicants, leads, activityLog, me, opsRole, scopeRecords, hasPermission]);
+	}, [consultations, applications, applicants, leads, apiLeads, activityLog, me, opsRole, scopeRecords, hasPermission]);
 
 	const filtered = filter === "unread" ? notifications.filter((n) => n.unread) : notifications;
 	const unreadCount = notifications.filter((n) => n.unread).length;

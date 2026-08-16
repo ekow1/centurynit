@@ -35,6 +35,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 		icon: "applications",
 		blurb: "Client work & progression",
 		children: [
+			{ to: "/clients", module: "applicants", label: "Clients Directory", blurb: "Accounts, status & access", icon: "users" },
 			{ to: "/applications", module: "applications", label: "Applications", blurb: "Active applications", icon: "applications" },
 			{ to: "/consultations", module: "consultations", label: "Consultations", blurb: "Meetings & assessments", icon: "consultations" },
 			{ to: "/visa", module: "visa", label: "Visa Processing", blurb: "Visa tracking & sub-steps", icon: "applications" },
@@ -89,7 +90,8 @@ const PLATFORM_NAV: NavEntry[] = [
 		icon: "users",
 		blurb: "Staff & sign-in",
 		children: [
-			{ to: "/users", module: "users", label: "Users & Roles", blurb: "Staff & access", icon: "users" },
+			{ to: "/users", module: "users", label: "Staff & Roles", blurb: "Staff directory & matrix", icon: "users" },
+			{ to: "/clients", module: "users", label: "Clients Directory", blurb: "Accounts, status & ban", icon: "users" },
 			{ to: "/auth", module: "auth", label: "Authentication", blurb: "Sign-in & sessions", icon: "auth" },
 			{ to: "/audit", module: "system", label: "Audit Logs", blurb: "Security & admin trail", icon: "security" },
 		],

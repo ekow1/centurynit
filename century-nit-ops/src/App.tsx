@@ -45,6 +45,7 @@ const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppoint
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
 const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
 const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"), "EnterpriseAuditLogs");
+const ClientDirectory = lazyNamed(() => import("./pages/ClientDirectory"), "ClientDirectory");
 const OpsLogin = lazyNamed(() => import("./pages/OpsLogin"), "OpsLogin");
 
 /** Short alias — the route table reads better without the long name. */
@@ -115,6 +116,7 @@ export default function App() {
 									<Route path="applications" element={<Ops module="applications"><EnterpriseCases /></Ops>} />
 									<Route path="consultations" element={<Ops module="consultations"><EnterpriseConsultations /></Ops>} />
 									<Route path="applicants" element={<Ops module="applicants"><EnterpriseApplicants /></Ops>} />
+									<Route path="clients" element={<Ops module="dashboard"><ClientDirectory /></Ops>} />
 									<Route path="leads" element={<Ops module="leads"><EnterpriseLeads /></Ops>} />
 									<Route path="crm" element={<Ops module="crm"><EnterpriseLeads /></Ops>} />
 									<Route path="helpdesk" element={<Ops module="helpdesk"><EnterpriseHelpdesk /></Ops>} />

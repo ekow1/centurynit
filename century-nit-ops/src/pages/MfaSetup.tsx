@@ -7,14 +7,11 @@ import QRCode from "qrcode";
 /**
  * Two-factor enrolment (TOTP).
  *
- * Required for every staff role: staff hold applicant records and financial
- * data, so a password alone must not be enough on its own. The API enforces
- * this independently in `requireMfa`.
- *
- * Enrolment is a clean three-step flow:
- * 1. Password confirmation (prevents unattended desk hijacking)
- * 2. Scan QR Code & Verify 6-digit TOTP code
- * 3. Save single-use backup recovery codes
+ * Enforces Century NIT's Minimalist Monochrome Design System:
+ * - Sharp borders (`--medium`, `--thin`) with 0px radius
+ * - Pure monochrome hierarchy (black, white, muted)
+ * - Monospace meta and uppercase step indicators
+ * - Client-side high-contrast black & white QR code rendering
  */
 
 const authClient = createAuthClient({
@@ -47,7 +44,7 @@ export function MfaSetup() {
 		}
 	})();
 
-	// Generate QR code locally in browser whenever totpUri is available
+	// Generate QR code locally in browser whenever totpUri is available (pure monochrome)
 	useEffect(() => {
 		if (!totpUri) {
 			setQrDataUrl("");
@@ -58,7 +55,7 @@ export function MfaSetup() {
 			width: 220,
 			margin: 1,
 			color: {
-				dark: "#0f172a",
+				dark: "#000000",
 				light: "#ffffff",
 			},
 			errorCorrectionLevel: "M",
@@ -111,74 +108,32 @@ export function MfaSetup() {
 	}
 
 	return (
-		<div className="mfa-page-container">
-			<div className="mfa-card" role="region" aria-labelledby="mfa-title">
-				{/* Header */}
-				<header className="mfa-header">
-					<div className="mfa-badge">
-						<svg
-							width="20"
-							height="20"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-							<path d="m9 12 2 2 4-4" />
-						</svg>
-						<span>Security Enrolment</span>
-					</div>
-					<h1 id="mfa-title" className="mfa-title">
-						Two-Factor Authentication
-					</h1>
-					<p className="mfa-subtitle">
-						Protect staff access to applicant records and financial data. Compatible with
-						Microsoft Authenticator, 1Password, Bitwarden, Authy, Apple Passwords, or any standard
-						TOTP authenticator app.
-					</p>
+		<div className="invite-page mfa-page">
+			<div className="invite-card mfa-card" role="region" aria-labelledby="mfa-title">
+				{/* Monochrome Eyebrow & Stepper */}
+				<p className="invite-card__eyebrow">
+					{step === "password" && "Step 1 of 3 · Security Enrolment"}
+					{step === "verify" && "Step 2 of 3 · Scan & Verify"}
+					{step === "codes" && "Step 3 of 3 · Backup Recovery"}
+				</p>
 
-					{/* Stepper dots */}
-					<div className="mfa-stepper" aria-label="Setup progress">
-						<span
-							className={`mfa-stepper__dot ${step === "password" ? "mfa-stepper__dot--active" : "mfa-stepper__dot--done"}`}
-						>
-							1. Password
-						</span>
-						<span className="mfa-stepper__line" />
-						<span
-							className={`mfa-stepper__dot ${step === "verify" ? "mfa-stepper__dot--active" : step === "codes" ? "mfa-stepper__dot--done" : ""}`}
-						>
-							2. Scan & Verify
-						</span>
-						<span className="mfa-stepper__line" />
-						<span
-							className={`mfa-stepper__dot ${step === "codes" ? "mfa-stepper__dot--active" : ""}`}
-						>
-							3. Backup Codes
-						</span>
-					</div>
-				</header>
+				<h1 id="mfa-title" className="invite-card__title">
+					Two-Factor Authentication
+				</h1>
 
-				{error && (
-					<div className="mfa-error" role="alert">
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-							<circle cx="12" cy="12" r="10" />
-							<line x1="12" y1="8" x2="12" y2="12" />
-							<line x1="12" y1="16" x2="12.01" y2="16" />
-						</svg>
-						<span>{error}</span>
-					</div>
-				)}
+				<p className="invite-card__body">
+					Staff accounts protect applicant records and sensitive financial data.
+					You will need an authenticator app (Microsoft Authenticator, 1Password, Bitwarden,
+					Authy, Apple Passwords, or any standard TOTP app).
+				</p>
+
+				{error && <p className="ops-modal__error">{error}</p>}
 
 				{/* Step 1: Password confirmation */}
 				{step === "password" && (
-					<form className="mfa-form" onSubmit={begin}>
+					<form className="invite-form" onSubmit={begin}>
 						<div className="field">
-							<label htmlFor="mfa-password">Confirm your password to begin</label>
+							<label htmlFor="mfa-password">Confirm your password to continue</label>
 							<input
 								id="mfa-password"
 								type="password"
@@ -191,13 +146,13 @@ export function MfaSetup() {
 								autoFocus
 							/>
 						</div>
-						<div className="mfa-actions">
-							<button type="submit" className="btn btn--primary btn--full" disabled={busy || !password}>
+						<div className="cal-actions">
+							<button type="submit" className="btn btn--primary" disabled={busy || !password}>
 								{busy ? "Confirming…" : "Continue to QR Code"}
 							</button>
 							<button
 								type="button"
-								className="btn btn--ghost btn--sm btn--full"
+								className="btn btn--ghost btn--sm"
 								onClick={() => navigate("/login")}
 							>
 								Back to sign in
@@ -208,135 +163,129 @@ export function MfaSetup() {
 
 				{/* Step 2: Scan QR Code & Enter 6-digit TOTP */}
 				{step === "verify" && (
-					<div className="mfa-flow">
-						<div className="mfa-qr-section">
-							<p className="mfa-step-label">1. Scan QR code in your authenticator</p>
-							<div className="mfa-qr-box">
-								{qrDataUrl ? (
-									<img
-										src={qrDataUrl}
-										alt="Scan this QR code with your authenticator app"
-										className="mfa-qr-img"
-										width={200}
-										height={200}
-									/>
-								) : (
-									<div className="mfa-qr-loading">
-										<span className="route-loading__spinner" aria-hidden="true" />
-										<span>Generating QR code…</span>
-									</div>
-								)}
-							</div>
+					<div className="mfa-step-content">
+						<h2 className="mfa-step__title">1 · Scan with your authenticator app</h2>
+						<p className="mfa-step__desc">
+							Scan this QR code, or enter the setup key manually if your app cannot scan.
+						</p>
 
-							<div className="mfa-manual-toggle">
-								<button
-									type="button"
-									className="btn btn--ghost btn--xs"
-									onClick={() => setShowManualKey((v) => !v)}
-								>
-									{showManualKey ? "Hide manual key" : "Cannot scan? View manual setup key"}
-								</button>
-							</div>
-
-							{showManualKey && (
-								<div className="mfa-secret-box">
-									<div className="mfa-secret-row">
-										<span className="mfa-secret-label">Setup Key</span>
-										<code className="mfa-secret-code">{secret || "—"}</code>
-										<button
-											type="button"
-											className="btn btn--ghost btn--xs"
-											onClick={() => {
-												void navigator.clipboard.writeText(secret);
-												setCopied(true);
-												window.setTimeout(() => setCopied(false), 2000);
-											}}
-										>
-											{copied ? "Copied!" : "Copy"}
-										</button>
-									</div>
-									{totpUri && (
-										<a href={totpUri} className="mfa-direct-link">
-											Open directly in authenticator app →
-										</a>
-									)}
-								</div>
+						<div className="mfa-qr-frame">
+							{qrDataUrl ? (
+								<img
+									src={qrDataUrl}
+									alt="Scan QR code in your authenticator app"
+									className="mfa-qr-image"
+									width={200}
+									height={200}
+								/>
+							) : (
+								<div className="mfa-qr-placeholder">Generating QR code…</div>
 							)}
 						</div>
 
-						<form onSubmit={confirm} className="mfa-verify-section">
-							<p className="mfa-step-label">2. Enter the 6-digit code from your app</p>
-							<div className="mfa-input-row">
-								<input
-									className="input input--full-border mfa-code-input"
-									inputMode="numeric"
-									autoComplete="one-time-code"
-									pattern="[0-9]{6}"
-									maxLength={6}
-									placeholder="000000"
-									aria-label="Six-digit code"
-									value={code}
-									onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-									required
-									autoFocus
-								/>
+						<div className="mfa-manual-wrapper">
+							<button
+								type="button"
+								className="btn btn--ghost btn--sm"
+								onClick={() => setShowManualKey((v) => !v)}
+							>
+								{showManualKey ? "Hide setup key" : "Cannot scan? View manual setup key"}
+							</button>
+						</div>
+
+						{showManualKey && (
+							<div className="mfa-secret">
+								<span className="mfa-secret__label">Setup key</span>
+								<code className="mfa-secret__value">{secret || "—"}</code>
+								<button
+									type="button"
+									className="btn btn--ghost btn--sm"
+									onClick={() => {
+										void navigator.clipboard.writeText(secret);
+										setCopied(true);
+										window.setTimeout(() => setCopied(false), 2000);
+									}}
+								>
+									{copied ? "Copied" : "Copy"}
+								</button>
 							</div>
+						)}
+
+						{totpUri && (
+							<p className="ops-modal__sub" style={{ marginTop: "0.5rem" }}>
+								Most apps also accept the direct link:{" "}
+								<a href={totpUri} style={{ color: "var(--foreground)", textDecoration: "underline" }}>
+									open in your authenticator
+								</a>
+							</p>
+						)}
+
+						<h2 className="mfa-step__title" style={{ marginTop: "1.5rem" }}>
+							2 · Enter the six-digit code it shows
+						</h2>
+						<form onSubmit={confirm} className="mfa-verify">
+							<input
+								className="input input--full-border mfa-code"
+								inputMode="numeric"
+								autoComplete="one-time-code"
+								pattern="[0-9]{6}"
+								maxLength={6}
+								placeholder="000000"
+								aria-label="Six-digit code"
+								value={code}
+								onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+								required
+								autoFocus
+							/>
 							<button
 								type="submit"
-								className="btn btn--primary btn--full"
+								className="btn btn--primary"
 								disabled={busy || code.length !== 6}
 							>
-								{busy ? "Verifying…" : "Verify & Activate 2FA"}
+								{busy ? "Checking…" : "Verify & Activate"}
 							</button>
 						</form>
 					</div>
 				)}
 
-				{/* Step 3: Backup codes */}
+				{/* Step 3: Backup recovery codes */}
 				{step === "codes" && (
-					<div className="mfa-flow">
-						<div className="mfa-codes-banner">
-							<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-								<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-							</svg>
-							<div>
-								<strong>Save your single-use backup codes</strong>
-								<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>
-									If you lose access to your authenticator app, these emergency backup codes are the
-									only way to recover your account. Store them in a secure password manager.
-								</p>
-							</div>
-						</div>
+					<div className="mfa-step-content">
+						<h2 className="mfa-step__title">Save your backup recovery codes</h2>
+						<p className="invite-card__body">
+							Each code works once, and only these will get you in if you lose your
+							device. <strong>This is the only time they are shown.</strong>
+						</p>
 
-						<ul className="mfa-codes-grid">
+						<ul className="mfa-codes">
 							{backupCodes.map((c) => (
-								<li key={c} className="mfa-code-item">
+								<li key={c}>
 									<code>{c}</code>
 								</li>
 							))}
 						</ul>
 
-						<div className="mfa-actions">
+						<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
 							<button
 								type="button"
-								className="btn btn--ghost btn--sm btn--full"
+								className="btn btn--ghost btn--sm"
 								onClick={() => {
 									void navigator.clipboard.writeText(backupCodes.join("\n"));
 									setCopied(true);
 									window.setTimeout(() => setCopied(false), 2000);
 								}}
 							>
-								{copied ? "Copied to clipboard!" : "Copy all backup codes"}
+								{copied ? "Copied" : "Copy all"}
 							</button>
 							<button
 								type="button"
-								className="btn btn--primary btn--full"
+								className="btn btn--primary"
 								onClick={() => {
-									// Full reload so all auth contexts re-read the session with 2FA enabled
+									// Full reload so every context re-reads the session with verified 2FA
 									window.location.assign("/dashboard");
 								}}
 							>
-								I have saved my codes — Continue to Console
+								I have saved them — Continue
 							</button>
 						</div>
 					</div>
@@ -345,4 +294,5 @@ export function MfaSetup() {
 		</div>
 	);
 }
+
 

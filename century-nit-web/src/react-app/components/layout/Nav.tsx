@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../ui/Button";
+import { Avatar } from "../ui/Avatar";
 import { JourneyButton } from "../ui/JourneyButton";
 import { useAppState } from "../../context/AppState";
 import { MAIN_LINKS as mainLinks, SECONDARY_LINKS as mobileExtra } from "./navLinks";
@@ -46,15 +47,6 @@ export function Nav() {
 
 	const linkClass = ({ isActive }: { isActive: boolean }) =>
 		`nav__link${isActive ? " nav__link--active" : ""}`;
-
-	const initials = authUser
-		? authUser.name
-				.split(" ")
-				.map((w) => w[0])
-				.slice(0, 2)
-				.join("")
-				.toUpperCase()
-		: "";
 
 	return (
 		<header className="nav">
@@ -141,7 +133,7 @@ export function Nav() {
 									aria-label="Open profile menu"
 									onClick={() => setProfileOpen((v) => !v)}
 								>
-									{initials}
+									<Avatar name={authUser?.name ?? ""} image={authUser?.image} className="nav__avatar-img" />
 								</button>
 								{profileOpen ? (
 									<div className="nav__dropdown nav__dropdown--profile">

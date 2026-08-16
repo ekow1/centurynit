@@ -65,6 +65,12 @@ export type AuthUser = {
 	email: string;
 	method: AuthMethod;
 	signedInAt: string;
+	/**
+	 * Whether an avatar is on file (the provider URL or a storage key). The
+	 * value is never rendered directly — it is signed per request by the API —
+	 * so components treat it as "show the photo, falling back to initials".
+	 */
+	image?: string | null;
 };
 
 export type DocReviewStatus = "idle" | "pending" | "approved" | "rejected";
@@ -810,6 +816,8 @@ type AppStateContextValue = {
 	signOut: () => Promise<void>;
 	/** Self-service account edit - syncs the auth record and application/assessment email */
 	updateAccount: (patch: { name: string; email: string }) => void;
+	/** Marks the profile photo as present ("set") or cleared ("clear") */
+	setAvatarImage: (state: "set" | "clear") => void;
 	/** Messaging */
 	messages: ChatMessage[];
 	sendMessage: (text: string) => void;
@@ -2013,6 +2021,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					method: "email",
 					name: data.user.name || data.user.email.split("@")[0] || "Applicant",
 					email: data.user.email,
+					image: data.user.image ?? null,
 				});
 			} else {
 				setAuthUser(null);
@@ -2051,6 +2060,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			...b,
 			assessment: { ...b.assessment, email },
 		}));
+	}, []);
+
+	/** Flip the avatar flag after an upload or removal, so every avatar rerenders. */
+	const setAvatarImage = useCallback((image: string | null) => {
+		setAuthUser((prev) => (prev ? { ...prev, image } : prev));
 	}, []);
 
 	const sendMessage = useCallback((text: string) => {
@@ -2318,6 +2332,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			signIn,
 			signOut,
 			updateAccount,
+			setAvatarImage,
 			messages,
 			sendMessage,
 			notifications,
@@ -2380,6 +2395,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			signIn,
 			signOut,
 			updateAccount,
+			setAvatarImage,
 			messages,
 			sendMessage,
 			notifications,

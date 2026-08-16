@@ -1,11 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CmsManager } from "./CmsManager";
 import { CMS_COLLECTIONS, resolveRecord } from "century-nit-core";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi } from "century-nit-core/api";
-import { MODULE_GROUPS, API_PREFIX, type OpsModule } from "century-nit-shared";
+import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsModule } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 
@@ -317,6 +317,63 @@ type StaffRow = {
 	mfaEnabled: boolean;
 };
 
+const DEFAULT_SYSTEM_ROLES: DynamicRole[] = [
+	{
+		id: "super_admin",
+		name: "System Administrator (Super Admin)",
+		description: "Full system authority across all business operations, platform configurations, and database governance.",
+		isSystem: true,
+		permissions: opsModuleSchema.options as unknown as OpsModule[],
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+	{
+		id: "manager",
+		name: "Operations Manager",
+		description: "Coordinates client journey, monitors workflow, reviews invoices, and assigns tasks to staff.",
+		isSystem: true,
+		permissions: ROLE_PERMISSIONS.manager,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+	{
+		id: "coordinator",
+		name: "Coordinator",
+		description: "Manages CRM leads, assigns consultants to bookings, and tracks applicant journey.",
+		isSystem: true,
+		permissions: ROLE_PERMISSIONS.coordinator,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+	{
+		id: "consultant",
+		name: "Consultant",
+		description: "Advises assigned clients, reviews documentation, and handles visa guidance.",
+		isSystem: true,
+		permissions: ROLE_PERMISSIONS.consultant,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+	{
+		id: "finance",
+		name: "Finance Officer",
+		description: "Manages invoices, accounting ledger, payments, and financial reports.",
+		isSystem: true,
+		permissions: ROLE_PERMISSIONS.finance,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+	{
+		id: "admin",
+		name: "Platform Administrator",
+		description: "Manages staff accounts, authentication policies, CMS content, and system configuration.",
+		isSystem: true,
+		permissions: ROLE_PERMISSIONS.admin,
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	},
+];
+
 interface DynamicRole {
 	id: string;
 	name: string;
@@ -332,8 +389,11 @@ function UsersAndRoles() {
 	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix">("staff");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
+	const [roleSearch, setRoleSearch] = useState("");
+	const [moduleSearch, setModuleSearch] = useState("");
 	const [staff, setStaff] = useState<StaffRow[]>([]);
-	const [roles, setRoles] = useState<DynamicRole[]>([]);
+	const [roles, setRoles] = useState<DynamicRole[]>(DEFAULT_SYSTEM_ROLES);
+	const [selectedRoleId, setSelectedRoleId] = useState<string>("super_admin");
 	const [invitations, setInvitations] = useState<
 		{ id: string; email: string; name: string; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
 	>([]);
@@ -359,7 +419,6 @@ function UsersAndRoles() {
 
 	const inviteable = useMemo(() => {
 		const base = INVITEABLE[opsRole ?? ""] ?? [];
-		// Include custom roles in inviteable list if caller is admin or super_admin
 		if (opsRole === "super_admin" || opsRole === "admin") {
 			const customIds = roles.filter((r) => !r.isSystem).map((r) => r.id);
 			return [...new Set([...base, ...customIds])];
@@ -390,7 +449,11 @@ function UsersAndRoles() {
 				})),
 			);
 			setInvitations(inviteRes.invitations);
-			setRoles(rolesRes.roles);
+			if (rolesRes.roles && rolesRes.roles.length > 0) {
+				setRoles(rolesRes.roles);
+			} else {
+				setRoles(DEFAULT_SYSTEM_ROLES);
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not load staff or roles");
 		} finally {
@@ -487,42 +550,6 @@ function UsersAndRoles() {
 		}
 	}
 
-	async function handleCreateRole(e: React.FormEvent) {
-		e.preventDefault();
-		if (!newRoleDraft.name.trim() || !newRoleDraft.id.trim()) return;
-
-		try {
-			await apiFetch(`${API_PREFIX}/roles`, {
-				method: "POST",
-				body: JSON.stringify({
-					id: newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_"),
-					name: newRoleDraft.name.trim(),
-					description: newRoleDraft.description.trim() || undefined,
-					permissions: newRoleDraft.permissions,
-				}),
-			});
-			say(`Custom role "${newRoleDraft.name}" created successfully.`);
-			setCreatingRole(false);
-			setNewRoleDraft({ id: "", name: "", description: "", permissions: ["dashboard"] });
-			await refresh();
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to create role");
-		}
-	}
-
-	async function handleDeleteRole(roleId: string, roleName: string) {
-		if (!window.confirm(`Are you sure you want to delete custom role "${roleName}"?`)) return;
-		try {
-			await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
-			say(`Role "${roleName}" deleted.`);
-			await refresh();
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to delete role");
-		}
-	}
-
-	const [moduleSearch, setModuleSearch] = useState("");
-
 	async function bulkSetRolePermissions(roleId: string, moduleIds: OpsModule[], grant: boolean) {
 		const target = roles.find((r) => r.id === roleId);
 		if (!target || target.id === "super_admin") return;
@@ -547,6 +574,51 @@ function UsersAndRoles() {
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to update permissions");
 			void refresh();
+		}
+	}
+
+	async function handleResetRoleDefaults(roleId: string) {
+		const def = ROLE_PERMISSIONS[roleId as keyof typeof ROLE_PERMISSIONS];
+		if (!def) return;
+		await bulkSetRolePermissions(roleId, opsModuleSchema.options as unknown as OpsModule[], false);
+		await bulkSetRolePermissions(roleId, def, true);
+		say("Role reset to system defaults.");
+	}
+
+	async function handleCreateRole(e: React.FormEvent) {
+		e.preventDefault();
+		if (!newRoleDraft.name.trim() || !newRoleDraft.id.trim()) return;
+
+		try {
+			await apiFetch(`${API_PREFIX}/roles`, {
+				method: "POST",
+				body: JSON.stringify({
+					id: newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_"),
+					name: newRoleDraft.name.trim(),
+					description: newRoleDraft.description.trim() || undefined,
+					permissions: newRoleDraft.permissions,
+				}),
+			});
+			say(`Custom role "${newRoleDraft.name}" created successfully.`);
+			setCreatingRole(false);
+			const newId = newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+			setNewRoleDraft({ id: "", name: "", description: "", permissions: ["dashboard"] });
+			await refresh();
+			setSelectedRoleId(newId);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to create role");
+		}
+	}
+
+	async function handleDeleteRole(roleId: string, roleName: string) {
+		if (!window.confirm(`Are you sure you want to delete custom role "${roleName}"?`)) return;
+		try {
+			await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
+			say(`Role "${roleName}" deleted.`);
+			setSelectedRoleId("super_admin");
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to delete role");
 		}
 	}
 
@@ -575,16 +647,22 @@ function UsersAndRoles() {
 		})).filter((g) => g.modules.length > 0);
 	}, [moduleSearch]);
 
-	const roleStats = useMemo(() => {
-		const map = new Map<string, { count: number; total: number; pct: number }>();
+	const filteredRoles = useMemo(() => {
+		if (!roleSearch.trim()) return roles;
+		const q = roleSearch.toLowerCase();
+		return roles.filter((r) => r.name.toLowerCase().includes(q) || r.id.toLowerCase().includes(q));
+	}, [roles, roleSearch]);
+
+	const selectedRole = useMemo(() => {
+		return roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? DEFAULT_SYSTEM_ROLES[0];
+	}, [roles, selectedRoleId]);
+
+	const selectedRoleStats = useMemo(() => {
 		const total = allModuleIds.length;
-		for (const r of roles) {
-			const count = r.id === "super_admin" ? total : (r.permissions?.length ?? 0);
-			const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-			map.set(r.id, { count, total, pct });
-		}
-		return map;
-	}, [roles, allModuleIds]);
+		const count = selectedRole.id === "super_admin" ? total : (selectedRole.permissions?.length ?? 0);
+		const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+		return { count, total, pct };
+	}, [selectedRole, allModuleIds]);
 
 	const rows = useMemo(() => {
 		return staff.filter(
@@ -605,7 +683,7 @@ function UsersAndRoles() {
 			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert">{error}</p> : null}
 
-			{/* Sub Tabs: Staff Directory vs Permissions Matrix */}
+			{/* Sub Tabs: Staff Directory vs Roles & Permissions */}
 			<div style={{ display: "flex", gap: "0.5rem", borderBottom: "var(--medium)", marginBottom: "1.5rem" }}>
 				<button
 					type="button"
@@ -641,7 +719,7 @@ function UsersAndRoles() {
 						cursor: "pointer",
 					}}
 				>
-					Roles & Permissions Matrix ({roles.length})
+					Roles & Permissions ({roles.length})
 				</button>
 			</div>
 
@@ -837,277 +915,290 @@ function UsersAndRoles() {
 				</>
 			)}
 
-			{/* ── Sub-tab 2: Dynamic Roles & Permissions Matrix ── */}
+			{/* ── Sub-tab 2: Master-Detail Roles & Permissions ── */}
 			{activeSubTab === "matrix" && (
-				<>
-					{/* Default System Administrator Callout Banner */}
-					<div
-						className="card"
-						style={{
-							padding: "1rem 1.25rem",
-							marginBottom: "1.5rem",
-							background: "var(--surface-subtle, #fcfcfc)",
-							borderLeft: "4px solid var(--foreground)",
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "center",
-							flexWrap: "wrap",
-							gap: "1rem",
-						}}
-					>
-						<div>
-							<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-								<span style={{ fontSize: "1.1rem" }}>👑</span>
-								<h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700 }}>
-									System Administrator (Super Admin)
+				<div className="perm-master-detail">
+					{/* Left Column: Role Selector Nav */}
+					<div>
+						<div className="card" style={{ padding: "1.25rem", marginBottom: "1rem" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+								<h3 className="section-title" style={{ fontSize: "0.95rem", margin: 0 }}>
+									Roles ({roles.length})
 								</h3>
-								<span
-									style={{
-										fontSize: "0.65rem",
-										fontFamily: "var(--font-mono)",
-										textTransform: "uppercase",
-										padding: "0.15rem 0.45rem",
-										background: "var(--foreground)",
-										color: "var(--background)",
-										borderRadius: "2px",
-									}}
+								<button
+									type="button"
+									className="btn btn--primary btn--sm"
+									style={{ fontSize: "0.7rem", padding: "0.2rem 0.5rem" }}
+									onClick={() => setCreatingRole(true)}
 								>
-									Default & Root Role
-								</span>
+									+ Add Role
+								</button>
 							</div>
-							<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>
-								System Administrators have immutable full-access authority across all 28 modules, database tables, and system security controls.
-							</p>
-						</div>
-						<div style={{ display: "flex", gap: "0.5rem" }}>
-							<button
-								type="button"
-								className="btn btn--primary btn--sm"
-								onClick={() => setCreatingRole(true)}
-							>
-								+ Add Custom Role
-							</button>
+
+							<input
+								type="search"
+								placeholder="Filter roles..."
+								className="input input--sm input--full-border"
+								style={{ width: "100%", marginBottom: "0.75rem" }}
+								value={roleSearch}
+								onChange={(e) => setRoleSearch(e.target.value)}
+							/>
+
+							<div className="perm-role-nav">
+								{filteredRoles.map((r) => {
+									const isSuper = r.id === "super_admin";
+									const isSelected = r.id === selectedRoleId;
+									const stats = isSuper
+										? { count: allModuleIds.length, total: allModuleIds.length, pct: 100 }
+										: {
+												count: r.permissions?.length ?? 0,
+												total: allModuleIds.length,
+												pct: Math.round(((r.permissions?.length ?? 0) / (allModuleIds.length || 1)) * 100),
+										  };
+									const staffCount = staff.filter((u) => u.role === r.id).length;
+
+									return (
+										<button
+											key={r.id}
+											type="button"
+											className={`perm-role-nav-item${isSelected ? " perm-role-nav-item--active" : ""}`}
+											onClick={() => setSelectedRoleId(r.id)}
+										>
+											<div className="perm-role-nav-item__head">
+												<strong style={{ fontSize: "var(--text-sm)" }}>
+													{isSuper ? "👑 " : ""}{r.name}
+												</strong>
+												<span
+													style={{
+														fontSize: "0.6rem",
+														fontFamily: "var(--font-mono)",
+														textTransform: "uppercase",
+														padding: "0.1rem 0.35rem",
+														border: "var(--thin)",
+														background: isSuper ? "var(--foreground)" : r.isSystem ? "var(--muted, #f0f0f0)" : "var(--foreground)",
+														color: isSuper ? "var(--background)" : r.isSystem ? "var(--foreground)" : "var(--background)",
+													}}
+												>
+													{isSuper ? "Root Default" : r.isSystem ? "System" : "Custom"}
+												</span>
+											</div>
+
+											<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", marginTop: "0.35rem" }}>
+												<span className="muted">{staffCount} {staffCount === 1 ? "staff" : "staff"}</span>
+												<span className="mono muted">{stats.count}/{stats.total} modules</span>
+											</div>
+
+											<div className="perm-progress-bar" style={{ marginTop: "0.35rem" }}>
+												<div className="perm-progress-fill" style={{ width: `${stats.pct}%` }} />
+											</div>
+										</button>
+									);
+								})}
+							</div>
 						</div>
 					</div>
 
-					{/* Matrix Filter Toolbar */}
-					<div className="card" style={{ padding: "0.85rem 1.25rem", marginBottom: "1.5rem" }}>
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-							<div style={{ minWidth: "16rem" }}>
+					{/* Right Column: Focused Permissions Panel for Selected Role */}
+					<div>
+						{/* Selected Role Header Card */}
+						<div className="card" style={{ padding: "1.25rem 1.5rem", marginBottom: "1.25rem" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+								<div>
+									<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+										{selectedRole.id === "super_admin" && <span style={{ fontSize: "1.2rem" }}>👑</span>}
+										<h2 className="section-title" style={{ margin: 0, fontSize: "1.25rem" }}>
+											{selectedRole.name}
+										</h2>
+										<span
+											style={{
+												fontSize: "0.65rem",
+												fontFamily: "var(--font-mono)",
+												textTransform: "uppercase",
+												padding: "0.15rem 0.45rem",
+												border: "var(--thin)",
+												background: selectedRole.id === "super_admin" ? "var(--foreground)" : "transparent",
+												color: selectedRole.id === "super_admin" ? "var(--background)" : "var(--foreground)",
+											}}
+										>
+											{selectedRole.id === "super_admin" ? "Root System Role" : selectedRole.isSystem ? "Built-in System Role" : "Custom Role"}
+										</span>
+									</div>
+									<p className="muted" style={{ margin: "0.35rem 0 0", fontSize: "var(--text-sm)" }}>
+										{selectedRole.description || "Custom operational role."}
+									</p>
+									<code className="mono muted" style={{ fontSize: "0.75rem", display: "inline-block", marginTop: "0.35rem" }}>
+										role_id: {selectedRole.id}
+									</code>
+								</div>
+
+								{selectedRole.id !== "super_admin" && (
+									<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+										<button
+											type="button"
+											className="perm-quick-btn"
+											onClick={() => bulkSetRolePermissions(selectedRole.id, allModuleIds, true)}
+										>
+											Grant All ({allModuleIds.length})
+										</button>
+										<button
+											type="button"
+											className="perm-quick-btn"
+											onClick={() => bulkSetRolePermissions(selectedRole.id, allModuleIds, false)}
+										>
+											Revoke All
+										</button>
+										{selectedRole.isSystem && (
+											<button
+												type="button"
+												className="perm-quick-btn"
+												onClick={() => handleResetRoleDefaults(selectedRole.id)}
+												title="Reset to factory system defaults"
+											>
+												Reset Defaults
+											</button>
+										)}
+										{!selectedRole.isSystem && (
+											<button
+												type="button"
+												className="perm-quick-btn"
+												style={{ color: "#c0392b", borderColor: "#c0392b" }}
+												onClick={() => handleDeleteRole(selectedRole.id, selectedRole.name)}
+											>
+												Delete Role
+											</button>
+										)}
+									</div>
+								)}
+							</div>
+
+							{selectedRole.id === "super_admin" ? (
+								<div
+									style={{
+										marginTop: "1rem",
+										padding: "0.75rem 1rem",
+										background: "var(--surface-subtle, #f6f6f6)",
+										borderLeft: "3px solid var(--foreground)",
+										fontSize: "var(--text-xs)",
+									}}
+								>
+									<strong>Root Authority:</strong> System Administrator always retains full, un-revocable permissions across all 28 modules, security settings, and data assets.
+								</div>
+							) : (
+								<div style={{ marginTop: "1rem" }}>
+									<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)" }}>
+										<span className="muted">Scope Completeness</span>
+										<span className="mono"><strong>{selectedRoleStats.count} / {selectedRoleStats.total} modules granted ({selectedRoleStats.pct}%)</strong></span>
+									</div>
+									<div className="perm-progress-bar" style={{ marginTop: "0.35rem" }}>
+										<div className="perm-progress-fill" style={{ width: `${selectedRoleStats.pct}%` }} />
+									</div>
+								</div>
+							)}
+
+							<div style={{ marginTop: "1rem" }}>
 								<input
 									type="search"
-									placeholder="Search module permissions (e.g. invoice, bookings, cms)..."
+									placeholder={`Filter permissions for ${selectedRole.name}...`}
 									className="input input--sm input--full-border"
 									style={{ width: "100%" }}
 									value={moduleSearch}
 									onChange={(e) => setModuleSearch(e.target.value)}
 								/>
 							</div>
-							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-								Showing {roles.length} roles across {allModuleIds.length} platform capabilities
-							</span>
 						</div>
-					</div>
 
-					{/* Permissions Matrix with Sticky Headers & Monochrome Toggle Switches */}
-					<div className="perm-matrix-container card" style={{ padding: 0, marginBottom: "2rem" }}>
-						<table className="perm-matrix">
-							<thead>
-								<tr>
-									<th className="perm-sticky-head perm-sticky-col" style={{ minWidth: "260px" }}>
-										<div style={{ fontWeight: 700, textTransform: "uppercase", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", letterSpacing: "0.05em" }}>
-											Capability / Module
-										</div>
-										<div className="muted" style={{ fontSize: "var(--text-xs)", fontWeight: 400, marginTop: "0.2rem" }}>
-											Select permissions per staff role
-										</div>
-									</th>
-									{roles.map((r) => {
-										const stats = roleStats.get(r.id) ?? { count: 0, total: allModuleIds.length, pct: 0 };
-										const isSuper = r.id === "super_admin";
-										return (
-											<th key={r.id} className="perm-sticky-head" style={{ textAlign: "center", minWidth: "150px", verticalAlign: "top" }}>
-												<div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>{r.name}</div>
-												<div style={{ display: "flex", justifyContent: "center", gap: "0.3rem", marginTop: "0.25rem", alignItems: "center" }}>
-													<span
-														style={{
-															fontSize: "0.6rem",
-															fontFamily: "var(--font-mono)",
-															textTransform: "uppercase",
-															padding: "0.1rem 0.35rem",
-															border: "var(--thin)",
-															background: isSuper ? "var(--foreground)" : r.isSystem ? "var(--muted, #f0f0f0)" : "var(--foreground)",
-															color: isSuper ? "var(--background)" : r.isSystem ? "var(--foreground)" : "var(--background)",
-														}}
-													>
-														{isSuper ? "Root Default" : r.isSystem ? "System" : "Custom"}
-													</span>
-													{!r.isSystem && (
-														<button
-															type="button"
-															onClick={() => handleDeleteRole(r.id, r.name)}
-															className="perm-quick-btn"
-															style={{ color: "#c0392b", borderColor: "#c0392b" }}
-															title="Delete custom role"
-														>
-															✕
-														</button>
-													)}
-												</div>
+						{/* Categorized Permissions Cards */}
+						{filteredModuleGroups.length === 0 ? (
+							<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
+								<p className="muted">No capabilities match "{moduleSearch}".</p>
+							</div>
+						) : (
+							filteredModuleGroups.map((group) => {
+								const groupIds = group.modules.map((m) => m.id);
+								const grantedInGroup = groupIds.filter((id) =>
+									selectedRole.id === "super_admin" || (selectedRole.permissions ?? []).includes(id),
+								).length;
+								const isSuper = selectedRole.id === "super_admin";
 
-												{/* Mini Progress Bar */}
-												<div style={{ marginTop: "0.4rem" }}>
-													<div className="mono muted" style={{ fontSize: "0.65rem" }}>
-														{isSuper ? "28/28 (100%)" : `${stats.count}/${stats.total} (${stats.pct}%)`}
-													</div>
-													<div className="perm-progress-bar">
-														<div className="perm-progress-fill" style={{ width: `${stats.pct}%` }} />
-													</div>
-												</div>
+								return (
+									<div key={group.group} className="perm-group-card">
+										<div className="perm-group-card__head">
+											<div>
+												<h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700 }}>
+													{group.group}
+												</h4>
+												<p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "var(--text-xs)" }}>
+													{group.description}
+												</p>
+											</div>
 
-												{/* Quick Actions (Grant All / Revoke All) */}
+											<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+												<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+													{grantedInGroup}/{groupIds.length}
+												</span>
 												{!isSuper && (
-													<div style={{ display: "flex", justifyContent: "center", gap: "0.25rem", marginTop: "0.45rem" }}>
+													<div style={{ display: "flex", gap: "0.25rem" }}>
 														<button
 															type="button"
 															className="perm-quick-btn"
-															onClick={() => bulkSetRolePermissions(r.id, allModuleIds, true)}
-															title="Grant all modules"
+															onClick={() => bulkSetRolePermissions(selectedRole.id, groupIds, true)}
 														>
-															Grant All
+															+ Group
 														</button>
 														<button
 															type="button"
 															className="perm-quick-btn"
-															onClick={() => bulkSetRolePermissions(r.id, allModuleIds, false)}
-															title="Revoke all modules"
+															onClick={() => bulkSetRolePermissions(selectedRole.id, groupIds, false)}
 														>
-															Revoke
+															- Group
 														</button>
 													</div>
 												)}
-											</th>
-										);
-									})}
-								</tr>
-							</thead>
-							<tbody>
-								{filteredModuleGroups.length === 0 ? (
-									<tr>
-										<td colSpan={roles.length + 1} className="muted" style={{ padding: "2.5rem", textAlign: "center" }}>
-											No modules matched your search "{moduleSearch}".
-										</td>
-									</tr>
-								) : (
-									filteredModuleGroups.map((group) => {
-										const groupModuleIds = group.modules.map((m) => m.id);
-										return (
-											<Fragment key={group.group}>
-												<tr style={{ background: "var(--muted, #f5f5f5)", borderTop: "var(--medium)", borderBottom: "var(--thin)" }}>
-													<td className="perm-sticky-col" style={{ fontWeight: 700, padding: "0.6rem 1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--muted, #f5f5f5)" }}>
-														{group.group} — <span style={{ fontWeight: 400, opacity: 0.7 }}>{group.description}</span>
-													</td>
-													{roles.map((r) => {
-														const isSuper = r.id === "super_admin";
-														return (
-															<td key={r.id} style={{ textAlign: "center", padding: "0.4rem 0.6rem", background: "var(--muted, #f5f5f5)" }}>
-																{!isSuper && (
-																	<div style={{ display: "flex", justifyContent: "center", gap: "0.2rem" }}>
-																		<button
-																			type="button"
-																			className="perm-quick-btn"
-																			style={{ fontSize: "0.6rem", padding: "0.05rem 0.3rem" }}
-																			onClick={() => bulkSetRolePermissions(r.id, groupModuleIds, true)}
-																			title={`Grant all ${group.group} to ${r.name}`}
-																		>
-																			+ Group
-																		</button>
-																		<button
-																			type="button"
-																			className="perm-quick-btn"
-																			style={{ fontSize: "0.6rem", padding: "0.05rem 0.3rem" }}
-																			onClick={() => bulkSetRolePermissions(r.id, groupModuleIds, false)}
-																			title={`Revoke all ${group.group} for ${r.name}`}
-																		>
-																			- Group
-																		</button>
-																	</div>
-																)}
-															</td>
-														);
-													})}
-												</tr>
-												{group.modules.map((mod) => (
-													<tr key={mod.id} style={{ borderBottom: "var(--thin)" }}>
-														<td className="perm-sticky-col" style={{ padding: "0.65rem 1rem" }}>
-															<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{mod.label}</div>
-															<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{mod.description}</div>
-															<code className="mono muted" style={{ fontSize: "0.7rem", marginTop: "0.15rem", display: "inline-block" }}>
+											</div>
+										</div>
+
+										<div>
+											{group.modules.map((mod) => {
+												const hasIt = isSuper || (selectedRole.permissions ?? []).includes(mod.id);
+												return (
+													<div key={mod.id} className="perm-item-row">
+														<div>
+															<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+																{mod.label}
+															</div>
+															<div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+																{mod.description}
+															</div>
+															<code className="mono muted" style={{ fontSize: "0.7rem", marginTop: "0.2rem", display: "inline-block" }}>
 																{mod.id}
 															</code>
-														</td>
-														{roles.map((r) => {
-															const hasIt = r.id === "super_admin" || (r.permissions ?? []).includes(mod.id);
-															const isSuper = r.id === "super_admin";
-															return (
-																<td key={r.id} style={{ textAlign: "center", padding: "0.65rem", verticalAlign: "middle" }}>
-																	<label
-																		className="perm-switch"
-																		title={isSuper ? "Super Admin root access cannot be disabled" : `${hasIt ? "Revoke" : "Grant"} ${mod.label} for ${r.name}`}
-																	>
-																		<input
-																			type="checkbox"
-																			checked={hasIt}
-																			disabled={isSuper}
-																			onChange={(e) => togglePermission(r.id, mod.id, e.target.checked)}
-																			aria-label={`Toggle ${mod.label} permission for ${r.name}`}
-																		/>
-																		<span className="perm-switch__slider" />
-																	</label>
-																</td>
-															);
-														})}
-													</tr>
-												))}
-											</Fragment>
-										);
-									})
-								)}
-							</tbody>
-						</table>
-					</div>
+														</div>
 
-					{/* Role Overview Cards */}
-					<div className="card" style={{ padding: "1.5rem" }}>
-						<h3 className="section-title mb-3" style={{ fontSize: "1.1rem" }}>Role Architecture & Granted Scope</h3>
-						<div className="admin-role-grid">
-							{roles.map((r) => {
-								const stats = roleStats.get(r.id) ?? { count: 0, total: allModuleIds.length, pct: 0 };
-								const isSuper = r.id === "super_admin";
-								return (
-									<div key={r.id} className="admin-role-card">
-										<div className="admin-role-card__head">
-											<span className="admin-role-card__name">
-												{isSuper ? "👑 " : ""}{r.name}
-											</span>
-											<span className="admin-role-card__count">{staff.filter((u) => u.role === r.id).length} staff</span>
-										</div>
-										<p className="admin-role-card__desc">{r.description || "Custom operational role."}</p>
-										<div style={{ marginTop: "0.75rem", borderTop: "var(--hairline)", paddingTop: "0.5rem" }}>
-											<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)" }}>
-												<span className="muted">Module Access</span>
-												<span className="mono"><strong>{isSuper ? "All 28 Modules" : `${stats.count} / ${stats.total}`}</strong></span>
-											</div>
-											<div className="perm-progress-bar" style={{ marginTop: "0.3rem" }}>
-												<div className="perm-progress-fill" style={{ width: `${stats.pct}%` }} />
-											</div>
+														<div>
+															<label
+																className="perm-switch"
+																title={isSuper ? "Root access cannot be disabled" : `${hasIt ? "Revoke" : "Grant"} ${mod.label}`}
+															>
+																<input
+																	type="checkbox"
+																	checked={hasIt}
+																	disabled={isSuper}
+																	onChange={(e) => togglePermission(selectedRole.id, mod.id, e.target.checked)}
+																	aria-label={`Toggle ${mod.label} for ${selectedRole.name}`}
+																/>
+																<span className="perm-switch__slider" />
+															</label>
+														</div>
+													</div>
+												);
+											})}
 										</div>
 									</div>
 								);
-							})}
-						</div>
+							})
+						)}
 					</div>
-				</>
+				</div>
 			)}
 
 			{/* Create Custom Role Modal with Preset Templates */}

@@ -711,3 +711,91 @@
 	background: var(--foreground);
 	color: var(--background);
 }
+
+/* ── Master-Detail Roles & Permissions Layout ── */
+
+.perm-master-detail {
+	display: grid;
+	grid-template-columns: 310px 1fr;
+	gap: 1.5rem;
+	align-items: start;
+}
+
+@media (max-width: 900px) {
+	.perm-master-detail {
+		grid-template-columns: 1fr;
+	}
+}
+
+.perm-role-nav {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.perm-role-nav-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 0.85rem 1rem;
+	border: var(--thin);
+	background: var(--background);
+	cursor: pointer;
+	transition: all 0.15s ease;
+	border-radius: 0;
+	position: relative;
+	box-sizing: border-box;
+}
+
+.perm-role-nav-item:hover {
+	background: var(--surface-subtle, #fbfbfb);
+	border-color: var(--foreground);
+}
+
+.perm-role-nav-item--active {
+	border: 2px solid var(--foreground);
+	background: var(--surface-subtle, #f7f7f7);
+	box-shadow: 2px 2px 0 var(--foreground);
+}
+
+.perm-role-nav-item__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 0.25rem;
+}
+
+.perm-group-card {
+	border: var(--thin);
+	background: var(--background);
+	margin-bottom: 1.25rem;
+	padding: 1.25rem;
+}
+
+.perm-group-card__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	border-bottom: var(--hairline);
+	padding-bottom: 0.75rem;
+	margin-bottom: 1rem;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+
+.perm-item-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.75rem 0.5rem;
+	border-bottom: var(--hairline);
+	transition: background 0.1s ease;
+}
+
+.perm-item-row:last-child {
+	border-bottom: none;
+}
+
+.perm-item-row:hover {
+	background: var(--surface-subtle, #fafafa);
+}

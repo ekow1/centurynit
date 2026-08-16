@@ -5,6 +5,8 @@ import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
+import { UploadProgressModal, type UploadStage } from "../../components/portal/UploadProgressModal";
+import { prepareDocumentForUpload } from "../../lib/upload";
 
 /**
  * The applicant's document vault — fully server-backed.
@@ -62,6 +64,12 @@ export function PortalDocumentVault() {
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [busyId, setBusyId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [activeUpload, setActiveUpload] = useState<{
+		fileName: string;
+		percent: number;
+		stage: UploadStage;
+		error?: string;
+	} | null>(null);
 	const fileInput = useRef<HTMLInputElement | null>(null);
 	const pendingTarget = useRef<string | null>(null);
 
@@ -121,7 +129,7 @@ export function PortalDocumentVault() {
 			return;
 		}
 		if (!(ALLOWED_DOCUMENT_TYPES as readonly string[]).includes(file.type)) {
-			const msg = "Upload a PDF or an image (JPEG, PNG, HEIC, WebP).";
+			const msg = "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).";
 			setError(msg);
 			toast.error(msg);
 			return;
@@ -129,13 +137,34 @@ export function PortalDocumentVault() {
 
 		setBusyId(id);
 		setError(null);
+		setActiveUpload({ fileName: file.name, percent: 0, stage: "preparing" });
 		try {
-			const saved = await documentsApi.upload(file, id);
+			// Large images are re-encoded here so they fit comfortably under the
+			// ceiling; PDFs and Word documents pass through untouched.
+			const ready = await prepareDocumentForUpload(file, (p) => {
+				setActiveUpload((u) => (u ? { ...u, percent: p, stage: "preparing" } : u));
+			});
+
+			if (ready.size > MAX_DOCUMENT_BYTES) {
+				const msg = `${file.name} is still larger than 15 MB after compression. Please upload a smaller scan.`;
+				setActiveUpload((u) => (u ? { ...u, stage: "error", error: msg } : u));
+				toast.error(msg);
+				return;
+			}
+
+			setActiveUpload((u) => (u ? { ...u, percent: 0, stage: "uploading" } : u));
+			const saved = await documentsApi.upload(ready, id, {
+				onProgress: (p) => {
+					setActiveUpload((u) => (u ? { ...u, percent: p, stage: "uploading" } : u));
+				},
+			});
 			setLiveDocs((current) => new Map(current ?? []).set(saved.documentType, saved));
+			setActiveUpload(null);
 			toast.success(`${file.name} uploaded. Your consultant will review it.`);
 		} catch (err) {
 			const msg = readableError(err, `Could not upload ${file.name}. Please try again.`);
 			setError(msg);
+			setActiveUpload((u) => (u ? { ...u, stage: "error", error: msg } : u));
 			toast.error(msg);
 		} finally {
 			setBusyId(null);
@@ -345,6 +374,15 @@ export function PortalDocumentVault() {
 					</p>
 				</div>
 			) : null}
+
+			<UploadProgressModal
+				open={activeUpload !== null}
+				fileName={activeUpload?.fileName ?? ""}
+				stage={activeUpload?.stage ?? "preparing"}
+				percent={activeUpload?.percent ?? 0}
+				error={activeUpload?.error}
+				onClose={() => setActiveUpload(null)}
+			/>
 		</div>
 	);
 }

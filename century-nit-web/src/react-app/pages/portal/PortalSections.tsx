@@ -33,6 +33,8 @@ import {
 } from "century-nit-core";
 import { documentsApi, invoicesApi, meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
+import { Avatar } from "../../components/ui/Avatar";
+import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
 import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
 
@@ -67,6 +69,7 @@ export function PortalProfile() {
 		interview,
 		updateAssessment,
 		updateAccount,
+		setAvatarImage,
 		pushNotification,
 	} = useAppState();
 	const a = application;
@@ -96,6 +99,7 @@ export function PortalProfile() {
 	const [editing, setEditing] = useState<null | "account" | "assessment" | "preferences">(null);
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [justSaved, setJustSaved] = useState(false);
+	const [avatarOpen, setAvatarOpen] = useState(false);
 
 	useEffect(() => {
 		if (!justSaved) return;
@@ -109,13 +113,6 @@ export function PortalProfile() {
 
 	const fullName =
 		authUser?.name || [a.firstName, a.lastName].filter(Boolean).join(" ") || "Century Applicant";
-	const initials = fullName
-		.split(/\s+/)
-		.map((p) => p[0])
-		.filter(Boolean)
-		.slice(0, 2)
-		.join("")
-		.toUpperCase();
 
 	const eligibility = booking.eligibilityOutcome.replace("_", " ");
 	const uploadedDocs = liveDocs ? liveDocs.size : 0;
@@ -185,8 +182,15 @@ export function PortalProfile() {
 			<section className="profile-hero-card mt-4">
 				<div className="profile-hero">
 					<div className="profile-hero__main">
-						<div className="profile-monogram" aria-hidden>
-							{initials}
+						<div className="profile-avatar">
+							<Avatar name={fullName} image={authUser?.image} className="profile-monogram" />
+							<button
+								type="button"
+								className="profile-avatar__edit"
+								onClick={() => setAvatarOpen(true)}
+							>
+								{authUser?.image ? "Change photo" : "Add photo"}
+							</button>
 						</div>
 						<div>
 							<p className="display profile-hero__name">{fullName}</p>
@@ -456,6 +460,20 @@ export function PortalProfile() {
 					</div>
 				</div>
 			</section>
+
+			<AvatarCropModal
+				open={avatarOpen}
+				onClose={() => setAvatarOpen(false)}
+				onSaved={() => {
+					setAvatarImage("set");
+					pushNotification({
+						type: "stage",
+						title: "Photo updated",
+						body: "Your new profile photo has been saved.",
+						link: "/portal/profile",
+					});
+				}}
+			/>
 		</div>
 	);
 }

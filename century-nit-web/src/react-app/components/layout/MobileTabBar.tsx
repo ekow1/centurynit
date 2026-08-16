@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
+import { Avatar } from "../ui/Avatar";
 import { Sheet } from "century-nit-core/ui";
 import { MENU_GROUPS } from "./navLinks";
 import {
@@ -39,15 +40,6 @@ export function MobileTabBar() {
 	const { isAuthenticated, authUser, signOut } = useAppState();
 
 	const exploreActive = EXPLORE_PATHS.some((p) => pathname.startsWith(p));
-
-	const initials = authUser
-		? authUser.name
-				.split(" ")
-				.map((w) => w[0])
-				.slice(0, 2)
-				.join("")
-				.toUpperCase()
-		: "";
 
 	// Close the profile dropdown on outside taps
 	useEffect(() => {
@@ -93,7 +85,7 @@ export function MobileTabBar() {
 							aria-haspopup="menu"
 							aria-label="Open profile menu"
 						>
-							<span className="tabbar__avatar">{initials}</span>
+							<Avatar name={authUser.name} image={authUser.image} className="tabbar__avatar" />
 							<span className="tabbar__label">Profile</span>
 						</button>
 						{profileOpen ? (
@@ -160,7 +152,7 @@ export function MobileTabBar() {
 			>
 				{isAuthenticated && authUser ? (
 					<Link to="/portal/home" className="sheet-account">
-						<span className="sheet-account__avatar">{initials}</span>
+						<Avatar name={authUser.name} image={authUser.image} className="sheet-account__avatar" />
 						<span className="sheet-account__meta">
 							<span className="sheet-account__name">{authUser.name}</span>
 							<span className="sheet-account__sub mono">{authUser.email}</span>

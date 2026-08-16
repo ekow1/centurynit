@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
+import { Avatar } from "../../components/ui/Avatar";
 import { NotificationBell } from "./NotificationBell";
 import {
 	IconChevronLeft,
@@ -88,15 +89,6 @@ export function PortalTabBar() {
 	const { toast } = useNotifier();
 	const inStage = isStagePath(pathname);
 
-	const initials = authUser
-		? authUser.name
-				.split(" ")
-				.map((w) => w[0])
-				.slice(0, 2)
-				.join("")
-				.toUpperCase()
-		: "··";
-
 	// Close the account dropdown on outside taps
 	useEffect(() => {
 		function handleClickOutside(e: MouseEvent) {
@@ -133,7 +125,7 @@ export function PortalTabBar() {
 					aria-haspopup="menu"
 					aria-label="Account menu"
 				>
-					<span className="tabbar__avatar">{initials}</span>
+					<Avatar name={authUser?.name ?? ""} image={authUser?.image} className="tabbar__avatar" />
 					<span className="tabbar__label">Profile</span>
 				</button>
 				{profileOpen ? (

@@ -40,14 +40,17 @@ export type BookingRow = typeof bookings.$inferSelect;
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
-/** `CNS-2026-0007`. Sequence-backed so concurrent creates cannot collide. */
+/** `CNS-2026-0007`. Advisory-locked so concurrent creates cannot collide. */
 async function nextReference(tx: typeof db): Promise<string> {
 	const year = new Date().getUTCFullYear();
+	await tx.execute(sql`SELECT pg_advisory_xact_lock(710001, ${year})`);
 	const [row] = await tx
-		.select({ count: sql<number>`count(*)::int` })
+		.select({
+			max: sql<number>`coalesce(max(split_part(${bookings.reference}, '-', 3)::int), 0)::int`,
+		})
 		.from(bookings)
-		.where(gte(bookings.createdAt, new Date(Date.UTC(year, 0, 1))));
-	return `CNS-${year}-${String((row?.count ?? 0) + 1).padStart(4, "0")}`;
+		.where(sql`${bookings.reference} like ${`CNS-${year}-%`}`);
+	return `CNS-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
 }
 
 /**
@@ -161,8 +164,9 @@ export async function createBooking(input: {
 		);
 	}
 
+	let booking: BookingRow;
 	try {
-		const booking = await db.transaction(async (tx) => {
+		booking = await db.transaction(async (tx) => {
 			const reference = await nextReference(tx as unknown as typeof db);
 			const [row] = await tx
 				.insert(bookings)
@@ -187,22 +191,6 @@ export async function createBooking(input: {
 				.returning();
 			return row;
 		});
-
-		await audit(booking.id, "created", client.email, { source: "portal" });
-
-		// Queued, never inline: a failed email must not undo a real booking (§13).
-		const ctx = await notificationContext(booking);
-		const managers = await db
-			.select({ email: opsUsers.email })
-			.from(opsUsers)
-			.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, ["manager", "coordinator"])));
-
-		await queueEmails([
-			mail.bookingCreatedForClient(ctx),
-			...managers.map((m) => mail.bookingCreatedForManagers(ctx, m.email)),
-		]);
-
-		return booking;
 	} catch (err) {
 		// The loser of a race lands here — the index rejected the second insert.
 		if (isConflictError(err)) {
@@ -214,6 +202,31 @@ export async function createBooking(input: {
 		}
 		throw err;
 	}
+
+	await audit(booking.id, "created", client.email, { source: "portal" });
+
+	// The booking is already committed. A case-setup failure must not look like
+	// a lost slot race, and must not roll the appointment back.
+	try {
+		const { ensureCaseForBooking } = await import("./cases.js");
+		await ensureCaseForBooking(booking);
+	} catch (err) {
+		console.error("[booking] could not open the consultation case:", err);
+	}
+
+	// Queued, never inline: a failed email must not undo a real booking (§13).
+	const ctx = await notificationContext(booking);
+	const managers = await db
+		.select({ email: opsUsers.email })
+		.from(opsUsers)
+		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, ["manager", "coordinator"])));
+
+	await queueEmails([
+		mail.bookingCreatedForClient(ctx),
+		...managers.map((m) => mail.bookingCreatedForManagers(ctx, m.email)),
+	]);
+
+	return booking;
 }
 
 /* ── Assign ──────────────────────────────────────────────────────────────── */
@@ -314,6 +327,9 @@ export async function assignBooking(input: {
 	const ctx = await notificationContext(updated, employee);
 	await queueEmails([mail.bookingAssignedForClient(ctx), mail.bookingAssignedForEmployee(ctx)]);
 	await scheduleReminders(updated, employee);
+
+	const { syncConsultationAssignment } = await import("./cases.js");
+	await syncConsultationAssignment(updated.id, employeeId, actor);
 
 	return updated;
 }
@@ -546,7 +562,7 @@ export async function rescheduleBooking(input: {
 	return updated;
 }
 
-async function updateCalendarForBooking(bookingId: string): Promise<BookingRow> {
+export async function updateCalendarForBooking(bookingId: string): Promise<BookingRow> {
 	const booking = await getBooking(bookingId);
 	if (!booking?.calendarEventId || !booking.employeeId) return booking!;
 
@@ -615,6 +631,9 @@ export async function cancelBooking(input: {
 
 	await audit(booking.id, "cancelled", input.actor.email, { reason: input.reason ?? null });
 
+	const { syncConsultationCancelled } = await import("./cases.js");
+	await syncConsultationCancelled(booking.id);
+
 	// Free the slot in Google too, and stop the reminders.
 	if (updated.calendarEventId && updated.employeeId) {
 		await queueCalendar({ type: "cancel", bookingId: updated.id });
@@ -629,6 +648,74 @@ export async function cancelBooking(input: {
 		...(employee ? [mail.bookingCancelled(ctx, "employee")] : []),
 	]);
 
+	return updated;
+}
+
+/* ── Complete / no-show ──────────────────────────────────────────────────── */
+
+/**
+ * Mark a booking completed. Releases the slot. The calendar event is left in
+ * place so the Meet recording / notes remain on the employee's calendar.
+ */
+export async function completeBooking(input: {
+	bookingId: string;
+	actor: { name: string; email: string };
+}): Promise<BookingRow> {
+	const booking = await getBooking(input.bookingId);
+	if (!booking) {
+		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+	}
+	if (booking.status === "COMPLETED") return booking;
+	if (!occupiesSlot(booking.status)) {
+		throw new HttpError(
+			409,
+			SCHEDULING_ERROR_CODES.BOOKING_CANCELLED,
+			`Cannot complete a booking that is ${booking.status}`,
+		);
+	}
+
+	const [updated] = await db
+		.update(bookings)
+		.set({ status: "COMPLETED", updatedAt: new Date() })
+		.where(eq(bookings.id, booking.id))
+		.returning();
+
+	await audit(booking.id, "completed", input.actor.email);
+	await cancelQueued(`notify:reminder:client:${booking.reference}`);
+	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+	return updated;
+}
+
+/**
+ * Mark a no-show. Releases the slot the same way cancel does, without treating
+ * it as a client-initiated cancellation.
+ */
+export async function markNoShow(input: {
+	bookingId: string;
+	actor: { name: string; email: string };
+}): Promise<BookingRow> {
+	const booking = await getBooking(input.bookingId);
+	if (!booking) {
+		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+	}
+	if (booking.status === "NO_SHOW") return booking;
+	if (!occupiesSlot(booking.status)) {
+		throw new HttpError(
+			409,
+			SCHEDULING_ERROR_CODES.BOOKING_CANCELLED,
+			`Cannot mark a booking that is ${booking.status} as a no-show`,
+		);
+	}
+
+	const [updated] = await db
+		.update(bookings)
+		.set({ status: "NO_SHOW", updatedAt: new Date() })
+		.where(eq(bookings.id, booking.id))
+		.returning();
+
+	await audit(booking.id, "no_show", input.actor.email);
+	await cancelQueued(`notify:reminder:client:${booking.reference}`);
+	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
 	return updated;
 }
 

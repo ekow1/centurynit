@@ -4,16 +4,25 @@ import { z } from "zod";
 import { db } from "../db/index.js";
 import { opsUsers } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
-import { canModifyBooking, canViewBooking, requireAuth, type AuthVariables } from "../middleware/auth.js";
+import {
+	canModifyBooking,
+	canSeeAllBookings,
+	canViewBooking,
+	requireAuth,
+	requireMfa,
+	type AuthVariables,
+} from "../middleware/auth.js";
 import { zonedTimeToUtc } from "../lib/time.js";
 import { assignableEmployees, branchAvailability, sameBranch } from "../services/availability.js";
 import {
 	assignBooking,
 	cancelBooking,
+	completeBooking,
 	createBooking,
 	getBooking,
 	listBookings,
 	listBookingsForClient,
+	markNoShow,
 	rescheduleBooking,
 	type BookingRow,
 } from "../services/booking.js";
@@ -195,7 +204,7 @@ bookingsRouter.openapi(
 		method: "get",
 		path: "/",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { query: listQuerySchema },
 		responses: {
 			200: {
@@ -212,7 +221,7 @@ bookingsRouter.openapi(
 		let rows: BookingRow[] = [];
 		if (!staff) {
 			rows = await listBookingsForClient(user.id);
-		} else if (staff.role === "manager" || staff.role === "coordinator" || staff.role === "finance") {
+		} else if (canSeeAllBookings(staff)) {
 			rows = await listBookings({
 				status: query.status ? [query.status] : undefined,
 				branchId: query.branchId,
@@ -252,7 +261,7 @@ bookingsRouter.openapi(
 		method: "get",
 		path: "/employees",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { query: employeesQuerySchema },
 		responses: {
 			200: {
@@ -319,7 +328,7 @@ bookingsRouter.openapi(
 		method: "get",
 		path: "/{id}",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -350,7 +359,7 @@ bookingsRouter.openapi(
 		method: "patch",
 		path: "/{id}/cancel",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -394,7 +403,7 @@ bookingsRouter.openapi(
 		method: "patch",
 		path: "/{id}/reschedule",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -441,7 +450,7 @@ bookingsRouter.openapi(
 		method: "patch",
 		path: "/{id}/assign",
 		tags: ["Bookings"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -463,7 +472,11 @@ bookingsRouter.openapi(
 		const staff = c.get("staff");
 
 		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
-		if (staff.role !== "manager" && staff.role !== "coordinator") {
+		if (
+			staff.role !== "manager" &&
+			staff.role !== "coordinator" &&
+			staff.role !== "super_admin"
+		) {
 			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign bookings");
 		}
 
@@ -471,6 +484,78 @@ bookingsRouter.openapi(
 			bookingId: id,
 			employeeId: body.employeeId,
 			actor: { opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
+		});
+		const employee = await loadEmployee(updated.employeeId);
+		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+/* ── PATCH /api/v1/bookings/:id/complete ────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/complete",
+		tags: ["Bookings"],
+		middleware: [requireAuth, requireMfa] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Completed booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to complete this booking");
+		}
+		const updated = await completeBooking({
+			bookingId: id,
+			actor: { name: staff.name, email: staff.email },
+		});
+		const employee = await loadEmployee(updated.employeeId);
+		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+/* ── PATCH /api/v1/bookings/:id/no-show ─────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/no-show",
+		tags: ["Bookings"],
+		middleware: [requireAuth, requireMfa] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Marked no-show",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to mark this booking as a no-show");
+		}
+		const updated = await markNoShow({
+			bookingId: id,
+			actor: { name: staff.name, email: staff.email },
 		});
 		const employee = await loadEmployee(updated.employeeId);
 		return c.json(toBookingResponse(updated, employee));

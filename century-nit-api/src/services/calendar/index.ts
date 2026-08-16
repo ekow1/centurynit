@@ -17,37 +17,33 @@ export { buildConsentUrl, googleConfigured, GOOGLE_SCOPES, createOAuthClient } f
 /**
  * The calendar client the application uses.
  *
- * Resolved lazily on first call (credentials may come from the settings
- * service), and overridable so tests can substitute `FakeCalendarClient`
- * without touching the code under test.
+ * Credentials can arrive after boot (Platform Settings). A disabled client is
+ * therefore not remembered — the same fix document storage already has — so
+ * saving Google keys in the ops console starts working without a restart.
+ * A live Google client is reused so its connection pool survives.
  */
-let client: CalendarClient | null = null;
-let clientInitPromise: Promise<CalendarClient> | null = null;
-
-async function resolveClient(): Promise<CalendarClient> {
-	if (client) return client;
-	if (!clientInitPromise) {
-		clientInitPromise = (async () => {
-			const configured = await googleConfigured();
-			client = configured ? new GoogleCalendarClient() : new DisabledCalendarClient();
-			return client;
-		})();
-	}
-	return clientInitPromise;
-}
+let liveClient: CalendarClient | null = null;
+let clientOverride: CalendarClient | null = null;
 
 export async function getCalendarClient(): Promise<CalendarClient> {
-	return resolveClient();
+	if (clientOverride) return clientOverride;
+
+	const configured = await googleConfigured();
+	if (!configured) {
+		liveClient = null;
+		return new DisabledCalendarClient();
+	}
+
+	liveClient ??= new GoogleCalendarClient();
+	return liveClient;
 }
 
 /** Test seam. Returns a restore function so suites can clean up after themselves. */
 export function setCalendarClient(next: CalendarClient): () => void {
-	const previous = client;
-	client = next;
-	clientInitPromise = Promise.resolve(next);
+	const previous = clientOverride;
+	clientOverride = next;
 	return () => {
-		client = previous;
-		clientInitPromise = previous ? Promise.resolve(previous) : null;
+		clientOverride = previous;
 	};
 }
 

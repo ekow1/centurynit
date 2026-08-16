@@ -190,7 +190,7 @@ export function requireModule(
 /**
  * Whether this caller may see a booking.
  *
- * Clients see only their own. Managers, coordinators and finance see all.
+ * Clients see only their own. Managers, coordinators and super admins see all.
  * A consultant sees only what is assigned to them — the same row-level rule the
  * ops UI applies client-side, now enforced where the user cannot reach it.
  */
@@ -201,7 +201,11 @@ export function canViewBooking(
 ): boolean {
 	if (booking.clientUserId === user.id) return true;
 	if (!staff) return false;
-	if (staff.role === "manager" || staff.role === "coordinator" || staff.role === "finance") {
+	if (
+		staff.role === "manager" ||
+		staff.role === "coordinator" ||
+		staff.role === "super_admin"
+	) {
 		return true;
 	}
 	if (staff.role === "consultant") return booking.employeeId === staff.opsUserId;
@@ -216,7 +220,22 @@ export function canModifyBooking(
 ): boolean {
 	if (booking.clientUserId === user.id) return true;
 	if (!staff) return false;
-	if (staff.role === "manager" || staff.role === "coordinator") return true;
+	if (
+		staff.role === "manager" ||
+		staff.role === "coordinator" ||
+		staff.role === "super_admin"
+	) {
+		return true;
+	}
 	if (staff.role === "consultant") return booking.employeeId === staff.opsUserId;
 	return false;
+}
+
+/** Roles that see every booking, not only their own assignments. */
+export function canSeeAllBookings(staff: StaffContext | null): boolean {
+	return (
+		staff?.role === "manager" ||
+		staff?.role === "coordinator" ||
+		staff?.role === "super_admin"
+	);
 }

@@ -1,5 +1,6 @@
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
+import { useNotifier } from "../../components/notifier/Notifier";
 import {
 	PORTAL_CHAPTERS,
 	type PortalChapterId,
@@ -87,6 +88,7 @@ export function PortalLayout() {
 		booking,
 		journeyPhase,
 	} = useAppState();
+	const { toast } = useNotifier();
 	const { pathname } = useLocation();
 	const currentStage = journeyPhase.stage;
 
@@ -121,7 +123,20 @@ export function PortalLayout() {
 						<>
 							<p className="portal__user-name">{authUser.name}</p>
 							<p className="portal__user-email muted">{authUser.email}</p>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={signOut}>
+							<button
+								type="button"
+								className="btn btn--ghost btn--sm"
+								onClick={async () => {
+									try {
+										await signOut();
+									} catch (err) {
+										console.error("Sign out failed on the server", err);
+										toast.error(
+											"Couldn't reach the server to end your session — please try again. Your account is still signed in.",
+										);
+									}
+								}}
+							>
 								Sign out
 							</button>
 						</>

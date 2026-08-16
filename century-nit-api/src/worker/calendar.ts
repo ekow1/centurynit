@@ -5,6 +5,7 @@ import { calendarBusyBlocks, staffCalendarAccounts } from "../db/schema.js";
 import {
 	cancelCalendarForBooking,
 	syncCalendarForBooking,
+	updateCalendarForBooking,
 } from "../services/booking.js";
 import {
 	CalendarAuthError,
@@ -45,10 +46,14 @@ export const calendarWorker = new Worker<CalendarJob>(
 		try {
 			switch (data.type) {
 				case "sync":
-				case "update":
-					// Re-running sync repairs an event whose update failed; it is a
-					// no-op when the booking is already consistent.
 					await syncCalendarForBooking(data.bookingId);
+					return;
+
+				case "update":
+					// Move the existing event. syncCalendarForBooking returns early
+					// once a Meet link exists, so a failed reschedule must not go
+					// down that path or the new time is never written to Google.
+					await updateCalendarForBooking(data.bookingId);
 					return;
 
 				case "cancel":

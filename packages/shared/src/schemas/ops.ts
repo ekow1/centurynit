@@ -79,7 +79,7 @@ export const ROLE_PERMISSIONS: Record<z.infer<typeof roleSchema>, OpsModule[]> =
 	super_admin: opsModuleSchema.options as unknown as OpsModule[],
 	manager: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "helpdesk", "marketing",
-		"invoices", "ledger", "payments", "payment-config",
+		"finance", "invoices", "ledger", "payments", "payment-config",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
 		"programs", "packages", "reports",
 	],

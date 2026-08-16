@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
+import { useNotifier } from "../../components/notifier/Notifier";
 import { NotificationBell } from "./NotificationBell";
 import {
 	IconChevronLeft,
@@ -84,6 +85,7 @@ export function PortalTabBar() {
 	const { pathname } = useLocation();
 	const navigate = useNavigate();
 	const { authUser, signOut } = useAppState();
+	const { toast } = useNotifier();
 	const inStage = isStagePath(pathname);
 
 	const initials = authUser
@@ -168,8 +170,16 @@ export function PortalTabBar() {
 						<button
 							type="button"
 							className="nav__dropdown-link nav__dropdown-link--danger"
-							onClick={() => {
-								signOut();
+							onClick={async () => {
+								try {
+									await signOut();
+								} catch (err) {
+									console.error("Sign out failed on the server", err);
+									toast.error(
+										"Couldn't reach the server to end your session — please try again. Your account is still signed in.",
+									);
+									return;
+								}
 								setProfileOpen(false);
 								navigate("/");
 							}}

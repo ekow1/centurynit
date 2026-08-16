@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
@@ -9,7 +9,7 @@ import { fmtFin } from "./currency";
 
 export function EnterpriseApplicants() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applicants, setDocVerdict, seededDocVerdicts } = useOpsState();
+	const { applicants, error: casesError } = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApplicant, setSelectedApplicant] = useState<MockApplicant | null>(null);
@@ -59,6 +59,7 @@ export function EnterpriseApplicants() {
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
+			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
 
 			<div style={{
 				padding: "0.65rem 1rem",
@@ -347,7 +348,7 @@ export function EnterpriseApplicants() {
 											{selectedApplicant.documents.map((doc, idx) => {
 												const docKey = `applicant:${selectedApplicant.id}:${doc.name}`;
 												const isLive = Boolean(selectedApplicant.isLive);
-												const status = isLive ? doc.status : (seededDocVerdicts[docKey] ?? doc.status);
+												const status = doc.status;
 												const settled = status === "Verified" || status === "Rejected";
 												return (
 													<li key={idx} style={{ padding: "0.75rem 0.5rem", borderBottom: idx < selectedApplicant.documents.length - 1 ? "1px solid var(--border-light)" : "none" }}>
@@ -367,8 +368,7 @@ export function EnterpriseApplicants() {
 														</div>
 													{!settled && selectedApplicant.assignedOfficerEmail === opsUser?.email && (
 														<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.5rem", paddingLeft: "1.875rem" }}>
-															<button onClick={() => setDocVerdict(docKey, isLive, doc.name, "Verified", opsUser?.name ?? "Consultant")} className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Verify</button>
-															<button onClick={() => setDocVerdict(docKey, isLive, doc.name, "Rejected", opsUser?.name ?? "Consultant")} className="btn btn--ghost btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Reject</button>
+															<a href="/documents" className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
 														</div>
 													)}
 													{!settled && selectedApplicant.assignedOfficerEmail !== opsUser?.email && (

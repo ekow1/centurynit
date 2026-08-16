@@ -153,7 +153,9 @@ export function AcceptInvite() {
 		<div className="invite-page">
 			<div className="invite-card">
 				<p className="invite-card__eyebrow">{preview?.organisation}</p>
-				<h1 className="invite-card__title">Set your password</h1>
+				<h1 className="invite-card__title">
+					{preview?.hasExistingLogin ? "Confirm your password" : "Set your password"}
+				</h1>
 				<p className="invite-card__body">
 					Hello {preview?.name}. You have been invited as{" "}
 					<strong>{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}</strong>
@@ -163,19 +165,22 @@ export function AcceptInvite() {
 
 				<form onSubmit={submit} className="invite-form">
 					<div className="field">
-						<label htmlFor="invite-password">Choose a password</label>
+						<label htmlFor="invite-password">
+							{preview?.hasExistingLogin ? "Your existing password" : "Choose a password"}
+						</label>
 						<input
 							id="invite-password"
 							type="password"
 							className="input input--full-border"
-							autoComplete="new-password"
+							autoComplete={preview?.hasExistingLogin ? "current-password" : "new-password"}
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							required
 						/>
 						<p className={`invite-hint ${tooShort ? "invite-hint--bad" : ""}`}>
-							At least 12 characters. Nobody else — including whoever invited you — ever
-							sees it.
+							{preview?.hasExistingLogin
+								? "This email already has a login. Enter the password you already use."
+								: "At least 12 characters. Nobody else — including whoever invited you — ever sees it."}
 						</p>
 					</div>
 

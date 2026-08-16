@@ -1,50 +1,29 @@
-import { useMemo, useState } from "react";
-import { useOpsState } from "./OpsStateContext";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { bookingsApi } from "century-nit-core/api";
+import type { Booking } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 
 const HOURS = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function parseDateAndTime(dateTime: string): { date: string | null; time: string | null } {
-	if (!dateTime) return { date: null, time: null };
-	const lower = dateTime.toLowerCase();
-	const now = new Date();
-
-	const dayMap: Record<string, number> = {
-		monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6, sunday: 0,
-		today: now.getDay(),
-		tomorrow: (now.getDay() + 1) % 7,
-	};
-
-	let targetDay: number | null = null;
-	for (const [word, day] of Object.entries(dayMap)) {
-		if (lower.includes(word)) {
-			targetDay = day;
-			break;
-		}
-	}
-
-	const timeMatch = dateTime.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-	let time: string | null = null;
-	if (timeMatch) {
-		let h = parseInt(timeMatch[1], 10);
-		const m = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-		const period = timeMatch[3]?.toLowerCase();
-		if (period === "pm" && h < 12) h += 12;
-		if (period === "am" && h === 12) h = 0;
-		time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-	}
-
-	if (targetDay !== null) {
-		const diff = (targetDay - now.getDay() + 7) % 7;
-		const d = new Date(now);
-		d.setDate(d.getDate() + diff);
-		const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-		return { date, time };
-	}
-
-	return { date: null, time };
+function localParts(iso: string, timeZone: string): { date: string; hour: string } {
+	const at = new Date(iso);
+	const date = new Intl.DateTimeFormat("en-CA", {
+		timeZone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(at);
+	const hour = new Intl.DateTimeFormat("en-GB", {
+		timeZone,
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	})
+		.format(at)
+		.slice(0, 2);
+	return { date, hour: `${hour}:00` };
 }
 
 function getWeekDates(anchor: Date): Date[] {
@@ -65,15 +44,27 @@ function dateToStr(d: Date): string {
 }
 
 export function EnterpriseAppointments() {
-	const { consultations } = useOpsState();
-	const { opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { canSeeAllBranches } = useOpsAuth();
 	const [branchFilter, setBranchFilter] = useState<string>("all");
 	const [weekAnchor, setWeekAnchor] = useState<Date>(new Date());
+	const [bookings, setBookings] = useState<Booking[]>([]);
+	const [loadError, setLoadError] = useState<string | null>(null);
+	const [selected, setSelected] = useState<Booking | null>(null);
+	const [acting, setActing] = useState(false);
 
-	const scopedConsultations = scopeRecords(
-		consultations,
-		(c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
-	);
+	const refresh = useCallback(async () => {
+		try {
+			const { bookings: rows } = await bookingsApi.list();
+			setBookings(rows.filter((b) => b.status !== "CANCELLED"));
+			setLoadError(null);
+		} catch (err) {
+			setLoadError(err instanceof Error ? err.message : "Could not load bookings");
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
 
 	const weekDates = useMemo(() => getWeekDates(weekAnchor), [weekAnchor]);
 	const weekStart = weekDates[0];
@@ -81,19 +72,18 @@ export function EnterpriseAppointments() {
 	const monthLabel = weekStart.toLocaleString("en", { month: "long", year: "numeric" });
 
 	const filtered = useMemo(() => {
-		return scopedConsultations.filter((c) => {
-			if (branchFilter !== "all" && c.branch !== branchFilter) return false;
+		return bookings.filter((b) => {
+			if (branchFilter !== "all" && b.branchId !== branchFilter) return false;
 			return true;
 		});
-	}, [scopedConsultations, branchFilter]);
+	}, [bookings, branchFilter]);
 
 	const appointmentsByDate = useMemo(() => {
-		const map: Record<string, { consultation: typeof filtered[number]; time: string }[]> = {};
-		for (const c of filtered) {
-			const { date, time } = parseDateAndTime(c.dateTime);
-			if (!date || !time) continue;
+		const map: Record<string, { booking: Booking; time: string }[]> = {};
+		for (const b of filtered) {
+			const { date, hour } = localParts(b.startsAt, b.timezone);
 			if (!map[date]) map[date] = [];
-			map[date].push({ consultation: c, time });
+			map[date].push({ booking: b, time: hour });
 		}
 		return map;
 	}, [filtered]);
@@ -101,9 +91,25 @@ export function EnterpriseAppointments() {
 	const stats = useMemo(() => {
 		const online = filtered.filter((c) => c.type === "online").length;
 		const inPerson = filtered.filter((c) => c.type === "in_person").length;
-		const confirmed = filtered.filter((c) => c.slotConfirmed).length;
+		const confirmed = filtered.filter((c) => c.status === "ASSIGNED" || c.status === "CONFIRMED" || c.status === "RESCHEDULED").length;
 		return { total: filtered.length, online, inPerson, confirmed };
 	}, [filtered]);
+
+	async function act(kind: "complete" | "no-show", booking: Booking) {
+		setActing(true);
+		try {
+			const updated =
+				kind === "complete"
+					? await bookingsApi.complete(booking.id)
+					: await bookingsApi.markNoShow(booking.id);
+			setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+			setSelected(updated);
+		} catch (err) {
+			setLoadError(err instanceof Error ? err.message : "Could not update booking");
+		} finally {
+			setActing(false);
+		}
+	}
 
 	function shiftWeek(direction: number) {
 		const d = new Date(weekAnchor);
@@ -181,29 +187,36 @@ export function EnterpriseAppointments() {
 									const dayAppts = appointmentsByDate[dateStr]?.filter((a) => a.time === hour) ?? [];
 									return (
 										<div key={i} style={{ borderLeft: "1px solid var(--border-light)", padding: "0.25rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-											{dayAppts.map(({ consultation: a }) => (
-												<div
+											{dayAppts.map(({ booking: a }) => (
+												<button
+													type="button"
 													key={a.id}
+													onClick={() => setSelected(a)}
 													style={{
 														background: a.type === "online" ? "#dbeafe" : "#d1fae5",
 														borderLeft: `3px solid ${a.type === "online" ? "#2563eb" : "#059669"}`,
 														padding: "0.3rem 0.4rem",
 														fontSize: "0.7rem",
 														borderRadius: "2px",
-														cursor: "default",
+														cursor: "pointer",
+														textAlign: "left",
+														borderTop: "none",
+														borderRight: "none",
+														borderBottom: "none",
 													}}
-													title={`${a.applicantName} - ${a.type}${a.slotConfirmed ? " (confirmed)" : ""}`}
+													title={`${a.clientName} — ${a.type} · ${a.status}`}
 												>
 													<div style={{ fontWeight: 600, color: "var(--foreground)" }}>
-														{a.applicantName}
+														{a.clientName}
 													</div>
 													<div style={{ opacity: 0.6, fontSize: "0.65rem" }}>
 														{a.type === "online" ? "Online" : "In-Person"}
-														{a.slotConfirmed ? " · confirmed" : ""}
+														{" · "}
+														{a.status.toLowerCase().replace("_", " ")}
 													</div>
-													{a.meetingLink && (
+													{a.meetingUrl && (
 														<a
-															href={a.meetingLink}
+															href={a.meetingUrl}
 															target="_blank"
 															rel="noopener noreferrer"
 															style={{ fontSize: "0.65rem", color: "#2563eb", display: "block", marginTop: "0.15rem" }}
@@ -212,18 +225,7 @@ export function EnterpriseAppointments() {
 															Join →
 														</a>
 													)}
-													{a.mapsUrl && (
-														<a
-															href={a.mapsUrl}
-															target="_blank"
-															rel="noopener noreferrer"
-															style={{ fontSize: "0.65rem", color: "#059669", display: "block", marginTop: "0.15rem" }}
-															onClick={(e) => e.stopPropagation()}
-														>
-															Directions →
-														</a>
-													)}
-												</div>
+												</button>
 											))}
 										</div>
 									);
@@ -244,6 +246,38 @@ export function EnterpriseAppointments() {
 					</div>
 				</div>
 			</div>
+
+			{loadError ? (
+				<p className="ops-modal__error" role="alert">{loadError}</p>
+			) : null}
+
+			{selected ? (
+				<div className="card card--pad mt-4">
+					<div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+						<div>
+							<p className="eyebrow">{selected.reference}</p>
+							<h2 className="section-title mt-1">{selected.clientName}</h2>
+							<p className="muted">
+								{selected.serviceName} · {selected.type === "online" ? "Online" : "In person"} · {selected.status.toLowerCase().replace("_", " ")}
+							</p>
+							<p className="muted">{selected.clientEmail}{selected.employeeName ? ` · ${selected.employeeName}` : ""}</p>
+						</div>
+						<div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+							{selected.status !== "COMPLETED" && selected.status !== "NO_SHOW" && selected.status !== "CANCELLED" ? (
+								<>
+									<button className="btn btn--primary btn--sm" disabled={acting} onClick={() => act("complete", selected)}>
+										Mark completed
+									</button>
+									<button className="btn btn--ghost btn--sm" disabled={acting} onClick={() => act("no-show", selected)}>
+										No-show
+									</button>
+								</>
+							) : null}
+							<button className="btn btn--ghost btn--sm" onClick={() => setSelected(null)}>Close</button>
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			{filtered.length === 0 && (
 				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>

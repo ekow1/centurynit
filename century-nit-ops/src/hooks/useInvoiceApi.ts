@@ -101,6 +101,7 @@ export function useInvoiceApi() {
 		async (input: {
 			applicantName: string;
 			applicantEmail?: string;
+			clientUserId?: string;
 			type: InvoiceType;
 			lines: OpsInvoiceLine[];
 			note?: string;
@@ -112,6 +113,7 @@ export function useInvoiceApi() {
 			const created = await apiCreateInvoice({
 				applicantName: input.applicantName,
 				applicantEmail: input.applicantEmail,
+				clientUserId: input.clientUserId,
 				type: apiType,
 				lines: input.lines.map((l) => ({
 					label: l.label,

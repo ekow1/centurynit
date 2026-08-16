@@ -636,3 +636,382 @@ export const settingsAudit = pgTable(
 		byKey: index("settings_audit_key_idx").on(t.key, t.at),
 	}),
 );
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Applicant journey
+ *
+ * An applicant is a person. A consultation is the assessment case, usually
+ * created from a booking. An application is the school-file that follows a
+ * successful assessment. Comments are shared across both case types.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const consultationStatusEnum = pgEnum("consultation_status", [
+	"UNDER_REVIEW",
+	"ASSIGNED",
+	"IN_ASSESSMENT",
+	"COMPLETED",
+	"CANCELLED",
+]);
+
+export const applicationStatusEnum = pgEnum("application_status", [
+	"UNDER_REVIEW",
+	"ACCEPTED",
+	"ACTION_REQUIRED",
+	"REJECTED",
+]);
+
+export const visaStageEnum = pgEnum("visa_stage", [
+	"locked",
+	"pending",
+	"biometrics",
+	"decision",
+	"complete",
+]);
+
+export const caseCommentKindEnum = pgEnum("case_comment_kind", [
+	"comment",
+	"recommendation",
+	"document_request",
+	"status",
+	"assignment",
+]);
+
+export const caseTargetEnum = pgEnum("case_target", ["consultation", "application"]);
+
+export const applicants = pgTable(
+	"applicants",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		userId: text("user_id")
+			.unique()
+			.references(() => users.id, { onDelete: "set null" }),
+		email: varchar("email", { length: 255 }).notNull().unique(),
+		name: text("name").notNull(),
+		phone: varchar("phone", { length: 40 }),
+		branch: varchar("branch", { length: 64 }).notNull(),
+		targetCountry: varchar("target_country", { length: 80 }),
+		assignedOfficerId: uuid("assigned_officer_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		profile: jsonb("profile").$type<Record<string, string>>().notNull().default({}),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byOfficer: index("applicants_officer_idx").on(t.assignedOfficerId),
+		byBranch: index("applicants_branch_idx").on(t.branch),
+	}),
+);
+
+export const consultations = pgTable(
+	"consultations",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		reference: varchar("reference", { length: 32 }).notNull(),
+		bookingId: uuid("booking_id")
+			.unique()
+			.references(() => bookings.id, { onDelete: "set null" }),
+		applicantId: uuid("applicant_id")
+			.notNull()
+			.references(() => applicants.id, { onDelete: "cascade" }),
+		branch: varchar("branch", { length: 64 }).notNull(),
+		type: varchar("type", { length: 32 }).notNull().default("online"),
+		targetCountry: varchar("target_country", { length: 80 }),
+		status: consultationStatusEnum("status").notNull().default("UNDER_REVIEW"),
+		assignedOfficerId: uuid("assigned_officer_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		assignedAt: timestamp("assigned_at", { withTimezone: true }),
+		assignedBy: uuid("assigned_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		slotConfirmed: boolean("slot_confirmed").notNull().default(false),
+		assessmentResult: jsonb("assessment_result").$type<{
+			outcome: string;
+			notes: string;
+			recCountry: string;
+			recUniversity: string;
+			recProgram: string;
+			recPackage: string;
+		}>(),
+		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplicant: index("consultations_applicant_idx").on(t.applicantId),
+		byOfficer: index("consultations_officer_idx").on(t.assignedOfficerId, t.status),
+		byStatus: index("consultations_status_idx").on(t.status),
+	}),
+);
+
+export const applications = pgTable(
+	"applications",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		appNumber: varchar("app_number", { length: 32 }).notNull().unique(),
+		applicantId: uuid("applicant_id")
+			.notNull()
+			.references(() => applicants.id, { onDelete: "cascade" }),
+		consultationId: uuid("consultation_id").references(() => consultations.id, {
+			onDelete: "set null",
+		}),
+		university: text("university").notNull(),
+		program: text("program").notNull(),
+		country: varchar("country", { length: 80 }).notNull(),
+		degreeLevel: varchar("degree_level", { length: 64 }).notNull().default("Master's"),
+		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		stage: varchar("stage", { length: 80 }).notNull().default("Document Verification"),
+		status: applicationStatusEnum("status").notNull().default("UNDER_REVIEW"),
+		fundingTrack: text("funding_track"),
+		notes: text("notes"),
+		checklist: jsonb("checklist")
+			.$type<{ id: string; label: string; checked: boolean }[]>()
+			.notNull()
+			.default([]),
+		visaStage: visaStageEnum("visa_stage").notNull().default("locked"),
+		visaInvoicePaid: boolean("visa_invoice_paid").notNull().default(false),
+		visaCounselorNote: text("visa_counselor_note"),
+		paymentPlanId: varchar("payment_plan_id", { length: 32 }),
+		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
+		agencySettled: boolean("agency_settled").notNull().default(false),
+		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),
+		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
+		submittedAt: timestamp("submitted_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplicant: index("applications_applicant_idx").on(t.applicantId),
+		byStaff: index("applications_staff_idx").on(t.assignedStaffId, t.status),
+		byStatus: index("applications_status_idx").on(t.status, t.stage),
+	}),
+);
+
+export const caseComments = pgTable(
+	"case_comments",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		targetType: caseTargetEnum("target_type").notNull(),
+		targetId: uuid("target_id").notNull(),
+		kind: caseCommentKindEnum("kind").notNull().default("comment"),
+		text: text("text").notNull(),
+		authorName: text("author_name").notNull(),
+		authorOpsUserId: uuid("author_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byTarget: index("case_comments_target_idx").on(t.targetType, t.targetId, t.at),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * School Applications & Tracking (Phase 1)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const schoolTrackStatusEnum = pgEnum("school_track_status", [
+	"Draft",
+	"Preparing Application",
+	"Documents under review",
+	"Submitted to University",
+	"Conditional Offer Received",
+	"Unconditional Offer",
+	"Offer Accepted",
+	"Offer Declined",
+	"Application Rejected",
+	"Waitlisted",
+	"Withdrawn",
+]);
+
+export const schoolApplications = pgTable(
+	"school_applications",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicantId: uuid("applicant_id")
+			.notNull()
+			.references(() => applicants.id, { onDelete: "cascade" }),
+		applicationId: uuid("application_id").references(() => applications.id, {
+			onDelete: "set null",
+		}),
+		destinationId: varchar("destination_id", { length: 64 }).notNull(),
+		universityId: text("university_id").notNull(),
+		programId: text("program_id").notNull(),
+		intake: varchar("intake", { length: 64 }).notNull(),
+		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
+		handlerNote: text("handler_note"),
+		financialNote: text("financial_note"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplicant: index("school_applications_applicant_idx").on(t.applicantId),
+		byApplication: index("school_applications_application_idx").on(t.applicationId),
+		byStatus: index("school_applications_status_idx").on(t.status),
+	}),
+);
+
+export const schoolTrackEvents = pgTable(
+	"school_track_events",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		schoolApplicationId: uuid("school_application_id")
+			.notNull()
+			.references(() => schoolApplications.id, { onDelete: "cascade" }),
+		status: schoolTrackStatusEnum("status").notNull(),
+		note: text("note").notNull().default(""),
+		financialNote: text("financial_note"),
+		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		bySchool: index("school_track_events_school_idx").on(t.schoolApplicationId, t.at),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Support & Helpdesk Tickets (Phase 1)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const ticketStatusEnum = pgEnum("ticket_status", [
+	"open",
+	"pending",
+	"resolved",
+	"closed",
+]);
+
+export const ticketPriorityEnum = pgEnum("ticket_priority", [
+	"low",
+	"medium",
+	"high",
+	"urgent",
+]);
+
+export const ticketSenderTypeEnum = pgEnum("ticket_sender_type", [
+	"applicant",
+	"staff",
+	"system",
+]);
+
+export const tickets = pgTable(
+	"tickets",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		clientUserId: text("client_user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		applicantId: uuid("applicant_id").references(() => applicants.id, {
+			onDelete: "set null",
+		}),
+		applicantName: text("applicant_name").notNull(),
+		subject: varchar("subject", { length: 255 }).notNull(),
+		category: varchar("category", { length: 64 }).notNull().default("General Inquiry"),
+		status: ticketStatusEnum("status").notNull().default("open"),
+		priority: ticketPriorityEnum("priority").notNull().default("medium"),
+		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byClient: index("tickets_client_idx").on(t.clientUserId, t.status),
+		byStaff: index("tickets_staff_idx").on(t.assignedStaffId, t.status),
+		byStatus: index("tickets_status_idx").on(t.status, t.createdAt),
+	}),
+);
+
+export const ticketMessages = pgTable(
+	"ticket_messages",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		ticketId: uuid("ticket_id")
+			.notNull()
+			.references(() => tickets.id, { onDelete: "cascade" }),
+		senderType: ticketSenderTypeEnum("sender_type").notNull().default("applicant"),
+		senderId: text("sender_id"),
+		senderName: text("sender_name").notNull(),
+		message: text("message").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byTicket: index("ticket_messages_ticket_idx").on(t.ticketId, t.createdAt),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * CRM Leads (Phase 1)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const leadStageEnum = pgEnum("lead_stage", [
+	"New Lead",
+	"Contacted",
+	"Consultation Booked",
+	"Assessment Complete",
+	"Enrolled",
+	"Lost",
+]);
+
+export const leads = pgTable(
+	"leads",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		name: text("name").notNull(),
+		email: varchar("email", { length: 255 }).notNull(),
+		phone: varchar("phone", { length: 40 }),
+		source: varchar("source", { length: 64 }).notNull().default("Web Inquiry"),
+		stage: leadStageEnum("stage").notNull().default("New Lead"),
+		targetCountry: varchar("target_country", { length: 80 }),
+		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		notes: text("notes"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byStage: index("leads_stage_idx").on(t.stage, t.createdAt),
+		byEmail: index("leads_email_idx").on(t.email),
+		byStaff: index("leads_staff_idx").on(t.assignedStaffId),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Payment Gateway Transactions (Paystack / Stripe)
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const paymentGatewayEnum = pgEnum("payment_gateway", ["paystack", "stripe"]);
+export const paymentStatusEnum = pgEnum("payment_status", [
+	"pending",
+	"success",
+	"failed",
+	"reversed",
+]);
+
+export const paymentTransactions = pgTable(
+	"payment_transactions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		invoiceId: uuid("invoice_id")
+			.notNull()
+			.references(() => invoices.id, { onDelete: "cascade" }),
+		clientUserId: text("client_user_id").references(() => users.id, {
+			onDelete: "set null",
+		}),
+		reference: varchar("reference", { length: 128 }).notNull().unique(),
+		gateway: paymentGatewayEnum("gateway").notNull().default("paystack"),
+		amountCents: integer("amount_cents").notNull(),
+		currency: varchar("currency", { length: 16 }).notNull().default("USD"),
+		status: paymentStatusEnum("status").notNull().default("pending"),
+		rawWebhookPayload: jsonb("raw_webhook_payload"),
+		paidAt: timestamp("paid_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byInvoice: index("payment_transactions_invoice_idx").on(t.invoiceId),
+		byReference: index("payment_transactions_ref_idx").on(t.reference),
+		byStatus: index("payment_transactions_status_idx").on(t.status),
+	}),
+);
+

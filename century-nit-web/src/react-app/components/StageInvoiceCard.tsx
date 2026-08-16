@@ -134,7 +134,7 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta }
 						<div className="invoice-card__actions">
 							<p className="mono muted mb-2">Pay to unlock the next stage</p>
 							<Button type="button" onClick={onPay} arrow disabled={paying}>
-								{paying ? "Processing…" : payCta ?? `Simulate Paystack · ${formatDualCurrency(payable)}`}
+								{paying ? "Processing…" : payCta ?? `Pay with Paystack · ${formatDualCurrency(payable)}`}
 							</Button>
 						</div>
 					) : null}

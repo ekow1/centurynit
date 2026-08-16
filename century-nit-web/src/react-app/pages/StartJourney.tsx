@@ -70,7 +70,7 @@ const FEATURES = [
 type AuthStep = "signin" | "forgot" | "verify" | "set" | "done";
 
 export function StartJourney() {
-	const { isAuthenticated, signIn, authUser } = useAppState();
+	const { isAuthenticated, signIn, sessionStatus } = useAppState();
 	const nav = useNavigate();
 	const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 	const [tab, setTab] = useState<"social" | "email" | "phone" | "otp">("social");
@@ -90,6 +90,20 @@ export function StartJourney() {
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [error, setError] = useState("");
+
+	// While the session probe is in flight, neither show the sign-in form nor
+	// bounce — the user may already be signed in server-side, in which case
+	// `sessionStatus` will flip to `authenticated` and the redirect below
+	// fires on the next render. Showing the form now would flash the login
+	// screen at a logged-in user.
+	if (sessionStatus === "checking") {
+		return (
+			<div className="route-loading" role="status" aria-live="polite">
+				<span className="route-loading__spinner" aria-hidden="true" />
+				<span className="sr-only">Checking your session…</span>
+			</div>
+		);
+	}
 
 	if (isAuthenticated) {
 		return <Navigate to="/portal" replace />;
@@ -446,7 +460,7 @@ export function StartJourney() {
 											Continue with {label}
 										</button>
 									))}
-									<p className="auth-social__note mono">Mockup · no real accounts</p>
+									<p className="auth-social__note mono">Apple &amp; LinkedIn not available yet</p>
 								</div>
 							) : tab === "email" ? (
 								<form className="auth-form" onSubmit={onEmail} noValidate>
@@ -575,18 +589,7 @@ export function StartJourney() {
 								</form>
 							)}
 
-							<div className="start-journey__divider" />
-
-							<button
-								type="button"
-								className="start-journey__guest"
-								onClick={() =>
-									finish("email", authUser?.name || "Guest Explorer", "guest@centurynit.example")
-								}
-							>
-								Skip as guest →
-							</button>
-						</>
+							</>
 					) : null}
 
 					{step === "forgot" ? (

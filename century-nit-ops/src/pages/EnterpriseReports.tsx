@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER } from "century-nit-core";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
@@ -45,7 +46,8 @@ function KPICard({ label, value, note, inverted }: { label: string; value: strin
 
 export function EnterpriseReports() {
 	const { opsUser, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants, leads, packages, invoices } = useOpsState();
+	const { consultations, applications, applicants, leads, packages } = useOpsState();
+	const { invoices } = useInvoiceApi();
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [branchFilter, setBranchFilter] = useState("all");

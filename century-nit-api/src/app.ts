@@ -15,6 +15,17 @@ import { invoicesRouter } from "./routes/invoices.js";
 import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
 import { settingsRouter } from "./routes/settings.js";
+import { webhooksRouter } from "./routes/webhooks.js";
+import {
+	applicantsRouter,
+	applicationsRouter,
+	consultationsRouter,
+	meRouter,
+} from "./routes/cases.js";
+import { meSchoolsRouter, opsSchoolsRouter } from "./routes/schools.js";
+import { meTicketsRouter, opsTicketsRouter } from "./routes/tickets.js";
+import { paymentsRouter } from "./routes/payments.js";
+
 
 /**
  * Just enough of the OpenAPI shape to merge two documents.
@@ -92,6 +103,7 @@ export function createApp() {
 	 */
 	app.route("/api/health", health);
 	app.route("/api/auth", auth);
+	app.route("/api/webhooks", webhooksRouter);
 
 	/*
 	 * Everything that is genuinely our contract lives under a version prefix.
@@ -108,6 +120,16 @@ export function createApp() {
 	app.route(`${API_PREFIX}/staff`, staffRouter);
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
+	app.route(`${API_PREFIX}/consultations`, consultationsRouter);
+	app.route(`${API_PREFIX}/applications`, applicationsRouter);
+	app.route(`${API_PREFIX}/applicants`, applicantsRouter);
+	app.route(`${API_PREFIX}/me/schools`, meSchoolsRouter);
+	app.route(`${API_PREFIX}/schools`, opsSchoolsRouter);
+	app.route(`${API_PREFIX}/me/tickets`, meTicketsRouter);
+	app.route(`${API_PREFIX}/tickets`, opsTicketsRouter);
+	app.route(`${API_PREFIX}/payments`, paymentsRouter);
+	app.route(`${API_PREFIX}/me`, meRouter);
+
 
 	const openApiInfo = {
 		openapi: "3.1.0" as const,
@@ -155,6 +177,18 @@ export function createApp() {
 					"`POST /staff/bootstrap` is the only way to create the first account.",
 			},
 			{
+				name: "Consultations",
+				description: "Assessment cases. Created automatically when a booking is made.",
+			},
+			{
+				name: "Applications",
+				description: "School-application files opened after a successful assessment.",
+			},
+			{
+				name: "Applicants",
+				description: "Client profiles shared by consultations, applications and the portal.",
+			},
+			{
 				name: "Documents",
 				description: "Applicant document upload, review and download via signed URLs.",
 			},
@@ -162,6 +196,12 @@ export function createApp() {
 			{
 				name: "Settings",
 				description: "Platform integration credentials, managed from the ops console.",
+			},
+			{
+				name: "Webhooks",
+				description:
+					"Provider event delivery. Unversioned — Paystack points a fixed URL " +
+					"at this Worker and retries failures, so the contract must not move.",
 			},
 			{
 				name: "Health",

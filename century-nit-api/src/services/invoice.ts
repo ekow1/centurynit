@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type {
 	ApiInvoice,
 	CreateInvoice,
@@ -31,14 +31,17 @@ type Actor = { opsUserId: string; name: string; email: string };
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
-/** `INV-2026-0007`. Counted within the year so numbers restart annually. */
+/** `INV-2026-0007`. Advisory-locked so concurrent creates cannot collide. */
 async function nextInvoiceNumber(tx: typeof db): Promise<string> {
 	const year = new Date().getUTCFullYear();
+	await tx.execute(sql`SELECT pg_advisory_xact_lock(710002, ${year})`);
 	const [row] = await tx
-		.select({ count: sql<number>`count(*)::int` })
+		.select({
+			max: sql<number>`coalesce(max(split_part(${invoices.invoiceNumber}, '-', 3)::int), 0)::int`,
+		})
 		.from(invoices)
-		.where(gte(invoices.createdAt, new Date(Date.UTC(year, 0, 1))));
-	return `INV-${year}-${String((row?.count ?? 0) + 1).padStart(4, "0")}`;
+		.where(sql`${invoices.invoiceNumber} like ${`INV-${year}-%`}`);
+	return `INV-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
 }
 
 async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promise<number> {
@@ -210,6 +213,21 @@ export async function listInvoicesForClient(clientUserId: string): Promise<Invoi
 		.orderBy(desc(invoices.createdAt));
 }
 
+/** Whether a payment with this gateway reference is already recorded (idempotency). */
+export async function paymentWithReferenceExists(
+	invoiceId: string,
+	reference: string,
+): Promise<boolean> {
+	const [row] = await db
+		.select({ id: invoicePayments.id })
+		.from(invoicePayments)
+		.where(
+			and(eq(invoicePayments.invoiceId, invoiceId), eq(invoicePayments.reference, reference)),
+		)
+		.limit(1);
+	return Boolean(row);
+}
+
 /* ── Commands ────────────────────────────────────────────────────────────── */
 
 export async function createInvoice(input: {
@@ -257,6 +275,42 @@ export async function createInvoice(input: {
 	});
 
 	return row;
+}
+
+/**
+ * Applicant self-service: record a payment against one of their own invoices.
+ *
+ * The staff-gated `recordPayment` above is the only writer for staff; this is
+ * the mirror for a logged-in applicant, restricted to invoices that carry their
+ * `clientUserId`. The actor is derived from the session, never from the body.
+ */
+export async function recordClientPayment(input: {
+	invoiceId: string;
+	userId: string;
+	userName: string;
+	userEmail: string;
+	amountCents: number;
+	method: string;
+	gateway?: string;
+	reference?: string;
+}): Promise<InvoiceRow> {
+	const row = await getInvoice(input.invoiceId);
+	if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+	if (row.clientUserId !== input.userId) {
+		throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
+	}
+	return recordPayment({
+		invoiceId: input.invoiceId,
+		amountCents: input.amountCents,
+		method: input.method,
+		gateway: input.gateway,
+		reference: input.reference,
+		actor: {
+			opsUserId: input.userId,
+			name: input.userName || "Applicant",
+			email: input.userEmail,
+		},
+	});
 }
 
 export async function recordPayment(input: {
@@ -335,6 +389,15 @@ export async function voidInvoice(input: {
 		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
 		if (row.status === "void") {
 			throw new HttpError(409, "INVOICE_VOID", "Invoice is already void");
+		}
+
+		const paidCents = await paidCentsOf(row.id, txDb);
+		if (paidCents > 0) {
+			throw new HttpError(
+				409,
+				"INVOICE_HAS_PAYMENTS",
+				"Cannot void an invoice that already has payments. Issue a credit note instead.",
+			);
 		}
 
 		const [updated] = await tx

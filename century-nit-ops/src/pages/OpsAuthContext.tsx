@@ -128,7 +128,14 @@ const OPS_AUTH_KEY = "century-nit-ops-auth";
 
 /** Roles were reduced from six to three - drop any stale session. */
 function isKnownRole(role: unknown): role is OpsRole {
-	return role === "manager" || role === "coordinator" || role === "consultant" || role === "finance" || role === "admin";
+	return (
+		role === "super_admin" ||
+		role === "manager" ||
+		role === "coordinator" ||
+		role === "consultant" ||
+		role === "finance" ||
+		role === "admin"
+	);
 }
 
 function loadSession(): OpsUser | null {
@@ -159,9 +166,11 @@ interface OpsAuthContextValue {
 	/** True until the initial session check completes. */
 	authInitializing: boolean;
 	/** Sign in with real credentials via Better Auth. */
-	opsSignInWithCredentials: (email: string, password: string) => Promise<void>;
+	opsSignInWithCredentials: (email: string, password: string) => Promise<OpsUser>;
 	/** Mock sign-in by role selection (dev only). */
 	opsSignIn: (role: OpsRole) => void;
+	/** True when the session came from the prototype role picker, not the API. */
+	isMockSession: boolean;
 	opsSignOut: () => void;
 	hasPermission: (module: OpsModule) => boolean;
 	getAllowedModules: () => OpsModule[];
@@ -208,6 +217,7 @@ function staffToOpsUser(s: NonNullable<SessionResponse["staff"]>): OpsUser {
 export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
+	const [isMockSession, setIsMockSession] = useState(false);
 
 	const opsRole = opsUser?.role ?? null;
 
@@ -223,10 +233,11 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				if (staff) {
 					const user = staffToOpsUser(staff);
 					setOpsUser(user);
+					setIsMockSession(false);
 					saveSession(user);
 				}
 			} catch {
-				// API not reachable — keep whatever mock session exists.
+				// API not reachable — keep a mock session only in development.
 			} finally {
 				if (!cancelled) setAuthInitializing(false);
 			}
@@ -240,18 +251,23 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
+		setIsMockSession(false);
 		saveSession(user);
+		return user;
 	}, []);
 
 	const opsSignIn = useCallback((role: OpsRole) => {
+		if (!import.meta.env.DEV) return;
 		const user = MOCK_USERS[role];
 		setOpsUser(user);
+		setIsMockSession(true);
 		saveSession(user);
 	}, []);
 
 	const opsSignOut = useCallback(() => {
 		apiSignOut().catch(() => {});
 		setOpsUser(null);
+		setIsMockSession(false);
 		saveSession(null);
 	}, []);
 
@@ -293,6 +309,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				opsSignInWithCredentials,
 				opsSignIn,
 				opsSignOut,
+				isMockSession,
 				hasPermission,
 				getAllowedModules,
 				canSeeAllBranches,

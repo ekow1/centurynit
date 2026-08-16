@@ -1,6 +1,9 @@
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_DESCRIPTIONS, ROLE_HOME, type OpsRole } from "./OpsAuthContext";
 import { useState } from "react";
+import { publicSiteUrl } from "../lib/publicSite";
+
+const IS_DEV = import.meta.env.DEV;
 
 const ALL_ROLES: OpsRole[] = ["manager", "coordinator", "consultant", "finance", "admin"];
 
@@ -25,7 +28,7 @@ export function OpsLogin() {
 	const navigate = useNavigate();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [showForm, setShowForm] = useState(false);
+	const [showForm, setShowForm] = useState(!import.meta.env.DEV);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
@@ -49,8 +52,8 @@ export function OpsLogin() {
 		setError(null);
 		setLoading(true);
 		try {
-			await opsSignInWithCredentials(email, password);
-			navigate(ROLE_HOME.manager);
+			const user = await opsSignInWithCredentials(email, password);
+			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Sign-in failed");
 		} finally {
@@ -140,6 +143,7 @@ export function OpsLogin() {
 									<span>{loading ? "Signing in…" : "Sign In"}</span>
 									{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 								</button>
+								{IS_DEV ? (
 								<button
 									type="button"
 									onClick={() => setShowForm(false)}
@@ -148,9 +152,10 @@ export function OpsLogin() {
 									<span dangerouslySetInnerHTML={{ __html: BACK_SVG }} />
 									Back to role selection
 								</button>
+								) : null}
 							</form>
 						</>
-					) : (
+					) : IS_DEV ? (
 						<>
 							<div className="ops-login__head">
 								<span className="ops-login__badge">Prototype Mode</span>
@@ -183,12 +188,12 @@ export function OpsLogin() {
 								Sign in with email instead
 							</button>
 						</>
-					)}
+					) : null}
 				</div>
 
-				<Link to="/" className="ops-login__home">
+				<a href={publicSiteUrl()} className="ops-login__home">
 					&larr; Back to public site
-				</Link>
+				</a>
 			</div>
 		</div>
 	);

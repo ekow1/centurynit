@@ -1,32 +1,11 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { safeSetItem } from "century-nit-core";
+import { ticketsApi } from "century-nit-core/api";
 import type { InternalTicket, TicketCategory, TicketMessage } from "century-nit-core/ops";
 
 /**
- * Applicant-side access to the support tickets the Operations Center owns.
- *
- * The portal used to call `useOpsState()` directly and share the ops React
- * store. Now that ops is a separate app and a separate bundle, that import is
- * gone and this reads and writes the ops store through `localStorage` — the same
- * approach `OpsDirectiveBridge` and `useSiteContent` already take. Same origin,
- * so the key is shared; `storage` events mean a ticket raised in the portal
- * window appears in an open ops window without a refresh.
- *
- * Scope is deliberately narrow. The portal may only:
- *   - read `external` tickets belonging to the signed-in applicant
- *   - open a new `external` ticket
- *   - append an `applicant` message to one of its own threads
- *
- * Triage, assignment, escalation and status remain ops-only. Nothing here can
- * touch an `internal` ticket or another applicant's thread.
- *
- * ── On the read-modify-write ──
- * Two apps now write one key, so a simultaneous write from both windows can
- * lose one. That risk existed before the split (ops already wrote this key from
- * multiple tabs); it is not newly introduced, and at localStorage speeds the
- * window is sub-millisecond. It disappears entirely once tickets live behind
- * `/api/tickets` — see docs/API_MIGRATION_PLAN.md §4/§6, where this file should
- * be deleted rather than ported.
+ * Applicant-side access to support tickets backed by the live /api/v1/me/tickets API,
+ * with local synchronization for instant optimistic updates.
  */
 
 const OPS_STATE_KEY = "century-nit-ops-state";
@@ -60,10 +39,6 @@ function subscribe(onChange: () => void) {
 	};
 }
 
-/**
- * Apply a change to the ticket list inside the ops blob, leaving every other
- * key in that blob untouched. A no-op if ops has never initialised its store.
- */
 function mutateTickets(update: (tickets: InternalTicket[]) => InternalTicket[]): void {
 	const raw = readRaw();
 	if (!raw) return;
@@ -77,7 +52,6 @@ function mutateTickets(update: (tickets: InternalTicket[]) => InternalTicket[]):
 	safeSetItem(OPS_STATE_KEY, JSON.stringify(next));
 }
 
-/** `CNT-014` style, continuing whatever ops has already issued. */
 function nextRef(tickets: InternalTicket[]): string {
 	const highest = tickets.reduce((max, t) => {
 		const n = Number.parseInt(t.ref.replace(/\D/g, ""), 10);
@@ -99,24 +73,75 @@ export type NewTicketInput = {
 	applicantRef?: string;
 };
 
-/**
- * The applicant's own support threads, plus the two actions they can take.
- *
- * @param email the signed-in applicant's address; tickets are matched on it.
- *              With no email nothing is returned and the actions are inert.
- */
 export function useApplicantTickets(email: string | undefined) {
 	const raw = useSyncExternalStore(subscribe, readRaw);
+	const [serverTickets, setServerTickets] = useState<InternalTicket[]>([]);
 
-	const tickets = useMemo(() => {
+	// Background fetch from live server API
+	useEffect(() => {
+		if (!email) return;
+		let cancelled = false;
+		ticketsApi
+			.listMy()
+			.then((res) => {
+				if (cancelled) return;
+				const mapped: InternalTicket[] = res.tickets.map((t, idx) => ({
+					id: t.id,
+					ref: `CNT-${String(idx + 1).padStart(3, "0")}`,
+					source: "external",
+					title: t.subject,
+					description: t.messages[0]?.message || "",
+					category: t.category as TicketCategory,
+					status: t.status === "resolved" ? "Resolved" : t.status === "pending" ? "In Progress" : "Open",
+					priority: t.priority === "urgent" ? "Urgent" : t.priority === "high" ? "High" : "Medium",
+					createdBy: t.applicantName,
+					createdByEmail: email,
+					assignedTo: t.assignedStaffName || "",
+					assignedToEmail: "",
+					escalatedToAdmin: false,
+					createdAt: t.createdAt,
+					updatedAt: t.updatedAt,
+					messages: t.messages.map((m) => ({
+						id: m.id,
+						author: m.senderName,
+						role: m.senderType === "applicant" ? "applicant" : "staff",
+						body: m.message,
+						at: m.createdAt,
+					})),
+
+				}));
+				setServerTickets(mapped);
+			})
+			.catch(() => {
+				// Ignore background errors, rely on localStorage fallback
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [email]);
+
+	const localTickets = useMemo(() => {
 		if (!email) return [];
 		return parseTickets(raw)
 			.filter((t) => t.source === "external" && t.createdByEmail === email)
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 	}, [raw, email]);
 
+	const tickets = serverTickets.length > 0 ? serverTickets : localTickets;
+
 	const createTicket = useCallback((input: NewTicketInput) => {
 		const now = new Date().toISOString();
+		// Live server dispatch
+		ticketsApi
+			.create({
+				subject: input.title,
+				category: input.category,
+				message: input.description,
+				priority: "medium",
+			})
+			.catch((err) => console.warn("Failed to sync new ticket to API", err));
+
+
 		mutateTickets((existing) => {
 			const opening: TicketMessage = {
 				id: uid("m"),
@@ -139,7 +164,6 @@ export function useApplicantTickets(email: string | undefined) {
 				applicantRef: input.applicantRef,
 				createdAt: now,
 				updatedAt: now,
-				// Empty means unassigned — it lands in the ops triage queue.
 				assignedTo: "",
 				assignedToEmail: "",
 				escalatedToAdmin: false,
@@ -152,14 +176,17 @@ export function useApplicantTickets(email: string | undefined) {
 	const replyToTicket = useCallback(
 		(id: string, body: string, author: string) => {
 			const now = new Date().toISOString();
+			// Live server dispatch
+			ticketsApi
+				.reply(id, { message: body })
+				.catch((err) => console.warn("Failed to sync reply to API", err));
+
 			mutateTickets((existing) =>
 				existing.map((t) => {
-					// Re-check ownership at write time, not just in the filtered view.
 					if (t.id !== id || t.source !== "external" || t.createdByEmail !== email) return t;
 					return {
 						...t,
 						updatedAt: now,
-						// A reply reopens a resolved thread; ops owns every other status.
 						status: t.status === "Resolved" ? "Open" : t.status,
 						messages: [
 							...t.messages,
@@ -174,3 +201,4 @@ export function useApplicantTickets(email: string | undefined) {
 
 	return { tickets, createTicket, replyToTicket };
 }
+

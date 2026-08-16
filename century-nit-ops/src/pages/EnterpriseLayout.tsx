@@ -7,6 +7,7 @@ import { useLivePortalCase } from "./useLivePortalCase";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
+import { publicSiteUrl } from "../lib/publicSite";
 
 type NavItem = { to: string; module: OpsModule; label: string; blurb: string; icon: string };
 type NavGroup = { group: string; icon: string; blurb: string; children: NavItem[] };
@@ -229,6 +230,7 @@ const PATH_MODULE: Record<string, OpsModule> = {
 
 export function EnterpriseLayout() {
 	const { opsUser, opsRole, opsSignIn, opsSignOut, hasPermission } = useOpsAuth();
+	const isDev = import.meta.env.DEV;
 	const { openCommandPalette, liveCase, resetOpsState } = useOpsState();
 	const navigate = useNavigate();
 	const location = useLocation();
@@ -347,6 +349,7 @@ export function EnterpriseLayout() {
 								</div>
 							</div>
 							<p style={{ fontSize: "var(--text-xs)", opacity: 0.8, color: "#fff" }}>{staffBranchName(opsUser.branch)}</p>
+							{isDev ? (
 							<div className="ops-sidebar-role-switch">
 								<span className="eyebrow" style={{ fontSize: "0.6rem", opacity: 0.8, color: "#fff" }}>View as</span>
 								<select
@@ -359,14 +362,15 @@ export function EnterpriseLayout() {
 									))}
 								</select>
 							</div>
+							) : null}
 							<button type="button" className="btn btn--ghost btn--sm" onClick={opsSignOut} style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
 								Sign out
 							</button>
 						</>
 					)}
-					<Link to="/" className="link-arrow portal__home">
+					<a href={publicSiteUrl()} className="link-arrow portal__home">
 						← Public site
-					</Link>
+					</a>
 				</div>
 			</aside>
 
@@ -414,7 +418,7 @@ export function EnterpriseLayout() {
 							</Link>
 						)}
 
-						{/* Prototype reset */}
+						{isDev ? (
 						<button
 							type="button"
 							className="btn btn--ghost btn--sm ops-reset-btn"
@@ -427,6 +431,7 @@ export function EnterpriseLayout() {
 							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
 							Reset
 						</button>
+						) : null}
 					</div>
 				</header>
 				<div className="portal__content">

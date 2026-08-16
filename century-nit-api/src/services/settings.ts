@@ -1,3 +1,4 @@
+import { desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { platformSettings, settingsAudit } from "../db/schema.js";
 import { encrypt, decrypt } from "../lib/crypto.js";
@@ -35,7 +36,10 @@ export type SettingKey =
 	| "GOOGLE_WEBHOOK_URL"
 	| "GOOGLE_WEBHOOK_TOKEN"
 	| "BOOKING_BUFFER_MINUTES"
-	| "DEFAULT_TIMEZONE";
+	| "DEFAULT_TIMEZONE"
+	| "PAYSTACK_SECRET_KEY"
+	| "STRIPE_SECRET_KEY";
+
 
 /** All keys this service manages, with metadata for the UI. */
 export const SETTING_DEFS: Record<
@@ -132,7 +136,22 @@ export const SETTING_DEFS: Record<
 		secret: false,
 		description: "Default IANA zone for branches and working hours.",
 	},
+	PAYSTACK_SECRET_KEY: {
+		label: "Paystack Secret Key",
+		group: "Payments",
+		secret: true,
+		description:
+			"Server-side Paystack key used to open and verify applicant invoice checkouts. Starts with sk_live_ or sk_test_.",
+	},
+	STRIPE_SECRET_KEY: {
+		label: "Stripe Secret Key",
+		group: "Payments",
+		secret: true,
+		description:
+			"Server-side Stripe key used for international USD/GBP card checkouts. Starts with sk_live_ or sk_test_.",
+	},
 };
+
 
 const ALL_KEYS = Object.keys(SETTING_DEFS) as SettingKey[];
 
@@ -353,10 +372,9 @@ export async function getAuditLog(limit = 50): Promise<
 	const rows = await db
 		.select()
 		.from(settingsAudit)
-		.orderBy(settingsAudit.at)
+		.orderBy(desc(settingsAudit.at))
 		.limit(limit);
 	return rows
-		.reverse()
 		.map((r) => ({
 			id: r.id,
 			key: r.key,

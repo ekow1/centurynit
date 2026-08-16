@@ -1,10 +1,17 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CmsManager } from "./CmsManager";
 import { CMS_COLLECTIONS, resolveRecord } from "century-nit-core";
 import { useOpsAuth, ROLE_LABELS, ROLE_DESCRIPTIONS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
-import { staffBranchName } from "century-nit-core/ops";
+import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
+import { ApiError, staffApi } from "century-nit-core/api";
 import { PlatformSettings } from "./PlatformSettings";
+
+const INVITEABLE: Record<string, OpsRole[]> = {
+	super_admin: ["super_admin", "admin", "manager", "coordinator", "consultant", "finance"],
+	admin: ["manager", "coordinator", "consultant", "finance"],
+	manager: ["coordinator", "consultant", "finance"],
+};
 
 /**
  * The platform console. Every screen here is about running the software -
@@ -297,15 +304,132 @@ function SystemOverview() {
 	);
 }
 
+type StaffRow = {
+	id: string;
+	email: string;
+	name: string;
+	role: OpsRole;
+	branch: string | null;
+	active: boolean;
+	hasLogin: boolean;
+	mfaEnabled: boolean;
+};
+
 function UsersAndRoles() {
-	const { opsUser } = useOpsAuth();
+	const { opsUser, opsRole } = useOpsAuth();
 	const [roleFilter, setRoleFilter] = useState<"all" | OpsRole>("all");
 	const [search, setSearch] = useState("");
+	const [staff, setStaff] = useState<StaffRow[]>([]);
+	const [invitations, setInvitations] = useState<
+		{ id: string; email: string; name: string; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
+	>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const [flash, setFlash] = useState<string | null>(null);
+	const [inviting, setInviting] = useState(false);
+	const [editing, setEditing] = useState<StaffRow | null>(null);
+	const [draft, setDraft] = useState({ name: "", email: "", role: "consultant" as OpsRole, branch: "accra" });
 
-	const rows = STAFF_ACCOUNTS.filter((u) => (roleFilter === "all" || u.role === roleFilter) && (search === "" || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())));
+	const inviteable = INVITEABLE[opsRole ?? ""] ?? [];
+
+	const refresh = useCallback(async () => {
+		setError(null);
+		try {
+			const [staffRes, inviteRes] = await Promise.all([
+				staffApi.list(),
+				staffApi.listInvitations().catch(() => ({ invitations: [] })),
+			]);
+			setStaff(
+				staffRes.staff.map((s) => ({
+					...s,
+					role: s.role as OpsRole,
+				})),
+			);
+			setInvitations(inviteRes.invitations);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not load staff");
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void refresh();
+	}, [refresh]);
+
+	function say(msg: string) {
+		setFlash(msg);
+		window.setTimeout(() => setFlash(null), 4000);
+	}
+
+	async function submitInvite(e: React.FormEvent) {
+		e.preventDefault();
+		if (!draft.email.trim() || !draft.name.trim()) return;
+		try {
+			const created = await staffApi.createInvitation({
+				email: draft.email.trim(),
+				name: draft.name.trim(),
+				role: draft.role,
+				branch: draft.branch,
+			});
+			say(`Invitation sent to ${created.email}.`);
+			if (created.acceptUrl) {
+				try {
+					await navigator.clipboard.writeText(created.acceptUrl);
+					say(`Invitation sent. Accept link copied — pass it on if email is not configured.`);
+				} catch {
+					/* clipboard may be denied */
+				}
+			}
+			setInviting(false);
+			setDraft({ name: "", email: "", role: "consultant", branch: "accra" });
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not send invitation");
+		}
+	}
+
+	async function saveEdit(e: React.FormEvent) {
+		e.preventDefault();
+		if (!editing) return;
+		try {
+			await staffApi.update(editing.id, {
+				role: editing.role,
+				branch: editing.branch,
+				active: editing.active,
+			});
+			say(`${editing.name} updated.`);
+			setEditing(null);
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not update staff");
+		}
+	}
+
+	async function revoke(id: string) {
+		try {
+			await staffApi.revokeInvitation(id);
+			say("Invitation withdrawn.");
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not revoke invitation");
+		}
+	}
+
+	const rows = staff.filter(
+		(u) =>
+			(roleFilter === "all" || u.role === roleFilter) &&
+			(search === "" ||
+				u.name.toLowerCase().includes(search.toLowerCase()) ||
+				u.email.toLowerCase().includes(search.toLowerCase())),
+	);
+	const pending = invitations.filter((i) => i.status === "PENDING");
 
 	return (
 		<>
+			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
+			{error ? <p className="ops-modal__error" role="alert">{error}</p> : null}
+
 			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
 				<input type="search" placeholder="Search staff..." className="input input--sm" style={{ maxWidth: "260px" }} value={search} onChange={(e) => setSearch(e.target.value)} />
 				<div className="admin-section-head__actions">
@@ -320,9 +444,91 @@ function UsersAndRoles() {
 							</button>
 						))}
 					</div>
-					<button className="btn btn--primary btn--sm">+ Add User</button>
+					{inviteable.length > 0 ? (
+						<button className="btn btn--primary btn--sm" onClick={() => setInviting(true)}>+ Invite</button>
+					) : null}
 				</div>
 			</div>
+
+			{inviting ? (
+				<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={submitInvite}>
+					<h2 className="section-title mb-3">Invite a staff member</h2>
+					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+						<label className="field">
+							Name
+							<input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
+						</label>
+						<label className="field">
+							Email
+							<input className="input" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} required />
+						</label>
+						<label className="field">
+							Role
+							<select className="input" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}>
+								{inviteable.map((r) => (
+									<option key={r} value={r}>{ROLE_LABELS[r]}</option>
+								))}
+							</select>
+						</label>
+						<label className="field">
+							Branch
+							<select className="input" value={draft.branch} onChange={(e) => setDraft({ ...draft, branch: e.target.value })}>
+								{OPS_BRANCHES.map((b) => (
+									<option key={b.id} value={b.id}>{b.name}</option>
+								))}
+								<option value="platform">Platform</option>
+							</select>
+						</label>
+					</div>
+					<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+						<button type="submit" className="btn btn--primary btn--sm">Send invitation</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>Cancel</button>
+					</div>
+				</form>
+			) : null}
+
+			{editing ? (
+				<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={saveEdit}>
+					<h2 className="section-title mb-3">Edit {editing.name}</h2>
+					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+						<label className="field">
+							Role
+							<select
+								className="input"
+								value={editing.role}
+								onChange={(e) => setEditing({ ...editing, role: e.target.value as OpsRole })}
+								disabled={editing.email === opsUser?.email}
+							>
+								{(inviteable.includes(editing.role) ? inviteable : [editing.role, ...inviteable]).map((r) => (
+									<option key={r} value={r}>{ROLE_LABELS[r]}</option>
+								))}
+							</select>
+						</label>
+						<label className="field">
+							Branch
+							<select className="input" value={editing.branch ?? ""} onChange={(e) => setEditing({ ...editing, branch: e.target.value || null })}>
+								{OPS_BRANCHES.map((b) => (
+									<option key={b.id} value={b.id}>{b.name}</option>
+								))}
+								<option value="platform">Platform</option>
+							</select>
+						</label>
+						<label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.6rem" }}>
+							<input
+								type="checkbox"
+								checked={editing.active}
+								disabled={editing.email === opsUser?.email}
+								onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
+							/>
+							Active
+						</label>
+					</div>
+					<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+						<button type="submit" className="btn btn--primary btn--sm">Save</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>Cancel</button>
+					</div>
+				</form>
+			) : null}
 
 			<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
 				<div className="ops-table-wrap">
@@ -334,47 +540,74 @@ function UsersAndRoles() {
 								<th>Role</th>
 								<th>Branch</th>
 								<th>Status</th>
+								<th>MFA</th>
 								<th style={{ textAlign: "right" }}>Action</th>
 							</tr>
 						</thead>
 						<tbody>
-							{rows.map((u) => (
-								<tr key={u.email}>
-									<td style={{ fontWeight: 500 }}>
-										{u.name}
-										{u.email === opsUser?.email && (
-											<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>
-										)}
-									</td>
-									<td className="muted">{u.email}</td>
-									<td>{ROLE_LABELS[u.role]}</td>
-									<td className="muted">{staffBranchName(u.branch)}</td>
-									<td>
-										<span
-											className="portal-pill"
-											style={u.status === "Active" ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
-										>
-											{u.status}
-										</span>
-									</td>
-									<td style={{ textAlign: "right" }}>
-										<button className="btn btn--ghost btn--sm">Edit</button>
-									</td>
-								</tr>
-							))}
+							{loading ? (
+								<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
+							) : rows.length === 0 ? (
+								<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members yet. Invite the first one.</td></tr>
+							) : (
+								rows.map((u) => (
+									<tr key={u.id}>
+										<td style={{ fontWeight: 500 }}>
+											{u.name}
+											{u.email === opsUser?.email && (
+												<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>
+											)}
+										</td>
+										<td className="muted">{u.email}</td>
+										<td>{ROLE_LABELS[u.role] ?? u.role}</td>
+										<td className="muted">{staffBranchName(u.branch ?? "")}</td>
+										<td>
+											<span
+												className="portal-pill"
+												style={u.active ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
+											>
+												{u.active ? "Active" : "Inactive"}
+											</span>
+										</td>
+										<td className="muted">{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}</td>
+										<td style={{ textAlign: "right" }}>
+											<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
+										</td>
+									</tr>
+								))
+							)}
 						</tbody>
 					</table>
 				</div>
 			</div>
 
+			{pending.length > 0 ? (
+				<div className="card" style={{ marginBottom: "2rem" }}>
+					<h2 className="section-title mb-3">Pending invitations</h2>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						{pending.map((i) => (
+							<li key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
+								<div>
+									<strong>{i.name}</strong> <span className="muted">{i.email}</span>
+									<p className="muted" style={{ margin: 0 }}>
+										{ROLE_LABELS[i.role as OpsRole] ?? i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
+									</p>
+								</div>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => revoke(i.id)}>Revoke</button>
+							</li>
+						))}
+					</ul>
+				</div>
+			) : null}
+
 			<div className="card">
 				<h2 className="section-title mb-3">Role Definitions</h2>
 				<div className="admin-role-grid">
-					{(["manager", "coordinator", "consultant", "finance", "admin"] as OpsRole[]).map((r) => (
+					{(["super_admin", "manager", "coordinator", "consultant", "finance", "admin"] as OpsRole[]).map((r) => (
 						<div key={r} className="admin-role-card">
 							<div className="admin-role-card__head">
 								<span className="admin-role-card__name">{ROLE_LABELS[r]}</span>
-								<span className="admin-role-card__count">{STAFF_ACCOUNTS.filter((u) => u.role === r).length}</span>
+								<span className="admin-role-card__count">{staff.filter((u) => u.role === r).length}</span>
 							</div>
 							<p className="admin-role-card__desc">{ROLE_DESCRIPTIONS[r]}</p>
 						</div>

@@ -21,7 +21,6 @@ import {
 	formatDualCurrency,
 	MESSAGES_KEY,
 	NOTIFICATIONS_KEY,
-	PORTAL_DOCS_KEY,
 	PORTAL_INTERVIEW_KEY,
 	PRE_DEPARTURE_KEY,
 	PRE_DEPARTURE_TASKS,
@@ -306,15 +305,6 @@ export type BookingData = {
 	notes?: string;
 };
 
-export type DocUploadStatus = "missing" | "uploaded" | "verified" | "rejected";
-
-export type PortalDocument = {
-	id: string;
-	fileName: string | null;
-	status: DocUploadStatus;
-	uploadedAt: string | null;
-};
-
 export type InterviewBooking = {
 	slotId: string | null;
 	mode: "video" | "phone" | "";
@@ -552,10 +542,6 @@ export function isProfileComplete(app: ApplicationData) {
 
 export function isSchoolSelected(app: ApplicationData) {
 	return Boolean(app.destinationId && app.universityId && app.programId && app.intake);
-}
-
-export function allRequiredDocsUploaded(docs: PortalDocument[]) {
-	return docs.length > 0 && docs.every((d) => d.status !== "missing" && d.fileName);
 }
 
 export function isConsultationEligible(booking: BookingData) {
@@ -814,16 +800,14 @@ type AppStateContextValue = {
 	completeConsultationPayment: () => string;
 	setEligibilityOutcome: (outcome: EligibilityOutcome, note?: string) => void;
 	revealOutcome: () => void;
-	documents: PortalDocument[];
-	uploadDocument: (id: string, fileName: string) => void;
-	removeDocument: (id: string) => void;
 	interview: InterviewBooking;
 	updateInterview: (patch: Partial<InterviewBooking>) => void;
 	confirmInterview: (slotId: string) => string;
 	authUser: AuthUser | null;
 	isAuthenticated: boolean;
+	sessionStatus: "checking" | "authenticated" | "unauthenticated";
 	signIn: (user: Omit<AuthUser, "signedInAt">) => void;
-	signOut: () => void;
+	signOut: () => Promise<void>;
 	/** Self-service account edit - syncs the auth record and application/assessment email */
 	updateAccount: (patch: { name: string; email: string }) => void;
 	/** Messaging */
@@ -842,46 +826,6 @@ type AppStateContextValue = {
 };
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
-
-const DEFAULT_DOC_IDS = [
-	"passport",
-	"transcript",
-	"diploma",
-	"statement",
-	"recommendation",
-	"english",
-];
-
-function defaultDocuments(): PortalDocument[] {
-	return DEFAULT_DOC_IDS.map((id) => ({
-		id,
-		fileName: null,
-		status: "missing" as const,
-		uploadedAt: null,
-	}));
-}
-
-function loadDocuments(): PortalDocument[] {
-	try {
-		const raw = localStorage.getItem(PORTAL_DOCS_KEY);
-		if (!raw) return defaultDocuments();
-		const parsed = JSON.parse(raw) as PortalDocument[];
-		if (!Array.isArray(parsed) || parsed.length === 0) return defaultDocuments();
-		return DEFAULT_DOC_IDS.map((id) => {
-			const existing = parsed.find((d) => d.id === id);
-			return (
-				existing ?? {
-					id,
-					fileName: null,
-					status: "missing" as const,
-					uploadedAt: null,
-				}
-			);
-		});
-	} catch {
-		return defaultDocuments();
-	}
-}
 
 function migrateApplication(loaded: ApplicationData): ApplicationData {
 	const base = { ...defaultApplication, ...loaded };
@@ -953,13 +897,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			assessmentDocs: { ...defaultAssessmentDocs, ...(loaded.assessmentDocs ?? {}) },
 		};
 	});
-	const [documents, setDocuments] = useState<PortalDocument[]>(loadDocuments);
 	const [schoolApplications, setSchoolApplications] =
 		useState<SchoolApplicationTrack[]>(loadSchoolApps);
 	const [interview, setInterview] = useState<InterviewBooking>(() =>
 		loadJSON(PORTAL_INTERVIEW_KEY, defaultInterview),
 	);
 	const [authUser, setAuthUser] = useState<AuthUser | null>(loadAuthUser);
+	const [sessionStatus, setSessionStatus] = useState<
+		"checking" | "authenticated" | "unauthenticated"
+	>("checking");
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
 
 	const [enabledPostArrivalSchedules, setEnabledPostArrivalSchedules] =
@@ -1062,10 +1008,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		safeSetJSON(BOOKING_STORAGE_KEY, booking);
 	}, [booking]);
-
-	useEffect(() => {
-		safeSetJSON(PORTAL_DOCS_KEY, documents);
-	}, [documents]);
 
 	useEffect(() => {
 		safeSetJSON(SCHOOL_APPS_KEY, schoolApplications);
@@ -1494,8 +1436,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			visaInvoice: { ...defaultApplication.visaInvoice },
 		});
 		localStorage.removeItem(STORAGE_KEY);
-		setDocuments(defaultDocuments());
-		localStorage.removeItem(PORTAL_DOCS_KEY);
 		setSchoolApplications([]);
 		localStorage.removeItem(SCHOOL_APPS_KEY);
 		setInterview(defaultInterview);
@@ -1515,8 +1455,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			},
 		});
 		localStorage.removeItem(STORAGE_KEY);
-		setDocuments(defaultDocuments());
-		localStorage.removeItem(PORTAL_DOCS_KEY);
 		setSchoolApplications([]);
 		localStorage.removeItem(SCHOOL_APPS_KEY);
 		setInterview(defaultInterview);
@@ -1640,7 +1578,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				applicationId: prev.applicationId ?? `CNT-APP-${Date.now().toString(36).toUpperCase()}`,
 				paymentStatus: "success",
 				submittedAt: prev.submittedAt ?? now,
-				counselorNote: `Payment simulated: ${formatDualCurrency(amount)} received. Application process / tracking has started.`,
+				counselorNote: `Payment received: ${formatDualCurrency(amount)}. Application process / tracking has started.`,
 			};
 		});
 		// Start tracking clock for every school once paid
@@ -1709,7 +1647,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				},
 				visaStatus: "pending",
 				visaUpdatedAt: now,
-				counselorNote: `Visa payment simulated: ${formatDualCurrency(amount)}. Visa process & tracking started.`,
+				counselorNote: `Visa payment received: ${formatDualCurrency(amount)}. Visa process & tracking started.`,
 			};
 		});
 	}, []);
@@ -2012,36 +1950,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		[],
 	);
 
-	const uploadDocument = useCallback((id: string, fileName: string) => {
-		setDocuments((prev) =>
-			prev.map((d) =>
-				d.id === id
-					? {
-							...d,
-							fileName,
-							status: "uploaded" as const,
-							uploadedAt: new Date().toISOString(),
-						}
-					: d,
-			),
-		);
-	}, []);
-
-	const removeDocument = useCallback((id: string) => {
-		setDocuments((prev) =>
-			prev.map((d) =>
-				d.id === id
-					? { ...d, fileName: null, status: "missing" as const, uploadedAt: null }
-					: d,
-			),
-		);
-		setApplication((prev) => ({
-			...prev,
-			docsReadyAt: null,
-			docReviewStatus: prev.docReviewStatus === "approved" ? "approved" : "idle",
-		}));
-	}, []);
-
 	const updateInterview = useCallback((patch: Partial<InterviewBooking>) => {
 		setInterview((prev) => ({ ...prev, ...patch }));
 	}, []);
@@ -2063,6 +1971,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			signedInAt: new Date().toISOString(),
 		};
 		setAuthUser(next);
+		setSessionStatus("authenticated");
 		setApplication((prev) => {
 			const isPhoneAuth = user.method === "phone";
 			return {
@@ -2077,34 +1986,55 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const signOut = useCallback(async () => {
 		try {
 			await authSignOut();
-		} catch {
-			/* ignore network errors - still clear local state */
+		} finally {
+			// Server-first: the error propagates to the caller so the UI can tell
+			// the user their session is still live on the server, but local state
+			// is cleared either way.
+			setAuthUser(null);
+			safeRemoveItem(AUTH_STORAGE_KEY);
+			setSessionStatus("unauthenticated");
 		}
-		setAuthUser(null);
-		safeRemoveItem(AUTH_STORAGE_KEY);
 	}, []);
 
-	useEffect(() => {
-		let active = true;
-		getCurrentSession()
-			.then((data) => {
-				if (!active) return;
-				if (data?.user) {
-					signIn({
-						id: data.user.id,
-						method: "email",
-						name: data.user.name || data.user.email.split("@")[0] || "Applicant",
-						email: data.user.email,
-					});
-				}
-			})
-			.catch(() => {
-				/* no session - leave unauthenticated */
-			});
-		return () => {
-			active = false;
-		};
+	/**
+	 * Re-validate the session against the server. Runs on mount and on every
+	 * window focus. While in flight `sessionStatus` is "checking"; a confirmed
+	 * session flips it to "authenticated" (through `signIn`), and a missing or
+	 * failed session clears the locally-cached user and marks it
+	 * "unauthenticated" so stale `AUTH_STORAGE_KEY` data cannot force the
+	 * portal open.
+	 */
+	const probeSession = useCallback(async () => {
+		try {
+			const data = await getCurrentSession();
+			if (data?.user) {
+				signIn({
+					id: data.user.id,
+					method: "email",
+					name: data.user.name || data.user.email.split("@")[0] || "Applicant",
+					email: data.user.email,
+				});
+			} else {
+				setAuthUser(null);
+				safeRemoveItem(AUTH_STORAGE_KEY);
+				setSessionStatus("unauthenticated");
+			}
+		} catch {
+			setAuthUser(null);
+			safeRemoveItem(AUTH_STORAGE_KEY);
+			setSessionStatus("unauthenticated");
+		}
 	}, [signIn]);
+
+	useEffect(() => {
+		void probeSession();
+	}, [probeSession]);
+
+	useEffect(() => {
+		const onFocus = () => void probeSession();
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [probeSession]);
 
 	const updateAccount = useCallback((patch: { name: string; email: string }) => {
 		const name = patch.name.trim();
@@ -2379,14 +2309,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			completeConsultationPayment,
 			setEligibilityOutcome,
 			revealOutcome,
-			documents,
-			uploadDocument,
-			removeDocument,
 			interview,
 			updateInterview,
 			confirmInterview,
 			authUser,
 			isAuthenticated: Boolean(authUser),
+			sessionStatus,
 			signIn,
 			signOut,
 			updateAccount,
@@ -2444,13 +2372,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			completeConsultationPayment,
 			setEligibilityOutcome,
 			revealOutcome,
-			documents,
-			uploadDocument,
-			removeDocument,
 			interview,
 			updateInterview,
 			confirmInterview,
 			authUser,
+			sessionStatus,
 			signIn,
 			signOut,
 			updateAccount,

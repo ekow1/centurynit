@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
@@ -10,12 +10,14 @@ export function EnterpriseCases() {
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
+		assignees,
+		error: casesError,
 		acceptApplication,
 		toggleApplicationChecklist,
 		assignApplication,
-		addCaseComment,
-		requestDocuments,
-	} = useOpsState();
+		commentOnApplication,
+		requestApplicationDocs,
+	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -45,22 +47,21 @@ export function EnterpriseCases() {
 		return a.status === statusFilter;
 	});
 
-	function handleAcceptApplication(appId: string) {
-		acceptApplication(appId);
-		if (selectedApp && selectedApp.appId === appId) {
-			setSelectedApp({ ...selectedApp, status: "Accepted" });
-		}
-		setActionSuccess(`Application ${appId} has been ACCEPTED & Approved!`);
+	async function handleAcceptApplication(appId: string) {
+		const target = applications.find((a) => a.appId === appId) ?? selectedApp;
+		if (!target) return;
+		const updated = await acceptApplication(target.id);
+		setSelectedApp(updated);
+		setActionSuccess(`Application ${updated.appId} has been ACCEPTED & Approved!`);
 		setTimeout(() => setActionSuccess(null), 4000);
 	}
 
-	function handleToggleChecklist(itemIndex: number) {
+	async function handleToggleChecklist(itemIndex: number) {
 		if (!selectedApp) return;
-		toggleApplicationChecklist(selectedApp.appId, itemIndex);
-		const updatedChecklist = selectedApp.checklist.map((item, idx) =>
-			idx === itemIndex ? { ...item, checked: !item.checked } : item,
-		);
-		setSelectedApp({ ...selectedApp, checklist: updatedChecklist });
+		const item = selectedApp.checklist[itemIndex];
+		if (!item) return;
+		const updated = await toggleApplicationChecklist(selectedApp.id, item.id, !item.checked);
+		setSelectedApp(updated);
 	}
 
 	return (
@@ -79,6 +80,8 @@ export function EnterpriseCases() {
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
+
+			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
 
 			{actionSuccess && (
 				<div style={{ padding: "0.85rem 1.25rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1rem" }}>
@@ -285,12 +288,13 @@ export function EnterpriseCases() {
 									canAssign={canAssignWork}
 									actor={opsUser?.name ?? "Staff"}
 									isMine={(liveSelected ?? selectedApp).assignedStaffEmail === opsUser?.email}
-									onAssign={(to) => assignApplication(selectedApp.appId, to, opsUser?.name ?? "Manager")}
+									assignees={assignees}
+									onAssign={(to) => void assignApplication(selectedApp.id, to)}
 									onComment={(kind, text) =>
-										addCaseComment({ type: "application", id: selectedApp.appId }, kind, text, opsUser?.name ?? "Staff")
+										void commentOnApplication(selectedApp.id, kind, text)
 									}
 									onRequestDocs={(docs) =>
-										requestDocuments({ type: "application", id: selectedApp.appId }, docs, opsUser?.name ?? "Staff")
+										void requestApplicationDocs(selectedApp.id, docs)
 									}
 								/>
 

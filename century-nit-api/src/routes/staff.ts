@@ -11,6 +11,7 @@ import {
 	mfaRequiredForRole,
 	roleSchema,
 	twoFactorStatusSchema,
+	updateStaffSchema,
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
@@ -19,7 +20,7 @@ import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
-	requireStaff,
+	requireMfa,
 	requireRole,
 	type AuthVariables,
 } from "../middleware/auth.js";
@@ -30,6 +31,7 @@ import {
 	findByToken,
 	listInvitations,
 	revokeInvitation,
+	updateStaff,
 	type InvitationRow,
 } from "../services/invitations.js";
 import { ensureDefaultWorkingHours } from "../services/availability.js";
@@ -70,7 +72,7 @@ staffRouter.openapi(
 		description:
 			"Sends an invitation email. The invitee sets their own password; nobody else ever knows it. " +
 			"You cannot invite a role above your own — only a super_admin may invite an admin or another super_admin.",
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: createInvitationSchema } },
@@ -107,7 +109,7 @@ staffRouter.openapi(
 		path: "/invitations",
 		tags: ["Staff"],
 		summary: "List staff invitations",
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
 		responses: {
 			200: {
 				content: {
@@ -133,7 +135,7 @@ staffRouter.openapi(
 		path: "/invitations/{id}",
 		tags: ["Staff"],
 		summary: "Revoke a pending invitation",
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			200: {
@@ -175,6 +177,11 @@ staffRouter.openapi(
 	async (c) => {
 		const { token } = c.req.valid("query");
 		const invitation = await findByToken(token);
+		const [existing] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.email, invitation.email))
+			.limit(1);
 		return c.json({
 			email: invitation.email,
 			name: invitation.name,
@@ -182,6 +189,7 @@ staffRouter.openapi(
 			branch: invitation.branch,
 			organisation: "Century NIT Operations",
 			expiresAt: invitation.expiresAt.toISOString(),
+			hasExistingLogin: Boolean(existing),
 		});
 	},
 );
@@ -485,7 +493,7 @@ staffRouter.openapi(
 		path: "/",
 		tags: ["Staff"],
 		summary: "List staff members",
-		middleware: [requireAuth, requireStaff] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator")] as const,
 		responses: {
 			200: {
 				content: {
@@ -538,6 +546,60 @@ staffRouter.openapi(
 				hasLogin: Boolean(r.userId),
 				mfaEnabled: r.twoFactorEnabled ?? false,
 			})),
+		});
+	},
+);
+
+/* ── PATCH /api/v1/staff/:id ────────────────────────────────────────────────── */
+
+staffRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}",
+		tags: ["Staff"],
+		summary: "Update a staff member's role, branch or active flag",
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+			body: {
+				content: { "application/json": { schema: updateStaffSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							id: z.string().uuid(),
+							email: z.string().email(),
+							name: z.string(),
+							role: roleSchema,
+							branch: z.string().nullable(),
+							active: z.boolean(),
+						}),
+					},
+				},
+				description: "Updated staff member",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const updated = await updateStaff({
+			id,
+			patch: body,
+			actor: { opsUserId: staff.opsUserId, role: staff.role },
+		});
+		return c.json({
+			id: updated.id,
+			email: updated.email,
+			name: updated.name,
+			role: roleSchema.parse(updated.role),
+			branch: updated.branch,
+			active: updated.active,
 		});
 	},
 );

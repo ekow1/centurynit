@@ -32,6 +32,7 @@ export function CaseWorkPanel({
 	onReschedule,
 	branchLabel = "",
 	currentWhen = "",
+	assignees = CONSULTANT_ROSTER,
 }: {
 	assignedName: string;
 	assignedEmail: string;
@@ -56,6 +57,8 @@ export function CaseWorkPanel({
 	onComment: (kind: CommentKind, text: string) => void;
 	onRequestDocs: (docs: string[]) => void;
 	onReschedule?: (date: string, time: string, reason: string) => void;
+	/** Staff the manager can route this case to. Defaults to the seed roster. */
+	assignees?: Assignee[];
 }) {
 	const [comment, setComment] = useState("");
 	const [commentKind, setCommentKind] = useState<CommentKind>("comment");
@@ -99,13 +102,13 @@ export function CaseWorkPanel({
 							className="input input--sm"
 							value={assignedEmail}
 							onChange={(e) => {
-								const to = CONSULTANT_ROSTER.find((c) => c.email === e.target.value);
+								const to = assignees.find((c) => c.email === e.target.value);
 								if (to) onAssign(to);
 							}}
 							style={{ minWidth: "210px", color: "var(--foreground)" }}
 						>
 							<option value="">Assign to…</option>
-							{CONSULTANT_ROSTER.map((c) => (
+							{assignees.map((c) => (
 								<option key={c.email} value={c.email}>
 									{c.name} · {branchName(c.branch)}
 								</option>

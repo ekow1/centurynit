@@ -13,7 +13,7 @@ function Spinner() {
 }
 
 export function OpsRequireAuth({ children }: { children: ReactNode }) {
-	const { opsUser, authInitializing } = useOpsAuth();
+	const { opsUser, authInitializing, isMockSession } = useOpsAuth();
 	const location = useLocation();
 
 	/**
@@ -36,13 +36,15 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 		staffApi
 			.mfaStatus()
 			.then((s) => active && setMfaOk(!s.required || s.enabled))
-			// A failed check must not lock staff out of their own tool; the server
-			// still refuses anything that genuinely requires the second factor.
-			.catch(() => active && setMfaOk(true));
+			.catch(() => {
+				// Prototype role-picker sessions have no API MFA to check.
+				// A real session that cannot prove enrolment is sent to setup.
+				if (active) setMfaOk(isMockSession);
+			});
 		return () => {
 			active = false;
 		};
-	}, [opsUser]);
+	}, [opsUser, isMockSession]);
 
 	if (authInitializing) return <Spinner />;
 

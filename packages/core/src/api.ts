@@ -17,8 +17,36 @@ import type {
 	UpdateWorkingHours,
 	UploadTicket,
 	WorkingHoursResponse,
+	AddComment,
+	ApiApplicant,
+	ApiApplication,
+	ApiConsultation,
+	ApiInvoice,
+	AssessmentResult,
+	ChoosePackage,
+	ChoosePaymentPlan,
+	RecordPayment,
+	PaystackCheckout,
+	PaystackVerify,
+	PaystackVerifyResponse,
+	UpdateMyProfile,
+	VisaStage,
+	SchoolApplication,
+	SchoolApplicationList,
+	AddSchoolApplication,
+	UpdateSchoolStatus,
+	LockSchools,
+	Ticket,
+	TicketList,
+	CreateTicket,
+	ReplyTicket,
+	UpdateTicketStatus,
+	InitializePayment,
+	InitializePaymentResponse,
+	PaymentVerificationResult,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
+
 
 /**
  * Typed client for the scheduling API, shared by the portal and the Operations
@@ -170,6 +198,14 @@ export const bookingsApi = {
 			...json({ reason }),
 		});
 	},
+
+	complete(bookingId: string): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/complete`, { method: "PATCH" });
+	},
+
+	markNoShow(bookingId: string): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/no-show`, { method: "PATCH" });
+	},
 };
 
 /* ── Staff identity: invitations and MFA ─────────────────────────────────── */
@@ -224,6 +260,20 @@ export const staffApi = {
 		}[];
 	}> {
 		return request(`${API_PREFIX}/staff`);
+	},
+
+	update(
+		id: string,
+		patch: { role?: string; branch?: string | null; active?: boolean },
+	): Promise<{
+		id: string;
+		email: string;
+		name: string;
+		role: string;
+		branch: string | null;
+		active: boolean;
+	}> {
+		return request(`${API_PREFIX}/staff/${id}`, { method: "PATCH", ...json(patch) });
 	},
 };
 
@@ -347,3 +397,263 @@ export const documentsApi = {
 		return documentsApi.completeUpload(ticket.documentId);
 	},
 };
+
+/* ── Cases: consultations, applications, applicants ──────────────────────── */
+
+export const consultationsApi = {
+	list(): Promise<{ consultations: ApiConsultation[]; total: number }> {
+		return request(`${API_PREFIX}/consultations`);
+	},
+	get(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}`);
+	},
+	assign(id: string, employeeId: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/assign`, {
+			method: "POST",
+			...json({ employeeId }),
+		});
+	},
+	confirmSlot(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/confirm-slot`, { method: "POST" });
+	},
+	startAssessment(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/start-assessment`, { method: "POST" });
+	},
+	completeAssessment(
+		id: string,
+		result: AssessmentResult,
+	): Promise<{ consultation: ApiConsultation; application: ApiApplication | null }> {
+		return request(`${API_PREFIX}/consultations/${id}/complete-assessment`, {
+			method: "POST",
+			...json(result),
+		});
+	},
+	comment(id: string, input: AddComment): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/comments`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+	requestDocuments(id: string, documents: string[]): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/request-documents`, {
+			method: "POST",
+			...json({ documents }),
+		});
+	},
+};
+
+export const applicationsApi = {
+	list(): Promise<{ applications: ApiApplication[]; total: number }> {
+		return request(`${API_PREFIX}/applications`);
+	},
+	get(id: string): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}`);
+	},
+	assign(id: string, employeeId: string): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/assign`, {
+			method: "POST",
+			...json({ employeeId }),
+		});
+	},
+	accept(id: string): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/accept`, { method: "POST" });
+	},
+	setStage(id: string, stage: string): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/stage`, {
+			method: "POST",
+			...json({ stage }),
+		});
+	},
+	toggleChecklist(id: string, itemId: string, checked: boolean): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/checklist`, {
+			method: "POST",
+			...json({ itemId, checked }),
+		});
+	},
+	setVisaStage(id: string, stage: VisaStage, note?: string): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/visa-stage`, {
+			method: "POST",
+			...json({ stage, note }),
+		});
+	},
+	setTravelClearance(id: string, cleared: boolean): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/travel-clearance`, {
+			method: "POST",
+			...json({ cleared }),
+		});
+	},
+	comment(id: string, input: AddComment): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/comments`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+	requestDocuments(id: string, documents: string[]): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/request-documents`, {
+			method: "POST",
+			...json({ documents }),
+		});
+	},
+};
+
+export const applicantsApi = {
+	list(): Promise<{ applicants: ApiApplicant[]; total: number }> {
+		return request(`${API_PREFIX}/applicants`);
+	},
+	get(id: string): Promise<ApiApplicant> {
+		return request(`${API_PREFIX}/applicants/${id}`);
+	},
+};
+
+export const meApi = {
+	application(): Promise<{
+		applicant: ApiApplicant | null;
+		consultation: ApiConsultation | null;
+		application: ApiApplication | null;
+	}> {
+		return request(`${API_PREFIX}/me/application`);
+	},
+
+	/**
+	 * Update the signed-in applicant's own profile. The server resolves the
+	 * applicant from the session, so no id is sent. `branch` is not accepted
+	 * here — that's an ops placement decision.
+	 */
+	updateProfile(input: UpdateMyProfile): Promise<ApiApplicant> {
+		return request(`${API_PREFIX}/me/application`, { method: "PATCH", ...json(input) });
+	},
+
+	/** Choose the school application package (funding track + degree level). */
+	choosePackage(input: ChoosePackage): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/package`, { method: "POST", ...json(input) });
+	},
+
+	/** Choose the post-admission payment plan (full or installment). */
+	choosePaymentPlan(input: ChoosePaymentPlan): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/payment-plan`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/**
+	 * Record a payment directly against one of the applicant's own invoices
+	 * (server-side record path — no payment gateway involved).
+	 */
+	payInvoice(invoiceId: string, body: RecordPayment): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/payments`, {
+			method: "POST",
+			...json(body),
+		});
+	},
+
+	/** Open a Paystack hosted checkout for an invoice's outstanding balance. */
+	paystackCheckout(invoiceId: string): Promise<PaystackCheckout> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/paystack/checkout`, {
+			method: "POST",
+		});
+	},
+
+	/** Verify the Paystack transaction the customer completed on return. */
+	paystackVerify(invoiceId: string, reference: string): Promise<PaystackVerifyResponse> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/paystack/verify`, {
+			method: "POST",
+			...json({ reference } satisfies PaystackVerify),
+		});
+	}
+};
+
+export const invoicesApi = {
+	list(): Promise<{ invoices: ApiInvoice[]; total: number }> {
+		return request(`${API_PREFIX}/invoices`);
+	},
+	get(id: string): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/invoices/${id}`);
+	},
+	payments(invoiceId: string, body: RecordPayment): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/invoices/${invoiceId}/payments`, {
+			method: "POST",
+			...json(body),
+		});
+	}
+};
+
+/* ── Schools & Applications ──────────────────────────────────────────────── */
+
+export const schoolsApi = {
+	/** List the signed-in applicant's school applications. */
+	list(): Promise<SchoolApplicationList> {
+		return request(`${API_PREFIX}/me/schools`);
+	},
+
+	/** Add a target school application before locking. */
+	add(input: AddSchoolApplication): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/me/schools`, { method: "POST", ...json(input) });
+	},
+
+	/** Remove a school application before locking. */
+	remove(id: string): Promise<void> {
+		return request(`${API_PREFIX}/me/schools/${id}`, { method: "DELETE" });
+	},
+
+	/** Lock school selections — raises Stage II application invoice on server. */
+	lock(input: LockSchools = {}): Promise<SchoolApplicationList> {
+		return request(`${API_PREFIX}/me/schools/lock`, { method: "POST", ...json(input) });
+	},
+
+	/** Staff: update an application track status, handler note, or timeline event. */
+	updateStatus(id: string, input: UpdateSchoolStatus): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/status`, { method: "PATCH", ...json(input) });
+	}
+};
+
+/* ── Support & In-App Messaging ─────────────────────────────────────────── */
+
+export const ticketsApi = {
+	/** List the signed-in applicant's tickets. */
+	listMy(): Promise<TicketList> {
+		return request(`${API_PREFIX}/me/tickets`);
+	},
+
+	/** Create a new support ticket. */
+	create(input: CreateTicket): Promise<Ticket> {
+		return request(`${API_PREFIX}/me/tickets`, { method: "POST", ...json(input) });
+	},
+
+	/** Reply to a ticket message thread. */
+	reply(ticketId: string, input: ReplyTicket): Promise<Ticket> {
+		return request(`${API_PREFIX}/me/tickets/${ticketId}/messages`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Staff: list tickets across all applicants. */
+	listAll(filter: { status?: string } = {}): Promise<TicketList> {
+		const query = new URLSearchParams(
+			Object.entries(filter).filter(([, v]) => v != null) as [string, string][],
+		);
+		const suffix = query.toString() ? `?${query}` : "";
+		return request(`${API_PREFIX}/tickets${suffix}`);
+	},
+
+	/** Staff: update ticket status, priority, or assign staff. */
+	updateStatus(ticketId: string, input: UpdateTicketStatus): Promise<Ticket> {
+		return request(`${API_PREFIX}/tickets/${ticketId}`, { method: "PATCH", ...json(input) });
+	}
+};
+
+/* ── Payments Gateway (Paystack / Stripe) ────────────────────────────────── */
+
+export const paymentsApi = {
+	/** Initialize a real payment intent for an invoice (Paystack or Stripe). */
+	initialize(input: InitializePayment): Promise<InitializePaymentResponse> {
+		return request(`${API_PREFIX}/payments/initialize`, { method: "POST", ...json(input) });
+	},
+
+	/** Verify transaction reference directly. */
+	verify(reference: string, gateway: "paystack" | "stripe" = "paystack"): Promise<PaymentVerificationResult> {
+		return request(`${API_PREFIX}/payments/verify/${encodeURIComponent(reference)}?gateway=${gateway}`);
+	}
+};
+

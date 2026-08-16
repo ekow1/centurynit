@@ -1,6 +1,6 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { AUTH_ERROR_CODES, type OpsRole } from "century-nit-shared";
+import { AUTH_ERROR_CODES, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, staffInvitations, users } from "../db/schema.js";
 import { env } from "../env.js";
@@ -44,6 +44,15 @@ const CAN_INVITE: Record<string, OpsRole[]> = {
 
 export function canInviteRole(inviterRole: string, target: OpsRole): boolean {
 	return (CAN_INVITE[inviterRole] ?? []).includes(target);
+}
+
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
 }
 
 function hashToken(token: string): string {
@@ -126,6 +135,9 @@ export async function createInvitation(input: {
 	}
 
 	const acceptUrl = `${env.CONSOLE_URL}/accept-invite?token=${token}`;
+	const safeName = escapeHtml(input.name.trim());
+	const safeInviter = escapeHtml(input.invitedBy.name);
+	const safeRole = escapeHtml(input.role.replace("_", " "));
 
 	await queueEmail({
 		to: email,
@@ -142,9 +154,9 @@ export async function createInvitation(input: {
 		html: `
 			<div style="font-family:system-ui,sans-serif;max-width:520px;line-height:1.5">
 				<h2 style="margin:0 0 16px">You have been invited to Century NIT Operations</h2>
-				<p>Hello ${input.name},</p>
-				<p><strong>${input.invitedBy.name}</strong> has invited you to join as
-				<strong>${input.role.replace("_", " ")}</strong>.</p>
+				<p>Hello ${safeName},</p>
+				<p><strong>${safeInviter}</strong> has invited you to join as
+				<strong>${safeRole}</strong>.</p>
 				<p style="margin:24px 0">
 					<a href="${acceptUrl}" style="background:#000;color:#fff;padding:12px 20px;text-decoration:none;display:inline-block">Set your password</a>
 				</p>
@@ -241,7 +253,21 @@ export async function acceptInvitation(input: {
 
 	if (existingUser) {
 		// They already have a client login. Reuse it rather than refusing — the
-		// same person can be both an applicant and a member of staff.
+		// same person can be both an applicant and a member of staff. The
+		// password they typed must be the one they already sign in with, or
+		// anyone with the invite link could attach staff to an existing account.
+		const authInstance = await getAuthInstance();
+		try {
+			await authInstance.api.signInEmail({
+				body: { email: invitation.email, password: input.password },
+			});
+		} catch {
+			throw new HttpError(
+				403,
+				AUTH_ERROR_CODES.INVITATION_INVALID,
+				"That password does not match the existing account. Sign in with the password you already use.",
+			);
+		}
 		userId = existingUser.id;
 	} else {
 		const authInstance = await getAuthInstance();
@@ -322,6 +348,61 @@ export async function revokeInvitation(id: string, by: string): Promise<Invitati
 	}
 	void by;
 	return row;
+}
+
+/**
+ * Change a staff member's role, branch or active flag.
+ *
+ * The same invite hierarchy applies: you cannot raise someone above a role you
+ * could not invite, and you cannot touch someone whose current role is above
+ * yours. You also cannot deactivate or demote yourself — that is how an
+ * administrator locks themselves out.
+ */
+export async function updateStaff(input: {
+	id: string;
+	patch: UpdateStaff;
+	actor: { opsUserId: string; role: string };
+}): Promise<typeof opsUsers.$inferSelect> {
+	const [target] = await db.select().from(opsUsers).where(eq(opsUsers.id, input.id)).limit(1);
+	if (!target) {
+		throw new HttpError(404, "NOT_FOUND", "Staff member not found");
+	}
+
+	const currentRole = roleSchema.parse(target.role);
+
+	if (target.id === input.actor.opsUserId) {
+		if (input.patch.role !== undefined && input.patch.role !== currentRole) {
+			throw new HttpError(403, "FORBIDDEN", "You cannot change your own role");
+		}
+		if (input.patch.active === false) {
+			throw new HttpError(403, "FORBIDDEN", "You cannot deactivate your own account");
+		}
+	} else if (!canInviteRole(input.actor.role, currentRole)) {
+		throw new HttpError(403, "FORBIDDEN", "You cannot change a staff member at or above your role");
+	}
+
+	if (input.patch.role !== undefined && input.patch.role !== currentRole) {
+		if (!canInviteRole(input.actor.role, input.patch.role)) {
+			throw new HttpError(
+				403,
+				AUTH_ERROR_CODES.CANNOT_INVITE_ROLE,
+				`Your role cannot assign ${input.patch.role}`,
+			);
+		}
+	}
+
+	const [updated] = await db
+		.update(opsUsers)
+		.set({
+			...(input.patch.role !== undefined ? { role: input.patch.role } : {}),
+			...(input.patch.branch !== undefined ? { branch: input.patch.branch } : {}),
+			...(input.patch.active !== undefined ? { active: input.patch.active } : {}),
+			updatedAt: new Date(),
+		})
+		.where(eq(opsUsers.id, target.id))
+		.returning();
+
+	return updated;
 }
 
 /** Mark overdue invitations expired so the pending-unique index frees up. */

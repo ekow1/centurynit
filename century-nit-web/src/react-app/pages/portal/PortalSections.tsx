@@ -29,7 +29,11 @@ import {
 	PROCESS_STAGES,
 	SCHOOL_TRACK_STATUS_LABELS,
 	VISA_INVOICE_AMOUNT,
+	REQUIRED_DOCUMENTS,
 } from "century-nit-core";
+import { documentsApi, invoicesApi, meApi, ApiError } from "century-nit-core/api";
+import { useNotifier } from "../../components/notifier/Notifier";
+import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
 
 /* ========== Profile ========== */
@@ -60,7 +64,6 @@ export function PortalProfile() {
 		authUser,
 		application,
 		booking,
-		documents,
 		interview,
 		updateAssessment,
 		updateAccount,
@@ -68,6 +71,27 @@ export function PortalProfile() {
 	} = useAppState();
 	const a = application;
 	const ass = booking.assessment;
+
+	/**
+	 * Documents are server-backed (R2 via presigned URLs). The profile shows a
+	 * read-only summary, so a light fetch-on-mount is enough — the vault screen
+	 * is where uploads happen.
+	 */
+	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
+	useEffect(() => {
+		let active = true;
+		documentsApi
+			.list()
+			.then((res) => {
+				if (active) setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
+			})
+			.catch(() => {
+				/* leave null — the summary shows "-" until it can load */
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
 
 	const [editing, setEditing] = useState<null | "account" | "assessment" | "preferences">(null);
 	const [draft, setDraft] = useState<Record<string, string>>({});
@@ -94,7 +118,8 @@ export function PortalProfile() {
 		.toUpperCase();
 
 	const eligibility = booking.eligibilityOutcome.replace("_", " ");
-	const uploadedDocs = documents.filter((d) => d.status !== "missing").length;
+	const uploadedDocs = liveDocs ? liveDocs.size : 0;
+	const totalDocs = REQUIRED_DOCUMENTS.length;
 
 	function startEdit(
 		section: "account" | "assessment" | "preferences",
@@ -222,7 +247,7 @@ export function PortalProfile() {
 					<div className="profile-ref">
 						<p className="profile-ref__label">Documents on file</p>
 						<p className="profile-ref__value mono">
-							{uploadedDocs}/{documents.length}
+							{liveDocs ? `${uploadedDocs}/${totalDocs}` : <span className="profile-hero__empty">-</span>}
 						</p>
 					</div>
 				</div>
@@ -396,17 +421,27 @@ export function PortalProfile() {
 				</div>
 				<div className="profile-block">
 					<p className="profile-docs__summary mono">
-						{uploadedDocs} of {documents.length} on file
+						{liveDocs ? `${uploadedDocs} of ${totalDocs} on file` : "-"}
 					</p>
 					<ul className="profile-docs">
-						{documents.map((d) => (
-							<li key={d.id} className="profile-doc">
-								<span className="profile-doc__name">{DOC_LABELS[d.id] ?? d.id}</span>
-								<span className={`portal-pill portal-pill--${docPill(d.status)}`}>
-									{d.status}
-								</span>
-							</li>
-						))}
+						{REQUIRED_DOCUMENTS.map((r) => {
+							const live = liveDocs?.get(r.id) ?? null;
+							const status = live
+								? live.status === "VERIFIED"
+									? "verified"
+									: live.status === "REJECTED"
+										? "rejected"
+										: "uploaded"
+								: "missing";
+							return (
+								<li key={r.id} className="profile-doc">
+									<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
+									<span className={`portal-pill portal-pill--${docPill(status)}`}>
+										{status}
+									</span>
+								</li>
+							);
+						})}
 					</ul>
 					<div className="profile-interview">
 						<DataRow
@@ -710,17 +745,46 @@ function invoiceDetail(inv: StageInvoice) {
 /** Financial - every payment, settlement, and what's still outstanding. */
 export function PortalFinancial() {
 	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules } = useAppState();
+	const { toast } = useNotifier();
 	const a = application;
 
+	// ── Invoice fetching from the real API ───────────────────────────────
+	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
+	const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+
+	useEffect(() => {
+		async function load() {
+			try {
+				const { invoices: list } = await invoicesApi.list();
+				setInvoices(list);
+				setInvoicesLoaded(true);
+			} catch (err) {
+				const msg =
+					err instanceof ApiError
+						? err.message
+						: "Could not load invoices. Please try again.";
+				toast.error(msg);
+			}
+		}
+		load();
+	}, []);
+
+	// ── Derived from fetched invoices (fallback to AppState + hardcoded) ──
 	const consultationPaid = booking.paymentStatus === "success";
-	const appPaid = isAppInvoicePaid(a);
-	const visaPaid = isVisaInvoicePaid(a);
+
+	// Find the application‑type and visa‑type invoice from the API list
+	const appInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "application") : null;
+	const visaInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "visa") : null;
+
+	const appPaid = isAppInvoicePaid(a) || (invoicesLoaded && appInvoiceType?.status === "paid");
+	const visaPaid = isVisaInvoicePaid(a) || (invoicesLoaded && visaInvoiceType?.status === "paid");
+
 	const settled = isAgencySettled(a);
 	const depositPaid = isAgencyDepositPaid(a);
 	const plan = hasPaymentPlan(a);
 
-	const appInvoiceAmount = a.applicationInvoice.amount;
-	const visaInvoiceAmount = a.visaInvoice.amount;
+	const appInvoiceAmount = appInvoiceType?.subtotalCents ?? a.applicationInvoice.amount;
+	const visaInvoiceAmount = visaInvoiceType?.subtotalCents ?? a.visaInvoice.amount;
 
 	const totalPaid =
 		(consultationPaid ? CONSULTATION_FEE_AMOUNT : 0) +
@@ -728,18 +792,31 @@ export function PortalFinancial() {
 		(visaPaid ? visaInvoiceAmount : 0) +
 		a.agencyPaid;
 
-	const appOutstanding = a.applicationInvoice.status === "raised" && !appPaid ? appInvoiceAmount : 0;
-	const visaOutstanding = a.visaInvoice.status === "raised" && !visaPaid ? visaInvoiceAmount : 0;
+	const appOutstanding =
+		(a.applicationInvoice.status === "raised" && !appPaid) ? appInvoiceAmount : 0;
+	const visaOutstanding =
+		(a.visaInvoice.status === "raised" && !visaPaid) ? visaInvoiceAmount : 0;
 	const agencyOutstanding = Math.max(0, a.agencyTotal - a.agencyPaid);
 
 	const totalOutstanding = appOutstanding + visaOutstanding + agencyOutstanding;
 
+	async function switchPlan(planId: "full" | "installment") {
+		try {
+			await meApi.choosePaymentPlan({ paymentPlanId: planId });
+			choosePaymentPlan(planId);
+			toast.success(`Payment plan switched to ${planId === "full" ? "full" : "installment"}.`);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError ? err.message : "Could not switch payment plan. Please try again.";
+			toast.error(msg);
+		}
+	}
+
 	// Fees the applicant will owe but that have not been raised yet — without
 	// these the top band reads GH₵0 / GH₵0 for most of the journey
-	const notYetRaised =
-		(consultationPaid ? 0 : CONSULTATION_FEE_AMOUNT) +
-		(a.applicationInvoice.status === "none" ? APP_INVOICE_BASE : 0) +
-		(a.visaInvoice.status === "none" ? VISA_INVOICE_AMOUNT : 0);
+	const appNotRaised = a.applicationInvoice.status === "none" ? APP_INVOICE_BASE : 0;
+	const visaNotRaised = a.visaInvoice.status === "none" ? VISA_INVOICE_AMOUNT : 0;
+	const notYetRaised = (consultationPaid ? 0 : CONSULTATION_FEE_AMOUNT) + appNotRaised + visaNotRaised;
 
 	/** Schools that have made an offer carry real institutional figures */
 	const offers = schoolApplications
@@ -847,13 +924,13 @@ export function PortalFinancial() {
 								const isFull = p.id === "full";
 								const remaining = a.agencyTotal - a.agencyPaid;
 								return (
-									<button
-										key={p.id}
-										type="button"
-										className={`plan-opt${on ? " plan-opt--on" : ""}`}
-										onClick={() => choosePaymentPlan(p.id)}
-										aria-pressed={on}
-									>
+<button
+									key={p.id}
+									type="button"
+									className={`plan-opt${on ? " plan-opt--on" : ""}`}
+									onClick={() => void switchPlan(p.id)}
+									aria-pressed={on}
+								>
 										<span className="plan-opt__check" aria-hidden>✓</span>
 										<span className="plan-opt__name">{p.name}</span>
 										<span className="plan-opt__blurb">{p.blurb}</span>

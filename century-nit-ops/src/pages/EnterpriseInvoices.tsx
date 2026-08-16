@@ -73,7 +73,10 @@ export function EnterpriseInvoices() {
 			invoices.map((inv) => {
 				const age = invoiceAgeDays(inv);
 				const derived: InvoiceStatus =
-					inv.status === "issued" && age !== null && age > 0 ? "overdue" : inv.status;
+					inv.status === "overdue" ||
+					((inv.status === "issued" || inv.status === "partial") && age !== null && age > 0)
+						? "overdue"
+						: inv.status;
 				return { inv, derived, age, balance: invoiceBalance(inv) };
 			}),
 		[invoices],
@@ -407,8 +410,15 @@ export function EnterpriseInvoices() {
 					onIssue={async (lines: OpsInvoiceLine[], note: string, type: InvoiceType) => {
 						const subtotal = lines.reduce((n, l) => n + l.amount, 0);
 						try {
+							const match = applicants.find((a) => a.id === building.applicantId);
+							const applicantEmail =
+								match?.email ||
+								(liveCase?.email && liveCase.name === building.applicantName
+									? liveCase.email
+									: undefined);
 							await apiCreateInvoice({
 								applicantName: building.applicantName,
+								applicantEmail,
 								type,
 								lines,
 								note,

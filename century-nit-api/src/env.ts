@@ -143,6 +143,16 @@ const schema = z.object({
 	BOOKING_BUFFER_MINUTES: z.coerce.number().int().min(0).max(120).default(0),
 	/** Default IANA zone for branches and working hours. */
 	DEFAULT_TIMEZONE: z.string().default("Africa/Accra"),
+
+	/**
+	 * Paystack — invoice payments from the portal.
+	 *
+	 * Optional: without a secret key the applicant payment endpoints refuse with
+	 * PAYMENT_GATEWAY_UNCONFIGURED and the portal falls back to the direct
+	 * server-side record path. The key can also be stored encrypted in
+	 * `platform_settings` via the ops Settings screen, which overrides this.
+	 */
+	PAYSTACK_SECRET_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

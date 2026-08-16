@@ -41,6 +41,10 @@ import {
 	bookedTimesOn,
 	upcomingDays,
 } from "century-nit-core";
+import { meApi, invoicesApi, schoolsApi, paymentsApi, ApiError } from "century-nit-core/api";
+import { useNotifier } from "../../components/notifier/Notifier";
+
+
 import { ChapterGate } from "./PortalLayout";
 import { ConsultationAppointmentCard } from "./ConsultationAppointmentCard";
 
@@ -62,6 +66,7 @@ export function PortalPackage() {
 
 function SchoolPackageInner() {
 	const { application, chooseSchoolPackage, choosePaymentPlan } = useAppState();
+	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [plan, setPlan] = useState<PaymentPlanId>(application.paymentPlanId || "full");
 	const [funding, setFunding] = useState<SchoolFundingTrack | "">(
@@ -70,6 +75,7 @@ function SchoolPackageInner() {
 	const [level, setLevel] = useState<SchoolDegreeLevel | "">(
 		application.schoolDegreeLevel || "masters",
 	);
+	const [saving, setSaving] = useState(false);
 	const chosen = hasSchoolPackage(application);
 	const fundMeta = SCHOOL_FUNDING_TRACKS.find((f) => f.id === (funding || application.schoolFundingTrack));
 	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === (level || application.schoolDegreeLevel));
@@ -78,10 +84,30 @@ function SchoolPackageInner() {
 	// this is the honest moment to show it, not after the visa is granted.
 	const serviceFee = serviceFeeFor(funding || application.schoolFundingTrack);
 
-	function confirm() {
-		if (!funding || !level) return;
-		chooseSchoolPackage(funding, level);
-		choosePaymentPlan(plan);
+	async function confirm() {
+		if (!funding || !level || saving) return;
+		setSaving(true);
+		try {
+			// Two commands in sequence: package first, then the payment plan
+			// that depends on it. Both target the applicant's latest application,
+			// resolved server-side from the session.
+			await meApi.choosePackage({ fundingTrack: funding, degreeLevel: level });
+			await meApi.choosePaymentPlan({ paymentPlanId: plan });
+			// Optimistic local update so the UI reflects the choice immediately;
+			// refreshSession re-syncs from the authority in the background.
+			chooseSchoolPackage(funding, level);
+			choosePaymentPlan(plan);
+			toast.success("Package locked. Continue to schools & invoice.");
+			nav("/portal/application", { replace: true });
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: "Could not save your package. Please try again.";
+			toast.error(msg);
+		} finally {
+			setSaving(false);
+		}
 	}
 
 	return (
@@ -241,13 +267,11 @@ function SchoolPackageInner() {
 				) : (
 					<Button
 						type="button"
-						onClick={() => {
-							confirm();
-						}}
+						onClick={() => void confirm()}
 						arrow
-						disabled={!funding || !level}
+						disabled={!funding || !level || saving}
 					>
-						Lock package
+						{saving ? "Locking…" : "Lock package"}
 					</Button>
 				)}
 				<Button to="/portal/consultation" variant="ghost">
@@ -828,8 +852,12 @@ function ConsultationOutcome({
 					</div>
 				) : null}
 
-				{/* Hidden when the Operations Center is driving - the consultant owns this call. */}
-				{autopilot ? (
+				{/* Hidden when the Operations Center is driving - the consultant owns this call.
+    Further gated behind the build-time dev flag: a production build must not
+    let an applicant self-approve their own eligibility, which is the gate for
+    the entire downstream journey. This is a demo affordance only, so Vite
+    tree-shakes the whole block out of a production bundle. */}
+				{import.meta.env.DEV && autopilot ? (
 					<details style={{ marginTop: "1rem" }}>
 						<summary className="mono muted" style={{ fontSize: "0.75rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em" }}>
 							Simulate other outcomes
@@ -1624,6 +1652,7 @@ function ApplicationHubInner() {
 	const [progId, setProgId] = useState("");
 	const [intake, setIntake] = useState("");
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+	const { toast } = useNotifier();
 
 	const uniList = destId ? universitiesForDestination(destId) : universities;
 	const progList = uniId ? programsForUniversity(uniId) : programs;
@@ -1632,12 +1661,48 @@ function ApplicationHubInner() {
 	const previewAmount =
 		APP_INVOICE_BASE + Math.max(0, schoolApplications.length) * APP_INVOICE_PER_SCHOOL;
 
-	function payInvoice() {
+	async function payInvoice() {
 		setPayPhase("loading");
-		window.setTimeout(() => {
+		try {
+			const { invoices } = await invoicesApi.list();
+			const backend = invoices.find((i) => i.type === "application" && i.balanceCents > 0);
+			if (!backend) {
+				toast.error(
+					"Your application invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			try {
+				// Real Paystack checkout via paymentsApi
+				const checkout = await paymentsApi.initialize({
+					invoiceId: backend.id,
+					gateway: "paystack",
+				});
+				if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
+					window.location.href = checkout.authorizationUrl;
+					return;
+				}
+			} catch (err) {
+				// Fallback to server-side record path if payment gateway offline
+				if (!(err instanceof ApiError && err.code === "PAYMENT_GATEWAY_UNCONFIGURED")) {
+					console.warn("Gateway init fallback:", err);
+				}
+			}
+			await meApi.payInvoice(backend.id, {
+				amountCents: backend.balanceCents,
+				method: "card",
+				gateway: "manual",
+				reference: `PAY-${Date.now()}`,
+			});
 			payApplicationInvoice();
+			toast.success("Payment recorded. Tracking is now unlocked.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
+			);
+		} finally {
 			setPayPhase("idle");
-		}, 1400);
+		}
 	}
 
 	function addSchool(e: FormEvent) {
@@ -1654,15 +1719,38 @@ function ApplicationHubInner() {
 			programId: p,
 			intake: i,
 		});
+		schoolsApi
+			.add({
+				destinationId: d,
+				universityId: u,
+				programId: p,
+				intake: i,
+			})
+			.catch((err) => console.warn("Failed to sync school to server", err));
 		setProgId("");
 		setIntake("");
 	}
+
+	function handleRemoveSchool(schoolId: string) {
+		removeSchoolApplication(schoolId);
+		schoolsApi.remove(schoolId).catch((err) => console.warn("Failed to remove school from server", err));
+	}
+
+	async function handleLockSelection() {
+		try {
+			await schoolsApi.lock();
+		} catch (err) {
+			console.warn("Failed to sync lock to server", err);
+		}
+		lockSchoolSelection();
+	}
+
 
 	if (payPhase === "loading") {
 		return (
 			<div className="loading-overlay">
 				<div className="spinner" aria-hidden />
-				<p className="mono">Simulating Paystack…</p>
+				<p className="mono">Contacting payment provider…</p>
 				<p className="muted">Charging {formatDualCurrency(inv.amount || previewAmount)}</p>
 			</div>
 		);
@@ -1813,7 +1901,7 @@ function ApplicationHubInner() {
 													<button
 														type="button"
 														className="btn btn--ghost btn--sm"
-														onClick={() => removeSchoolApplication(s.id)}
+														onClick={() => handleRemoveSchool(s.id)}
 													>
 														Remove
 													</button>
@@ -1849,13 +1937,14 @@ function ApplicationHubInner() {
 
 					{schoolApplications.length > 0 ? (
 						<div className="row mt-4">
-							<Button type="button" onClick={lockSchoolSelection}>
+							<Button type="button" onClick={handleLockSelection}>
 								Confirm school list & raise invoice
 							</Button>
 						</div>
 					) : (
 						<p className="mono muted mt-3">Add at least one school to continue.</p>
 					)}
+
 				</section>
 			) : null}
 
@@ -2303,20 +2392,52 @@ function VisaHubInner() {
 	const amount = inv.amount || VISA_INVOICE_AMOUNT;
 
 	const nav = useNavigate();
+	const { toast } = useNotifier();
 
-	function pay() {
+	async function pay() {
 		setPayPhase("loading");
-		window.setTimeout(() => {
+		try {
+			const { invoices } = await invoicesApi.list();
+			const backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0);
+			if (!backend) {
+				toast.error(
+					"Your visa invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			try {
+				// Real Paystack checkout — the page redirects to the hosted page.
+				const checkout = await meApi.paystackCheckout(backend.id);
+				window.location.href = checkout.authorizationUrl;
+				return;
+			} catch (err) {
+				// No gateway configured → fall back to the server-side record path.
+				if (!(err instanceof ApiError && err.code === "PAYMENT_GATEWAY_UNCONFIGURED")) {
+					throw err;
+				}
+			}
+			await meApi.payInvoice(backend.id, {
+				amountCents: backend.balanceCents,
+				method: "card",
+				gateway: "manual",
+				reference: `PAY-${Date.now()}`,
+			});
 			payVisaInvoice();
+			toast.success("Payment recorded. The visa case will be opened.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
+			);
+		} finally {
 			setPayPhase("idle");
-		}, 1400);
+		}
 	}
 
 	if (payPhase === "loading") {
 		return (
 			<div className="loading-overlay">
 				<div className="spinner" aria-hidden />
-				<p className="mono">Simulating Paystack…</p>
+				<p className="mono">Contacting payment provider…</p>
 				<p className="muted">Charging {formatDualCurrency(amount)} visa fee</p>
 			</div>
 		);
@@ -2549,6 +2670,85 @@ function CompleteInner() {
 				<Button to="/" variant="ghost">
 					Home
 				</Button>
+			</div>
+		</div>
+	);
+}
+
+/* ========== Paystack return ========== */
+
+/**
+ * Paystack redirects the browser back to `/portal/pay?invoice=…&paystack=1&reference=…`
+ * after the hosted checkout. This route verifies the transaction server-side,
+ * marks the matching local invoice paid, and routes to the right stage page.
+ */
+export function PortalPayCallback() {
+	const { payApplicationInvoice, payVisaInvoice } = useAppState();
+	const { toast } = useNotifier();
+	const nav = useNavigate();
+	const [failed, setFailed] = useState(false);
+
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const invoiceId = params.get("invoice");
+		const reference = params.get("reference");
+		let cancelled = false;
+		(async () => {
+			try {
+				if (params.get("paystack") !== "1" || !invoiceId || !reference) {
+					nav("/portal/application", { replace: true });
+					return;
+				}
+				const { invoice } = await meApi.paystackVerify(invoiceId, reference);
+				if (cancelled) return;
+				const settled = invoice.balanceCents === 0;
+				if (settled) {
+					if (invoice.type === "visa") payVisaInvoice();
+					else payApplicationInvoice();
+				}
+				nav(invoice.type === "visa" ? "/portal/visa" : "/portal/application", {
+					replace: true,
+				});
+				if (settled) toast.success("Payment confirmed.");
+				else toast.error("Payment was not completed.");
+			} catch (err) {
+				if (cancelled) return;
+				setFailed(true);
+				toast.error(
+					err instanceof ApiError ? err.message : "Could not confirm the payment.",
+				);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [nav, payApplicationInvoice, payVisaInvoice, toast]);
+
+	if (failed) {
+		return (
+			<div className="portal-page">
+				<div className="card card--pad">
+					<p className="eyebrow">Payment confirmation</p>
+					<h1 className="page-title mt-1">Could not confirm the payment</h1>
+					<p className="muted mt-2">
+						If you were charged, the payment will still be recorded via the webhook.
+						Go back and try again.
+					</p>
+					<div className="row mt-4">
+						<Button to="/portal/application" arrow>
+							Back to dashboard
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="portal-page">
+			<div className="loading-overlay">
+				<div className="spinner" aria-hidden />
+				<p className="mono">Confirming payment…</p>
 			</div>
 		</div>
 	);

@@ -1,19 +1,12 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { ReschedulePanel } from "./ReschedulePanel";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
-
-const DIRECTIVE_OUTCOME: Record<string, "eligible" | "conditional" | "needs_info" | "not_eligible"> = {
-	Eligible: "eligible",
-	"Conditionally Eligible": "conditional",
-	"Need More Information": "needs_info",
-	"Not Eligible": "not_eligible",
-};
 
 /** Placeholder values shouldn't be joined into a meta line as bare em-dashes */
 function isKnown(v: string | undefined | null): v is string {
@@ -32,17 +25,15 @@ export function EnterpriseConsultations() {
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		consultations,
+		assignees,
+		error: casesError,
 		completeConsultationAssessment,
-		issueEligibility,
 		assignConsultation,
 		confirmConsultationSlot,
 		startConsultationAssessment,
-		addCaseComment,
-		requestDocuments,
-		rescheduleConsultation,
-		setDocVerdict,
-		seededDocVerdicts,
-	} = useOpsState();
+		commentOnConsultation,
+		requestConsultationDocs,
+	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedConsultation, setSelectedConsultation] = useState<MockConsultation | null>(null);
@@ -103,19 +94,12 @@ export function EnterpriseConsultations() {
 		setShowReschedule(false);
 	}
 
-	function handleCompleteAssessment(e: React.FormEvent) {
+	async function handleCompleteAssessment(e: React.FormEvent) {
 		e.preventDefault();
 		if (!selectedConsultation) return;
 		const result = { outcome, notes, recCountry, recUniversity, recProgram, recPackage };
-		completeConsultationAssessment(selectedConsultation.id, result, opsUser?.name);
-		if (selectedConsultation.isLive) {
-			issueEligibility({
-				outcome: DIRECTIVE_OUTCOME[outcome] ?? "needs_info",
-				note: notes || `${outcome} - recommended ${recProgram} at ${recUniversity} (${recCountry}).`,
-				by: opsUser?.name ?? "Consultant",
-			});
-		}
-		setSelectedConsultation({ ...selectedConsultation, status: "Completed", assessmentResult: result });
+		const res = await completeConsultationAssessment(selectedConsultation.id, result);
+		setSelectedConsultation({ ...selectedConsultation, status: "Completed", assessmentResult: res.consultation.assessmentResult ?? result });
 		setIsSubmitted(true);
 		setTimeout(() => setIsSubmitted(false), 3000);
 	}
@@ -143,6 +127,8 @@ export function EnterpriseConsultations() {
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
+
+			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
 
 			<div style={{
 				padding: "0.65rem 1rem",
@@ -397,7 +383,7 @@ export function EnterpriseConsultations() {
 										↻ Reschedule
 									</button>
 									<button
-										onClick={() => confirmConsultationSlot(selectedConsultation.id, opsUser?.name ?? "Consultant")}
+										onClick={() => void confirmConsultationSlot(selectedConsultation.id)}
 										className="btn btn--primary btn--sm"
 										style={{ whiteSpace: "nowrap" }}
 									>
@@ -420,7 +406,7 @@ export function EnterpriseConsultations() {
 									</button>
 									<button
 										onClick={() => {
-											startConsultationAssessment(selectedConsultation.id, opsUser?.name ?? "Consultant");
+											void startConsultationAssessment(selectedConsultation.id);
 											setDetailTab("assessment");
 										}}
 										className="btn btn--primary btn--sm"
@@ -436,7 +422,9 @@ export function EnterpriseConsultations() {
 								currentWhen={active.dateTime}
 								branchLabel={active.branch}
 								onConfirm={(date, time, reason) => {
-									rescheduleConsultation(selectedConsultation.id, date, time, reason, opsUser?.name ?? "Staff");
+									void date;
+										void time;
+										void reason;
 									setShowReschedule(false);
 								}}
 								onCancel={() => setShowReschedule(false)}
@@ -545,18 +533,17 @@ export function EnterpriseConsultations() {
 									}
 									actor={opsUser?.name ?? "Staff"}
 									isMine={isMine}
-									onAssign={(to) => assignConsultation(selectedConsultation.id, to, opsUser?.name ?? "Manager")}
+									assignees={assignees}
+									onAssign={(to) => void assignConsultation(selectedConsultation.id, to)}
 									onComment={(kind, text) =>
-										addCaseComment({ type: "consultation", id: selectedConsultation.id }, kind, text, opsUser?.name ?? "Staff")
+										void commentOnConsultation(selectedConsultation.id, kind, text)
 									}
 									onRequestDocs={(docs) =>
-										requestDocuments({ type: "consultation", id: selectedConsultation.id }, docs, opsUser?.name ?? "Staff")
+										void requestConsultationDocs(selectedConsultation.id, docs)
 									}
 									branchLabel={active.branch}
 									currentWhen={active.dateTime}
-									onReschedule={(date, time, reason) =>
-										rescheduleConsultation(selectedConsultation.id, date, time, reason, opsUser?.name ?? "Staff")
-									}
+									onReschedule={undefined}
 								/>
 
 								{detailTab === "profile" && (
@@ -628,7 +615,7 @@ export function EnterpriseConsultations() {
 												{selectedConsultation.documents.map((doc, idx) => {
 													const docKey = `consultation:${selectedConsultation.id}:${doc.name}`;
 													const isLive = Boolean(selectedConsultation.isLive);
-													const status = isLive ? doc.status : (seededDocVerdicts[docKey] ?? doc.status);
+													const status = doc.status;
 													const settled = status === "Verified" || status === "Rejected";
 													return (
 														<li key={idx} style={{ padding: "0.75rem 0.5rem", borderBottom: idx < selectedConsultation.documents.length - 1 ? "1px solid var(--border-light)" : "none" }}>
@@ -648,8 +635,7 @@ export function EnterpriseConsultations() {
 															</div>
 														{!settled && isMine && (
 															<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.5rem", paddingLeft: "1.875rem" }}>
-																<button onClick={() => setDocVerdict(docKey, isLive, doc.name, "Verified", opsUser?.name ?? "Consultant")} className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Verify</button>
-																<button onClick={() => setDocVerdict(docKey, isLive, doc.name, "Rejected", opsUser?.name ?? "Consultant")} className="btn btn--ghost btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Reject</button>
+																<a href="/documents" className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
 															</div>
 														)}
 														{!settled && !isMine && (

@@ -69,6 +69,40 @@ export const listInvoicesQuerySchema = z.object({
 	offset: z.coerce.number().int().min(0).default(0),
 });
 
+/**
+ * Paystack checkout for an applicant paying one of their own invoices.
+ *
+ * The server derives the amount from the invoice balance — the client never
+ * picks a price — and returns the Paystack hosted checkout URL to redirect to.
+ */
+export const paystackCheckoutSchema = z.object({
+	authorizationUrl: z.string().url(),
+	reference: z.string(),
+	amountCents: z.number().int(),
+});
+
+/** Verify a Paystack transaction reference against an invoice. */
+export const paystackVerifySchema = z.object({
+	reference: z.string().min(1).max(200),
+});
+
+/** Paystack webhook `charge.success` payload, the only shape we consume. */
+export const paystackWebhookSchema = z.object({
+	event: z.string(),
+	data: z
+		.object({
+			reference: z.string().optional(),
+			amount: z.number().int().optional(),
+			currency: z.string().optional(),
+			metadata: z
+				.object({
+					invoiceId: z.string().optional(),
+				})
+				.optional(),
+		})
+		.optional(),
+});
+
 /* ── Responses ─────────────────────────────────────────────────────────── */
 
 export const invoiceLineSchema = z.object({
@@ -125,6 +159,11 @@ export const invoiceListSchema = z.object({
 	total: z.number().int(),
 });
 
+/** Result of verifying a Paystack transaction against an invoice. */
+export const paystackVerifyResponseSchema = z.object({
+	invoice: invoiceSchema,
+});
+
 export type InvoiceType = z.infer<typeof invoiceTypeSchema>;
 export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
 export type InvoiceStoredStatus = z.infer<typeof invoiceStoredStatusSchema>;
@@ -136,3 +175,7 @@ export type InvoiceLine = z.infer<typeof invoiceLineSchema>;
 export type InvoicePaymentRecord = z.infer<typeof invoicePaymentSchema>;
 export type InvoiceEventRecord = z.infer<typeof invoiceEventSchema>;
 export type ApiInvoice = z.infer<typeof invoiceSchema>;
+export type PaystackCheckout = z.infer<typeof paystackCheckoutSchema>;
+export type PaystackVerify = z.infer<typeof paystackVerifySchema>;
+export type PaystackVerifyResponse = z.infer<typeof paystackVerifyResponseSchema>;
+export type PaystackWebhook = z.infer<typeof paystackWebhookSchema>;

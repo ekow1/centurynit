@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAppState } from "../context/AppState";
+import { useNotifier } from "./notifier/Notifier";
 import { useOpsSnapshot, resetOpsStorage } from "../data/opsDemoBridge";
 
 /**
@@ -12,16 +13,30 @@ import { useOpsSnapshot, resetOpsStorage } from "../data/opsDemoBridge";
 export function DemoControls() {
 	const [open, setOpen] = useState(false);
 	const { simAutopilot, setSimAutopilot, journeyPhase, resetJourney, authUser } = useAppState();
+	const { confirm, toast } = useNotifier();
 	const ops = useOpsSnapshot();
 
-	function resetEverything() {
-		const ok = window.confirm(
-			"Reset the whole demo? Clears the applicant journey, all ops records, and any issued decisions.\n\n" +
-				"An Operations Center window that is already open will need a refresh.",
-		);
+	// Demo/debug affordance only. The panel exposes simulation levers — most
+	// importantly the `simAutopilot` toggle, which is the gate that reveals
+	// the "Simulate other outcomes" self-approve buttons in the portal. A
+	// production build must not let any visitor flip that gate at will, so
+	// the entire panel (including the "DEMO" tab) is compiled out. Vite
+	// treats `import.meta.env.DEV` as a build-time constant and tree-shakes
+	// the dead branch, so none of this reaches a production bundle.
+	if (!import.meta.env.DEV) return null;
+
+	async function resetEverything() {
+		const ok = await confirm({
+			title: "Reset the whole demo?",
+			message:
+				"Clears the applicant journey, all ops records, and any issued decisions. An Operations Center window that is already open will need a refresh.",
+			confirmText: "Reset demo",
+			tone: "danger",
+		});
 		if (!ok) return;
 		resetJourney();
 		resetOpsStorage();
+		toast.success("Demo reset.");
 	}
 
 	if (!open) {

@@ -83,6 +83,7 @@ async function seedUser(id: string) {
 		name: id,
 		email: `${id}${SUFFIX}`,
 		emailVerified: true,
+		twoFactorEnabled: true,
 		createdAt: new Date(),
 		updatedAt: new Date(),
 	});
@@ -119,7 +120,7 @@ beforeAll(async () => {
 	// Imported after the mock is registered, so the router picks up the fake session.
 	const { createApp } = await import("../app.js");
 	const app = createApp();
-	request = (path, init) => app.request(path, init);
+	request = (path, init) => Promise.resolve(app.request(path, init));
 });
 
 beforeEach(async () => {

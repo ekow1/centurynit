@@ -89,7 +89,7 @@ export function signOut(): Promise<unknown> {
 export type ApiInvoice = {
 	id: string;
 	invoiceNumber: string;
-	status: "issued" | "partial" | "paid" | "void";
+	status: "issued" | "partial" | "paid" | "overdue" | "void";
 	type: "application" | "visa" | "consultation" | "custom";
 	applicantName: string;
 	applicantEmail: string | null;
@@ -153,6 +153,7 @@ export function getInvoice(id: string): Promise<ApiInvoice> {
 export function createInvoice(body: {
 	applicantName: string;
 	applicantEmail?: string;
+	clientUserId?: string;
 	type: "application" | "visa" | "consultation" | "custom";
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;

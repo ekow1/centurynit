@@ -12,6 +12,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
+	requireMfa,
 	requireModule,
 	type AuthVariables,
 	type StaffContext,
@@ -52,7 +53,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: createInvoiceSchema } },
@@ -82,7 +83,7 @@ invoicesRouter.openapi(
 		method: "get",
 		path: "/",
 		tags: ["Invoices"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { query: listInvoicesQuerySchema },
 		responses: {
 			200: {
@@ -131,7 +132,7 @@ invoicesRouter.openapi(
 		method: "get",
 		path: "/{id}",
 		tags: ["Invoices"],
-		middleware: requireAuth,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -165,7 +166,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/payments",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireModule("payments")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("payments")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -204,7 +205,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/void",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -236,7 +237,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/credit",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
 		request: {
 			params: idParams,
 			body: {

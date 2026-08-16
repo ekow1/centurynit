@@ -10,6 +10,7 @@ import { getAuthInstance } from "./auth.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
+	requireMfa,
 	requireRole,
 	type AuthVariables,
 } from "../middleware/auth.js";
@@ -88,7 +89,7 @@ settingsRouter.openapi(
 			"Returns every integration setting with masked values. " +
 			"Secrets show first 3 + last 4 chars; non-secrets show in full. " +
 			"Requires super_admin.",
-		middleware: [requireAuth, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: listResponseSchema } },
@@ -112,9 +113,9 @@ settingsRouter.openapi(
 		tags: ["Settings"],
 		summary: "Update a platform setting",
 		description:
-			"Encrypts and stores a setting value. Requires the caller's current " +
-			"password. Pass null to clear (revert to env fallback). Requires super_admin.",
-		middleware: [requireAuth, requireRole("super_admin")] as const,
+			"Encrypts and stores a setting value. Requires a current TOTP code. " +
+			"Pass null to clear (revert to env fallback). Requires super_admin.",
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: updateBodySchema } },
@@ -193,7 +194,7 @@ settingsRouter.openapi(
 		summary: "Settings audit log",
 		description:
 			"Recent settings changes, newest first. Values are masked. Requires super_admin.",
-		middleware: [requireAuth, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: auditResponseSchema } },

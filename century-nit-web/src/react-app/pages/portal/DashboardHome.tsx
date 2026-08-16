@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { useAppState } from "../../context/AppState";
+import { useNotifier } from "../../components/notifier/Notifier";
 import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
 
@@ -39,6 +40,7 @@ export function DashboardHome() {
 		authUser,
 		resetJourney,
 	} = useAppState();
+	const { confirm, toast } = useNotifier();
 	const nav = useNavigate();
 	const current = journeyPhase.stage;
 	const cta = currentStageCta(current);
@@ -51,12 +53,17 @@ export function DashboardHome() {
 	const consultationRef = booking.confirmationId;
 	const applicationId = application.applicationId;
 
-	function onReset() {
-		const ok = window.confirm(
-			"Reset the entire application journey? Consultation, schools, invoices, visa, and payments will clear. You stay signed in.",
-		);
+	async function onReset() {
+		const ok = await confirm({
+			title: "Reset your journey?",
+			message:
+				"Consultation, schools, invoices, visa, and payments will clear. You stay signed in.",
+			confirmText: "Reset journey",
+			tone: "danger",
+		});
 		if (!ok) return;
 		resetJourney();
+		toast.success("Journey reset. You can start again from the top.");
 		nav("/portal/home", { replace: true });
 	}
 

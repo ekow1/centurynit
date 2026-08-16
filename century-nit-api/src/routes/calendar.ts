@@ -6,7 +6,7 @@ import { db } from "../db/index.js";
 import { staffCalendarAccounts } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
-import { requireAuth, requireStaff, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireMfa, requireStaff, type AuthVariables } from "../middleware/auth.js";
 import { encrypt } from "../lib/crypto.js";
 import {
 	buildConsentUrl,
@@ -79,7 +79,7 @@ calendarRouter.openapi(
 		path: "/status",
 		tags: ["Calendar"],
 		summary: "Whether the signed-in staff member has connected Google Calendar",
-		middleware: [requireAuth, requireStaff] as const,
+		middleware: [requireAuth, requireStaff, requireMfa] as const,
 		responses: {
 			200: { content: { "application/json": { schema: statusSchema } }, description: "Status" },
 		},
@@ -110,7 +110,7 @@ calendarRouter.openapi(
 		path: "/connect",
 		tags: ["Calendar"],
 		summary: "Begin the Google Calendar OAuth flow",
-		middleware: [requireAuth, requireStaff] as const,
+		middleware: [requireAuth, requireStaff, requireMfa] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: z.object({ url: z.string().url() }) } },
@@ -246,7 +246,7 @@ calendarRouter.openapi(
 		path: "/working-hours",
 		tags: ["Calendar"],
 		summary: "Replace your weekly working hours",
-		middleware: [requireAuth, requireStaff] as const,
+		middleware: [requireAuth, requireStaff, requireMfa] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: updateWorkingHoursSchema } },
@@ -286,7 +286,7 @@ calendarRouter.openapi(
 		path: "/connection",
 		tags: ["Calendar"],
 		summary: "Disconnect Google Calendar",
-		middleware: [requireAuth, requireStaff] as const,
+		middleware: [requireAuth, requireStaff, requireMfa] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: z.object({ disconnected: z.boolean() }) } },
@@ -329,14 +329,14 @@ calendarRouter.openapi(
 		const token = c.req.header("x-goog-channel-token");
 		const state = c.req.header("x-goog-resource-state");
 
-		// Reject forgeries: the token is a shared secret we set when watching.
-		if (env.GOOGLE_WEBHOOK_TOKEN) {
-			const expected = Buffer.from(env.GOOGLE_WEBHOOK_TOKEN);
-			const received = Buffer.from(token ?? "");
-			const ok =
-				expected.length === received.length && timingSafeEqual(expected, received);
-			if (!ok) return c.body(null, 401);
-		}
+		// Reject forgeries. No token configured means we never issued a channel,
+		// so nothing arriving here is genuine — refuse rather than accept all.
+		if (!env.GOOGLE_WEBHOOK_TOKEN) return c.body(null, 401);
+		const expected = Buffer.from(env.GOOGLE_WEBHOOK_TOKEN);
+		const received = Buffer.from(token ?? "");
+		const ok =
+			expected.length === received.length && timingSafeEqual(expected, received);
+		if (!ok) return c.body(null, 401);
 
 		// The handshake Google sends when a channel is created.
 		if (state === "sync") return c.body(null, 200);

@@ -117,8 +117,23 @@ export const invitationPreviewSchema = z.object({
 	branch: z.string().nullable(),
 	organisation: z.string(),
 	expiresAt: z.string().datetime(),
+	/** The email already has a login — accept verifies that password instead of creating one. */
+	hasExistingLogin: z.boolean(),
 });
 export type InvitationPreview = z.infer<typeof invitationPreviewSchema>;
+
+/** Role, branch or active flag. At least one field must be present. */
+export const updateStaffSchema = z
+	.object({
+		role: roleSchema.optional(),
+		branch: z.string().max(64).nullable().optional(),
+		active: z.boolean().optional(),
+	})
+	.refine(
+		(v) => v.role !== undefined || v.branch !== undefined || v.active !== undefined,
+		{ message: "Provide at least one of role, branch, or active" },
+	);
+export type UpdateStaff = z.infer<typeof updateStaffSchema>;
 
 /* ── Two-factor ──────────────────────────────────────────────────────────── */
 

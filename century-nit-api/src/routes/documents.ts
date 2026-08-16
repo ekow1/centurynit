@@ -16,6 +16,7 @@ import { applicantDocuments, bookings, users } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
+	requireMfa,
 	requireModule,
 	type AuthVariables,
 	type StaffContext,
@@ -84,7 +85,9 @@ async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] |
 		.from(bookings)
 		.where(eq(bookings.employeeId, staff.opsUserId));
 
-	return rows.map((r) => r.ownerUserId);
+	const { assignedApplicantUserIds } = await import("../services/cases.js");
+	const fromCases = await assignedApplicantUserIds(staff.opsUserId);
+	return Array.from(new Set([...rows.map((r) => r.ownerUserId), ...fromCases]));
 }
 
 /** Whether this caller may act on a document owned by `ownerUserId`. */
@@ -135,7 +138,7 @@ documentsRouter.openapi(
 		description:
 			"Creates the document record at PENDING_UPLOAD and returns a short-lived URL. " +
 			"PUT the file to that URL, then call /api/v1/documents/{id}/complete.",
-		middleware: [requireAuth] as const,
+		middleware: [requireAuth, requireMfa] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: requestUploadSchema } },
@@ -156,9 +159,10 @@ documentsRouter.openapi(
 
 		const storageKey = buildStorageKey(user.id, body.documentType, body.fileName);
 
-		// Replacing a document of the same type: retire the previous row first, or
-		// the partial unique index rejects the new one. The old object is removed
-		// only after the replacement is confirmed, in /complete.
+		// Replacing a document of the same type: retire every live row first, or
+		// the partial unique index (`status <> 'REJECTED'`) rejects the new one.
+		// The old object is removed only after the replacement is confirmed, in
+		// /complete. PENDING_UPLOAD, UPLOADED and VERIFIED all occupy that index.
 		await db
 			.update(applicantDocuments)
 			.set({ status: "REJECTED", reviewNote: "Replaced by a newer upload", updatedAt: new Date() })
@@ -166,7 +170,7 @@ documentsRouter.openapi(
 				and(
 					eq(applicantDocuments.ownerUserId, user.id),
 					eq(applicantDocuments.documentType, body.documentType),
-					eq(applicantDocuments.status, "PENDING_UPLOAD"),
+					ne(applicantDocuments.status, "REJECTED"),
 				),
 			);
 
@@ -180,19 +184,6 @@ documentsRouter.openapi(
 				sizeBytes: body.sizeBytes,
 				storageKey,
 				status: "PENDING_UPLOAD",
-			})
-			.onConflictDoUpdate({
-				target: [applicantDocuments.ownerUserId, applicantDocuments.documentType],
-				set: {
-					fileName: body.fileName,
-					contentType: body.contentType,
-					sizeBytes: body.sizeBytes,
-					storageKey,
-					status: "PENDING_UPLOAD",
-					reviewNote: null,
-					reviewedAt: null,
-					updatedAt: new Date(),
-				},
 			})
 			.returning();
 
@@ -223,7 +214,7 @@ documentsRouter.openapi(
 		summary: "Confirm an upload finished",
 		description:
 			"Verifies the object actually exists in storage before marking the document UPLOADED.",
-		middleware: [requireAuth] as const,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			200: {
@@ -302,7 +293,7 @@ documentsRouter.openapi(
 		summary: "List documents",
 		description:
 			"Applicants see their own. Staff with the documents module see the review queue.",
-		middleware: [requireAuth] as const,
+		middleware: [requireAuth, requireMfa] as const,
 		request: {
 			query: z.object({
 				/** Staff only — read another applicant's documents. */
@@ -377,7 +368,7 @@ documentsRouter.openapi(
 		path: "/{id}/download",
 		tags: ["Documents"],
 		summary: "Get a short-lived download URL",
-		middleware: [requireAuth] as const,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			200: {
@@ -440,7 +431,7 @@ documentsRouter.openapi(
 		path: "/{id}/review",
 		tags: ["Documents"],
 		summary: "Verify or reject a document",
-		middleware: [requireAuth, requireModule("documents")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("documents")] as const,
 		request: {
 			params: z.object({ id: z.string().uuid() }),
 			body: {
@@ -509,7 +500,7 @@ documentsRouter.openapi(
 		path: "/{id}",
 		tags: ["Documents"],
 		summary: "Delete a document",
-		middleware: [requireAuth] as const,
+		middleware: [requireAuth, requireMfa] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			200: {

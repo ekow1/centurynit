@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { AppStateProvider } from "./context/AppState";
 import { OpsDirectiveBridge } from "./context/OpsDirectiveBridge";
+import { NotifierProvider } from "./components/notifier/Notifier";
 import { DemoControls } from "./components/DemoControls";
 import { EnquiryWidget } from "./components/EnquiryWidget";
 import { NewsletterPopup } from "./components/NewsletterPopup";
@@ -60,6 +61,7 @@ const PortalComplete = lazyNamed(portalPages, "PortalComplete");
 const PortalConsultation = lazyNamed(portalPages, "PortalConsultation");
 const PortalIndex = lazyNamed(portalPages, "PortalIndex");
 const PortalPackage = lazyNamed(portalPages, "PortalPackage");
+const PortalPayCallback = lazyNamed(portalPages, "PortalPayCallback");
 const PortalPaymentPlan = lazyNamed(portalPages, "PortalPaymentPlan");
 const PortalTrackingPage = lazyNamed(portalPages, "PortalTrackingPage");
 const PortalVisa = lazyNamed(portalPages, "PortalVisa");
@@ -162,6 +164,7 @@ function AppShell() {
 						<Route path="application" element={<PortalApplicationHub />} />
 						<Route path="tracking" element={<PortalTrackingPage />} />
 						<Route path="visa" element={<PortalVisa />} />
+						<Route path="pay" element={<PortalPayCallback />} />
 						{/* Retired stages — kept as redirects so old links still resolve */}
 						<Route path="payment-plan" element={<PortalPaymentPlan />} />
 						<Route path="agency" element={<PortalAgency />} />
@@ -197,15 +200,17 @@ function AppShell() {
 export default function App() {
 	return (
 		<BrowserRouter>
-			<AppStateProvider>
-				{/* Applies Operations Center decisions to the applicant's state */}
-				<OpsDirectiveBridge />
-				<EnquiryProvider>
-					<ScrollToTop />
-					<AppShell />
-					<DemoControls />
-				</EnquiryProvider>
-			</AppStateProvider>
+			<NotifierProvider>
+				<AppStateProvider>
+					{/* Applies Operations Center decisions to the applicant's state */}
+					<OpsDirectiveBridge />
+					<EnquiryProvider>
+						<ScrollToTop />
+						<AppShell />
+						<DemoControls />
+					</EnquiryProvider>
+				</AppStateProvider>
+			</NotifierProvider>
 		</BrowserRouter>
 	);
 }

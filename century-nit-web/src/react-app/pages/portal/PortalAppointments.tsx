@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import { branches, CONSULTATION_DURATIONS } from "century-nit-core/content";
+import { useNotifier } from "../../components/notifier/Notifier";
 import type { AvailabilitySlot, Booking } from "century-nit-shared";
 
 /**
@@ -411,17 +412,27 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 	const [rescheduling, setRescheduling] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const { confirm, toast } = useNotifier();
 	const copy = STATUS_COPY[booking.status] ?? { label: booking.status, note: "" };
 	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED";
 
 	async function cancel() {
-		if (!window.confirm("Cancel this appointment? The time will be released.")) return;
+		const ok = await confirm({
+			title: "Cancel this appointment?",
+			message: "The selected time will be released back to other applicants.",
+			confirmText: "Cancel appointment",
+			tone: "danger",
+		});
+		if (!ok) return;
 		setBusy(true);
 		try {
 			await bookingsApi.cancel(booking.id);
+			toast.success("Appointment cancelled.");
 			onChanged();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not cancel.");
+			const msg = err instanceof Error ? err.message : "Could not cancel.";
+			setError(msg);
+			toast.error(msg);
 		} finally {
 			setBusy(false);
 		}

@@ -239,16 +239,29 @@ const CACHE_TTL_MS = 30_000;
 async function loadCache(force = false): Promise<void> {
 	if (!force && Date.now() - cacheLoadedAt < CACHE_TTL_MS) return;
 
-	const rows = await db.select().from(platformSettings);
-	// Rebuilt rather than merged, so a key deleted from the table stops being
-	// served from memory.
-	cache.clear();
-	for (const row of rows) {
-		const key = row.key as SettingKey;
-		if (!SETTING_DEFS[key]) continue;
-		cache.set(key, row.encryptedValue ? decrypt(row.encryptedValue) : null);
+	try {
+		const rows = await db.select().from(platformSettings);
+		// Rebuilt rather than merged, so a key deleted from the table stops being
+		// served from memory.
+		cache.clear();
+		for (const row of rows) {
+			const key = row.key as SettingKey;
+			if (!SETTING_DEFS[key]) continue;
+			if (!row.encryptedValue) {
+				cache.set(key, null);
+				continue;
+			}
+			try {
+				cache.set(key, decrypt(row.encryptedValue));
+			} catch (decErr) {
+				console.warn(`[Settings] Failed to decrypt setting '${key}', falling back to env/default:`, decErr);
+				cache.set(key, null);
+			}
+		}
+		cacheLoadedAt = Date.now();
+	} catch (dbErr) {
+		console.error("[Settings] Failed to read platform_settings table:", dbErr);
 	}
-	cacheLoadedAt = Date.now();
 }
 
 

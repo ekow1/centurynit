@@ -4,6 +4,7 @@ import {
 	writeSetting,
 	getAuditLog,
 	SETTING_DEFS,
+	mask,
 	type SettingKey,
 } from "../services/settings.js";
 import { getAuthInstance } from "./auth.js";
@@ -153,11 +154,15 @@ settingsRouter.openapi(
 		 */
 		try {
 			const authInstance = await getAuthInstance();
-			await authInstance.api.verifyTOTP({
+			const verifyRes = await authInstance.api.verifyTOTP({
 				body: { code: body.totpCode },
 				headers: c.req.raw.headers,
 			});
-		} catch {
+			if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
+				throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
+			}
+		} catch (totpErr) {
+			console.error("[Settings] TOTP verification failed:", totpErr);
 			throw new HttpError(
 				403,
 				"MFA_REQUIRED",
@@ -171,6 +176,7 @@ settingsRouter.openapi(
 				email: staff.email,
 			});
 		} catch (err) {
+			if (err instanceof HttpError) throw err;
 			throw new HttpError(
 				400,
 				"VALIDATION_ERROR",
@@ -179,7 +185,19 @@ settingsRouter.openapi(
 		}
 
 		const all = await listSettingsForDisplay();
-		const updated = all.find((s) => s.key === body.key)!;
+		const updated = all.find((s) => s.key === body.key);
+		if (!updated) {
+			return c.json({
+				key: body.key,
+				label: SETTING_DEFS[body.key]?.label ?? body.key,
+				group: SETTING_DEFS[body.key]?.group ?? "Other",
+				secret: SETTING_DEFS[body.key]?.secret ?? false,
+				description: SETTING_DEFS[body.key]?.description ?? "",
+				valueMasked: body.value ? mask(body.value, SETTING_DEFS[body.key]?.secret ?? false) : null,
+				source: body.value ? "database" : "unset",
+				updatedAt: new Date().toISOString(),
+			});
+		}
 		return c.json(updated);
 	},
 );

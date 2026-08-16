@@ -22,6 +22,10 @@ import type {
 	ApiApplication,
 	ApiConsultation,
 	ApiInvoice,
+	CreateInvoice,
+	IssueProforma,
+	VoidInvoice,
+	CreditInvoice,
 	AssessmentResult,
 	ChoosePackage,
 	ChoosePaymentPlan,
@@ -46,6 +50,7 @@ import type {
 	PaymentVerificationResult,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
+
 
 
 /**
@@ -564,19 +569,53 @@ export const meApi = {
 };
 
 export const invoicesApi = {
-	list(): Promise<{ invoices: ApiInvoice[]; total: number }> {
-		return request(`${API_PREFIX}/invoices`);
+	list(query?: { status?: string; type?: string; q?: string; limit?: number; offset?: number }): Promise<{ invoices: ApiInvoice[]; total: number }> {
+		const params = new URLSearchParams();
+		if (query?.status) params.set("status", query.status);
+		if (query?.type) params.set("type", query.type);
+		if (query?.q) params.set("q", query.q);
+		if (query?.limit) params.set("limit", String(query.limit));
+		if (query?.offset) params.set("offset", String(query.offset));
+		const qs = params.toString();
+		return request(`${API_PREFIX}/invoices${qs ? `?${qs}` : ""}`);
 	},
 	get(id: string): Promise<ApiInvoice> {
 		return request(`${API_PREFIX}/invoices/${id}`);
+	},
+	create(body: CreateInvoice): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/invoices`, {
+			method: "POST",
+			...json(body),
+		});
+	},
+	issue(invoiceId: string, body: IssueProforma): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/invoices/${invoiceId}/issue`, {
+			method: "POST",
+			...json(body),
+		});
 	},
 	payments(invoiceId: string, body: RecordPayment): Promise<ApiInvoice> {
 		return request(`${API_PREFIX}/invoices/${invoiceId}/payments`, {
 			method: "POST",
 			...json(body),
 		});
-	}
+	},
+	void(invoiceId: string, input: string | VoidInvoice): Promise<ApiInvoice> {
+		const payload = typeof input === "string" ? { reason: input } : input;
+		return request(`${API_PREFIX}/invoices/${invoiceId}/void`, {
+			method: "POST",
+			...json(payload),
+		});
+	},
+
+	credit(invoiceId: string, body: CreditInvoice): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/invoices/${invoiceId}/credit`, {
+			method: "POST",
+			...json(body),
+		});
+	},
 };
+
 
 /* ── Schools & Applications ──────────────────────────────────────────────── */
 

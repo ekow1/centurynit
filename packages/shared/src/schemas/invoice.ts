@@ -21,10 +21,10 @@ export const invoiceTypeSchema = z.enum([
 ]);
 
 /** What the database stores. */
-export const invoiceStoredStatusSchema = z.enum(["issued", "partial", "paid", "void"]);
+export const invoiceStoredStatusSchema = z.enum(["proforma", "issued", "partial", "paid", "void"]);
 
 /** What responses carry — stored status plus the derived "overdue". */
-export const invoiceStatusSchema = z.enum(["issued", "partial", "paid", "overdue", "void"]);
+export const invoiceStatusSchema = z.enum(["proforma", "issued", "partial", "paid", "overdue", "void"]);
 
 /** A single invoice line at creation. Amounts are integer cents. */
 export const invoiceLineInputSchema = z.object({
@@ -58,6 +58,14 @@ export const voidInvoiceSchema = z.object({
 export const creditInvoiceSchema = z.object({
 	amountCents: z.number().int().positive().max(100_000_000),
 	reason: z.string().min(3).max(500),
+});
+
+/** Staff action: review a proforma estimate and issue it as a real invoice. */
+export const issueProformaSchema = z.object({
+	/** Staff can adjust the line items before issuing. */
+	lines: z.array(invoiceLineInputSchema).min(1).max(50),
+	note: z.string().max(2000).optional(),
+	dueAt: z.string().datetime().optional(),
 });
 
 export const listInvoicesQuerySchema = z.object({
@@ -145,6 +153,8 @@ export const invoiceSchema = z.object({
 	balanceCents: z.number().int(),
 	note: z.string().nullable(),
 	issuedByName: z.string(),
+	reviewedByName: z.string().nullable(),
+	reviewedAt: z.string().datetime().nullable(),
 	dueAt: z.string().datetime().nullable(),
 	voidedAt: z.string().datetime().nullable(),
 	voidReason: z.string().nullable(),
@@ -168,6 +178,7 @@ export type InvoiceType = z.infer<typeof invoiceTypeSchema>;
 export type InvoiceStatus = z.infer<typeof invoiceStatusSchema>;
 export type InvoiceStoredStatus = z.infer<typeof invoiceStoredStatusSchema>;
 export type CreateInvoice = z.infer<typeof createInvoiceSchema>;
+export type IssueProforma = z.infer<typeof issueProformaSchema>;
 export type RecordPayment = z.infer<typeof recordPaymentSchema>;
 export type VoidInvoice = z.infer<typeof voidInvoiceSchema>;
 export type CreditInvoice = z.infer<typeof creditInvoiceSchema>;

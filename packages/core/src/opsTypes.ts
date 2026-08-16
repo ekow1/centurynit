@@ -345,7 +345,7 @@ export type Invoice = {
 	history?: InvoiceEvent[];
 };
 
-export type InvoiceStatus = "issued" | "paid" | "partial" | "overdue" | "void";
+export type InvoiceStatus = "proforma" | "issued" | "paid" | "partial" | "overdue" | "void";
 
 export type InvoicePayment = {
 	id: string;
@@ -364,12 +364,14 @@ export type InvoiceEvent = {
 };
 
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
+	proforma: "Pending Review",
 	issued: "Issued",
 	partial: "Part paid",
 	paid: "Paid",
 	overdue: "Overdue",
 	void: "Void",
 };
+
 
 /** Total settled against an invoice */
 export function invoicePaid(inv: Invoice): number {

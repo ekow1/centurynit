@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
@@ -13,7 +13,9 @@ import {
 	type AssessmentDoc,
 	type BookingData,
 	type EligibilityOutcome,
+	type InvoiceLine,
 	type SchoolApplicationTrack,
+	type StageInvoice,
 } from "../../context/AppState";
 import {
 	APP_INVOICE_BASE,
@@ -42,7 +44,9 @@ import {
 	upcomingDays,
 } from "century-nit-core";
 import { meApi, invoicesApi, schoolsApi, paymentsApi, ApiError } from "century-nit-core/api";
+import type { ApiInvoice } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
+
 
 
 import { ChapterGate } from "./PortalLayout";
@@ -1639,14 +1643,71 @@ function ApplicationHubInner() {
 	} = useAppState();
 	const nav = useNavigate();
 
+	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
+
+	const fetchInvoice = useCallback(() => {
+		invoicesApi
+			.list()
+			.then((res) => {
+				const found = res.invoices.find((i) => i.type === "application");
+				if (found) setServerInvoice(found);
+			})
+			.catch(() => {});
+	}, []);
+
+	useEffect(() => {
+		fetchInvoice();
+	}, [fetchInvoice]);
+
 	const inv = application.applicationInvoice;
+
+	const effectiveInv: StageInvoice = useMemo(() => {
+		if (!serverInvoice) return inv;
+		const isProforma = serverInvoice.status === "proforma";
+		const isPaid = serverInvoice.status === "paid";
+		const isRaised =
+			serverInvoice.status === "issued" ||
+			serverInvoice.status === "partial" ||
+			serverInvoice.status === "overdue";
+
+		const lines: InvoiceLine[] = serverInvoice.lines.map((l) => ({
+			id: l.id,
+			label: l.label,
+			detail: l.detail || "",
+			amount: l.amountCents / 100,
+		}));
+
+		return {
+			id: serverInvoice.invoiceNumber,
+			amount:
+				serverInvoice.balanceCents > 0
+					? serverInvoice.balanceCents / 100
+					: serverInvoice.subtotalCents / 100,
+			status: isPaid ? "paid" : isRaised ? "raised" : isProforma ? "estimated" : "none",
+			raisedAt: serverInvoice.createdAt,
+			paidAt: isPaid ? serverInvoice.updatedAt : null,
+			description: isProforma
+				? "Proforma estimate — your consultant is reviewing and will confirm the final figures."
+				: isRaised
+					? `Official invoice ${serverInvoice.invoiceNumber} issued by ${serverInvoice.issuedByName}`
+					: isPaid
+						? `Settled in full (${serverInvoice.invoiceNumber})`
+						: inv.description,
+			estimatedAmount: serverInvoice.subtotalCents / 100,
+			estimateLines: lines,
+			actualAmount: isRaised || isPaid ? serverInvoice.subtotalCents / 100 : null,
+			actualLines: isRaised || isPaid ? lines : [],
+			consultantNote: serverInvoice.note,
+		};
+	}, [serverInvoice, inv]);
+
 	// Sum in USD — `tuition` is a display string in each university's own currency
 	const tuitionTotal = schoolApplications.reduce(
 		(n, s) => n + (getProgram(s.programId)?.tuitionUsd ?? 0),
 		0,
 	);
-	const selectionDone = Boolean(application.schoolSelectionDoneAt);
-	const paid = inv.status === "paid";
+	const selectionDone = Boolean(application.schoolSelectionDoneAt) || Boolean(serverInvoice);
+	const paid = effectiveInv.status === "paid" || inv.status === "paid";
 	const [destId, setDestId] = useState("");
 	const [uniId, setUniId] = useState("");
 	const [progId, setProgId] = useState("");
@@ -1669,6 +1730,12 @@ function ApplicationHubInner() {
 			if (!backend) {
 				toast.error(
 					"Your application invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			if (backend.status === "proforma") {
+				toast.error(
+					"This invoice is currently in review as a proforma estimate. Your consultant will issue the final invoice shortly.",
 				);
 				return;
 			}
@@ -1695,6 +1762,7 @@ function ApplicationHubInner() {
 				reference: `PAY-${Date.now()}`,
 			});
 			payApplicationInvoice();
+			fetchInvoice();
 			toast.success("Payment recorded. Tracking is now unlocked.");
 		} catch (err) {
 			toast.error(
@@ -1739,11 +1807,13 @@ function ApplicationHubInner() {
 	async function handleLockSelection() {
 		try {
 			await schoolsApi.lock();
+			fetchInvoice();
 		} catch (err) {
 			console.warn("Failed to sync lock to server", err);
 		}
 		lockSchoolSelection();
 	}
+
 
 
 	if (payPhase === "loading") {
@@ -1951,7 +2021,7 @@ function ApplicationHubInner() {
 			{/* 2 · Invoice only on this page */}
 			{selectionDone ? (
 				<StageInvoiceCard
-					invoice={inv}
+					invoice={effectiveInv}
 					title="Application invoice"
 					onPay={payInvoice}
 					meta={
@@ -1974,6 +2044,7 @@ function ApplicationHubInner() {
 			) : (
 				<p className="mono muted mb-4">Confirm your school list to raise the invoice.</p>
 			)}
+
 
 			{/* After pay: Next → Tracking page (not embedded here) */}
 			{paid ? (

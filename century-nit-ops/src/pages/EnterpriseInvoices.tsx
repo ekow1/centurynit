@@ -34,7 +34,7 @@ import {
  * by person — and the invoice detail that previously did not exist anywhere.
  */
 
-const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "issued", "partial", "overdue", "paid", "void"];
+const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "proforma", "issued", "partial", "overdue", "paid", "void"];
 
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
@@ -48,10 +48,12 @@ export function EnterpriseInvoices() {
 		loading,
 		error: invoiceError,
 		createInvoice: apiCreateInvoice,
+		issueInvoice: apiIssueInvoice,
 		recordPayment: apiRecordPayment,
 		voidInvoice: apiVoidInvoice,
 		creditInvoice: apiCreditInvoice,
 	} = useInvoiceApi();
+
 
 	const [view, setView] = useState<"invoices" | "accounts">("invoices");
 	const [status, setStatus] = useState<"all" | InvoiceStatus>("all");
@@ -305,6 +307,14 @@ export function EnterpriseInvoices() {
 								<InvoiceDetail
 									row={active}
 									by={by}
+									onIssue={async (lines, note, dueAt) => {
+										try {
+											await apiIssueInvoice(active.inv.id, lines, note, dueAt);
+											say(`Invoice ${active.inv.invoiceNumber} reviewed and issued.`);
+										} catch (e) {
+											say(e instanceof Error ? e.message : "Failed to issue invoice");
+										}
+									}}
 									onPay={async (amt, method, ref) => {
 										try {
 											await apiRecordPayment(active.inv.id, amt, method, ref);
@@ -359,40 +369,28 @@ export function EnterpriseInvoices() {
 							</tr>
 						</thead>
 						<tbody>
-							{accounts.length === 0 ? (
-								<tr>
-									<td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>
-										No accounts with invoices yet.
+							{accounts.map((a) => (
+								<tr key={a.id}>
+									<td><strong>{a.name}</strong></td>
+									<td>{a.count}</td>
+									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.billed)}</td>
+									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.paid)}</td>
+									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.balance)}</td>
+									<td>{a.overdue > 0 ? <span className="inv-tag inv-tag--overdue">{a.overdue}d overdue</span> : "Current"}</td>
+									<td style={{ textAlign: "right" }}>
+										<button
+											type="button"
+											className="btn btn--ghost btn--sm"
+											onClick={() => {
+												setSearch(a.name);
+												setView("invoices");
+											}}
+										>
+											View invoices
+										</button>
 									</td>
 								</tr>
-							) : (
-								accounts.map((acc) => (
-									<tr key={acc.id}>
-										<td style={{ fontWeight: 500 }}>{acc.name}</td>
-										<td className="muted">{acc.count}</td>
-										<td style={{ textAlign: "right" }} className="admin-table__mono">{fmtGhs(acc.billed)}</td>
-										<td style={{ textAlign: "right" }} className="admin-table__mono">{fmtGhs(acc.paid)}</td>
-										<td style={{ textAlign: "right" }} className="admin-table__mono">
-											<strong>{fmtGhs(acc.balance)}</strong>
-										</td>
-										<td>
-											{acc.overdue > 0 ? (
-												<span className="inv-aging">{acc.overdue}d overdue</span>
-											) : (
-												<span className="muted">Current</span>
-											)}
-										</td>
-										<td style={{ textAlign: "right" }}>
-											<button
-												className="btn btn--ghost btn--sm"
-												onClick={() => setBuilding({ applicantId: acc.id, applicantName: acc.name, type: "Application" })}
-											>
-												New invoice
-											</button>
-										</td>
-									</tr>
-								))
-							)}
+							))}
 						</tbody>
 					</table>
 				</div>
@@ -440,6 +438,7 @@ export function EnterpriseInvoices() {
 function InvoiceDetail({
 	row,
 	by,
+	onIssue,
 	onPay,
 	onVoid,
 	onCredit,
@@ -447,18 +446,23 @@ function InvoiceDetail({
 }: {
 	row: { inv: Invoice; derived: InvoiceStatus; age: number | null; balance: number };
 	by: string;
+	onIssue: (lines: OpsInvoiceLine[], note?: string, dueAt?: string) => Promise<void>;
 	onPay: (amount: number, method: string, reference: string) => void;
 	onVoid: (reason: string) => void;
 	onCredit: (amount: number, reason: string) => void;
 	onResend: () => void;
 }) {
 	const { inv, derived, balance } = row;
-	const [panel, setPanel] = useState<"none" | "pay" | "void" | "credit">("none");
+	const [panel, setPanel] = useState<"none" | "issue" | "pay" | "void" | "credit">("none");
+	const [editLines, setEditLines] = useState<OpsInvoiceLine[]>(inv.lines);
+	const [editNote, setEditNote] = useState(inv.note || "");
+	const [editDueAt, setEditDueAt] = useState("");
 	const [amount, setAmount] = useState("");
 	const [method, setMethod] = useState("Bank Transfer");
 	const [reference, setReference] = useState("");
 	const [reason, setReason] = useState("");
 
+	const isProforma = inv.status === "proforma";
 	const paid = invoicePaid(inv);
 	const closed = inv.status === "void" || balance === 0;
 
@@ -467,16 +471,26 @@ function InvoiceDetail({
 		setAmount("");
 		setReference("");
 		setReason("");
+		setEditLines(inv.lines);
 	}
 
 	return (
 		<div className="inv-doc">
+			{isProforma ? (
+				<div style={{ background: "rgba(99, 102, 241, 0.12)", border: "1px solid rgba(99, 102, 241, 0.3)", borderRadius: "6px", padding: "0.85rem 1rem", marginBottom: "1.25rem" }}>
+					<strong style={{ color: "#6366f1" }}>Proforma Estimate</strong>
+					<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>
+						This is an auto-generated estimate requested by the applicant. Review or adjust line items before issuing. The applicant cannot pay until you issue the invoice.
+					</p>
+				</div>
+			) : null}
+
 			<header className="inv-doc__head">
 				<div>
 					<p className="inv-doc__num mono">{inv.invoiceNumber}</p>
 					<p className="inv-doc__who display">{inv.applicantName}</p>
 					<p className="mono muted inv-doc__meta">
-						{inv.type} · issued {new Date(inv.issuedAt).toLocaleDateString()} by {inv.issuedBy}
+						{inv.type} · {isProforma ? "estimated" : `issued ${new Date(inv.issuedAt).toLocaleDateString()} by ${inv.issuedBy}`}
 						{inv.dueAt ? ` · due ${new Date(inv.dueAt).toLocaleDateString()}` : ""}
 					</p>
 				</div>
@@ -499,7 +513,7 @@ function InvoiceDetail({
 				<Row label="Subtotal" value={fmtBoth(inv.subtotal)} />
 				{paid > 0 ? <Row label="Paid" value={`− ${fmtBoth(paid)}`} /> : null}
 				{inv.creditedAmount ? <Row label="Credited" value={`− ${fmtBoth(inv.creditedAmount)}`} /> : null}
-				<Row label="Balance due" value={fmtBoth(balance)} strong />
+				<Row label={isProforma ? "Estimated total" : "Balance due"} value={fmtBoth(balance)} strong />
 			</div>
 
 			{inv.note ? <p className="inv-doc__note">{inv.note}</p> : null}
@@ -510,35 +524,147 @@ function InvoiceDetail({
 
 			{/* Actions */}
 			<div className="inv-doc__actions">
-				<button type="button" className="btn btn--ghost btn--sm" onClick={onResend}>
-					Re-send
-				</button>
-				{!closed ? (
+				{isProforma ? (
+					<button
+						type="button"
+						className={`btn btn--sm ${panel === "issue" ? "btn--ghost" : "btn--primary"}`}
+						onClick={() => {
+							setEditLines(inv.lines);
+							setEditNote(inv.note || "");
+							setPanel(panel === "issue" ? "none" : "issue");
+						}}
+					>
+						{panel === "issue" ? "Close review" : "Review & Issue Invoice"}
+					</button>
+				) : (
 					<>
-						<button
-							type="button"
-							className={`btn btn--sm ${panel === "pay" ? "btn--primary" : "btn--ghost"}`}
-							onClick={() => setPanel(panel === "pay" ? "none" : "pay")}
-						>
-							Record payment
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onResend}>
+							Re-send
 						</button>
-						<button
-							type="button"
-							className={`btn btn--sm ${panel === "credit" ? "btn--primary" : "btn--ghost"}`}
-							onClick={() => setPanel(panel === "credit" ? "none" : "credit")}
-						>
-							Credit note
-						</button>
-						<button
-							type="button"
-							className={`btn btn--sm ${panel === "void" ? "btn--primary" : "btn--ghost"}`}
-							onClick={() => setPanel(panel === "void" ? "none" : "void")}
-						>
-							Void
-						</button>
+						{!closed ? (
+							<>
+								<button
+									type="button"
+									className={`btn btn--sm ${panel === "pay" ? "btn--primary" : "btn--ghost"}`}
+									onClick={() => setPanel(panel === "pay" ? "none" : "pay")}
+								>
+									Record payment
+								</button>
+								<button
+									type="button"
+									className={`btn btn--sm ${panel === "credit" ? "btn--primary" : "btn--ghost"}`}
+									onClick={() => setPanel(panel === "credit" ? "none" : "credit")}
+								>
+									Credit note
+								</button>
+								<button
+									type="button"
+									className={`btn btn--sm ${panel === "void" ? "btn--primary" : "btn--ghost"}`}
+									onClick={() => setPanel(panel === "void" ? "none" : "void")}
+								>
+									Void
+								</button>
+							</>
+						) : null}
 					</>
-				) : null}
+				)}
 			</div>
+
+			{panel === "issue" ? (
+				<form
+					className="inv-form"
+					onSubmit={async (e) => {
+						e.preventDefault();
+						await onIssue(editLines, editNote, editDueAt || undefined);
+						reset();
+					}}
+				>
+					<p className="eyebrow">Review & Issue Proforma</p>
+					<p className="muted mt-1 mb-3" style={{ fontSize: "var(--text-xs)" }}>
+						Adjust the line items and set a payment due date. When issued, this becomes a payable invoice in the applicant portal.
+					</p>
+
+					{editLines.map((line, idx) => (
+						<div key={line.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 40px", gap: "0.5rem", marginBottom: "0.5rem", alignItems: "center" }}>
+							<input
+								className="input input--sm"
+								value={line.label}
+								onChange={(e) => {
+									const updated = [...editLines];
+									updated[idx] = { ...line, label: e.target.value };
+									setEditLines(updated);
+								}}
+								placeholder="Label"
+							/>
+							<input
+								className="input input--sm"
+								value={line.detail || ""}
+								onChange={(e) => {
+									const updated = [...editLines];
+									updated[idx] = { ...line, detail: e.target.value };
+									setEditLines(updated);
+								}}
+								placeholder="Detail"
+							/>
+							<input
+								className="input input--sm"
+								type="number"
+								value={line.amount}
+								onChange={(e) => {
+									const updated = [...editLines];
+									updated[idx] = { ...line, amount: Number(e.target.value) || 0 };
+									setEditLines(updated);
+								}}
+								placeholder="USD"
+							/>
+							<button
+								type="button"
+								className="btn btn--ghost btn--sm"
+								style={{ padding: "0.2rem 0.5rem" }}
+								onClick={() => setEditLines(editLines.filter((_, i) => i !== idx))}
+							>
+								✕
+							</button>
+						</div>
+					))}
+
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm mt-2 mb-3"
+						onClick={() => setEditLines([...editLines, { id: `item-${Date.now()}`, label: "Additional Fee", detail: "", amount: 50 }])}
+					>
+						+ Add line item
+					</button>
+
+					<div className="inv-form__grid">
+						<label>
+							<span className="inv-form__label mono">Due date</span>
+							<input
+								type="date"
+								className="input input--sm"
+								value={editDueAt}
+								onChange={(e) => setEditDueAt(e.target.value)}
+							/>
+						</label>
+						<label style={{ gridColumn: "span 2" }}>
+							<span className="inv-form__label mono">Consultant note</span>
+							<input
+								className="input input--sm"
+								value={editNote}
+								onChange={(e) => setEditNote(e.target.value)}
+								placeholder="Note visible to applicant"
+							/>
+						</label>
+					</div>
+
+					<div className="inv-form__foot mt-3">
+						<button type="submit" className="btn btn--primary btn--sm" disabled={editLines.length === 0}>
+							Confirm & Issue Invoice (${editLines.reduce((n, l) => n + l.amount, 0)})
+						</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={reset}>Cancel</button>
+					</div>
+				</form>
+			) : null}
 
 			{panel === "pay" ? (
 				<form

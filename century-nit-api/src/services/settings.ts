@@ -38,7 +38,12 @@ export type SettingKey =
 	| "BOOKING_BUFFER_MINUTES"
 	| "DEFAULT_TIMEZONE"
 	| "PAYSTACK_SECRET_KEY"
-	| "STRIPE_SECRET_KEY";
+	| "STRIPE_SECRET_KEY"
+	| "APP_BASE_FEE_CENTS"
+	| "APP_PER_SCHOOL_FEE_CENTS"
+	| "APP_DOC_VERIFY_FEE_CENTS"
+	| "VISA_BASE_FEE_CENTS"
+	| "CONSULTATION_FEE_CENTS";
 
 
 /** All keys this service manages, with metadata for the UI. */
@@ -149,6 +154,36 @@ export const SETTING_DEFS: Record<
 		secret: true,
 		description:
 			"Server-side Stripe key used for international USD/GBP card checkouts. Starts with sk_live_ or sk_test_.",
+	},
+	APP_BASE_FEE_CENTS: {
+		label: "Application Base Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Application processing base fee in USD cents. Default: 35000 ($350).",
+	},
+	APP_PER_SCHOOL_FEE_CENTS: {
+		label: "Per-School Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Per-university application fee in USD cents. Default: 10000 ($100).",
+	},
+	APP_DOC_VERIFY_FEE_CENTS: {
+		label: "Document Verification Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Document verification and courier fee in USD cents. Default: 4000 ($40).",
+	},
+	VISA_BASE_FEE_CENTS: {
+		label: "Visa Base Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Visa processing base fee in USD cents. Default: 35000 ($350).",
+	},
+	CONSULTATION_FEE_CENTS: {
+		label: "Consultation Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Initial consultation fee in USD cents. Default: 7500 ($75).",
 	},
 };
 

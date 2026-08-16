@@ -89,7 +89,7 @@ export function signOut(): Promise<unknown> {
 export type ApiInvoice = {
 	id: string;
 	invoiceNumber: string;
-	status: "issued" | "partial" | "paid" | "overdue" | "void";
+	status: "proforma" | "issued" | "partial" | "paid" | "overdue" | "void";
 	type: "application" | "visa" | "consultation" | "custom";
 	applicantName: string;
 	applicantEmail: string | null;
@@ -101,6 +101,8 @@ export type ApiInvoice = {
 	balanceCents: number;
 	note: string | null;
 	issuedByName: string;
+	reviewedByName?: string | null;
+	reviewedAt?: string | null;
 	dueAt: string | null;
 	voidedAt: string | null;
 	voidReason: string | null;
@@ -165,6 +167,20 @@ export function createInvoice(body: {
 	});
 }
 
+export function issueInvoice(
+	id: string,
+	body: {
+		lines: { label: string; detail?: string; amountCents: number }[];
+		note?: string;
+		dueAt?: string;
+	},
+): Promise<ApiInvoice> {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}/issue`, {
+		method: "POST",
+		body: JSON.stringify(body),
+	});
+}
+
 export function recordPayment(
 	id: string,
 	body: {
@@ -178,6 +194,7 @@ export function recordPayment(
 		method: "POST",
 		body: JSON.stringify(body),
 	});
+
 }
 
 export function voidInvoice(

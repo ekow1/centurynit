@@ -17,11 +17,13 @@ import {
 import {
 	listInvoices as apiListInvoices,
 	createInvoice as apiCreateInvoice,
+	issueInvoice as apiIssueInvoice,
 	recordPayment as apiRecordPayment,
 	voidInvoice as apiVoidInvoice,
 	creditInvoice as apiCreditInvoice,
 	type ApiInvoice,
 } from "../lib/api";
+
 
 const TYPE_MAP: Record<ApiInvoice["type"], InvoiceType> = {
 	application: "Application",
@@ -129,6 +131,24 @@ export function useInvoiceApi() {
 		[],
 	);
 
+	const issueInvoice = useCallback(
+		async (id: string, lines: OpsInvoiceLine[], note?: string, dueAt?: string) => {
+			const updated = await apiIssueInvoice(id, {
+				lines: lines.map((l) => ({
+					label: l.label,
+					detail: l.detail || undefined,
+					amountCents: Math.round(l.amount * 100),
+				})),
+				note: note || undefined,
+				dueAt,
+			});
+			const adapted = adaptInvoice(updated);
+			setInvoices((prev) => prev.map((inv) => (inv.id === id ? adapted : inv)));
+			return adapted;
+		},
+		[],
+	);
+
 	const recordPayment = useCallback(
 		async (id: string, amount: number, method: string, reference: string) => {
 			const updated = await apiRecordPayment(id, {
@@ -166,8 +186,10 @@ export function useInvoiceApi() {
 		error,
 		refresh,
 		createInvoice,
+		issueInvoice,
 		recordPayment,
 		voidInvoice,
 		creditInvoice,
 	};
 }
+

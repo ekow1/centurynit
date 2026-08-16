@@ -13,6 +13,7 @@ import {
 	invoices,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { getSetting } from "./settings.js";
 
 /**
  * Invoice lifecycle — commands, not CRUD (API_MIGRATION_PLAN.md §4).
@@ -60,6 +61,7 @@ function balanceOf(row: InvoiceRow, paidCents: number): number {
 /** Stored status from the numbers — void is sticky and set explicitly. */
 function storedStatusFor(row: InvoiceRow, paidCents: number): InvoiceStoredStatus {
 	if (row.status === "void") return "void";
+	if (row.status === "proforma") return "proforma";
 	const balance = balanceOf(row, paidCents);
 	if (balance === 0) return "paid";
 	if (paidCents > 0 || row.creditedCents > 0) return "partial";
@@ -69,6 +71,7 @@ function storedStatusFor(row: InvoiceRow, paidCents: number): InvoiceStoredStatu
 /** Effective status for responses — derives "overdue", never stores it. */
 function effectiveStatus(row: InvoiceRow, paidCents: number): InvoiceStatus {
 	const stored = storedStatusFor(row, paidCents);
+	if (stored === "proforma") return "proforma";
 	if (
 		(stored === "issued" || stored === "partial") &&
 		row.dueAt &&
@@ -133,6 +136,8 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 		balanceCents: balanceOf(row, paidCents),
 		note: row.note ?? null,
 		issuedByName: row.issuedByName,
+		reviewedByName: row.reviewedByName ?? null,
+		reviewedAt: row.reviewedAt?.toISOString() ?? null,
 		dueAt: row.dueAt?.toISOString() ?? null,
 		voidedAt: row.voidedAt?.toISOString() ?? null,
 		voidReason: row.voidReason ?? null,
@@ -463,3 +468,155 @@ export async function creditInvoice(input: {
 		return updated;
 	});
 }
+
+/* ── Fee Schedule ────────────────────────────────────────────────────────── */
+
+/** Read configurable fee amounts from platform_settings, with hardcoded defaults. */
+export async function getFeeSchedule(): Promise<{
+	appBaseCents: number;
+	appPerSchoolCents: number;
+	appDocVerifyCents: number;
+	visaBaseCents: number;
+	consultationCents: number;
+}> {
+	const parse = async (key: Parameters<typeof getSetting>[0], fallback: number) => {
+		const v = await getSetting(key);
+		const n = v ? Number.parseInt(v, 10) : NaN;
+		return Number.isFinite(n) && n >= 0 ? n : fallback;
+	};
+	return {
+		appBaseCents: await parse("APP_BASE_FEE_CENTS", 35000),
+		appPerSchoolCents: await parse("APP_PER_SCHOOL_FEE_CENTS", 10000),
+		appDocVerifyCents: await parse("APP_DOC_VERIFY_FEE_CENTS", 4000),
+		visaBaseCents: await parse("VISA_BASE_FEE_CENTS", 35000),
+		consultationCents: await parse("CONSULTATION_FEE_CENTS", 7500),
+	};
+}
+
+/* ── Proforma (estimate, not payable) ────────────────────────────────────── */
+
+/**
+ * Create a proforma estimate — a non-payable preview of an upcoming invoice.
+ *
+ * The applicant sees it as "Estimated — pending review". Staff see it in the
+ * review queue and can adjust line items before issuing it as a real invoice.
+ * The proforma gets a real invoice number so it can be referenced in messages.
+ */
+export async function createProforma(input: {
+	data: CreateInvoice;
+}): Promise<InvoiceRow> {
+	const { data } = input;
+	const subtotalCents = data.lines.reduce((n, l) => n + l.amountCents, 0);
+
+	const row = await db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const invoiceNumber = await nextInvoiceNumber(txDb);
+		const [created] = await tx
+			.insert(invoices)
+			.values({
+				invoiceNumber,
+				clientUserId: data.clientUserId ?? null,
+				applicantName: data.applicantName,
+				applicantEmail: data.applicantEmail ?? null,
+				type: data.type,
+				subtotalCents,
+				note: data.note ?? null,
+				status: "proforma",
+				issuedBy: null,
+				issuedByName: "System Estimate",
+			})
+			.returning();
+
+		await tx.insert(invoiceLines).values(
+			data.lines.map((l, position) => ({
+				invoiceId: created.id,
+				position,
+				label: l.label,
+				detail: l.detail ?? null,
+				amountCents: l.amountCents,
+			})),
+		);
+
+		await audit(created.id, "proforma_created", null, "Estimate generated — pending staff review", txDb);
+		return created;
+	});
+
+	return row;
+}
+
+/**
+ * Staff action: review a proforma and issue it as a real, payable invoice.
+ *
+ * The staff member can adjust line items (add document fees, discounts, etc.),
+ * set a due date, and add a note. The old estimate lines are replaced entirely.
+ */
+export async function issueProforma(input: {
+	invoiceId: string;
+	lines: { label: string; detail?: string; amountCents: number }[];
+	note?: string;
+	dueAt?: string;
+	actor: Actor;
+}): Promise<InvoiceRow> {
+	return db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [row] = await tx
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, input.invoiceId))
+			.limit(1)
+			.for("update");
+
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.status !== "proforma") {
+			throw new HttpError(
+				409,
+				"NOT_PROFORMA",
+				`Only proforma invoices can be issued. This invoice is "${row.status}".`,
+			);
+		}
+
+		const newSubtotal = input.lines.reduce((n, l) => n + l.amountCents, 0);
+		if (newSubtotal <= 0) {
+			throw new HttpError(400, "VALIDATION_ERROR", "Invoice total must be greater than zero");
+		}
+
+		// Replace estimate lines with the reviewed/adjusted lines
+		await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, row.id));
+		await tx.insert(invoiceLines).values(
+			input.lines.map((l, position) => ({
+				invoiceId: row.id,
+				position,
+				label: l.label,
+				detail: l.detail ?? null,
+				amountCents: l.amountCents,
+			})),
+		);
+
+		const [updated] = await tx
+			.update(invoices)
+			.set({
+				status: "issued",
+				subtotalCents: newSubtotal,
+				note: input.note ?? row.note,
+				dueAt: input.dueAt ? new Date(input.dueAt) : null,
+				issuedBy: input.actor.opsUserId,
+				issuedByName: input.actor.name,
+				reviewedBy: input.actor.opsUserId,
+				reviewedByName: input.actor.name,
+				reviewedAt: new Date(),
+				updatedAt: new Date(),
+			})
+			.where(eq(invoices.id, row.id))
+			.returning();
+
+		await audit(
+			row.id,
+			"issued",
+			input.actor.email,
+			`Reviewed and issued by ${input.actor.name}. Subtotal: ${newSubtotal} cents`,
+			txDb,
+		);
+		return updated;
+	});
+}
+

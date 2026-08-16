@@ -13,11 +13,100 @@ import {
 	schoolApplications,
 	schoolTrackEvents,
 } from "../db/schema.js";
-import { createInvoice } from "./invoice.js";
+import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 
-const APP_INVOICE_BASE_CENTS = 35000; // $350.00
-const APP_INVOICE_PER_SCHOOL_CENTS = 10000; // $100.00 per school
+export async function lockSchoolsForApplicant(
+	applicantId: string,
+	user: { id: string; email: string; name?: string | null },
+): Promise<SchoolApplicationList> {
+	const rows = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.applicantId, applicantId));
+
+	if (rows.length === 0) {
+		throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Please select at least one university/program before locking.");
+	}
+
+	const [app] = await db
+		.select()
+		.from(applications)
+		.where(eq(applications.applicantId, applicantId))
+		.orderBy(desc(applications.createdAt))
+		.limit(1);
+
+	// Update all draft schools to "Preparing Application"
+	for (const row of rows) {
+		if (row.status === "Draft") {
+			await db
+				.update(schoolApplications)
+				.set({ status: "Preparing Application", updatedAt: new Date() })
+				.where(eq(schoolApplications.id, row.id));
+
+			await db.insert(schoolTrackEvents).values({
+				schoolApplicationId: row.id,
+				status: "Preparing Application",
+				note: "Selection locked by applicant. Moving to preparation.",
+			});
+		}
+	}
+
+	// Read configurable fees from platform_settings
+	const fees = await getFeeSchedule();
+
+	// Find applicant details
+	const [applicantRow] = await db
+		.select()
+		.from(applicants)
+		.where(eq(applicants.id, applicantId))
+		.limit(1);
+
+	// Create a PROFORMA estimate — not payable until a staff member reviews and issues it
+	const proforma = await createProforma({
+		data: {
+			applicantName: applicantRow?.name ?? user.name ?? "Applicant",
+			applicantEmail: applicantRow?.email ?? user.email,
+			clientUserId: user.id,
+			type: "application",
+			lines: [
+				{
+					label: "Application Processing Base Fee",
+					detail: "Document verification, portal account creation, credential review",
+					amountCents: fees.appBaseCents,
+				},
+				{
+					label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
+					detail: `Per-institution submission & liaison fee`,
+					amountCents: rows.length * fees.appPerSchoolCents,
+				},
+				{
+					label: "Document Verification & Courier",
+					detail: "Transcripts and certificates verified and shipped",
+					amountCents: fees.appDocVerifyCents,
+				},
+			],
+			note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
+		},
+	});
+
+	if (app) {
+		await db
+			.update(applications)
+			.set({
+				stage: "School Applications Locked",
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, app.id));
+	}
+
+	const updated = await listSchoolsForApplicant(applicantId);
+	return {
+		...updated,
+		selectionDoneAt: new Date().toISOString(),
+		invoiceId: proforma.id,
+	};
+}
 
 export async function serializeSchool(
 	row: typeof schoolApplications.$inferSelect,
@@ -123,95 +212,6 @@ export async function removeSchoolForApplicant(
 	}
 
 	await db.delete(schoolApplications).where(eq(schoolApplications.id, schoolId));
-}
-
-export async function lockSchoolsForApplicant(
-	applicantId: string,
-	user: { id: string; email: string; name?: string | null },
-): Promise<SchoolApplicationList> {
-	const rows = await db
-		.select()
-		.from(schoolApplications)
-		.where(eq(schoolApplications.applicantId, applicantId));
-
-	if (rows.length === 0) {
-		throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Please select at least one university/program before locking.");
-	}
-
-	const [app] = await db
-		.select()
-		.from(applications)
-		.where(eq(applications.applicantId, applicantId))
-		.orderBy(desc(applications.createdAt))
-		.limit(1);
-
-	// Update all draft schools to "Preparing Application"
-	for (const row of rows) {
-		if (row.status === "Draft") {
-			await db
-				.update(schoolApplications)
-				.set({ status: "Preparing Application", updatedAt: new Date() })
-				.where(eq(schoolApplications.id, row.id));
-
-			await db.insert(schoolTrackEvents).values({
-				schoolApplicationId: row.id,
-				status: "Preparing Application",
-				note: "Selection locked by applicant. Moving to preparation.",
-			});
-		}
-	}
-
-	// Auto-raise Stage II Invoice if not already raised
-	const [applicantRow] = await db
-		.select()
-		.from(applicants)
-
-		.where(eq(applicants.id, applicantId))
-		.limit(1);
-
-	const invoice = await createInvoice({
-		data: {
-			applicantName: applicantRow?.name ?? user.name ?? "Applicant",
-			applicantEmail: applicantRow?.email ?? user.email,
-			clientUserId: user.id,
-			type: "application",
-			lines: [
-				{
-					label: "Stage II — University Application Processing Base Fee",
-					detail: `Document verification, portal account creation, credential review`,
-					amountCents: APP_INVOICE_BASE_CENTS,
-				},
-				{
-					label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
-					detail: `$100 per selected university application track`,
-					amountCents: rows.length * APP_INVOICE_PER_SCHOOL_CENTS,
-				},
-			],
-			note: `Stage II Application Fee for ${rows.length} locked school applications.`,
-		},
-		actor: {
-			opsUserId: "00000000-0000-0000-0000-000000000000",
-			name: "System Automation",
-			email: "system@centurynit.com",
-		},
-	});
-
-	if (app) {
-		await db
-			.update(applications)
-			.set({
-				stage: "School Applications Locked",
-				updatedAt: new Date(),
-			})
-			.where(eq(applications.id, app.id));
-	}
-
-	const updated = await listSchoolsForApplicant(applicantId);
-	return {
-		...updated,
-		selectionDoneAt: new Date().toISOString(),
-		invoiceId: invoice.id,
-	};
 }
 
 export async function updateSchoolStatus(

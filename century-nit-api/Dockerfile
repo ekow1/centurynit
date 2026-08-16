@@ -40,9 +40,12 @@ COPY packages/core ./packages/core
 COPY century-nit-api ./century-nit-api
 # Order matters: the API imports the emitted types of both packages, so they must
 # be built first. `century-nit-core` also imports `century-nit-shared`.
+# The API's `tsc` needs more than the ~2GB default old-space cap on build
+# hosts with limited RAM (V8 sizes the default cap from system memory); without
+# this the build dies with "JavaScript heap out of memory".
 RUN npm run build --workspace=packages/shared \
 	&& npm run build --workspace=packages/core \
-	&& npm run build --workspace=century-nit-api
+	&& NODE_OPTIONS=--max-old-space-size=4096 npm run build --workspace=century-nit-api
 
 # ── Stage 3: production dependencies only ──
 FROM node:22-alpine AS prod-deps

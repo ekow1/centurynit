@@ -460,6 +460,7 @@ export const calendarBusyBlocks = pgTable(
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [
+	"proforma",
 	"issued",
 	"partial",
 	"paid",
@@ -502,6 +503,10 @@ export const invoices = pgTable(
 
 		voidedAt: timestamp("voided_at", { withTimezone: true }),
 		voidReason: text("void_reason"),
+
+		reviewedBy: uuid("reviewed_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		reviewedByName: text("reviewed_by_name"),
+		reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
 
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

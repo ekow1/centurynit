@@ -5,6 +5,7 @@ import {
 	creditInvoiceSchema,
 	invoiceListSchema,
 	invoiceSchema,
+	issueProformaSchema,
 	listInvoicesQuerySchema,
 	recordPaymentSchema,
 	voidInvoiceSchema,
@@ -21,12 +22,14 @@ import {
 	createInvoice,
 	creditInvoice,
 	getInvoice,
+	issueProforma,
 	listInvoices,
 	listInvoicesForClient,
 	recordPayment,
 	serializeInvoice,
 	voidInvoice,
 } from "../services/invoice.js";
+
 
 /**
  * Invoice routes — commands, not CRUD (API_MIGRATION_PLAN.md §4).
@@ -267,4 +270,43 @@ invoicesRouter.openapi(
 	},
 );
 
+/* ── POST /api/v1/invoices/:id/issue ────────────────────────────────────────── */
+
+invoicesRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/issue",
+		tags: ["Invoices"],
+		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: issueProformaSchema } },
+				description: "Reviewed lines and terms to issue the invoice",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Issued invoice",
+				content: { "application/json": { schema: invoiceSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff")!;
+		const row = await issueProforma({
+			invoiceId: id,
+			lines: body.lines,
+			note: body.note,
+			dueAt: body.dueAt,
+			actor: actorFrom(staff),
+		});
+		return c.json(await serializeInvoice(row));
+	},
+);
+
 export { invoicesRouter };
+

@@ -10,7 +10,15 @@ import {
 	type OpsModule,
 	type OpsRole,
 } from "century-nit-shared";
-import { getSession, signIn as apiSignIn, signOut as apiSignOut, apiFetch, type SessionResponse } from "../lib/api";
+import {
+	getSession,
+	signIn as apiSignIn,
+	signOut as apiSignOut,
+	verifyTotp as apiVerifyTotp,
+	verifyBackupCode as apiVerifyBackupCode,
+	apiFetch,
+	type SessionResponse,
+} from "../lib/api";
 
 /* ─── Role Definitions ─── */
 
@@ -112,11 +120,11 @@ export const ROLE_LABELS: Record<OpsRole, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<OpsRole, string> = {
 	super_admin:
-		"The only role spanning operations and platform administration. Exists to bootstrap and recover the system - it is the role that can invite the first administrator - rather than for day-to-day work, and should be held by as few people as possible.",
+		"Full unrestricted platform control. Access to every operational workspace, staff matrices, system configuration, client records, and financial controls.",
 	manager:
-		"Coordinates the whole client journey. Sees every lead, booking, application, and visa stage, assigns and reassigns work to consultants, and monitors progress. Does not create consultations - clients book those themselves.",
+		"Covers every branch. Assigns consultants to consultations, creates school applications after assessment, edits package and university catalogues, and sees full revenue reporting.",
 	coordinator:
-		"Manages CRM leads, assigns consultants to bookings, follows up on leads, and tracks all workflows. Can reassign cases between consultants. Handles the day-to-day operational delegation so the manager can focus on high-level decisions.",
+		"Desk for the assigned branch. Reviews incoming consultations, checks uploaded identity and academic documents, and assigns consultations to consultants.",
 	consultant:
 		"Works only the cases assigned to them. Reviews documents, adds comments and recommendations, requests further documents, updates progress, and can reschedule an assigned consultation.",
 	finance:
@@ -169,7 +177,9 @@ interface OpsAuthContextValue {
 	/** True until the initial session check completes. */
 	authInitializing: boolean;
 	/** Sign in with real credentials via Better Auth. */
-	opsSignInWithCredentials: (email: string, password: string) => Promise<OpsUser>;
+	opsSignInWithCredentials: (email: string, password: string) => Promise<{ user?: OpsUser; twoFactorRequired?: boolean }>;
+	/** Complete sign in via 2FA TOTP or backup recovery code. */
+	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean) => Promise<OpsUser>;
 	/** Mock sign-in by role selection (dev only). */
 	opsSignIn: (role: OpsRole) => void;
 	/** True when the session came from the prototype role picker, not the API. */
@@ -264,7 +274,27 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	}, [refreshPermissions]);
 
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string) => {
-		await apiSignIn(email, password);
+		const res = await apiSignIn(email, password);
+		if (res?.twoFactorRedirect) {
+			return { twoFactorRequired: true };
+		}
+		const { staff } = await getSession();
+		if (!staff) throw new Error("No staff profile linked to this account.");
+		const user = staffToOpsUser(staff);
+		setOpsUser(user);
+		setIsMockSession(false);
+		saveSession(user);
+		void refreshPermissions();
+		return { user };
+	}, [refreshPermissions]);
+
+	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean) => {
+		const cleanCode = code.trim().replace(/\s+/g, "");
+		if (isBackupCode) {
+			await apiVerifyBackupCode(cleanCode);
+		} else {
+			await apiVerifyTotp(cleanCode.replace(/\D/g, ""));
+		}
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
@@ -340,6 +370,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				opsRole,
 				authInitializing,
 				opsSignInWithCredentials,
+				opsVerifyTwoFactor,
 				opsSignIn,
 				opsSignOut,
 				isMockSession,

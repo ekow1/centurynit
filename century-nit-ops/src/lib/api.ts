@@ -71,10 +71,31 @@ export function getSession(): Promise<SessionResponse> {
 	return apiFetch<SessionResponse>("/api/auth/me");
 }
 
-export function signIn(email: string, password: string): Promise<unknown> {
-	return apiFetch("/api/auth/sign-in/email", {
+export type SignInResponse = {
+	twoFactorRedirect?: boolean;
+	twoFactorMethods?: string[];
+	user?: unknown;
+	session?: unknown;
+};
+
+export function signIn(email: string, password: string): Promise<SignInResponse> {
+	return apiFetch<SignInResponse>("/api/auth/sign-in/email", {
 		method: "POST",
 		body: JSON.stringify({ email, password }),
+	});
+}
+
+export function verifyTotp(code: string): Promise<unknown> {
+	return apiFetch("/api/auth/two-factor/verify-totp", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
+export function verifyBackupCode(code: string): Promise<unknown> {
+	return apiFetch("/api/auth/two-factor/verify-backup-code", {
+		method: "POST",
+		body: JSON.stringify({ code }),
 	});
 }
 

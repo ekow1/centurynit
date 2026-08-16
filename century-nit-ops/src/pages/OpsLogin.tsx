@@ -24,11 +24,14 @@ const SEARCH_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const SHIELD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 
 export function OpsLogin() {
-	const { opsSignIn, opsSignInWithCredentials, opsUser, authInitializing } = useOpsAuth();
+	const { opsSignIn, opsSignInWithCredentials, opsVerifyTwoFactor, opsUser, authInitializing } = useOpsAuth();
 	const navigate = useNavigate();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [showForm, setShowForm] = useState(!import.meta.env.DEV);
+	const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+	const [twoFactorCode, setTwoFactorCode] = useState("");
+	const [useBackupCode, setUseBackupCode] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
@@ -52,10 +55,34 @@ export function OpsLogin() {
 		setError(null);
 		setLoading(true);
 		try {
-			const user = await opsSignInWithCredentials(email, password);
-			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
+			const res = await opsSignInWithCredentials(email, password);
+			if (res.twoFactorRequired) {
+				setTwoFactorRequired(true);
+				return;
+			}
+			if (res.user) {
+				navigate(ROLE_HOME[res.user.role] ?? ROLE_HOME.manager);
+			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Sign-in failed");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	async function handleTwoFactorSubmit(e: React.FormEvent) {
+		e.preventDefault();
+		setError(null);
+		setLoading(true);
+		try {
+			const user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode);
+			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
+		} catch (err) {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Invalid two-factor code. Check your authenticator app and try again.",
+			);
 		} finally {
 			setLoading(false);
 		}
@@ -102,7 +129,82 @@ export function OpsLogin() {
 			{/* Right panel - login form / role selection */}
 			<div className="ops-login__main">
 				<div className="ops-login__card">
-					{showForm ? (
+					{twoFactorRequired ? (
+						<>
+							<div className="ops-login__head">
+								<h1 className="ops-login__title">Two-Factor Authentication</h1>
+								<p className="ops-login__subtitle">
+									{useBackupCode
+										? "Enter one of your 10-character backup recovery codes"
+										: "Enter the current 6-digit code from your authenticator app"}
+								</p>
+							</div>
+
+							<form onSubmit={handleTwoFactorSubmit} className="ops-login__form">
+								<div className="ops-login__field">
+									<label className="ops-login__label">
+										<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
+										{useBackupCode ? "Backup Recovery Code" : "Authenticator Code"}
+									</label>
+									<input
+										type="text"
+										value={twoFactorCode}
+										onChange={(e) =>
+											setTwoFactorCode(
+												useBackupCode
+													? e.target.value.trim()
+													: e.target.value.replace(/\D/g, "").slice(0, 6),
+											)
+										}
+										placeholder={useBackupCode ? "e.g. a1b2c3d4e5" : "000000"}
+										inputMode={useBackupCode ? "text" : "numeric"}
+										autoComplete="one-time-code"
+										pattern={useBackupCode ? undefined : "[0-9]{6}"}
+										maxLength={useBackupCode ? 32 : 6}
+										className="ops-login__input mono"
+										required
+										autoFocus
+									/>
+								</div>
+
+								{error ? (
+									<p className="ops-login__error" role="alert">{error}</p>
+								) : null}
+
+								<button type="submit" disabled={loading || !twoFactorCode} className="btn btn--primary ops-login__submit">
+									<span>{loading ? "Verifying…" : "Verify & Sign In"}</span>
+									{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
+								</button>
+
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem", fontSize: "var(--text-xs)" }}>
+									<button
+										type="button"
+										onClick={() => {
+											setUseBackupCode(!useBackupCode);
+											setTwoFactorCode("");
+											setError(null);
+										}}
+										className="btn btn--ghost btn--xs"
+										style={{ padding: "0.25rem 0.5rem" }}
+									>
+										{useBackupCode ? "Use Authenticator App" : "Use a backup recovery code"}
+									</button>
+									<button
+										type="button"
+										onClick={() => {
+											setTwoFactorRequired(false);
+											setTwoFactorCode("");
+											setError(null);
+										}}
+										className="ops-login__back"
+										style={{ margin: 0 }}
+									>
+										Back to login
+									</button>
+								</div>
+							</form>
+						</>
+					) : showForm ? (
 						<>
 							<div className="ops-login__head">
 								<h1 className="ops-login__title">Welcome back</h1>
@@ -121,6 +223,8 @@ export function OpsLogin() {
 										onChange={(e) => setEmail(e.target.value)}
 										placeholder="you@century-nit.com"
 										className="ops-login__input"
+										required
+										autoFocus
 									/>
 								</div>
 								<div className="ops-login__field">
@@ -132,8 +236,9 @@ export function OpsLogin() {
 										type="password"
 										value={password}
 										onChange={(e) => setPassword(e.target.value)}
-										placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+										placeholder="••••••••"
 										className="ops-login__input"
+										required
 									/>
 								</div>
 								{error ? (

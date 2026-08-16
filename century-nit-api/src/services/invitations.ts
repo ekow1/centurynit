@@ -8,7 +8,7 @@ import { HttpError } from "../middleware/error.js";
 import { isUniqueViolation } from "../lib/db-errors.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "./availability.js";
-import { queueEmail } from "../worker/queues.js";
+import { sendEmail } from "../lib/resend.js";
 
 /**
  * Staff invitations.
@@ -145,7 +145,7 @@ export async function createInvitation(input: {
 	const safeInviter = escapeHtml(input.invitedBy.name);
 	const safeRole = escapeHtml(input.role.replace("_", " "));
 
-	await queueEmail({
+	await sendEmail({
 		to: email,
 		subject: `You have been invited to Century NIT Operations`,
 		text: [
@@ -168,8 +168,6 @@ export async function createInvitation(input: {
 				</p>
 				<p style="font-size:12px;color:#666">This link expires in ${INVITE_TTL_DAYS} days and can be used once.</p>
 			</div>`,
-		// One invitation, one email — a retry must not send a second.
-		idempotencyKey: `notify:invite:${invitation.id}`,
 	});
 
 	return { invitation, acceptUrl };

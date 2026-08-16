@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { CmsManager } from "./CmsManager";
 import { CMS_COLLECTIONS, resolveRecord } from "century-nit-core";
-import { useOpsAuth, ROLE_LABELS, ROLE_DESCRIPTIONS, type OpsRole } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi } from "century-nit-core/api";
+import { MODULE_GROUPS, API_PREFIX, type OpsModule } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 
 const INVITEABLE: Record<string, OpsRole[]> = {
@@ -315,11 +317,23 @@ type StaffRow = {
 	mfaEnabled: boolean;
 };
 
+interface DynamicRole {
+	id: string;
+	name: string;
+	description: string | null;
+	isSystem: boolean;
+	permissions: OpsModule[];
+	createdAt: string;
+	updatedAt: string;
+}
+
 function UsersAndRoles() {
 	const { opsUser, opsRole } = useOpsAuth();
-	const [roleFilter, setRoleFilter] = useState<"all" | OpsRole>("all");
+	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix">("staff");
+	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
 	const [staff, setStaff] = useState<StaffRow[]>([]);
+	const [roles, setRoles] = useState<DynamicRole[]>([]);
 	const [invitations, setInvitations] = useState<
 		{ id: string; email: string; name: string; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
 	>([]);
@@ -328,16 +342,46 @@ function UsersAndRoles() {
 	const [flash, setFlash] = useState<string | null>(null);
 	const [inviting, setInviting] = useState(false);
 	const [editing, setEditing] = useState<StaffRow | null>(null);
+	const [creatingRole, setCreatingRole] = useState(false);
 	const [draft, setDraft] = useState({ name: "", email: "", role: "consultant" as OpsRole, branch: "accra" });
 
-	const inviteable = INVITEABLE[opsRole ?? ""] ?? [];
+	const [newRoleDraft, setNewRoleDraft] = useState<{
+		id: string;
+		name: string;
+		description: string;
+		permissions: OpsModule[];
+	}>({
+		id: "",
+		name: "",
+		description: "",
+		permissions: ["dashboard"],
+	});
+
+	const inviteable = useMemo(() => {
+		const base = INVITEABLE[opsRole ?? ""] ?? [];
+		// Include custom roles in inviteable list if caller is admin or super_admin
+		if (opsRole === "super_admin" || opsRole === "admin") {
+			const customIds = roles.filter((r) => !r.isSystem).map((r) => r.id);
+			return [...new Set([...base, ...customIds])];
+		}
+		return base;
+	}, [opsRole, roles]);
+
+	const roleLabelMap = useMemo(() => {
+		const map: Record<string, string> = { ...ROLE_LABELS };
+		for (const r of roles) {
+			map[r.id] = r.name;
+		}
+		return map;
+	}, [roles]);
 
 	const refresh = useCallback(async () => {
 		setError(null);
 		try {
-			const [staffRes, inviteRes] = await Promise.all([
+			const [staffRes, inviteRes, rolesRes] = await Promise.all([
 				staffApi.list(),
 				staffApi.listInvitations().catch(() => ({ invitations: [] })),
+				apiFetch<{ roles: DynamicRole[] }>(`${API_PREFIX}/roles`).catch(() => ({ roles: [] })),
 			]);
 			setStaff(
 				staffRes.staff.map((s) => ({
@@ -346,8 +390,9 @@ function UsersAndRoles() {
 				})),
 			);
 			setInvitations(inviteRes.invitations);
+			setRoles(rolesRes.roles);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not load staff");
+			setError(err instanceof Error ? err.message : "Could not load staff or roles");
 		} finally {
 			setLoading(false);
 		}
@@ -376,7 +421,7 @@ function UsersAndRoles() {
 			if (created.acceptUrl) {
 				try {
 					await navigator.clipboard.writeText(created.acceptUrl);
-					say(`Invitation sent. Accept link copied — pass it on if email is not configured.`);
+					say(`Invitation sent. Accept link copied.`);
 				} catch {
 					/* clipboard may be denied */
 				}
@@ -416,6 +461,66 @@ function UsersAndRoles() {
 		}
 	}
 
+	async function togglePermission(roleId: string, module: OpsModule, enabled: boolean) {
+		const target = roles.find((r) => r.id === roleId);
+		if (!target || target.id === "super_admin") return;
+
+		const current = target.permissions ?? [];
+		const nextPermissions = enabled
+			? [...new Set([...current, module])]
+			: current.filter((m) => m !== module);
+
+		// Optimistic update
+		setRoles((prev) =>
+			prev.map((r) => (r.id === roleId ? { ...r, permissions: nextPermissions } : r)),
+		);
+
+		try {
+			await apiFetch(`${API_PREFIX}/roles/${roleId}`, {
+				method: "PUT",
+				body: JSON.stringify({ permissions: nextPermissions }),
+			});
+			say(`Updated ${target.name} permissions for ${module}.`);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to update permission");
+			void refresh();
+		}
+	}
+
+	async function handleCreateRole(e: React.FormEvent) {
+		e.preventDefault();
+		if (!newRoleDraft.name.trim() || !newRoleDraft.id.trim()) return;
+
+		try {
+			await apiFetch(`${API_PREFIX}/roles`, {
+				method: "POST",
+				body: JSON.stringify({
+					id: newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_"),
+					name: newRoleDraft.name.trim(),
+					description: newRoleDraft.description.trim() || undefined,
+					permissions: newRoleDraft.permissions,
+				}),
+			});
+			say(`Custom role "${newRoleDraft.name}" created successfully.`);
+			setCreatingRole(false);
+			setNewRoleDraft({ id: "", name: "", description: "", permissions: ["dashboard"] });
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to create role");
+		}
+	}
+
+	async function handleDeleteRole(roleId: string, roleName: string) {
+		if (!window.confirm(`Are you sure you want to delete custom role "${roleName}"?`)) return;
+		try {
+			await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
+			say(`Role "${roleName}" deleted.`);
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to delete role");
+		}
+	}
+
 	const rows = staff.filter(
 		(u) =>
 			(roleFilter === "all" || u.role === roleFilter) &&
@@ -430,190 +535,429 @@ function UsersAndRoles() {
 			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert">{error}</p> : null}
 
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
-				<input type="search" placeholder="Search staff..." className="input input--sm" style={{ maxWidth: "260px" }} value={search} onChange={(e) => setSearch(e.target.value)} />
-				<div className="admin-section-head__actions">
-					<div className="admin-env-tabs">
-						{(["all", "manager", "coordinator", "consultant", "finance", "admin"] as const).map((r) => (
-							<button
-								key={r}
-								onClick={() => setRoleFilter(r)}
-								className={`admin-env-tab${roleFilter === r ? " admin-env-tab--active" : ""}`}
-							>
-								{r === "all" ? "All" : ROLE_LABELS[r]}
-							</button>
-						))}
+			{/* Sub Tabs: Staff Directory vs Permissions Matrix */}
+			<div style={{ display: "flex", gap: "0.5rem", borderBottom: "var(--medium)", marginBottom: "1.5rem" }}>
+				<button
+					type="button"
+					onClick={() => setActiveSubTab("staff")}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeSubTab === "staff" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeSubTab === "staff" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					Staff Directory ({staff.length})
+				</button>
+				<button
+					type="button"
+					onClick={() => setActiveSubTab("matrix")}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeSubTab === "matrix" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeSubTab === "matrix" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					Roles & Permissions Matrix ({roles.length})
+				</button>
+			</div>
+
+			{/* ── Sub-tab 1: Staff Directory ── */}
+			{activeSubTab === "staff" && (
+				<>
+					<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+						<input
+							type="search"
+							placeholder="Search staff..."
+							className="input input--sm input--full-border"
+							style={{ maxWidth: "260px" }}
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+						/>
+						<div className="admin-section-head__actions">
+							<div className="admin-env-tabs">
+								<button
+									onClick={() => setRoleFilter("all")}
+									className={`admin-env-tab${roleFilter === "all" ? " admin-env-tab--active" : ""}`}
+								>
+									All
+								</button>
+								{roles.map((r) => (
+									<button
+										key={r.id}
+										onClick={() => setRoleFilter(r.id)}
+										className={`admin-env-tab${roleFilter === r.id ? " admin-env-tab--active" : ""}`}
+									>
+										{r.name}
+									</button>
+								))}
+							</div>
+							{inviteable.length > 0 ? (
+								<button className="btn btn--primary btn--sm" onClick={() => setInviting(true)}>+ Invite Staff</button>
+							) : null}
+						</div>
 					</div>
-					{inviteable.length > 0 ? (
-						<button className="btn btn--primary btn--sm" onClick={() => setInviting(true)}>+ Invite</button>
+
+					{inviting ? (
+						<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={submitInvite}>
+							<h2 className="section-title mb-3">Invite a staff member</h2>
+							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+								<label className="field">
+									Name
+									<input className="input input--full-border" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
+								</label>
+								<label className="field">
+									Email
+									<input className="input input--full-border" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} required />
+								</label>
+								<label className="field">
+									Role
+									<select className="input input--full-border" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}>
+										{roles.map((r) => (
+											<option key={r.id} value={r.id}>{r.name}</option>
+										))}
+									</select>
+								</label>
+								<label className="field">
+									Branch
+									<select className="input input--full-border" value={draft.branch} onChange={(e) => setDraft({ ...draft, branch: e.target.value })}>
+										{OPS_BRANCHES.map((b) => (
+											<option key={b.id} value={b.id}>{b.name}</option>
+										))}
+										<option value="platform">Platform</option>
+									</select>
+								</label>
+							</div>
+							<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+								<button type="submit" className="btn btn--primary btn--sm">Send invitation</button>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>Cancel</button>
+							</div>
+						</form>
 					) : null}
-				</div>
-			</div>
 
-			{inviting ? (
-				<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={submitInvite}>
-					<h2 className="section-title mb-3">Invite a staff member</h2>
-					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-						<label className="field">
-							Name
-							<input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
-						</label>
-						<label className="field">
-							Email
-							<input className="input" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} required />
-						</label>
-						<label className="field">
-							Role
-							<select className="input" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}>
-								{inviteable.map((r) => (
-									<option key={r} value={r}>{ROLE_LABELS[r]}</option>
-								))}
-							</select>
-						</label>
-						<label className="field">
-							Branch
-							<select className="input" value={draft.branch} onChange={(e) => setDraft({ ...draft, branch: e.target.value })}>
-								{OPS_BRANCHES.map((b) => (
-									<option key={b.id} value={b.id}>{b.name}</option>
-								))}
-								<option value="platform">Platform</option>
-							</select>
-						</label>
-					</div>
-					<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-						<button type="submit" className="btn btn--primary btn--sm">Send invitation</button>
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>Cancel</button>
-					</div>
-				</form>
-			) : null}
+					{editing ? (
+						<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={saveEdit}>
+							<h2 className="section-title mb-3">Edit {editing.name}</h2>
+							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+								<label className="field">
+									Role
+									<select
+										className="input input--full-border"
+										value={editing.role}
+										onChange={(e) => setEditing({ ...editing, role: e.target.value as OpsRole })}
+										disabled={editing.email === opsUser?.email}
+									>
+										{roles.map((r) => (
+											<option key={r.id} value={r.id}>{r.name}</option>
+										))}
+									</select>
+								</label>
+								<label className="field">
+									Branch
+									<select className="input input--full-border" value={editing.branch ?? ""} onChange={(e) => setEditing({ ...editing, branch: e.target.value || null })}>
+										{OPS_BRANCHES.map((b) => (
+											<option key={b.id} value={b.id}>{b.name}</option>
+										))}
+										<option value="platform">Platform</option>
+									</select>
+								</label>
+								<label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.6rem" }}>
+									<input
+										type="checkbox"
+										checked={editing.active}
+										disabled={editing.email === opsUser?.email}
+										onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
+									/>
+									Active
+								</label>
+							</div>
+							<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+								<button type="submit" className="btn btn--primary btn--sm">Save</button>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>Cancel</button>
+							</div>
+						</form>
+					) : null}
 
-			{editing ? (
-				<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={saveEdit}>
-					<h2 className="section-title mb-3">Edit {editing.name}</h2>
-					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-						<label className="field">
-							Role
-							<select
-								className="input"
-								value={editing.role}
-								onChange={(e) => setEditing({ ...editing, role: e.target.value as OpsRole })}
-								disabled={editing.email === opsUser?.email}
-							>
-								{(inviteable.includes(editing.role) ? inviteable : [editing.role, ...inviteable]).map((r) => (
-									<option key={r} value={r}>{ROLE_LABELS[r]}</option>
-								))}
-							</select>
-						</label>
-						<label className="field">
-							Branch
-							<select className="input" value={editing.branch ?? ""} onChange={(e) => setEditing({ ...editing, branch: e.target.value || null })}>
-								{OPS_BRANCHES.map((b) => (
-									<option key={b.id} value={b.id}>{b.name}</option>
-								))}
-								<option value="platform">Platform</option>
-							</select>
-						</label>
-						<label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.6rem" }}>
-							<input
-								type="checkbox"
-								checked={editing.active}
-								disabled={editing.email === opsUser?.email}
-								onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
-							/>
-							Active
-						</label>
-					</div>
-					<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-						<button type="submit" className="btn btn--primary btn--sm">Save</button>
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>Cancel</button>
-					</div>
-				</form>
-			) : null}
-
-			<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>Name</th>
-								<th>Email</th>
-								<th>Role</th>
-								<th>Branch</th>
-								<th>Status</th>
-								<th>MFA</th>
-								<th style={{ textAlign: "right" }}>Action</th>
-							</tr>
-						</thead>
-						<tbody>
-							{loading ? (
-								<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
-							) : rows.length === 0 ? (
-								<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members yet. Invite the first one.</td></tr>
-							) : (
-								rows.map((u) => (
-									<tr key={u.id}>
-										<td style={{ fontWeight: 500 }}>
-											{u.name}
-											{u.email === opsUser?.email && (
-												<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>
-											)}
-										</td>
-										<td className="muted">{u.email}</td>
-										<td>{ROLE_LABELS[u.role] ?? u.role}</td>
-										<td className="muted">{staffBranchName(u.branch ?? "")}</td>
-										<td>
-											<span
-												className="portal-pill"
-												style={u.active ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
-											>
-												{u.active ? "Active" : "Inactive"}
-											</span>
-										</td>
-										<td className="muted">{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}</td>
-										<td style={{ textAlign: "right" }}>
-											<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
-										</td>
+					<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
+						<div className="ops-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th>Name</th>
+										<th>Email</th>
+										<th>Role</th>
+										<th>Branch</th>
+										<th>Status</th>
+										<th>MFA</th>
+										<th style={{ textAlign: "right" }}>Action</th>
 									</tr>
-								))
-							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+								</thead>
+								<tbody>
+									{loading ? (
+										<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
+									) : rows.length === 0 ? (
+										<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members match criteria.</td></tr>
+									) : (
+										rows.map((u) => (
+											<tr key={u.id}>
+												<td style={{ fontWeight: 500 }}>
+													{u.name}
+													{u.email === opsUser?.email && (
+														<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>
+													)}
+												</td>
+												<td className="muted">{u.email}</td>
+												<td>
+													<span className="mono" style={{ fontSize: "var(--text-xs)" }}>
+														{roleLabelMap[u.role] ?? u.role}
+													</span>
+												</td>
+												<td className="muted">{staffBranchName(u.branch ?? "")}</td>
+												<td>
+													<span
+														className="portal-pill"
+														style={u.active ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
+													>
+														{u.active ? "Active" : "Inactive"}
+													</span>
+												</td>
+												<td className="muted">{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}</td>
+												<td style={{ textAlign: "right" }}>
+													<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
+												</td>
+											</tr>
+										))
+									)}
+								</tbody>
+							</table>
+						</div>
+					</div>
 
-			{pending.length > 0 ? (
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Pending invitations</h2>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{pending.map((i) => (
-							<li key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
-								<div>
-									<strong>{i.name}</strong> <span className="muted">{i.email}</span>
-									<p className="muted" style={{ margin: 0 }}>
-										{ROLE_LABELS[i.role as OpsRole] ?? i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
+					{pending.length > 0 ? (
+						<div className="card" style={{ marginBottom: "2rem" }}>
+							<h2 className="section-title mb-3">Pending invitations</h2>
+							<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+								{pending.map((i) => (
+									<li key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
+										<div>
+											<strong>{i.name}</strong> <span className="muted">{i.email}</span>
+											<p className="muted" style={{ margin: 0 }}>
+												{roleLabelMap[i.role] ?? i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
+											</p>
+										</div>
+										<button type="button" className="btn btn--ghost btn--sm" onClick={() => revoke(i.id)}>Revoke</button>
+									</li>
+								))}
+							</ul>
+						</div>
+					) : null}
+				</>
+			)}
+
+			{/* ── Sub-tab 2: Dynamic Roles & Permissions Matrix ── */}
+			{activeSubTab === "matrix" && (
+				<>
+					<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+						<div>
+							<h2 className="section-title">Granular Permissions Matrix</h2>
+							<p className="muted" style={{ marginTop: "0.25rem" }}>
+								Toggle page view and action permissions for each staff role in real time.
+							</p>
+						</div>
+						<button
+							type="button"
+							className="btn btn--primary btn--sm"
+							onClick={() => setCreatingRole(true)}
+						>
+							+ Add Custom Role
+						</button>
+					</div>
+
+					<div className="card" style={{ padding: 0, overflowX: "auto", marginBottom: "2rem" }}>
+						<table className="admin-table" style={{ borderCollapse: "collapse" }}>
+							<thead>
+								<tr>
+									<th style={{ minWidth: "220px", background: "var(--muted, #f5f5f5)" }}>
+										Module / Page
+									</th>
+									{roles.map((r) => (
+										<th key={r.id} style={{ textAlign: "center", minWidth: "130px" }}>
+											<div style={{ fontWeight: 700 }}>{r.name}</div>
+											<div style={{ display: "flex", justifyContent: "center", gap: "0.25rem", marginTop: "0.25rem" }}>
+												<span
+													style={{
+														fontSize: "0.65rem",
+														fontFamily: "var(--font-mono)",
+														textTransform: "uppercase",
+														padding: "0.1rem 0.35rem",
+														border: "var(--thin)",
+														background: r.isSystem ? "var(--muted, #f5f5f5)" : "var(--foreground)",
+														color: r.isSystem ? "var(--foreground)" : "var(--background)",
+													}}
+												>
+													{r.isSystem ? "System" : "Custom"}
+												</span>
+												{!r.isSystem && (
+													<button
+														type="button"
+														onClick={() => handleDeleteRole(r.id, r.name)}
+														style={{
+															fontSize: "0.65rem",
+															padding: "0.1rem 0.35rem",
+															border: "var(--thin)",
+															background: "transparent",
+															color: "#c0392b",
+															cursor: "pointer",
+														}}
+														title="Delete custom role"
+													>
+														✕
+													</button>
+												)}
+											</div>
+										</th>
+									))}
+								</tr>
+							</thead>
+							<tbody>
+								{MODULE_GROUPS.map((group) => (
+									<Fragment key={group.group}>
+										<tr style={{ background: "var(--muted, #f5f5f5)", borderTop: "var(--medium)", borderBottom: "var(--thin)" }}>
+											<td colSpan={roles.length + 1} style={{ fontWeight: 700, padding: "0.6rem 1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+												{group.group} — <span style={{ fontWeight: 400, opacity: 0.7 }}>{group.description}</span>
+											</td>
+										</tr>
+										{group.modules.map((mod) => (
+											<tr key={mod.id} style={{ borderBottom: "var(--thin)" }}>
+												<td style={{ padding: "0.6rem 1rem" }}>
+													<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{mod.label}</div>
+													<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{mod.description}</div>
+												</td>
+												{roles.map((r) => {
+													const hasIt = r.id === "super_admin" || (r.permissions ?? []).includes(mod.id);
+													const isSuper = r.id === "super_admin";
+													return (
+														<td key={r.id} style={{ textAlign: "center", padding: "0.6rem" }}>
+															<input
+																type="checkbox"
+																checked={hasIt}
+																disabled={isSuper}
+																onChange={(e) => togglePermission(r.id, mod.id, e.target.checked)}
+																style={{ width: "1.1rem", height: "1.1rem", cursor: isSuper ? "not-allowed" : "pointer" }}
+																title={isSuper ? "Super Admin always has full permissions" : `Toggle ${mod.label} for ${r.name}`}
+															/>
+														</td>
+													);
+												})}
+											</tr>
+										))}
+									</Fragment>
+								))}
+							</tbody>
+						</table>
+					</div>
+
+					{/* Role Descriptions List */}
+					<div className="card">
+						<h3 className="section-title mb-3" style={{ fontSize: "1.1rem" }}>Role Descriptions</h3>
+						<div className="admin-role-grid">
+							{roles.map((r) => (
+								<div key={r.id} className="admin-role-card">
+									<div className="admin-role-card__head">
+										<span className="admin-role-card__name">{r.name}</span>
+										<span className="admin-role-card__count">{staff.filter((u) => u.role === r.id).length} staff</span>
+									</div>
+									<p className="admin-role-card__desc">{r.description || "No description provided."}</p>
+									<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
+										Granted {r.id === "super_admin" ? "All" : (r.permissions?.length ?? 0)} modules
 									</p>
 								</div>
-								<button type="button" className="btn btn--ghost btn--sm" onClick={() => revoke(i.id)}>Revoke</button>
-							</li>
-						))}
-					</ul>
-				</div>
-			) : null}
-
-			<div className="card">
-				<h2 className="section-title mb-3">Role Definitions</h2>
-				<div className="admin-role-grid">
-					{(["super_admin", "manager", "coordinator", "consultant", "finance", "admin"] as OpsRole[]).map((r) => (
-						<div key={r} className="admin-role-card">
-							<div className="admin-role-card__head">
-								<span className="admin-role-card__name">{ROLE_LABELS[r]}</span>
-								<span className="admin-role-card__count">{staff.filter((u) => u.role === r).length}</span>
-							</div>
-							<p className="admin-role-card__desc">{ROLE_DESCRIPTIONS[r]}</p>
+							))}
 						</div>
-					))}
+					</div>
+				</>
+			)}
+
+			{/* Create Custom Role Modal */}
+			{creatingRole && (
+				<div className="ops-modal-backdrop" onClick={() => setCreatingRole(false)} role="dialog" aria-modal="true">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Role Management</p>
+								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Create Custom Role</h2>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatingRole(false)}>
+								✕ Close
+							</button>
+						</header>
+
+						<form onSubmit={handleCreateRole} className="invite-form" style={{ marginTop: "1rem" }}>
+							<div className="field">
+								<label htmlFor="role-name">Role Name</label>
+								<input
+									id="role-name"
+									className="input input--full-border"
+									placeholder="e.g. Senior Admissions Advisor"
+									value={newRoleDraft.name}
+									onChange={(e) => {
+										const val = e.target.value;
+										const autoId = val.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 32);
+										setNewRoleDraft((prev) => ({ ...prev, name: val, id: prev.id === "" || prev.id.startsWith(autoId.slice(0, -1)) ? autoId : prev.id }));
+									}}
+									required
+									autoFocus
+								/>
+							</div>
+
+							<div className="field">
+								<label htmlFor="role-id">Role Key / Slug</label>
+								<input
+									id="role-id"
+									className="input input--full-border mono"
+									placeholder="e.g. senior_advisor"
+									value={newRoleDraft.id}
+									onChange={(e) => setNewRoleDraft({ ...newRoleDraft, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_") })}
+									required
+								/>
+							</div>
+
+							<div className="field">
+								<label htmlFor="role-desc">Description</label>
+								<input
+									id="role-desc"
+									className="input input--full-border"
+									placeholder="What responsibilities this role handles"
+									value={newRoleDraft.description}
+									onChange={(e) => setNewRoleDraft({ ...newRoleDraft, description: e.target.value })}
+								/>
+							</div>
+
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatingRole(false)}>
+									Cancel
+								</button>
+								<button type="submit" className="btn btn--primary" disabled={!newRoleDraft.name.trim() || !newRoleDraft.id.trim()}>
+									Create Role
+								</button>
+							</div>
+						</form>
+					</div>
 				</div>
-			</div>
+			)}
 		</>
 	);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS, ROLE_HOME, ROLE_PERMISSIONS, type OpsRole, type OpsModule } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
+import { roleCanAccess } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { useLivePortalCase } from "./useLivePortalCase";
@@ -262,14 +263,14 @@ export function EnterpriseLayout() {
 		const currentPath = location.pathname;
 		const requiredModule = PATH_MODULE[currentPath];
 		if (requiredModule) {
-			const allowed = ROLE_PERMISSIONS[role].includes(requiredModule);
+			const allowed = roleCanAccess(role, requiredModule);
 			if (!allowed) {
-				navigate(ROLE_HOME[role], { replace: true });
+				navigate(ROLE_HOME[role] ?? "/dashboard", { replace: true });
 				return;
 			}
 		}
 		if (currentPath === "/inbox" && role === "admin") {
-			navigate(ROLE_HOME[role], { replace: true });
+			navigate(ROLE_HOME[role] ?? "/dashboard", { replace: true });
 		}
 	}
 

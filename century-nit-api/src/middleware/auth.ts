@@ -3,13 +3,13 @@ import { eq } from "drizzle-orm";
 import {
 	AUTH_ERROR_CODES,
 	mfaRequiredForRole,
-	roleCanAccess,
 	type OpsModule,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
+import { checkRolePermission } from "../services/roles.js";
 
 /**
  * Authentication and authorisation for the scheduling API.
@@ -176,7 +176,8 @@ export function requireModule(
 		if (!staff) {
 			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
-		if (!roleCanAccess(staff.role, module)) {
+		const allowed = await checkRolePermission(staff.role, module);
+		if (!allowed) {
 			throw new HttpError(
 				403,
 				"FORBIDDEN",

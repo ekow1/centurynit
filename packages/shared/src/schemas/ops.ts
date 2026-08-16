@@ -8,14 +8,18 @@ import { z } from "zod";
  * check the same definition. The React copy only hides UI; the server is the
  * authority.
  */
-export const roleSchema = z.enum([
+export const SYSTEM_ROLES = [
 	"super_admin",
 	"manager",
 	"coordinator",
 	"consultant",
 	"finance",
 	"admin",
-]);
+] as const;
+
+export const roleSchema = z.string().min(1);
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+export type OpsRole = string;
 
 /**
  * Modules a staff role can be granted. Mirrors the ops app's navigation; the
@@ -59,37 +63,84 @@ export const opsModuleSchema = z.enum([
 export type OpsModule = z.infer<typeof opsModuleSchema>;
 
 /**
- * The permission matrix — the single source of truth for both halves.
- *
- * Deliberately disjoint: the admin has no window into applicant data, and
- * operational roles cannot reconfigure the platform. The API enforces this via
- * `requireModule`; the React copy in the ops app imports this same object and
- * only hides UI (docs/API_MIGRATION_PLAN.md §5).
+ * Module metadata and groupings for the Permissions Matrix UI.
  */
-export const ROLE_PERMISSIONS: Record<z.infer<typeof roleSchema>, OpsModule[]> = {
-	/**
-	 * The only role that spans operations *and* platform administration.
-	 *
-	 * Every other role is deliberately partial — the admin has no window into
-	 * applicant data, operational roles cannot reconfigure the platform. This one
-	 * exists to bootstrap and recover the system (it is the role that can invite
-	 * the first admin), not for day-to-day work, and should be held by as few
-	 * people as possible.
-	 */
+export const MODULE_GROUPS: Array<{
+	group: string;
+	description: string;
+	modules: Array<{ id: OpsModule; label: string; description: string }>;
+}> = [
+	{
+		group: "Core Operations",
+		description: "Day-to-day client engagement and case management.",
+		modules: [
+			{ id: "dashboard", label: "Dashboard", description: "Operational metrics and quick overviews" },
+			{ id: "applications", label: "Applications", description: "Client university and program applications" },
+			{ id: "consultations", label: "Consultations", description: "Initial and follow-up advisory sessions" },
+			{ id: "applicants", label: "Applicants", description: "Client accounts and profile records" },
+			{ id: "leads", label: "CRM & Leads", description: "Inbound leads, inquiry pipeline, and CRM" },
+			{ id: "appointments", label: "Appointments", description: "Calendar booking and consultant schedules" },
+			{ id: "helpdesk", label: "Helpdesk", description: "Support tickets and applicant inquiries" },
+			{ id: "marketing", label: "Marketing", description: "Campaigns and outreach tools" },
+		],
+	},
+	{
+		group: "Financials & Invoicing",
+		description: "Revenue, payments, fee schedules, and invoices.",
+		modules: [
+			{ id: "finance", label: "Financial Overview", description: "Revenue tracking and financial summaries" },
+			{ id: "invoices", label: "Invoices", description: "Proforma generation and formal invoice issuance" },
+			{ id: "ledger", label: "Accounting Ledger", description: "Immutable transaction and invoice history" },
+			{ id: "payments", label: "Payments Log", description: "Gateways, Paystack, Stripe, and bank transfers" },
+			{ id: "payment-config", label: "Payment Config", description: "Gateway toggles and currency configurations" },
+			{ id: "packages", label: "Service Packages", description: "Package tiers, pricing, and services included" },
+			{ id: "reports", label: "Analytics & Reports", description: "Financial and operational reporting" },
+		],
+	},
+	{
+		group: "Admissions, Visa & Travel",
+		description: "Educational placement, visa handling, and relocation.",
+		modules: [
+			{ id: "universities", label: "Universities & Programs", description: "Partner universities and course catalogs" },
+			{ id: "documents", label: "Document Verification", description: "Applicant document review and verification" },
+			{ id: "workflow", label: "Case Workflow", description: "Multi-stage admissions progression" },
+			{ id: "visa", label: "Visa Processing", description: "Embassy filings, CAS, and visa outcomes" },
+			{ id: "travel", label: "Travel & Relocation", description: "Flights, accommodation, and arrival briefings" },
+		],
+	},
+	{
+		group: "Platform Administration",
+		description: "Platform settings, user access, and system governance.",
+		modules: [
+			{ id: "system", label: "System Overview", description: "Platform health and server metrics" },
+			{ id: "users", label: "Users & Roles", description: "Staff directory, roles, and permissions matrix" },
+			{ id: "auth", label: "Authentication", description: "Sign-in methods, sessions, and MFA policy" },
+			{ id: "cms", label: "Content Management", description: "Public website content, destinations, and blog" },
+			{ id: "site", label: "Site & UI", description: "Public website branding and navigation" },
+			{ id: "notifications", label: "Notifications", description: "Automated templates and communication channels" },
+			{ id: "settings", label: "System Configuration", description: "API keys, fee schedule, and integration credentials" },
+		],
+	},
+];
+
+/**
+ * Built-in default permissions matrix (fallback when not loaded from DB).
+ */
+export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 	super_admin: opsModuleSchema.options as unknown as OpsModule[],
 	manager: [
-		"dashboard", "applications", "consultations", "applicants", "leads", "helpdesk", "marketing",
+		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
 		"finance", "invoices", "ledger", "payments", "payment-config",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
 		"programs", "packages", "reports",
 	],
 	coordinator: [
-		"dashboard", "applications", "consultations", "applicants", "leads", "helpdesk", "marketing",
+		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
 		"programs", "packages", "reports",
 	],
 	consultant: [
-		"dashboard", "applications", "consultations", "applicants", "leads", "helpdesk", "marketing", "workflow",
+		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing", "workflow",
 		"visa", "travel", "documents", "appointments", "universities", "programs", "packages", "reports",
 	],
 	finance: [
@@ -102,17 +153,26 @@ export const ROLE_PERMISSIONS: Record<z.infer<typeof roleSchema>, OpsModule[]> =
 
 /**
  * Capability lists — viewing a module is not the same as changing it.
- * Finance owns money; manager and coordinator route work to people.
  */
-export const ASSIGN_WORK_ROLES = ["manager", "coordinator"] as const;
-export const EDIT_PACKAGES_ROLES = ["manager", "finance"] as const;
-export const EDIT_UNIVERSITIES_ROLES = ["manager"] as const;
+export const ASSIGN_WORK_ROLES = ["super_admin", "manager", "coordinator"] as const;
+export const EDIT_PACKAGES_ROLES = ["super_admin", "manager", "finance"] as const;
+export const EDIT_UNIVERSITIES_ROLES = ["super_admin", "manager"] as const;
 
 /** Whether a role (from an untrusted string) may access a module. */
-export function roleCanAccess(role: string, module: OpsModule): boolean {
-	const parsed = roleSchema.safeParse(role);
-	if (!parsed.success) return false;
-	return ROLE_PERMISSIONS[parsed.data].includes(module);
+export function roleCanAccess(
+	role: string,
+	module: OpsModule,
+	customPermissions?: Record<string, OpsModule[]>,
+): boolean {
+	if (role === "super_admin") return true;
+	if (customPermissions && customPermissions[role]) {
+		return customPermissions[role].includes(module);
+	}
+	const fallback = ROLE_PERMISSIONS[role as SystemRole];
+	if (fallback) {
+		return fallback.includes(module);
+	}
+	return false;
 }
 
 export const opsUserSchema = z.object({
@@ -127,4 +187,4 @@ export const opsUserSchema = z.object({
 });
 
 export type OpsUser = z.infer<typeof opsUserSchema>;
-export type OpsRole = z.infer<typeof roleSchema>;
+

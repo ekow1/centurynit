@@ -123,6 +123,23 @@ export const verifications = pgTable("verifications", {
  * `users`, so Better Auth's own table keeps the shape its adapter expects and
  * there is still only one authentication system.
  */
+/**
+ * Dynamic Operations Roles & Permission Matrix.
+ *
+ * Built-in system roles (super_admin, admin, manager, coordinator, consultant, finance)
+ * are seeded automatically. Admins can create custom roles and toggle granted module
+ * permissions dynamically in the UI.
+ */
+export const opsRoles = pgTable("ops_roles", {
+	id: varchar("id", { length: 64 }).primaryKey(),
+	name: varchar("name", { length: 128 }).notNull(),
+	description: text("description"),
+	isSystem: boolean("is_system").notNull().default(false),
+	permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const opsUsers = pgTable("ops_users", {
 	id: uuid("id").primaryKey().defaultRandom(),
 	userId: text("user_id")

@@ -29,25 +29,58 @@ import {
  *   - Every change is recorded in `settings_audit` with masked old/new values.
  */
 
+import { createHmac } from "node:crypto";
+import { env } from "../env.js";
+
+const STEP_UP_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+export function createStepUpToken(opsUserId: string, email: string): { stepUpToken: string; expiresAt: string } {
+	const expiresAtMs = Date.now() + STEP_UP_TTL_MS;
+	const payload = `${opsUserId}:${email}:${expiresAtMs}`;
+	const signature = createHmac("sha256", env.BETTER_AUTH_SECRET)
+		.update(payload)
+		.digest("base64url");
+	const stepUpToken = `${Buffer.from(payload).toString("base64url")}.${signature}`;
+	return { stepUpToken, expiresAt: new Date(expiresAtMs).toISOString() };
+}
+
+export function verifyStepUpToken(token: string, expectedOpsUserId: string): boolean {
+	try {
+		const [b64Payload, signature] = token.split(".");
+		if (!b64Payload || !signature) return false;
+		const payload = Buffer.from(b64Payload, "base64url").toString("utf8");
+		const expectedSig = createHmac("sha256", env.BETTER_AUTH_SECRET)
+			.update(payload)
+			.digest("base64url");
+		if (signature !== expectedSig) return false;
+		const [opsUserId, , expiresAtMsStr] = payload.split(":");
+		if (opsUserId !== expectedOpsUserId) return false;
+		const expiresAtMs = Number(expiresAtMsStr);
+		if (!Number.isFinite(expiresAtMs) || Date.now() > expiresAtMs) return false;
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 const settingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
 const settingKeySchema = z.enum(
 	Object.keys(SETTING_DEFS) as [SettingKey, ...SettingKey[]],
 );
 
+const stepUpBodySchema = z.object({
+	totpCode: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator"),
+});
+
 const updateBodySchema = z.object({
 	key: settingKeySchema,
 	/** Plaintext value to store. Pass null to clear (revert to env fallback). */
 	value: z.string().nullable(),
-	/**
-	 * A current code from the caller's authenticator.
-	 *
-	 * Step-up authentication: a session cookie alone must not be enough to
-	 * rotate an API key, so the caller proves possession of their second factor
-	 * at the moment of the change. Every staff role already has TOTP enrolled
-	 * (`requireMfa`), so this asks for something they always have.
-	 */
-	totpCode: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator"),
+	/** 6-digit code from authenticator app (if unlocking on save). */
+	totpCode: z.string().regex(/^\d{6}$/).optional(),
+	/** Active 15-minute step-up token from prior unlock. */
+	stepUpToken: z.string().optional(),
 });
 
 const settingResponseSchema = z.object({
@@ -59,6 +92,8 @@ const settingResponseSchema = z.object({
 	valueMasked: z.string().nullable(),
 	source: z.enum(["database", "env", "unset"]),
 	updatedAt: z.string().nullable(),
+	stepUpToken: z.string().optional(),
+	expiresAt: z.string().optional(),
 });
 
 const listResponseSchema = z.object({
@@ -78,6 +113,65 @@ const auditResponseSchema = z.object({
 	entries: z.array(auditEntrySchema),
 });
 
+/* ── POST /api/v1/settings/step-up ────────────────────────────────────────── */
+
+settingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/step-up",
+		tags: ["Settings"],
+		summary: "Unlock settings session for 15 minutes with TOTP",
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: stepUpBodySchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							ok: z.boolean(),
+							stepUpToken: z.string(),
+							expiresAt: z.string(),
+						}),
+					},
+				},
+				description: "Step-up session token valid for 15 minutes",
+			},
+			403: { description: "Invalid authenticator code" },
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json" as never) as z.infer<typeof stepUpBodySchema>;
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
+
+		try {
+			const authInstance = await getAuthInstance();
+			const verifyRes = await authInstance.api.verifyTOTP({
+				body: { code: body.totpCode },
+				headers: c.req.raw.headers,
+			});
+			if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
+				throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
+			}
+		} catch (totpErr) {
+			console.error("[Settings] Step-up TOTP verification failed:", totpErr);
+			throw new HttpError(
+				403,
+				"MFA_REQUIRED",
+				"That code was not accepted. Use the current code from your authenticator.",
+			);
+		}
+
+		const stepUp = createStepUpToken(staff.opsUserId, staff.email);
+		return c.json({ ok: true, ...stepUp });
+	},
+);
+
 /* ── GET /api/v1/settings ──────────────────────────────────────────────────── */
 
 settingsRouter.openapi(
@@ -86,10 +180,6 @@ settingsRouter.openapi(
 		path: "/",
 		tags: ["Settings"],
 		summary: "List all platform settings (masked)",
-		description:
-			"Returns every integration setting with masked values. " +
-			"Secrets show first 3 + last 4 chars; non-secrets show in full. " +
-			"Requires super_admin.",
 		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
 		responses: {
 			200: {
@@ -113,9 +203,6 @@ settingsRouter.openapi(
 		path: "/",
 		tags: ["Settings"],
 		summary: "Update a platform setting",
-		description:
-			"Encrypts and stores a setting value. Requires a current TOTP code. " +
-			"Pass null to clear (revert to env fallback). Requires super_admin.",
 		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
 		request: {
 			body: {
@@ -139,35 +226,41 @@ settingsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
 
-		/*
-		 * Step up before accepting the change.
-		 *
-		 * Deliberately NOT a password re-check via `signInEmail`. That is a full
-		 * sign-in used as a comparison: it writes a session row per settings save,
-		 * and — the real problem — failed attempts count against Better Auth's
-		 * sign-in rate limiter, so an admin who mistypes while editing settings can
-		 * lock themselves out of signing in at all.
-		 *
-		 * A TOTP code is the right primitive here: it proves possession, it is
-		 * inherently fresh and single-use, and every staff role already has one
-		 * enrolled.
-		 */
-		try {
-			const authInstance = await getAuthInstance();
-			const verifyRes = await authInstance.api.verifyTOTP({
-				body: { code: body.totpCode },
-				headers: c.req.raw.headers,
-			});
-			if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
-				throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
+		let activeStepUp = false;
+		if (body.stepUpToken && verifyStepUpToken(body.stepUpToken, staff.opsUserId)) {
+			activeStepUp = true;
+		}
+
+		let refreshedStepUp: { stepUpToken: string; expiresAt: string } | null = null;
+
+		if (!activeStepUp) {
+			if (!body.totpCode) {
+				throw new HttpError(
+					403,
+					"MFA_REQUIRED",
+					"Settings session locked. Enter your 6-digit authenticator code to proceed.",
+				);
 			}
-		} catch (totpErr) {
-			console.error("[Settings] TOTP verification failed:", totpErr);
-			throw new HttpError(
-				403,
-				"MFA_REQUIRED",
-				"That code was not accepted. Use the current code from your authenticator.",
-			);
+
+			try {
+				const authInstance = await getAuthInstance();
+				const verifyRes = await authInstance.api.verifyTOTP({
+					body: { code: body.totpCode },
+					headers: c.req.raw.headers,
+				});
+				if (verifyRes && typeof verifyRes === "object" && "error" in verifyRes && (verifyRes as { error?: { message?: string } }).error) {
+					throw new Error((verifyRes as { error?: { message?: string } }).error?.message || "Invalid code");
+				}
+			} catch (totpErr) {
+				console.error("[Settings] TOTP verification failed:", totpErr);
+				throw new HttpError(
+					403,
+					"MFA_REQUIRED",
+					"That code was not accepted. Use the current code from your authenticator.",
+				);
+			}
+
+			refreshedStepUp = createStepUpToken(staff.opsUserId, staff.email);
 		}
 
 		try {
@@ -186,21 +279,24 @@ settingsRouter.openapi(
 
 		const all = await listSettingsForDisplay();
 		const updated = all.find((s) => s.key === body.key);
-		if (!updated) {
-			return c.json({
-				key: body.key,
-				label: SETTING_DEFS[body.key]?.label ?? body.key,
-				group: SETTING_DEFS[body.key]?.group ?? "Other",
-				secret: SETTING_DEFS[body.key]?.secret ?? false,
-				description: SETTING_DEFS[body.key]?.description ?? "",
-				valueMasked: body.value ? mask(body.value, SETTING_DEFS[body.key]?.secret ?? false) : null,
-				source: body.value ? "database" : "unset",
-				updatedAt: new Date().toISOString(),
-			});
-		}
-		return c.json(updated);
+		const baseResponse = updated ?? {
+			key: body.key,
+			label: SETTING_DEFS[body.key]?.label ?? body.key,
+			group: SETTING_DEFS[body.key]?.group ?? "Other",
+			secret: SETTING_DEFS[body.key]?.secret ?? false,
+			description: SETTING_DEFS[body.key]?.description ?? "",
+			valueMasked: body.value ? mask(body.value, SETTING_DEFS[body.key]?.secret ?? false) : null,
+			source: body.value ? ("database" as const) : ("unset" as const),
+			updatedAt: new Date().toISOString(),
+		};
+
+		return c.json({
+			...baseResponse,
+			...(refreshedStepUp ? refreshedStepUp : {}),
+		});
 	},
 );
+
 
 /* ── GET /api/v1/settings/audit ────────────────────────────────────────────── */
 

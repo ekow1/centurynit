@@ -64,14 +64,54 @@ function formatCentsHelper(val: string): string | null {
 	return `$${(num / 100).toFixed(2)} USD`;
 }
 
+const STEP_UP_STORAGE_KEY = "century_nit_settings_step_up";
+
 export function PlatformSettings() {
 	const [settings, setSettings] = useState<SettingView[]>([]);
 	const [audit, setAudit] = useState<AuditEntry[]>([]);
 	const [loadState, setLoadState] = useState<LoadState>("idle");
 	const [error, setError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<SettingView | null>(null);
+	const [unlocking, setUnlocking] = useState(false);
 	const [selectedGroup, setSelectedGroup] = useState<string>("all");
 	const [searchQuery, setSearchQuery] = useState("");
+
+	// 15-minute step-up session state
+	const [stepUp, setStepUp] = useState<{ token: string; expiresAt: number } | null>(() => {
+		try {
+			const raw = sessionStorage.getItem(STEP_UP_STORAGE_KEY);
+			if (!raw) return null;
+			const parsed = JSON.parse(raw);
+			if (parsed.expiresAt && Date.now() < parsed.expiresAt) {
+				return parsed;
+			}
+			sessionStorage.removeItem(STEP_UP_STORAGE_KEY);
+			return null;
+		} catch {
+			return null;
+		}
+	});
+
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		const interval = setInterval(() => setNow(Date.now()), 10000);
+		return () => clearInterval(interval);
+	}, []);
+
+	const isUnlocked = Boolean(stepUp && now < stepUp.expiresAt);
+	const minutesRemaining = stepUp && isUnlocked ? Math.max(1, Math.ceil((stepUp.expiresAt - now) / 60000)) : 0;
+
+	function saveStepUp(token: string, expiresAtIso: string) {
+		const expiresAt = new Date(expiresAtIso).getTime();
+		const state = { token, expiresAt };
+		setStepUp(state);
+		sessionStorage.setItem(STEP_UP_STORAGE_KEY, JSON.stringify(state));
+	}
+
+	function lockSession() {
+		setStepUp(null);
+		sessionStorage.removeItem(STEP_UP_STORAGE_KEY);
+	}
 
 	const loadAll = useCallback(async () => {
 		setLoadState("loading");
@@ -140,15 +180,63 @@ export function PlatformSettings() {
 						Regional defaults, payment keys, integration credentials, and fee schedules.
 					</p>
 				</div>
-				<button
-					type="button"
-					className="btn btn--ghost btn--sm"
-					onClick={() => void loadAll()}
-					disabled={loadState === "loading"}
-				>
-					{loadState === "loading" ? "Refreshing…" : "Refresh"}
-				</button>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+					{isUnlocked ? (
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							onClick={lockSession}
+							title="Lock settings immediately"
+						>
+							🔒 Lock Session
+						</button>
+					) : (
+						<button
+							type="button"
+							className="btn btn--primary btn--sm"
+							onClick={() => setUnlocking(true)}
+						>
+							🔓 Unlock Settings (15m)
+						</button>
+					)}
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						onClick={() => void loadAll()}
+						disabled={loadState === "loading"}
+					>
+						{loadState === "loading" ? "Refreshing…" : "Refresh"}
+					</button>
+				</div>
 			</div>
+
+			{/* Active Step-Up Unlock Banner */}
+			{isUnlocked && (
+				<div
+					style={{
+						padding: "0.75rem 1rem",
+						border: "var(--medium)",
+						background: "var(--foreground)",
+						color: "var(--background)",
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "center",
+						marginBottom: "1.5rem",
+					}}
+				>
+					<span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)" }}>
+						🔓 <strong>SETTINGS UNLOCKED</strong> — Editing enabled without repeated authenticator prompts ({minutesRemaining} min remaining).
+					</span>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						style={{ color: "var(--background)", borderColor: "var(--background)", padding: "0.2rem 0.6rem" }}
+						onClick={lockSession}
+					>
+						Lock Now
+					</button>
+				</div>
+			)}
 
 			{error && (
 				<div className="ops-modal__error" style={{ marginBottom: "1.5rem" }}>
@@ -286,12 +374,28 @@ export function PlatformSettings() {
 				))
 			)}
 
-			{/* Centered Modal Overlay for Editing */}
+			{/* Step-Up Unlock Modal Dialog */}
+			{unlocking && (
+				<UnlockSettingsModal
+					onClose={() => setUnlocking(false)}
+					onUnlocked={(token, expiresAt) => {
+						saveStepUp(token, expiresAt);
+						setUnlocking(false);
+					}}
+				/>
+			)}
+
+			{/* Centered Modal Overlay for Editing Single Setting */}
 			{editing && (
 				<EditSettingModal
 					setting={editing}
+					isUnlocked={isUnlocked}
+					stepUpToken={stepUp?.token ?? null}
 					onClose={() => setEditing(null)}
-					onSaved={() => {
+					onSaved={(newStepUp) => {
+						if (newStepUp?.stepUpToken && newStepUp?.expiresAt) {
+							saveStepUp(newStepUp.stepUpToken, newStepUp.expiresAt);
+						}
 						setEditing(null);
 						void loadAll();
 					}}
@@ -338,14 +442,111 @@ export function PlatformSettings() {
 	);
 }
 
+function UnlockSettingsModal({
+	onClose,
+	onUnlocked,
+}: {
+	onClose: () => void;
+	onUnlocked: (token: string, expiresAt: string) => void;
+}) {
+	const [totpCode, setTotpCode] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	async function unlock(e: React.FormEvent) {
+		e.preventDefault();
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch<{ ok: boolean; stepUpToken: string; expiresAt: string }>(
+				`${API_PREFIX}/settings/step-up`,
+				{
+					method: "POST",
+					body: JSON.stringify({ totpCode }),
+				},
+			);
+			onUnlocked(res.stepUpToken, res.expiresAt);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "That code was not accepted.");
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div className="ops-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+			<div className="ops-modal" onClick={(e) => e.stopPropagation()}>
+				<header className="ops-modal__head">
+					<div>
+						<p className="invite-card__eyebrow" style={{ margin: 0 }}>
+							Security Verification · Super Admin
+						</p>
+						<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>
+							Unlock Settings Session
+						</h2>
+						<p className="ops-modal__sub">
+							Authenticate once with your 6-digit code to freely edit system settings for 15 minutes.
+						</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
+						✕ Close
+					</button>
+				</header>
+
+				{error && <p className="ops-modal__error">{error}</p>}
+
+				<form onSubmit={unlock} className="invite-form" style={{ marginTop: "1rem" }}>
+					<div className="field">
+						<label htmlFor="unlock-totp-input">
+							Authenticator 6-Digit Code <span style={{ color: "#b00020" }}>*</span>
+						</label>
+						<input
+							id="unlock-totp-input"
+							type="text"
+							className="input input--full-border mfa-code"
+							style={{ width: "100%", fontSize: "1.25rem", letterSpacing: "0.25em" }}
+							value={totpCode}
+							onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+							placeholder="000000"
+							inputMode="numeric"
+							autoComplete="one-time-code"
+							required
+							autoFocus
+						/>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+							Enter the current TOTP code from Microsoft Authenticator, 1Password, or your auth app.
+						</p>
+					</div>
+
+					<div className="cal-actions" style={{ marginTop: "1.25rem" }}>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={busy}>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							className="btn btn--primary"
+							disabled={busy || totpCode.length !== 6}
+						>
+							{busy ? "Verifying…" : "Unlock for 15 Minutes"}
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	);
+}
+
 function EditSettingModal({
 	setting,
+	isUnlocked,
+	stepUpToken,
 	onClose,
 	onSaved,
 }: {
 	setting: SettingView;
+	isUnlocked: boolean;
+	stepUpToken: string | null;
 	onClose: () => void;
-	onSaved: () => void;
+	onSaved: (newStepUp?: { stepUpToken?: string; expiresAt?: string }) => void;
 }) {
 	const [value, setValue] = useState("");
 	const [totpCode, setTotpCode] = useState("");
@@ -367,15 +568,25 @@ function EditSettingModal({
 		setSaving(true);
 		setError(null);
 		try {
-			await apiFetch(`${API_PREFIX}/settings`, {
-				method: "PUT",
-				body: JSON.stringify({
-					key: setting.key,
-					value: clear ? null : value,
-					totpCode,
-				}),
-			});
-			onSaved();
+			const payload: Record<string, unknown> = {
+				key: setting.key,
+				value: clear ? null : value,
+			};
+
+			if (isUnlocked && stepUpToken) {
+				payload.stepUpToken = stepUpToken;
+			} else {
+				payload.totpCode = totpCode;
+			}
+
+			const res = await apiFetch<{ stepUpToken?: string; expiresAt?: string }>(
+				`${API_PREFIX}/settings`,
+				{
+					method: "PUT",
+					body: JSON.stringify(payload),
+				},
+			);
+			onSaved(res);
 		} catch (err) {
 			const msg = err instanceof ApiError ? err.message : String(err);
 			setError(msg);
@@ -449,26 +660,28 @@ function EditSettingModal({
 						</label>
 					</div>
 
-					<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
-						<label htmlFor="totp-code-input">
-							Authenticator 6-Digit Code <span style={{ color: "#b00020" }}>*</span>
-						</label>
-						<input
-							id="totp-code-input"
-							type="text"
-							className="input input--full-border mfa-code"
-							style={{ width: "100%", fontSize: "1.25rem", letterSpacing: "0.25em" }}
-							value={totpCode}
-							onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-							placeholder="000000"
-							inputMode="numeric"
-							autoComplete="one-time-code"
-							required
-						/>
-						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-							Security verification: enter the current 6-digit code from your authenticator app.
-						</p>
-					</div>
+					{!isUnlocked && (
+						<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+							<label htmlFor="totp-code-input">
+								Authenticator 6-Digit Code <span style={{ color: "#b00020" }}>*</span>
+							</label>
+							<input
+								id="totp-code-input"
+								type="text"
+								className="input input--full-border mfa-code"
+								style={{ width: "100%", fontSize: "1.25rem", letterSpacing: "0.25em" }}
+								value={totpCode}
+								onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+								placeholder="000000"
+								inputMode="numeric"
+								autoComplete="one-time-code"
+								required
+							/>
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+								Session locked: enter code once to unlock 15 minutes of continuous editing.
+							</p>
+						</div>
+					)}
 
 					<div className="cal-actions" style={{ marginTop: "1.25rem" }}>
 						<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={saving}>
@@ -477,7 +690,7 @@ function EditSettingModal({
 						<button
 							type="submit"
 							className="btn btn--primary"
-							disabled={saving || (!clear && !value && !setting.secret) || totpCode.length !== 6}
+							disabled={saving || (!clear && !value && !setting.secret) || (!isUnlocked && totpCode.length !== 6)}
 						>
 							{saving ? "Saving Changes…" : "Save Configuration"}
 						</button>
@@ -487,4 +700,5 @@ function EditSettingModal({
 		</div>
 	);
 }
+
 

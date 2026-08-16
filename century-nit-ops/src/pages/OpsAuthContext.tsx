@@ -4,10 +4,13 @@ import {
 	ASSIGN_WORK_ROLES,
 	EDIT_PACKAGES_ROLES,
 	EDIT_UNIVERSITIES_ROLES,
+	roleCanAccess,
+	opsModuleSchema,
+	API_PREFIX,
 	type OpsModule,
 	type OpsRole,
 } from "century-nit-shared";
-import { getSession, signIn as apiSignIn, signOut as apiSignOut, type SessionResponse } from "../lib/api";
+import { getSession, signIn as apiSignIn, signOut as apiSignOut, apiFetch, type SessionResponse } from "../lib/api";
 
 /* ─── Role Definitions ─── */
 
@@ -218,12 +221,26 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
 	const [isMockSession, setIsMockSession] = useState(false);
+	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, OpsModule[]>>({});
 
 	const opsRole = opsUser?.role ?? null;
 
-	// On mount, check for an existing API session. If one exists and is linked
-	// to a staff profile, it takes precedence over any mock session in
-	// sessionStorage — the API session is the real authority.
+	const refreshPermissions = useCallback(async () => {
+		try {
+			const res = await apiFetch<{ roles: Array<{ id: string; permissions: OpsModule[] }> }>(
+				`${API_PREFIX}/roles`,
+			);
+			const map: Record<string, OpsModule[]> = {};
+			for (const r of res.roles) {
+				map[r.id] = r.permissions;
+			}
+			setDynamicPermissions(map);
+		} catch {
+			// API error or unauthenticated, fallback to built-in map
+		}
+	}, []);
+
+	// On mount, check for an existing API session and load role permissions.
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -235,6 +252,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 					setOpsUser(user);
 					setIsMockSession(false);
 					saveSession(user);
+					void refreshPermissions();
 				}
 			} catch {
 				// API not reachable — keep a mock session only in development.
@@ -243,7 +261,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}
 		})();
 		return () => { cancelled = true; };
-	}, []);
+	}, [refreshPermissions]);
 
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string) => {
 		await apiSignIn(email, password);
@@ -253,12 +271,19 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		setOpsUser(user);
 		setIsMockSession(false);
 		saveSession(user);
+		void refreshPermissions();
 		return user;
-	}, []);
+	}, [refreshPermissions]);
 
 	const opsSignIn = useCallback((role: OpsRole) => {
 		if (!import.meta.env.DEV) return;
-		const user = MOCK_USERS[role];
+		const user = MOCK_USERS[role as keyof typeof MOCK_USERS] ?? {
+			name: role,
+			email: `${role}@century-nit.com`,
+			role,
+			branch: "platform",
+			avatar: role.slice(0, 2).toUpperCase(),
+		};
 		setOpsUser(user);
 		setIsMockSession(true);
 		saveSession(user);
@@ -274,15 +299,18 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const hasPermission = useCallback(
 		(module: OpsModule) => {
 			if (!opsRole) return false;
-			return ROLE_PERMISSIONS[opsRole].includes(module);
+			return roleCanAccess(opsRole, module, dynamicPermissions);
 		},
-		[opsRole],
+		[opsRole, dynamicPermissions],
 	);
 
 	const getAllowedModules = useCallback(() => {
 		if (!opsRole) return [];
-		return ROLE_PERMISSIONS[opsRole];
-	}, [opsRole]);
+		if (opsRole === "super_admin") return opsModuleSchema.options as unknown as OpsModule[];
+		if (dynamicPermissions[opsRole]) return dynamicPermissions[opsRole];
+		return (ROLE_PERMISSIONS as Record<string, OpsModule[]>)[opsRole] ?? [];
+	}, [opsRole, dynamicPermissions]);
+
 
 	const canSeeAllBranches = opsRole === "manager" || opsRole === "finance";
 	const branchScopeId = opsUser?.branch ?? null;

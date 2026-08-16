@@ -8,6 +8,7 @@ import { ApiError, staffApi } from "century-nit-core/api";
 import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsModule } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
+import { ClientDirectory } from "./ClientDirectory";
 
 const INVITEABLE: Record<string, OpsRole[]> = {
 	super_admin: ["super_admin", "admin", "manager", "coordinator", "consultant", "finance"],
@@ -386,7 +387,7 @@ interface DynamicRole {
 
 function UsersAndRoles() {
 	const { opsUser, opsRole } = useOpsAuth();
-	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix">("staff");
+	const [activeSubTab, setActiveSubTab] = useState<"staff" | "clients" | "matrix">("staff");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
 	const [roleSearch, setRoleSearch] = useState("");
@@ -465,10 +466,10 @@ function UsersAndRoles() {
 		void refresh();
 	}, [refresh]);
 
-	function say(msg: string) {
+	const say = (msg: string) => {
 		setFlash(msg);
 		window.setTimeout(() => setFlash(null), 4000);
-	}
+	};
 
 	async function submitInvite(e: React.FormEvent) {
 		e.preventDefault();
@@ -683,7 +684,7 @@ function UsersAndRoles() {
 			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert">{error}</p> : null}
 
-			{/* Sub Tabs: Staff Directory vs Roles & Permissions */}
+			{/* Sub Tabs: Staff Directory vs Client Accounts vs Roles & Permissions */}
 			<div style={{ display: "flex", gap: "0.5rem", borderBottom: "var(--medium)", marginBottom: "1.5rem" }}>
 				<button
 					type="button"
@@ -702,6 +703,24 @@ function UsersAndRoles() {
 					}}
 				>
 					Staff Directory ({staff.length})
+				</button>
+				<button
+					type="button"
+					onClick={() => setActiveSubTab("clients")}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeSubTab === "clients" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeSubTab === "clients" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					Client Accounts & Access
 				</button>
 				<button
 					type="button"
@@ -996,7 +1015,10 @@ function UsersAndRoles() {
 				</>
 			)}
 
-			{/* ── Sub-tab 2: Master-Detail Roles & Permissions ── */}
+			{/* ── Sub-tab 2: Client Accounts & Access ── */}
+			{activeSubTab === "clients" && <ClientDirectory />}
+
+			{/* ── Sub-tab 3: Master-Detail Roles & Permissions ── */}
 			{activeSubTab === "matrix" && (
 				<div className="perm-master-detail">
 					{/* Left Column: Role Selector Nav */}

@@ -58,6 +58,22 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 		throw new HttpError(401, "UNAUTHENTICATED", "Sign in to continue");
 	}
 
+	const [dbUser] = await db
+		.select({ banned: users.banned, banReason: users.banReason })
+		.from(users)
+		.where(eq(users.id, session.user.id))
+		.limit(1);
+
+	if (dbUser?.banned) {
+		throw new HttpError(
+			403,
+			"FORBIDDEN",
+			dbUser.banReason
+				? `Account suspended: ${dbUser.banReason}`
+				: "Your account has been suspended. Please contact support.",
+		);
+	}
+
 	c.set("user", {
 		id: session.user.id,
 		email: session.user.email,

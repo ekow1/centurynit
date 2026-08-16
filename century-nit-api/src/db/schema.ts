@@ -37,6 +37,15 @@ export const users = pgTable("users", {
 	 */
 	twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
 
+	/**
+	 * Access control / suspension.
+	 * When banned is true, Better Auth and API reject all session attempts.
+	 */
+	banned: boolean("banned").notNull().default(false),
+	banReason: text("ban_reason"),
+	bannedAt: timestamp("banned_at", { withTimezone: true }),
+	bannedBy: text("banned_by"),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

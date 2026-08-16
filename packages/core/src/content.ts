@@ -1842,15 +1842,18 @@ export const PROCESS_STAGES: {
 ];
 
 /** Fee simulation amounts (USD) - GHS equivalents derived via GHS_RATE */
-export const APP_INVOICE_BASE = 200;
-export const APP_INVOICE_PER_SCHOOL = 75;
-export const VISA_INVOICE_AMOUNT = 350;
-export const CONSULTATION_FEE_AMOUNT = 75;
-/** Consultant-entered add-ons that turn the estimate into the actual invoice */
-export const APP_DOC_VERIFY_FEE = 40;
-export const APP_MATCH_REVIEW_FEE = 30;
-export const VISA_BIOMETRICS_FEE = 40;
-export const VISA_TRANSLATION_FEE = 30;
+import { DEFAULT_FEE_CENTS, usdFromCents } from "century-nit-shared";
+
+/** Stage fees in USD — derived from the shared cent schedule so portal and API cannot drift. */
+export const APP_INVOICE_BASE = usdFromCents(DEFAULT_FEE_CENTS.appBase);
+export const APP_INVOICE_PER_SCHOOL = usdFromCents(DEFAULT_FEE_CENTS.appPerSchool);
+export const VISA_INVOICE_AMOUNT = usdFromCents(DEFAULT_FEE_CENTS.visaBase);
+export const CONSULTATION_FEE_AMOUNT = usdFromCents(DEFAULT_FEE_CENTS.consultation);
+/** Suggested extras — handler/finance confirm these on the proforma. */
+export const APP_DOC_VERIFY_FEE = usdFromCents(DEFAULT_FEE_CENTS.appDocVerify);
+export const APP_MATCH_REVIEW_FEE = usdFromCents(DEFAULT_FEE_CENTS.appMatchReview);
+export const VISA_BIOMETRICS_FEE = usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics);
+export const VISA_TRANSLATION_FEE = usdFromCents(DEFAULT_FEE_CENTS.visaTranslation);
 /** GHS equivalents (auto-calculated at GHS_RATE = 15) */
 export const APP_INVOICE_BASE_GHS = APP_INVOICE_BASE * GHS_RATE;
 export const APP_INVOICE_PER_SCHOOL_GHS = APP_INVOICE_PER_SCHOOL * GHS_RATE;

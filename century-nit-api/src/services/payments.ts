@@ -27,9 +27,18 @@ export async function initializePayment(
 		throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
 	}
 
+	if (invoice.status === "proforma") {
+		throw new HttpError(
+			400,
+			"INVOICE_PROFORMA",
+			"Cannot pay a proforma estimate before it is reviewed and issued by staff",
+		);
+	}
+
 	if (invoice.status === "paid" || invoice.status === "void") {
 		throw new HttpError(400, "INVOICE_ALREADY_SETTLED", `Invoice is already ${invoice.status}`);
 	}
+
 
 	const balanceCents = invoice.subtotalCents - invoice.creditedCents;
 	const reference = `PAY-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;

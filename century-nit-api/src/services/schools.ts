@@ -10,6 +10,8 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
+	invoiceLines,
+	invoices,
 	schoolApplications,
 	schoolTrackEvents,
 } from "../db/schema.js";
@@ -62,33 +64,87 @@ export async function lockSchoolsForApplicant(
 		.where(eq(applicants.id, applicantId))
 		.limit(1);
 
-	// Create a PROFORMA estimate — not payable until a staff member reviews and issues it
-	const proforma = await createProforma({
-		data: {
-			applicantName: applicantRow?.name ?? user.name ?? "Applicant",
-			applicantEmail: applicantRow?.email ?? user.email,
-			clientUserId: user.id,
-			type: "application",
-			lines: [
-				{
-					label: "Application Processing Base Fee",
-					detail: "Document verification, portal account creation, credential review",
-					amountCents: fees.appBaseCents,
-				},
-				{
-					label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
-					detail: `Per-institution submission & liaison fee`,
-					amountCents: rows.length * fees.appPerSchoolCents,
-				},
-				{
-					label: "Document Verification & Courier",
-					detail: "Transcripts and certificates verified and shipped",
-					amountCents: fees.appDocVerifyCents,
-				},
-			],
-			note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
-		},
-	});
+	// Check if an application invoice already exists for this client to prevent duplicate invoices on re-lock
+	const existingInvoices = await db
+		.select()
+		.from(invoices)
+		.where(and(eq(invoices.clientUserId, user.id), eq(invoices.type, "application")))
+		.orderBy(desc(invoices.createdAt));
+
+	const activeInvoice = existingInvoices.find((i) => i.status !== "void");
+	let invoiceId: string;
+
+	if (activeInvoice) {
+		invoiceId = activeInvoice.id;
+		// If it is still a proforma, update lines to reflect current selected schools count & current pricing
+		if (activeInvoice.status === "proforma") {
+			const subtotalCents =
+				fees.appBaseCents + rows.length * fees.appPerSchoolCents + fees.appDocVerifyCents;
+			await db.transaction(async (tx) => {
+				await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, activeInvoice.id));
+				await tx.insert(invoiceLines).values([
+					{
+						invoiceId: activeInvoice.id,
+						position: 0,
+						label: "Application Processing Base Fee",
+						detail: "Document verification, portal account creation, credential review",
+						amountCents: fees.appBaseCents,
+					},
+					{
+						invoiceId: activeInvoice.id,
+						position: 1,
+						label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
+						detail: `Per-institution submission & liaison fee`,
+						amountCents: rows.length * fees.appPerSchoolCents,
+					},
+					{
+						invoiceId: activeInvoice.id,
+						position: 2,
+						label: "Document Verification & Courier",
+						detail: "Transcripts and certificates verified and shipped",
+						amountCents: fees.appDocVerifyCents,
+					},
+				]);
+				await tx
+					.update(invoices)
+					.set({
+						subtotalCents,
+						note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
+						updatedAt: new Date(),
+					})
+					.where(eq(invoices.id, activeInvoice.id));
+			});
+		}
+	} else {
+		// Create a new PROFORMA estimate — not payable until a staff member reviews and issues it
+		const proforma = await createProforma({
+			data: {
+				applicantName: applicantRow?.name ?? user.name ?? "Applicant",
+				applicantEmail: applicantRow?.email ?? user.email,
+				clientUserId: user.id,
+				type: "application",
+				lines: [
+					{
+						label: "Application Processing Base Fee",
+						detail: "Document verification, portal account creation, credential review",
+						amountCents: fees.appBaseCents,
+					},
+					{
+						label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
+						detail: `Per-institution submission & liaison fee`,
+						amountCents: rows.length * fees.appPerSchoolCents,
+					},
+					{
+						label: "Document Verification & Courier",
+						detail: "Transcripts and certificates verified and shipped",
+						amountCents: fees.appDocVerifyCents,
+					},
+				],
+				note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
+			},
+		});
+		invoiceId = proforma.id;
+	}
 
 	if (app) {
 		await db
@@ -104,9 +160,10 @@ export async function lockSchoolsForApplicant(
 	return {
 		...updated,
 		selectionDoneAt: new Date().toISOString(),
-		invoiceId: proforma.id,
+		invoiceId,
 	};
 }
+
 
 export async function serializeSchool(
 	row: typeof schoolApplications.$inferSelect,

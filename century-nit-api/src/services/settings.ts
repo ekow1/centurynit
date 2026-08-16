@@ -42,7 +42,10 @@ export type SettingKey =
 	| "APP_BASE_FEE_CENTS"
 	| "APP_PER_SCHOOL_FEE_CENTS"
 	| "APP_DOC_VERIFY_FEE_CENTS"
+	| "APP_MATCH_REVIEW_FEE_CENTS"
 	| "VISA_BASE_FEE_CENTS"
+	| "VISA_BIOMETRICS_FEE_CENTS"
+	| "VISA_TRANSLATION_FEE_CENTS"
 	| "CONSULTATION_FEE_CENTS";
 
 
@@ -173,11 +176,29 @@ export const SETTING_DEFS: Record<
 		secret: false,
 		description: "Document verification and courier fee in USD cents. Default: 4000 ($40).",
 	},
+	APP_MATCH_REVIEW_FEE_CENTS: {
+		label: "Match Review Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Course matching and credit evaluation fee in USD cents. Default: 3000 ($30).",
+	},
 	VISA_BASE_FEE_CENTS: {
 		label: "Visa Base Fee (cents)",
 		group: "Fee Schedule",
 		secret: false,
 		description: "Visa processing base fee in USD cents. Default: 35000 ($350).",
+	},
+	VISA_BIOMETRICS_FEE_CENTS: {
+		label: "Visa Biometrics Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Visa biometrics appointment booking fee in USD cents. Default: 4000 ($40).",
+	},
+	VISA_TRANSLATION_FEE_CENTS: {
+		label: "Visa Translation Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Document translation assistance fee in USD cents. Default: 3000 ($30).",
 	},
 	CONSULTATION_FEE_CENTS: {
 		label: "Consultation Fee (cents)",

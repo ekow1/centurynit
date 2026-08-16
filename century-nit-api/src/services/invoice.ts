@@ -5,6 +5,7 @@ import type {
 	InvoiceStatus,
 	InvoiceStoredStatus,
 } from "century-nit-shared";
+import { DEFAULT_FEE_CENTS } from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
 	invoiceEvents,
@@ -43,6 +44,19 @@ async function nextInvoiceNumber(tx: typeof db): Promise<string> {
 		.from(invoices)
 		.where(sql`${invoices.invoiceNumber} like ${`INV-${year}-%`}`);
 	return `INV-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
+}
+
+/** `PRO-2026-0007`. Advisory-locked so concurrent proforma creates cannot collide. */
+async function nextProformaNumber(tx: typeof db): Promise<string> {
+	const year = new Date().getUTCFullYear();
+	await tx.execute(sql`SELECT pg_advisory_xact_lock(710003, ${year})`);
+	const [row] = await tx
+		.select({
+			max: sql<number>`coalesce(max(split_part(${invoices.invoiceNumber}, '-', 3)::int), 0)::int`,
+		})
+		.from(invoices)
+		.where(sql`${invoices.invoiceNumber} like ${`PRO-${year}-%`}`);
+	return `PRO-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
 }
 
 async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promise<number> {
@@ -339,6 +353,13 @@ export async function recordPayment(input: {
 		if (row.status === "void") {
 			throw new HttpError(409, "INVOICE_VOID", "Cannot record a payment against a void invoice");
 		}
+		if (row.status === "proforma") {
+			throw new HttpError(
+				409,
+				"INVOICE_PROFORMA",
+				"Cannot pay a proforma invoice before it is reviewed and issued by staff",
+			);
+		}
 
 		const paidCents = await paidCentsOf(row.id, txDb);
 		const balance = balanceOf(row, paidCents);
@@ -476,7 +497,10 @@ export async function getFeeSchedule(): Promise<{
 	appBaseCents: number;
 	appPerSchoolCents: number;
 	appDocVerifyCents: number;
+	appMatchReviewCents: number;
 	visaBaseCents: number;
+	visaBiometricsCents: number;
+	visaTranslationCents: number;
 	consultationCents: number;
 }> {
 	const parse = async (key: Parameters<typeof getSetting>[0], fallback: number) => {
@@ -485,11 +509,14 @@ export async function getFeeSchedule(): Promise<{
 		return Number.isFinite(n) && n >= 0 ? n : fallback;
 	};
 	return {
-		appBaseCents: await parse("APP_BASE_FEE_CENTS", 35000),
-		appPerSchoolCents: await parse("APP_PER_SCHOOL_FEE_CENTS", 10000),
-		appDocVerifyCents: await parse("APP_DOC_VERIFY_FEE_CENTS", 4000),
-		visaBaseCents: await parse("VISA_BASE_FEE_CENTS", 35000),
-		consultationCents: await parse("CONSULTATION_FEE_CENTS", 7500),
+		appBaseCents: await parse("APP_BASE_FEE_CENTS", DEFAULT_FEE_CENTS.appBase),
+		appPerSchoolCents: await parse("APP_PER_SCHOOL_FEE_CENTS", DEFAULT_FEE_CENTS.appPerSchool),
+		appDocVerifyCents: await parse("APP_DOC_VERIFY_FEE_CENTS", DEFAULT_FEE_CENTS.appDocVerify),
+		appMatchReviewCents: await parse("APP_MATCH_REVIEW_FEE_CENTS", DEFAULT_FEE_CENTS.appMatchReview),
+		visaBaseCents: await parse("VISA_BASE_FEE_CENTS", DEFAULT_FEE_CENTS.visaBase),
+		visaBiometricsCents: await parse("VISA_BIOMETRICS_FEE_CENTS", DEFAULT_FEE_CENTS.visaBiometrics),
+		visaTranslationCents: await parse("VISA_TRANSLATION_FEE_CENTS", DEFAULT_FEE_CENTS.visaTranslation),
+		consultationCents: await parse("CONSULTATION_FEE_CENTS", DEFAULT_FEE_CENTS.consultation),
 	};
 }
 
@@ -500,7 +527,7 @@ export async function getFeeSchedule(): Promise<{
  *
  * The applicant sees it as "Estimated — pending review". Staff see it in the
  * review queue and can adjust line items before issuing it as a real invoice.
- * The proforma gets a real invoice number so it can be referenced in messages.
+ * The proforma gets a real PRO-2026-XXXX number so it can be referenced in messages.
  */
 export async function createProforma(input: {
 	data: CreateInvoice;
@@ -510,7 +537,7 @@ export async function createProforma(input: {
 
 	const row = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
-		const invoiceNumber = await nextInvoiceNumber(txDb);
+		const invoiceNumber = await nextProformaNumber(txDb);
 		const [created] = await tx
 			.insert(invoices)
 			.values({
@@ -537,7 +564,7 @@ export async function createProforma(input: {
 			})),
 		);
 
-		await audit(created.id, "proforma_created", null, "Estimate generated — pending staff review", txDb);
+		await audit(created.id, "proforma_created", null, `Estimate generated (${invoiceNumber}) — pending staff review`, txDb);
 		return created;
 	});
 
@@ -592,9 +619,11 @@ export async function issueProforma(input: {
 			})),
 		);
 
+		const officialInvoiceNumber = await nextInvoiceNumber(txDb);
 		const [updated] = await tx
 			.update(invoices)
 			.set({
+				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				subtotalCents: newSubtotal,
 				note: input.note ?? row.note,
@@ -613,7 +642,7 @@ export async function issueProforma(input: {
 			row.id,
 			"issued",
 			input.actor.email,
-			`Reviewed and issued by ${input.actor.name}. Subtotal: ${newSubtotal} cents`,
+			`Issued as ${officialInvoiceNumber} from proforma ${row.invoiceNumber} by ${input.actor.name}. Subtotal: ${newSubtotal} cents`,
 			txDb,
 		);
 		return updated;

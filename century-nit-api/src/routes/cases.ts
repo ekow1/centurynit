@@ -883,7 +883,15 @@ meRouter.openapi(
 		if (row.clientUserId !== user.id) {
 			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
 		}
+		if (row.status === "proforma") {
+			throw new HttpError(
+				409,
+				"INVOICE_PROFORMA",
+				"Cannot pay a proforma invoice before it is reviewed and issued by staff",
+			);
+		}
 		const serialized = await serializeInvoice(row);
+
 		if (serialized.balanceCents <= 0) {
 			throw new HttpError(409, "INVOICE_PAID", "This invoice is already fully paid");
 		}

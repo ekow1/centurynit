@@ -90,15 +90,21 @@ export function MfaSetup() {
 		e.preventDefault();
 		setBusy(true);
 		setError(null);
+		const cleanCode = code.trim().replace(/\D/g, "");
+		if (cleanCode.length !== 6) {
+			setError("Please enter the complete 6-digit code from your authenticator app.");
+			setBusy(false);
+			return;
+		}
 		try {
-			const { error: err } = await authClient.twoFactor.verifyTotp({ code });
+			const { error: err } = await authClient.twoFactor.verifyTotp({ code: cleanCode });
 			if (err) throw new Error(err.message ?? "That code was not accepted");
 			setStep("codes");
 		} catch (err) {
 			setError(
 				err instanceof Error
-					? `${err.message}. Check your device clock is accurate, then try again.`
-					: "That code was not accepted",
+					? `${err.message}. If you generated a new key, delete any older "Century NIT" entry in your authenticator app and use the code from this latest scan.`
+					: "That code was not accepted. Check your device clock is accurate and try again.",
 			);
 		} finally {
 			setBusy(false);
@@ -197,6 +203,9 @@ export function MfaSetup() {
 						<form onSubmit={confirm} className="mfa-action-col">
 							<p className="mfa-step__desc">
 								Scan the QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.), or paste the setup key manually, then enter the current 6-digit code.
+							</p>
+							<p className="mfa-step__desc" style={{ fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "-0.5rem" }}>
+								<strong>Tip:</strong> If you set up Century NIT before, delete the old account in your authenticator app first so you use the code from this newly generated QR code.
 							</p>
 
 							<div className="field">

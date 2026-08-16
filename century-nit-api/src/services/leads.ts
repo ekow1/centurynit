@@ -17,6 +17,44 @@ export interface LeadView {
 }
 
 /**
+ * Backfill any existing registered client accounts into the CRM leads pipeline.
+ */
+export async function syncLeadsFromRegisteredUsers(): Promise<void> {
+	try {
+		const allUsers = await db.query.users.findMany();
+		const allStaff = await db.query.opsUsers.findMany();
+		const staffEmails = new Set(allStaff.map((s) => s.email.toLowerCase().trim()));
+
+		for (const u of allUsers) {
+			const email = u.email.toLowerCase().trim();
+			if (staffEmails.has(email)) continue;
+
+			const existing = await db.query.leads.findFirst({
+				where: eq(leads.email, email),
+			});
+			if (!existing) {
+				const displayName =
+					u.name?.trim() ||
+					email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+					"Registered Client";
+
+				await db.insert(leads).values({
+					name: displayName,
+					email,
+					phone: u.phoneNumber || null,
+					source: "Account Registration",
+					stage: "New Lead",
+					notes: `Registered account captured into CRM (${new Date().toLocaleDateString()}).`,
+				});
+				console.log(`[CRM] Auto-backfilled lead for existing client user: ${email}`);
+			}
+		}
+	} catch (err) {
+		console.warn("[CRM] syncLeadsFromRegisteredUsers error:", err);
+	}
+}
+
+/**
  * Capture an inbound user registration or sign-in as a CRM lead.
  * Does NOT create leads for internal staff members.
  */
@@ -74,6 +112,8 @@ export async function captureLeadFromUser(
 }
 
 export async function listLeads(query?: { stage?: string; search?: string }): Promise<LeadView[]> {
+	await syncLeadsFromRegisteredUsers();
+
 	let whereClause;
 
 	if (query?.search?.trim()) {

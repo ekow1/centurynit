@@ -179,7 +179,7 @@ function LeadCard({
 
 export function EnterpriseLeads() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
-	const { leads: localLeads, moveLead } = useOpsState();
+	const { leads: localLeads, moveLead, liveCase } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
@@ -213,6 +213,7 @@ export function EnterpriseLeads() {
 		const emailSet = new Set<string>();
 		const result: Lead[] = [];
 
+		// 1. Live database leads take priority
 		for (const al of apiLeads) {
 			emailSet.add(al.email.toLowerCase());
 			result.push({
@@ -233,6 +234,31 @@ export function EnterpriseLeads() {
 			});
 		}
 
+		// 2. Active client portal session
+		if (liveCase?.present && liveCase.email) {
+			const liveEmail = liveCase.email.toLowerCase();
+			if (!emailSet.has(liveEmail)) {
+				emailSet.add(liveEmail);
+				result.unshift({
+					id: "lead-live-session",
+					name: liveCase.name || "Live Portal Client",
+					email: liveCase.email,
+					phone: liveCase.phone || "-",
+					country: liveCase.targetCountry || "Canada",
+					degreeLevel: liveCase.degreeLevel || "Master's",
+					branch: "accra",
+					stage: "new",
+					source: "Live Portal Sign-In",
+					value: 3000,
+					createdAt: new Date().toISOString().slice(0, 10),
+					lastContactAt: new Date().toISOString(),
+					notes: `Active client portal session at stage: ${liveCase.stageLabel || "New Client"}.`,
+					assignedTo: "Unassigned",
+				});
+			}
+		}
+
+		// 3. Seed / custom leads
 		for (const ll of localLeads) {
 			if (!emailSet.has(ll.email.toLowerCase())) {
 				emailSet.add(ll.email.toLowerCase());
@@ -240,7 +266,7 @@ export function EnterpriseLeads() {
 			}
 		}
 		return result;
-	}, [apiLeads, localLeads]);
+	}, [apiLeads, liveCase, localLeads]);
 
 	const handleLeadMove = useCallback(
 		async (id: string, stage: LeadStage) => {

@@ -53,7 +53,7 @@ const TYPE_META: Record<NotificationItem["type"], { label: string; color: string
 
 export function EnterpriseInbox() {
 	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
-	const { consultations, applications, applicants, leads, activityLog } = useOpsState();
+	const { consultations, applications, applicants, leads, activityLog, liveCase } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [filter, setFilter] = useState<"all" | "unread">("all");
 
@@ -78,6 +78,18 @@ export function EnterpriseInbox() {
 
 	const notifications = useMemo<NotificationItem[]>(() => {
 		const items: NotificationItem[] = [];
+
+		if (liveCase?.present && liveCase.email) {
+			items.push({
+				id: "live-portal-session-notif",
+				type: "lead",
+				title: `Active client portal session: ${liveCase.name}`,
+				detail: `Signed in as ${liveCase.email} · Current stage: ${liveCase.stageLabel || "New Client"}`,
+				time: relativeTime(liveCase.updatedAt || new Date().toISOString()),
+				link: "/leads",
+				unread: true,
+			});
+		}
 
 		for (const c of consultations) {
 			const isMine = c.assignedOfficer === me;

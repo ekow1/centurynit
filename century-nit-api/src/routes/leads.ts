@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
+import { HttpError } from "../middleware/error.js";
 import {
 	createManualLead,
 	deleteLead,
@@ -74,7 +75,7 @@ leadsRouter.openapi(
 		method: "get",
 		path: "/",
 		tags: ["CRM Leads"],
-		middleware: [requireAuth, requireMfa, requireModule("leads")] as const,
+		middleware: [requireAuth, requireModule("leads")] as const,
 		request: {
 			query: z.object({
 				stage: z.string().optional(),
@@ -102,7 +103,7 @@ leadsRouter.openapi(
 		method: "post",
 		path: "/",
 		tags: ["CRM Leads"],
-		middleware: [requireAuth, requireMfa, requireModule("leads")] as const,
+		middleware: [requireAuth, requireModule("leads")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: createLeadBodySchema } },
@@ -130,7 +131,7 @@ leadsRouter.openapi(
 		method: "patch",
 		path: "/{id}",
 		tags: ["CRM Leads"],
-		middleware: [requireAuth, requireMfa, requireModule("leads")] as const,
+		middleware: [requireAuth, requireModule("leads")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -141,10 +142,7 @@ leadsRouter.openapi(
 		responses: {
 			200: {
 				content: { "application/json": { schema: leadSchema } },
-				description: "Lead updated",
-			},
-			404: {
-				description: "Lead not found",
+				description: "Lead updated successfully",
 			},
 		},
 	}),
@@ -153,7 +151,7 @@ leadsRouter.openapi(
 		const body = c.req.valid("json");
 		const updated = await updateLead(id, body);
 		if (!updated) {
-			return c.json({ error: { code: "NOT_FOUND", message: "Lead not found" } }, 404);
+			throw new HttpError(404, "NOT_FOUND", "Lead not found");
 		}
 		return c.json(updated);
 	},
@@ -166,17 +164,18 @@ leadsRouter.openapi(
 		method: "delete",
 		path: "/{id}",
 		tags: ["CRM Leads"],
-		middleware: [requireAuth, requireMfa, requireModule("leads")] as const,
+		middleware: [requireAuth, requireModule("leads")] as const,
 		request: {
 			params: idParams,
 		},
 		responses: {
 			200: {
-				content: { "application/json": { schema: z.object({ success: z.boolean() }) } },
-				description: "Lead deleted",
-			},
-			404: {
-				description: "Lead not found",
+				content: {
+					"application/json": {
+						schema: z.object({ success: z.boolean() }),
+					},
+				},
+				description: "Lead deleted successfully",
 			},
 		},
 	}),
@@ -184,7 +183,7 @@ leadsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const ok = await deleteLead(id);
 		if (!ok) {
-			return c.json({ error: { code: "NOT_FOUND", message: "Lead not found" } }, 404);
+			throw new HttpError(404, "NOT_FOUND", "Lead not found");
 		}
 		return c.json({ success: true });
 	},

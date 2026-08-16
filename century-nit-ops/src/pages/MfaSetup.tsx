@@ -196,8 +196,9 @@ export function MfaSetup() {
 						{/* Right column: Instructions, 6-digit input, Submit */}
 						<form onSubmit={confirm} className="mfa-action-col">
 							<p className="mfa-step__desc">
-								Scan with your authenticator app (Microsoft Authenticator, 1Password, Bitwarden, Authy, or any TOTP app), then enter the 6-digit code.
+								Scan the QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, etc.), or paste the setup key manually, then enter the current 6-digit code.
 							</p>
+
 							<div className="field">
 								<label htmlFor="mfa-code-input">Six-digit code</label>
 								<input
@@ -214,6 +215,7 @@ export function MfaSetup() {
 									autoFocus
 								/>
 							</div>
+
 							<button
 								type="submit"
 								className="btn btn--primary mfa-submit-btn"
@@ -221,13 +223,15 @@ export function MfaSetup() {
 							>
 								{busy ? "Checking…" : "Verify & Activate"}
 							</button>
-							{totpUri && (
-								<p className="mfa-direct-link-wrap">
-									<a href={totpUri} className="mfa-direct-link">
-										Open in app directly →
-									</a>
+
+							<div style={{ marginTop: "1rem", fontSize: "var(--text-xs)", color: "var(--muted)", lineHeight: 1.4 }}>
+								<p style={{ margin: "0 0 0.25rem 0" }}>
+									<strong>Tip:</strong> If you previously scanned an earlier QR code, delete that entry in your app first to avoid entering an expired key's code.
 								</p>
-							)}
+								<p style={{ margin: 0 }}>
+									Ensure your device clock is set to <strong>Automatic Network Time</strong>.
+								</p>
+							</div>
 						</form>
 					</div>
 				)}

@@ -172,7 +172,19 @@ export function EnterpriseDashboard() {
 			</div>
 
 			{/* Role-specific dashboard view */}
-			{opsRole === "manager" && (
+			{opsRole === "coordinator" ? (
+				<CoordinatorView
+					stats={stats}
+					funnel={funnel}
+					funnelMax={funnelMax}
+					activityLog={activityLog}
+				/>
+			) : opsRole === "consultant" ? (
+				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} />
+			) : opsRole === "finance" ? (
+				<FinanceView stats={stats} applicants={scoped.applicants} />
+			) : (
+				/* super_admin, admin, manager, or unassigned staff default to full operational executive overview */
 				<ManagerView
 					stats={stats}
 					funnel={funnel}
@@ -181,18 +193,6 @@ export function EnterpriseDashboard() {
 					activityLog={activityLog}
 				/>
 			)}
-			{opsRole === "coordinator" && (
-				<CoordinatorView
-					stats={stats}
-					funnel={funnel}
-					funnelMax={funnelMax}
-					activityLog={activityLog}
-				/>
-			)}
-			{opsRole === "consultant" && (
-				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} />
-			)}
-			{opsRole === "finance" && <FinanceView stats={stats} applicants={scoped.applicants} />}
 		</div>
 	);
 }
@@ -251,7 +251,7 @@ function ManagerView({
 }) {
 	return (
 		<>
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2.5rem" }}>
 				<KPICard
 					label="Awaiting Assignment"
 					value={String(stats.unassignedConsultations + stats.unassignedApplications)}
@@ -262,7 +262,11 @@ function ManagerView({
 				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
 				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
 				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/applicants" />
-				<KPICard label="Active Cases" value={String(stats.appsUnderReview)} note={`${stats.accepted} accepted`} to="/workflow" />
+				<KPICard label="Collected Revenue" value={fmtUsd(stats.collected)} note={`Outstanding: ${fmtUsd(stats.outstanding)}`} to="/finance" />
+			</div>
+
+			<div style={{ marginBottom: "2rem" }}>
+				<UnassignedBookings />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>

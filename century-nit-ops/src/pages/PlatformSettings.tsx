@@ -135,13 +135,22 @@ export function PlatformSettings() {
 		void loadAll();
 	}, [loadAll]);
 
+	const nonFeeSettings = useMemo(() => {
+		return settings.filter(
+			(s) =>
+				!s.key.includes("_FEE") &&
+				!s.key.includes("FEE_") &&
+				!s.group.toLowerCase().includes("fee"),
+		);
+	}, [settings]);
+
 	const groups = useMemo(() => {
 		const set = new Set<string>();
-		for (const s of settings) {
+		for (const s of nonFeeSettings) {
 			set.add(s.group);
 		}
 		return Array.from(set);
-	}, [settings]);
+	}, [nonFeeSettings]);
 
 	const [activeTab, setActiveTab] = useState<"integrations" | "defaults" | "audit">("integrations");
 
@@ -150,13 +159,13 @@ export function PlatformSettings() {
 			return ["Email", "Storage", "Google Integration", "Payment Gateways"];
 		}
 		if (activeTab === "defaults") {
-			return ["Scheduling", "Application Fees", "Visa Fees", "Consultation Fees", "General"];
+			return ["Scheduling", "General", "System"];
 		}
 		return [];
 	}, [activeTab]);
 
 	const filteredSettings = useMemo(() => {
-		return settings.filter((s) => {
+		return nonFeeSettings.filter((s) => {
 			if (activeTab !== "audit") {
 				if (!tabGroups.includes(s.group) && selectedGroup === "all") {
 					// Fallback for general custom groups
@@ -176,7 +185,7 @@ export function PlatformSettings() {
 			}
 			return true;
 		});
-	}, [settings, activeTab, tabGroups, selectedGroup, searchQuery]);
+	}, [nonFeeSettings, activeTab, tabGroups, selectedGroup, searchQuery]);
 
 	// Group filtered settings by group name
 	const grouped = useMemo(() => {

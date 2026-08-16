@@ -759,85 +759,166 @@ function UsersAndRoles() {
 						</div>
 					</div>
 
-					{inviting ? (
-						<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={submitInvite}>
-							<h2 className="section-title mb-3">Invite a staff member</h2>
-							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-								<label className="field">
-									Name
-									<input className="input input--full-border" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} required />
-								</label>
-								<label className="field">
-									Email
-									<input className="input input--full-border" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} required />
-								</label>
-								<label className="field">
-									Role
-									<select className="input input--full-border" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}>
-										{roles.map((r) => (
-											<option key={r.id} value={r.id}>{r.name}</option>
-										))}
-									</select>
-								</label>
-								<label className="field">
-									Branch
-									<select className="input input--full-border" value={draft.branch} onChange={(e) => setDraft({ ...draft, branch: e.target.value })}>
-										{OPS_BRANCHES.map((b) => (
-											<option key={b.id} value={b.id}>{b.name}</option>
-										))}
-										<option value="platform">Platform</option>
-									</select>
-								</label>
-							</div>
-							<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-								<button type="submit" className="btn btn--primary btn--sm">Send invitation</button>
-								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>Cancel</button>
-							</div>
-						</form>
-					) : null}
+					{inviting && (
+						<div className="ops-modal-backdrop" onClick={() => setInviting(false)} role="dialog" aria-modal="true">
+							<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "32rem" }}>
+								<header className="ops-modal__head">
+									<div>
+										<p className="invite-card__eyebrow" style={{ margin: 0 }}>Staff Onboarding</p>
+										<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Invite Staff Member</h2>
+										<p className="ops-modal__sub">Issue an onboarding invite link with assigned role and branch scope.</p>
+									</div>
+									<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>
+										✕ Close
+									</button>
+								</header>
 
-					{editing ? (
-						<form className="card" style={{ marginBottom: "1.5rem", padding: "1.25rem" }} onSubmit={saveEdit}>
-							<h2 className="section-title mb-3">Edit {editing.name}</h2>
-							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-								<label className="field">
-									Role
-									<select
-										className="input input--full-border"
-										value={editing.role}
-										onChange={(e) => setEditing({ ...editing, role: e.target.value as OpsRole })}
-										disabled={editing.email === opsUser?.email}
-									>
-										{roles.map((r) => (
-											<option key={r.id} value={r.id}>{r.name}</option>
-										))}
-									</select>
-								</label>
-								<label className="field">
-									Branch
-									<select className="input input--full-border" value={editing.branch ?? ""} onChange={(e) => setEditing({ ...editing, branch: e.target.value || null })}>
-										{OPS_BRANCHES.map((b) => (
-											<option key={b.id} value={b.id}>{b.name}</option>
-										))}
-										<option value="platform">Platform</option>
-									</select>
-								</label>
-								<label className="field" style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.6rem" }}>
-									<input
-										type="checkbox"
-										checked={editing.active}
-										disabled={editing.email === opsUser?.email}
-										onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
-									/>
-									Active
-								</label>
+								<form onSubmit={submitInvite} className="invite-form" style={{ marginTop: "1rem" }}>
+									<div className="field">
+										<label htmlFor="inv-name">Full Name <span style={{ color: "#b00020" }}>*</span></label>
+										<input
+											id="inv-name"
+											className="input input--full-border"
+											placeholder="e.g. Kwame Mensah"
+											value={draft.name}
+											onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+											required
+											autoFocus
+										/>
+									</div>
+
+									<div className="field">
+										<label htmlFor="inv-email">Work Email <span style={{ color: "#b00020" }}>*</span></label>
+										<input
+											id="inv-email"
+											className="input input--full-border"
+											type="email"
+											placeholder="k.mensah@century-nit.com"
+											value={draft.email}
+											onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+											required
+										/>
+									</div>
+
+									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+										<div className="field">
+											<label htmlFor="inv-role">Assigned Role</label>
+											<select
+												id="inv-role"
+												className="input input--full-border"
+												value={draft.role}
+												onChange={(e) => setDraft({ ...draft, role: e.target.value as OpsRole })}
+											>
+												{roles.map((r) => (
+													<option key={r.id} value={r.id}>{r.name}</option>
+												))}
+											</select>
+										</div>
+
+										<div className="field">
+											<label htmlFor="inv-branch">Branch Scope</label>
+											<select
+												id="inv-branch"
+												className="input input--full-border"
+												value={draft.branch}
+												onChange={(e) => setDraft({ ...draft, branch: e.target.value })}
+											>
+												{OPS_BRANCHES.map((b) => (
+													<option key={b.id} value={b.id}>{b.name}</option>
+												))}
+												<option value="platform">Platform</option>
+											</select>
+										</div>
+									</div>
+
+									<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+										<button type="button" className="btn btn--ghost btn--sm" onClick={() => setInviting(false)}>
+											Cancel
+										</button>
+										<button type="submit" className="btn btn--primary">
+											Send Invitation
+										</button>
+									</div>
+								</form>
 							</div>
-							<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-								<button type="submit" className="btn btn--primary btn--sm">Save</button>
-								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>Cancel</button>
+						</div>
+					)}
+
+					{editing && (
+						<div className="ops-modal-backdrop" onClick={() => setEditing(null)} role="dialog" aria-modal="true">
+							<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "32rem" }}>
+								<header className="ops-modal__head">
+									<div>
+										<p className="invite-card__eyebrow" style={{ margin: 0 }}>Staff Account</p>
+										<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Edit Staff Member</h2>
+										<p className="ops-modal__sub">{editing.name} ({editing.email})</p>
+									</div>
+									<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>
+										✕ Close
+									</button>
+								</header>
+
+								<form onSubmit={saveEdit} className="invite-form" style={{ marginTop: "1rem" }}>
+									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+										<div className="field">
+											<label htmlFor="edit-role">Role</label>
+											<select
+												id="edit-role"
+												className="input input--full-border"
+												value={editing.role}
+												onChange={(e) => setEditing({ ...editing, role: e.target.value as OpsRole })}
+												disabled={editing.email === opsUser?.email}
+											>
+												{roles.map((r) => (
+													<option key={r.id} value={r.id}>{r.name}</option>
+												))}
+											</select>
+											{editing.email === opsUser?.email && (
+												<p className="field__hint">You cannot modify your own role.</p>
+											)}
+										</div>
+
+										<div className="field">
+											<label htmlFor="edit-branch">Branch</label>
+											<select
+												id="edit-branch"
+												className="input input--full-border"
+												value={editing.branch ?? ""}
+												onChange={(e) => setEditing({ ...editing, branch: e.target.value || null })}
+											>
+												{OPS_BRANCHES.map((b) => (
+													<option key={b.id} value={b.id}>{b.name}</option>
+												))}
+												<option value="platform">Platform</option>
+											</select>
+										</div>
+									</div>
+
+									<div className="field" style={{ marginTop: "1rem" }}>
+										<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+											<input
+												type="checkbox"
+												checked={editing.active}
+												disabled={editing.email === opsUser?.email}
+												onChange={(e) => setEditing({ ...editing, active: e.target.checked })}
+											/>
+											<strong>Active Staff Account</strong>
+										</label>
+										<p className="field__hint">Inactive accounts are blocked from logging into the platform.</p>
+									</div>
+
+									<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+										<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>
+											Cancel
+										</button>
+										<button type="submit" className="btn btn--primary">
+											Save Changes
+										</button>
+									</div>
+								</form>
 							</div>
-						</form>
-					) : null}
+						</div>
+					)}
 
 					<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
 						<div className="ops-table-wrap">

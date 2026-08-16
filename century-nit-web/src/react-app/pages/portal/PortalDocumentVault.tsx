@@ -5,6 +5,7 @@ import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
+import { IconDoc } from "../../components/ui/Icons";
 import { UploadProgressModal, type UploadStage } from "../../components/portal/UploadProgressModal";
 import { prepareDocumentForUpload } from "../../lib/upload";
 
@@ -23,10 +24,10 @@ import { prepareDocumentForUpload } from "../../lib/upload";
  */
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
-	missing: { label: "Not uploaded", pill: "portal-pill--needs_info" },
-	uploaded: { label: "Uploaded - pending review", pill: "portal-pill--draft" },
-	verified: { label: "Verified", pill: "portal-pill--approved" },
-	rejected: { label: "Rejected - resubmit", pill: "portal-pill--needs_info" },
+	missing: { label: "Required", pill: "portal-pill--needs_info" },
+	uploaded: { label: "In review", pill: "portal-pill--draft" },
+	verified: { label: "Verified ✓", pill: "portal-pill--approved" },
+	rejected: { label: "Resubmit", pill: "portal-pill--under_review" },
 };
 
 /** API vocabulary → the vault's. PENDING_UPLOAD never reaches a listing. */
@@ -108,6 +109,7 @@ export function PortalDocumentVault() {
 	const uploadedCount = rows.filter((d) => d.status !== "missing").length;
 	const verifiedCount = rows.filter((d) => d.status === "verified").length;
 	const allUploaded = uploadedCount === rows.length;
+	const allVerified = allUploaded && verifiedCount === rows.length;
 
 	function handleUpload(id: string) {
 		setError(null);
@@ -226,23 +228,31 @@ export function PortalDocumentVault() {
 				</div>
 			</header>
 
-			<div className="stat-band mt-4">
-				<div className="stat-cell">
-					<p className="stat-cell__label">Uploaded</p>
-					<p className="stat-cell__value">
-						{uploadedCount}/{rows.length}
-					</p>
-				</div>
-				<div className="stat-cell">
-					<p className="stat-cell__label">Verified</p>
-					<p className="stat-cell__value">{verifiedCount}</p>
-				</div>
-				<div className="stat-cell stat-cell--accent">
-					<p className="stat-cell__label">Verification</p>
-					<p className="stat-cell__value">
-						{verifiedCount === rows.length && allUploaded ? "All verified" : "In review"}
-					</p>
-				</div>
+			<div className="vault-summary mt-4">
+				<span className="vault-summary__item">
+					<strong>{uploadedCount}/{rows.length}</strong> uploaded
+				</span>
+				<span className="vault-summary__item">
+					<strong>{verifiedCount}</strong> verified
+				</span>
+				<span
+					className={`vault-summary__item vault-summary__status${allVerified ? " vault-summary__status--done" : ""}`}
+				>
+					{allVerified ? "All verified" : "In review"}
+				</span>
+			</div>
+
+			<div className="vault-rules mt-3">
+				<span className="vault-rules__mark" aria-hidden>
+					i
+				</span>
+				<p className="vault-rules__text">
+					Accepted formats: <strong>PDF, JPG, PNG, DOC, DOCX</strong>
+					<span className="vault-rules__sep" aria-hidden>·</span>
+					Max <strong>15 MB</strong> per file
+					<span className="vault-rules__sep" aria-hidden>·</span>
+					Large images are compressed automatically before upload.
+				</p>
 			</div>
 
 			<input
@@ -276,84 +286,89 @@ export function PortalDocumentVault() {
 				</div>
 			) : null}
 
-			<section className="mt-6">
-				<p className="eyebrow mb-3">Required documents</p>
-				<div className="ledger">
+			<section className="mt-4">
+				<div className="vault-list">
 					{rows.map((doc) => {
 						const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
 						const busy = busyId === doc.id;
 						return (
-							<div key={doc.id} className="ledger-item">
-								<div className="ledger-item__head">
-									<span className="ledger-item__title">{doc.name}</span>
+							<div key={doc.id} className="doc-item">
+								<span className="doc-item__icon" aria-hidden>
+									<IconDoc size={20} />
+								</span>
+
+								<div className="doc-item__body">
+									<div className="doc-item__top">
+										<span className="doc-item__title">{doc.name}</span>
+										<span className="doc-item__hint muted">{doc.hint}</span>
+									</div>
+									{doc.live?.reviewNote ? (
+										<p className="doc-item__note">{doc.live.reviewNote}</p>
+									) : null}
+									{doc.fileName ? (
+										<p className="doc-item__file">
+											<span className="doc-item__filename mono">{doc.fileName}</span>
+											{doc.uploadedAt ? (
+												<span className="muted">
+													{new Date(doc.uploadedAt).toLocaleDateString()}
+												</span>
+											) : null}
+										</p>
+									) : null}
+								</div>
+
+								<div className="doc-item__side">
 									<span className={`portal-pill ${statusMeta.pill}`}>
 										{statusMeta.label}
 									</span>
-								</div>
-								<div className="ledger-item__sub">
-									<span className="ledger-item__detail muted">{doc.hint}</span>
-								</div>
-								{doc.live?.reviewNote ? (
-									<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
-										{doc.live.reviewNote}
-									</p>
-								) : null}
-								{doc.fileName ? (
-									<div className="row mt-2" style={{ alignItems: "center", gap: "0.75rem" }}>
-										<span className="mono" style={{ fontSize: "0.8rem" }}>
-											{doc.fileName}
-										</span>
-										{doc.uploadedAt ? (
-											<span className="muted" style={{ fontSize: "0.75rem" }}>
-												{new Date(doc.uploadedAt).toLocaleDateString()}
-											</span>
-										) : null}
-										<div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-											<button
+									<div className="doc-item__actions">
+										{doc.fileName ? (
+											<>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													onClick={() => void handlePreview(doc)}
+													disabled={busy}
+												>
+													Preview
+												</button>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													onClick={() => handleUpload(doc.id)}
+													disabled={busy}
+												>
+													{busy ? "Uploading…" : "Replace"}
+												</button>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													onClick={() => void handleRemove(doc)}
+													disabled={busy}
+												>
+													Remove
+												</button>
+											</>
+										) : (
+											<Button
 												type="button"
-												className="btn btn--ghost btn--sm"
-												onClick={() => void handlePreview(doc)}
-												disabled={busy}
-											>
-												Preview
-											</button>
-											<button
-												type="button"
-												className="btn btn--ghost btn--sm"
+												variant="secondary"
+												size="sm"
 												onClick={() => handleUpload(doc.id)}
-												disabled={busy}
+												disabled={busy || loading}
 											>
-												{busy ? "Uploading…" : "Replace"}
-											</button>
-											<button
-												type="button"
-												className="btn btn--ghost btn--sm"
-												onClick={() => void handleRemove(doc)}
-												disabled={busy}
-											>
-												Remove
-											</button>
-										</div>
+												{busy ? "Uploading…" : "Upload"}
+											</Button>
+										)}
 									</div>
-								) : (
-									<div className="row mt-2">
-										<Button
-											type="button"
-											variant="secondary"
-											onClick={() => handleUpload(doc.id)}
-											disabled={busy || loading}
-										>
-											{busy ? "Uploading…" : "Upload"}
-										</Button>
-									</div>
-								)}
+								</div>
 							</div>
 						);
 					})}
 				</div>
 			</section>
 
-			{allUploaded ? (
+			{allUploaded && !allVerified ? (
 				<div className="card card--pad mt-5 next-action">
 					<p className="eyebrow">All documents uploaded</p>
 					<p className="muted mt-1">
@@ -362,7 +377,7 @@ export function PortalDocumentVault() {
 				</div>
 			) : null}
 
-			{verifiedCount === rows.length && allUploaded ? (
+			{allVerified ? (
 				<div className="card card--pad mt-5">
 					<p className="eyebrow">Verification complete</p>
 					<p className="display mt-2" style={{ fontSize: "1.2rem" }}>

@@ -3,11 +3,10 @@ import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 
 /**
- * Platform Settings — integration credentials managed from the ops UI.
+ * Platform Settings — integration credentials and fee schedule.
  *
- * Replaces the mock `SystemConfig`. Talks to the real `/api/v1/settings`
- * endpoints, which are super_admin-only and require a fresh TOTP code on every
- * write. Values are masked server-side; secrets never come back in plaintext.
+ * Managed from the ops UI with strict super_admin enforcement.
+ * Editing requires a fresh TOTP code from an authenticator app.
  */
 
 type SettingSource = "database" | "env" | "unset";
@@ -34,42 +33,35 @@ interface AuditEntry {
 
 type LoadState = "idle" | "loading" | "error" | "ready";
 
-const GROUP_ORDER = ["Email", "Storage", "Google Sign-In", "Google Calendar", "Booking"] as const;
-
-function groupRank(group: string): number {
-	const i = (GROUP_ORDER as readonly string[]).indexOf(group);
-	return i === -1 ? GROUP_ORDER.length : i;
-}
-
 function sourceLabel(source: SettingSource): string {
 	switch (source) {
 		case "database":
 			return "Database";
 		case "env":
-			return "Env var";
+			return "Environment";
 		case "unset":
-			return "Not set";
-	}
-}
-
-function sourceTone(source: SettingSource): string {
-	switch (source) {
-		case "database":
-			return "ok";
-		case "env":
-			return "warn";
-		case "unset":
-			return "danger";
+			return "Default";
 	}
 }
 
 function formatDate(iso: string | null): string {
 	if (!iso) return "—";
 	try {
-		return new Date(iso).toLocaleString();
+		return new Date(iso).toLocaleString(undefined, {
+			month: "short",
+			day: "numeric",
+			hour: "2-digit",
+			minute: "2-digit",
+		});
 	} catch {
 		return iso;
 	}
+}
+
+function formatCentsHelper(val: string): string | null {
+	const num = Number.parseInt(val, 10);
+	if (Number.isNaN(num)) return null;
+	return `$${(num / 100).toFixed(2)} USD`;
 }
 
 export function PlatformSettings() {
@@ -78,6 +70,8 @@ export function PlatformSettings() {
 	const [loadState, setLoadState] = useState<LoadState>("idle");
 	const [error, setError] = useState<string | null>(null);
 	const [editing, setEditing] = useState<SettingView | null>(null);
+	const [selectedGroup, setSelectedGroup] = useState<string>("all");
+	const [searchQuery, setSearchQuery] = useState("");
 
 	const loadAll = useCallback(async () => {
 		setLoadState("loading");
@@ -101,30 +95,54 @@ export function PlatformSettings() {
 		void loadAll();
 	}, [loadAll]);
 
+	const groups = useMemo(() => {
+		const set = new Set<string>();
+		for (const s of settings) {
+			set.add(s.group);
+		}
+		return Array.from(set);
+	}, [settings]);
+
+	const filteredSettings = useMemo(() => {
+		return settings.filter((s) => {
+			if (selectedGroup !== "all" && s.group !== selectedGroup) return false;
+			if (searchQuery.trim()) {
+				const q = searchQuery.toLowerCase();
+				return (
+					s.label.toLowerCase().includes(q) ||
+					s.key.toLowerCase().includes(q) ||
+					s.group.toLowerCase().includes(q) ||
+					s.description.toLowerCase().includes(q)
+				);
+			}
+			return true;
+		});
+	}, [settings, selectedGroup, searchQuery]);
+
+	// Group filtered settings by group name
 	const grouped = useMemo(() => {
 		const map = new Map<string, SettingView[]>();
-		for (const s of settings) {
+		for (const s of filteredSettings) {
 			const arr = map.get(s.group) ?? [];
 			arr.push(s);
 			map.set(s.group, arr);
 		}
-		return [...map.entries()].sort((a, b) => groupRank(a[0]) - groupRank(b[0]));
-	}, [settings]);
+		return Array.from(map.entries());
+	}, [filteredSettings]);
 
 	return (
-		<>
+		<div className="admin-page">
+			{/* Page Header */}
 			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
 				<div>
-					<h2 className="section-title">Platform Settings</h2>
+					<h2 className="section-title">System Configuration</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Integration credentials stored encrypted in the database. Editing requires a
-						fresh authenticator code. Infrastructure secrets (database, auth, encryption key)
-						stay in environment variables.
+						Regional defaults, payment keys, integration credentials, and fee schedules.
 					</p>
 				</div>
 				<button
 					type="button"
-					className="btn btn--ghost"
+					className="btn btn--ghost btn--sm"
 					onClick={() => void loadAll()}
 					disabled={loadState === "loading"}
 				>
@@ -133,65 +151,142 @@ export function PlatformSettings() {
 			</div>
 
 			{error && (
-				<div className="card" style={{ marginBottom: "1.5rem", borderColor: "var(--danger, #c0392b)" }}>
-					<strong>Couldn’t load settings.</strong>
-					<p className="muted" style={{ marginTop: "0.5rem" }}>
-						{error}
-					</p>
+				<div className="ops-modal__error" style={{ marginBottom: "1.5rem" }}>
+					<strong>Could not load settings:</strong> {error}
 				</div>
 			)}
 
-			{grouped.map(([group, items]) => (
-				<div key={group} className="card" style={{ marginBottom: "1.5rem" }}>
-					<h3 className="section-title" style={{ fontSize: "1.05rem", marginBottom: "1rem" }}>
-						{group}
-					</h3>
-					<div className="admin-table-wrap">
-						<table className="admin-table">
-							<thead>
-								<tr>
-									<th>Setting</th>
-									<th>Value</th>
-									<th>Source</th>
-									<th>Updated</th>
-									<th aria-label="actions" />
-								</tr>
-							</thead>
-							<tbody>
-								{items.map((s) => (
-									<tr key={s.key}>
-										<td>
-											<div style={{ fontWeight: 600 }}>{s.label}</div>
-											<div className="muted" style={{ fontSize: "0.85rem" }}>
-												{s.description}
-											</div>
-										</td>
-										<td className="mono">
-											{s.valueMasked ?? <span className="muted">—</span>}
-										</td>
-										<td>
-											<span className={`admin-status-pill admin-status-pill--${sourceTone(s.source)}`}>
-												{sourceLabel(s.source)}
-											</span>
-										</td>
-										<td className="muted">{formatDate(s.updatedAt)}</td>
-										<td>
-											<button
-												type="button"
-												className="btn btn--ghost btn--sm"
-												onClick={() => setEditing(s)}
-											>
-												Edit
-											</button>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+			{/* Filters & Search Toolbar */}
+			<div className="card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+				<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+						<button
+							type="button"
+							className={`btn btn--sm ${selectedGroup === "all" ? "btn--primary" : "btn--ghost"}`}
+							onClick={() => setSelectedGroup("all")}
+						>
+							All ({settings.length})
+						</button>
+						{groups.map((g) => {
+							const count = settings.filter((s) => s.group === g).length;
+							return (
+								<button
+									key={g}
+									type="button"
+									className={`btn btn--sm ${selectedGroup === g ? "btn--primary" : "btn--ghost"}`}
+									onClick={() => setSelectedGroup(g)}
+								>
+									{g} ({count})
+								</button>
+							);
+						})}
+					</div>
+
+					<div style={{ minWidth: "14rem" }}>
+						<input
+							type="search"
+							className="input input--full-border"
+							placeholder="Search settings…"
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+							style={{ padding: "0.4rem 0.75rem", fontSize: "var(--text-sm)" }}
+						/>
 					</div>
 				</div>
-			))}
+			</div>
 
+			{/* Grouped Settings Tables */}
+			{grouped.length === 0 ? (
+				<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
+					<p className="muted">No settings match your search or filter.</p>
+				</div>
+			) : (
+				grouped.map(([group, items]) => (
+					<div key={group} className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem" }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+							<h3 className="section-title" style={{ fontSize: "1.1rem", margin: 0 }}>
+								{group}
+							</h3>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+								{items.length} {items.length === 1 ? "setting" : "settings"}
+							</span>
+						</div>
+
+						<div className="admin-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th style={{ width: "40%" }}>Setting</th>
+										<th style={{ width: "25%" }}>Current Value</th>
+										<th style={{ width: "15%" }}>Source</th>
+										<th style={{ width: "10%" }}>Updated</th>
+										<th style={{ width: "10%", textAlign: "right" }}>Action</th>
+									</tr>
+								</thead>
+								<tbody>
+									{items.map((s) => (
+										<tr key={s.key}>
+											<td>
+												<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</div>
+												<div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+													{s.description}
+												</div>
+												<code className="mono muted" style={{ fontSize: "0.75rem", display: "inline-block", marginTop: "0.25rem" }}>
+													{s.key}
+												</code>
+											</td>
+											<td className="mono" style={{ fontSize: "var(--text-sm)" }}>
+												{s.valueMasked ? (
+													<div>
+														<span>{s.valueMasked}</span>
+														{s.key.endsWith("_CENTS") && (
+															<div className="muted" style={{ fontSize: "var(--text-xs)" }}>
+																{formatCentsHelper(s.valueMasked)}
+															</div>
+														)}
+													</div>
+												) : (
+													<span className="muted">— (Default)</span>
+												)}
+											</td>
+											<td>
+												<span
+													style={{
+														fontFamily: "var(--font-mono)",
+														fontSize: "var(--text-xs)",
+														textTransform: "uppercase",
+														letterSpacing: "0.04em",
+														padding: "0.2rem 0.5rem",
+														border: "var(--thin)",
+														background: s.source === "database" ? "var(--foreground)" : "transparent",
+														color: s.source === "database" ? "var(--background)" : "var(--foreground)",
+													}}
+												>
+													{sourceLabel(s.source)}
+												</span>
+											</td>
+											<td className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
+												{formatDate(s.updatedAt)}
+											</td>
+											<td style={{ textAlign: "right" }}>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													onClick={() => setEditing(s)}
+												>
+													Edit
+												</button>
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				))
+			)}
+
+			{/* Centered Modal Overlay for Editing */}
 			{editing && (
 				<EditSettingModal
 					setting={editing}
@@ -203,9 +298,10 @@ export function PlatformSettings() {
 				/>
 			)}
 
-			<div className="card">
-				<h3 className="section-title" style={{ fontSize: "1.05rem", marginBottom: "1rem" }}>
-					Audit Log
+			{/* Audit Log Card */}
+			<div className="card" style={{ padding: "1.5rem" }}>
+				<h3 className="section-title" style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>
+					Configuration Audit Log
 				</h3>
 				{audit.length === 0 ? (
 					<p className="muted">No changes recorded yet.</p>
@@ -215,20 +311,22 @@ export function PlatformSettings() {
 							<thead>
 								<tr>
 									<th>When</th>
-									<th>Key</th>
-									<th>By</th>
-									<th>Old</th>
-									<th>New</th>
+									<th>Setting Key</th>
+									<th>Changed By</th>
+									<th>Old Value</th>
+									<th>New Value</th>
 								</tr>
 							</thead>
 							<tbody>
 								{audit.map((e) => (
 									<tr key={e.id}>
-										<td className="muted">{formatDate(e.at)}</td>
-										<td className="mono">{e.key}</td>
+										<td className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
+											{formatDate(e.at)}
+										</td>
+										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.key}</td>
 										<td>{e.actorEmail ?? "—"}</td>
-										<td className="mono">{e.oldValueMasked ?? "—"}</td>
-										<td className="mono">{e.newValueMasked ?? "—"}</td>
+										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.oldValueMasked ?? "—"}</td>
+										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.newValueMasked ?? "—"}</td>
 									</tr>
 								))}
 							</tbody>
@@ -236,7 +334,7 @@ export function PlatformSettings() {
 					</div>
 				)}
 			</div>
-		</>
+		</div>
 	);
 }
 
@@ -255,15 +353,17 @@ function EditSettingModal({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Pre-fill non-secrets so the admin can see and tweak the current value.
-	// Secrets are never sent back — leave blank to keep, or type a new value.
+	// Pre-fill non-secrets so the admin can tweak the current value.
 	useEffect(() => {
 		if (!setting.secret && setting.valueMasked) {
 			setValue(setting.valueMasked);
 		}
 	}, [setting]);
 
-	async function save() {
+	const centsHelper = setting.key.endsWith("_CENTS") && value ? formatCentsHelper(value) : null;
+
+	async function save(e: React.FormEvent) {
+		e.preventDefault();
 		setSaving(true);
 		setError(null);
 		try {
@@ -285,81 +385,106 @@ function EditSettingModal({
 
 	return (
 		<div
-			className="modal-backdrop"
+			className="ops-modal-backdrop"
 			onClick={onClose}
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="edit-setting-title"
 		>
-			<div className="modal-card" onClick={(e) => e.stopPropagation()}>
-				<h3 id="edit-setting-title" className="section-title">
-					Edit {setting.label}
-				</h3>
-				<p className="muted" style={{ marginTop: "0.25rem", marginBottom: "1rem" }}>
-					{setting.description}
-				</p>
+			<div className="ops-modal" onClick={(e) => e.stopPropagation()}>
+				<header className="ops-modal__head">
+					<div>
+						<p className="invite-card__eyebrow" style={{ margin: 0 }}>
+							{setting.group} · {setting.key}
+						</p>
+						<h2 id="edit-setting-title" className="ops-modal__title" style={{ marginTop: "0.25rem" }}>
+							Edit {setting.label}
+						</h2>
+						<p className="ops-modal__sub">{setting.description}</p>
+					</div>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
+						✕ Close
+					</button>
+				</header>
 
-				<label className="field">
-					<span className="field__label">
-						{setting.secret ? "New value" : "Value"}
-						{setting.secret && (
-							<span className="muted" style={{ fontWeight: 400 }}>
-								{" — leave blank to keep the current value"}
-							</span>
+				{error && <p className="ops-modal__error">{error}</p>}
+
+				<form onSubmit={save} className="invite-form" style={{ marginTop: "1rem" }}>
+					<div className="field">
+						<label htmlFor="setting-val-input">
+							{setting.secret ? "New Secret Value" : "Value"}
+							{setting.secret && (
+								<span className="muted" style={{ fontWeight: 400 }}>
+									{" (leave blank to keep existing value)"}
+								</span>
+							)}
+						</label>
+						<input
+							id="setting-val-input"
+							type={setting.secret ? "password" : "text"}
+							className="input input--full-border"
+							value={value}
+							onChange={(e) => setValue(e.target.value)}
+							placeholder={setting.secret ? "••••••••••••••••" : "Enter setting value"}
+							autoComplete="off"
+							disabled={clear}
+							autoFocus
+						/>
+						{centsHelper && (
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+								Equivalent amount: <strong>{centsHelper}</strong>
+							</p>
 						)}
-					</span>
-					<input
-						type={setting.secret ? "password" : "text"}
-						className="input"
-						value={value}
-						onChange={(e) => setValue(e.target.value)}
-						placeholder={setting.secret ? "••••••••••••" : ""}
-						autoComplete="off"
-					/>
-				</label>
+					</div>
 
-				<label className="field" style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-				<input
-					type="checkbox"
-					checked={clear}
-					onChange={(e) => setClear(e.target.checked)}
-				/>
-				<span className="field__label" style={{ margin: 0 }}>
-						Clear stored value (revert to env var)
-					</span>
-				</label>
+					<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", margin: "0.25rem 0" }}>
+						<input
+							id="clear-setting-chk"
+							type="checkbox"
+							checked={clear}
+							onChange={(e) => setClear(e.target.checked)}
+						/>
+						<label htmlFor="clear-setting-chk" style={{ fontSize: "var(--text-sm)", cursor: "pointer", margin: 0 }}>
+							Revert to default / environment variable
+						</label>
+					</div>
 
-				<label className="field">
-					<span className="field__label">Authenticator code</span>
-					<input
-						type="text"
-						className="input"
-						value={totpCode}
-						onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-						placeholder="6 digits"
-						inputMode="numeric"
-						autoComplete="one-time-code"
-					/>
-				</label>
+					<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+						<label htmlFor="totp-code-input">
+							Authenticator 6-Digit Code <span style={{ color: "#b00020" }}>*</span>
+						</label>
+						<input
+							id="totp-code-input"
+							type="text"
+							className="input input--full-border mfa-code"
+							style={{ width: "100%", fontSize: "1.25rem", letterSpacing: "0.25em" }}
+							value={totpCode}
+							onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+							placeholder="000000"
+							inputMode="numeric"
+							autoComplete="one-time-code"
+							required
+						/>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+							Security verification: enter the current 6-digit code from your authenticator app.
+						</p>
+					</div>
 
-				{error && (
-					<p style={{ color: "var(--danger, #c0392b)", marginTop: "0.5rem" }}>{error}</p>
-				)}
-
-				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "1.5rem" }}>
-					<button type="button" className="btn btn--ghost" onClick={onClose} disabled={saving}>
-						Cancel
-					</button>
-					<button
-						type="button"
-						className="btn btn--primary"
-						onClick={() => void save()}
-						disabled={saving || (!clear && !value) || totpCode.length !== 6}
-					>
-						{saving ? "Saving…" : "Save"}
-					</button>
-				</div>
+					<div className="cal-actions" style={{ marginTop: "1.25rem" }}>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={onClose} disabled={saving}>
+							Cancel
+						</button>
+						<button
+							type="submit"
+							className="btn btn--primary"
+							disabled={saving || (!clear && !value && !setting.secret) || totpCode.length !== 6}
+						>
+							{saving ? "Saving Changes…" : "Save Configuration"}
+						</button>
+					</div>
+				</form>
 			</div>
 		</div>
 	);
 }
+

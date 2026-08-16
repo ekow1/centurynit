@@ -14,6 +14,9 @@ import { allowedOrigins, warnAboutInsecureOrigins } from "./lib/origins.js";
  * something has to report.
  */
 await assertDatabaseReachable();
+await (await import("./services/roles.js")).seedSystemRoles().catch((err) => {
+	console.error("[roles] Failed to seed system roles on boot:", err);
+});
 
 const app = createApp();
 

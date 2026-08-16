@@ -6,6 +6,7 @@ export * from "./schemas/booking.js";
 export * from "./schemas/invoice.js";
 export * from "./schemas/auth.js";
 export * from "./schemas/document.js";
+export * from "./schemas/avatar.js";
 export * from "./schemas/cases.js";
 export * from "./schemas/school.js";
 export * from "./schemas/ticket.js";

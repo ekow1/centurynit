@@ -521,14 +521,84 @@ function UsersAndRoles() {
 		}
 	}
 
-	const rows = staff.filter(
-		(u) =>
-			(roleFilter === "all" || u.role === roleFilter) &&
-			(search === "" ||
-				u.name.toLowerCase().includes(search.toLowerCase()) ||
-				u.email.toLowerCase().includes(search.toLowerCase())),
-	);
-	const pending = invitations.filter((i) => i.status === "PENDING");
+	const [moduleSearch, setModuleSearch] = useState("");
+
+	async function bulkSetRolePermissions(roleId: string, moduleIds: OpsModule[], grant: boolean) {
+		const target = roles.find((r) => r.id === roleId);
+		if (!target || target.id === "super_admin") return;
+
+		const current = new Set(target.permissions ?? []);
+		for (const m of moduleIds) {
+			if (grant) current.add(m);
+			else current.delete(m);
+		}
+		const nextPermissions = Array.from(current);
+
+		setRoles((prev) =>
+			prev.map((r) => (r.id === roleId ? { ...r, permissions: nextPermissions } : r)),
+		);
+
+		try {
+			await apiFetch(`${API_PREFIX}/roles/${roleId}`, {
+				method: "PUT",
+				body: JSON.stringify({ permissions: nextPermissions }),
+			});
+			say(`Updated ${target.name} permissions.`);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to update permissions");
+			void refresh();
+		}
+	}
+
+	const allModuleIds = useMemo(() => {
+		const list: OpsModule[] = [];
+		for (const g of MODULE_GROUPS) {
+			for (const m of g.modules) {
+				list.push(m.id);
+			}
+		}
+		return list;
+	}, []);
+
+	const filteredModuleGroups = useMemo(() => {
+		if (!moduleSearch.trim()) return MODULE_GROUPS;
+		const q = moduleSearch.toLowerCase();
+		return MODULE_GROUPS.map((g) => ({
+			...g,
+			modules: g.modules.filter(
+				(m) =>
+					m.label.toLowerCase().includes(q) ||
+					m.id.toLowerCase().includes(q) ||
+					m.description.toLowerCase().includes(q) ||
+					g.group.toLowerCase().includes(q),
+			),
+		})).filter((g) => g.modules.length > 0);
+	}, [moduleSearch]);
+
+	const roleStats = useMemo(() => {
+		const map = new Map<string, { count: number; total: number; pct: number }>();
+		const total = allModuleIds.length;
+		for (const r of roles) {
+			const count = r.id === "super_admin" ? total : (r.permissions?.length ?? 0);
+			const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+			map.set(r.id, { count, total, pct });
+		}
+		return map;
+	}, [roles, allModuleIds]);
+
+	const rows = useMemo(() => {
+		return staff.filter(
+			(u) =>
+				(roleFilter === "all" || u.role === roleFilter) &&
+				(search === "" ||
+					u.name.toLowerCase().includes(search.toLowerCase()) ||
+					u.email.toLowerCase().includes(search.toLowerCase())),
+		);
+	}, [staff, roleFilter, search]);
+
+	const pending = useMemo(() => {
+		return invitations.filter((i) => i.status === "PENDING");
+	}, [invitations]);
 
 	return (
 		<>
@@ -770,135 +840,285 @@ function UsersAndRoles() {
 			{/* ── Sub-tab 2: Dynamic Roles & Permissions Matrix ── */}
 			{activeSubTab === "matrix" && (
 				<>
-					<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+					{/* Default System Administrator Callout Banner */}
+					<div
+						className="card"
+						style={{
+							padding: "1rem 1.25rem",
+							marginBottom: "1.5rem",
+							background: "var(--surface-subtle, #fcfcfc)",
+							borderLeft: "4px solid var(--foreground)",
+							display: "flex",
+							justifyContent: "space-between",
+							alignItems: "center",
+							flexWrap: "wrap",
+							gap: "1rem",
+						}}
+					>
 						<div>
-							<h2 className="section-title">Granular Permissions Matrix</h2>
-							<p className="muted" style={{ marginTop: "0.25rem" }}>
-								Toggle page view and action permissions for each staff role in real time.
+							<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+								<span style={{ fontSize: "1.1rem" }}>👑</span>
+								<h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700 }}>
+									System Administrator (Super Admin)
+								</h3>
+								<span
+									style={{
+										fontSize: "0.65rem",
+										fontFamily: "var(--font-mono)",
+										textTransform: "uppercase",
+										padding: "0.15rem 0.45rem",
+										background: "var(--foreground)",
+										color: "var(--background)",
+										borderRadius: "2px",
+									}}
+								>
+									Default & Root Role
+								</span>
+							</div>
+							<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>
+								System Administrators have immutable full-access authority across all 28 modules, database tables, and system security controls.
 							</p>
 						</div>
-						<button
-							type="button"
-							className="btn btn--primary btn--sm"
-							onClick={() => setCreatingRole(true)}
-						>
-							+ Add Custom Role
-						</button>
+						<div style={{ display: "flex", gap: "0.5rem" }}>
+							<button
+								type="button"
+								className="btn btn--primary btn--sm"
+								onClick={() => setCreatingRole(true)}
+							>
+								+ Add Custom Role
+							</button>
+						</div>
 					</div>
 
-					<div className="card" style={{ padding: 0, overflowX: "auto", marginBottom: "2rem" }}>
-						<table className="admin-table" style={{ borderCollapse: "collapse" }}>
+					{/* Matrix Filter Toolbar */}
+					<div className="card" style={{ padding: "0.85rem 1.25rem", marginBottom: "1.5rem" }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+							<div style={{ minWidth: "16rem" }}>
+								<input
+									type="search"
+									placeholder="Search module permissions (e.g. invoice, bookings, cms)..."
+									className="input input--sm input--full-border"
+									style={{ width: "100%" }}
+									value={moduleSearch}
+									onChange={(e) => setModuleSearch(e.target.value)}
+								/>
+							</div>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+								Showing {roles.length} roles across {allModuleIds.length} platform capabilities
+							</span>
+						</div>
+					</div>
+
+					{/* Permissions Matrix with Sticky Headers & Monochrome Toggle Switches */}
+					<div className="perm-matrix-container card" style={{ padding: 0, marginBottom: "2rem" }}>
+						<table className="perm-matrix">
 							<thead>
 								<tr>
-									<th style={{ minWidth: "220px", background: "var(--muted, #f5f5f5)" }}>
-										Module / Page
+									<th className="perm-sticky-head perm-sticky-col" style={{ minWidth: "260px" }}>
+										<div style={{ fontWeight: 700, textTransform: "uppercase", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", letterSpacing: "0.05em" }}>
+											Capability / Module
+										</div>
+										<div className="muted" style={{ fontSize: "var(--text-xs)", fontWeight: 400, marginTop: "0.2rem" }}>
+											Select permissions per staff role
+										</div>
 									</th>
-									{roles.map((r) => (
-										<th key={r.id} style={{ textAlign: "center", minWidth: "130px" }}>
-											<div style={{ fontWeight: 700 }}>{r.name}</div>
-											<div style={{ display: "flex", justifyContent: "center", gap: "0.25rem", marginTop: "0.25rem" }}>
-												<span
-													style={{
-														fontSize: "0.65rem",
-														fontFamily: "var(--font-mono)",
-														textTransform: "uppercase",
-														padding: "0.1rem 0.35rem",
-														border: "var(--thin)",
-														background: r.isSystem ? "var(--muted, #f5f5f5)" : "var(--foreground)",
-														color: r.isSystem ? "var(--foreground)" : "var(--background)",
-													}}
-												>
-													{r.isSystem ? "System" : "Custom"}
-												</span>
-												{!r.isSystem && (
-													<button
-														type="button"
-														onClick={() => handleDeleteRole(r.id, r.name)}
+									{roles.map((r) => {
+										const stats = roleStats.get(r.id) ?? { count: 0, total: allModuleIds.length, pct: 0 };
+										const isSuper = r.id === "super_admin";
+										return (
+											<th key={r.id} className="perm-sticky-head" style={{ textAlign: "center", minWidth: "150px", verticalAlign: "top" }}>
+												<div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>{r.name}</div>
+												<div style={{ display: "flex", justifyContent: "center", gap: "0.3rem", marginTop: "0.25rem", alignItems: "center" }}>
+													<span
 														style={{
-															fontSize: "0.65rem",
+															fontSize: "0.6rem",
+															fontFamily: "var(--font-mono)",
+															textTransform: "uppercase",
 															padding: "0.1rem 0.35rem",
 															border: "var(--thin)",
-															background: "transparent",
-															color: "#c0392b",
-															cursor: "pointer",
+															background: isSuper ? "var(--foreground)" : r.isSystem ? "var(--muted, #f0f0f0)" : "var(--foreground)",
+															color: isSuper ? "var(--background)" : r.isSystem ? "var(--foreground)" : "var(--background)",
 														}}
-														title="Delete custom role"
 													>
-														✕
-													</button>
+														{isSuper ? "Root Default" : r.isSystem ? "System" : "Custom"}
+													</span>
+													{!r.isSystem && (
+														<button
+															type="button"
+															onClick={() => handleDeleteRole(r.id, r.name)}
+															className="perm-quick-btn"
+															style={{ color: "#c0392b", borderColor: "#c0392b" }}
+															title="Delete custom role"
+														>
+															✕
+														</button>
+													)}
+												</div>
+
+												{/* Mini Progress Bar */}
+												<div style={{ marginTop: "0.4rem" }}>
+													<div className="mono muted" style={{ fontSize: "0.65rem" }}>
+														{isSuper ? "28/28 (100%)" : `${stats.count}/${stats.total} (${stats.pct}%)`}
+													</div>
+													<div className="perm-progress-bar">
+														<div className="perm-progress-fill" style={{ width: `${stats.pct}%` }} />
+													</div>
+												</div>
+
+												{/* Quick Actions (Grant All / Revoke All) */}
+												{!isSuper && (
+													<div style={{ display: "flex", justifyContent: "center", gap: "0.25rem", marginTop: "0.45rem" }}>
+														<button
+															type="button"
+															className="perm-quick-btn"
+															onClick={() => bulkSetRolePermissions(r.id, allModuleIds, true)}
+															title="Grant all modules"
+														>
+															Grant All
+														</button>
+														<button
+															type="button"
+															className="perm-quick-btn"
+															onClick={() => bulkSetRolePermissions(r.id, allModuleIds, false)}
+															title="Revoke all modules"
+														>
+															Revoke
+														</button>
+													</div>
 												)}
-											</div>
-										</th>
-									))}
+											</th>
+										);
+									})}
 								</tr>
 							</thead>
 							<tbody>
-								{MODULE_GROUPS.map((group) => (
-									<Fragment key={group.group}>
-										<tr style={{ background: "var(--muted, #f5f5f5)", borderTop: "var(--medium)", borderBottom: "var(--thin)" }}>
-											<td colSpan={roles.length + 1} style={{ fontWeight: 700, padding: "0.6rem 1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-												{group.group} — <span style={{ fontWeight: 400, opacity: 0.7 }}>{group.description}</span>
-											</td>
-										</tr>
-										{group.modules.map((mod) => (
-											<tr key={mod.id} style={{ borderBottom: "var(--thin)" }}>
-												<td style={{ padding: "0.6rem 1rem" }}>
-													<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{mod.label}</div>
-													<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{mod.description}</div>
-												</td>
-												{roles.map((r) => {
-													const hasIt = r.id === "super_admin" || (r.permissions ?? []).includes(mod.id);
-													const isSuper = r.id === "super_admin";
-													return (
-														<td key={r.id} style={{ textAlign: "center", padding: "0.6rem" }}>
-															<input
-																type="checkbox"
-																checked={hasIt}
-																disabled={isSuper}
-																onChange={(e) => togglePermission(r.id, mod.id, e.target.checked)}
-																style={{ width: "1.1rem", height: "1.1rem", cursor: isSuper ? "not-allowed" : "pointer" }}
-																title={isSuper ? "Super Admin always has full permissions" : `Toggle ${mod.label} for ${r.name}`}
-															/>
+								{filteredModuleGroups.length === 0 ? (
+									<tr>
+										<td colSpan={roles.length + 1} className="muted" style={{ padding: "2.5rem", textAlign: "center" }}>
+											No modules matched your search "{moduleSearch}".
+										</td>
+									</tr>
+								) : (
+									filteredModuleGroups.map((group) => {
+										const groupModuleIds = group.modules.map((m) => m.id);
+										return (
+											<Fragment key={group.group}>
+												<tr style={{ background: "var(--muted, #f5f5f5)", borderTop: "var(--medium)", borderBottom: "var(--thin)" }}>
+													<td className="perm-sticky-col" style={{ fontWeight: 700, padding: "0.6rem 1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.05em", background: "var(--muted, #f5f5f5)" }}>
+														{group.group} — <span style={{ fontWeight: 400, opacity: 0.7 }}>{group.description}</span>
+													</td>
+													{roles.map((r) => {
+														const isSuper = r.id === "super_admin";
+														return (
+															<td key={r.id} style={{ textAlign: "center", padding: "0.4rem 0.6rem", background: "var(--muted, #f5f5f5)" }}>
+																{!isSuper && (
+																	<div style={{ display: "flex", justifyContent: "center", gap: "0.2rem" }}>
+																		<button
+																			type="button"
+																			className="perm-quick-btn"
+																			style={{ fontSize: "0.6rem", padding: "0.05rem 0.3rem" }}
+																			onClick={() => bulkSetRolePermissions(r.id, groupModuleIds, true)}
+																			title={`Grant all ${group.group} to ${r.name}`}
+																		>
+																			+ Group
+																		</button>
+																		<button
+																			type="button"
+																			className="perm-quick-btn"
+																			style={{ fontSize: "0.6rem", padding: "0.05rem 0.3rem" }}
+																			onClick={() => bulkSetRolePermissions(r.id, groupModuleIds, false)}
+																			title={`Revoke all ${group.group} for ${r.name}`}
+																		>
+																			- Group
+																		</button>
+																	</div>
+																)}
+															</td>
+														);
+													})}
+												</tr>
+												{group.modules.map((mod) => (
+													<tr key={mod.id} style={{ borderBottom: "var(--thin)" }}>
+														<td className="perm-sticky-col" style={{ padding: "0.65rem 1rem" }}>
+															<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{mod.label}</div>
+															<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{mod.description}</div>
+															<code className="mono muted" style={{ fontSize: "0.7rem", marginTop: "0.15rem", display: "inline-block" }}>
+																{mod.id}
+															</code>
 														</td>
-													);
-												})}
-											</tr>
-										))}
-									</Fragment>
-								))}
+														{roles.map((r) => {
+															const hasIt = r.id === "super_admin" || (r.permissions ?? []).includes(mod.id);
+															const isSuper = r.id === "super_admin";
+															return (
+																<td key={r.id} style={{ textAlign: "center", padding: "0.65rem", verticalAlign: "middle" }}>
+																	<label
+																		className="perm-switch"
+																		title={isSuper ? "Super Admin root access cannot be disabled" : `${hasIt ? "Revoke" : "Grant"} ${mod.label} for ${r.name}`}
+																	>
+																		<input
+																			type="checkbox"
+																			checked={hasIt}
+																			disabled={isSuper}
+																			onChange={(e) => togglePermission(r.id, mod.id, e.target.checked)}
+																			aria-label={`Toggle ${mod.label} permission for ${r.name}`}
+																		/>
+																		<span className="perm-switch__slider" />
+																	</label>
+																</td>
+															);
+														})}
+													</tr>
+												))}
+											</Fragment>
+										);
+									})
+								)}
 							</tbody>
 						</table>
 					</div>
 
-					{/* Role Descriptions List */}
-					<div className="card">
-						<h3 className="section-title mb-3" style={{ fontSize: "1.1rem" }}>Role Descriptions</h3>
+					{/* Role Overview Cards */}
+					<div className="card" style={{ padding: "1.5rem" }}>
+						<h3 className="section-title mb-3" style={{ fontSize: "1.1rem" }}>Role Architecture & Granted Scope</h3>
 						<div className="admin-role-grid">
-							{roles.map((r) => (
-								<div key={r.id} className="admin-role-card">
-									<div className="admin-role-card__head">
-										<span className="admin-role-card__name">{r.name}</span>
-										<span className="admin-role-card__count">{staff.filter((u) => u.role === r.id).length} staff</span>
+							{roles.map((r) => {
+								const stats = roleStats.get(r.id) ?? { count: 0, total: allModuleIds.length, pct: 0 };
+								const isSuper = r.id === "super_admin";
+								return (
+									<div key={r.id} className="admin-role-card">
+										<div className="admin-role-card__head">
+											<span className="admin-role-card__name">
+												{isSuper ? "👑 " : ""}{r.name}
+											</span>
+											<span className="admin-role-card__count">{staff.filter((u) => u.role === r.id).length} staff</span>
+										</div>
+										<p className="admin-role-card__desc">{r.description || "Custom operational role."}</p>
+										<div style={{ marginTop: "0.75rem", borderTop: "var(--hairline)", paddingTop: "0.5rem" }}>
+											<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)" }}>
+												<span className="muted">Module Access</span>
+												<span className="mono"><strong>{isSuper ? "All 28 Modules" : `${stats.count} / ${stats.total}`}</strong></span>
+											</div>
+											<div className="perm-progress-bar" style={{ marginTop: "0.3rem" }}>
+												<div className="perm-progress-fill" style={{ width: `${stats.pct}%` }} />
+											</div>
+										</div>
 									</div>
-									<p className="admin-role-card__desc">{r.description || "No description provided."}</p>
-									<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-										Granted {r.id === "super_admin" ? "All" : (r.permissions?.length ?? 0)} modules
-									</p>
-								</div>
-							))}
+								);
+							})}
 						</div>
 					</div>
 				</>
 			)}
 
-			{/* Create Custom Role Modal */}
+			{/* Create Custom Role Modal with Preset Templates */}
 			{creatingRole && (
 				<div className="ops-modal-backdrop" onClick={() => setCreatingRole(false)} role="dialog" aria-modal="true">
-					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "38rem", maxHeight: "90vh", overflowY: "auto" }}>
 						<header className="ops-modal__head">
 							<div>
 								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Role Management</p>
 								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Create Custom Role</h2>
+								<p className="ops-modal__sub">Define a tailored staff role with granular module permissions.</p>
 							</div>
 							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatingRole(false)}>
 								✕ Close
@@ -907,32 +1127,73 @@ function UsersAndRoles() {
 
 						<form onSubmit={handleCreateRole} className="invite-form" style={{ marginTop: "1rem" }}>
 							<div className="field">
-								<label htmlFor="role-name">Role Name</label>
-								<input
-									id="role-name"
+								<label htmlFor="role-template-picker">Start from Preset Template</label>
+								<select
+									id="role-template-picker"
 									className="input input--full-border"
-									placeholder="e.g. Senior Admissions Advisor"
-									value={newRoleDraft.name}
 									onChange={(e) => {
-										const val = e.target.value;
-										const autoId = val.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 32);
-										setNewRoleDraft((prev) => ({ ...prev, name: val, id: prev.id === "" || prev.id.startsWith(autoId.slice(0, -1)) ? autoId : prev.id }));
+										const selected = roles.find((r) => r.id === e.target.value);
+										if (selected) {
+											setNewRoleDraft((prev) => ({
+												...prev,
+												permissions: [...selected.permissions],
+											}));
+										} else if (e.target.value === "all") {
+											setNewRoleDraft((prev) => ({
+												...prev,
+												permissions: [...allModuleIds],
+											}));
+										} else if (e.target.value === "none") {
+											setNewRoleDraft((prev) => ({
+												...prev,
+												permissions: ["dashboard"],
+											}));
+										}
 									}}
-									required
-									autoFocus
-								/>
+								>
+									<option value="none">Custom / Blank (Dashboard only)</option>
+									<option value="all">Full Access (All 28 Modules)</option>
+									{roles.map((r) => (
+										<option key={r.id} value={r.id}>
+											Copy from {r.name} ({r.permissions.length} modules)
+										</option>
+									))}
+								</select>
 							</div>
 
-							<div className="field">
-								<label htmlFor="role-id">Role Key / Slug</label>
-								<input
-									id="role-id"
-									className="input input--full-border mono"
-									placeholder="e.g. senior_advisor"
-									value={newRoleDraft.id}
-									onChange={(e) => setNewRoleDraft({ ...newRoleDraft, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_") })}
-									required
-								/>
+							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+								<div className="field">
+									<label htmlFor="role-name">Role Name <span style={{ color: "#b00020" }}>*</span></label>
+									<input
+										id="role-name"
+										className="input input--full-border"
+										placeholder="e.g. Senior Admissions Advisor"
+										value={newRoleDraft.name}
+										onChange={(e) => {
+											const val = e.target.value;
+											const autoId = val.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 32);
+											setNewRoleDraft((prev) => ({
+												...prev,
+												name: val,
+												id: prev.id === "" || prev.id.startsWith(autoId.slice(0, -1)) ? autoId : prev.id,
+											}));
+										}}
+										required
+										autoFocus
+									/>
+								</div>
+
+								<div className="field">
+									<label htmlFor="role-id">Role Slug / Identifier <span style={{ color: "#b00020" }}>*</span></label>
+									<input
+										id="role-id"
+										className="input input--full-border mono"
+										placeholder="e.g. senior_advisor"
+										value={newRoleDraft.id}
+										onChange={(e) => setNewRoleDraft({ ...newRoleDraft, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_") })}
+										required
+									/>
+								</div>
 							</div>
 
 							<div className="field">
@@ -944,6 +1205,86 @@ function UsersAndRoles() {
 									value={newRoleDraft.description}
 									onChange={(e) => setNewRoleDraft({ ...newRoleDraft, description: e.target.value })}
 								/>
+							</div>
+
+							{/* Granular Module Checkboxes in Modal */}
+							<div className="field" style={{ borderTop: "var(--thin)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+									<label style={{ margin: 0, fontWeight: 700 }}>
+										Assign Permissions ({newRoleDraft.permissions.length} selected)
+									</label>
+									<div style={{ display: "flex", gap: "0.3rem" }}>
+										<button
+											type="button"
+											className="perm-quick-btn"
+											onClick={() => setNewRoleDraft((prev) => ({ ...prev, permissions: [...allModuleIds] }))}
+										>
+											Select All
+										</button>
+										<button
+											type="button"
+											className="perm-quick-btn"
+											onClick={() => setNewRoleDraft((prev) => ({ ...prev, permissions: [] }))}
+										>
+											Deselect All
+										</button>
+									</div>
+								</div>
+
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", maxHeight: "15rem", overflowY: "auto", border: "var(--thin)", padding: "0.75rem", background: "var(--surface-subtle, #fcfcfc)" }}>
+									{MODULE_GROUPS.map((g) => {
+										const groupIds = g.modules.map((m) => m.id);
+										const allSelected = groupIds.every((id) => newRoleDraft.permissions.includes(id));
+										return (
+											<div key={g.group} style={{ marginBottom: "0.5rem" }}>
+												<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "var(--hairline)", paddingBottom: "0.25rem", marginBottom: "0.4rem" }}>
+													<strong style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
+														{g.group}
+													</strong>
+													<button
+														type="button"
+														className="perm-quick-btn"
+														style={{ fontSize: "0.55rem" }}
+														onClick={() => {
+															setNewRoleDraft((prev) => {
+																const current = new Set(prev.permissions);
+																if (allSelected) {
+																	for (const id of groupIds) current.delete(id);
+																} else {
+																	for (const id of groupIds) current.add(id);
+																}
+																return { ...prev, permissions: Array.from(current) };
+															});
+														}}
+													>
+														{allSelected ? "None" : "All"}
+													</button>
+												</div>
+												{g.modules.map((m) => {
+													const checked = newRoleDraft.permissions.includes(m.id);
+													return (
+														<label key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "var(--text-xs)", margin: "0.2rem 0", cursor: "pointer" }}>
+															<input
+																type="checkbox"
+																checked={checked}
+																onChange={(e) => {
+																	const c = e.target.checked;
+																	setNewRoleDraft((prev) => ({
+																		...prev,
+																		permissions: c
+																			? [...new Set([...prev.permissions, m.id])]
+																			: prev.permissions.filter((id) => id !== m.id),
+																	}));
+																}}
+															/>
+															<span>{m.label}</span>
+														</label>
+													);
+												})}
+											</div>
+										);
+									})}
+								</div>
 							</div>
 
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>

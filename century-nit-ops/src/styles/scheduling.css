@@ -558,5 +558,156 @@
 	}
 }
 
+/* ── Permissions Matrix & Monochrome Toggle Switches ── */
 
+.perm-matrix-container {
+	position: relative;
+	max-height: 72vh;
+	overflow: auto;
+	border: var(--thin);
+	background: var(--background);
+}
 
+.perm-matrix {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	font-size: var(--text-sm);
+}
+
+.perm-matrix th.perm-sticky-head {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	background: var(--background);
+	border-bottom: var(--medium);
+	padding: 0.85rem 0.75rem;
+}
+
+.perm-matrix th.perm-sticky-col,
+.perm-matrix td.perm-sticky-col {
+	position: sticky;
+	left: 0;
+	z-index: 5;
+	background: var(--background);
+	border-right: var(--thin);
+}
+
+.perm-matrix th.perm-sticky-head.perm-sticky-col {
+	z-index: 15;
+}
+
+.perm-matrix tr:hover td {
+	background: var(--surface-subtle, #fcfcfc);
+}
+
+.perm-matrix tr:hover td.perm-sticky-col {
+	background: var(--surface-subtle, #fcfcfc);
+}
+
+/* ── Monochrome Toggle Switch Component ── */
+
+.perm-switch {
+	position: relative;
+	display: inline-block;
+	width: 36px;
+	height: 20px;
+	vertical-align: middle;
+	cursor: pointer;
+	user-select: none;
+}
+
+.perm-switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+}
+
+.perm-switch__slider {
+	position: absolute;
+	inset: 0;
+	background: var(--background, #fff);
+	border: 1.5px solid var(--foreground, #111);
+	border-radius: 12px;
+	transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+	box-sizing: border-box;
+}
+
+.perm-switch__slider:before {
+	position: absolute;
+	content: "";
+	height: 12px;
+	width: 12px;
+	left: 2px;
+	bottom: 2px;
+	background: var(--foreground, #111);
+	border-radius: 50%;
+	transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.perm-switch:hover .perm-switch__slider {
+	box-shadow: 0 0 0 1px var(--foreground, #111);
+}
+
+.perm-switch input:checked + .perm-switch__slider {
+	background: var(--foreground, #111);
+}
+
+.perm-switch input:checked + .perm-switch__slider:before {
+	transform: translateX(16px);
+	background: var(--background, #fff);
+}
+
+.perm-switch input:focus-visible + .perm-switch__slider {
+	outline: 2px solid var(--foreground, #111);
+	outline-offset: 2px;
+}
+
+.perm-switch input:disabled + .perm-switch__slider {
+	opacity: 0.6;
+	cursor: not-allowed;
+	background: var(--foreground, #111);
+}
+
+.perm-switch input:disabled + .perm-switch__slider:before {
+	background: var(--background, #fff);
+}
+
+/* ── Mini Progress Bar ── */
+
+.perm-progress-bar {
+	width: 100%;
+	height: 4px;
+	background: var(--border-light, #e0e0e0);
+	border-radius: 2px;
+	overflow: hidden;
+	margin-top: 0.4rem;
+}
+
+.perm-progress-fill {
+	height: 100%;
+	background: var(--foreground, #111);
+	transition: width 0.2s ease;
+}
+
+/* ── Quick Action Pill Buttons ── */
+
+.perm-quick-btn {
+	background: transparent;
+	border: var(--thin);
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding: 0.15rem 0.45rem;
+	cursor: pointer;
+	color: var(--foreground);
+	border-radius: 2px;
+	transition: all 0.1s ease;
+}
+
+.perm-quick-btn:hover {
+	background: var(--foreground);
+	color: var(--background);
+}

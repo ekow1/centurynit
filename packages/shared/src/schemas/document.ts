@@ -20,16 +20,19 @@ export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 /**
  * What may be uploaded.
  *
- * An allowlist, not a blocklist: anything not named here is refused. Office
- * formats are excluded deliberately — they carry macros, and nothing in this
- * process needs them.
+ * An allowlist, not a blocklist: anything not named here is refused. HEIC and
+ * WebP are deliberately absent — phone HEIC shots are refused as-is because the
+ * vault compresses images client-side first (a HEIC that arrives here has been
+ * re-encoded as JPEG or PNG), and WebP is still too unevenly supported in the
+ * tools reviewers open documents with. Office formats are allowed only in their
+ * DOC/DOCX forms, per the portal's requirements.
  */
 export const ALLOWED_DOCUMENT_TYPES = [
 	"application/pdf",
 	"image/jpeg",
 	"image/png",
-	"image/heic",
-	"image/webp",
+	"application/msword",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ] as const;
 
 /** 15 MB — comfortably above a phone photo of a passport, well below abuse. */
@@ -40,7 +43,7 @@ export const requestUploadSchema = z.object({
 	documentType: z.string().min(1).max(64),
 	fileName: z.string().min(1).max(255),
 	contentType: z.enum(ALLOWED_DOCUMENT_TYPES, {
-		errorMap: () => ({ message: "Upload a PDF or an image (JPEG, PNG, HEIC, WebP)" }),
+		errorMap: () => ({ message: "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX)" }),
 	}),
 	sizeBytes: z
 		.number()

@@ -14,6 +14,7 @@ import { calendarRouter } from "./routes/calendar.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
+import { avatarRouter } from "./routes/avatar.js";
 import { settingsRouter } from "./routes/settings.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import {
@@ -131,6 +132,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/payments`, paymentsRouter);
 	app.route(`${API_PREFIX}/roles`, rolesRouter);
 	app.route(`${API_PREFIX}/me`, meRouter);
+	app.route(`${API_PREFIX}/me`, avatarRouter);
 
 
 	const openApiInfo = {

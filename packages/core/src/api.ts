@@ -48,6 +48,9 @@ import type {
 	InitializePayment,
 	InitializePaymentResponse,
 	PaymentVerificationResult,
+	AvatarUploadTicket,
+	AvatarUrl,
+	RequestAvatarUpload,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
 
@@ -121,6 +124,44 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 const json = (body: unknown) => ({ body: JSON.stringify(body) });
+
+/**
+ * PUT a file to a signed storage URL, reporting upload progress.
+ *
+ * `fetch` only exposes download progress — the number that matters here is
+ * upload progress, which is why this uses XMLHttpRequest. The signed URL is the
+ * entire authorisation, so no session cookie is sent, and the response is not
+ * our JSON error envelope.
+ */
+function putFileWithProgress(
+	url: string,
+	file: File,
+	headers: Record<string, string>,
+	onProgress?: (percent: number) => void,
+	signal?: AbortSignal,
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open("PUT", url);
+		for (const [key, value] of Object.entries(headers)) {
+			xhr.setRequestHeader(key, value);
+		}
+		xhr.upload.onprogress = (e) => {
+			if (e.lengthComputable && onProgress) {
+				onProgress(Math.round((e.loaded / e.total) * 100));
+			}
+		};
+		xhr.onload = () => {
+			if (xhr.status >= 200 && xhr.status < 300) resolve();
+			else reject(new ApiError(xhr.status, "UPLOAD_FAILED", `Upload failed (${xhr.status})`));
+		};
+		xhr.onerror = () =>
+			reject(new ApiError(0, "UPLOAD_FAILED", "Upload failed. Check your connection."));
+		xhr.onabort = () => reject(new ApiError(0, "UPLOAD_ABORTED", "Upload cancelled"));
+		signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+		xhr.send(file);
+	});
+}
 
 /* ── Bookings ────────────────────────────────────────────────────────────── */
 
@@ -371,11 +412,12 @@ export const documentsApi = {
 	 * The PUT goes to storage, not to us, so it deliberately bypasses `request`:
 	 * no session cookie should be sent to a third-party host, the signed URL is
 	 * the entire authorisation, and the response is not our JSON error envelope.
+	 * `onProgress` receives 0–100 as the browser sends bytes, for a progress bar.
 	 */
 	async upload(
 		file: File,
 		documentType: string,
-		options: { signal?: AbortSignal } = {},
+		options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {},
 	): Promise<ApplicantDocument> {
 		const ticket = await documentsApi.requestUpload({
 			documentType,
@@ -384,19 +426,23 @@ export const documentsApi = {
 			sizeBytes: file.size,
 		});
 
-		const put = await fetch(ticket.uploadUrl, {
-			method: "PUT",
-			body: file,
-			headers: { "Content-Type": file.type, ...ticket.headers },
-			signal: options.signal,
-		});
-
-		if (!put.ok) {
-			throw new ApiError(
-				put.status,
-				"UPLOAD_FAILED",
-				`Could not upload ${file.name}. The link may have expired — try again.`,
+		try {
+			await putFileWithProgress(
+				ticket.uploadUrl,
+				file,
+				{ "Content-Type": file.type, ...ticket.headers },
+				options.onProgress,
+				options.signal,
 			);
+		} catch (err) {
+			if (err instanceof ApiError && err.code === "UPLOAD_FAILED") {
+				throw new ApiError(
+					err.status,
+					"UPLOAD_FAILED",
+					`Could not upload ${file.name}. The link may have expired — try again.`,
+				);
+			}
+			throw err;
 		}
 
 		return documentsApi.completeUpload(ticket.documentId);
@@ -565,6 +611,59 @@ export const meApi = {
 			method: "POST",
 			...json({ reference } satisfies PaystackVerify),
 		});
+	},
+
+	/** A fresh signed URL for the signed-in user's photo, or null when none is set. */
+	avatarUrl(): Promise<AvatarUrl> {
+		return request(`${API_PREFIX}/me/avatar`);
+	},
+
+	/** Step one of setting a photo: take a signed upload ticket. */
+	avatarUploadTicket(input: RequestAvatarUpload): Promise<AvatarUploadTicket> {
+		return request(`${API_PREFIX}/me/avatar/upload-url`, { method: "POST", ...json(input) });
+	},
+
+	/** Step three: tell the server the bytes landed, committing the photo. */
+	avatarComplete(key: string): Promise<AvatarUrl> {
+		return request(`${API_PREFIX}/me/avatar/complete`, {
+			method: "POST",
+			...json({ key }),
+		});
+	},
+
+	/**
+	 * The whole photo upload, as one call — ticket, PUT straight to storage with
+	 * progress, then complete. `onProgress` receives 0–100 as bytes go up.
+	 */
+	async uploadAvatar(
+		file: File,
+		onProgress?: (percent: number) => void,
+	): Promise<AvatarUrl> {
+		const ticket = await meApi.avatarUploadTicket({
+			fileName: file.name,
+			contentType: file.type as RequestAvatarUpload["contentType"],
+			sizeBytes: file.size,
+		});
+
+		try {
+			await putFileWithProgress(
+				ticket.uploadUrl,
+				file,
+				{ "Content-Type": file.type, ...ticket.headers },
+				onProgress,
+			);
+		} catch (err) {
+			if (err instanceof ApiError && err.code === "UPLOAD_FAILED") {
+				throw new ApiError(
+					err.status,
+					"UPLOAD_FAILED",
+					`Could not upload your photo. The link may have expired — try again.`,
+				);
+			}
+			throw err;
+		}
+
+		return meApi.avatarComplete(ticket.key);
 	}
 };
 

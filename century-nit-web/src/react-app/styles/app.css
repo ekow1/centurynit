@@ -1975,6 +1975,216 @@ img.tabbar__avatar {
 	flex-shrink: 0;
 }
 
+/* ---------------------------------------------------------
+   Document vault — compact, scannable checklist
+   --------------------------------------------------------- */
+
+/* Slim summary strip — replaces the oversized stat band */
+.vault-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.35rem 1.25rem;
+	padding: 0.6rem 0.9rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	font-size: 0.8rem;
+}
+
+.vault-summary__item {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.35rem;
+	color: var(--muted-foreground);
+}
+
+.vault-summary__item strong {
+	font-family: var(--font-mono);
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--foreground);
+}
+
+.vault-summary__status {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0.3rem 0.65rem;
+	border: 1.5px solid var(--border);
+	color: var(--foreground);
+}
+
+.vault-summary__status--done {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+/* One-line rules strip — the restrictions live up front, not in an error toast */
+.vault-rules {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.65rem;
+	padding: 0.6rem 0.9rem;
+	border: 1px dashed var(--border-light);
+	background: var(--muted);
+}
+
+.vault-rules__mark {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.15rem;
+	height: 1.15rem;
+	flex-shrink: 0;
+	border: 1.5px solid var(--border);
+	border-radius: 50%;
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	font-weight: 700;
+	font-style: normal;
+	line-height: 1;
+	color: var(--foreground);
+	margin-top: 0.1rem;
+}
+
+.vault-rules__text {
+	font-size: 0.8rem;
+	line-height: 1.5;
+	color: var(--muted-foreground);
+	margin: 0;
+}
+
+.vault-rules__text strong {
+	color: var(--foreground);
+	font-weight: 600;
+}
+
+.vault-rules__sep {
+	margin: 0 0.35rem;
+	opacity: 0.5;
+}
+
+/* Compact document rows — icon, meta, status + actions on one line */
+.vault-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.doc-item {
+	display: flex;
+	align-items: center;
+	gap: 0.9rem;
+	padding: 0.8rem 0.9rem;
+	background: var(--muted);
+	border: 1px solid transparent;
+	transition: border-color var(--t-instant);
+}
+
+.doc-item:hover {
+	border-color: var(--border-light);
+}
+
+.doc-item__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 2.4rem;
+	height: 2.4rem;
+	flex-shrink: 0;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	color: var(--foreground);
+}
+
+.doc-item__body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+}
+
+.doc-item__top {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem 0.75rem;
+}
+
+.doc-item__title {
+	font-weight: 600;
+	font-size: 0.95rem;
+}
+
+.doc-item__hint {
+	font-size: 0.78rem;
+}
+
+.doc-item__note {
+	font-size: 0.8rem;
+	color: var(--muted-foreground);
+	margin: 0.15rem 0 0;
+}
+
+.doc-item__file {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.25rem 0.75rem;
+	font-size: 0.78rem;
+	margin: 0.15rem 0 0;
+}
+
+.doc-item__filename {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 24rem;
+}
+
+.doc-item__side {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	flex-shrink: 0;
+}
+
+.doc-item__side .portal-pill {
+	padding: 0.35rem 0.6rem;
+	font-size: 0.6rem;
+}
+
+.doc-item__actions {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+/* Stack the side block under the meta on narrow screens */
+@media (max-width: 767.98px) {
+	.doc-item {
+		flex-wrap: wrap;
+	}
+
+	.doc-item__body {
+		flex: 1 1 calc(100% - 3.3rem);
+	}
+
+	.doc-item__side {
+		width: 100%;
+		padding-left: 3.3rem;
+		justify-content: space-between;
+	}
+
+	.doc-item__filename {
+		max-width: 100%;
+	}
+}
+
 .profile-hero__name {
 	font-size: 1.75rem;
 	font-weight: 600;

@@ -2270,32 +2270,32 @@ export const REQUIRED_DOCUMENTS = [
 	{
 		id: "passport",
 		name: "Passport bio page",
-		hint: "Colour scan, valid 6+ months",
+		hint: "Clear colour scan of the photo page — all four corners visible, valid 6+ months beyond travel",
 	},
 	{
 		id: "transcript",
 		name: "Academic transcript",
-		hint: "Official or certified copy",
+		hint: "Official or certified copy — every page, with legible stamps and signatures",
 	},
 	{
 		id: "diploma",
 		name: "Diploma / certificate",
-		hint: "Highest completed qualification",
+		hint: "Highest completed qualification — the final award certificate, not a result slip",
 	},
 	{
 		id: "statement",
 		name: "Personal statement",
-		hint: "PDF, 500–800 words recommended",
+		hint: "PDF preferred, 500–800 words — why this course, and why this country",
 	},
 	{
 		id: "recommendation",
 		name: "Recommendation letter",
-		hint: "On institutional letterhead",
+		hint: "On institutional letterhead, signed and dated within the last 12 months",
 	},
 	{
 		id: "english",
 		name: "English proficiency",
-		hint: "IELTS / TOEFL / waiver letter",
+		hint: "IELTS / TOEFL score report, or a waiver letter from your institution",
 	},
 ] as const;
 

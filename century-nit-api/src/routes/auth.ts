@@ -14,6 +14,7 @@ import { allowedOrigins } from "../lib/origins.js";
 import { sendEmail } from "../lib/resend.js";
 import { getSmsSender } from "../lib/sms.js";
 import { getSetting } from "../services/settings.js";
+import { captureLeadFromUser } from "../services/leads.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
@@ -86,6 +87,48 @@ function createAuth(config: GoogleSocialConfig) {
 			twoFactor: schema.twoFactors,
 		},
 	}),
+	databaseHooks: {
+		user: {
+			create: {
+				after: async (user) => {
+					const u = user as { id?: string; email: string; name?: string | null; phoneNumber?: string | null };
+					await captureLeadFromUser(
+						{
+							id: u.id,
+							email: u.email,
+							name: u.name,
+							phoneNumber: typeof u.phoneNumber === "string" ? u.phoneNumber : null,
+						},
+						"Account Registration",
+					);
+				},
+			},
+		},
+		session: {
+			create: {
+				after: async (session) => {
+					try {
+						const u = await db.query.users.findFirst({
+							where: eq(schema.users.id, session.userId),
+						});
+						if (u) {
+							await captureLeadFromUser(
+								{
+									id: u.id,
+									email: u.email,
+									name: u.name,
+									phoneNumber: u.phoneNumber,
+								},
+								"Portal Sign-In",
+							);
+						}
+					} catch (err) {
+						console.error("[CRM] Error in session create hook:", err);
+					}
+				},
+			},
+		},
+	},
 	emailAndPassword: {
 		enabled: true,
 		/*

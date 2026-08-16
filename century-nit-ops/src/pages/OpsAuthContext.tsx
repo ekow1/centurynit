@@ -312,7 +312,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	}, [opsRole, dynamicPermissions]);
 
 
-	const canSeeAllBranches = opsRole === "manager" || opsRole === "finance";
+	const canSeeAllBranches =
+		opsRole === "super_admin" ||
+		opsRole === "admin" ||
+		opsRole === "manager" ||
+		opsRole === "coordinator" ||
+		opsRole === "finance";
 	const branchScopeId = opsUser?.branch ?? null;
 	const requiresAssignmentScope = opsRole === "consultant";
 	const inBranchScope = useCallback(

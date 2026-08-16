@@ -11,6 +11,7 @@ export interface LeadView {
 	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
 	targetCountry: string | null;
 	assignedStaffId: string | null;
+	assignedStaffName?: string | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -111,11 +112,18 @@ export async function captureLeadFromUser(
 	}
 }
 
-export async function listLeads(query?: { stage?: string; search?: string }): Promise<LeadView[]> {
+export async function listLeads(query?: {
+	stage?: string;
+	search?: string;
+	assignedStaffId?: string;
+}): Promise<LeadView[]> {
 	await syncLeadsFromRegisteredUsers();
 
-	let whereClause;
+	// Fetch all staff for name resolution
+	const staffMembers = await db.query.opsUsers.findMany();
+	const staffNameMap = new Map(staffMembers.map((s) => [s.id, s.name]));
 
+	let whereClause;
 	if (query?.search?.trim()) {
 		const pattern = `%${query.search.trim()}%`;
 		whereClause = or(
@@ -131,7 +139,12 @@ export async function listLeads(query?: { stage?: string; search?: string }): Pr
 		orderBy: [desc(leads.createdAt)],
 	});
 
-	return rows.map((r) => ({
+	// Filter by assignedStaffId if scoped (for consultant)
+	const filteredRows = query?.assignedStaffId
+		? rows.filter((r) => r.assignedStaffId === query.assignedStaffId || r.assignedStaffId === null)
+		: rows;
+
+	return filteredRows.map((r) => ({
 		id: r.id,
 		name: r.name,
 		email: r.email,
@@ -140,6 +153,7 @@ export async function listLeads(query?: { stage?: string; search?: string }): Pr
 		stage: r.stage,
 		targetCountry: r.targetCountry,
 		assignedStaffId: r.assignedStaffId,
+		assignedStaffName: r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null,
 		notes: r.notes,
 		createdAt: r.createdAt.toISOString(),
 		updatedAt: r.updatedAt.toISOString(),

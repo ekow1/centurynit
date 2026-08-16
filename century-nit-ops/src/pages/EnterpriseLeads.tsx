@@ -22,6 +22,7 @@ interface ApiLead {
 	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
 	targetCountry: string | null;
 	assignedStaffId: string | null;
+	assignedStaffName: string | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -178,12 +179,13 @@ function LeadCard({
 }
 
 export function EnterpriseLeads() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches } = useOpsAuth();
 	const { leads: localLeads, moveLead, liveCase } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [assignFilter, setAssignFilter] = useState<"all" | "mine">("all");
 
 	const canSeeAll = canSeeAllBranches;
 	const canMoveAny = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager" || opsRole === "coordinator";
@@ -230,7 +232,7 @@ export function EnterpriseLeads() {
 				createdAt: al.createdAt.slice(0, 10),
 				lastContactAt: al.updatedAt || al.createdAt,
 				notes: al.notes || "Captured automatically from client sign-in.",
-				assignedTo: "Unassigned",
+				assignedTo: al.assignedStaffName || (al.assignedStaffId ? "Assigned" : "Unassigned"),
 			});
 		}
 
@@ -286,7 +288,18 @@ export function EnterpriseLeads() {
 		[moveLead],
 	);
 
-	const roleScopedLeads = scopeRecords(mergedLeads, (l) => l.assignedTo === opsUser?.name);
+	const roleScopedLeads = useMemo(() => {
+		if (canSeeAll) {
+			if (assignFilter === "mine") {
+				return mergedLeads.filter((l) => l.assignedTo === opsUser?.name);
+			}
+			return mergedLeads;
+		}
+		// Non-manager roles (e.g. consultant) see leads assigned to them or unassigned
+		return mergedLeads.filter(
+			(l) => l.assignedTo === opsUser?.name || l.assignedTo === "Unassigned",
+		);
+	}, [canSeeAll, assignFilter, mergedLeads, opsUser?.name]);
 
 	const branchScopedLeads = useMemo(
 		() =>
@@ -316,14 +329,14 @@ export function EnterpriseLeads() {
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
 				<div>
 					<h1 className="page-title">CRM · Lead Pipeline</h1>
 					<p className="lead mt-2">
 						Drag a lead between columns, or expand a card to move it a stage at a time.
 					</p>
 				</div>
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
 					<button
 						type="button"
 						className="btn btn--ghost btn--sm"
@@ -335,8 +348,28 @@ export function EnterpriseLeads() {
 					>
 						{loading ? "Refreshing…" : "↻ Refresh"}
 					</button>
+
+					{canSeeAll && (
+						<div className="admin-env-tabs" style={{ margin: 0 }}>
+							<button
+								type="button"
+								className={`admin-env-tab${assignFilter === "all" ? " admin-env-tab--active" : ""}`}
+								onClick={() => setAssignFilter("all")}
+							>
+								All Leads ({mergedLeads.length})
+							</button>
+							<button
+								type="button"
+								className={`admin-env-tab${assignFilter === "mine" ? " admin-env-tab--active" : ""}`}
+								onClick={() => setAssignFilter("mine")}
+							>
+								Assigned to Me
+							</button>
+						</div>
+					)}
+
 					<span className="portal-pill" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-						{canSeeAll ? `All leads (${mergedLeads.length}) · Live Synced` : "Assigned to you"}
+						{canSeeAll ? `Active: ${branchScopedLeads.length}` : "Assigned to you"}
 					</span>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
@@ -357,7 +390,7 @@ export function EnterpriseLeads() {
 					<span style={{ fontSize: "1rem" }}>{canSeeAll ? "◱" : "◎"}</span>
 					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
 						{canSeeAll
-							? `All ${mergedLeads.length} leads · Live database synced · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+							? `${assignFilter === "all" ? "All organization leads" : "Your assigned leads"} · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
 							: `${roleScopedLeads.length} leads assigned to you`}
 					</p>
 				</div>

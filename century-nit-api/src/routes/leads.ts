@@ -25,6 +25,7 @@ const leadSchema = z.object({
 	]),
 	targetCountry: z.string().nullable(),
 	assignedStaffId: z.string().uuid().nullable(),
+	assignedStaffName: z.string().nullable().optional(),
 	notes: z.string().nullable(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
@@ -90,8 +91,22 @@ leadsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		const staff = c.get("staff");
 		const query = c.req.valid("query");
-		const rows = await listLeads(query);
+
+		// Super Admin, Admin, Manager, Coordinator see all leads; consultants see leads assigned to them or unassigned
+		const isManagerLevel =
+			staff?.role === "super_admin" ||
+			staff?.role === "admin" ||
+			staff?.role === "manager" ||
+			staff?.role === "coordinator";
+
+		const assignedStaffId = !isManagerLevel && staff?.opsUserId ? staff.opsUserId : undefined;
+
+		const rows = await listLeads({
+			...query,
+			assignedStaffId,
+		});
 		return c.json({ leads: rows });
 	},
 );

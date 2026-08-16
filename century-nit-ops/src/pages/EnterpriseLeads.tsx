@@ -187,8 +187,21 @@ export function EnterpriseLeads() {
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [assignFilter, setAssignFilter] = useState<"all" | "mine">("all");
 
-	const canSeeAll = canSeeAllBranches;
-	const canMoveAny = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager" || opsRole === "coordinator";
+	const canSeeAll =
+		canSeeAllBranches ||
+		opsRole === "super_admin" ||
+		opsRole === "admin" ||
+		opsRole === "manager" ||
+		opsRole === "coordinator" ||
+		opsRole === "finance" ||
+		!opsRole;
+
+	const canMoveAny =
+		opsRole === "super_admin" ||
+		opsRole === "admin" ||
+		opsRole === "manager" ||
+		opsRole === "coordinator" ||
+		!opsRole;
 	const canMoveLead = (l: Lead) => canMoveAny || l.assignedTo === opsUser?.name;
 
 	const [dragging, setDragging] = useState<string | null>(null);
@@ -295,9 +308,13 @@ export function EnterpriseLeads() {
 			}
 			return mergedLeads;
 		}
-		// Non-manager roles (e.g. consultant) see leads assigned to them or unassigned
+		// Non-manager roles (e.g. consultant) see leads assigned to them, unassigned leads, or any incoming new lead
 		return mergedLeads.filter(
-			(l) => l.assignedTo === opsUser?.name || l.assignedTo === "Unassigned",
+			(l) =>
+				l.assignedTo === opsUser?.name ||
+				l.assignedTo === "Unassigned" ||
+				!l.assignedTo ||
+				l.stage === "new",
 		);
 	}, [canSeeAll, assignFilter, mergedLeads, opsUser?.name]);
 

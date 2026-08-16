@@ -36,6 +36,7 @@ import {
 } from "../services/cases.js";
 import {
 	getInvoice,
+	listInvoicesForClient,
 	paymentWithReferenceExists,
 	recordClientPayment,
 	serializeInvoice,
@@ -44,6 +45,7 @@ import {
 	createPaystackCheckout,
 	verifyPaystackTransaction,
 } from "../services/paystack.js";
+import { listSchoolsForApplicant } from "../services/schools.js";
 import {
 	addCommentSchema,
 	applicantListSchema,
@@ -969,6 +971,136 @@ meRouter.openapi(
 		}
 		const invoice = await serializeInvoice(row);
 		return c.json({ invoice });
+	},
+);
+
+/* ── Journey stage ─────────────────────────────────────────────────────── */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/journey",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: journeySchema } },
+				description: "Current journey stage and chapter unlocks",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			return c.json({
+				currentStage: "consultation",
+				chapterUnlocks: {
+					journey: true,
+					consultation: true,
+					package: false,
+					application: false,
+					tracking: false,
+					visa: false,
+					pre_departure: false,
+					complete: false,
+				},
+				label: "Stage I · Consultation first",
+				nextUnlock: "Next: Stage I · Consultation first",
+			});
+		}
+
+		const [consultation, application] = await Promise.all([
+			latestConsultationForApplicant(applicant.id),
+			latestApplicationForApplicant(applicant.id),
+		]);
+
+		// --- derive stage from server data ---
+		const eligible =
+			consultation?.assessmentResult?.outcome === "Eligible" ||
+			consultation?.assessmentResult?.outcome === "Conditionally Eligible";
+		const consulted = Boolean(
+			consultation?.confirmationId && consultation.paymentStatus === "success",
+		);
+		const pkg = Boolean(application?.fundingTrack);
+		const appPaid = application?.applicationInvoice?.status === "paid";
+		const visaPaid = application?.visaInvoice?.status === "paid";
+		const visaDone = application?.visaStatus === "complete";
+		const preDepartureDone =
+			application?.checklist?.length > 0 &&
+			application.checklist.every((c) => c.checked);
+		const admitted = Boolean(application?.university && application.university !== "TBC");
+
+		const order: ("consultation" | "eligibility" | "school_package" | "school_select" | "application_invoice" | "school_tracking" | "visa_invoice" | "visa" | "pre_departure" | "completed")[] = [
+			"consultation",
+			"eligibility",
+			"school_package",
+			"school_select",
+			"application_invoice",
+			"school_tracking",
+			"visa_invoice",
+			"visa",
+			"pre_departure",
+			"completed",
+		];
+		let stage: "consultation" | "eligibility" | "school_package" | "school_select" | "application_invoice" | "school_tracking" | "visa_invoice" | "visa" | "pre_departure" | "completed";
+		if (application?.completedAt || (visaDone && preDepartureDone)) {
+			stage = "completed";
+		} else if (admitted && visaDone) {
+			stage = "pre_departure";
+		} else if (admitted && visaPaid) {
+			stage = "visa";
+		} else if (admitted && !visaPaid) {
+			stage = "visa_invoice";
+		} else if (appPaid && selectionConfirmed) {
+			stage = "school_tracking";
+		} else if (selectionConfirmed && !appPaid) {
+			stage = "application_invoice";
+		} else if (pkg) {
+			stage = "school_select";
+		} else if (eligible && !pkg) {
+			stage = "school_package";
+		} else if (consulted) {
+			stage = "eligibility";
+		} else {
+			stage = "consultation";
+		}
+
+		// Labels
+		const labels: Record<string, string> = {
+			consultation: "Stage I · Consultation first",
+			eligibility: "Awaiting eligibility",
+			school_package: "Choose school application package",
+			school_select: "Select schools & programmes",
+			application_invoice: "Pay application invoice (before tracking)",
+			school_tracking: "Application process / tracking",
+			visa_invoice: "Pay visa invoice (before process)",
+			visa: "Visa tracking in progress",
+			pre_departure: "Travel & pre-departure",
+			completed: "Application complete",
+		};
+
+		const nextIdx = ["consultation", "eligibility", "school_package", "school_select", "application_invoice", "school_tracking", "visa_invoice", "visa", "pre_departure", "completed"].indexOf(stage);
+		const nextUnlock = nextIdx >= 0 && nextIdx < 9
+			? labels[order[nextIdx + 1]]
+			: null;
+
+		const chapterUnlocks = {
+			journey: true,
+			consultation: true,
+			package: eligible,
+			application: eligible && pkg,
+			tracking: appPaid && selectionConfirmed,
+			visa: admitted,
+			pre_departure: admitted && visaPaid && visaDone,
+			complete: preDepartureDone,
+		};
+
+		return c.json({
+			currentStage: stage,
+			chapterUnlocks,
+			label: labels[stage],
+			nextUnlock,
+		});
 	},
 );
 

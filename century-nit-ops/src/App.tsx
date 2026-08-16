@@ -43,6 +43,8 @@ const EnterprisePackages = lazyNamed(() => import("./pages/EnterprisePackages"),
 const EnterpriseReports = lazyNamed(() => import("./pages/EnterpriseReports"), "EnterpriseReports");
 const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppointments"), "EnterpriseAppointments");
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
+const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
+const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"), "EnterpriseAuditLogs");
 const OpsLogin = lazyNamed(() => import("./pages/OpsLogin"), "OpsLogin");
 
 /** Short alias — the route table reads better without the long name. */
@@ -125,6 +127,7 @@ export default function App() {
 									<Route path="invoices" element={<Ops module="invoices"><EnterpriseInvoices /></Ops>} />
 									<Route path="ledger" element={<Ops module="ledger"><EnterpriseLedger /></Ops>} />
 									<Route path="payments" element={<Ops module="payments"><EnterprisePaymentsLog /></Ops>} />
+									<Route path="fee-schedule" element={<Ops module="finance"><EnterpriseFeeSchedule /></Ops>} />
 									<Route path="payment-config" element={<Ops module="payment-config"><EnterprisePaymentConfig /></Ops>} />
 									<Route path="finance" element={<Ops module="finance"><EnterpriseFinance /></Ops>} />
 									<Route path="appointments" element={<Ops module="appointments"><EnterpriseAppointments /></Ops>} />
@@ -142,6 +145,7 @@ export default function App() {
 									<Route path="system" element={<Ops module="system"><EnterpriseAdministration section="system" /></Ops>} />
 									<Route path="users" element={<Ops module="users"><EnterpriseAdministration section="users" /></Ops>} />
 									<Route path="auth" element={<Ops module="auth"><EnterpriseAdministration section="auth" /></Ops>} />
+									<Route path="audit" element={<Ops module="system"><EnterpriseAuditLogs /></Ops>} />
 									<Route path="cms" element={<Ops module="cms"><EnterpriseAdministration section="cms" /></Ops>} />
 									<Route path="site" element={<Ops module="site"><EnterpriseAdministration section="site" /></Ops>} />
 									<Route path="notifications" element={<Ops module="notifications"><EnterpriseAdministration section="notifications" /></Ops>} />

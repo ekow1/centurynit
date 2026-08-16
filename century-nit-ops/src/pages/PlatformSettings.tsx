@@ -143,9 +143,28 @@ export function PlatformSettings() {
 		return Array.from(set);
 	}, [settings]);
 
+	const [activeTab, setActiveTab] = useState<"integrations" | "defaults" | "audit">("integrations");
+
+	const tabGroups = useMemo(() => {
+		if (activeTab === "integrations") {
+			return ["Email", "Storage", "Google Integration", "Payment Gateways"];
+		}
+		if (activeTab === "defaults") {
+			return ["Scheduling", "Application Fees", "Visa Fees", "Consultation Fees", "General"];
+		}
+		return [];
+	}, [activeTab]);
+
 	const filteredSettings = useMemo(() => {
 		return settings.filter((s) => {
-			if (selectedGroup !== "all" && s.group !== selectedGroup) return false;
+			if (activeTab !== "audit") {
+				if (!tabGroups.includes(s.group) && selectedGroup === "all") {
+					// Fallback for general custom groups
+					if (activeTab === "integrations" && !["Email", "Storage", "Google Integration", "Payment Gateways"].includes(s.group)) return false;
+					if (activeTab === "defaults" && ["Email", "Storage", "Google Integration", "Payment Gateways"].includes(s.group)) return false;
+				}
+				if (selectedGroup !== "all" && s.group !== selectedGroup) return false;
+			}
 			if (searchQuery.trim()) {
 				const q = searchQuery.toLowerCase();
 				return (
@@ -157,7 +176,7 @@ export function PlatformSettings() {
 			}
 			return true;
 		});
-	}, [settings, selectedGroup, searchQuery]);
+	}, [settings, activeTab, tabGroups, selectedGroup, searchQuery]);
 
 	// Group filtered settings by group name
 	const grouped = useMemo(() => {
@@ -177,7 +196,7 @@ export function PlatformSettings() {
 				<div>
 					<h2 className="section-title">System Configuration</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Regional defaults, payment keys, integration credentials, and fee schedules.
+						Regional defaults, payment keys, and third-party integration credentials.
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -208,6 +227,28 @@ export function PlatformSettings() {
 						{loadState === "loading" ? "Refreshing…" : "Refresh"}
 					</button>
 				</div>
+			</div>
+
+			{/* Dedicated Notice pointing to Fee Schedule under Finance */}
+			<div
+				className="card"
+				style={{
+					padding: "0.85rem 1.25rem",
+					marginBottom: "1.5rem",
+					background: "var(--surface-subtle, #fcfcfc)",
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+					flexWrap: "wrap",
+					gap: "0.75rem",
+				}}
+			>
+				<div>
+					<strong>Official Pricing & Rates:</strong> Managing student service charges, application rates, and visa fees has moved to Finance.
+				</div>
+				<a href="/fee-schedule" className="btn btn--ghost btn--sm">
+					Go to Fee Schedule →
+				</a>
 			</div>
 
 			{/* Active Step-Up Unlock Banner */}
@@ -244,134 +285,248 @@ export function PlatformSettings() {
 				</div>
 			)}
 
-			{/* Filters & Search Toolbar */}
-			<div className="card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
-				<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
-					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-						<button
-							type="button"
-							className={`btn btn--sm ${selectedGroup === "all" ? "btn--primary" : "btn--ghost"}`}
-							onClick={() => setSelectedGroup("all")}
-						>
-							All ({settings.length})
-						</button>
-						{groups.map((g) => {
-							const count = settings.filter((s) => s.group === g).length;
-							return (
-								<button
-									key={g}
-									type="button"
-									className={`btn btn--sm ${selectedGroup === g ? "btn--primary" : "btn--ghost"}`}
-									onClick={() => setSelectedGroup(g)}
-								>
-									{g} ({count})
-								</button>
-							);
-						})}
-					</div>
-
-					<div style={{ minWidth: "14rem" }}>
-						<input
-							type="search"
-							className="input input--full-border"
-							placeholder="Search settings…"
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							style={{ padding: "0.4rem 0.75rem", fontSize: "var(--text-sm)" }}
-						/>
-					</div>
-				</div>
+			{/* Main Settings Section Tabs */}
+			<div style={{ display: "flex", gap: "0.5rem", borderBottom: "var(--medium)", marginBottom: "1.5rem" }}>
+				<button
+					type="button"
+					onClick={() => { setActiveTab("integrations"); setSelectedGroup("all"); }}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeTab === "integrations" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeTab === "integrations" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					Integrations & API Keys
+				</button>
+				<button
+					type="button"
+					onClick={() => { setActiveTab("defaults"); setSelectedGroup("all"); }}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeTab === "defaults" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeTab === "defaults" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					System Defaults & Scheduling
+				</button>
+				<button
+					type="button"
+					onClick={() => setActiveTab("audit")}
+					style={{
+						padding: "0.6rem 1.25rem",
+						fontFamily: "var(--font-mono)",
+						fontSize: "var(--text-sm)",
+						textTransform: "uppercase",
+						letterSpacing: "0.05em",
+						border: "none",
+						borderBottom: activeTab === "audit" ? "3px solid var(--foreground)" : "3px solid transparent",
+						background: "transparent",
+						fontWeight: activeTab === "audit" ? 700 : 500,
+						cursor: "pointer",
+					}}
+				>
+					Configuration Change Logs ({audit.length})
+				</button>
 			</div>
 
-			{/* Grouped Settings Tables */}
-			{grouped.length === 0 ? (
-				<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
-					<p className="muted">No settings match your search or filter.</p>
-				</div>
-			) : (
-				grouped.map(([group, items]) => (
-					<div key={group} className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem" }}>
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-							<h3 className="section-title" style={{ fontSize: "1.1rem", margin: 0 }}>
-								{group}
-							</h3>
-							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-								{items.length} {items.length === 1 ? "setting" : "settings"}
-							</span>
+			{/* Filters & Search Toolbar (for settings tabs) */}
+			{activeTab !== "audit" && (
+				<div className="card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+					<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
+						<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+							<button
+								type="button"
+								className={`btn btn--sm ${selectedGroup === "all" ? "btn--primary" : "btn--ghost"}`}
+								onClick={() => setSelectedGroup("all")}
+							>
+								All ({filteredSettings.length})
+							</button>
+							{groups
+								.filter((g) => tabGroups.length === 0 || tabGroups.includes(g))
+								.map((g) => {
+									const count = settings.filter((s) => s.group === g).length;
+									return (
+										<button
+											key={g}
+											type="button"
+											className={`btn btn--sm ${selectedGroup === g ? "btn--primary" : "btn--ghost"}`}
+											onClick={() => setSelectedGroup(g)}
+										>
+											{g} ({count})
+										</button>
+									);
+								})}
 						</div>
 
+						<div style={{ minWidth: "14rem" }}>
+							<input
+								type="search"
+								className="input input--full-border"
+								placeholder="Search settings…"
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								style={{ padding: "0.4rem 0.75rem", fontSize: "var(--text-sm)" }}
+							/>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Tab 1 & Tab 2: Grouped Settings Tables */}
+			{activeTab !== "audit" && (
+				grouped.length === 0 ? (
+					<div className="card" style={{ padding: "2rem", textAlign: "center" }}>
+						<p className="muted">No settings match your search or filter.</p>
+					</div>
+				) : (
+					grouped.map(([group, items]) => (
+						<div key={group} className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+								<h3 className="section-title" style={{ fontSize: "1.1rem", margin: 0 }}>
+									{group}
+								</h3>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+									{items.length} {items.length === 1 ? "setting" : "settings"}
+								</span>
+							</div>
+
+							<div className="admin-table-wrap">
+								<table className="admin-table">
+									<thead>
+										<tr>
+											<th style={{ width: "40%" }}>Setting</th>
+											<th style={{ width: "25%" }}>Current Value</th>
+											<th style={{ width: "15%" }}>Source</th>
+											<th style={{ width: "10%" }}>Updated</th>
+											<th style={{ width: "10%", textAlign: "right" }}>Action</th>
+										</tr>
+									</thead>
+									<tbody>
+										{items.map((s) => (
+											<tr key={s.key}>
+												<td>
+													<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</div>
+													<div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+														{s.description}
+													</div>
+													<code className="mono muted" style={{ fontSize: "0.75rem", display: "inline-block", marginTop: "0.25rem" }}>
+														{s.key}
+													</code>
+												</td>
+												<td className="mono" style={{ fontSize: "var(--text-sm)" }}>
+													{s.valueMasked ? (
+														<div>
+															<span>{s.valueMasked}</span>
+															{s.key.endsWith("_CENTS") && (
+																<div className="muted" style={{ fontSize: "var(--text-xs)" }}>
+																	{formatCentsHelper(s.valueMasked)}
+																</div>
+															)}
+														</div>
+													) : (
+														<span className="muted">— (Default)</span>
+													)}
+												</td>
+												<td>
+													<span
+														style={{
+															fontFamily: "var(--font-mono)",
+															fontSize: "var(--text-xs)",
+															textTransform: "uppercase",
+															letterSpacing: "0.04em",
+															padding: "0.2rem 0.5rem",
+															border: "var(--thin)",
+															background: s.source === "database" ? "var(--foreground)" : "transparent",
+															color: s.source === "database" ? "var(--background)" : "var(--foreground)",
+														}}
+													>
+														{sourceLabel(s.source)}
+													</span>
+												</td>
+												<td className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
+													{formatDate(s.updatedAt)}
+												</td>
+												<td style={{ textAlign: "right" }}>
+													<button
+														type="button"
+														className="btn btn--ghost btn--sm"
+														onClick={() => setEditing(s)}
+													>
+														Edit
+													</button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					))
+				)
+			)}
+
+			{/* Tab 3: Configuration Audit Log */}
+			{activeTab === "audit" && (
+				<div className="card" style={{ padding: "1.5rem" }}>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+						<div>
+							<h3 className="section-title" style={{ fontSize: "1.1rem", margin: 0 }}>
+								Configuration Modification History
+							</h3>
+							<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>
+								Recent configuration overrides, API key rotations, and policy updates.
+							</p>
+						</div>
+						<a href="/audit" className="btn btn--ghost btn--sm">
+							Open Full Security Audit Trail →
+						</a>
+					</div>
+
+					{audit.length === 0 ? (
+						<p className="muted">No configuration changes recorded yet.</p>
+					) : (
 						<div className="admin-table-wrap">
 							<table className="admin-table">
 								<thead>
 									<tr>
-										<th style={{ width: "40%" }}>Setting</th>
-										<th style={{ width: "25%" }}>Current Value</th>
-										<th style={{ width: "15%" }}>Source</th>
-										<th style={{ width: "10%" }}>Updated</th>
-										<th style={{ width: "10%", textAlign: "right" }}>Action</th>
+										<th>When</th>
+										<th>Setting Key</th>
+										<th>Changed By</th>
+										<th>Old Value</th>
+										<th>New Value</th>
 									</tr>
 								</thead>
 								<tbody>
-									{items.map((s) => (
-										<tr key={s.key}>
-											<td>
-												<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</div>
-												<div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-													{s.description}
-												</div>
-												<code className="mono muted" style={{ fontSize: "0.75rem", display: "inline-block", marginTop: "0.25rem" }}>
-													{s.key}
-												</code>
-											</td>
-											<td className="mono" style={{ fontSize: "var(--text-sm)" }}>
-												{s.valueMasked ? (
-													<div>
-														<span>{s.valueMasked}</span>
-														{s.key.endsWith("_CENTS") && (
-															<div className="muted" style={{ fontSize: "var(--text-xs)" }}>
-																{formatCentsHelper(s.valueMasked)}
-															</div>
-														)}
-													</div>
-												) : (
-													<span className="muted">— (Default)</span>
-												)}
-											</td>
-											<td>
-												<span
-													style={{
-														fontFamily: "var(--font-mono)",
-														fontSize: "var(--text-xs)",
-														textTransform: "uppercase",
-														letterSpacing: "0.04em",
-														padding: "0.2rem 0.5rem",
-														border: "var(--thin)",
-														background: s.source === "database" ? "var(--foreground)" : "transparent",
-														color: s.source === "database" ? "var(--background)" : "var(--foreground)",
-													}}
-												>
-													{sourceLabel(s.source)}
-												</span>
-											</td>
+									{audit.map((e) => (
+										<tr key={e.id}>
 											<td className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
-												{formatDate(s.updatedAt)}
+												{formatDate(e.at)}
 											</td>
-											<td style={{ textAlign: "right" }}>
-												<button
-													type="button"
-													className="btn btn--ghost btn--sm"
-													onClick={() => setEditing(s)}
-												>
-													Edit
-												</button>
-											</td>
+											<td className="mono" style={{ fontSize: "var(--text-xs)", fontWeight: 600 }}>{e.key}</td>
+											<td style={{ fontSize: "var(--text-xs)" }}>{e.actorEmail ?? "System"}</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{e.oldValueMasked ?? "—"}</td>
+											<td className="mono" style={{ fontSize: "var(--text-xs)", fontWeight: 600 }}>{e.newValueMasked ?? "—"}</td>
 										</tr>
 									))}
 								</tbody>
 							</table>
 						</div>
-					</div>
-				))
+					)}
+				</div>
 			)}
 
 			{/* Step-Up Unlock Modal Dialog */}
@@ -401,43 +556,6 @@ export function PlatformSettings() {
 					}}
 				/>
 			)}
-
-			{/* Audit Log Card */}
-			<div className="card" style={{ padding: "1.5rem" }}>
-				<h3 className="section-title" style={{ fontSize: "1.1rem", marginBottom: "0.75rem" }}>
-					Configuration Audit Log
-				</h3>
-				{audit.length === 0 ? (
-					<p className="muted">No changes recorded yet.</p>
-				) : (
-					<div className="admin-table-wrap">
-						<table className="admin-table">
-							<thead>
-								<tr>
-									<th>When</th>
-									<th>Setting Key</th>
-									<th>Changed By</th>
-									<th>Old Value</th>
-									<th>New Value</th>
-								</tr>
-							</thead>
-							<tbody>
-								{audit.map((e) => (
-									<tr key={e.id}>
-										<td className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
-											{formatDate(e.at)}
-										</td>
-										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.key}</td>
-										<td>{e.actorEmail ?? "—"}</td>
-										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.oldValueMasked ?? "—"}</td>
-										<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{e.newValueMasked ?? "—"}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				)}
-			</div>
 		</div>
 	);
 }

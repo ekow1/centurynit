@@ -19,8 +19,30 @@ export function Avatar({
 	image?: string | null;
 	className?: string;
 }) {
-	const [url, setUrl] = useState<string | null>(null);
-	const [failed, setFailed] = useState(false);
+	const [resolved, setResolved] = useState<{ key: string; url: string | null }>({
+		key: "",
+		url: null,
+	});
+
+	useEffect(() => {
+		if (!image) return;
+		let active = true;
+		meApi
+			.avatarUrl()
+			.then((res) => {
+				if (active) setResolved({ key: image, url: res.url });
+			})
+			.catch(() => {
+				if (active) setResolved({ key: image, url: null });
+			});
+		return () => {
+			active = false;
+		};
+	}, [image]);
+
+	// Only trust a resolved URL while it matches the photo flag it was fetched
+	// for; otherwise (photo just cleared, or still loading) show the initials.
+	const src = image && resolved.key === image ? resolved.url : null;
 
 	const initials = name
 		.split(/\s+/)
@@ -30,29 +52,17 @@ export function Avatar({
 		.join("")
 		.toUpperCase();
 
-	useEffect(() => {
-		if (!image) {
-			setUrl(null);
-			setFailed(false);
-			return;
-		}
-		let active = true;
-		setFailed(false);
-		meApi
-			.avatarUrl()
-			.then((res) => {
-				if (active) setUrl(res.url);
-			})
-			.catch(() => {
-				if (active) setUrl(null);
-			});
-		return () => {
-			active = false;
-		};
-	}, [image]);
-
-	if (url && !failed) {
-		return <img src={url} alt={name} className={className} onError={() => setFailed(true)} />;
+	if (src) {
+		return (
+			<img
+				src={src}
+				alt={name}
+				className={className}
+				onError={() =>
+					setResolved((r) => (r.key === image ? { key: r.key, url: null } : r))
+				}
+			/>
+		);
 	}
 	return (
 		<span className={className} aria-hidden>

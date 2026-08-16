@@ -71,6 +71,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 			{ to: "/invoices", module: "invoices", label: "Invoices", blurb: "Raise, chase & settle", icon: "finance" },
 			{ to: "/ledger", module: "ledger", label: "Client Ledger", blurb: "Per-client journal & installments", icon: "finance" },
 			{ to: "/payments", module: "payments", label: "Payments Log", blurb: "All incoming payments", icon: "finance" },
+			{ to: "/fee-schedule", module: "finance", label: "Fee Schedule", blurb: "Official service pricing", icon: "finance" },
 			{ to: "/payment-config", module: "payment-config", label: "Payment Config", blurb: "Schedule options & plans", icon: "finance" },
 			{ to: "/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
@@ -89,6 +90,7 @@ const PLATFORM_NAV: NavEntry[] = [
 		children: [
 			{ to: "/users", module: "users", label: "Users & Roles", blurb: "Staff & access", icon: "users" },
 			{ to: "/auth", module: "auth", label: "Authentication", blurb: "Sign-in & sessions", icon: "auth" },
+			{ to: "/audit", module: "system", label: "Audit Logs", blurb: "Security & admin trail", icon: "security" },
 		],
 	},
 	{

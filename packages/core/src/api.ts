@@ -664,7 +664,17 @@ export const meApi = {
 		}
 
 		return meApi.avatarComplete(ticket.key);
-	}
+	},
+
+	/** Current journey stage and chapter unlocks derived server-side. */
+	journey(): Promise<{
+		currentStage: string;
+		chapterUnlocks: Record<string, boolean>;
+		label: string;
+		nextUnlock: string | null;
+	}> {
+		return request(`${API_PREFIX}/me/journey`);
+	},
 };
 
 export const invoicesApi = {

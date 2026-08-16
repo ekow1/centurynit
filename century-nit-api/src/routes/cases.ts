@@ -975,6 +975,23 @@ meRouter.openapi(
 );
 
 /* ── Journey stage ─────────────────────────────────────────────────────── */
+
+const journeySchema = z.object({
+	currentStage: z.string(),
+	chapterUnlocks: z.object({
+		journey: z.boolean(),
+		consultation: z.boolean(),
+		package: z.boolean(),
+		application: z.boolean(),
+		tracking: z.boolean(),
+		visa: z.boolean(),
+		pre_departure: z.boolean(),
+		complete: z.boolean(),
+	}),
+	label: z.string(),
+	nextUnlock: z.string().nullable(),
+});
+
 meRouter.openapi(
 	createRoute({
 		method: "get",
@@ -991,6 +1008,7 @@ meRouter.openapi(
 	async (c) => {
 		const user = c.get("user");
 		const applicant = await getApplicantByUserId(user.id);
+
 		if (!applicant) {
 			return c.json({
 				currentStage: "consultation",
@@ -1005,32 +1023,93 @@ meRouter.openapi(
 					complete: false,
 				},
 				label: "Stage I · Consultation first",
-				nextUnlock: "Next: Stage I · Consultation first",
+				nextUnlock: null,
 			});
 		}
 
-		const [consultation, application] = await Promise.all([
-			latestConsultationForApplicant(applicant.id),
-			latestApplicationForApplicant(applicant.id),
-		]);
+		const [consultation, application, schoolTracks, invoices] =
+			await Promise.all([
+				latestConsultationForApplicant(applicant.id),
+				latestApplicationForApplicant(applicant.id),
+				listSchoolsForApplicant(applicant.id),
+				listInvoicesForClient(user.id),
+			]);
 
-		// --- derive stage from server data ---
-		const eligible =
+		// ── Derive booleans ────────────────────────────────────────────────
+		const hasConsultation = Boolean(consultation);
+		const isEligible =
 			consultation?.assessmentResult?.outcome === "Eligible" ||
 			consultation?.assessmentResult?.outcome === "Conditionally Eligible";
-		const consulted = Boolean(
-			consultation?.confirmationId && consultation.paymentStatus === "success",
-		);
-		const pkg = Boolean(application?.fundingTrack);
-		const appPaid = application?.applicationInvoice?.status === "paid";
-		const visaPaid = application?.visaInvoice?.status === "paid";
-		const visaDone = application?.visaStatus === "complete";
-		const preDepartureDone =
-			application?.checklist?.length > 0 &&
-			application.checklist.every((c) => c.checked);
-		const admitted = Boolean(application?.university && application.university !== "TBC");
 
-		const order: ("consultation" | "eligibility" | "school_package" | "school_select" | "application_invoice" | "school_tracking" | "visa_invoice" | "visa" | "pre_departure" | "completed")[] = [
+		const hasPackage = Boolean(application?.fundingTrack);
+		const hasSelection = schoolTracks.schools.some(
+			(s) => s.status !== "Draft",
+		);
+		const isAppInvoicePaid = invoices.some(
+			(i) => i.type === "application" && i.status === "paid",
+		);
+		const hasAdmitted = schoolTracks.schools.some(
+			(s) =>
+				s.status === "Unconditional Offer" ||
+				s.status === "Offer Accepted",
+		);
+		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
+		const isVisaDone = application?.visaStage === "complete";
+		const isPreDepartureDone =
+			(application?.checklist?.length ?? 0) > 0 &&
+			application?.checklist?.every((item) => item.checked);
+		const isCompleted = application?.travelClearance === "cleared";
+
+		// ── Determine stage ────────────────────────────────────────────────
+		type Stage =
+			| "consultation"
+			| "eligibility"
+			| "school_package"
+			| "school_select"
+			| "application_invoice"
+			| "school_tracking"
+			| "visa_invoice"
+			| "visa"
+			| "pre_departure"
+			| "completed";
+
+		let currentStage: Stage = "consultation";
+
+		if (isCompleted || (isVisaDone && isPreDepartureDone)) {
+			currentStage = "completed";
+		} else if (hasAdmitted && isVisaDone) {
+			currentStage = "pre_departure";
+		} else if (hasAdmitted && isVisaInvoicePaid) {
+			currentStage = "visa";
+		} else if (hasAdmitted && !isVisaInvoicePaid) {
+			currentStage = "visa_invoice";
+		} else if (isAppInvoicePaid && hasSelection) {
+			currentStage = "school_tracking";
+		} else if (hasSelection && !isAppInvoicePaid) {
+			currentStage = "application_invoice";
+		} else if (hasPackage) {
+			currentStage = "school_select";
+		} else if (isEligible && !hasPackage) {
+			currentStage = "school_package";
+		} else if (hasConsultation) {
+			currentStage = "eligibility";
+		}
+
+		// ── Labels ─────────────────────────────────────────────────────────
+		const stageLabel: Record<Stage, string> = {
+			consultation: "Stage I \u00b7 Consultation first",
+			eligibility: "Awaiting eligibility",
+			school_package: "Choose school application package",
+			school_select: "Select schools & programmes",
+			application_invoice: "Pay application invoice",
+			school_tracking: "Application process / tracking",
+			visa_invoice: "Pay visa invoice",
+			visa: "Visa tracking in progress",
+			pre_departure: "Travel & pre-departure",
+			completed: "Application complete",
+		};
+
+		const stageOrder: Stage[] = [
 			"consultation",
 			"eligibility",
 			"school_package",
@@ -1042,63 +1121,29 @@ meRouter.openapi(
 			"pre_departure",
 			"completed",
 		];
-		let stage: "consultation" | "eligibility" | "school_package" | "school_select" | "application_invoice" | "school_tracking" | "visa_invoice" | "visa" | "pre_departure" | "completed";
-		if (application?.completedAt || (visaDone && preDepartureDone)) {
-			stage = "completed";
-		} else if (admitted && visaDone) {
-			stage = "pre_departure";
-		} else if (admitted && visaPaid) {
-			stage = "visa";
-		} else if (admitted && !visaPaid) {
-			stage = "visa_invoice";
-		} else if (appPaid && selectionConfirmed) {
-			stage = "school_tracking";
-		} else if (selectionConfirmed && !appPaid) {
-			stage = "application_invoice";
-		} else if (pkg) {
-			stage = "school_select";
-		} else if (eligible && !pkg) {
-			stage = "school_package";
-		} else if (consulted) {
-			stage = "eligibility";
-		} else {
-			stage = "consultation";
-		}
 
-		// Labels
-		const labels: Record<string, string> = {
-			consultation: "Stage I · Consultation first",
-			eligibility: "Awaiting eligibility",
-			school_package: "Choose school application package",
-			school_select: "Select schools & programmes",
-			application_invoice: "Pay application invoice (before tracking)",
-			school_tracking: "Application process / tracking",
-			visa_invoice: "Pay visa invoice (before process)",
-			visa: "Visa tracking in progress",
-			pre_departure: "Travel & pre-departure",
-			completed: "Application complete",
-		};
+		const idx = stageOrder.indexOf(currentStage);
+		const nextUnlock =
+			idx >= 0 && idx < stageOrder.length - 1
+				? stageLabel[stageOrder[idx + 1]]
+				: null;
 
-		const nextIdx = ["consultation", "eligibility", "school_package", "school_select", "application_invoice", "school_tracking", "visa_invoice", "visa", "pre_departure", "completed"].indexOf(stage);
-		const nextUnlock = nextIdx >= 0 && nextIdx < 9
-			? labels[order[nextIdx + 1]]
-			: null;
-
+		// ── Chapter unlocks ────────────────────────────────────────────────
 		const chapterUnlocks = {
 			journey: true,
 			consultation: true,
-			package: eligible,
-			application: eligible && pkg,
-			tracking: appPaid && selectionConfirmed,
-			visa: admitted,
-			pre_departure: admitted && visaPaid && visaDone,
-			complete: preDepartureDone,
+			package: isEligible,
+			application: isEligible && hasPackage,
+			tracking: isAppInvoicePaid && hasSelection,
+			visa: hasAdmitted,
+			pre_departure: hasAdmitted && isVisaInvoicePaid && isVisaDone,
+			complete: Boolean(isPreDepartureDone),
 		};
 
 		return c.json({
-			currentStage: stage,
+			currentStage,
 			chapterUnlocks,
-			label: labels[stage],
+			label: stageLabel[currentStage],
 			nextUnlock,
 		});
 	},

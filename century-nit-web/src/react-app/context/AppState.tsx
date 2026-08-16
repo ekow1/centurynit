@@ -12,7 +12,7 @@ import {
 	getCurrentSession,
 	signOut as authSignOut,
 } from "./authStore";
-import { safeGetJSON, safeRemoveItem, safeSetItem, safeSetJSON } from "century-nit-core";
+import { safeGetJSON, safeRemoveItem, safeSetItem, safeSetJSON, meApi } from "century-nit-core";
 import {
 	APPLICATION_FEE,
 	APP_INVOICE_BASE,
@@ -2265,6 +2265,54 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		[application, booking, schoolApplications],
 	);
 
+	// ── Server-driven journey stage ───────────────────────────────────────
+	// When the user is authenticated, fetch the authoritative stage from the
+	// API and prefer it over the locally computed one.  Falls back to local
+	// on network error so the portal never breaks.
+	type ServerJourney = {
+		currentStage: string;
+		chapterUnlocks: Record<string, boolean>;
+		label: string;
+		nextUnlock: string | null;
+	};
+	const [serverJourney, setServerJourney] = useState<ServerJourney | null>(
+		null,
+	);
+
+	useEffect(() => {
+		if (!authUser) {
+			setServerJourney(null);
+			return;
+		}
+		let cancelled = false;
+		meApi
+			.journey()
+			.then((j: ServerJourney) => {
+				if (!cancelled) setServerJourney(j);
+			})
+			.catch(() => {
+				/* keep local fallback */
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [authUser]);
+
+	const effectiveJourneyPhase = useMemo(() => {
+		if (serverJourney) {
+			const meta = PROCESS_STAGES.find(
+				(s) => s.id === serverJourney.currentStage,
+			)!;
+			return {
+				phase: meta.index,
+				label: serverJourney.label,
+				nextUnlock: serverJourney.nextUnlock,
+				stage: serverJourney.currentStage as ProcessStageId,
+			};
+		}
+		return journeyPhase;
+	}, [serverJourney, journeyPhase]);
+
 	const value = useMemo(
 		() => ({
 			application,
@@ -2311,7 +2359,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			simAutopilot,
 			setSimAutopilot,
 			chapterUnlocks,
-			journeyPhase,
+			journeyPhase: effectiveJourneyPhase,
 			processStage,
 			booking,
 			updateBooking,
@@ -2364,7 +2412,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			enabledPostArrivalSchedules,
 			setEnabledPostArrivalSchedules,
 			customPostArrivalSchedules,
-			setCustomPostArrivalSchedules,
 			payAgencyInstallment,
 			schoolApplications,
 			addSchoolApplication,
@@ -2375,7 +2422,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			simAutopilot,
 			setSimAutopilot,
 			chapterUnlocks,
-			journeyPhase,
+			effectiveJourneyPhase,
 			processStage,
 			booking,
 			updateBooking,

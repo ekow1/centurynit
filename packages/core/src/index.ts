@@ -19,6 +19,7 @@ export * from "./availability.js";
 export * from "./storage.js";
 export * from "./fileStore.js";
 export * from "./siteContent.js";
+export { meApi } from "./api.js";
 
 /**
  * The ops record types live behind `century-nit-core/ops` rather than being

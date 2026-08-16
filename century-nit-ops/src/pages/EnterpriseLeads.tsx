@@ -180,7 +180,7 @@ function LeadCard({
 
 export function EnterpriseLeads() {
 	const { opsRole, opsUser, canSeeAllBranches } = useOpsAuth();
-	const { leads: localLeads, moveLead, liveCase } = useOpsState();
+	const { moveLead, liveCase } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
@@ -273,15 +273,8 @@ export function EnterpriseLeads() {
 			}
 		}
 
-		// 3. Seed / custom leads
-		for (const ll of localLeads) {
-			if (!emailSet.has(ll.email.toLowerCase())) {
-				emailSet.add(ll.email.toLowerCase());
-				result.push(ll);
-			}
-		}
 		return result;
-	}, [apiLeads, liveCase, localLeads]);
+	}, [apiLeads, liveCase]);
 
 	const handleLeadMove = useCallback(
 		async (id: string, stage: LeadStage) => {

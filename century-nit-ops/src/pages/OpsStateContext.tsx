@@ -10,7 +10,6 @@ import {
 } from "react";
 import { safeSetItem, slotFromToday, formatSlot, resolveBranchId } from "century-nit-core";
 import {
-	SEED_LEADS,
 	servicePackages as PUBLIC_SERVICE_PACKAGES,
 	CONSULTATION_FEE_AMOUNT,
 	APP_INVOICE_BASE,
@@ -57,7 +56,7 @@ import { cmsKey, type CmsCollectionId, type CmsOverlay, type CmsStatus } from "c
 
 /* ─── INITIAL DATA ─── */
 
-const SEED_CONSULTATIONS: MockConsultation[] = [
+export const SEED_CONSULTATIONS: MockConsultation[] = [
 	{
 		id: "c-1",
 		ref: "CNS-2026-001",
@@ -136,7 +135,7 @@ const SEED_CONSULTATIONS: MockConsultation[] = [
 	},
 ];
 
-const SEED_APPLICATIONS: MockApplication[] = [
+export const SEED_APPLICATIONS: MockApplication[] = [
 	{
 		id: "app-1",
 		appId: "APP-2026-1001",
@@ -486,7 +485,7 @@ function seedFinancials(paidStages: "consultation" | "application" | "visa" | "a
 	};
 }
 
-const SEED_APPLICANTS: MockApplicant[] = [
+export const SEED_APPLICANTS: MockApplicant[] = [
 	{
 		id: "applicant-1",
 		applicantId: "APP-2026-9012",
@@ -759,7 +758,7 @@ const SEED_APPLICANTS: MockApplicant[] = [
 	},
 ];
 
-const SEED_INVOICES: Invoice[] = [
+export const SEED_INVOICES: Invoice[] = [
 	{
 		id: "inv-seed-1",
 		invoiceNumber: "INV-2026-0001",
@@ -1021,7 +1020,7 @@ const SEED_INVOICES: Invoice[] = [
 const OPS_STATE_KEY = "century-nit-ops-state";
 
 /** Bump when seed data or shape changes so stale saved state is discarded. */
-const OPS_STATE_VERSION = 20;
+const OPS_STATE_VERSION = 21;
 
 const SEED_PACKAGES: ServicePackage[] = PUBLIC_SERVICE_PACKAGES.map((p) => ({
 	id: p.id,
@@ -1097,7 +1096,7 @@ export type EmailTemplate = {
 	createdBy: string;
 };
 
-const SEED_TICKETS: InternalTicket[] = [
+export const SEED_TICKETS: InternalTicket[] = [
 	{
 		id: "tkt-1",
 		ref: "TKT-2026-0001",
@@ -1429,12 +1428,12 @@ const SEED_TICKETS: InternalTicket[] = [
 	},
 ];
 
-const SEED_CAMPAIGNS: MarketingCampaign[] = [
+export const SEED_CAMPAIGNS: MarketingCampaign[] = [
 	{ id: "cmp-1", name: "Fall Intake Newsletter", type: "Email", audience: "All Leads", status: "Sent", sentAt: "2026-08-01T09:00:00Z", sentBy: "Adjoa Mensah-Bonsu", subject: "Fall 2026 Intake - New Programs Available", body: "Dear {{name}},\n\nWe are excited to announce new programs for the Fall 2026 intake...", templateId: "tpl-email-newsletter" },
 	{ id: "cmp-2", name: "Missing Documents Reminder", type: "SMS", audience: "Applicants - Missing Docs", status: "Sent", sentAt: "2026-08-03T11:00:00Z", sentBy: "Kojo Asante", body: "Hi {{name}}, your application is missing documents. Please upload them by Friday.", templateId: "tpl-sms-reminder" },
 ];
 
-const SEED_MAILING_LISTS: MailingList[] = [
+export const SEED_MAILING_LISTS: MailingList[] = [
 	{ id: "ml-1", name: "All Leads", description: "Every lead in the CRM pipeline", recipientCount: 0, contacts: [], createdAt: "2026-07-15T10:00:00Z" },
 	{ id: "ml-2", name: "Active Applicants", description: "Applicants with an open application", recipientCount: 0, contacts: [], createdAt: "2026-07-15T10:00:00Z" },
 	{ id: "ml-3", name: "Visa Stage Applicants", description: "Applicants currently in visa processing", recipientCount: 0, contacts: [], createdAt: "2026-07-20T14:00:00Z" },
@@ -1649,20 +1648,20 @@ type PersistedOpsState = {
 function defaultPersisted(): PersistedOpsState {
 	return {
 		version: OPS_STATE_VERSION,
-		consultations: SEED_CONSULTATIONS,
-		applications: SEED_APPLICATIONS,
-		applicants: SEED_APPLICANTS,
-		leads: SEED_LEADS,
+		consultations: [],
+		applications: [],
+		applicants: [],
+		leads: [],
 		packages: SEED_PACKAGES,
 		directives: EMPTY_DIRECTIVES,
 		activityLog: [],
 		liveOverlay: EMPTY_LIVE_OVERLAY,
 		seededDocVerdicts: {},
-		invoices: SEED_INVOICES,
+		invoices: [],
 		cmsOverlay: {},
-		internalTickets: SEED_TICKETS,
-		marketingCampaigns: SEED_CAMPAIGNS,
-		mailingLists: SEED_MAILING_LISTS,
+		internalTickets: [],
+		marketingCampaigns: [],
+		mailingLists: [],
 		emailTemplates: SEED_EMAIL_TEMPLATES,
 	};
 }

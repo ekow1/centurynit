@@ -402,6 +402,13 @@ function UsersAndRoles() {
 	const [error, setError] = useState<string | null>(null);
 	const [flash, setFlash] = useState<string | null>(null);
 	const [inviting, setInviting] = useState(false);
+	const [createdInvite, setCreatedInvite] = useState<{
+		email: string;
+		name: string;
+		role: string;
+		acceptUrl: string;
+	} | null>(null);
+	const [copiedInvite, setCopiedInvite] = useState(false);
 	const [editing, setEditing] = useState<StaffRow | null>(null);
 	const [creatingRole, setCreatingRole] = useState(false);
 	const [draft, setDraft] = useState({ name: "", email: "", role: "consultant" as OpsRole, branch: "accra" });
@@ -481,11 +488,28 @@ function UsersAndRoles() {
 				role: draft.role,
 				branch: draft.branch,
 			});
-			say(`Invitation sent to ${created.email}.`);
-			if (created.acceptUrl) {
+			let finalUrl = created.acceptUrl || "";
+			if (finalUrl && typeof window !== "undefined") {
 				try {
-					await navigator.clipboard.writeText(created.acceptUrl);
-					say(`Invitation sent. Accept link copied.`);
+					const u = new URL(finalUrl);
+					if (u.hostname === "localhost" || u.hostname === "127.0.0.1") {
+						finalUrl = `${window.location.origin}${u.pathname}${u.search}`;
+					}
+				} catch {
+					// fallback
+				}
+			}
+			setCreatedInvite({
+				email: created.email,
+				name: draft.name.trim(),
+				role: draft.role,
+				acceptUrl: finalUrl,
+			});
+			if (finalUrl) {
+				try {
+					await navigator.clipboard.writeText(finalUrl);
+					setCopiedInvite(true);
+					window.setTimeout(() => setCopiedInvite(false), 2000);
 				} catch {
 					/* clipboard may be denied */
 				}
@@ -859,6 +883,58 @@ function UsersAndRoles() {
 										</button>
 									</div>
 								</form>
+							</div>
+						</div>
+					)}
+
+					{createdInvite && (
+						<div className="ops-modal-backdrop" onClick={() => setCreatedInvite(null)} role="dialog" aria-modal="true">
+							<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
+								<header className="ops-modal__head">
+									<div>
+										<p className="invite-card__eyebrow" style={{ margin: 0, color: "var(--success, #059669)" }}>✓ Invitation Created</p>
+										<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Staff Invitation Link</h2>
+										<p className="ops-modal__sub">
+											Invitation for <strong>{createdInvite.name}</strong> ({createdInvite.email}) as <strong>{roleLabelMap[createdInvite.role] ?? createdInvite.role}</strong>.
+										</p>
+									</div>
+									<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatedInvite(null)}>
+										✕ Close
+									</button>
+								</header>
+
+								<div style={{ marginTop: "1.25rem" }}>
+									<p style={{ fontSize: "var(--text-xs)", color: "var(--muted)", marginBottom: "0.5rem" }}>
+										An onboarding email has been queued. You can also copy and share this link directly with the staff member:
+									</p>
+									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+										<input
+											type="text"
+											readOnly
+											value={createdInvite.acceptUrl}
+											className="input input--full-border mono"
+											style={{ fontSize: "var(--text-xs)", width: "100%" }}
+											onClick={(e) => (e.target as HTMLInputElement).select()}
+										/>
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											style={{ whiteSpace: "nowrap" }}
+											onClick={() => {
+												void navigator.clipboard.writeText(createdInvite.acceptUrl);
+												setCopiedInvite(true);
+												window.setTimeout(() => setCopiedInvite(false), 2000);
+											}}
+										>
+											{copiedInvite ? "Copied!" : "Copy Link"}
+										</button>
+									</div>
+									<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+										<button type="button" className="btn btn--primary" onClick={() => setCreatedInvite(null)}>
+											Done
+										</button>
+									</div>
+								</div>
 							</div>
 						</div>
 					)}

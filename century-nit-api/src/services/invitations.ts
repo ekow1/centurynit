@@ -134,7 +134,13 @@ export async function createInvitation(input: {
 		throw err;
 	}
 
-	const acceptUrl = `${env.CONSOLE_URL}/accept-invite?token=${token}`;
+	const consoleBase =
+		env.CONSOLE_URL && !env.CONSOLE_URL.includes("localhost")
+			? env.CONSOLE_URL
+			: process.env.NODE_ENV === "production"
+				? "https://console.softclicksolutionsgh.workers.dev"
+				: env.CONSOLE_URL;
+	const acceptUrl = `${consoleBase}/accept-invite?token=${token}`;
 	const safeName = escapeHtml(input.name.trim());
 	const safeInviter = escapeHtml(input.invitedBy.name);
 	const safeRole = escapeHtml(input.role.replace("_", " "));

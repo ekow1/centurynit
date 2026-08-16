@@ -91,4 +91,10 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 	CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+# Start both the API and the email/calendar worker in the same container.
+# The worker consumes the BullMQ queues that the API writes to (invitation emails,
+# appointment reminders, calendar sync). Without it those jobs pile up in Redis
+# and are never processed.
+# `sh -c` runs the worker in the background (&) and the API in the foreground so
+# Docker's PID 1 is the API — SIGTERM reaches it directly for a clean shutdown.
+CMD ["sh", "-c", "node dist/worker/main.js & node dist/index.js"]

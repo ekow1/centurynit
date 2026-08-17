@@ -1554,7 +1554,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 						<p className="eyebrow">Branch</p>
 						<div className="card-grid card-grid--2 mt-3">
 							{[
-								{ id: "accra-hq", name: "Accra Headquarters" },
+								{ id: "accra", name: "Accra Headquarters" },
 								{ id: "kumasi", name: "Kumasi Branch" },
 								{ id: "takoradi", name: "Takoradi Branch" },
 							].map((b) => (

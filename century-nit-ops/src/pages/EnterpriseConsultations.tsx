@@ -423,10 +423,10 @@ export function EnterpriseConsultations() {
 								currentWhen={active.dateTime}
 								branchLabel={active.branch}
 								onConfirm={(date, time, reason) => {
-									void date;
-										void time;
-										void reason;
-									setShowReschedule(false);
+									if (!active.bookingId) { setShowReschedule(false); return; }
+									rescheduleConsultation(active.id, active.bookingId, date, time, reason)
+										.then(() => setShowReschedule(false))
+										.catch(() => setShowReschedule(false));
 								}}
 								onCancel={() => setShowReschedule(false)}
 							/>
@@ -672,21 +672,20 @@ export function EnterpriseConsultations() {
 									</div>
 								)}
 
-								{detailTab === "assessment" && canAssess && (
-								canAssess ? (
-								<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>
-									<h3 className="section-title mb-3">Consultation Assessment Form</h3>
-									{isSubmitted && (
-										<div style={{ padding: "0.85rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1.25rem" }}>
-											✓ Assessment recorded. Applicant status updated to {selectedConsultation.status}.
-										</div>
-									)}
-									{docs.pending > 0 && (
-										<div style={{ padding: "0.75rem 1rem", background: "#fef3c7", border: "1px solid #fde68a", marginBottom: "1.25rem" }}>
-											<p style={{ fontSize: "var(--text-sm)", color: "#92400e", fontWeight: 600 }}>⚠ {docs.pending} document(s) still pending verification</p>
-											<p style={{ fontSize: "var(--text-xs)", color: "#92400e", marginTop: "0.25rem" }}>
-												It's recommended to verify all documents before completing the assessment. You can still proceed, but this will be noted in the record.
-											</p>
+							{detailTab === "assessment" && canAssess && (
+							<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>
+								<h3 className="section-title mb-3">Consultation Assessment Form</h3>
+								{isSubmitted && (
+									<div style={{ padding: "0.85rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1.25rem" }}>
+										✓ Assessment recorded. Applicant status updated to {selectedConsultation.status}.
+									</div>
+								)}
+								{docs.pending > 0 && (
+									<div style={{ padding: "0.75rem 1rem", background: "#fef3c7", border: "1px solid #fde68a", marginBottom: "1.25rem" }}>
+										<p style={{ fontSize: "var(--text-sm)", color: "#92400e", fontWeight: 600 }}>⚠ {docs.pending} document(s) still pending verification</p>
+										<p style={{ fontSize: "var(--text-xs)", color: "#92400e", marginTop: "0.25rem" }}>
+											It's recommended to verify all documents before completing the assessment. You can still proceed, but this will be noted in the record.
+										</p>
 										</div>
 									)}
 									<div style={{ marginBottom: "1.25rem" }}>
@@ -731,35 +730,8 @@ export function EnterpriseConsultations() {
 									<button type="submit" className="btn btn--primary" style={{ width: "100%", padding: "0.85rem" }}>
 										Complete Consultation & Lock Assessment
 									</button>
-								</form>
-								) : (
-									<div className="card" style={{ marginTop: "1rem" }}>
-										<h3 className="section-title mb-3">Assessment Decision</h3>
-										{active.assessmentResult ? (
-											<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-												<div>
-													<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Outcome</p>
-													<p style={{ fontWeight: 600 }}>{active.assessmentResult.outcome}</p>
-												</div>
-												<div>
-													<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommendation</p>
-													<p>{active.assessmentResult.recProgram} at {active.assessmentResult.recUniversity} ({active.assessmentResult.recCountry})</p>
-												</div>
-												{active.assessmentResult.notes && (
-													<div>
-														<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Notes</p>
-														<p style={{ fontSize: "var(--text-sm)" }}>{active.assessmentResult.notes}</p>
-													</div>
-												)}
-											</div>
-										) : (
-											<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
-												Assessment has not been completed yet. Only the assigned consultant or a manager can complete the assessment.
-											</p>
-										)}
-									</div>
-								)
-							)}
+							</form>
+						)}
 							</div>
 						</>
 					)}

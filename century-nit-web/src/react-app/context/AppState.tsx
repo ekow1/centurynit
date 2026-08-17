@@ -1929,14 +1929,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							: c.status === "ASSIGNED"
 								? "assigned"
 								: "confirmed";
-				const outcome: EligibilityOutcome =
-					c.assessmentResult?.outcome?.toLowerCase() === "eligible"
-						? "eligible"
-						: c.assessmentResult?.outcome?.toLowerCase() === "conditional"
-							? "conditional"
-							: c.assessmentResult?.outcome?.toLowerCase() === "ineligible"
-								? "not_eligible"
-								: "pending";
+			const outcome: EligibilityOutcome =
+				c.assessmentResult?.outcome?.toLowerCase() === "eligible"
+					? "eligible"
+					: c.assessmentResult?.outcome?.toLowerCase().includes("conditional")
+						? "conditional"
+						: c.assessmentResult?.outcome?.toLowerCase().includes("ineligible")
+							? "not_eligible"
+							: "pending";
 				setBooking((prev) => ({
 					...prev,
 					confirmationId: c.reference,

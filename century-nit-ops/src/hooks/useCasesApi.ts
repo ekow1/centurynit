@@ -74,7 +74,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 			intake: p.intake ?? "-",
 			major: p.major ?? "-",
 		},
-		documents: [],
+		documents: (row.requestedDocuments ?? []).map((name) => ({ name, status: "Pending Review" })),
 		assessmentResult: row.assessmentResult ?? undefined,
 		slotConfirmed: row.slotConfirmed,
 		comments: row.comments,
@@ -90,6 +90,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 				})
 			: undefined,
 		slotBranchId: row.branch,
+		isLive: true,
 	};
 }
 

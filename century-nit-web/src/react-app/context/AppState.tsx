@@ -432,14 +432,14 @@ const defaultAssessment: AssessmentData = {
 };
 
 const defaultAssessmentDocs: Record<string, AssessmentDoc> = {
-	passport: { fileName: null, uploadedAt: null },
-	certificates: { fileName: null, uploadedAt: null },
-	transcripts: { fileName: null, uploadedAt: null },
-	cv: { fileName: null, uploadedAt: null },
-	english: { fileName: null, uploadedAt: null },
-	financial: { fileName: null, uploadedAt: null },
-	sponsorship: { fileName: null, uploadedAt: null },
-	additional: { fileName: null, uploadedAt: null },
+	passport: { fileName: null, uploadedAt: null, documentId: null },
+	certificates: { fileName: null, uploadedAt: null, documentId: null },
+	transcripts: { fileName: null, uploadedAt: null, documentId: null },
+	cv: { fileName: null, uploadedAt: null, documentId: null },
+	english: { fileName: null, uploadedAt: null, documentId: null },
+	financial: { fileName: null, uploadedAt: null, documentId: null },
+	sponsorship: { fileName: null, uploadedAt: null, documentId: null },
+	additional: { fileName: null, uploadedAt: null, documentId: null },
 };
 
 const defaultBooking: BookingData = {
@@ -1978,15 +1978,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				const a = res.application;
 				setApplication((prev) => ({
 					...prev,
-					id: a.id || prev.id,
 					applicationId: a.id || prev.applicationId,
-					appNumber: a.appNumber || prev.appNumber,
-					stage: a.stage || prev.stage,
-					status: a.status || prev.status,
-					program: a.program || prev.program,
-					university: a.university || prev.university,
-					country: a.country || prev.country,
-					degreeLevel: a.degreeLevel || prev.degreeLevel,
+					destinationId: a.country || prev.destinationId,
+					universityId: a.university || prev.universityId,
+					programId: a.program || prev.programId,
+					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
+					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 				}));
 			}
 		} catch {

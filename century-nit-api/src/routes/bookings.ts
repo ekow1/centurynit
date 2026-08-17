@@ -27,6 +27,7 @@ import {
 	type BookingRow,
 } from "../services/booking.js";
 import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
+import { createConsultationInvoice } from "../services/invoice.js";
 import {
 	assignBookingSchema,
 	assignableEmployeeSchema,
@@ -195,7 +196,7 @@ bookingsRouter.openapi(
 			serviceName,
 		});
 
-		// Immediately create the consultation row so ops see it in the intake queue.
+// Immediately create the consultation row so ops see it in the intake queue.
 		// ensureCaseForBooking is idempotent — safe to call for every booking type
 		// but only actually creates a consultation row for serviceId "consultation".
 		if (body.serviceId === "consultation") {
@@ -209,6 +210,15 @@ bookingsRouter.openapi(
 					clientPhone: booking.clientPhone ?? null,
 					branchId: booking.branchId,
 					type: booking.type,
+				});
+				await createConsultationInvoice({
+					clientUserId: user.id,
+					applicantName: user.name ?? user.email,
+					applicantEmail: user.email,
+					bookingId: booking.id,
+					reference: booking.reference,
+					amountCents: 7500,
+					issuedBy: "System",
 				});
 			} catch {
 				// Non-fatal — booking still succeeds; ops can still find the booking

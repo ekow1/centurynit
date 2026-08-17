@@ -296,6 +296,68 @@ export async function createInvoice(input: {
 	return row;
 }
 
+export async function createConsultationInvoice(input: {
+	clientUserId?: string | null;
+	applicantName: string;
+	applicantEmail?: string | null;
+	bookingId: string;
+	reference: string;
+	amountCents: number;
+	issuedBy?: string;
+}): Promise<InvoiceRow> {
+	const [existing] = await db
+		.select()
+		.from(invoices)
+		.where(and(eq(invoices.type, "consultation"), ilike(invoices.note, `%${input.reference}%`)))
+		.limit(1);
+	if (existing) return existing;
+
+	const row = await db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const invoiceNumber = await nextInvoiceNumber(txDb);
+		const [created] = await tx
+			.insert(invoices)
+			.values({
+				invoiceNumber,
+				clientUserId: input.clientUserId ?? null,
+				applicantName: input.applicantName,
+				applicantEmail: input.applicantEmail ?? null,
+				type: "consultation",
+				subtotalCents: input.amountCents,
+				note: `Consultation Booking ${input.reference}`,
+				status: "paid",
+				issuedBy: "system",
+				issuedByName: input.issuedBy ?? "System",
+			})
+			.returning();
+
+		await tx.insert(invoiceLines).values([
+			{
+				invoiceId: created.id,
+				position: 0,
+				label: "Initial Advisory Consultation",
+				detail: `Comprehensive evaluation session (${input.reference})`,
+				amountCents: input.amountCents,
+			},
+		]);
+
+		await tx.insert(invoicePayments).values({
+			invoiceId: created.id,
+			amountCents: input.amountCents,
+			method: "Card Payment",
+			gateway: "Paystack",
+			reference: `PAY-${input.reference}`,
+			recordedBy: "system",
+			recordedByName: input.issuedBy ?? "System",
+		});
+
+		await audit(created.id, "paid", input.issuedBy ?? "System", "Consultation fee paid upon booking", txDb);
+		return created;
+	});
+
+	return row;
+}
+
 /**
  * Applicant self-service: record a payment against one of their own invoices.
  *

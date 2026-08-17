@@ -219,7 +219,7 @@ export function EnterpriseConsultations() {
 						) : (
 							filteredConsultations.map((c) => {
 								const isSelected = selectedConsultation?.id === c.id;
-								const d = docSummary(c);
+								const d = docSummary(c, realDocs);
 								return (
 									<div
 										key={c.id}

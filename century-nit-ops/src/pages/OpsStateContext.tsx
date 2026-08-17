@@ -423,6 +423,7 @@ const LIVE_APPLICANT_ID = "live-applicant";
 function liveConsultation(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockConsultation {
 	return {
 		id: LIVE_CONSULTATION_ID,
+		applicantId: snap.email || LIVE_APPLICANT_ID,
 		ref: snap.consultationRef ?? "CNS-LIVE",
 		bookingId: null,
 		applicantName: snap.name,

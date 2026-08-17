@@ -351,7 +351,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const branchScopeId = opsUser?.branch ?? null;
 	const requiresAssignmentScope = opsRole === "consultant";
 	const inBranchScope = useCallback(
-		(branch: string) => canSeeAllBranches || branch === branchScopeId,
+		(branch: string) => canSeeAllBranches || branch === branchScopeId || branch.startsWith(`${branchScopeId}-`),
 		[canSeeAllBranches, branchScopeId],
 	);
 	const scopeRecords = useCallback(

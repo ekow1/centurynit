@@ -39,3 +39,9 @@ Thumbs.db
 *cookies*.txt
 *.cookies
 *.jar
+
+# Scratch/backup files
+*.original.tsx
+*.original.ts
+*.diff
+scratch_*

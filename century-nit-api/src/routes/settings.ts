@@ -12,15 +12,15 @@ import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
-	requireRole,
+	requireModule,
 	type AuthVariables,
 } from "../middleware/auth.js";
 
 /**
  * Platform settings — integration credentials managed from the ops UI.
  *
- * Strict security:
- *   - `super_admin` only. Not even `admin` can change these.
+ * Security:
+ *   - Requires the `settings` module permission (typically `super_admin` / `admin`).
  *   - Every write requires a fresh TOTP code from the caller's authenticator.
  *     A stolen session (an unattended laptop) cannot rotate API keys without
  *     the physical second factor.
@@ -121,7 +121,7 @@ settingsRouter.openapi(
 		path: "/step-up",
 		tags: ["Settings"],
 		summary: "Unlock settings session for 15 minutes with TOTP",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: stepUpBodySchema } },
@@ -180,7 +180,7 @@ settingsRouter.openapi(
 		path: "/",
 		tags: ["Settings"],
 		summary: "List all platform settings (masked)",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: listResponseSchema } },
@@ -203,7 +203,7 @@ settingsRouter.openapi(
 		path: "/",
 		tags: ["Settings"],
 		summary: "Update a platform setting",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: updateBodySchema } },
@@ -308,7 +308,7 @@ settingsRouter.openapi(
 		summary: "Settings audit log",
 		description:
 			"Recent settings changes, newest first. Values are masked. Requires super_admin.",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("settings")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: auditResponseSchema } },

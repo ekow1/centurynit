@@ -34,6 +34,7 @@ export function EnterprisePackages() {
 			price: 0,
 			description: "",
 			services: [],
+			feeKeys: [],
 			exclusions: [...STANDARD_EXCLUSIONS],
 			active: true,
 		});
@@ -194,7 +195,9 @@ function PackageEditor({
 	const [description, setDescription] = useState(pkg.description);
 	const [selectedServices, setSelectedServices] = useState<string[]>(pkg.services);
 	const [selectedFeeKeys, setSelectedFeeKeys] = useState<string[]>(() => {
-		// Derive fee keys from existing services by matching titles
+		if (pkg.feeKeys) return pkg.feeKeys;
+		
+		// Fallback for legacy packages without feeKeys: Derive fee keys from existing services by matching titles
 		const keys: string[] = [];
 		for (const svc of pkg.services) {
 			const match = FEE_DEFINITIONS.find((f) => f.title.toLowerCase() === svc.toLowerCase());
@@ -309,6 +312,7 @@ function PackageEditor({
 			price: Number(price) || 0,
 			description: description.trim(),
 			services: selectedServices.filter(Boolean),
+			feeKeys: selectedFeeKeys,
 			exclusions: selectedExclusions.filter(Boolean),
 		});
 	}

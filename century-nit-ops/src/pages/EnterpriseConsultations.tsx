@@ -33,6 +33,7 @@ export function EnterpriseConsultations() {
 		startConsultationAssessment,
 		commentOnConsultation,
 		requestConsultationDocs,
+		rescheduleConsultation,
 	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -543,7 +544,18 @@ export function EnterpriseConsultations() {
 									}
 									branchLabel={active.branch}
 									currentWhen={active.dateTime}
-									onReschedule={undefined}
+									onReschedule={
+										active.bookingId
+											? (date, time, reason) =>
+													void rescheduleConsultation(
+														selectedConsultation.id,
+														active.bookingId!,
+														date,
+														time,
+														reason,
+													)
+											: undefined
+									}
 								/>
 
 								{detailTab === "profile" && (

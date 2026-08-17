@@ -4,6 +4,7 @@ import {
 	applicationsApi,
 	consultationsApi,
 	staffApi,
+	bookingsApi,
 } from "century-nit-core/api";
 import {
 	APPLICATION_STATUS_TO_OPS,
@@ -26,6 +27,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 	return {
 		id: row.id,
 		ref: row.reference,
+		bookingId: row.bookingId,
 		applicantName: row.applicantName,
 		email: row.email,
 		phone: row.phone ?? "",
@@ -234,6 +236,11 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.comment(id, { kind, text })),
 		requestConsultationDocs: async (id: string, documents: string[]) =>
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
+		rescheduleConsultation: async (id: string, bookingId: string, date: string, time: string, reason: string) => {
+			await bookingsApi.reschedule(bookingId, { date, time, reason });
+			const consultation = await consultationsApi.get(id);
+			return replaceConsultation(consultation);
+		},
 		assignApplication: async (id: string, to: Assignee) =>
 			replaceApplication(await applicationsApi.assign(id, await staffIdByEmail(to.email))),
 		acceptApplication: async (id: string) => replaceApplication(await applicationsApi.accept(id)),

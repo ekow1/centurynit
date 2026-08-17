@@ -437,6 +437,7 @@ function liveConsultation(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockCon
 	return {
 		id: LIVE_CONSULTATION_ID,
 		ref: snap.consultationRef ?? "CNS-LIVE",
+		bookingId: null,
 		applicantName: snap.name,
 		email: snap.email,
 		phone: snap.phone || "-",

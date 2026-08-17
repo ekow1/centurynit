@@ -517,11 +517,13 @@ export function PortalConsultation() {
 		}
 	}
 
-	const hasActiveCase = Boolean(liveConsultation || booking.confirmationId);
-	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
-	const activeOfficer = liveConsultation?.assignedOfficerName ?? booking.consultantName;
-	const activeOutcome = liveConsultation?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
-	const activeNotes = liveConsultation?.assessmentResult?.notes ?? booking.eligibilityNote;
+	const isCancelled = liveConsultation?.status === "CANCELLED";
+	const activeCase = !isCancelled ? liveConsultation : null;
+	const hasActiveCase = Boolean(!isCancelled && (activeCase || booking.confirmationId));
+	const activeRef = activeCase?.reference ?? booking.confirmationId;
+	const activeOfficer = activeCase?.assignedOfficerName ?? booking.consultantName;
+	const activeOutcome = activeCase?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
+	const activeNotes = activeCase?.assessmentResult?.notes ?? booking.eligibilityNote;
 
 	return (
 		<div className="portal-page">

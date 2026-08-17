@@ -1,9 +1,9 @@
 /**
- * Century NIT — Professional Email Design System
+ * Century NIT — Monochrome Email Design System
  *
- * Responsive, bulletproof HTML email templates with clean brand styling:
- * Deep Navy (#0f172a), Century Gold/Amber (#d97706), modern typography,
- * high-contrast buttons, and graceful fallbacks across all email clients.
+ * Responsive HTML email templates matching the web design system:
+ * Pure black/white, sharp edges (no border-radius), serif type,
+ * thick borders, no gradients or shadows.
  */
 
 function escapeHtml(value: string): string {
@@ -15,7 +15,7 @@ function escapeHtml(value: string): string {
 		.replace(/'/g, "&#39;");
 }
 
-/** Base email wrapper layout */
+/** Base email wrapper layout — monochrome, sharp edges */
 function emailLayout({
 	title,
 	preheader,
@@ -35,29 +35,28 @@ function emailLayout({
 	<title>${escapeHtml(title)}</title>
 	<!--[if mso]>
 	<style type="text/css">
-		body, table, td {font-family: Arial, Helvetica, sans-serif !important;}
+		body, table, td {font-family: Georgia, 'Times New Roman', Times, serif !important;}
 	</style>
 	<![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;color:#1e293b;">
-	${preheader ? `<div style="display:none;font-size:1px;color:#f1f5f9;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</div>` : ""}
-	
-	<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:32px 16px;">
+<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;color:#000000;">
+	${preheader ? `<div style="display:none;font-size:1px;color:#f5f5f5;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${escapeHtml(preheader)}</div>` : ""}
+
+	<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f5f5f5;padding:32px 16px;">
 		<tr>
 			<td align="center">
-				<!-- Main Container -->
-				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);border:1px solid #e2e8f0;">
-					
-					<!-- Header Banner -->
+				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border:4px solid #000000;">
+
+					<!-- Header -->
 					<tr>
-						<td style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);padding:28px 36px;text-align:left;border-bottom:3px solid #d97706;">
+						<td style="background-color:#000000;padding:28px 36px;text-align:left;border-bottom:4px solid #000000;">
 							<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
 								<tr>
 									<td>
-										<div style="display:inline-block;padding:4px 10px;background:rgba(217,119,6,0.15);border-radius:6px;border:1px solid rgba(217,119,6,0.3);margin-bottom:8px;">
-											<span style="color:#fbbf24;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Century NIT</span>
+										<div style="display:inline-block;padding:3px 8px;border:1px solid #ffffff;margin-bottom:8px;">
+											<span style="color:#ffffff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">Century NIT</span>
 										</div>
-										<h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;">
+										<h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;font-family:Georgia,'Times New Roman',Times,serif;">
 											${escapeHtml(title)}
 										</h1>
 									</td>
@@ -66,21 +65,21 @@ function emailLayout({
 						</td>
 					</tr>
 
-					<!-- Content Body -->
+					<!-- Content -->
 					<tr>
-						<td style="padding:36px 36px 28px 36px;font-size:15px;line-height:1.65;color:#334155;">
+						<td style="padding:36px 36px 28px 36px;font-size:15px;line-height:1.65;color:#000000;">
 							${bodyHtml}
 						</td>
 					</tr>
 
 					<!-- Footer -->
 					<tr>
-						<td style="background-color:#f8fafc;padding:24px 36px;border-top:1px solid #e2e8f0;text-align:center;font-size:12px;line-height:1.6;color:#64748b;">
-							${footerNote ? `<p style="margin:0 0 8px 0;color:#94a3b8;">${footerNote}</p>` : ""}
-							<p style="margin:0;font-weight:600;color:#475569;">
-								Century NIT Consult &bull; Study Abroad &amp; Immigration Operations
+						<td style="background-color:#f5f5f5;padding:24px 36px;border-top:2px solid #000000;text-align:center;font-size:12px;line-height:1.6;color:#666666;">
+							${footerNote ? `<p style="margin:0 0 8px 0;color:#999999;">${footerNote}</p>` : ""}
+							<p style="margin:0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.5px;">
+								Century NIT Consult
 							</p>
-							<p style="margin:4px 0 0 0;color:#94a3b8;">
+							<p style="margin:4px 0 0 0;color:#999999;">
 								Accra, Ghana &bull; London, UK &bull; support@centurynit.com
 							</p>
 						</td>
@@ -110,56 +109,56 @@ export function renderInvitationEmail(data: {
 	const safeBranch = data.branch ? escapeHtml(data.branch.toUpperCase()) : null;
 
 	const bodyHtml = `
-		<p style="margin:0 0 18px 0;font-size:16px;color:#0f172a;">
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
 			Hello <strong>${safeName}</strong>,
 		</p>
-		
-		<p style="margin:0 0 20px 0;color:#334155;">
+
+		<p style="margin:0 0 20px 0;color:#000000;">
 			<strong>${safeInviter}</strong> has invited you to join the <strong>Century NIT Operations Center</strong> as a staff member.
 		</p>
 
-		<!-- Role & Assignment Badge Card -->
-		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;padding:16px 20px;">
+		<!-- Role & Assignment Card -->
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:2px solid #000000;padding:16px 20px;">
 			<tr>
 				<td>
 					<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
 						<tr>
-							<td style="padding:4px 0;font-size:13px;color:#64748b;width:110px;">Assigned Role:</td>
-							<td style="padding:4px 0;font-size:14px;font-weight:700;color:#0f172a;">${safeRole}</td>
+							<td style="padding:4px 0;font-size:13px;color:#666666;width:110px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Assigned Role</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:700;color:#000000;">${safeRole}</td>
 						</tr>
 						${safeBranch ? `
 						<tr>
-							<td style="padding:4px 0;font-size:13px;color:#64748b;">Branch:</td>
-							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#0f172a;">${safeBranch} Branch</td>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Branch</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${safeBranch} Branch</td>
 						</tr>` : ""}
 						<tr>
-							<td style="padding:4px 0;font-size:13px;color:#64748b;">Link Validity:</td>
-							<td style="padding:4px 0;font-size:13px;color:#d97706;font-weight:600;">${data.expiresDays} days (single use)</td>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Link Validity</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${data.expiresDays} days (single use)</td>
 						</tr>
 					</table>
 				</td>
 			</tr>
 		</table>
 
-		<p style="margin:0 0 24px 0;color:#334155;">
-			Please click the button below to accept your invitation, create your password, and access the platform:
+		<p style="margin:0 0 24px 0;color:#000000;">
+			Click the button below to accept your invitation, create your password, and access the platform.
 		</p>
 
 		<!-- Action Button -->
 		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
 			<tr>
-				<td align="center" style="border-radius:8px;background-color:#0f172a;">
-					<a href="${data.acceptUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border:1px solid #334155;">
-						Accept Invitation &amp; Set Password &rarr;
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.acceptUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Accept Invitation &amp; Set Password
 					</a>
 				</td>
 			</tr>
 		</table>
 
-		<!-- Plaintext link box fallback -->
-		<div style="padding:14px 18px;background-color:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1;font-size:12px;color:#64748b;word-break:break-all;">
-			<p style="margin:0 0 6px 0;font-weight:600;color:#475569;">Button not working? Paste this link into your browser:</p>
-			<a href="${data.acceptUrl}" style="color:#2563eb;text-decoration:underline;">${data.acceptUrl}</a>
+		<!-- Fallback link -->
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Button not working? Paste this link into your browser:</p>
+			<a href="${data.acceptUrl}" style="color:#000000;text-decoration:underline;">${data.acceptUrl}</a>
 		</div>
 	`;
 
@@ -196,27 +195,27 @@ export function renderPasswordResetEmail(data: {
 	const greeting = data.name ? `Hello <strong>${escapeHtml(data.name)}</strong>,` : `Hello,`;
 
 	const bodyHtml = `
-		<p style="margin:0 0 16px 0;font-size:16px;color:#0f172a;">${greeting}</p>
-		<p style="margin:0 0 20px 0;color:#334155;">
+		<p style="margin:0 0 16px 0;font-size:16px;color:#000000;">${greeting}</p>
+		<p style="margin:0 0 20px 0;color:#000000;">
 			We received a request to reset your password for your Century NIT account. Click the button below to choose a new password:
 		</p>
 
 		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
 			<tr>
-				<td align="center" style="border-radius:8px;background-color:#0f172a;">
-					<a href="${data.resetUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;background:#0f172a;">
-						Reset Password &rarr;
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.resetUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Reset Password
 					</a>
 				</td>
 			</tr>
 		</table>
 
-		<div style="padding:14px 18px;background-color:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1;font-size:12px;color:#64748b;word-break:break-all;margin-bottom:16px;">
-			<p style="margin:0 0 6px 0;font-weight:600;color:#475569;">Or copy and paste this link:</p>
-			<a href="${data.resetUrl}" style="color:#2563eb;text-decoration:underline;">${data.resetUrl}</a>
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;margin-bottom:16px;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Or copy and paste this link:</p>
+			<a href="${data.resetUrl}" style="color:#000000;text-decoration:underline;">${data.resetUrl}</a>
 		</div>
 
-		<p style="margin:0;font-size:13px;color:#64748b;">
+		<p style="margin:0;font-size:13px;color:#666666;">
 			If you did not request a password reset, you can safely ignore this email. Your password will remain unchanged.
 		</p>
 	`;
@@ -251,8 +250,8 @@ export function renderOtpEmail(data: {
 	expiresMinutes: number;
 }): { html: string; text: string } {
 	const bodyHtml = `
-		<p style="margin:0 0 16px 0;font-size:16px;color:#0f172a;">Hello,</p>
-		<p style="margin:0 0 20px 0;color:#334155;">
+		<p style="margin:0 0 16px 0;font-size:16px;color:#000000;">Hello,</p>
+		<p style="margin:0 0 20px 0;color:#000000;">
 			Use the verification code below to <strong>${escapeHtml(data.purpose)}</strong> on Century NIT:
 		</p>
 
@@ -260,15 +259,15 @@ export function renderOtpEmail(data: {
 		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 24px 0;">
 			<tr>
 				<td align="center">
-					<div style="display:inline-block;padding:16px 36px;background-color:#f8fafc;border:2px solid #e2e8f0;border-radius:12px;letter-spacing:8px;font-size:32px;font-weight:800;color:#0f172a;font-family:Consolas,Monaco,'Courier New',monospace;">
+					<div style="display:inline-block;padding:16px 36px;background-color:#f5f5f5;border:4px solid #000000;letter-spacing:8px;font-size:32px;font-weight:800;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">
 						${escapeHtml(data.otp)}
 					</div>
 				</td>
 			</tr>
 		</table>
 
-		<p style="margin:0;font-size:13px;color:#64748b;text-align:center;">
-			This code will expire in <strong style="color:#d97706;">${data.expiresMinutes} minutes</strong>. Do not share this code with anyone.
+		<p style="margin:0;font-size:13px;color:#666666;text-align:center;">
+			This code will expire in <strong>${data.expiresMinutes} minutes</strong>. Do not share this code with anyone.
 		</p>
 	`;
 
@@ -301,23 +300,23 @@ export function renderBookingEmail(data: {
 }): { html: string; text: string } {
 	const bodyHtml = `
 		<div style="margin:0 0 20px 0;">
-			${data.lines.map((l) => `<p style="margin:0 0 10px 0;color:#334155;font-size:15px;line-height:1.6;">${l}</p>`).join("")}
+			${data.lines.map((l) => `<p style="margin:0 0 10px 0;color:#000000;font-size:15px;line-height:1.6;">${l}</p>`).join("")}
 		</div>
 
 		${data.meetingUrl ? `
 		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:20px 0 24px 0;">
 			<tr>
-				<td align="center" style="border-radius:8px;background-color:#0f172a;">
-					<a href="${data.meetingUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;background:#0f172a;">
-						Join Consultation Meeting &rarr;
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.meetingUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Join Consultation Meeting
 					</a>
 				</td>
 			</tr>
 		</table>
 
-		<div style="padding:12px 16px;background-color:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1;font-size:12px;color:#64748b;word-break:break-all;">
-			<p style="margin:0 0 4px 0;font-weight:600;color:#475569;">Meeting Link:</p>
-			<a href="${data.meetingUrl}" style="color:#2563eb;text-decoration:underline;">${data.meetingUrl}</a>
+		<div style="padding:12px 16px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 4px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Meeting Link</p>
+			<a href="${data.meetingUrl}" style="color:#000000;text-decoration:underline;">${data.meetingUrl}</a>
 		</div>` : ""}
 	`;
 

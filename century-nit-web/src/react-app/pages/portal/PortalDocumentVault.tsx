@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { REQUIRED_DOCUMENTS } from "century-nit-core";
 import { ApiError, documentsApi } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -73,6 +73,9 @@ export function PortalDocumentVault() {
 	} | null>(null);
 	const fileInput = useRef<HTMLInputElement | null>(null);
 	const pendingTarget = useRef<string | null>(null);
+	const [pickDocId, setPickDocId] = useState<string | null>(null);
+	const pickDragCounter = useRef(0);
+	const [pickDragOver, setPickDragOver] = useState(false);
 
 	const loadLive = useCallback(async () => {
 		setLoadError(null);
@@ -113,7 +116,50 @@ export function PortalDocumentVault() {
 
 	function handleUpload(id: string) {
 		setError(null);
-		pendingTarget.current = id;
+		setPickDocId(id);
+	}
+
+	function closePickModal() {
+		setPickDocId(null);
+		setPickDragOver(false);
+		pickDragCounter.current = 0;
+	}
+
+	function onPickDragEnter(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current += 1;
+		if (pickDragCounter.current === 1) setPickDragOver(true);
+	}
+	function onPickDragLeave(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current -= 1;
+		if (pickDragCounter.current <= 0) {
+			pickDragCounter.current = 0;
+			setPickDragOver(false);
+		}
+	}
+	function onPickDragOver(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+	}
+	function onPickDrop(e: DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current = 0;
+		setPickDragOver(false);
+		const file = e.dataTransfer.files?.[0];
+		if (!file || !pickDocId) return;
+		pendingTarget.current = pickDocId;
+		closePickModal();
+		void onFileChosen(file);
+	}
+
+	function pickBrowse() {
+		if (!pickDocId) return;
+		pendingTarget.current = pickDocId;
+		closePickModal();
 		fileInput.current?.click();
 	}
 
@@ -389,6 +435,61 @@ export function PortalDocumentVault() {
 					</p>
 				</div>
 			) : null}
+
+			{pickDocId ? (() => {
+				const doc = rows.find((r) => r.id === pickDocId);
+				return (
+					<div
+						role="dialog"
+						aria-modal="true"
+						aria-label={`Upload ${doc?.name ?? "document"}`}
+						onDragEnter={onPickDragEnter}
+						onDragLeave={onPickDragLeave}
+						onDragOver={onPickDragOver}
+						onDrop={onPickDrop}
+						style={{
+							position: "fixed",
+							inset: 0,
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							background: "rgba(0,0,0,0.6)",
+							zIndex: 9998,
+							padding: "1rem",
+						}}
+					>
+						<div
+							className="card"
+							style={{
+								width: "100%",
+								maxWidth: "420px",
+								padding: "1.5rem",
+								boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+							}}
+						>
+							<p className="eyebrow" style={{ margin: 0 }}>
+								{doc?.status === "missing" ? "Upload" : "Replace"} document
+							</p>
+							<p style={{ margin: "0.5rem 0 1rem", fontSize: "0.95rem" }}>
+								{doc?.name ?? "Select a file"}
+								{doc?.hint ? <span className="muted" style={{ display: "block", fontSize: "0.85rem", marginTop: "0.15rem" }}>{doc.hint}</span> : null}
+							</p>
+							<div className={`drop-zone${pickDragOver ? " drop-zone--active" : ""}`}>
+								<p className="drop-zone__label">Drop file here</p>
+								<Button size="sm" onClick={pickBrowse}>
+									Browse files
+								</Button>
+								<p className="drop-zone__hint">PDF, JPG, PNG, DOC or DOCX — max 15 MB</p>
+							</div>
+							<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "1rem" }}>
+								<Button variant="ghost" size="sm" onClick={closePickModal}>
+									Cancel
+								</Button>
+							</div>
+						</div>
+					</div>
+				);
+			})() : null}
 
 			<UploadProgressModal
 				open={activeUpload !== null}

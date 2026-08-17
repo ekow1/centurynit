@@ -54,10 +54,7 @@ export function AvatarCropModal({
 		onClose();
 	}
 
-	function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-		const file = e.target.files?.[0];
-		e.target.value = "";
-		if (!file) return;
+	function processFile(file: File) {
 		setError(null);
 
 		if (!(file.type === "image/jpeg" || file.type === "image/png")) {
@@ -78,6 +75,43 @@ export function AvatarCropModal({
 		};
 		reader.onerror = () => setError("Could not read that photo. Please try another.");
 		reader.readAsDataURL(file);
+	}
+
+	function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+		const file = e.target.files?.[0];
+		e.target.value = "";
+		if (file) processFile(file);
+	}
+
+	const pickDragCounter = useRef(0);
+	const [pickDragOver, setPickDragOver] = useState(false);
+
+	function onPickDragEnter(e: React.DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current += 1;
+		if (pickDragCounter.current === 1) setPickDragOver(true);
+	}
+	function onPickDragLeave(e: React.DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current -= 1;
+		if (pickDragCounter.current <= 0) {
+			pickDragCounter.current = 0;
+			setPickDragOver(false);
+		}
+	}
+	function onPickDragOver(e: React.DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+	}
+	function onPickDrop(e: React.DragEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		pickDragCounter.current = 0;
+		setPickDragOver(false);
+		const file = e.dataTransfer.files?.[0];
+		if (file) processFile(file);
 	}
 
 	async function handleSave() {
@@ -207,6 +241,10 @@ export function AvatarCropModal({
 					role="dialog"
 					aria-modal="true"
 					aria-label="Add a profile photo"
+					onDragEnter={onPickDragEnter}
+					onDragLeave={onPickDragLeave}
+					onDragOver={onPickDragOver}
+					onDrop={onPickDrop}
 					style={{
 						position: "fixed",
 						inset: 0,
@@ -225,6 +263,7 @@ export function AvatarCropModal({
 							maxWidth: "420px",
 							padding: "1.5rem",
 							boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+							position: "relative",
 						}}
 					>
 						<p className="eyebrow" style={{ margin: 0 }}>
@@ -233,6 +272,22 @@ export function AvatarCropModal({
 						<p style={{ margin: "0.5rem 0 1rem", fontSize: "0.95rem" }}>
 							Add a photo so your consultant can recognise you at a glance.
 						</p>
+						<div
+							className={`drop-zone${pickDragOver ? " drop-zone--active" : ""}`}
+						>
+							<p className="drop-zone__label">
+								Drop a photo here
+							</p>
+							<Button
+								size="sm"
+								onClick={() => fileRef.current?.click()}
+							>
+								Browse files
+							</Button>
+							<p className="drop-zone__hint">
+								JPEG or PNG, up to 5 MB
+							</p>
+						</div>
 						{error ? (
 							<p role="alert" style={{ margin: "0 0 0.75rem", fontSize: "0.85rem", color: "#e53935" }}>
 								{error}
@@ -241,9 +296,6 @@ export function AvatarCropModal({
 						<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
 							<Button variant="ghost" size="sm" onClick={handleClose}>
 								Cancel
-							</Button>
-							<Button size="sm" onClick={() => fileRef.current?.click()}>
-								Choose photo
 							</Button>
 						</div>
 					</div>

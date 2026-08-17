@@ -1,4 +1,5 @@
 import { formatInZone } from "../lib/time.js";
+import { renderBookingEmail } from "../lib/email-templates.js";
 
 /**
  * Scheduling notifications.
@@ -38,22 +39,8 @@ export type QueuedEmail = {
 	idempotencyKey: string;
 };
 
-function layout(title: string, lines: string[], meetingUrl?: string | null): string {
-	const body = lines.map((l) => `<p style="margin:0 0 8px">${l}</p>`).join("");
-	const cta = meetingUrl
-		? `<p style="margin:24px 0"><a href="${meetingUrl}" style="background:#000;color:#fff;padding:12px 20px;text-decoration:none;display:inline-block">Join the meeting</a></p>
-		   <p style="margin:0;font-size:12px;color:#666">Or paste this link: ${meetingUrl}</p>`
-		: "";
-	return `<div style="font-family:system-ui,sans-serif;max-width:520px;line-height:1.5">
-	<h2 style="margin:0 0 16px">${title}</h2>${body}${cta}
-	<hr style="margin:24px 0;border:none;border-top:1px solid #e5e5e5" />
-	<p style="margin:0;font-size:12px;color:#666">Century NIT Consult</p>
-</div>`;
-}
-
-function plain(title: string, lines: string[], meetingUrl?: string | null): string {
-	const stripped = lines.map((l) => l.replace(/<[^>]+>/g, ""));
-	return [title, "", ...stripped, ...(meetingUrl ? ["", `Join: ${meetingUrl}`] : [])].join("\n");
+function formatEmail(title: string, lines: string[], meetingUrl?: string | null, reference?: string): { html: string; text: string } {
+	return renderBookingEmail({ title, lines, meetingUrl, reference });
 }
 
 /* ── Message builders ────────────────────────────────────────────────────── */
@@ -65,17 +52,18 @@ function plain(title: string, lines: string[], meetingUrl?: string | null): stri
 export function bookingCreatedForClient(ctx: BookingNotificationContext): QueuedEmail {
 	const when = formatInZone(ctx.startsAt, ctx.clientTimezone);
 	const lines = [
-		`Hi ${ctx.clientName},`,
+		`Hi <strong>${ctx.clientName}</strong>,`,
 		`We have received your booking for <strong>${ctx.serviceName}</strong>.`,
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 		"A team member will be assigned to your appointment and you will receive the meeting details once that is done.",
 	];
+	const { html, text } = formatEmail("Your appointment has been received", lines, null, ctx.reference);
 	return {
 		to: ctx.clientEmail,
 		subject: `Booking received · ${ctx.reference}`,
-		html: layout("Your appointment has been received", lines),
-		text: plain("Your appointment has been received", lines),
+		html,
+		text,
 		idempotencyKey: `notify:created:client:${ctx.reference}`,
 	};
 }
@@ -93,11 +81,12 @@ export function bookingCreatedForManagers(
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
+	const { html, text } = formatEmail("New booking awaiting assignment", lines, null, ctx.reference);
 	return {
 		to: managerEmail,
 		subject: `Unassigned booking · ${ctx.reference}`,
-		html: layout("New booking awaiting assignment", lines),
-		text: plain("New booking awaiting assignment", lines),
+		html,
+		text,
 		idempotencyKey: `notify:created:manager:${ctx.reference}:${managerEmail}`,
 	};
 }
@@ -106,18 +95,19 @@ export function bookingCreatedForManagers(
 export function bookingAssignedForClient(ctx: BookingNotificationContext): QueuedEmail {
 	const when = formatInZone(ctx.startsAt, ctx.clientTimezone);
 	const lines = [
-		`Hi ${ctx.clientName},`,
+		`Hi <strong>${ctx.clientName}</strong>,`,
 		`Your appointment is confirmed.`,
 		`<strong>Service:</strong> ${ctx.serviceName}`,
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
+	const { html, text } = formatEmail("Your appointment is confirmed", lines, ctx.meetingUrl, ctx.reference);
 	return {
 		to: ctx.clientEmail,
 		subject: `Appointment confirmed · ${ctx.reference}`,
-		html: layout("Your appointment is confirmed", lines, ctx.meetingUrl),
-		text: plain("Your appointment is confirmed", lines, ctx.meetingUrl),
+		html,
+		text,
 		idempotencyKey: `notify:assigned:client:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
 	};
 }
@@ -125,18 +115,19 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 export function bookingAssignedForEmployee(ctx: BookingNotificationContext): QueuedEmail {
 	const when = formatInZone(ctx.startsAt, ctx.employeeTimezone);
 	const lines = [
-		`Hi ${ctx.employeeName ?? "there"},`,
+		`Hi <strong>${ctx.employeeName ?? "there"}</strong>,`,
 		`You have been assigned a consultation.`,
 		`<strong>Client:</strong> ${ctx.clientName} (${ctx.clientEmail})`,
 		`<strong>Service:</strong> ${ctx.serviceName}`,
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
+	const { html, text } = formatEmail("A consultation has been assigned to you", lines, ctx.meetingUrl, ctx.reference);
 	return {
 		to: ctx.employeeEmail ?? "",
 		subject: `New consultation assigned · ${ctx.reference}`,
-		html: layout("A consultation has been assigned to you", lines, ctx.meetingUrl),
-		text: plain("A consultation has been assigned to you", lines, ctx.meetingUrl),
+		html,
+		text,
 		idempotencyKey: `notify:assigned:employee:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
 	};
 }
@@ -150,18 +141,19 @@ export function bookingRescheduled(
 	const zone = isClient ? ctx.clientTimezone : ctx.employeeTimezone;
 	const when = formatInZone(ctx.startsAt, zone);
 	const lines = [
-		isClient ? `Hi ${ctx.clientName},` : `Hi ${ctx.employeeName ?? "there"},`,
+		isClient ? `Hi <strong>${ctx.clientName}</strong>,` : `Hi <strong>${ctx.employeeName ?? "there"}</strong>,`,
 		`This appointment has been moved.`,
 		`<strong>New time:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		...(ctx.reason ? [`<strong>Reason:</strong> ${ctx.reason}`] : []),
 		`<strong>Reference:</strong> ${ctx.reference}`,
 		"The meeting link below is unchanged.",
 	];
+	const { html, text } = formatEmail("Your appointment has moved", lines, ctx.meetingUrl, ctx.reference);
 	return {
 		to,
 		subject: `Appointment rescheduled · ${ctx.reference}`,
-		html: layout("Your appointment has moved", lines, ctx.meetingUrl),
-		text: plain("Your appointment has moved", lines, ctx.meetingUrl),
+		html,
+		text,
 		// Keyed on the new time, so each distinct reschedule notifies once.
 		idempotencyKey: `notify:rescheduled:${recipient}:${ctx.reference}:${ctx.startsAt.toISOString()}`,
 	};
@@ -175,17 +167,18 @@ export function bookingCancelled(
 	const to = isClient ? ctx.clientEmail : (ctx.employeeEmail ?? "");
 	const zone = isClient ? ctx.clientTimezone : ctx.employeeTimezone;
 	const lines = [
-		isClient ? `Hi ${ctx.clientName},` : `Hi ${ctx.employeeName ?? "there"},`,
+		isClient ? `Hi <strong>${ctx.clientName}</strong>,` : `Hi <strong>${ctx.employeeName ?? "there"}</strong>,`,
 		`The appointment on <strong>${formatInZone(ctx.startsAt, zone)}</strong> has been cancelled.`,
 		...(ctx.reason ? [`<strong>Reason:</strong> ${ctx.reason}`] : []),
 		`<strong>Reference:</strong> ${ctx.reference}`,
 		"The meeting link is no longer valid.",
 	];
+	const { html, text } = formatEmail("Appointment cancelled", lines, null, ctx.reference);
 	return {
 		to,
 		subject: `Appointment cancelled · ${ctx.reference}`,
-		html: layout("Appointment cancelled", lines),
-		text: plain("Appointment cancelled", lines),
+		html,
+		text,
 		idempotencyKey: `notify:cancelled:${recipient}:${ctx.reference}`,
 	};
 }
@@ -198,17 +191,18 @@ export function bookingReminder(
 	const to = isClient ? ctx.clientEmail : (ctx.employeeEmail ?? "");
 	const zone = isClient ? ctx.clientTimezone : ctx.employeeTimezone;
 	const lines = [
-		isClient ? `Hi ${ctx.clientName},` : `Hi ${ctx.employeeName ?? "there"},`,
+		isClient ? `Hi <strong>${ctx.clientName}</strong>,` : `Hi <strong>${ctx.employeeName ?? "there"}</strong>,`,
 		`A reminder about your appointment tomorrow.`,
 		`<strong>When:</strong> ${formatInZone(ctx.startsAt, zone)}`,
 		`<strong>Service:</strong> ${ctx.serviceName}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
+	const { html, text } = formatEmail("Your appointment is tomorrow", lines, ctx.meetingUrl, ctx.reference);
 	return {
 		to,
 		subject: `Reminder · ${ctx.serviceName} tomorrow`,
-		html: layout("Your appointment is tomorrow", lines, ctx.meetingUrl),
-		text: plain("Your appointment is tomorrow", lines, ctx.meetingUrl),
+		html,
+		text,
 		idempotencyKey: `notify:reminder:${recipient}:${ctx.reference}`,
 	};
 }

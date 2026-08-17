@@ -9,6 +9,7 @@ import { isUniqueViolation } from "../lib/db-errors.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "./availability.js";
 import { sendEmail } from "../lib/resend.js";
+import { renderInvitationEmail } from "../lib/email-templates.js";
 
 /**
  * Staff invitations.
@@ -46,14 +47,6 @@ export function canInviteRole(inviterRole: string, target: OpsRole): boolean {
 	return (CAN_INVITE[inviterRole] ?? []).includes(target);
 }
 
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
-}
 
 function hashToken(token: string): string {
 	return createHash("sha256").update(token).digest("hex");
@@ -141,33 +134,20 @@ export async function createInvitation(input: {
 				? "https://console.softclicksolutionsgh.workers.dev"
 				: env.CONSOLE_URL;
 	const acceptUrl = `${consoleBase}/accept-invite?token=${token}`;
-	const safeName = escapeHtml(input.name.trim());
-	const safeInviter = escapeHtml(input.invitedBy.name);
-	const safeRole = escapeHtml(input.role.replace("_", " "));
+	const { html, text } = renderInvitationEmail({
+		name: input.name,
+		inviterName: input.invitedBy.name,
+		role: input.role,
+		branch: input.branch,
+		acceptUrl,
+		expiresDays: INVITE_TTL_DAYS,
+	});
 
 	await sendEmail({
 		to: email,
 		subject: `You have been invited to Century NIT Operations`,
-		text: [
-			`Hello ${input.name},`,
-			``,
-			`${input.invitedBy.name} has invited you to join Century NIT Operations as ${input.role.replace("_", " ")}.`,
-			``,
-			`Set your password and sign in: ${acceptUrl}`,
-			``,
-			`This link expires in ${INVITE_TTL_DAYS} days and can be used once.`,
-		].join("\n"),
-		html: `
-			<div style="font-family:system-ui,sans-serif;max-width:520px;line-height:1.5">
-				<h2 style="margin:0 0 16px">You have been invited to Century NIT Operations</h2>
-				<p>Hello ${safeName},</p>
-				<p><strong>${safeInviter}</strong> has invited you to join as
-				<strong>${safeRole}</strong>.</p>
-				<p style="margin:24px 0">
-					<a href="${acceptUrl}" style="background:#000;color:#fff;padding:12px 20px;text-decoration:none;display:inline-block">Set your password</a>
-				</p>
-				<p style="font-size:12px;color:#666">This link expires in ${INVITE_TTL_DAYS} days and can be used once.</p>
-			</div>`,
+		text,
+		html,
 	});
 
 	return { invitation, acceptUrl };

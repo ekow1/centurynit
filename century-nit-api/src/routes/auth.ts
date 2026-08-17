@@ -12,6 +12,7 @@ import * as schema from "../db/schema.js";
 import { env } from "../env.js";
 import { allowedOrigins } from "../lib/origins.js";
 import { sendEmail } from "../lib/resend.js";
+import { renderPasswordResetEmail, renderOtpEmail } from "../lib/email-templates.js";
 import { getSmsSender } from "../lib/sms.js";
 import { getSetting } from "../services/settings.js";
 import { captureLeadFromUser } from "../services/leads.js";
@@ -138,11 +139,15 @@ function createAuth(config: GoogleSocialConfig) {
 		 */
 		minPasswordLength: 12,
 		sendResetPassword: async ({ user, url }) => {
+			const { html, text } = renderPasswordResetEmail({
+				name: user.name,
+				resetUrl: url,
+			});
 			await sendEmail({
 				to: user.email,
 				subject: "Reset your Century NIT password",
-				text: `Reset your password: ${url}\n\nIf you did not ask for this, ignore this email — your password is unchanged.`,
-				html: `<p>Reset your password:</p><p><a href="${url}">${url}</a></p><p>If you did not ask for this, ignore this email — your password is unchanged.</p>`,
+				text,
+				html,
 			});
 		},
 	},
@@ -179,11 +184,16 @@ function createAuth(config: GoogleSocialConfig) {
 			issuer: "Century NIT",
 			otpOptions: {
 				async sendOTP({ user, otp }) {
+					const { html, text } = renderOtpEmail({
+						otp,
+						purpose: "verify your identity",
+						expiresMinutes: 3,
+					});
 					await sendEmail({
 						to: user.email,
-						subject: "Your Century NIT verification code",
-						text: `Your verification code is ${otp}. It expires in 3 minutes.`,
-						html: `<p>Your verification code is <strong>${otp}</strong>.</p><p>It expires in 3 minutes.</p>`,
+						subject: `Century NIT Verification Code: ${otp}`,
+						text,
+						html,
 					});
 				},
 			},
@@ -229,11 +239,16 @@ function createAuth(config: GoogleSocialConfig) {
 						: type === "email-verification"
 							? "verify your email address"
 							: "sign in";
+				const { html, text } = renderOtpEmail({
+					otp,
+					purpose,
+					expiresMinutes: 10,
+				});
 				await sendEmail({
 					to: email,
-					subject: `Your Century NIT code: ${otp}`,
-					text: `Use ${otp} to ${purpose}. It expires in 10 minutes.`,
-					html: `<p>Use <strong>${otp}</strong> to ${purpose}.</p><p>It expires in 10 minutes.</p>`,
+					subject: `Your Century NIT Code: ${otp}`,
+					text,
+					html,
 				});
 			},
 		}),

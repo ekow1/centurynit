@@ -208,6 +208,7 @@ function PackageEditor({
 	);
 	const [customServiceText, setCustomServiceText] = useState("");
 	const [customExclusionText, setCustomExclusionText] = useState("");
+	const [selectedFeeKey, setSelectedFeeKey] = useState<string>("");
 
 	// All available fee schedule items (built-in + custom stored)
 	const allFeeItems = useMemo<FeeItem[]>(() => {
@@ -250,25 +251,26 @@ function PackageEditor({
 		}
 	}, [computedSumCents, priceLocked]);
 
-	function toggleServiceItem(item: FeeItem) {
-		const exists = selectedServices.some(
-			(s) => s.toLowerCase() === item.title.toLowerCase() || s.startsWith(item.title),
-		);
-		if (exists) {
-			setSelectedServices((prev) =>
-				prev.filter((s) => s.toLowerCase() !== item.title.toLowerCase() && !s.startsWith(item.title)),
-			);
-			setSelectedFeeKeys((prev) => prev.filter((k) => k !== item.key));
-		} else {
+	function addFeeItem() {
+		if (!selectedFeeKey) return;
+		const item = allFeeItems.find((f) => f.key === selectedFeeKey);
+		if (!item) return;
+		if (selectedFeeKeys.includes(item.key)) return;
+		setSelectedFeeKeys((prev) => [...prev, item.key]);
+		if (!selectedServices.some((s) => s.toLowerCase() === item.title.toLowerCase())) {
 			setSelectedServices((prev) => [...prev, item.title]);
-			setSelectedFeeKeys((prev) => [...prev, item.key]);
 		}
+		setSelectedFeeKey("");
 	}
 
-	function isItemIncluded(item: FeeItem): boolean {
-		return selectedServices.some(
-			(s) => s.toLowerCase() === item.title.toLowerCase() || s.startsWith(item.title),
-		);
+	function removeFeeItem(key: string) {
+		const item = allFeeItems.find((f) => f.key === key);
+		setSelectedFeeKeys((prev) => prev.filter((k) => k !== key));
+		if (item) {
+			setSelectedServices((prev) =>
+				prev.filter((s) => s.toLowerCase() !== item.title.toLowerCase()),
+			);
+		}
 	}
 
 	function toggleExclusion(item: string) {
@@ -293,13 +295,6 @@ function PackageEditor({
 			setSelectedExclusions((prev) => [...prev, trimmed]);
 			setCustomExclusionText("");
 		}
-	}
-
-	function removeService(s: string) {
-		setSelectedServices((prev) => prev.filter((x) => x !== s));
-		// Also remove fee key if this service maps to one
-		const match = FEE_DEFINITIONS.find((f) => f.title.toLowerCase() === s.toLowerCase());
-		if (match) setSelectedFeeKeys((prev) => prev.filter((k) => k !== match.key));
 	}
 
 	function removeExclusion(e: string) {
@@ -408,90 +403,112 @@ function PackageEditor({
 					/>
 				</Field>
 
-				{/* ── Fee Schedule Item Selector ── */}
-				<div style={{ border: "1px solid var(--border-color, #e2e8f0)", borderRadius: "8px", overflow: "hidden" }}>
-					<div
-						style={{
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "center",
-							padding: "0.75rem 1rem",
-							background: "var(--surface-muted, #f8fafc)",
-							borderBottom: "1px solid var(--border-color, #e2e8f0)",
-						}}
-					>
-						<span className="eyebrow" style={{ fontWeight: 600, color: "var(--primary, #2563eb)" }}>
-							Select Included Fee Schedule Items
-						</span>
-						<span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-							Selected: <strong>{selectedFeeKeys.length} fee items</strong>
-							{computedSumCents > 0 && ` · $${computedSumDollars}`}
-						</span>
+				{/* ── Official Fee Schedule Items ── */}
+				<div>
+					<p className="eyebrow mb-2" style={{ fontWeight: 600 }}>
+						Official Fee Schedule Items
+					</p>
+					<p className="muted mb-3" style={{ fontSize: "0.8rem" }}>
+						Select items from the master fee schedule to include in this package. Price auto-computes.
+					</p>
+
+					<div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+						<select
+							className="input"
+							style={{ flex: 1 }}
+							value={selectedFeeKey}
+							onChange={(e) => setSelectedFeeKey(e.target.value)}
+						>
+							<option value="">— Select a fee item —</option>
+							{Object.entries(categories).map(([catName, items]) => (
+								<optgroup key={catName} label={catName}>
+									{items.map((item) => (
+										<option
+											key={item.key}
+											value={item.key}
+											disabled={selectedFeeKeys.includes(item.key)}
+										>
+											{item.title} — ${(item.defaultCents / 100).toFixed(2)}
+										</option>
+									))}
+								</optgroup>
+							))}
+						</select>
+						<button
+							type="button"
+							className="btn btn--secondary btn--sm"
+							onClick={addFeeItem}
+							disabled={!selectedFeeKey}
+						>
+							+ Add
+						</button>
 					</div>
 
-					<div style={{ padding: "1rem", maxHeight: "240px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-						{Object.entries(categories).map(([catName, items]) => (
-							<div key={catName}>
-								<p className="eyebrow mb-2" style={{ fontSize: "0.75rem", color: "#475569", fontWeight: 700 }}>
-									{catName}
-								</p>
-								<div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.5rem" }}>
-									{items.map((item) => {
-										const included = isItemIncluded(item);
-										return (
-											<label
-												key={item.key}
-												style={{
-													display: "flex",
-													alignItems: "flex-start",
-													gap: "0.75rem",
-													padding: "0.6rem 0.75rem",
-													borderRadius: "6px",
-													background: included ? "rgba(37, 99, 235, 0.05)" : "transparent",
-													border: `1px solid ${included ? "var(--primary, #2563eb)" : "var(--border-color, #e2e8f0)"}`,
-													cursor: "pointer",
-													transition: "all 120ms ease",
-												}}
-											>
-												<input
-													type="checkbox"
-													checked={included}
-													onChange={() => toggleServiceItem(item)}
-													style={{ marginTop: "0.2rem", cursor: "pointer" }}
-												/>
-												<div style={{ flex: 1, minWidth: 0 }}>
-													<div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
-														<span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{item.title}</span>
-														<span style={{ fontWeight: 600, fontSize: "0.8rem", color: "#2563eb" }}>
-															${(item.defaultCents / 100).toFixed(2)}
-														</span>
-													</div>
-													<p className="muted" style={{ fontSize: "0.75rem", margin: "0.15rem 0 0" }}>
-														{item.description}
-													</p>
-												</div>
-											</label>
-										);
-									})}
-								</div>
-							</div>
-						))}
-					</div>
+					{selectedFeeKeys.length > 0 ? (
+						<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+							<thead>
+								<tr style={{ borderBottom: "2px solid var(--border)" }}>
+									<th style={{ textAlign: "left", padding: "0.5rem 0.75rem", fontWeight: 600 }}>Fee Item</th>
+									<th style={{ textAlign: "right", padding: "0.5rem 0.75rem", fontWeight: 600, width: "100px" }}>Amount</th>
+									<th style={{ width: "40px" }} />
+								</tr>
+							</thead>
+							<tbody>
+								{selectedFeeKeys.map((key) => {
+									const item = allFeeItems.find((f) => f.key === key);
+									if (!item) return null;
+									return (
+										<tr key={key} style={{ borderBottom: "1px solid var(--border-light)" }}>
+											<td style={{ padding: "0.5rem 0.75rem" }}>
+												<span style={{ fontWeight: 600 }}>{item.title}</span>
+												<span className="muted" style={{ display: "block", fontSize: "0.75rem", marginTop: "0.1rem" }}>
+													{item.category}
+												</span>
+											</td>
+											<td style={{ padding: "0.5rem 0.75rem", textAlign: "right", fontWeight: 600, fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
+												${(item.defaultCents / 100).toFixed(2)}
+											</td>
+											<td style={{ padding: "0.5rem 0.25rem", textAlign: "center" }}>
+												<button
+													type="button"
+													onClick={() => removeFeeItem(key)}
+													style={{ border: "none", background: "transparent", cursor: "pointer", color: "#999", fontSize: "1rem", fontWeight: "bold" }}
+													title="Remove"
+												>
+													×
+												</button>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+							<tfoot>
+								<tr style={{ borderTop: "2px solid var(--border)" }}>
+									<td style={{ padding: "0.6rem 0.75rem", fontWeight: 700 }}>Total</td>
+									<td style={{ padding: "0.6rem 0.75rem", textAlign: "right", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "0.95rem" }}>
+										${computedSumDollars}
+									</td>
+									<td />
+								</tr>
+							</tfoot>
+						</table>
+					) : (
+						<p className="muted" style={{ fontSize: "0.8rem", padding: "1rem", textAlign: "center", border: "1px dashed var(--border-light)" }}>
+							No fee items selected yet. Use the dropdown above to add items from the Official Fee Schedule.
+						</p>
+					)}
+				</div>
 
-					{/* Custom service addition */}
-					<div
-						style={{
-							padding: "0.75rem 1rem",
-							background: "var(--surface-muted, #f8fafc)",
-							borderTop: "1px solid var(--border-color, #e2e8f0)",
-							display: "flex",
-							gap: "0.5rem",
-						}}
-					>
+				{/* ── Custom service addition ── */}
+				<div>
+					<p className="eyebrow mb-2" style={{ fontWeight: 600 }}>
+						Custom Included Services
+					</p>
+					<div style={{ display: "flex", gap: "0.5rem" }}>
 						<input
 							className="input"
 							style={{ flex: 1, fontSize: "0.85rem" }}
-							placeholder="Add custom included service item..."
+							placeholder="Add a custom service not in the fee schedule..."
 							value={customServiceText}
 							onChange={(e) => setCustomServiceText(e.target.value)}
 							onKeyDown={(e) => {
@@ -506,49 +523,6 @@ function PackageEditor({
 						</button>
 					</div>
 				</div>
-
-				{/* ── Selected Services Tags ── */}
-				{selectedServices.length > 0 && (
-					<div>
-						<p className="eyebrow mb-1" style={{ fontSize: "0.75rem" }}>
-							Included in Package ({selectedServices.length}):
-						</p>
-						<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-							{selectedServices.map((s) => (
-								<span
-									key={s}
-									style={{
-										display: "inline-flex",
-										alignItems: "center",
-										gap: "0.35rem",
-										padding: "0.25rem 0.6rem",
-										borderRadius: "4px",
-										background: "#eff6ff",
-										color: "#1e40af",
-										fontSize: "0.75rem",
-										fontWeight: 500,
-									}}
-								>
-									✓ {s}
-									<button
-										type="button"
-										onClick={() => removeService(s)}
-										style={{
-											border: "none",
-											background: "transparent",
-											cursor: "pointer",
-											color: "#1e40af",
-											padding: 0,
-											fontWeight: "bold",
-										}}
-									>
-										×
-									</button>
-								</span>
-							))}
-						</div>
-					</div>
-				)}
 
 				{/* ── Separate Official Fee Exclusions ── */}
 				<div

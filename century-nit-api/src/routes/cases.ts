@@ -81,6 +81,7 @@ import {
 	type AuthVariables,
 	type StaffContext,
 } from "../middleware/auth.js";
+import { env } from "../env.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 
@@ -897,7 +898,7 @@ meRouter.openapi(
 		if (serialized.balanceCents <= 0) {
 			throw new HttpError(409, "INVOICE_PAID", "This invoice is already fully paid");
 		}
-		const origin = new URL(c.req.url).origin;
+		const origin = c.req.header("origin") || env.FRONTEND_URL;
 		const checkout = await createPaystackCheckout({
 			email: user.email,
 			amountCents: serialized.balanceCents,

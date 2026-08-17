@@ -60,51 +60,79 @@ export async function initializePayment(
 
 
 	if (input.gateway === "paystack") {
-		if (paystackSecret && !paystackSecret.includes("MOCK")) {
-			// Real Paystack API call
-			const amountInGhsSubunits = Math.round((balanceCents / 100) * GHS_USD_RATE * 100);
-			try {
-				const res = await fetch("https://api.paystack.co/transaction/initialize", {
-					method: "POST",
-					headers: {
-						Authorization: `Bearer ${paystackSecret}`,
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						email: user.email,
-						amount: amountInGhsSubunits,
-						currency: "GHS",
-						reference,
-						callback_url: callback,
-						metadata: {
-							invoiceId: invoice.id,
-							userId: user.id,
-							amountCents: balanceCents,
-						},
-					}),
-				});
-				const data = (await res.json()) as any;
-				if (data.status && data.data?.authorization_url) {
-					return {
-						authorizationUrl: data.data.authorization_url,
-						reference,
-						gateway: "paystack",
-						amountCents: balanceCents,
-						currency: "GHS",
-					};
-				}
-			} catch (err) {
-				console.error("Paystack initialization failed:", err);
-			}
+		if (!paystackSecret) {
+			throw new HttpError(
+				501,
+				"PAYMENT_GATEWAY_UNCONFIGURED",
+				"Paystack payment gateway is not configured on this server.",
+			);
 		}
 
-		// Fallback / Sandbox direct checkout flow
+		// Real Paystack API call
+		const amountInGhsSubunits = Math.round((balanceCents / 100) * GHS_USD_RATE * 100);
+		const res = await fetch("https://api.paystack.co/transaction/initialize", {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${paystackSecret}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({
+				email: user.email,
+				amount: amountInGhsSubunits,
+				currency: "GHS",
+				reference,
+				callback_url: callback,
+				metadata: {
+					invoiceId: invoice.id,
+					userId: user.id,
+					amountCents: balanceCents,
+				},
+			}),
+		});
+		let data = (await res.json()) as {
+			status?: boolean;
+			message?: string;
+			data?: { authorization_url?: string };
+		};
+
+		if (!res.ok || !data.status || !data.data?.authorization_url) {
+			// Retry in USD if GHS is not default on merchant account
+			const retryUsd = await fetch("https://api.paystack.co/transaction/initialize", {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${paystackSecret}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					email: user.email,
+					amount: balanceCents,
+					currency: "USD",
+					reference,
+					callback_url: callback,
+					metadata: {
+						invoiceId: invoice.id,
+						userId: user.id,
+						amountCents: balanceCents,
+					},
+				}),
+			});
+			data = (await retryUsd.json()) as typeof data;
+		}
+
+		if (!data.status || !data.data?.authorization_url) {
+			throw new HttpError(
+				502,
+				"PAYMENT_GATEWAY_ERROR",
+				`Paystack could not initialize payment: ${data.message || "Unknown gateway error"}`,
+			);
+		}
+
 		return {
-			authorizationUrl: `${callback}&gateway=paystack&amount=${balanceCents}&status=success`,
+			authorizationUrl: data.data.authorization_url,
 			reference,
 			gateway: "paystack",
 			amountCents: balanceCents,
-			currency: "USD",
+			currency: "GHS",
 		};
 	}
 
@@ -113,13 +141,11 @@ export async function initializePayment(
 		// Real Stripe Checkout session creation would go here
 	}
 
-	return {
-		authorizationUrl: `${callback}&gateway=stripe&amount=${balanceCents}&status=success`,
-		reference,
-		gateway: "stripe",
-		amountCents: balanceCents,
-		currency: "USD",
-	};
+	throw new HttpError(
+		501,
+		"PAYMENT_GATEWAY_UNCONFIGURED",
+		"Selected payment gateway is currently unavailable.",
+	);
 }
 
 export async function verifyAndSettlePayment(
@@ -146,6 +172,34 @@ export async function verifyAndSettlePayment(
 			invoiceId: tx.invoiceId,
 			paidAt: tx.paidAt?.toISOString(),
 		};
+	}
+
+	if (gateway === "paystack") {
+		const paystackSecret = await getSetting("PAYSTACK_SECRET_KEY");
+		if (!paystackSecret) {
+			throw new HttpError(501, "PAYMENT_GATEWAY_UNCONFIGURED", "Paystack secret key is not set.");
+		}
+		const verifyRes = await fetch(
+			`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+			{
+				headers: { Authorization: `Bearer ${paystackSecret}` },
+			},
+		);
+		const verifyData = (await verifyRes.json()) as {
+			status?: boolean;
+			data?: {
+				status?: string;
+				amount?: number;
+				currency?: string;
+			};
+		};
+		if (!verifyRes.ok || !verifyData.status || verifyData.data?.status !== "success") {
+			throw new HttpError(
+				402,
+				"PAYMENT_UNVERIFIED",
+				`Paystack payment status: ${verifyData.data?.status || "unverified"}.`,
+			);
+		}
 	}
 
 	// Mark transaction successful

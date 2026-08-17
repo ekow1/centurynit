@@ -37,7 +37,7 @@ import {
 	universitiesForDestination,
 	branches,
 } from "century-nit-core";
-import { meApi, bookingsApi, invoicesApi, schoolsApi, paymentsApi, ApiError } from "century-nit-core/api";
+import { meApi, bookingsApi, invoicesApi, schoolsApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 
@@ -1091,7 +1091,6 @@ export function PortalApplicationHub() {
 function ApplicationHubInner() {
 	const {
 		application,
-		payApplicationInvoice,
 		schoolApplications,
 		addSchoolApplication,
 		removeSchoolApplication,
@@ -1196,31 +1195,13 @@ function ApplicationHubInner() {
 				);
 				return;
 			}
-			try {
-				// Real Paystack checkout via paymentsApi
-				const checkout = await paymentsApi.initialize({
-					invoiceId: backend.id,
-					gateway: "paystack",
-				});
-				if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
-					window.location.href = checkout.authorizationUrl;
-					return;
-				}
-			} catch (err) {
-				// Fallback to server-side record path if payment gateway offline
-				if (!(err instanceof ApiError && err.code === "PAYMENT_GATEWAY_UNCONFIGURED")) {
-					console.warn("Gateway init fallback:", err);
-				}
+			// Real Paystack hosted checkout session
+			const checkout = await meApi.paystackCheckout(backend.id);
+			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
+				window.location.href = checkout.authorizationUrl;
+				return;
 			}
-			await meApi.payInvoice(backend.id, {
-				amountCents: backend.balanceCents,
-				method: "card",
-				gateway: "manual",
-				reference: `PAY-${Date.now()}`,
-			});
-			payApplicationInvoice();
-			fetchInvoice();
-			toast.success("Payment recorded. Tracking is now unlocked.");
+			toast.error("Could not initialize Paystack checkout.");
 		} catch (err) {
 			toast.error(
 				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
@@ -1911,7 +1892,7 @@ export function PortalVisa() {
 }
 
 function VisaHubInner() {
-	const { application, payVisaInvoice, schoolApplications } = useAppState();
+	const { application, schoolApplications } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.status === "accepted" || s.status === "offer");
@@ -1933,25 +1914,13 @@ function VisaHubInner() {
 				);
 				return;
 			}
-			try {
-				// Real Paystack checkout — the page redirects to the hosted page.
-				const checkout = await meApi.paystackCheckout(backend.id);
+			// Real Paystack checkout — redirect to hosted checkout
+			const checkout = await meApi.paystackCheckout(backend.id);
+			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
 				window.location.href = checkout.authorizationUrl;
 				return;
-			} catch (err) {
-				// No gateway configured → fall back to the server-side record path.
-				if (!(err instanceof ApiError && err.code === "PAYMENT_GATEWAY_UNCONFIGURED")) {
-					throw err;
-				}
 			}
-			await meApi.payInvoice(backend.id, {
-				amountCents: backend.balanceCents,
-				method: "card",
-				gateway: "manual",
-				reference: `PAY-${Date.now()}`,
-			});
-			payVisaInvoice();
-			toast.success("Payment recorded. The visa case will be opened.");
+			toast.error("Could not initialize Paystack checkout.");
 		} catch (err) {
 			toast.error(
 				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",

@@ -55,12 +55,41 @@ export async function createPaystackCheckout(input: {
 			metadata: { invoiceId: input.invoiceId },
 		}),
 	});
-	const body = (await response.json()) as {
+	let body = (await response.json()) as {
 		status?: boolean;
 		message?: string;
 		data?: { authorization_url?: string };
 	};
+
+	// If the merchant integration only accepts GHS, retry in GHS subunits
 	if (!response.ok || !body.status || !body.data?.authorization_url) {
+		if (
+			body.message?.toLowerCase().includes("currency") ||
+			body.message?.toLowerCase().includes("usd") ||
+			!response.ok
+		) {
+			const GHS_USD_RATE = 15.0;
+			const amountInPesewas = Math.round((input.amountCents / 100) * GHS_USD_RATE * 100);
+			const retryRes = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${secretKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					email: input.email,
+					amount: amountInPesewas,
+					currency: "GHS",
+					reference,
+					callback_url: input.callbackUrl,
+					metadata: { invoiceId: input.invoiceId, amountCents: input.amountCents },
+				}),
+			});
+			body = (await retryRes.json()) as typeof body;
+		}
+	}
+
+	if (!body.status || !body.data?.authorization_url) {
 		throw new HttpError(
 			502,
 			"PAYMENT_GATEWAY_ERROR",

@@ -133,34 +133,83 @@ const json = (body: unknown) => ({ body: JSON.stringify(body) });
  * entire authorisation, so no session cookie is sent, and the response is not
  * our JSON error envelope.
  */
-function putFileWithProgress(
+async function putFileWithProgress(
 	url: string,
 	file: File,
 	headers: Record<string, string>,
 	onProgress?: (percent: number) => void,
 	signal?: AbortSignal,
+	maxRetries = 3,
 ): Promise<void> {
-	return new Promise((resolve, reject) => {
-		const xhr = new XMLHttpRequest();
-		xhr.open("PUT", url);
-		for (const [key, value] of Object.entries(headers)) {
-			xhr.setRequestHeader(key, value);
+	let attempt = 0;
+	while (attempt < maxRetries) {
+		attempt++;
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const xhr = new XMLHttpRequest();
+				xhr.open("PUT", url);
+
+				const isSupabaseSign = url.includes("/object/upload/sign/");
+				let body: BodyInit = file;
+
+				if (isSupabaseSign) {
+					const formData = new FormData();
+					formData.append("cacheControl", "3600");
+					formData.append("", file);
+					body = formData;
+
+					for (const [key, value] of Object.entries(headers)) {
+						if (key.toLowerCase() !== "content-type") {
+							xhr.setRequestHeader(key, value);
+						}
+					}
+				} else {
+					for (const [key, value] of Object.entries(headers)) {
+						xhr.setRequestHeader(key, value);
+					}
+				}
+
+				xhr.upload.onprogress = (e) => {
+					if (e.lengthComputable && onProgress) {
+						onProgress(Math.round((e.loaded / e.total) * 100));
+					}
+				};
+
+				xhr.onload = () => {
+					if (xhr.status >= 200 && xhr.status < 300) {
+						resolve();
+					} else {
+						let detail = "";
+						try {
+							const json = JSON.parse(xhr.responseText);
+							detail = json.message || json.error || xhr.responseText;
+						} catch {
+							detail = xhr.responseText || xhr.statusText;
+						}
+						reject(
+							new ApiError(
+								xhr.status,
+								"UPLOAD_FAILED",
+								`Upload failed (${xhr.status})${detail ? `: ${detail}` : ""}`,
+							),
+						);
+					}
+				};
+
+				xhr.onerror = () =>
+					reject(new ApiError(0, "UPLOAD_FAILED", "Upload failed. Check your connection."));
+				xhr.onabort = () => reject(new ApiError(0, "UPLOAD_ABORTED", "Upload cancelled"));
+
+				signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+				xhr.send(body);
+			});
+			return;
+		} catch (err) {
+			if (signal?.aborted || attempt >= maxRetries) throw err;
+			// Exponential backoff before retry
+			await new Promise((r) => setTimeout(r, Math.min(1000 * Math.pow(2, attempt - 1), 4000)));
 		}
-		xhr.upload.onprogress = (e) => {
-			if (e.lengthComputable && onProgress) {
-				onProgress(Math.round((e.loaded / e.total) * 100));
-			}
-		};
-		xhr.onload = () => {
-			if (xhr.status >= 200 && xhr.status < 300) resolve();
-			else reject(new ApiError(xhr.status, "UPLOAD_FAILED", `Upload failed (${xhr.status})`));
-		};
-		xhr.onerror = () =>
-			reject(new ApiError(0, "UPLOAD_FAILED", "Upload failed. Check your connection."));
-		xhr.onabort = () => reject(new ApiError(0, "UPLOAD_ABORTED", "Upload cancelled"));
-		signal?.addEventListener("abort", () => xhr.abort(), { once: true });
-		xhr.send(file);
-	});
+	}
 }
 
 /* ── Bookings ────────────────────────────────────────────────────────────── */

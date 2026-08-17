@@ -1,8 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
-import { LEAD_STAGE_LABELS } from "century-nit-core";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { money } from "./currency";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -53,7 +52,7 @@ const TYPE_META: Record<NotificationItem["type"], { label: string; color: string
 
 export function EnterpriseInbox() {
 	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
-	const { consultations, applications, applicants, leads, activityLog, liveCase } = useOpsState();
+	const { consultations, applications, applicants } = useCasesApi();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [filter, setFilter] = useState<"all" | "unread">("all");
 
@@ -74,26 +73,14 @@ export function EnterpriseInbox() {
 		return () => clearInterval(timer);
 	}, [loadApiLeads]);
 
-	const me = opsUser?.name ?? "";
+	const meEmail = opsUser?.email ?? "";
 
 	const notifications = useMemo<NotificationItem[]>(() => {
 		const items: NotificationItem[] = [];
 
-		if (liveCase?.present && liveCase.email) {
-			items.push({
-				id: "live-portal-session-notif",
-				type: "lead",
-				title: `Active client portal session: ${liveCase.name}`,
-				detail: `Signed in as ${liveCase.email} · Current stage: ${liveCase.stageLabel || "New Client"}`,
-				time: relativeTime(liveCase.updatedAt || new Date().toISOString()),
-				link: "/leads",
-				unread: true,
-			});
-		}
-
 		for (const c of consultations) {
-			const isMine = c.assignedOfficer === me;
-			if (c.status === "Under Review" && !c.assignedOfficer) {
+			const isMine = c.assignedOfficerEmail === meEmail;
+			if (c.status === "Under Review" && !c.assignedOfficerEmail) {
 				items.push({
 					id: `unassigned-c-${c.id}`,
 					type: "consultation",
@@ -129,7 +116,7 @@ export function EnterpriseInbox() {
 		}
 
 		for (const a of applications) {
-			const isMine = a.assignedStaff === me;
+			const isMine = a.assignedStaffEmail === meEmail;
 			if (isMine && a.status === "Under Review") {
 				items.push({
 					id: `app-review-${a.id}`,
@@ -155,7 +142,7 @@ export function EnterpriseInbox() {
 			}
 		}
 
-		const scopedApplicants = scopeRecords(applicants, (a) => a.assignedOfficer === me);
+		const scopedApplicants = scopeRecords(applicants, (a) => a.assignedOfficerEmail === meEmail);
 		for (const a of scopedApplicants) {
 			const pending = a.documents.filter((d) => d.status === "Pending Review");
 			for (const d of pending) {
@@ -183,7 +170,6 @@ export function EnterpriseInbox() {
 			}
 		}
 
-		// Real-time captured CRM leads from PostgreSQL database
 		for (const al of apiLeads) {
 			if (al.stage === "New Lead" || al.stage === "Contacted") {
 				items.push({
@@ -198,38 +184,11 @@ export function EnterpriseInbox() {
 			}
 		}
 
-		const scopedLeads = scopeRecords(leads, (l) => l.assignedTo === me);
-		for (const l of scopedLeads) {
-			if (l.stage === "new" || l.stage === "contacted") {
-				items.push({
-					id: `lead-${l.id}`,
-					type: "lead",
-					title: `Lead needs follow-up: ${l.name}`,
-					detail: `${LEAD_STAGE_LABELS[l.stage]} · ${l.country} · ${l.degreeLevel}`,
-					time: l.lastContactAt,
-					link: "/leads",
-					unread: l.stage === "new",
-				});
-			}
-		}
-
-		for (const e of activityLog.slice(0, 10)) {
-			items.push({
-				id: `log-${e.id}`,
-				type: "system",
-				title: `${e.action} - ${e.actor}`,
-				detail: e.detail,
-				time: relativeTime(e.at),
-				link: "/workflow",
-				unread: false,
-			});
-		}
-
 		return items.sort((a, b) => {
 			if (a.unread !== b.unread) return a.unread ? -1 : 1;
 			return 0;
 		});
-	}, [consultations, applications, applicants, leads, apiLeads, activityLog, me, opsRole, scopeRecords, hasPermission]);
+	}, [consultations, applications, applicants, apiLeads, meEmail, opsRole, scopeRecords, hasPermission]);
 
 	const filtered = filter === "unread" ? notifications.filter((n) => n.unread) : notifications;
 	const unreadCount = notifications.filter((n) => n.unread).length;

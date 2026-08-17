@@ -20,6 +20,8 @@ import {
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
+import * as mail from "./notifications.js";
+import { queueEmails } from "../worker/queues.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -517,6 +519,26 @@ export async function assignConsultation(input: {
 		} catch (err) {
 			if (err instanceof HttpError && err.code === "EMPLOYEE_UNAVAILABLE") throw err;
 			// Booking already assigned to this person, or calendar retry — the case is assigned.
+		}
+	} else {
+		// No linked booking — send a standalone assignment notification to the consultant.
+		try {
+			const applicant = await db
+				.select()
+				.from(applicants)
+				.where(eq(applicants.id, row.applicantId))
+				.limit(1)
+				.then((r) => r[0]);
+			const email = mail.consultationAssigned({
+				reference: updated.reference,
+				clientName: applicant?.name ?? "Client",
+				clientEmail: applicant?.email ?? "",
+				employeeName: employee.name,
+				employeeEmail: employee.email,
+			});
+			await queueEmails([email]);
+		} catch {
+			// Notification failure must not block the assignment.
 		}
 	}
 

@@ -132,6 +132,31 @@ export function bookingAssignedForEmployee(ctx: BookingNotificationContext): Que
 	};
 }
 
+/** Consultation assigned without a booking (no scheduled time yet). */
+export function consultationAssigned(ctx: {
+	reference: string;
+	clientName: string;
+	clientEmail: string;
+	employeeName: string;
+	employeeEmail: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.employeeName}</strong>,`,
+		`A consultation has been assigned to you.`,
+		`<strong>Client:</strong> ${ctx.clientName} (${ctx.clientEmail})`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		`Log in to the Operations Center to review the case and schedule a slot.`,
+	];
+	const { html, text } = formatEmail("A consultation has been assigned to you", lines, null, ctx.reference);
+	return {
+		to: ctx.employeeEmail,
+		subject: `New consultation assigned · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:consultation:assigned:${ctx.reference}:${ctx.employeeEmail}`,
+	};
+}
+
 export function bookingRescheduled(
 	ctx: BookingNotificationContext,
 	recipient: "client" | "employee",

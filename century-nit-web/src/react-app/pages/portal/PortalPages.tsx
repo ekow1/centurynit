@@ -40,8 +40,6 @@ import {
 	universities,
 	universitiesForDestination,
 	CONSULTATION_DURATIONS,
-	bookedTimesOn,
-	upcomingDays,
 } from "century-nit-core";
 import { meApi, bookingsApi, invoicesApi, schoolsApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation } from "century-nit-shared";
@@ -321,16 +319,6 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 	return out;
 }
 
-function browserTimeZone(): string {
-	try {
-		return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Accra";
-	} catch {
-		return "Africa/Accra";
-	}
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-// @ts-ignore
 function SlotPickerLive({
 	branchId,
 	date,
@@ -374,62 +362,59 @@ function SlotPickerLive({
 
 	return (
 		<div>
-			<div className="field mb-3">
-				<label htmlFor="consult-date">Select Appointment Date</label>
-				<select
-					id="consult-date"
-					className="select select--full-border"
-					value={date}
-					onChange={(e) => {
-						onDateChange(e.target.value);
-						onTimeChange("");
-					}}
-				>
-					{dates.map((d) => (
-						<option key={d.value} value={d.value}>
-							{d.label}
-						</option>
-					))}
-				</select>
+			<p className="eyebrow">Date &amp; time</p>
+
+			<p className="resched__label mono mt-3">Date</p>
+			<div className="resched__days">
+				{dates.map((d) => (
+					<button
+						key={d.value}
+						type="button"
+						onClick={() => {
+							onDateChange(d.value);
+							onTimeChange("");
+						}}
+						className={`resched__day${date === d.value ? " resched__day--on" : ""}`}
+					>
+						<span className="resched__day-wd">{d.label.split(",")[0]}</span>
+						<span className="resched__day-num">{d.label.split(",")[1]?.trim()}</span>
+					</button>
+				))}
 			</div>
 
-			<div className="field">
-				<label>Available Times ({browserTimeZone()})</label>
-				{error && <p className="appt-error mt-1" style={{ color: "#dc2626", fontSize: "0.85rem" }}>{error}</p>}
-				{!slots && !error && <p className="muted mt-1" style={{ fontSize: "0.85rem" }}>Checking live availability…</p>}
-				{slots && (
-					<div
-						style={{
-							display: "grid",
-							gridTemplateColumns: "repeat(auto-fill, minmax(85px, 1fr))",
-							gap: "0.5rem",
-							marginTop: "0.5rem",
-						}}
-					>
-						{slots.map((s) => (
-							<button
-								key={s.time}
-								type="button"
-								className={`btn btn--sm ${time === s.time ? "btn--primary" : "btn--ghost"}`}
-								disabled={!s.available}
-								style={{
-									border: "1px solid var(--border)",
-									opacity: s.available ? 1 : 0.4,
-									cursor: s.available ? "pointer" : "not-allowed",
-								}}
-								onClick={() => onTimeChange(s.time)}
-							>
-								{s.time}
-							</button>
-						))}
-					</div>
-				)}
-				{slots?.every((s) => !s.available) && (
-					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
-						No open slots on this date. Please choose another date above.
-					</p>
-				)}
-			</div>
+			<p className="resched__label mono mt-3">
+				Time{" "}
+				<span className="muted">
+					· {CONSULTATION_DURATIONS.find((d) => d.id === String(45))?.label ?? "45 min"} · branch local
+				</span>
+			</p>
+			{error && <p style={{ color: "#dc2626", fontSize: "0.85rem" }}>{error}</p>}
+			{!slots && !error && date && <p className="muted" style={{ fontSize: "0.85rem" }}>Checking live availability…</p>}
+			{date && slots && (
+				<div className="resched__slots">
+					{slots.map((s) => (
+						<button
+							key={s.time}
+							type="button"
+							disabled={!s.available}
+							onClick={() => onTimeChange(s.time)}
+							className={`resched__slot${time === s.time ? " resched__slot--on" : ""}`}
+							title={!s.available ? "Already booked at this branch" : undefined}
+						>
+							{s.time}
+							{!s.available ? <span className="resched__slot-tag">booked</span> : null}
+						</button>
+					))}
+				</div>
+			)}
+			{!date && (
+				<p className="resched__hint muted">Select a date to see open slots.</p>
+			)}
+			{slots?.every((s) => !s.available) && (
+				<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+					No open slots on this date. Please choose another date above.
+				</p>
+			)}
 		</div>
 	);
 }
@@ -1286,102 +1271,6 @@ function ConsultationReview({
 	);
 }
 
-/**
- * Date and slot picker for the applicant's consultation booking.
- *
- * Replaces a bare `<input type="date">` plus six hard-coded times that checked
- * nothing: an applicant could book a date in the past, a day the branch is
- * closed, or a slot another applicant already had. It now applies the same
- * rules the Operations Center's reschedule panel does, from the same module —
- * when the two drifted, one side offered slots the other considered taken.
- *
- * Slot times come from the chosen duration, so a 60-minute consultation no
- * longer offers half-hour starts.
- */
-function SlotPicker({
-	branchId,
-	duration,
-	date,
-	time,
-	onPick,
-}: {
-	branchId: string;
-	duration: string;
-	date: string;
-	time: string;
-	onPick: (date: string, time: string) => void;
-}) {
-	const days = useMemo(() => upcomingDays(branchId || null), [branchId]);
-	const slots =
-		(CONSULTATION_DURATIONS.find((d) => d.id === duration) ?? CONSULTATION_DURATIONS[1])
-			.slots as readonly string[];
-
-	// Recomputed per render rather than memoised: occupancy can change in the
-	// other tab (an ops user taking a slot) and this view must not go stale.
-	const taken = branchId && date ? bookedTimesOn(branchId, date) : new Set<string>();
-
-	if (!branchId) {
-		return (
-			<>
-				<p className="eyebrow">Date &amp; time</p>
-				<p className="muted mt-3">Choose a branch first — opening days differ by location.</p>
-			</>
-		);
-	}
-
-	return (
-		<>
-			<p className="eyebrow">Date &amp; time</p>
-
-			<p className="resched__label mono mt-3">Date</p>
-			<div className="resched__days">
-				{days.map((d) => (
-					<button
-						key={d.date}
-						type="button"
-						disabled={d.disabled}
-						onClick={() => onPick(d.date, "")}
-						className={`resched__day${date === d.date ? " resched__day--on" : ""}`}
-						title={d.disabled ? "Branch closed" : undefined}
-					>
-						<span className="resched__day-wd">{d.weekday}</span>
-						<span className="resched__day-num">{d.label}</span>
-					</button>
-				))}
-			</div>
-
-			<p className="resched__label mono mt-3">
-				Time{" "}
-				<span className="muted">
-					· {CONSULTATION_DURATIONS.find((d) => d.id === duration)?.label ?? "45 min"} · branch local
-				</span>
-			</p>
-			{date ? (
-				<div className="resched__slots">
-					{slots.map((t) => {
-						const isTaken = taken.has(t);
-						return (
-							<button
-								key={t}
-								type="button"
-								disabled={isTaken}
-								onClick={() => onPick(date, t)}
-								className={`resched__slot${time === t ? " resched__slot--on" : ""}`}
-								title={isTaken ? "Already booked at this branch" : undefined}
-							>
-								{t}
-								{isTaken ? <span className="resched__slot-tag">booked</span> : null}
-							</button>
-						);
-					})}
-				</div>
-			) : (
-				<p className="resched__hint muted">Select a date to see open slots.</p>
-			)}
-		</>
-	);
-}
-
 export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () => Promise<void> }) {
 	const {
 		booking,
@@ -1420,14 +1309,29 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 				notes: "Preferred: " + booking.assessment.preferredCountries + ", " + booking.assessment.preferredLevel,
 			});
 
-			await meApi.updateProfile({
+		await meApi.updateProfile({
+				name: [booking.assessment.firstName, booking.assessment.middleName, booking.assessment.lastName].filter(Boolean).join(" "),
+				phone: booking.assessment.phone,
 				targetCountry: booking.assessment.preferredCountries,
 				profile: {
+					nationality: booking.assessment.nationality,
+					dob: booking.assessment.dateOfBirth,
+					passportNumber: booking.assessment.passportNumber,
+					passportExpiry: booking.assessment.passportExpiry,
+					previousRefusals: "",
 					degree: booking.assessment.highestEducation,
 					institution: booking.assessment.institution,
-					degreeLevel: booking.assessment.preferredLevel,
-					budget: booking.assessment.budgetRange,
+					gpa: booking.assessment.gpa,
+					gradYear: booking.assessment.graduationYear,
+					currentRole: booking.assessment.jobTitle,
+					company: booking.assessment.employer,
+					experienceYears: booking.assessment.yearsExperience,
 					fundingSource: booking.assessment.fundingSource,
+					budget: booking.assessment.budgetRange,
+					degreeLevel: booking.assessment.preferredLevel,
+					intake: booking.assessment.intakePreference,
+					major: booking.assessment.preferredField,
+					referralSource: "",
 				},
 			});
 
@@ -1573,12 +1477,13 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 					</>
 				)}
 				{tab === 3 && (
-					<SlotPicker
+					<SlotPickerLive
 						branchId={booking.branchId}
-						duration={booking.duration}
 						date={booking.date}
+						onDateChange={(d) => updateBooking({ date: d })}
 						time={booking.time}
-						onPick={(date, time) => updateBooking({ date, time })}
+						onTimeChange={(t) => updateBooking({ time: t })}
+						durationMinutes={45}
 					/>
 				)}
 				{tab === 4 && (
@@ -1594,117 +1499,46 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 						<p className="display mt-2" style={{ fontSize: "2rem" }}>
 							{formatDualCurrency(75)}
 						</p>
-						<p className="muted mt-1">Mock gateway - choose a payment method to confirm booking.</p>
+						<p className="muted mt-1">Confirm your booking details below. Payment will be collected at the branch.</p>
 
 						{payState === "paid" && booking.confirmationId ? (
 							<div className="card card--pad mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
-								<p className="eyebrow">Payment received</p>
+								<p className="eyebrow">Booking confirmed</p>
 								<p className="mono mt-2">Ref: {booking.confirmationId}</p>
 								<p className="mt-2" style={{ opacity: 0.85 }}>
-									Booking is now awaiting confirmation from the branch.
+									Your consultation has been booked. A branch coordinator will review and assign your consultant shortly.
 								</p>
 							</div>
 						) : null}
 
 						{payState === "method" ? (
 							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
-								<p className="eyebrow mb-2">Select payment method</p>
-								<div className="card-grid card-grid--2 mt-2">
-									<button
-										type="button"
-										className="card card--pad card--selectable"
-										onClick={() => setPayState("card")}
-									>
-										<span className="display" style={{ fontSize: "1.2rem" }}>Card</span>
-										<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
-											Visa / Mastercard (mock Paystack)
-										</p>
-									</button>
-									<button
-										type="button"
-										className="card card--pad card--selectable"
-										onClick={() => setPayState("momo")}
-									>
-										<span className="display" style={{ fontSize: "1.2rem" }}>MTN MoMo</span>
-										<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
-											Mobile money (mock)
-										</p>
-									</button>
-								</div>
-							</div>
-						) : null}
-
-						{payState === "card" ? (
-							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-									<p className="eyebrow mb-2">Pay with card (mock)</p>
-									<button
-										type="button"
-										className="btn btn--ghost btn--sm"
-										onClick={() => setPayState("method")}
-									>
-										Change
-									</button>
-								</div>
-								<div className="form-grid form-grid--2">
-									<div className="field">
-										<label htmlFor="card-number">Card number</label>
-										<input id="card-number" className="input input--full-border" value="4242 4242 4242 4242" readOnly />
+								<p className="eyebrow mb-2">Booking summary</p>
+								<div style={{ display: "grid", gap: "0.5rem", fontSize: "var(--text-sm)" }}>
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span className="muted">Branch</span>
+										<span>{booking.branchId || "—"}</span>
 									</div>
-									<div className="field">
-										<label htmlFor="card-name">Cardholder</label>
-										<input id="card-name" className="input input--full-border" value="Alex Rivera" readOnly />
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span className="muted">Date</span>
+										<span>{booking.date || "—"}</span>
 									</div>
-									<div className="field">
-										<label htmlFor="card-expiry">Expiry</label>
-										<input id="card-expiry" className="input input--full-border" value="12/30" readOnly />
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span className="muted">Time</span>
+										<span>{booking.time || "—"}</span>
 									</div>
-									<div className="field">
-										<label htmlFor="card-cvv">CVV</label>
-										<input id="card-cvv" className="input input--full-border" value="123" readOnly />
+									<div style={{ display: "flex", justifyContent: "space-between" }}>
+										<span className="muted">Type</span>
+										<span>{booking.consultationType === "online" ? "Online" : "In-person"}</span>
+									</div>
+									<div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-light)", paddingTop: "0.5rem", marginTop: "0.25rem" }}>
+										<span className="muted">Fee</span>
+										<span style={{ fontWeight: 600 }}>{formatDualCurrency(75)}</span>
 									</div>
 								</div>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
-										Pay {formatDualCurrency(75)}
-									</Button>
-								</div>
-							</div>
-						) : null}
-
-						{payState === "momo" ? (
-							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-									<p className="eyebrow mb-2">Pay with MTN MoMo (mock)</p>
-									<button
-										type="button"
-										className="btn btn--ghost btn--sm"
-										onClick={() => setPayState("method")}
-									>
-										Change
-									</button>
-								</div>
-								<div className="form-grid form-grid--2">
-									<div className="field">
-										<label htmlFor="momo-number">MoMo number</label>
-										<input id="momo-number" className="input input--full-border" value="024 123 4567" readOnly />
-									</div>
-									<div className="field">
-										<label htmlFor="momo-name">Account name</label>
-										<input id="momo-name" className="input input--full-border" value="Alex Rivera" readOnly />
-									</div>
-									<div className="field">
-										<label htmlFor="momo-provider">Provider</label>
-										<input id="momo-provider" className="input input--full-border" value="MTN Mobile Money" readOnly />
-									</div>
-									<div className="field">
-										<label htmlFor="momo-confirm">Confirm</label>
-										<input id="momo-confirm" className="input input--full-border" value="PIN: 0000" readOnly />
-									</div>
-								</div>
-								<div className="row mt-4">
-									<Button type="button" onClick={startPayment} arrow>
-										Pay {formatDualCurrency(75)}
+										Confirm Booking — {formatDualCurrency(75)}
 									</Button>
 								</div>
 							</div>
@@ -1712,9 +1546,9 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 
 						{payState === "processing" ? (
 							<div className="card card--pad mt-3" style={{ textAlign: "center", border: "1px solid var(--border-light)" }}>
-								<p className="eyebrow">Processing payment…</p>
+								<p className="eyebrow">Creating your booking…</p>
 								<p className="mono mt-2" style={{ fontSize: "0.85rem" }}>
-									Verifying payment with mock gateway
+									Submitting to server
 								</p>
 								<div
 									style={{
@@ -1723,7 +1557,6 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 										background: "var(--border-light)",
 										marginTop: "1rem",
 										overflow: "hidden",
-										borderRadius: "2px",
 									}}
 								>
 									<div
@@ -1740,9 +1573,9 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 
 						{payState === "success" ? (
 							<div className="card card--pad mt-3" style={{ textAlign: "center", background: "var(--foreground)", color: "var(--accent-foreground)" }}>
-								<p className="eyebrow">Payment successful</p>
+								<p className="eyebrow">Booking confirmed</p>
 								<p className="display mt-2" style={{ fontSize: "1.35rem" }}>
-									✓ {formatDualCurrency(75)} received
+									✓ {formatDualCurrency(75)} consultation booked
 								</p>
 								<p className="mono mt-2" style={{ opacity: 0.85 }}>
 									Redirecting to booking confirmation…

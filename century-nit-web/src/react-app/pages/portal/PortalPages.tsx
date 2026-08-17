@@ -848,6 +848,20 @@ function ConsultationOutcome({
 	const outcome = booking.eligibilityOutcome;
 	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete");
 	const recs = CONSULTANT_RECOMMENDATIONS[outcome];
+	const [respondState, setRespondState] = useState<"idle" | "loading" | "done">("idle");
+	const [respondAction, setRespondAction] = useState<"accept" | "request_info" | null>(null);
+
+	async function handleRespond(action: "accept" | "request_info") {
+		setRespondState("loading");
+		setRespondAction(action);
+		try {
+			await meApi.respondToOutcome({ action });
+			setRespondState("done");
+		} catch {
+			setRespondState("idle");
+			setRespondAction(null);
+		}
+	}
 
 	if (!booking.confirmationId) {
 		return (
@@ -979,21 +993,65 @@ function ConsultationOutcome({
 					</div>
 				) : null}
 
-				{(outcome === "eligible" || outcome === "conditional") ? (
-					<div className="card card--pad mt-4 next-action">
-						<p className="eyebrow">Next step</p>
+			{(outcome === "eligible" || outcome === "conditional") ? (
+				<div className="card card--pad mt-4 next-action">
+					<p className="eyebrow">Next step</p>
+					{respondState === "done" ? (
+						<>
+							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
+								{respondAction === "accept"
+									? "Outcome accepted. You can now choose your school application package."
+									: "Your request has been sent. Your consultant will follow up with additional information."}
+							</p>
+							{respondAction === "accept" ? (
+								<div className="row mt-3">
+									<Button to="/portal/package" arrow>
+										Next · School package
+									</Button>
+								</div>
+							) : null}
+						</>
+					) : (
+						<>
+							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
+								{outcome === "eligible"
+									? "You're cleared to proceed. Choose your school application package to begin applying."
+									: "Address the recommendations above, then proceed to choose your school application package."}
+							</p>
+							<div className="row mt-3" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+								<Button type="button" onClick={() => handleRespond("accept")} arrow disabled={respondState === "loading"}>
+									Accept & proceed →
+								</Button>
+								<Button type="button" variant="secondary" onClick={() => handleRespond("request_info")} disabled={respondState === "loading"}>
+									I need more information
+								</Button>
+							</div>
+						</>
+					)}
+				</div>
+			) : null}
+
+			{outcome === "not_eligible" ? (
+				<div className="card card--pad mt-4 next-action">
+					<p className="eyebrow">Next step</p>
+					{respondState === "done" ? (
 						<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-							{outcome === "eligible"
-								? "You're cleared to proceed. Choose your school application package to begin applying."
-								: "Address the recommendations above, then proceed to choose your school application package."}
+							Your consultant will review your request and follow up with alternative pathways or preparatory steps.
 						</p>
-						<div className="row mt-3">
-							<Button to="/portal/package" arrow>
-								Next · School package
-							</Button>
-						</div>
-					</div>
-				) : null}
+					) : (
+						<>
+							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
+								You may request more information or explore alternative pathways with your consultant.
+							</p>
+							<div className="row mt-3" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+								<Button type="button" variant="secondary" onClick={() => handleRespond("request_info")} disabled={respondState === "loading"}>
+									Request more information
+								</Button>
+							</div>
+						</>
+					)}
+				</div>
+			) : null}
 
 				{/* Hidden when the Operations Center is driving - the consultant owns this call.
     Further gated behind the build-time dev flag: a production build must not
@@ -1335,12 +1393,12 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 				},
 			});
 
-			setPayState("success");
-			updateBooking({
-			    paymentStatus: "success",
-			    paidAt: new Date().toISOString(),
-			    consultationPhase: "assessment",
-            });
+		setPayState("success");
+		updateBooking({
+		    paymentStatus: "success",
+		    paidAt: new Date().toISOString(),
+		    consultationPhase: "awaiting_assignment",
+        });
             
             await onComplete();
 

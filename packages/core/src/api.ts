@@ -643,6 +643,14 @@ export const meApi = {
 		});
 	},
 
+	/** Respond to a completed consultation outcome (accept or request more info). */
+	respondToOutcome(input: { action: "accept" | "request_info"; note?: string }): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/application/consultation/respond`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
 	/**
 	 * Record a payment directly against one of the applicant's own invoices
 	 * (server-side record path — no payment gateway involved).

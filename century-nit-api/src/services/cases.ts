@@ -570,6 +570,9 @@ export async function startConsultationAssessment(id: string, actor: Actor): Pro
 	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
 	}
+	if (!row.slotConfirmed) {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Confirm the meeting slot before starting assessment");
+	}
 	const [updated] = await db
 		.update(consultations)
 		.set({ status: "IN_ASSESSMENT", updatedAt: new Date() })
@@ -660,6 +663,55 @@ export async function completeConsultationAssessment(input: {
 	});
 
 	return { consultation: updated, application: created };
+}
+
+export async function respondToOutcome(input: {
+	consultationId: string;
+	userId: string;
+	action: "accept" | "request_info";
+	note?: string;
+}): Promise<void> {
+	const row = await getConsultation(input.consultationId);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status !== "COMPLETED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Consultation is not yet completed");
+	}
+
+	const applicant = await getApplicantByUserId(input.userId);
+	if (!applicant || applicant.id !== row.applicantId) {
+		throw new HttpError(403, CASE_ERROR_CODES.CASE_CLOSED, "Not your consultation");
+	}
+
+	const text =
+		input.action === "accept"
+			? "Applicant accepted the assessment outcome and is proceeding to package selection."
+			: `Applicant requested more information: ${input.note || "No additional note provided."}`;
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: input.action === "accept" ? "status" : "comment",
+		text,
+		authorName: applicant.name,
+		authorOpsUserId: null,
+	});
+
+	if (row.assignedOfficerId) {
+		const officer = await loadStaff(row.assignedOfficerId);
+		if (officer) {
+			await queueEmails([
+				{
+					to: officer.email,
+					subject: input.action === "accept"
+						? `Outcome accepted — ${applicant.name}`
+						: `Applicant needs more info — ${applicant.name}`,
+					text,
+					html: `<p>${text}</p><p>Consultation ref: ${row.reference}</p>`,
+					idempotencyKey: `outcome-respond-${row.id}-${input.action}-${Date.now()}`,
+				},
+			]);
+		}
+	}
 }
 
 export async function addCaseComment(input: {

@@ -23,6 +23,7 @@ import {
 	listApplications,
 	listConsultations,
 	patchApplicant,
+	respondToOutcome,
 	requestCaseDocuments,
 	serializeApplicant,
 	serializeApplication,
@@ -1172,6 +1173,55 @@ meRouter.openapi(
 			label: stageLabel[currentStage],
 			nextUnlock,
 		});
+	},
+);
+
+/**
+ * Applicant self-service: respond to a completed consultation outcome.
+ *
+ * Two actions:
+ * - `accept`: applicant proceeds to package selection (adds an audit comment).
+ * - `request_info`: applicant needs more information before deciding (notifies the assigned consultant).
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/consultation/respond",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							action: z.enum(["accept", "request_info"]),
+							note: z.string().optional(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Response recorded",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		const consultation = await latestConsultationForApplicant(applicant.id);
+		if (!consultation) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "No consultation on file");
+		await respondToOutcome({
+			consultationId: consultation.id,
+			userId: user.id,
+			action: body.action,
+			note: body.note,
+		});
+		return c.json({ ok: true });
 	},
 );
 

@@ -1927,8 +1927,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						: c.status === "IN_ASSESSMENT"
 							? "assessment"
 							: c.status === "ASSIGNED"
-								? "assigned"
-								: "confirmed";
+								? c.slotConfirmed ? "assigned" : "awaiting_assignment_confirmation"
+								: c.status === "CONFIRMED"
+									? "confirmed"
+									: c.status === "UNDER_REVIEW"
+										? "awaiting_assignment"
+										: "confirmed";
 			const outcome: EligibilityOutcome =
 				c.assessmentResult?.outcome?.toLowerCase() === "eligible"
 					? "eligible"
@@ -1967,6 +1971,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					phone: prev.phone || a.phone || "",
 					nationality: prev.nationality || a.profile?.nationality || "",
 					destinationId: prev.destinationId || a.targetCountry || "",
+				}));
+			}
+			if (res.application) {
+				const a = res.application;
+				setApplication((prev) => ({
+					...prev,
+					id: a.id || prev.id,
+					applicationId: a.id || prev.applicationId,
+					appNumber: a.appNumber || prev.appNumber,
+					stage: a.stage || prev.stage,
+					status: a.status || prev.status,
+					program: a.program || prev.program,
+					university: a.university || prev.university,
+					country: a.country || prev.country,
+					degreeLevel: a.degreeLevel || prev.degreeLevel,
 				}));
 			}
 		} catch {

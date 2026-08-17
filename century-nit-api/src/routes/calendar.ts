@@ -21,6 +21,7 @@ import {
 } from "../services/availability.js";
 import { isValidTimeZone } from "../lib/time.js";
 import { updateWorkingHoursSchema, workingHoursResponseSchema } from "century-nit-shared";
+import { getSetting } from "../services/settings.js";
 import { queuePendingCalendarSyncs } from "../services/booking.js";
 import { queueCalendar } from "../worker/queues.js";
 
@@ -331,8 +332,10 @@ calendarRouter.openapi(
 
 		// Reject forgeries. No token configured means we never issued a channel,
 		// so nothing arriving here is genuine — refuse rather than accept all.
-		if (!env.GOOGLE_WEBHOOK_TOKEN) return c.body(null, 401);
-		const expected = Buffer.from(env.GOOGLE_WEBHOOK_TOKEN);
+		const configuredToken =
+			(await getSetting("GOOGLE_WEBHOOK_TOKEN")) ?? env.GOOGLE_WEBHOOK_TOKEN;
+		if (!configuredToken) return c.body(null, 401);
+		const expected = Buffer.from(configuredToken);
 		const received = Buffer.from(token ?? "");
 		const ok =
 			expected.length === received.length && timingSafeEqual(expected, received);

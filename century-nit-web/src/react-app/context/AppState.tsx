@@ -39,7 +39,6 @@ import {
 	appInvoiceActualLines,
 	getProgram,
 	appInvoiceEstimateLines,
-	pickConsultantFor,
 	sumInvoiceLines,
 	visaInvoiceActualLines,
 	visaInvoiceEstimateLines,
@@ -2155,92 +2154,72 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return () => window.clearInterval(id);
 	}, [simAutopilot, application.agencySettledAt, application.visaStatus]);
 
-	/** After payment, consultation progresses through confirmation → assignment → assessment → outcome (prototype) */
+	/** Sync real server consultation & applicant profile with AppState */
 	useEffect(() => {
-		const phase = booking.consultationPhase;
-		if (!booking.confirmationId || !booking.paidAt) return;
-
-		const transitions: Record<string, { next: string; delay: number; note?: string; notif?: { type: "stage" | "message"; title: string; body: string } }> = {
-			awaiting_confirmation: {
-				next: "confirmed",
-				delay: 2_000,
-				note: "Your booking has been confirmed by the branch. Waiting for a consultant to be assigned.",
-				notif: { type: "stage", title: "Booking confirmed", body: "Your consultation slot has been confirmed by the branch." },
-			},
-			confirmed: {
-				next: "awaiting_assignment",
-				delay: 1_500,
-				note: "Booking confirmed. Awaiting consultant assignment from the branch.",
-			},
-			awaiting_assignment: {
-				next: "assigned",
-				delay: 2_500,
-				note: "A consultant has been assigned to your case. Assessment will begin shortly.",
-				notif: { type: "stage", title: "Consultant assigned", body: "A consultant has been assigned to your case. Assessment begins shortly." },
-			},
-			assigned: {
-				next: "awaiting_assignment_confirmation",
-				delay: 1_500,
-				note: `Consultant assigned. Waiting for the consultant to confirm and accept the assignment before assessment begins.`,
-			},
-			awaiting_assignment_confirmation: {
-				next: "assessment",
-				delay: 2_000,
-				note: "The consultant has accepted the assignment and is now reviewing your assessment data and documents.",
-				notif: { type: "stage", title: "Assignment confirmed", body: "Your consultant has accepted the assignment. Assessment is now underway." },
-			},
-			assessment: {
-				next: "assessment_complete",
-				delay: 3_000,
-				note: "Assessment complete. Your consultant has finished reviewing your file. Click to view your eligibility outcome.",
-				notif: { type: "stage", title: "Assessment complete", body: "Your consultant has completed the assessment. View your outcome in the portal." },
-			},
-			assessment_complete: {
-				next: "outcome",
-				delay: 2_000,
-				note: "Eligibility outcome is ready. You are eligible to continue.",
-				notif: { type: "stage", title: "Outcome ready", body: "Your eligibility outcome has been determined. View it in the portal." },
-			},
-		};
-
-		const t = transitions[phase];
-		if (!t) return;
-
-		const timer = window.setTimeout(() => {
-			setBooking((prev) => {
-				if (prev.consultationPhase !== phase) return prev;
-				const update: Partial<BookingData> = {
-					consultationPhase: t.next as BookingData["consultationPhase"],
-					eligibilityNote: t.note ?? prev.eligibilityNote,
-				};
-				if (t.next === "assigned") {
-					// Assign someone from the real roster, matched to the applicant's
-					// stated destinations - the old list was invented names with no
-					// profile, photo, or message history anywhere in the system.
-					const c = pickConsultantFor(
-						prev.assessment.preferredCountries,
-						prev.confirmationId ?? "century-nit",
-					);
-					update.consultantId = c.id;
-					update.consultantName = c.name;
+		if (!authUser) return;
+		let cancelled = false;
+		meApi
+			.application()
+			.then((res) => {
+				if (cancelled) return;
+				if (res.consultation) {
+					const c = res.consultation;
+					const phase: BookingData["consultationPhase"] =
+						c.status === "COMPLETED"
+							? "outcome"
+							: c.status === "IN_ASSESSMENT"
+								? "assessment"
+								: c.status === "ASSIGNED"
+									? "assigned"
+									: "confirmed";
+					const outcome: EligibilityOutcome =
+						c.assessmentResult?.outcome?.toLowerCase() === "eligible"
+							? "eligible"
+							: c.assessmentResult?.outcome?.toLowerCase() === "conditional"
+								? "conditional"
+								: c.assessmentResult?.outcome?.toLowerCase() === "ineligible"
+									? "not_eligible"
+									: "pending";
+					setBooking((prev) => ({
+						...prev,
+						confirmationId: c.reference,
+						consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
+						branchId: c.branch,
+						consultantName: c.assignedOfficerName ?? prev.consultantName,
+						consultantId: c.assignedOfficerId ?? prev.consultantId,
+						consultationPhase: phase,
+						eligibilityOutcome: outcome,
+						eligibilityNote:
+							c.assessmentResult?.notes ||
+							(c.status === "COMPLETED"
+								? "Assessment complete. You are eligible to continue."
+								: "Your consultation case is under review by your advisor."),
+						outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
+						paymentStatus: "success",
+						paidAt: c.createdAt,
+						meetingLink: c.meetingUrl ?? prev.meetingLink,
+						date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
+					}));
 				}
-				if (t.next === "outcome") {
-					update.eligibilityOutcome = "eligible";
-					update.outcomeAt = new Date().toISOString();
+				if (res.applicant) {
+					const a = res.applicant;
+					setApplication((prev) => ({
+						...prev,
+						firstName: prev.firstName || a.name.split(" ")[0] || "",
+						lastName: prev.lastName || a.name.split(" ").slice(1).join(" ") || "",
+						phone: prev.phone || a.phone || "",
+						nationality: prev.nationality || a.profile?.nationality || "",
+						destinationId: prev.destinationId || a.targetCountry || "",
+					}));
 				}
-				return { ...prev, ...update };
+			})
+			.catch(() => {
+				/* server state fallback */
 			});
-			if (t.notif) {
-				pushNotification({
-					type: t.notif.type,
-					title: t.notif.title,
-					body: t.notif.body,
-					link: "/portal/consultation",
-				});
-			}
-		}, t.delay);
-		return () => window.clearTimeout(timer);
-	}, [booking.consultationPhase, booking.confirmationId, booking.paidAt, pushNotification]);
+		return () => {
+			cancelled = true;
+		};
+	}, [authUser]);
 
 	const unreadCount = useMemo(
 		() => notifications.filter((n) => !n.read).length,

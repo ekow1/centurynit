@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
@@ -41,7 +41,7 @@ import {
 	universitiesForDestination,
 	CONSULTATION_DURATIONS,
 } from "century-nit-core";
-import { meApi, bookingsApi, invoicesApi, schoolsApi, ApiError } from "century-nit-core/api";
+import { meApi, bookingsApi, invoicesApi, schoolsApi, documentsApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 
@@ -447,10 +447,11 @@ function AssessmentForm({
 	assessment: AssessmentData;
 	assessmentDocs: Record<string, AssessmentDoc>;
 	onUpdate: (patch: Partial<AssessmentData>) => void;
-	onDocUpdate: (id: string, fileName: string | null) => void;
+	onDocUpdate: (id: string, fileName: string | null, documentId?: string | null) => void;
 }) {
 	const [section, setSection] = useState(0);
-	const uploadCounter = useRef(0);
+	const [uploading, setUploading] = useState<Record<string, number>>({});
+	const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
 	const sections = [
 		{ label: "Personal", icon: "◎" },
@@ -464,9 +465,27 @@ function AssessmentForm({
 	];
 
 	function handleDocUpload(id: string) {
-		uploadCounter.current += 1;
-		const fakeName = `${id}_${uploadCounter.current.toString().padStart(4, "0")}.pdf`;
-		onDocUpdate(id, fakeName);
+		const input = fileInputRefs.current[id];
+		if (input) {
+			input.value = "";
+			input.click();
+		}
+	}
+
+	async function handleFileSelected(id: string, e: ChangeEvent<HTMLInputElement>) {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		setUploading((prev) => ({ ...prev, [id]: 0 }));
+		try {
+			const doc = await documentsApi.upload(file, id, {
+				onProgress: (pct) => setUploading((prev) => ({ ...prev, [id]: pct })),
+			});
+			onDocUpdate(id, doc.fileName, doc.id);
+		} catch {
+			alert("Upload failed. Please try again.");
+		} finally {
+			setUploading((prev) => { const n = { ...prev }; delete n[id]; return n; });
+		}
 	}
 
 	return (
@@ -709,49 +728,66 @@ function AssessmentForm({
 					</div>
 				)}
 
-				{section === 7 && (
-					<div>
-						<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
-							Upload scanned copies of your documents. Simulated - clicking upload generates a placeholder filename.
-						</p>
-						<div className="form-grid form-grid--2">
-							{ASSESSMENT_DOC_FIELDS.map((doc) => {
-								const uploaded = assessmentDocs[doc.id];
-								return (
-									<div key={doc.id} className="card card--pad">
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-											<div>
-												<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{doc.label}</p>
-												<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.2rem" }}>{doc.hint}</p>
-											</div>
-											{uploaded?.fileName ? (
-												<span className="portal-pill portal-pill--approved">Uploaded</span>
-											) : (
-												<span className="portal-pill portal-pill--needs_info">Pending</span>
-											)}
+			{section === 7 && (
+				<div>
+					<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
+						Upload scanned copies of your documents. Accepted: PDF, JPEG, PNG, DOC, DOCX (max 15 MB each).
+					</p>
+					<div className="form-grid form-grid--2">
+						{ASSESSMENT_DOC_FIELDS.map((doc) => {
+							const uploaded = assessmentDocs[doc.id];
+							const pct = uploading[doc.id];
+							const isUploading = pct !== undefined;
+							return (
+								<div key={doc.id} className="card card--pad">
+									<input
+										type="file"
+										accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+										style={{ display: "none" }}
+										ref={(el) => { fileInputRefs.current[doc.id] = el; }}
+										onChange={(e) => void handleFileSelected(doc.id, e)}
+									/>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{doc.label}</p>
+											<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.2rem" }}>{doc.hint}</p>
 										</div>
-										{uploaded?.fileName ? (
-											<div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-												<span className="mono" style={{ fontSize: "0.75rem" }}>{uploaded.fileName}</span>
-												{uploaded.uploadedAt ? (
-													<span className="muted" style={{ fontSize: "0.7rem" }}>{new Date(uploaded.uploadedAt).toLocaleDateString()}</span>
-												) : null}
-												<div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-													<button type="button" className="btn btn--ghost btn--sm" onClick={() => handleDocUpload(doc.id)}>Replace</button>
-													<button type="button" className="btn btn--ghost btn--sm" onClick={() => onDocUpdate(doc.id, null)}>Remove</button>
-												</div>
-											</div>
+										{isUploading ? (
+											<span className="portal-pill portal-pill--draft">Uploading {pct}%</span>
+										) : uploaded?.fileName ? (
+											<span className="portal-pill portal-pill--approved">Uploaded</span>
 										) : (
-											<div style={{ marginTop: "0.75rem" }}>
-												<button type="button" className="btn btn--secondary btn--sm" onClick={() => handleDocUpload(doc.id)}>Upload (simulated)</button>
-											</div>
+											<span className="portal-pill portal-pill--needs_info">Pending</span>
 										)}
 									</div>
-								);
-							})}
-						</div>
+									{isUploading ? (
+										<div style={{ marginTop: "0.75rem" }}>
+											<div style={{ height: "4px", background: "var(--border-light)", borderRadius: "2px", overflow: "hidden" }}>
+												<div style={{ height: "100%", width: `${pct}%`, background: "var(--foreground)", transition: "width 0.2s" }} />
+											</div>
+										</div>
+									) : uploaded?.fileName ? (
+										<div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+											<span className="mono" style={{ fontSize: "0.75rem" }}>{uploaded.fileName}</span>
+											{uploaded.uploadedAt ? (
+												<span className="muted" style={{ fontSize: "0.7rem" }}>{new Date(uploaded.uploadedAt).toLocaleDateString()}</span>
+											) : null}
+											<div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+												<button type="button" className="btn btn--ghost btn--sm" onClick={() => handleDocUpload(doc.id)}>Replace</button>
+												<button type="button" className="btn btn--ghost btn--sm" onClick={() => onDocUpdate(doc.id, null)}>Remove</button>
+											</div>
+										</div>
+									) : (
+										<div style={{ marginTop: "0.75rem" }}>
+											<button type="button" className="btn btn--secondary btn--sm" onClick={() => handleDocUpload(doc.id)}>Upload file</button>
+										</div>
+									)}
+								</div>
+							);
+						})}
 					</div>
-				)}
+				</div>
+			)}
 			</div>
 
 			<div className="row mt-4" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>

@@ -209,6 +209,7 @@ export type EligibilityOutcome =
 export type AssessmentDoc = {
 	fileName: string | null;
 	uploadedAt: string | null;
+	documentId: string | null;
 };
 
 export type AssessmentData = {
@@ -1649,14 +1650,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}));
 	}, []);
 
-	const updateAssessmentDoc = useCallback((id: string, fileName: string | null) => {
+	const updateAssessmentDoc = useCallback((id: string, fileName: string | null, documentId?: string | null) => {
 		setBooking((prev) => ({
 			...prev,
 			assessmentDocs: {
 				...prev.assessmentDocs,
 				[id]: fileName
-					? { fileName, uploadedAt: new Date().toISOString() }
-					: { fileName: null, uploadedAt: null },
+					? { fileName, uploadedAt: new Date().toISOString(), documentId: documentId ?? prev.assessmentDocs[id]?.documentId ?? null }
+					: { fileName: null, uploadedAt: null, documentId: null },
 			},
 		}));
 	}, []);

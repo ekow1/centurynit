@@ -517,19 +517,11 @@ export function PortalConsultation() {
 		}
 	}
 
-	const isCancelled = liveConsultation?.status === "CANCELLED";
-	const activeCase = !isCancelled ? liveConsultation : null;
-	const hasActiveCase = Boolean(!isCancelled && (activeCase || booking.confirmationId));
-	const activeRef = activeCase?.reference ?? booking.confirmationId;
-	const activeOfficer = activeCase?.assignedOfficerName ?? booking.consultantName;
-	const activeOutcome = activeCase?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
-	const activeNotes = activeCase?.assessmentResult?.notes ?? booking.eligibilityNote;
-
-	// When the consultation is active but all its bookings are cancelled/completed,
-	// the applicant should reschedule rather than seeing stale appointment details.
-	const [rescheduleMode, setRescheduleMode] = useState(false);
-	const hasUpcomingBooking = liveConsultation?.bookingId && liveConsultation?.slotConfirmed;
-	const needsReschedule = hasActiveCase && !isCancelled && !hasUpcomingBooking && !rescheduleMode;
+	const hasActiveCase = Boolean(liveConsultation || booking.confirmationId);
+	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
+	const activeOfficer = liveConsultation?.assignedOfficerName ?? booking.consultantName;
+	const activeOutcome = liveConsultation?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
+	const activeNotes = liveConsultation?.assessmentResult?.notes ?? booking.eligibilityNote;
 
 	return (
 		<div className="portal-page">
@@ -549,25 +541,7 @@ export function PortalConsultation() {
 				<div className="card card--pad text-center py-5">
 					<p className="muted">Loading consultation case details…</p>
 				</div>
-			) : needsReschedule ? (
-				/* ── Reschedule Banner ── */
-				<div className="card card--pad mt-4" style={{ maxWidth: "720px", textAlign: "center" }}>
-					<p style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-						Your consultation is active but needs a new appointment
-					</p>
-					<p className="muted mb-4" style={{ fontSize: "0.9rem" }}>
-						Your previous appointment was cancelled. Please reschedule with your assigned counselor{" "}
-						<strong>{activeOfficer}</strong>.
-					</p>
-					<button
-						type="button"
-						className="btn btn--primary"
-						onClick={() => setRescheduleMode(true)}
-					>
-						Reschedule Appointment
-					</button>
-				</div>
-			) : !hasActiveCase || rescheduleMode ? (
+			) : !hasActiveCase ? (
 				/* ── Live Booking Form ── */
 				<div className="card card--pad mt-4" style={{ maxWidth: "720px" }}>
 					<div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
@@ -851,27 +825,33 @@ export function PortalConsultation() {
 									className="portal-pill"
 									style={{
 										background:
-											liveConsultation?.status === "COMPLETED"
-												? "#dcfce7"
-												: liveConsultation?.status === "IN_ASSESSMENT"
-													? "#e0e7ff"
-													: "#fef3c7",
+											liveConsultation?.status === "CANCELLED"
+												? "#fee2e2"
+												: liveConsultation?.status === "COMPLETED"
+													? "#dcfce7"
+													: liveConsultation?.status === "IN_ASSESSMENT"
+														? "#e0e7ff"
+														: "#fef3c7",
 										color:
-											liveConsultation?.status === "COMPLETED"
-												? "#166534"
-												: liveConsultation?.status === "IN_ASSESSMENT"
-													? "#3730a3"
-													: "#92400e",
+											liveConsultation?.status === "CANCELLED"
+												? "#991b1b"
+												: liveConsultation?.status === "COMPLETED"
+													? "#166534"
+													: liveConsultation?.status === "IN_ASSESSMENT"
+														? "#3730a3"
+														: "#92400e",
 										fontWeight: 600,
 									}}
 								>
-									{liveConsultation?.status === "COMPLETED"
-										? "✓ Assessment Completed"
-										: liveConsultation?.status === "IN_ASSESSMENT"
-											? "In Assessment"
-											: liveConsultation?.status === "ASSIGNED"
-												? "Consultant Assigned"
-												: "Awaiting Staff Assignment"}
+									{liveConsultation?.status === "CANCELLED"
+										? "Appointment Cancelled"
+										: liveConsultation?.status === "COMPLETED"
+											? "✓ Assessment Completed"
+											: liveConsultation?.status === "IN_ASSESSMENT"
+												? "In Assessment"
+												: liveConsultation?.status === "ASSIGNED"
+													? "Consultant Assigned"
+													: "Awaiting Staff Assignment"}
 								</span>
 							</div>
 
@@ -913,7 +893,12 @@ export function PortalConsultation() {
 						<h3 className="section-title mb-2" style={{ fontSize: "1.1rem" }}>
 							Assigned Academic Counselor
 						</h3>
-						{activeOfficer ? (
+						{liveConsultation?.status === "CANCELLED" ? (
+							<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
+								This consultation appointment was cancelled. If you would like to book a new appointment,
+								please proceed to the Appointments tab.
+							</p>
+						) : activeOfficer ? (
 							<div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
 								<div
 									style={{

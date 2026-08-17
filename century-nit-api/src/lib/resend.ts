@@ -35,18 +35,6 @@ export async function sendEmail({
 	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
 
 	if (!apiKey) {
-		/*
-		 * No provider configured — print the message instead of dropping it.
-		 *
-		 * The body matters, not just the envelope: invitation links, one-time
-		 * codes and password resets are all delivered by email, so logging only
-		 * "to" and "subject" makes those flows impossible to complete locally or
-		 * to verify without buying a mail provider first.
-		 *
-		 * Development only. In production a missing key is a misconfiguration, and
-		 * printing one-time codes to the log would be a real disclosure, so that
-		 * case stays quiet.
-		 */
 		if (env.NODE_ENV === "production") {
 			console.warn("[email] RESEND_API_KEY is not set — message dropped.", { to, subject });
 		} else {
@@ -62,11 +50,20 @@ export async function sendEmail({
 
 	const { Resend } = await import("resend");
 	const resend = new Resend(apiKey);
-	return resend.emails.send({
+	const res = await resend.emails.send({
 		from,
 		to,
 		subject,
 		...(html ? { html } : {}),
 		...(text ? { text } : {}),
 	} as never);
+
+	if (res.error) {
+		console.error(`[email] Resend delivery error to ${to}:`, res.error);
+		throw new Error(`Resend error: ${res.error.message}`);
+	}
+
+	console.log(`[email] Successfully sent to ${to} (id: ${res.data?.id})`);
+	return res.data;
 }
+

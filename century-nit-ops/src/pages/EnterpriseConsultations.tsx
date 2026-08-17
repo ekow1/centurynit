@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -7,6 +7,8 @@ import { ReschedulePanel } from "./ReschedulePanel";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
+import { documentsApi } from "century-nit-core/api";
+import type { ApplicantDocument } from "century-nit-shared";
 
 /** Placeholder values shouldn't be joined into a meta line as bare em-dashes */
 function isKnown(v: string | undefined | null): v is string {
@@ -14,12 +16,20 @@ function isKnown(v: string | undefined | null): v is string {
 	return s !== "" && s !== "-" && s !== "-";
 }
 
-function docSummary(c: MockConsultation) {
-	const total = c.documents.length;
-	const verified = c.documents.filter((d) => d.status === "Verified").length;
-	const pending = c.documents.filter((d) => d.status === "Pending Review").length;
-	return { total, verified, pending };
+function docSummary(c: MockConsultation, realDocs: ApplicantDocument[]) {
+	const requested = c.requestedDocuments?.length ?? 0;
+	const uploaded = realDocs.filter((d) => d.status === "UPLOADED" || d.status === "VERIFIED").length;
+	const verified = realDocs.filter((d) => d.status === "VERIFIED").length;
+	const pending = realDocs.filter((d) => d.status === "UPLOADED").length;
+	return { total: Math.max(requested, realDocs.length), verified, pending, uploaded };
 }
+
+const DOC_STATUS_MAP: Record<string, string> = {
+	UPLOADED: "Pending Review",
+	VERIFIED: "Verified",
+	REJECTED: "Rejected",
+	PENDING_UPLOAD: "Pending Upload",
+};
 
 export function EnterpriseConsultations() {
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
@@ -34,6 +44,7 @@ export function EnterpriseConsultations() {
 		commentOnConsultation,
 		requestConsultationDocs,
 		rescheduleConsultation,
+		refresh,
 	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -50,6 +61,7 @@ export function EnterpriseConsultations() {
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -81,14 +93,24 @@ export function EnterpriseConsultations() {
 		? consultations.find((c) => c.id === selectedConsultation.id) ?? selectedConsultation
 		: null;
 
+	useEffect(() => {
+		if (!liveSelected?.applicantId) { setRealDocs([]); return; }
+		let cancelled = false;
+		documentsApi
+			.list({ ownerUserId: liveSelected.applicantId })
+			.then((res) => { if (!cancelled) setRealDocs(res.documents); })
+			.catch(() => { if (!cancelled) setRealDocs([]); });
+		return () => { cancelled = true; };
+	}, [liveSelected?.applicantId]);
+
 	function openDetail(c: MockConsultation) {
 		setSelectedConsultation(c);
 		setOutcome(c.assessmentResult?.outcome || "Eligible");
 		setNotes(c.assessmentResult?.notes || "");
-		setRecCountry(c.assessmentResult?.recCountry || c.targetCountry);
-		setRecUniversity(c.assessmentResult?.recUniversity || "University of Toronto");
-		setRecProgram(c.assessmentResult?.recProgram || "Master's Degree Program");
-		setRecPackage(c.assessmentResult?.recPackage || "Premium Study Package");
+		setRecCountry(c.assessmentResult?.recCountry || c.targetCountry || "");
+		setRecUniversity(c.assessmentResult?.recUniversity || "");
+		setRecProgram(c.assessmentResult?.recProgram || `${c.goals.degreeLevel || ""} in ${c.goals.major || ""}`.trim() || "");
+		setRecPackage(c.assessmentResult?.recPackage || "");
 		setDetailTab("profile");
 		setIsSubmitted(false);
 		setPreviewingDoc(null);
@@ -103,10 +125,11 @@ export function EnterpriseConsultations() {
 		setSelectedConsultation({ ...selectedConsultation, status: "Completed", assessmentResult: res.consultation.assessmentResult ?? result });
 		setIsSubmitted(true);
 		setTimeout(() => setIsSubmitted(false), 3000);
+		void refresh();
 	}
 
 	const active = liveSelected ?? selectedConsultation;
-	const docs = active ? docSummary(active) : { total: 0, verified: 0, pending: 0 };
+	const docs = active ? docSummary(active, realDocs) : { total: 0, verified: 0, pending: 0, uploaded: 0 };
 	const isMine = Boolean(active && active.assignedOfficerEmail === opsUser?.email);
 	const canAssess = isMine || opsRole === "manager" || opsRole === "coordinator";
 
@@ -599,52 +622,61 @@ export function EnterpriseConsultations() {
 									</div>
 								)}
 
-								{detailTab === "documents" && (
-									previewingDoc ? (
-										<div style={{ marginTop: "1rem" }}>
-											<DocPreviewInline
-												doc={previewingDoc}
-												isMine={isMine}
-												applicantName={active.applicantName}
-												reference={active.ref}
-												onBack={() => setPreviewingDoc(null)}
-											/>
+							{detailTab === "documents" && (
+								previewingDoc ? (
+									<div style={{ marginTop: "1rem" }}>
+										<DocPreviewInline
+											doc={previewingDoc}
+											isMine={isMine}
+											applicantName={active.applicantName}
+											reference={active.ref}
+											onBack={() => setPreviewingDoc(null)}
+										/>
+									</div>
+								) : (
+									<div className="card" style={{ marginTop: "1rem" }}>
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+											<p className="eyebrow">Uploaded Documents</p>
+											<span style={{ fontSize: "var(--text-xs)", color: docs.pending > 0 ? "#92400e" : "#065f46", fontWeight: 600 }}>
+												{docs.verified}/{docs.uploaded || docs.total} verified{docs.pending > 0 ? ` · ${docs.pending} pending` : docs.uploaded > 0 ? " ✓ all clear" : ""}
+											</span>
 										</div>
-									) : (
-										<div className="card" style={{ marginTop: "1rem" }}>
-											<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-												<p className="eyebrow">Submitted Application Documents</p>
-												<span style={{ fontSize: "var(--text-xs)", color: docs.pending > 0 ? "#92400e" : "#065f46", fontWeight: 600 }}>
-													{docs.verified}/{docs.total} verified{docs.pending > 0 ? ` · ${docs.pending} pending` : " ✓ all clear"}
-												</span>
+										{docs.pending > 0 && (
+											<div style={{ padding: "0.6rem 0.85rem", background: "#fef3c7", border: "1px solid #fde68a", marginBottom: "0.75rem", fontSize: "var(--text-xs)", color: "#92400e" }}>
+												{docs.pending} document(s) awaiting verification. Verify or reject each document before completing the assessment.
 											</div>
-											{docs.pending > 0 && (
-												<div style={{ padding: "0.6rem 0.85rem", background: "#fef3c7", border: "1px solid #fde68a", marginBottom: "0.75rem", fontSize: "var(--text-xs)", color: "#92400e" }}>
-													{docs.pending} document(s) awaiting verification. Verify or reject each document before completing the assessment.
-												</div>
-											)}
-											<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-												{selectedConsultation.documents.map((doc, idx) => {
-													const docKey = `consultation:${selectedConsultation.id}:${doc.name}`;
-													const isLive = Boolean(selectedConsultation.isLive);
-													const status = doc.status;
-													const settled = status === "Verified" || status === "Rejected";
-													return (
-														<li key={idx} style={{ padding: "0.75rem 0.5rem", borderBottom: idx < selectedConsultation.documents.length - 1 ? "1px solid var(--border-light)" : "none" }}>
-															<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-																<button
-																	type="button"
-																	onClick={() => setPreviewingDoc({ name: doc.name, category: "Application Document", status, isLive, docKey })}
-																	style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: "0.75rem", flex: 1, minWidth: 0 }}
-																>
-																	<span style={{ fontSize: "1.1rem", fontFamily: "var(--font-mono)" }}>≡</span>
-																	<div style={{ minWidth: 0 }}>
-																		<p style={{ fontWeight: 500, fontSize: "var(--text-sm)", textDecoration: "underline", textUnderlineOffset: "3px" }}>{doc.name}</p>
-																		<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Click to inspect →</p>
-																	</div>
-																</button>
-																<span className="portal-pill" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{status}</span>
-															</div>
+										)}
+										{realDocs.length === 0 && (selectedConsultation.requestedDocuments?.length ?? 0) > 0 && (
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+												No documents uploaded yet. The applicant has been asked to provide: {(selectedConsultation.requestedDocuments ?? []).join(", ")}.
+											</p>
+										)}
+										{realDocs.length === 0 && (selectedConsultation.requestedDocuments?.length ?? 0) === 0 && (
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+												No documents have been uploaded or requested for this case yet.
+											</p>
+										)}
+										<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+											{realDocs.map((doc, idx) => {
+												const displayStatus = DOC_STATUS_MAP[doc.status] ?? doc.status;
+												const settled = doc.status === "VERIFIED" || doc.status === "REJECTED";
+												const docKey = `applicant:${active.applicantId}:${doc.documentType}`;
+												return (
+													<li key={doc.id} style={{ padding: "0.75rem 0.5rem", borderBottom: idx < realDocs.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+															<button
+																type="button"
+																onClick={() => setPreviewingDoc({ name: doc.fileName, category: doc.documentType, status: displayStatus, isLive: true, docKey })}
+																style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: "0.75rem", flex: 1, minWidth: 0 }}
+															>
+																<span style={{ fontSize: "1.1rem", fontFamily: "var(--font-mono)" }}>≡</span>
+																<div style={{ minWidth: 0 }}>
+																	<p style={{ fontWeight: 500, fontSize: "var(--text-sm)", textDecoration: "underline", textUnderlineOffset: "3px" }}>{doc.fileName}</p>
+																	<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{doc.documentType} · {doc.sizeBytes ? `${(doc.sizeBytes / 1024).toFixed(0)} KB` : ""} · Click to inspect →</p>
+																</div>
+															</button>
+															<span className="portal-pill" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{displayStatus}</span>
+														</div>
 														{!settled && isMine && (
 															<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.5rem", paddingLeft: "1.875rem" }}>
 																<a href="/documents" className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
@@ -655,13 +687,13 @@ export function EnterpriseConsultations() {
 																Read-only - only the assigned consultant can verify documents.
 															</p>
 														)}
-														</li>
-													);
-												})}
-											</ul>
-										</div>
-									)
-								)}
+													</li>
+												);
+											})}
+										</ul>
+									</div>
+								)
+							)}
 
 								{detailTab === "assessment" && !canAssess && (
 									<div className="card" style={{ marginTop: "1rem" }}>

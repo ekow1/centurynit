@@ -26,6 +26,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 	const p = row.profile ?? {};
 	return {
 		id: row.id,
+		applicantId: row.applicantId,
 		ref: row.reference,
 		bookingId: row.bookingId,
 		applicantName: row.applicantName,

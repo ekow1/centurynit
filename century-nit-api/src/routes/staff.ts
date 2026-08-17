@@ -30,6 +30,7 @@ import {
 	createInvitation,
 	findByToken,
 	listInvitations,
+	resendInvitation,
 	revokeInvitation,
 	updateStaff,
 	type InvitationRow,
@@ -148,6 +149,38 @@ staffRouter.openapi(
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		return c.json(toInvitationResponse(await revokeInvitation(id, staff.email)));
+	},
+);
+
+/* ── POST /api/v1/staff/invitations/:id/resend ──────────────────────────────── */
+
+staffRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/invitations/{id}/resend",
+		tags: ["Staff"],
+		summary: "Re-send an invitation",
+		description:
+			"Issues a fresh token, revokes the old one, and sends a new invitation email. " +
+			"Works for PENDING and EXPIRED invitations. Returns the new acceptUrl.",
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		request: { params: z.object({ id: z.string().uuid() }) },
+		responses: {
+			201: {
+				content: { "application/json": { schema: createdInvitationSchema } },
+				description: "New invitation issued and emailed",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const { invitation, acceptUrl } = await resendInvitation(id, {
+			opsUserId: staff.opsUserId,
+			name: staff.name,
+			role: staff.role,
+		});
+		return c.json({ ...toInvitationResponse(invitation), acceptUrl }, 201);
 	},
 );
 

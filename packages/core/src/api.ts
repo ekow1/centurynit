@@ -288,6 +288,10 @@ export const staffApi = {
 		return request(`${API_PREFIX}/staff/invitations/${id}`, { method: "DELETE" });
 	},
 
+	resendInvitation(id: string): Promise<CreatedInvitation> {
+		return request(`${API_PREFIX}/staff/invitations/${id}/resend`, { method: "POST" });
+	},
+
 	/** Whether the caller holds a second factor, and whether they must. */
 	mfaStatus(): Promise<TwoFactorStatus> {
 		return request(`${API_PREFIX}/staff/mfa`);

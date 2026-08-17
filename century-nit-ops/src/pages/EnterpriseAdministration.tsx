@@ -539,6 +539,8 @@ function UsersAndRoles() {
 		}
 	}
 
+	const [resendingId, setResendingId] = useState<string | null>(null);
+
 	async function revoke(id: string) {
 		try {
 			await staffApi.revokeInvitation(id);
@@ -546,6 +548,36 @@ function UsersAndRoles() {
 			await refresh();
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not revoke invitation");
+		}
+	}
+
+	async function resend(id: string) {
+		setResendingId(id);
+		try {
+			const created = await staffApi.resendInvitation(id);
+			let finalUrl = created.acceptUrl || "";
+			if (finalUrl && typeof window !== "undefined") {
+				try {
+					const u = new URL(finalUrl);
+					if (u.hostname === "localhost" || u.hostname === "127.0.0.1") {
+						finalUrl = `${window.location.origin}${u.pathname}${u.search}`;
+					}
+				} catch {
+					// fallback
+				}
+			}
+			setCreatedInvite({
+				email: created.email,
+				name: created.name,
+				role: created.role,
+				acceptUrl: finalUrl,
+			});
+			say(`Invitation re-sent to ${created.email}.`);
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not resend invitation");
+		} finally {
+			setResendingId(null);
 		}
 	}
 
@@ -1075,14 +1107,26 @@ function UsersAndRoles() {
 							<h2 className="section-title mb-3">Pending invitations</h2>
 							<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
 								{pending.map((i) => (
-									<li key={i.id} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
+									<li key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
 										<div>
 											<strong>{i.name}</strong> <span className="muted">{i.email}</span>
 											<p className="muted" style={{ margin: 0 }}>
 												{roleLabelMap[i.role] ?? i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
 											</p>
 										</div>
-										<button type="button" className="btn btn--ghost btn--sm" onClick={() => revoke(i.id)}>Revoke</button>
+										<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+											<button
+												type="button"
+												className="btn btn--primary btn--sm"
+												disabled={resendingId === i.id}
+												onClick={() => resend(i.id)}
+											>
+												{resendingId === i.id ? "Sending..." : "Resend"}
+											</button>
+											<button type="button" className="btn btn--ghost btn--sm" onClick={() => revoke(i.id)}>
+												Revoke
+											</button>
+										</div>
 									</li>
 								))}
 							</ul>

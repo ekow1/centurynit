@@ -336,6 +336,49 @@ export async function listInvitations(): Promise<InvitationRow[]> {
 	return db.select().from(staffInvitations).orderBy(desc(staffInvitations.createdAt));
 }
 
+/**
+ * Re-send a pending (or expired) invitation.
+ *
+ * Issues a fresh token and email for the same invitee — the old row is marked
+ * REVOKED so the partial-unique index frees up, and a brand-new PENDING row
+ * replaces it. The caller gets back the new acceptUrl just like on the first
+ * create, so the ops UI can show it in a copy dialog.
+ */
+export async function resendInvitation(
+	id: string,
+	resender: { opsUserId: string; name: string; role: string },
+): Promise<{ invitation: InvitationRow; acceptUrl: string }> {
+	const [original] = await db
+		.select()
+		.from(staffInvitations)
+		.where(eq(staffInvitations.id, id))
+		.limit(1);
+
+	if (!original) {
+		throw new HttpError(404, AUTH_ERROR_CODES.INVITATION_INVALID, "Invitation not found");
+	}
+	if (original.status === "ACCEPTED") {
+		throw new HttpError(409, AUTH_ERROR_CODES.INVITATION_ALREADY_ACCEPTED, "This invitation has already been accepted");
+	}
+
+	// Revoke the old row so the pending-unique index frees up.
+	await db
+		.update(staffInvitations)
+		.set({ status: "REVOKED", revokedAt: new Date(), updatedAt: new Date() })
+		.where(eq(staffInvitations.id, id));
+
+	// Issue a fresh invitation for the same person.
+	return createInvitation({
+		email: original.email,
+		name: original.name,
+		role: original.role as OpsRole,
+		branch: original.branch ?? undefined,
+		invitedBy: resender,
+	});
+}
+
+
+
 export async function revokeInvitation(id: string, by: string): Promise<InvitationRow> {
 	const [row] = await db
 		.update(staffInvitations)

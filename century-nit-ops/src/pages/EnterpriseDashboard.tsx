@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
-import { LEAD_STAGE_LABELS, type LeadStage } from "century-nit-core";
+import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { UnassignedBookings } from "./UnassignedBookings";
 
 /**
- * Every figure on this page is derived from the ops store, so drilling into a
+ * Every figure on this page is derived from the API, so drilling into a
  * module always matches the number that sent you there. Manager and finance
  * see every branch (optionally filtered); coordinator and consultant are
  * auto-scoped to their branch / assignments - no filter shown.
  */
 export function EnterpriseDashboard() {
 	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants, leads, activityLog, liveCase, liveOverlay } = useOpsState();
+	const { consultations, applications, applicants } = useCasesApi();
 	const [branchFilter, setBranchFilter] = useState("all");
 
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
@@ -33,16 +33,14 @@ export function EnterpriseDashboard() {
 			applicants,
 			(a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name,
 		);
-		const scopedLeads = scopeRecords(leads, (l) => l.assignedTo === opsUser?.name);
 		const inBranch = <T extends { branch: string }>(list: T[]) =>
 			branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter);
 		return {
 			consultations: inBranch(scopedConsultations),
 			applications: inBranch(scopedApplications),
 			applicants: inBranch(scopedApplicants),
-			leads: inBranch(scopedLeads),
 		};
-	}, [scopeRecords, consultations, applications, applicants, leads, opsUser, branchFilter]);
+	}, [scopeRecords, consultations, applications, applicants, opsUser, branchFilter]);
 
 	const stats = useMemo(() => {
 		const pendingDocs = scoped.applicants.reduce(
@@ -66,8 +64,8 @@ export function EnterpriseDashboard() {
 			accepted: scoped.applications.filter((a) => a.status === "Accepted").length,
 			applicants: scoped.applicants.length,
 			activeApplicants: scoped.applicants.filter((a) => a.status === "Active").length,
-			leads: scoped.leads.length,
-			convertedLeads: scoped.leads.filter((l) => l.stage === "converted").length,
+			leads: 0,
+			convertedLeads: 0,
 			unassignedConsultations: scoped.consultations.filter((c) => !c.assignedOfficer).length,
 			unassignedApplications: scoped.applications.filter((a) => !a.assignedStaff).length,
 			pendingDocs,
@@ -78,16 +76,15 @@ export function EnterpriseDashboard() {
 	}, [scoped]);
 
 	const funnel = useMemo(() => {
-		const byStage = (stage: LeadStage) => scoped.leads.filter((l) => l.stage === stage).length;
 		return [
-			{ label: LEAD_STAGE_LABELS.new, value: byStage("new"), to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.contacted, value: byStage("contacted"), to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.interested, value: byStage("interested"), to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.new, value: 0, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.contacted, value: 0, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.interested, value: 0, to: "/crm" },
 			{ label: "Consultations", value: stats.consultations, to: "/consultations" },
 			{ label: "Applications", value: stats.applications, to: "/applications" },
 			{ label: "Applicants", value: stats.applicants, to: "/applicants" },
 		];
-	}, [scoped, stats]);
+	}, [stats]);
 
 	const funnelMax = Math.max(1, ...funnel.map((f) => f.value));
 
@@ -106,51 +103,6 @@ export function EnterpriseDashboard() {
 					{canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
-
-			{/* Live portal session callout - visible to manager/coordinator/finance, hidden from admin */}
-			{liveCase?.present &&
-				opsRole &&
-				opsRole !== "admin" &&
-				(opsRole === "manager" ||
-					opsRole === "coordinator" ||
-					opsRole === "finance" ||
-					!liveOverlay.assignedOfficerEmail ||
-					liveOverlay.assignedOfficerEmail === opsUser?.email) && (
-					<div
-						style={{
-							padding: "1rem 1.25rem",
-							background: "var(--foreground)",
-							color: "var(--background)",
-							marginBottom: "2rem",
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "center",
-							gap: "1rem",
-							flexWrap: "wrap",
-						}}
-					>
-						<div>
-							<p className="eyebrow" style={{ color: "var(--muted)" }}>
-								Live applicant session
-							</p>
-							<p style={{ fontWeight: 600, marginTop: "0.2rem" }}>
-								{liveCase.name} · {liveCase.stageLabel}
-							</p>
-							<p style={{ fontSize: "var(--text-xs)", opacity: 0.8, marginTop: "0.15rem" }}>
-								{liveCase.email}
-								{liveCase.consultationRef ? ` · ${liveCase.consultationRef}` : ""}
-								{liveCase.schools.length ? ` · ${liveCase.schools.length} school(s) selected` : ""}
-							</p>
-						</div>
-						<Link
-							to={opsRole === "finance" ? "/invoices" : "/consultations"}
-							className="btn btn--sm"
-							style={{ background: "var(--background)", color: "var(--foreground)", whiteSpace: "nowrap" }}
-						>
-							{opsRole === "finance" ? "Open billing →" : "Open their case →"}
-						</Link>
-					</div>
-				)}
 
 			{/* Quick Actions - filtered by permission */}
 			<div style={{ display: "flex", gap: "1rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
@@ -173,25 +125,14 @@ export function EnterpriseDashboard() {
 
 			{/* Role-specific dashboard view */}
 			{opsRole === "coordinator" ? (
-				<CoordinatorView
-					stats={stats}
-					funnel={funnel}
-					funnelMax={funnelMax}
-					activityLog={activityLog}
-				/>
+				<CoordinatorView stats={stats} funnel={funnel} funnelMax={funnelMax} />
 			) : opsRole === "consultant" ? (
 				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} />
 			) : opsRole === "finance" ? (
 				<FinanceView stats={stats} applicants={scoped.applicants} />
 			) : (
 				/* super_admin, admin, manager, or unassigned staff default to full operational executive overview */
-				<ManagerView
-					stats={stats}
-					funnel={funnel}
-					funnelMax={funnelMax}
-					applicants={scoped.applicants}
-					activityLog={activityLog}
-				/>
+				<ManagerView stats={stats} funnel={funnel} funnelMax={funnelMax} applicants={scoped.applicants} />
 			)}
 		</div>
 	);
@@ -217,18 +158,6 @@ type Stats = {
 	collected: number;
 };
 
-type ActivityLog = { id: string; at: string; actor: string; action: string; detail: string }[];
-
-function relativeTime(iso: string) {
-	const diff = Date.now() - new Date(iso).getTime();
-	const mins = Math.round(diff / 60000);
-	if (mins < 1) return "just now";
-	if (mins < 60) return `${mins} min ago`;
-	const hours = Math.round(mins / 60);
-	if (hours < 24) return `${hours}h ago`;
-	return `${Math.round(hours / 24)}d ago`;
-}
-
 /* ─── Manager - full operational oversight ─── */
 
 function ManagerView({
@@ -236,7 +165,6 @@ function ManagerView({
 	funnel,
 	funnelMax,
 	applicants,
-	activityLog,
 }: {
 	stats: Stats;
 	funnel: { label: string; value: number; to?: string }[];
@@ -247,7 +175,6 @@ function ManagerView({
 		name: string;
 		financials: { outstanding: string; plan: string };
 	}[];
-	activityLog: ActivityLog;
 }) {
 	return (
 		<>
@@ -296,25 +223,6 @@ function ManagerView({
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
 				<div className="card">
-					<h2 className="section-title mb-3">Team Activity</h2>
-					{activityLog.length === 0 ? (
-						<p className="muted" style={{ padding: "1rem 0", fontSize: "var(--text-sm)" }}>
-							No activity yet. Complete an assessment or issue an invoice and it appears here.
-						</p>
-					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-							{activityLog.slice(0, 6).map((e) => (
-								<ActivityItem
-									key={e.id}
-									title={`${e.action} - ${e.actor}`}
-									time={`${e.detail} · ${relativeTime(e.at)}`}
-									to="/workflow"
-								/>
-							))}
-						</ul>
-					)}
-				</div>
-				<div className="card">
 					<h2 className="section-title mb-3">Balances</h2>
 					{applicants.length === 0 ? (
 						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
@@ -342,20 +250,13 @@ function CoordinatorView({
 	stats,
 	funnel,
 	funnelMax,
-	activityLog,
 }: {
 	stats: Stats;
 	funnel: { label: string; value: number; to?: string }[];
 	funnelMax: number;
-	activityLog: ActivityLog;
 }) {
 	return (
 		<>
-			{/*
-			 * Real bookings from the API, above the seeded KPI cards. This is the
-			 * manager's actual queue: clients book, nothing is auto-assigned, and
-			 * assigning here is what creates the calendar event and meeting link.
-			 */}
 			<UnassignedBookings />
 
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
@@ -366,7 +267,6 @@ function CoordinatorView({
 					inverted
 					to="/consultations"
 				/>
-				<KPICard label="Open Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/crm" />
 				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
 				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
 				<KPICard label="Pending Docs" value={String(stats.pendingDocs)} note="Awaiting verification" to="/documents" />
@@ -374,7 +274,7 @@ function CoordinatorView({
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
 				<div className="card">
-					<h2 className="section-title mb-3">Lead Pipeline Funnel</h2>
+					<h2 className="section-title mb-3">Conversion Funnel</h2>
 					<p className="muted mb-2" style={{ fontSize: "var(--text-xs)" }}>Click a stage to drill into the module.</p>
 					<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 						{funnel.map((f) => (
@@ -391,26 +291,6 @@ function CoordinatorView({
 						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/applications" />
 					</ul>
 				</div>
-			</div>
-
-			<div className="card">
-				<h2 className="section-title mb-3">Recent Activity</h2>
-				{activityLog.length === 0 ? (
-					<p className="muted" style={{ padding: "1rem 0", fontSize: "var(--text-sm)" }}>
-						No activity yet. Assign a consultant or move a lead and it appears here.
-					</p>
-				) : (
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{activityLog.slice(0, 8).map((e) => (
-							<ActivityItem
-								key={e.id}
-								title={`${e.action} - ${e.actor}`}
-								time={`${e.detail} · ${relativeTime(e.at)}`}
-								to="/workflow"
-							/>
-						))}
-					</ul>
-				)}
 			</div>
 		</>
 	);
@@ -435,7 +315,6 @@ function ConsultantView({
 				<KPICard label="My Consultations" value={String(stats.consultations)} note={`${toAssess.length} awaiting assessment`} inverted to="/consultations" />
 				<KPICard label="My Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review`} to="/applications" />
 				<KPICard label="My Applicants" value={String(stats.activeApplicants)} note="Active across all stages" to="/applicants" />
-				<KPICard label="My Leads" value={String(stats.leads)} note={`${stats.convertedLeads} converted`} to="/crm" />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>

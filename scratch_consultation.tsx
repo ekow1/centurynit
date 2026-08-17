@@ -1,0 +1,1242 @@
+					</Button>
+				)}
+				<Button to="/portal/consultation" variant="ghost">
+					← Consultation
+				</Button>
+			</div>
+		</div>
+	);
+}
+
+/* ========== Consultation - fully inside dashboard (mockup) ========== */
+
+const ASSESSMENT_DOC_FIELDS: { id: string; label: string; hint: string }[] = [
+	{ id: "passport", label: "Passport bio page", hint: "Clear scan of photo page" },
+	{ id: "certificates", label: "Academic certificates", hint: "Degree/diploma certificates" },
+	{ id: "transcripts", label: "Academic transcripts", hint: "Official grade transcripts" },
+	{ id: "cv", label: "CV / Resume", hint: "Current CV (PDF)" },
+	{ id: "english", label: "English test result", hint: "IELTS, TOEFL, or Duolingo score" },
+	{ id: "financial", label: "Financial proof", hint: "Bank statements (last 3 months)" },
+	{ id: "sponsorship", label: "Sponsorship letter", hint: "If sponsored by a third party" },
+	{ id: "additional", label: "Additional documents", hint: "Any other supporting documents" },
+];
+
+function AssessmentForm({
+	assessment,
+	assessmentDocs,
+	onUpdate,
+	onDocUpdate,
+}: {
+	assessment: AssessmentData;
+	assessmentDocs: Record<string, AssessmentDoc>;
+	onUpdate: (patch: Partial<AssessmentData>) => void;
+	onDocUpdate: (id: string, fileName: string | null) => void;
+}) {
+	const [section, setSection] = useState(0);
+	const uploadCounter = useRef(0);
+
+	const sections = [
+		{ label: "Personal", icon: "◎" },
+		{ label: "Passport", icon: "≡" },
+		{ label: "Education", icon: "◈" },
+		{ label: "Employment", icon: "◴" },
+		{ label: "English", icon: "✦" },
+		{ label: "Preferences", icon: "❖" },
+		{ label: "Financial", icon: "¤" },
+		{ label: "Documents", icon: "📎" },
+	];
+
+	function handleDocUpload(id: string) {
+		uploadCounter.current += 1;
+		const fakeName = `${id}_${uploadCounter.current.toString().padStart(4, "0")}.pdf`;
+		onDocUpdate(id, fakeName);
+	}
+
+	return (
+		<>
+			<p className="eyebrow">Assessment form</p>
+			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
+				Complete all sections. Your consultant will review this before your meeting.
+			</p>
+
+			<div className="dash-tabs mt-3" role="tablist">
+				{sections.map((s, i) => (
+					<button
+						key={s.label}
+						type="button"
+						role="tab"
+						aria-selected={section === i}
+						className={`dash-tabs__btn${section === i ? " dash-tabs__btn--active" : ""}`}
+						onClick={() => setSection(i)}
+					>
+						<span>{s.icon}</span> {s.label}
+					</button>
+				))}
+			</div>
+
+			<div className="mt-4">
+				{section === 0 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-fn">First name *</label>
+							<input id="a-fn" className="input input--full-border" value={assessment.firstName} onChange={(e) => onUpdate({ firstName: e.target.value })} placeholder="Kwame" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-mn">Middle name</label>
+							<input id="a-mn" className="input input--full-border" value={assessment.middleName} onChange={(e) => onUpdate({ middleName: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-ln">Last name *</label>
+							<input id="a-ln" className="input input--full-border" value={assessment.lastName} onChange={(e) => onUpdate({ lastName: e.target.value })} placeholder="Mensah" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-em">Email *</label>
+							<input id="a-em" type="email" className="input input--full-border" value={assessment.email} onChange={(e) => onUpdate({ email: e.target.value })} placeholder="you@example.com" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-ph">Phone *</label>
+							<input id="a-ph" className="input input--full-border" value={assessment.phone} onChange={(e) => onUpdate({ phone: e.target.value })} placeholder="+233 24 000 0000" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-dob">Date of birth</label>
+							<input id="a-dob" type="date" className="input input--full-border" value={assessment.dateOfBirth} onChange={(e) => onUpdate({ dateOfBirth: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-gender">Gender</label>
+							<select id="a-gender" className="select select--full-border" value={assessment.gender} onChange={(e) => onUpdate({ gender: e.target.value })}>
+								<option value="">Select</option>
+								<option value="male">Male</option>
+								<option value="female">Female</option>
+								<option value="other">Other</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-nat">Nationality</label>
+							<input id="a-nat" className="input input--full-border" value={assessment.nationality} onChange={(e) => onUpdate({ nationality: e.target.value })} placeholder="Ghanaian" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-addr">Residential address</label>
+							<input id="a-addr" className="input input--full-border" value={assessment.address} onChange={(e) => onUpdate({ address: e.target.value })} placeholder="Street, city, country" />
+						</div>
+					</div>
+				)}
+
+				{section === 1 && (
+					<div className="form-grid form-grid--2">
+						<div className="field">
+							<label htmlFor="a-pn">Passport number</label>
+							<input id="a-pn" className="input input--full-border" value={assessment.passportNumber} onChange={(e) => onUpdate({ passportNumber: e.target.value })} placeholder="G1234567" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-pc">Passport country</label>
+							<input id="a-pc" className="input input--full-border" value={assessment.passportCountry} onChange={(e) => onUpdate({ passportCountry: e.target.value })} placeholder="Ghana" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-pi">Issue date</label>
+							<input id="a-pi" type="date" className="input input--full-border" value={assessment.passportIssue} onChange={(e) => onUpdate({ passportIssue: e.target.value })} />
+						</div>
+						<div className="field">
+							<label htmlFor="a-pe">Expiry date</label>
+							<input id="a-pe" type="date" className="input input--full-border" value={assessment.passportExpiry} onChange={(e) => onUpdate({ passportExpiry: e.target.value })} />
+						</div>
+					</div>
+				)}
+
+				{section === 2 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-edu">Highest education</label>
+							<select id="a-edu" className="select select--full-border" value={assessment.highestEducation} onChange={(e) => onUpdate({ highestEducation: e.target.value })}>
+								<option value="">Select</option>
+								<option value="high_school">High School / WASSCE</option>
+								<option value="diploma">Diploma</option>
+								<option value="bachelors">Bachelor's Degree</option>
+								<option value="masters">Master's Degree</option>
+								<option value="phd">PhD</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-inst">Institution</label>
+							<input id="a-inst" className="input input--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })} placeholder="University of Ghana" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-fos">Field of study</label>
+							<input id="a-fos" className="input input--full-border" value={assessment.fieldOfStudy} onChange={(e) => onUpdate({ fieldOfStudy: e.target.value })} placeholder="Computer Science" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-gy">Graduation year</label>
+							<input id="a-gy" className="input input--full-border" value={assessment.graduationYear} onChange={(e) => onUpdate({ graduationYear: e.target.value })} placeholder="2024" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-gpa">GPA / Grade</label>
+							<input id="a-gpa" className="input input--full-border" value={assessment.gpa} onChange={(e) => onUpdate({ gpa: e.target.value })} placeholder="3.6 / 4.0" />
+						</div>
+					</div>
+				)}
+
+				{section === 3 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-es">Employment status</label>
+							<select id="a-es" className="select select--full-border" value={assessment.employmentStatus} onChange={(e) => onUpdate({ employmentStatus: e.target.value })}>
+								<option value="">Select</option>
+								<option value="employed">Employed</option>
+								<option value="self_employed">Self-employed</option>
+								<option value="unemployed">Unemployed</option>
+								<option value="student">Student</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-emp">Employer</label>
+							<input id="a-emp" className="input input--full-border" value={assessment.employer} onChange={(e) => onUpdate({ employer: e.target.value })} placeholder="Company name" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-jt">Job title</label>
+							<input id="a-jt" className="input input--full-border" value={assessment.jobTitle} onChange={(e) => onUpdate({ jobTitle: e.target.value })} placeholder="Software Engineer" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-yexp">Years of experience</label>
+							<input id="a-yexp" className="input input--full-border" value={assessment.yearsExperience} onChange={(e) => onUpdate({ yearsExperience: e.target.value })} placeholder="3" />
+						</div>
+					</div>
+				)}
+
+				{section === 4 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-et">English test taken</label>
+							<select id="a-et" className="select select--full-border" value={assessment.englishTest} onChange={(e) => onUpdate({ englishTest: e.target.value })}>
+								<option value="">Select</option>
+								<option value="ielts">IELTS</option>
+								<option value="toefl">TOEFL</option>
+								<option value="duolingo">Duolingo English Test</option>
+								<option value="pte">PTE Academic</option>
+								<option value="none">Not yet taken</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-es-score">Score</label>
+							<input id="a-es-score" className="input input--full-border" value={assessment.englishScore} onChange={(e) => onUpdate({ englishScore: e.target.value })} placeholder="7.5" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-ed">Test date</label>
+							<input id="a-ed" type="date" className="input input--full-border" value={assessment.englishDate} onChange={(e) => onUpdate({ englishDate: e.target.value })} />
+						</div>
+					</div>
+				)}
+
+				{section === 5 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-pc2">Preferred countries</label>
+							<input id="a-pc2" className="input input--full-border" value={assessment.preferredCountries} onChange={(e) => onUpdate({ preferredCountries: e.target.value })} placeholder="UK, Canada, Australia" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-pl">Preferred level</label>
+							<select id="a-pl" className="select select--full-border" value={assessment.preferredLevel} onChange={(e) => onUpdate({ preferredLevel: e.target.value })}>
+								<option value="">Select</option>
+								<option value="foundation">Foundation / Pathway</option>
+								<option value="bachelors">Bachelor's</option>
+								<option value="masters">Master's</option>
+								<option value="phd">PhD</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-pf">Preferred field</label>
+							<input id="a-pf" className="input input--full-border" value={assessment.preferredField} onChange={(e) => onUpdate({ preferredField: e.target.value })} placeholder="Data Science, Business" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-intake">Intake preference</label>
+							<select id="a-intake" className="select select--full-border" value={assessment.intakePreference} onChange={(e) => onUpdate({ intakePreference: e.target.value })}>
+								<option value="">Select</option>
+								<option value="spring">Spring (Jan/Feb)</option>
+								<option value="fall">Fall (Sep/Oct)</option>
+								<option value="summer">Summer (May/Jun)</option>
+								<option value="flexible">Flexible</option>
+							</select>
+						</div>
+					</div>
+				)}
+
+				{section === 6 && (
+					<div className="form-grid form-grid--3">
+						<div className="field">
+							<label htmlFor="a-fs">Funding source</label>
+							<select id="a-fs" className="select select--full-border" value={assessment.fundingSource} onChange={(e) => onUpdate({ fundingSource: e.target.value })}>
+								<option value="">Select</option>
+								<option value="self">Self-funded</option>
+								<option value="family">Family / Parents</option>
+								<option value="sponsor">Sponsor</option>
+								<option value="loan">Education loan</option>
+								<option value="scholarship">Scholarship / Grant</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-br">Budget range (GHS / USD per year)</label>
+							<select id="a-br" className="select select--full-border" value={assessment.budgetRange} onChange={(e) => onUpdate({ budgetRange: e.target.value })}>
+								<option value="">Select</option>
+								<option value="under_15k">Under $15,000</option>
+								<option value="15k_30k">$15,000 – $30,000</option>
+								<option value="30k_50k">$30,000 – $50,000</option>
+								<option value="over_50k">Over $50,000</option>
+							</select>
+						</div>
+						<div className="field">
+							<label htmlFor="a-sn">Sponsor name</label>
+							<input id="a-sn" className="input input--full-border" value={assessment.sponsorName} onChange={(e) => onUpdate({ sponsorName: e.target.value })} placeholder="If applicable" />
+						</div>
+						<div className="field">
+							<label htmlFor="a-sr">Sponsor relationship</label>
+							<input id="a-sr" className="input input--full-border" value={assessment.sponsorRelationship} onChange={(e) => onUpdate({ sponsorRelationship: e.target.value })} placeholder="Parent, Guardian, etc." />
+						</div>
+					</div>
+				)}
+
+				{section === 7 && (
+					<div>
+						<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
+							Upload scanned copies of your documents. Simulated - clicking upload generates a placeholder filename.
+						</p>
+						<div className="form-grid form-grid--2">
+							{ASSESSMENT_DOC_FIELDS.map((doc) => {
+								const uploaded = assessmentDocs[doc.id];
+								return (
+									<div key={doc.id} className="card card--pad">
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+											<div>
+												<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{doc.label}</p>
+												<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.2rem" }}>{doc.hint}</p>
+											</div>
+											{uploaded?.fileName ? (
+												<span className="portal-pill portal-pill--approved">Uploaded</span>
+											) : (
+												<span className="portal-pill portal-pill--needs_info">Pending</span>
+											)}
+										</div>
+										{uploaded?.fileName ? (
+											<div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+												<span className="mono" style={{ fontSize: "0.75rem" }}>{uploaded.fileName}</span>
+												{uploaded.uploadedAt ? (
+													<span className="muted" style={{ fontSize: "0.7rem" }}>{new Date(uploaded.uploadedAt).toLocaleDateString()}</span>
+												) : null}
+												<div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
+													<button type="button" className="btn btn--ghost btn--sm" onClick={() => handleDocUpload(doc.id)}>Replace</button>
+													<button type="button" className="btn btn--ghost btn--sm" onClick={() => onDocUpdate(doc.id, null)}>Remove</button>
+												</div>
+											</div>
+										) : (
+											<div style={{ marginTop: "0.75rem" }}>
+												<button type="button" className="btn btn--secondary btn--sm" onClick={() => handleDocUpload(doc.id)}>Upload (simulated)</button>
+											</div>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				)}
+			</div>
+
+			<div className="row mt-4" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>
+				<Button type="button" variant="ghost" disabled={section === 0} onClick={() => setSection((s) => Math.max(0, s - 1))}>
+					← Prev section
+				</Button>
+				<Button type="button" variant="secondary" disabled={section >= sections.length - 1} onClick={() => setSection((s) => Math.min(sections.length - 1, s + 1))}>
+					Next section →
+				</Button>
+			</div>
+		</>
+	);
+}
+
+const CONSULT_TABS = [
+	"Type",
+	"Location",
+	"Branch",
+	"Schedule",
+	"Assessment",
+	"Pay",
+	"Review",
+	"Outcome",
+] as const;
+
+const OUTCOME_LABELS: Record<EligibilityOutcome, string> = {
+	pending: "Awaiting consultant feedback",
+	eligible: "Eligible",
+	conditional: "Conditionally Eligible",
+	needs_info: "Additional Information Required",
+	not_eligible: "Not Eligible",
+};
+
+const OUTCOME_PILLS: Record<EligibilityOutcome, string> = {
+	pending: "portal-pill--draft",
+	eligible: "portal-pill--approved",
+	conditional: "portal-pill--draft",
+	needs_info: "portal-pill--needs_info",
+	not_eligible: "portal-pill--needs_info",
+};
+
+const CONSULTANT_RECOMMENDATIONS: Record<EligibilityOutcome, { countries: string[]; programs: string[]; notes: string[] }> = {
+	pending: { countries: [], programs: [], notes: [] },
+	eligible: {
+		countries: ["United Kingdom", "Canada", "Australia"],
+		programs: ["MSc Data Science", "MSc Business Analytics", "MA International Relations"],
+		notes: [
+			"Strong academic background matches top-tier universities.",
+			"English proficiency meets requirements for most partner institutions.",
+			"Financial capacity is sufficient for the proposed budget range.",
+			"Recommended to apply to 3–5 universities for best outcomes.",
+		],
+	},
+	conditional: {
+		countries: ["United Kingdom", "Ireland"],
+		programs: ["Pre-Master's Pathway", "MSc Management"],
+		notes: [
+			"English score slightly below requirement - recommend retaking IELTS (target 6.5+).",
+			"Consider a pathway/foundation programme as an entry route.",
+			"Submit updated transcripts with degree certificate once available.",
+		],
+	},
+	needs_info: {
+		countries: [],
+		programs: [],
+		notes: [
+			"Please upload your passport bio page.",
+			"Submit your most recent academic transcript.",
+			"Provide proof of English proficiency (IELTS/TOEFL/Duolingo).",
+		],
+	},
+	not_eligible: {
+		countries: [],
+		programs: [],
+		notes: [
+			"Current qualifications do not meet minimum entry requirements for the preferred pathways.",
+			"Consider upgrading qualifications or exploring alternative programmes.",
+			"Re-apply after completing the recommended preparatory steps.",
+		],
+	},
+};
+
+function ConsultationOutcome({
+	booking,
+	onMockOutcome,
+	onRevealOutcome,
+	autopilot,
+}: {
+	booking: BookingData;
+	onMockOutcome: (outcome: EligibilityOutcome, note?: string) => void;
+	onRevealOutcome: () => void;
+	autopilot: boolean;
+}) {
+	const outcome = booking.eligibilityOutcome;
+	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete");
+	const recs = CONSULTANT_RECOMMENDATIONS[outcome];
+
+	if (!booking.confirmationId) {
+		return (
+			<>
+				<p className="eyebrow">Outcome</p>
+				<p className="muted mt-2">Complete payment in the Pay tab to receive your consultation outcome.</p>
+			</>
+		);
+	}
+
+	if (booking.consultationPhase === "assessment_complete") {
+		return (
+			<>
+				<p className="eyebrow">Outcome</p>
+				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
+					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
+						Your consultant has finished reviewing your file. Your eligibility outcome is ready to view.
+					</p>
+					<div className="row mt-4" style={{ justifyContent: "center" }}>
+						<Button type="button" onClick={onRevealOutcome} arrow>
+							View your outcome →
+						</Button>
+					</div>
+					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
+						Booking ref: {booking.confirmationId}
+					</p>
+				</div>
+			</>
+		);
+	}
+
+	if (isPending) {
+		const phaseLabels: Record<string, string> = {
+			awaiting_confirmation: "Awaiting booking confirmation",
+			confirmed: "Booking confirmed - awaiting consultant assignment",
+			awaiting_assignment: "Awaiting consultant assignment",
+			assigned: booking.consultantName ? `Assigned to ${booking.consultantName}` : "Consultant assigned",
+			awaiting_assignment_confirmation: "Awaiting assignment confirmation",
+			assessment: "Assessment in progress",
+			booked: "Booking confirmed",
+			draft: "Awaiting payment",
+		};
+		const phaseLabel = phaseLabels[booking.consultationPhase] ?? "In progress";
+		return (
+			<>
+				<p className="eyebrow">Outcome</p>
+				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+					<div style={{ marginBottom: "1.5rem" }}>
+						<span
+							style={{
+								display: "inline-flex",
+								width: "48px",
+								height: "48px",
+								border: "2px solid var(--border)",
+								borderTopColor: "var(--foreground)",
+								borderRadius: "50%",
+								animation: "spin 1s linear infinite",
+							}}
+						/>
+					</div>
+					<p className="display" style={{ fontSize: "1.2rem" }}>{phaseLabel}</p>
+					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
+						Your consultant is reviewing your assessment details and uploaded documents. This typically takes a few minutes in the prototype. You'll see the outcome here once it's ready.
+					</p>
+					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
+						Booking ref: {booking.confirmationId}
+					</p>
+				</div>
+				<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+			</>
+		);
+	}
+
+	return (
+		<>
+				<p className="eyebrow">Consultation outcome</p>
+				<div className="mt-3" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+					<span className={`portal-pill ${OUTCOME_PILLS[outcome]}`} style={{ fontSize: "0.85rem" }}>
+						{OUTCOME_LABELS[outcome]}
+					</span>
+					{booking.outcomeAt ? (
+						<span className="mono muted" style={{ fontSize: "0.75rem" }}>
+							{new Date(booking.outcomeAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+						</span>
+					) : null}
+				</div>
+
+				<div className="card card--pad mt-4">
+					<p className="eyebrow">Consultant's feedback</p>
+					<p className="mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+						{booking.eligibilityNote}
+					</p>
+				</div>
+
+				{recs.notes.length > 0 ? (
+					<div className="card card--pad mt-3">
+						<p className="eyebrow">Recommendations</p>
+						<ul style={{ listStyle: "none", margin: 0, padding: 0, marginTop: "0.75rem" }}>
+							{recs.notes.map((note, i) => (
+								<li key={i} style={{ padding: "0.5rem 0", borderBottom: i < recs.notes.length - 1 ? "1px solid var(--border-light)" : "none", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+									<span style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>→</span>
+									<span style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>{note}</span>
+								</li>
+							))}
+						</ul>
+					</div>
+				) : null}
+
+				{recs.countries.length > 0 ? (
+					<div className="card card--pad mt-3">
+						<p className="eyebrow">Recommended destinations</p>
+						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+							{recs.countries.map((c) => (
+								<span key={c} className="portal-pill" style={{ fontSize: "0.8rem" }}>{c}</span>
+							))}
+						</div>
+					</div>
+				) : null}
+
+				{recs.programs.length > 0 ? (
+					<div className="card card--pad mt-3">
+						<p className="eyebrow">Suggested programmes</p>
+						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+							{recs.programs.map((p) => (
+								<span key={p} className="portal-pill" style={{ fontSize: "0.8rem" }}>{p}</span>
+							))}
+						</div>
+					</div>
+				) : null}
+
+				{(outcome === "eligible" || outcome === "conditional") ? (
+					<div className="card card--pad mt-4 next-action">
+						<p className="eyebrow">Next step</p>
+						<p className="mt-2" style={{ fontSize: "0.95rem" }}>
+							{outcome === "eligible"
+								? "You're cleared to proceed. Choose your school application package to begin applying."
+								: "Address the recommendations above, then proceed to choose your school application package."}
+						</p>
+						<div className="row mt-3">
+							<Button to="/portal/package" arrow>
+								Next · School package
+							</Button>
+						</div>
+					</div>
+				) : null}
+
+				{/* Hidden when the Operations Center is driving - the consultant owns this call.
+    Further gated behind the build-time dev flag: a production build must not
+    let an applicant self-approve their own eligibility, which is the gate for
+    the entire downstream journey. This is a demo affordance only, so Vite
+    tree-shakes the whole block out of a production bundle. */}
+				{import.meta.env.DEV && autopilot ? (
+					<details style={{ marginTop: "1rem" }}>
+						<summary className="mono muted" style={{ fontSize: "0.75rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+							Simulate other outcomes
+						</summary>
+						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+							<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("eligible")}>
+								Eligible
+							</Button>
+							<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("conditional")}>
+								Conditional
+							</Button>
+							<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("needs_info")}>
+								Needs Info
+							</Button>
+							<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("not_eligible")}>
+								Not Eligible
+							</Button>
+						</div>
+					</details>
+				) : null}
+		</>
+	);
+}
+
+/* ========== Consultation review - awaiting approval & assessment ========== */
+
+function ConsultationReview({
+	booking,
+	onProceed,
+	onRevealOutcome,
+}: {
+	booking: BookingData;
+	onProceed: () => void;
+	onRevealOutcome: () => void;
+}) {
+	const phase = booking.consultationPhase;
+
+	if (!booking.confirmationId) {
+		return (
+			<>
+				<p className="eyebrow">Review</p>
+				<p className="muted mt-2">Complete payment in the Pay tab first. Your consultant review begins after confirmation.</p>
+			</>
+		);
+	}
+
+	const isPast = (p: string) => {
+		const order = ["draft", "awaiting_confirmation", "confirmed", "awaiting_assignment", "assigned", "awaiting_assignment_confirmation", "assessment", "assessment_complete", "outcome"];
+		return order.indexOf(phase) > order.indexOf(p);
+	};
+	const isActive = (p: string) => phase === p;
+	const isDone = (p: string) => isPast(p) || phase === "outcome";
+
+	const steps = [
+		{
+			id: "paid",
+			label: "Payment received",
+			detail: `Reference ${booking.confirmationId} · ${formatDualCurrency(75)}`,
+			done: true,
+		},
+		{
+			id: "awaiting_confirmation",
+			label: "Awaiting booking confirmation",
+			detail: "The branch reviews your payment and confirms your consultation slot.",
+			active: isActive("awaiting_confirmation"),
+			done: isDone("awaiting_confirmation"),
+		},
+		{
+			id: "confirmed",
+			label: "Booking confirmed",
+			detail: "Your consultation slot has been confirmed. Waiting for a consultant to be assigned.",
+			active: isActive("confirmed"),
+			done: isDone("confirmed"),
+		},
+		{
+			id: "awaiting_assignment",
+			label: "Awaiting consultant assignment",
+			detail: "The branch is assigning a consultant to your case.",
+			active: isActive("awaiting_assignment"),
+			done: isDone("awaiting_assignment"),
+		},
+		{
+			id: "assigned",
+			label: "Consultant assigned",
+			detail: booking.consultantName
+				? `Your case has been assigned to ${booking.consultantName}. Waiting for the consultant to confirm the assignment.`
+				: "A consultant has been assigned to your case. Waiting for confirmation.",
+			active: isActive("assigned"),
+			done: isDone("assigned"),
+		},
+		{
+			id: "awaiting_assignment_confirmation",
+			label: "Awaiting assignment confirmation",
+			detail: booking.consultantName
+				? `${booking.consultantName} is reviewing and accepting the assignment before assessment begins.`
+				: "The consultant is confirming the assignment before assessment begins.",
+			active: isActive("awaiting_assignment_confirmation"),
+			done: isDone("awaiting_assignment_confirmation"),
+		},
+		{
+			id: "assessment",
+			label: "Assessment in progress",
+			detail: booking.consultantName
+				? `${booking.consultantName} is reviewing your academic background, documents, and study goals.`
+				: "Your consultant evaluates your academic background, documents, and study goals.",
+			active: isActive("assessment"),
+			done: isDone("assessment"),
+		},
+		{
+			id: "assessment_complete",
+			label: "Assessment complete",
+			detail: "Your consultant has finished the assessment. Click to view your eligibility outcome.",
+			active: isActive("assessment_complete"),
+			done: phase === "outcome",
+		},
+		{
+			id: "outcome",
+			label: "Eligibility outcome",
+			detail: "The consultant determines your eligibility and recommends next steps.",
+			active: isActive("outcome"),
+			done: phase === "outcome",
+		},
+	];
+
+	const phaseLabels: Record<string, string> = {
+		awaiting_confirmation: "Awaiting booking confirmation",
+		confirmed: "Booking confirmed",
+		awaiting_assignment: "Awaiting consultant assignment",
+		assigned: booking.consultantName ? `Assigned to ${booking.consultantName}` : "Consultant assigned",
+		awaiting_assignment_confirmation: "Awaiting assignment confirmation",
+		assessment: "Assessment in progress",
+		assessment_complete: "Assessment complete",
+		outcome: "Review complete",
+		draft: "Awaiting payment",
+		booked: "Booking confirmed",
+	};
+
+	return (
+		<>
+			<p className="eyebrow">Consultant review</p>
+			<p className="display mt-2" style={{ fontSize: "1.3rem" }}>
+				{phaseLabels[phase] ?? "In progress"}
+			</p>
+			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
+				{booking.eligibilityNote ??
+					"Your file has been submitted. The consultant at your branch will review and assess before producing an outcome."}
+			</p>
+
+			{/* Assessment complete - prominent call to action */}
+			{phase === "assessment_complete" ? (
+				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "2rem 1.5rem", border: "2px solid var(--foreground)" }}>
+					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
+					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
+						Your consultant has finished reviewing your file. Your eligibility outcome is ready.
+					</p>
+					<div className="row mt-3" style={{ justifyContent: "center" }}>
+						<Button type="button" onClick={onRevealOutcome} arrow>
+							View your outcome →
+						</Button>
+					</div>
+				</div>
+			) : null}
+
+			{/* Appointment - consultant, when, and a mode-aware where + actions */}
+			<ConsultationAppointmentCard />
+
+			{/* The consultant now leads the appointment card above, so no separate tile */}
+
+			<div className="mt-4" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+				{steps.map((s, i) => (
+					<div
+						key={s.id}
+						style={{
+							display: "flex",
+							gap: "1rem",
+							paddingBottom: i < steps.length - 1 ? "1.5rem" : 0,
+							position: "relative",
+						}}
+					>
+						<div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+							<span
+								style={{
+									width: "32px",
+									height: "32px",
+									borderRadius: "50%",
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									fontSize: "0.75rem",
+									fontWeight: 600,
+									border: s.done
+										? "2px solid var(--foreground)"
+										: s.active
+											? "2px solid var(--foreground)"
+											: "2px solid var(--border)",
+									background: s.done ? "var(--foreground)" : "transparent",
+									color: s.done ? "var(--background)" : s.active ? "var(--foreground)" : "var(--muted-foreground)",
+								}}
+							>
+								{s.done ? "✓" : s.active ? (
+									<span
+										style={{
+											display: "inline-block",
+											width: "14px",
+											height: "14px",
+											border: "2px solid var(--foreground)",
+											borderTopColor: "transparent",
+											borderRadius: "50%",
+											animation: "spin 1s linear infinite",
+										}}
+									/>
+								) : i + 1}
+							</span>
+							{i < steps.length - 1 ? (
+								<span
+									style={{
+										width: "2px",
+										flex: 1,
+										minHeight: "2rem",
+										marginTop: "0.25rem",
+										background: s.done ? "var(--foreground)" : "var(--border)",
+									}}
+								/>
+							) : null}
+						</div>
+						<div style={{ paddingBottom: "0.5rem" }}>
+							<p
+								style={{
+									fontSize: "0.95rem",
+									fontWeight: s.active || s.done ? 600 : 400,
+									color: s.done || s.active ? "var(--foreground)" : "var(--muted-foreground)",
+								}}
+							>
+								{s.label}
+							</p>
+							<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.2rem" }}>
+								{s.detail}
+							</p>
+							{s.active ? (
+								<p className="mono" style={{ fontSize: "0.7rem", marginTop: "0.4rem", color: "var(--muted-foreground)" }}>
+									In progress…
+								</p>
+							) : null}
+						</div>
+					</div>
+				))}
+			</div>
+
+			<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+			{phase === "outcome" ? (
+				<div className="row mt-4">
+					<Button type="button" onClick={onProceed} arrow>
+						View outcome →
+					</Button>
+				</div>
+			) : phase !== "assessment_complete" ? (
+				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>
+					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
+						Booking ref: {booking.confirmationId}
+					</p>
+					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+						This typically takes a few minutes in the prototype. The outcome will appear automatically - you can stay on this page or check the Outcome tab.
+					</p>
+				</div>
+			) : null}
+		</>
+	);
+}
+
+/**
+ * Date and slot picker for the applicant's consultation booking.
+ *
+ * Replaces a bare `<input type="date">` plus six hard-coded times that checked
+ * nothing: an applicant could book a date in the past, a day the branch is
+ * closed, or a slot another applicant already had. It now applies the same
+ * rules the Operations Center's reschedule panel does, from the same module —
+ * when the two drifted, one side offered slots the other considered taken.
+ *
+ * Slot times come from the chosen duration, so a 60-minute consultation no
+ * longer offers half-hour starts.
+ */
+function SlotPicker({
+	branchId,
+	duration,
+	date,
+	time,
+	onPick,
+}: {
+	branchId: string;
+	duration: string;
+	date: string;
+	time: string;
+	onPick: (date: string, time: string) => void;
+}) {
+	const days = useMemo(() => upcomingDays(branchId || null), [branchId]);
+	const slots =
+		(CONSULTATION_DURATIONS.find((d) => d.id === duration) ?? CONSULTATION_DURATIONS[1])
+			.slots as readonly string[];
+
+	// Recomputed per render rather than memoised: occupancy can change in the
+	// other tab (an ops user taking a slot) and this view must not go stale.
+	const taken = branchId && date ? bookedTimesOn(branchId, date) : new Set<string>();
+
+	if (!branchId) {
+		return (
+			<>
+				<p className="eyebrow">Date &amp; time</p>
+				<p className="muted mt-3">Choose a branch first — opening days differ by location.</p>
+			</>
+		);
+	}
+
+	return (
+		<>
+			<p className="eyebrow">Date &amp; time</p>
+
+			<p className="resched__label mono mt-3">Date</p>
+			<div className="resched__days">
+				{days.map((d) => (
+					<button
+						key={d.date}
+						type="button"
+						disabled={d.disabled}
+						onClick={() => onPick(d.date, "")}
+						className={`resched__day${date === d.date ? " resched__day--on" : ""}`}
+						title={d.disabled ? "Branch closed" : undefined}
+					>
+						<span className="resched__day-wd">{d.weekday}</span>
+						<span className="resched__day-num">{d.label}</span>
+					</button>
+				))}
+			</div>
+
+			<p className="resched__label mono mt-3">
+				Time{" "}
+				<span className="muted">
+					· {CONSULTATION_DURATIONS.find((d) => d.id === duration)?.label ?? "45 min"} · branch local
+				</span>
+			</p>
+			{date ? (
+				<div className="resched__slots">
+					{slots.map((t) => {
+						const isTaken = taken.has(t);
+						return (
+							<button
+								key={t}
+								type="button"
+								disabled={isTaken}
+								onClick={() => onPick(date, t)}
+								className={`resched__slot${time === t ? " resched__slot--on" : ""}`}
+								title={isTaken ? "Already booked at this branch" : undefined}
+							>
+								{t}
+								{isTaken ? <span className="resched__slot-tag">booked</span> : null}
+							</button>
+						);
+					})}
+				</div>
+			) : (
+				<p className="resched__hint muted">Select a date to see open slots.</p>
+			)}
+		</>
+	);
+}
+
+export function PortalConsultation() {
+	const {
+		booking,
+		updateBooking,
+		updateAssessment,
+		updateAssessmentDoc,
+		completeConsultationPayment,
+		setEligibilityOutcome,
+		revealOutcome,
+		simAutopilot,
+	} = useAppState();
+	const [selectedTab, setSelectedTab] = useState(0);
+	const tab = useMemo(() => {
+		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete") {
+			return CONSULT_TABS.length - 1;
+		}
+		return selectedTab;
+	}, [booking.consultationPhase, selectedTab]);
+	const [payState, setPayState] = useState<"method" | "card" | "momo" | "processing" | "success" | "paid">(
+		booking.confirmationId ? "paid" : "method",
+	);
+
+	function startPayment() {
+		if (payState === "paid" || payState === "processing" || payState === "success") return;
+		setPayState("processing");
+		window.setTimeout(() => {
+			completeConsultationPayment();
+			setPayState("success");
+			window.setTimeout(() => {
+				setSelectedTab(6);
+				setPayState("paid");
+			}, 2_500);
+		}, 4_200);
+	}
+
+	return (
+		<div className="portal-page">
+			<header className="portal-page__header">
+				<div>
+					<p className="eyebrow">Dashboard · Stage I</p>
+					<h1 className="page-title mt-1">Consultation</h1>
+					<p className="lead mt-2">
+						All consultation steps stay <strong>inside this dashboard</strong> - not a separate app.
+						Mockup: skip freely between tabs.
+					</p>
+				</div>
+			</header>
+
+			<div className="dash-tabs" role="tablist">
+				{CONSULT_TABS.map((label, i) => {
+					const isOutcomeTab = i === CONSULT_TABS.length - 1;
+					const outcomeUnlocked =
+						booking.consultationPhase === "assessment_complete" ||
+						booking.consultationPhase === "outcome";
+					const isLocked = isOutcomeTab && !outcomeUnlocked;
+					return (
+						<button
+							key={label}
+							type="button"
+							role="tab"
+							aria-selected={tab === i}
+							aria-disabled={isLocked}
+							className={`dash-tabs__btn${tab === i ? " dash-tabs__btn--active" : ""}${isLocked ? " dash-tabs__btn--locked" : ""}`}
+							onClick={() => !isLocked && setSelectedTab(i)}
+						>
+							<span className="mono">{i + 1}</span> {label}
+							{isLocked ? <span className="dash-tabs__lock">🔒</span> : null}
+						</button>
+					);
+				})}
+			</div>
+
+			<div className="card card--pad mt-3">
+				{tab === 0 && (
+					<>
+						<p className="eyebrow">Meeting type</p>
+						<div className="card-grid card-grid--2 mt-3">
+							{(
+								[
+									["online", "Online Consultation"],
+									["in_person", "In-Person Consultation"],
+								] as const
+							).map(([id, name]) => (
+								<button
+									key={id}
+									type="button"
+									className={`card card--pad card--selectable${booking.consultationType === id ? " card--selected" : ""}`}
+									onClick={() => updateBooking({ consultationType: id })}
+								>
+									<span className="display" style={{ fontSize: "1.25rem" }}>
+										{name}
+									</span>
+								</button>
+							))}
+						</div>
+					</>
+				)}
+				{tab === 1 && (
+					<>
+						<p className="eyebrow">Your location</p>
+						<div className="form-grid form-grid--3 mt-3">
+							<div className="field">
+								<label htmlFor="c-country">Country</label>
+								<input
+									id="c-country"
+									className="input input--full-border"
+									value={booking.country}
+									onChange={(e) => updateBooking({ country: e.target.value })}
+									placeholder="Ghana"
+								/>
+							</div>
+							<div className="field">
+								<label htmlFor="c-region">Region</label>
+								<input
+									id="c-region"
+									className="input input--full-border"
+									value={booking.region}
+									onChange={(e) => updateBooking({ region: e.target.value })}
+									placeholder="Greater Accra"
+								/>
+							</div>
+							<div className="field">
+								<label htmlFor="c-city">City</label>
+								<input
+									id="c-city"
+									className="input input--full-border"
+									value={booking.city}
+									onChange={(e) => updateBooking({ city: e.target.value })}
+									placeholder="Accra"
+								/>
+							</div>
+						</div>
+					</>
+				)}
+				{tab === 2 && (
+					<>
+						<p className="eyebrow">Branch</p>
+						<div className="card-grid card-grid--2 mt-3">
+							{[
+								{ id: "accra-hq", name: "Accra Headquarters" },
+								{ id: "kumasi", name: "Kumasi Branch" },
+								{ id: "takoradi", name: "Takoradi Branch" },
+							].map((b) => (
+								<button
+									key={b.id}
+									type="button"
+									className={`card card--pad card--selectable${booking.branchId === b.id ? " card--selected" : ""}`}
+									onClick={() => updateBooking({ branchId: b.id })}
+								>
+									<span className="display" style={{ fontSize: "1.2rem" }}>
+										{b.name}
+									</span>
+								</button>
+							))}
+						</div>
+					</>
+				)}
+				{tab === 3 && (
+					<SlotPicker
+						branchId={booking.branchId}
+						duration={booking.duration}
+						date={booking.date}
+						time={booking.time}
+						onPick={(date, time) => updateBooking({ date, time })}
+					/>
+				)}
+				{tab === 4 && (
+					<AssessmentForm
+						assessment={booking.assessment}
+						assessmentDocs={booking.assessmentDocs}
+						onUpdate={updateAssessment}
+						onDocUpdate={updateAssessmentDoc}
+					/>
+				)}
+				{tab === 5 && (					<>
+						<p className="eyebrow">Consultation fee</p>
+						<p className="display mt-2" style={{ fontSize: "2rem" }}>
+							{formatDualCurrency(75)}
+						</p>
+						<p className="muted mt-1">Mock gateway - choose a payment method to confirm booking.</p>
+
+						{payState === "paid" && booking.confirmationId ? (
+							<div className="card card--pad mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
+								<p className="eyebrow">Payment received</p>
+								<p className="mono mt-2">Ref: {booking.confirmationId}</p>
+								<p className="mt-2" style={{ opacity: 0.85 }}>
+									Booking is now awaiting confirmation from the branch.
+								</p>
+							</div>
+						) : null}
+
+						{payState === "method" ? (
+							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
+								<p className="eyebrow mb-2">Select payment method</p>
+								<div className="card-grid card-grid--2 mt-2">
+									<button
+										type="button"
+										className="card card--pad card--selectable"
+										onClick={() => setPayState("card")}
+									>
+										<span className="display" style={{ fontSize: "1.2rem" }}>Card</span>
+										<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
+											Visa / Mastercard (mock Paystack)
+										</p>
+									</button>
+									<button
+										type="button"
+										className="card card--pad card--selectable"
+										onClick={() => setPayState("momo")}
+									>
+										<span className="display" style={{ fontSize: "1.2rem" }}>MTN MoMo</span>
+										<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>
+											Mobile money (mock)
+										</p>
+									</button>
+								</div>
+							</div>
+						) : null}
+
+						{payState === "card" ? (
+							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+									<p className="eyebrow mb-2">Pay with card (mock)</p>
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={() => setPayState("method")}
+									>
+										Change
+									</button>
+								</div>
+								<div className="form-grid form-grid--2">
+									<div className="field">
+										<label htmlFor="card-number">Card number</label>
+										<input id="card-number" className="input input--full-border" value="4242 4242 4242 4242" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="card-name">Cardholder</label>
+										<input id="card-name" className="input input--full-border" value="Alex Rivera" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="card-expiry">Expiry</label>
+										<input id="card-expiry" className="input input--full-border" value="12/30" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="card-cvv">CVV</label>
+										<input id="card-cvv" className="input input--full-border" value="123" readOnly />
+									</div>
+								</div>
+								<div className="row mt-4">
+									<Button type="button" onClick={startPayment} arrow>
+										Pay {formatDualCurrency(75)}
+									</Button>
+								</div>
+							</div>
+						) : null}
+
+						{payState === "momo" ? (
+							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+									<p className="eyebrow mb-2">Pay with MTN MoMo (mock)</p>
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={() => setPayState("method")}
+									>
+										Change
+									</button>
+								</div>
+								<div className="form-grid form-grid--2">
+									<div className="field">
+										<label htmlFor="momo-number">MoMo number</label>
+										<input id="momo-number" className="input input--full-border" value="024 123 4567" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="momo-name">Account name</label>
+										<input id="momo-name" className="input input--full-border" value="Alex Rivera" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="momo-provider">Provider</label>
+										<input id="momo-provider" className="input input--full-border" value="MTN Mobile Money" readOnly />
+									</div>
+									<div className="field">
+										<label htmlFor="momo-confirm">Confirm</label>
+										<input id="momo-confirm" className="input input--full-border" value="PIN: 0000" readOnly />
+									</div>
+								</div>
+								<div className="row mt-4">
+									<Button type="button" onClick={startPayment} arrow>
+										Pay {formatDualCurrency(75)}

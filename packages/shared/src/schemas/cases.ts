@@ -87,6 +87,7 @@ export const applicantProfileSchema = z.object({
 	degreeLevel: z.string().optional(),
 	intake: z.string().optional(),
 	major: z.string().optional(),
+	referralSource: z.string().optional(),
 });
 export type ApplicantProfile = z.infer<typeof applicantProfileSchema>;
 

@@ -97,6 +97,10 @@ export async function createTicket(
 
 	const applicantName = applicant?.name ?? user.name ?? user.email.split("@")[0];
 
+	// Auto-assign to the applicant's consultation officer so the ticket
+	// reaches the right desk immediately instead of sitting in triage.
+	const autoAssignId = applicant?.assignedOfficerId ?? null;
+
 	const [created] = await db
 		.insert(tickets)
 		.values({
@@ -107,6 +111,7 @@ export async function createTicket(
 			category: input.category,
 			status: "open",
 			priority: input.priority ?? "medium",
+			assignedStaffId: autoAssignId,
 		})
 		.returning();
 

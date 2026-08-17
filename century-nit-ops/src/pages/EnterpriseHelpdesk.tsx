@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
-import { SUPPORT_ROSTER, branchName } from "century-nit-core/ops";
+import { useTicketsApi } from "../hooks/useTicketsApi";
+import { branchName } from "century-nit-core/ops";
 import type {
 	InternalTicket,
 	TicketCategory,
@@ -38,13 +39,31 @@ type Queue = "external" | "internal";
 export function EnterpriseHelpdesk() {
 	const {
 		internalTickets,
-		createTicket,
-		updateTicketStatus,
-		assignTicket,
-		escalateTicket,
-		replyToTicket,
+		createTicket: localCreateTicket,
+		updateTicketStatus: localUpdateTicketStatus,
+		assignTicket: localAssignTicket,
+		escalateTicket: localEscalateTicket,
+		replyToTicket: localReplyToTicket,
 	} = useOpsState();
 	const { opsUser, opsRole } = useOpsAuth();
+
+	const {
+		tickets: allTickets,
+		error: ticketsError,
+		staffList,
+		assignTicket,
+		escalateTicket,
+		updateTicketStatus,
+		replyToTicket,
+		createTicket: _createTicket,
+	} = useTicketsApi({
+		localInternalTickets: internalTickets,
+		onLocalCreate: localCreateTicket,
+		onLocalUpdate: localUpdateTicketStatus,
+		onLocalAssign: localAssignTicket,
+		onLocalEscalate: localEscalateTicket,
+		onLocalReply: localReplyToTicket,
+	});
 
 	const [queue, setQueue] = useState<Queue>("external");
 	const [statusFilter, setStatusFilter] = useState<"all" | TicketStatus>("all");
@@ -66,12 +85,12 @@ export function EnterpriseHelpdesk() {
 	const isAdmin = opsRole === "admin";
 
 	const scoped = useMemo(() => {
-		if (canTriage) return internalTickets;
-		if (isAdmin) return internalTickets.filter((t) => t.escalatedToAdmin || t.source === "internal");
-		return internalTickets.filter(
+		if (canTriage) return allTickets;
+		if (isAdmin) return allTickets.filter((t) => t.escalatedToAdmin || t.source === "internal");
+		return allTickets.filter(
 			(t) => t.assignedToEmail === opsUser?.email || t.createdBy === opsUser?.name,
 		);
-	}, [internalTickets, canTriage, isAdmin, opsUser]);
+	}, [allTickets, canTriage, isAdmin, opsUser]);
 
 	const inQueue = scoped.filter((t) => t.source === queue);
 
@@ -98,7 +117,7 @@ export function EnterpriseHelpdesk() {
 	function submitNew(e: React.FormEvent) {
 		e.preventDefault();
 		if (!form.title.trim() || !form.description.trim()) return;
-		createTicket({
+		localCreateTicket({
 			source: "internal",
 			title: form.title.trim(),
 			description: form.description.trim(),
@@ -132,6 +151,8 @@ export function EnterpriseHelpdesk() {
 					+ Raise internal ticket
 				</button>
 			</div>
+
+			{ticketsError && <p className="muted mt-2" style={{ color: "var(--error, #b00)" }}>{ticketsError}</p>}
 
 			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
 				<HdStat label="From clients" value={counts.external} note="Raised in the portal" />
@@ -305,6 +326,7 @@ export function EnterpriseHelpdesk() {
 							ticket={selected}
 							canTriage={canTriage}
 							by={by}
+							staffList={staffList}
 							reply={reply}
 							setReply={setReply}
 							onSend={sendReply}
@@ -323,6 +345,7 @@ function TicketDetail({
 	ticket,
 	canTriage,
 	by,
+	staffList,
 	reply,
 	setReply,
 	onSend,
@@ -333,6 +356,7 @@ function TicketDetail({
 	ticket: InternalTicket;
 	canTriage: boolean;
 	by: string;
+	staffList: { id: string; name: string; email: string; role: string; branch: string | null }[];
 	reply: string;
 	setReply: (v: string) => void;
 	onSend: () => void;
@@ -391,15 +415,15 @@ function TicketDetail({
 							className="input input--sm"
 							value={ticket.assignedToEmail}
 							onChange={(e) => {
-								const to = SUPPORT_ROSTER.find((c) => c.email === e.target.value);
+								const to = staffList.find((s) => s.email === e.target.value);
 								onAssign(to ? { name: to.name, email: to.email } : null);
 							}}
 							aria-label="Assign ticket"
 						>
 							<option value="">Assign to…</option>
-							{SUPPORT_ROSTER.map((c) => (
-								<option key={c.email} value={c.email}>
-									{c.name} · {c.role} · {branchName(c.branch)}
+							{staffList.map((s) => (
+								<option key={s.email} value={s.email}>
+									{s.name} · {s.role} · {branchName(s.branch ?? "")}
 								</option>
 							))}
 						</select>

@@ -24,7 +24,7 @@ const CATEGORIES: { id: TicketCategory; label: string; blurb: string }[] = [
 
 export function PortalSupport() {
 	const { authUser, application, booking } = useAppState();
-	const { tickets: mine, createTicket, replyToTicket } = useApplicantTickets(authUser?.email);
+	const { tickets: mine, loading, error: listError, createTicket, replyToTicket } = useApplicantTickets(authUser?.email);
 
 	const [composing, setComposing] = useState(false);
 	const [openId, setOpenId] = useState<string | null>(null);
@@ -34,38 +34,56 @@ export function PortalSupport() {
 	const [category, setCategory] = useState<TicketCategory | null>(null);
 	const [subject, setSubject] = useState("");
 	const [body, setBody] = useState("");
+	const [submitting, setSubmitting] = useState(false);
+	const [submitError, setSubmitError] = useState<string | null>(null);
+	const [replying, setReplying] = useState(false);
+	const [replyError, setReplyError] = useState<string | null>(null);
 
 	const me = authUser?.name ?? "Applicant";
 	const myRef = application.applicationId ?? booking.confirmationId ?? undefined;
 
-	/* `mine` comes from useApplicantTickets above — already scoped to this
-	 * applicant's own external tickets and sorted newest first. */
-
 	const listed = filter === "all" ? mine : mine.filter((t) => t.status !== "Resolved");
 
-	/**
-	 * Derived, not synchronised: with nothing explicitly selected the newest
-	 * request opens by default, so the right pane is never blank when the
-	 * applicant has history. An effect here would just be state chasing props.
-	 */
 	const active = openId ? (mine.find((t) => t.id === openId) ?? null) : (listed[0] ?? null);
 
-	function submit(e: React.FormEvent) {
+	async function submit(e: React.FormEvent) {
 		e.preventDefault();
 		if (!category || !subject.trim() || !body.trim()) return;
-		createTicket({
-			title: subject.trim(),
-			description: body.trim(),
-			category,
-			createdBy: me,
-			createdByEmail: authUser?.email ?? "",
-			applicantRef: myRef,
-		});
-		setCategory(null);
-		setSubject("");
-		setBody("");
-		setComposing(false);
-		setOpenId(null);
+		setSubmitting(true);
+		setSubmitError(null);
+		try {
+			await createTicket({
+				title: subject.trim(),
+				description: body.trim(),
+				category,
+				createdBy: me,
+				createdByEmail: authUser?.email ?? "",
+				applicantRef: myRef,
+			});
+			setCategory(null);
+			setSubject("");
+			setBody("");
+			setComposing(false);
+			setOpenId(null);
+		} catch (err) {
+			setSubmitError(err instanceof Error ? err.message : "Could not send request. Please try again.");
+		} finally {
+			setSubmitting(false);
+		}
+	}
+
+	async function handleReply() {
+		if (!active || !reply.trim()) return;
+		setReplying(true);
+		setReplyError(null);
+		try {
+			await replyToTicket(active.id, reply.trim());
+			setReply("");
+		} catch (err) {
+			setReplyError(err instanceof Error ? err.message : "Could not send reply. Please try again.");
+		} finally {
+			setReplying(false);
+		}
 	}
 
 	return (
@@ -84,11 +102,14 @@ export function PortalSupport() {
 					onClick={() => {
 						setComposing(true);
 						setOpenId(null);
+						setSubmitError(null);
 					}}
 				>
 					Raise a request →
 				</button>
 			</header>
+
+			{listError && <p className="muted mt-3" style={{ color: "var(--error, #b00)" }}>{listError}</p>}
 
 			<div className="sup-split mt-5">
 				{/* Requests */}
@@ -110,7 +131,9 @@ export function PortalSupport() {
 					</div>
 
 					<div className="sup-pane__body">
-						{listed.length === 0 ? (
+						{loading ? (
+							<p className="sup-none muted">Loading…</p>
+						) : listed.length === 0 ? (
 							<p className="sup-none muted">
 								{filter === "open" ? "Nothing open right now." : "No requests yet."}
 							</p>
@@ -124,6 +147,7 @@ export function PortalSupport() {
 										setOpenId(t.id);
 										setComposing(false);
 										setReply("");
+										setReplyError(null);
 									}}
 								>
 									<span className="sup-row__top">
@@ -189,15 +213,19 @@ export function PortalSupport() {
 										placeholder="Include anything that would help — dates, reference numbers, what you expected."
 									/>
 								</label>
+
+								{submitError && (
+									<p className="mt-2" style={{ color: "var(--error, #b00)" }}>{submitError}</p>
+								)}
 							</div>
 
 							<div className="sup-pane__foot">
 								<button
 									type="submit"
 									className="btn btn--primary btn--sm"
-									disabled={!category || !subject.trim() || !body.trim()}
+									disabled={!category || !subject.trim() || !body.trim() || submitting}
 								>
-									Send request
+									{submitting ? "Sending…" : "Send request"}
 								</button>
 								{!category ? <span className="mono muted sup-hint">Pick a category to continue</span> : null}
 							</div>
@@ -229,7 +257,7 @@ export function PortalSupport() {
 								))}
 							</div>
 
-							{active.status !== "Resolved" ? (
+							{active.status !== "Resolved" && active.status !== "Closed" ? (
 								<div className="sup-pane__foot sup-reply">
 									<textarea
 										className="input"
@@ -238,16 +266,16 @@ export function PortalSupport() {
 										onChange={(e) => setReply(e.target.value)}
 										placeholder="Add to this request…"
 									/>
+									{replyError && (
+										<p className="mt-2" style={{ color: "var(--error, #b00)" }}>{replyError}</p>
+									)}
 									<button
 										type="button"
 										className="btn btn--primary btn--sm mt-2"
-										disabled={!reply.trim()}
-										onClick={() => {
-											replyToTicket(active.id, reply.trim(), me);
-											setReply("");
-										}}
+										disabled={!reply.trim() || replying}
+										onClick={handleReply}
 									>
-										Send
+										{replying ? "Sending…" : "Send"}
 									</button>
 								</div>
 							) : (

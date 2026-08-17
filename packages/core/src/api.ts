@@ -844,7 +844,15 @@ export const ticketsApi = {
 	/** Staff: update ticket status, priority, or assign staff. */
 	updateStatus(ticketId: string, input: UpdateTicketStatus): Promise<Ticket> {
 		return request(`${API_PREFIX}/tickets/${ticketId}`, { method: "PATCH", ...json(input) });
-	}
+	},
+
+	/** Staff: reply to a ticket message thread. */
+	replyAsStaff(ticketId: string, input: ReplyTicket): Promise<Ticket> {
+		return request(`${API_PREFIX}/tickets/${ticketId}/messages`, {
+			method: "POST",
+			...json(input),
+		});
+	},
 };
 
 /* ── Payments Gateway (Paystack / Stripe) ────────────────────────────────── */

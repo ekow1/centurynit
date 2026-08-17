@@ -350,7 +350,7 @@ export function FloatingChat() {
 			// Real ticketing: append to the open request, or raise a new one.
 			// No scripted reply here — a person answers from the ops helpdesk.
 			if (openTicket) {
-				replyToTicket(openTicket.id, trimmed, authUser?.name ?? "Applicant");
+				replyToTicket(openTicket.id, trimmed);
 			} else {
 				createTicket({
 					// First sentence becomes the subject staff see in the queue

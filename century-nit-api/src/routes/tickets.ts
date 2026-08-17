@@ -155,3 +155,38 @@ opsTicketsRouter.openapi(
 		return c.json(updated);
 	},
 );
+
+/* ── POST /api/v1/tickets/:id/messages (staff reply) ──────────────────────── */
+
+opsTicketsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/messages",
+		tags: ["Tickets"],
+		middleware: [requireAuth, requireMfa, requireModule("helpdesk")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: replyTicketSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: ticketSchema } },
+				description: "Staff reply added",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const updated = await replyToTicket(
+			id,
+			{ type: "staff", id: user.id, name: user.name ?? user.email.split("@")[0] },
+			body,
+		);
+		return c.json(updated);
+	},
+);

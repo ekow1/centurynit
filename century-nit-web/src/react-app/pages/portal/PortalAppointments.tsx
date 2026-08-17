@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
-import { branches, CONSULTATION_DURATIONS } from "century-nit-core/content";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { AvailabilitySlot, Booking } from "century-nit-shared";
 
@@ -14,8 +13,6 @@ import type { AvailabilitySlot, Booking } from "century-nit-shared";
  * Availability shown here is advisory. The server re-checks on submit, so a slot
  * can still be refused — that outcome is handled rather than assumed away.
  */
-
-const DEFAULT_DURATION = 45;
 
 /** The next N days a client may pick. Today is never offered — too short notice. */
 function upcomingDates(count = 21): { value: string; label: string }[] {
@@ -41,14 +38,6 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 		cursor.setDate(cursor.getDate() + 1);
 	}
 	return out;
-}
-
-function browserTimeZone(): string {
-	try {
-		return Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Accra";
-	} catch {
-		return "Africa/Accra";
-	}
 }
 
 function formatWhen(booking: Booking): string {
@@ -182,141 +171,6 @@ function SlotPicker({
 }
 
 /* ── Booking form ────────────────────────────────────────────────────────── */
-
-function BookForm({ onBooked }: { onBooked: (b: Booking) => void }) {
-	const dates = useMemo(() => upcomingDates(), []);
-	const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
-	const [date, setDate] = useState(dates[0]?.value ?? "");
-	const [time, setTime] = useState("");
-	const [duration, setDuration] = useState(DEFAULT_DURATION);
-	const [type, setType] = useState<"online" | "in_person">("online");
-	const [notes, setNotes] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	async function submit(e: React.FormEvent) {
-		e.preventDefault();
-		if (!time) {
-			setError("Choose a time.");
-			return;
-		}
-		setBusy(true);
-		setError(null);
-		try {
-			onBooked(
-				await bookingsApi.create({
-					serviceId: "consultation",
-					branchId,
-					type,
-					date,
-					time,
-					durationMinutes: duration,
-					timezone: browserTimeZone(),
-					notes: notes.trim() || undefined,
-				}),
-			);
-		} catch (err) {
-			setError(
-				err instanceof ApiError && err.isSlotTaken
-					? "That time was just taken. Please pick another."
-					: err instanceof ApiError && err.isUnauthenticated
-						? "Please sign in again to book."
-						: err instanceof Error
-							? err.message
-							: "Could not create the booking.",
-			);
-			// A taken slot must refresh the picker, not leave a stale selection.
-			if (err instanceof ApiError && err.isSlotTaken) setTime("");
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	return (
-		<form className="appt-form" onSubmit={submit}>
-			<div className="form-grid form-grid--2">
-				<div className="field">
-					<label htmlFor="appt-branch">Branch</label>
-					<select
-						id="appt-branch"
-						className="select select--full-border"
-						value={branchId}
-						onChange={(e) => {
-							setBranchId(e.target.value);
-							setTime("");
-						}}
-					>
-						{branches.map((b) => (
-							<option key={b.id} value={b.id}>
-								{b.name}
-							</option>
-						))}
-					</select>
-				</div>
-
-				<div className="field">
-					<label htmlFor="appt-type">Format</label>
-					<select
-						id="appt-type"
-						className="select select--full-border"
-						value={type}
-						onChange={(e) => setType(e.target.value as "online" | "in_person")}
-					>
-						<option value="online">Online (video call)</option>
-						<option value="in_person">In person</option>
-					</select>
-				</div>
-
-				<div className="field">
-					<label htmlFor="appt-duration">Duration</label>
-					<select
-						id="appt-duration"
-						className="select select--full-border"
-						value={String(duration)}
-						onChange={(e) => {
-							setDuration(Number(e.target.value));
-							setTime("");
-						}}
-					>
-						{CONSULTATION_DURATIONS.map((d) => (
-							<option key={d.id} value={d.id}>
-								{d.label}
-							</option>
-						))}
-					</select>
-				</div>
-
-				<SlotPicker
-					branchId={branchId}
-					date={date}
-					onDateChange={setDate}
-					time={time}
-					onTimeChange={setTime}
-					durationMinutes={duration}
-				/>
-			</div>
-
-			<div className="field">
-				<label htmlFor="appt-notes">Anything we should know? (optional)</label>
-				<textarea
-					id="appt-notes"
-					className="input input--full-border"
-					rows={3}
-					maxLength={2000}
-					value={notes}
-					onChange={(e) => setNotes(e.target.value)}
-				/>
-			</div>
-
-			{error && <p className="appt-error">{error}</p>}
-
-			<button type="submit" className="btn btn--primary" disabled={busy || !time}>
-				{busy ? "Requesting…" : "Request appointment"}
-			</button>
-		</form>
-	);
-}
-
 /* ── Reschedule ──────────────────────────────────────────────────────────── */
 
 function RescheduleForm({
@@ -515,8 +369,6 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 export function PortalAppointments() {
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [booking, setBooking] = useState(false);
-	const [justBooked, setJustBooked] = useState<Booking | null>(null);
 
 	const load = useCallback(() => {
 		bookingsApi
@@ -550,48 +402,17 @@ export function PortalAppointments() {
 		<div className="appt-page">
 			<header className="appt-page__head">
 				<h1 className="page-title">Appointments</h1>
-				{!booking && (
-					<button type="button" className="btn btn--primary btn--sm" onClick={() => setBooking(true)}>
-						Book an appointment
-					</button>
-				)}
+				<p className="lead mt-1" style={{ fontSize: "var(--text-sm)" }}>
+					View and manage your consultation appointments. To book a new appointment, go to{" "}
+					<a href="/portal/consultation" style={{ textDecoration: "underline", textUnderlineOffset: "3px" }}>Consultation & Assessment</a>.
+				</p>
 			</header>
 
 			{error && <p className="appt-error">{error}</p>}
 
-			{justBooked && (
-				<div className="appt-confirm" role="status">
-					<h2 className="appt-confirm__title">Your appointment has been received</h2>
-					<p>
-						{formatWhen(justBooked)} · reference <strong>{justBooked.reference}</strong>
-					</p>
-					{/* §1 verbatim — do not tell the client an employee has been assigned. */}
-					<p>
-						A team member will be assigned to your appointment and you will receive
-						confirmation once it is assigned.
-					</p>
-				</div>
-			)}
-
-			{booking && (
-				<section className="appt-section">
-					<h2 className="section-title">New appointment</h2>
-					<BookForm
-						onBooked={(b) => {
-							setBooking(false);
-							setJustBooked(b);
-							load();
-						}}
-					/>
-					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setBooking(false)}>
-						Cancel
-					</button>
-				</section>
-			)}
-
 			{!bookings && !error && <p className="appt-muted">Loading…</p>}
 
-			{bookings && upcoming.length === 0 && !booking && (
+			{bookings && upcoming.length === 0 && (
 				<p className="appt-muted">You have no upcoming appointments.</p>
 			)}
 

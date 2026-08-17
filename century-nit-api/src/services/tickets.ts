@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 
 import type {
 	CreateTicket,
@@ -15,6 +15,56 @@ import {
 	tickets,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+
+/* ── Category-based routing ────────────────────────────────────────────────── */
+
+/**
+ * Maps ticket categories to the role that should handle them.
+ * `autoAssign: true` means route to the applicant's consultation officer.
+ * A `role` string means find an active staff member with that role.
+ */
+const CATEGORY_ROUTING: Record<string, { role: string } | { autoAssign: true }> = {
+	Billing: { role: "finance" },
+	Technical: { role: "coordinator" },
+	Application: { autoAssign: true },
+	Documents: { autoAssign: true },
+	Visa: { autoAssign: true },
+	Other: { autoAssign: true },
+};
+
+/**
+ * Determine who should be assigned to a ticket based on its category
+ * and the applicant's existing consultation officer.
+ *
+ * Returns a staff UUID or null (unassigned → triage queue).
+ */
+async function resolveAssignee(
+	category: string,
+	applicantId: string | null,
+): Promise<string | null> {
+	const rule = CATEGORY_ROUTING[category] ?? { autoAssign: true };
+
+	if ("role" in rule) {
+		// Find an active staff member with the target role
+		const [staff] = await db
+			.select({ id: opsUsers.id })
+			.from(opsUsers)
+			.where(and(eq(opsUsers.role, rule.role), eq(opsUsers.active, true)))
+			.limit(1);
+		return staff?.id ?? null;
+	}
+
+	// autoAssign: route to the applicant's consultation officer
+	if (!applicantId) return null;
+	const [applicant] = await db
+		.select({ assignedOfficerId: applicants.assignedOfficerId })
+		.from(applicants)
+		.where(eq(applicants.id, applicantId))
+		.limit(1);
+	return applicant?.assignedOfficerId ?? null;
+}
+
+/* ── Serialization ─────────────────────────────────────────────────────────── */
 
 export async function serializeTicket(row: typeof tickets.$inferSelect): Promise<Ticket> {
 	const messages = await db
@@ -37,6 +87,7 @@ export async function serializeTicket(row: typeof tickets.$inferSelect): Promise
 		id: row.id,
 		clientUserId: row.clientUserId,
 		applicantName: row.applicantName,
+		source: (row.source as "internal" | "external") ?? "external",
 		subject: row.subject,
 		category: row.category,
 		status: row.status,
@@ -57,11 +108,13 @@ export async function serializeTicket(row: typeof tickets.$inferSelect): Promise
 	};
 }
 
+/* ── Queries ───────────────────────────────────────────────────────────────── */
+
 export async function listTicketsForUser(userId: string): Promise<TicketList> {
 	const rows = await db
 		.select()
 		.from(tickets)
-		.where(eq(tickets.clientUserId, userId))
+		.where(and(eq(tickets.clientUserId, userId), eq(tickets.source, "external")))
 		.orderBy(desc(tickets.updatedAt));
 
 	const list = await Promise.all(rows.map(serializeTicket));
@@ -71,10 +124,18 @@ export async function listTicketsForUser(userId: string): Promise<TicketList> {
 	};
 }
 
-export async function listAllTickets(filter?: { status?: string }): Promise<TicketList> {
-	let query = db.select().from(tickets);
+export async function listAllTickets(filter?: { status?: string; source?: string }): Promise<TicketList> {
+	const conditions = [];
 	if (filter?.status && ["open", "pending", "resolved", "closed"].includes(filter.status)) {
-		query = query.where(eq(tickets.status, filter.status as any)) as any;
+		conditions.push(eq(tickets.status, filter.status as any));
+	}
+	if (filter?.source && ["internal", "external"].includes(filter.source)) {
+		conditions.push(eq(tickets.source, filter.source as any));
+	}
+
+	let query = db.select().from(tickets);
+	if (conditions.length > 0) {
+		query = query.where(and(...conditions)) as typeof query;
 	}
 
 	const rows = await query.orderBy(desc(tickets.updatedAt));
@@ -84,6 +145,8 @@ export async function listAllTickets(filter?: { status?: string }): Promise<Tick
 		total: list.length,
 	};
 }
+
+/* ── Applicant creates ticket (external) ───────────────────────────────────── */
 
 export async function createTicket(
 	user: { id: string; name?: string | null; email: string },
@@ -97,9 +160,8 @@ export async function createTicket(
 
 	const applicantName = applicant?.name ?? user.name ?? user.email.split("@")[0];
 
-	// Auto-assign to the applicant's consultation officer so the ticket
-	// reaches the right desk immediately instead of sitting in triage.
-	const autoAssignId = applicant?.assignedOfficerId ?? null;
+	// Category-based routing with fallback to consultation officer → triage
+	const assigneeId = await resolveAssignee(input.category, applicant?.id ?? null);
 
 	const [created] = await db
 		.insert(tickets)
@@ -107,15 +169,15 @@ export async function createTicket(
 			clientUserId: user.id,
 			applicantId: applicant?.id ?? null,
 			applicantName,
+			source: "external",
 			subject: input.subject,
 			category: input.category,
 			status: "open",
 			priority: input.priority ?? "medium",
-			assignedStaffId: autoAssignId,
+			assignedStaffId: assigneeId,
 		})
 		.returning();
 
-	// Insert initial message
 	await db.insert(ticketMessages).values({
 		ticketId: created.id,
 		senderType: "applicant",
@@ -126,6 +188,40 @@ export async function createTicket(
 
 	return serializeTicket(created);
 }
+
+/* ── Staff creates internal ticket ─────────────────────────────────────────── */
+
+export async function createInternalTicket(
+	user: { id: string; name?: string | null; email: string },
+	input: CreateTicket,
+): Promise<Ticket> {
+	const staffName = user.name ?? user.email.split("@")[0];
+
+	const [created] = await db
+		.insert(tickets)
+		.values({
+			clientUserId: user.id,
+			applicantName: staffName,
+			source: "internal",
+			subject: input.subject,
+			category: input.category,
+			status: "open",
+			priority: input.priority ?? "medium",
+		})
+		.returning();
+
+	await db.insert(ticketMessages).values({
+		ticketId: created.id,
+		senderType: "staff",
+		senderId: user.id,
+		senderName: staffName,
+		message: input.message,
+	});
+
+	return serializeTicket(created);
+}
+
+/* ── Reply ─────────────────────────────────────────────────────────────────── */
 
 export async function replyToTicket(
 	ticketId: string,
@@ -159,6 +255,8 @@ export async function replyToTicket(
 
 	return serializeTicket(updated);
 }
+
+/* ── Update status / priority / assignment ─────────────────────────────────── */
 
 export async function updateTicketStatus(
 	ticketId: string,

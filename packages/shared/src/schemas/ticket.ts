@@ -21,6 +21,7 @@ export const ticketSchema = z.object({
 	id: z.string().uuid(),
 	clientUserId: z.string(),
 	applicantName: z.string(),
+	source: z.enum(["internal", "external"]).default("external"),
 	subject: z.string().min(1).max(255),
 	category: z.string().min(1).max(64),
 	status: ticketStatusSchema,

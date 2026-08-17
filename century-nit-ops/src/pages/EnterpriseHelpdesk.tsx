@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useTicketsApi } from "../hooks/useTicketsApi";
 import { branchName } from "century-nit-core/ops";
@@ -37,14 +36,6 @@ const CATEGORIES: TicketCategory[] = [
 type Queue = "external" | "internal";
 
 export function EnterpriseHelpdesk() {
-	const {
-		internalTickets,
-		createTicket: localCreateTicket,
-		updateTicketStatus: localUpdateTicketStatus,
-		assignTicket: localAssignTicket,
-		escalateTicket: localEscalateTicket,
-		replyToTicket: localReplyToTicket,
-	} = useOpsState();
 	const { opsUser, opsRole } = useOpsAuth();
 
 	const {
@@ -55,15 +46,8 @@ export function EnterpriseHelpdesk() {
 		escalateTicket,
 		updateTicketStatus,
 		replyToTicket,
-		createTicket: _createTicket,
-	} = useTicketsApi({
-		localInternalTickets: internalTickets,
-		onLocalCreate: localCreateTicket,
-		onLocalUpdate: localUpdateTicketStatus,
-		onLocalAssign: localAssignTicket,
-		onLocalEscalate: localEscalateTicket,
-		onLocalReply: localReplyToTicket,
-	});
+		createTicket,
+	} = useTicketsApi();
 
 	const [queue, setQueue] = useState<Queue>("external");
 	const [statusFilter, setStatusFilter] = useState<"all" | TicketStatus>("all");
@@ -117,14 +101,11 @@ export function EnterpriseHelpdesk() {
 	function submitNew(e: React.FormEvent) {
 		e.preventDefault();
 		if (!form.title.trim() || !form.description.trim()) return;
-		localCreateTicket({
-			source: "internal",
+		createTicket({
 			title: form.title.trim(),
 			description: form.description.trim(),
 			category: form.category,
 			priority: form.priority,
-			status: "Open",
-			createdBy: by,
 		});
 		setForm({ title: "", description: "", category: "Technical", priority: "Medium" });
 		setComposing(false);

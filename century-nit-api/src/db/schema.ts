@@ -935,6 +935,7 @@ export const tickets = pgTable(
 			onDelete: "set null",
 		}),
 		applicantName: text("applicant_name").notNull(),
+		source: varchar("source", { length: 16 }).notNull().default("external"),
 		subject: varchar("subject", { length: 255 }).notNull(),
 		category: varchar("category", { length: 64 }).notNull().default("General Inquiry"),
 		status: ticketStatusEnum("status").notNull().default("open"),
@@ -949,6 +950,7 @@ export const tickets = pgTable(
 		byClient: index("tickets_client_idx").on(t.clientUserId, t.status),
 		byStaff: index("tickets_staff_idx").on(t.assignedStaffId, t.status),
 		byStatus: index("tickets_status_idx").on(t.status, t.createdAt),
+		bySource: index("tickets_source_idx").on(t.source, t.status),
 	}),
 );
 

@@ -10,6 +10,7 @@ import {
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
 import {
 	createTicket,
+	createInternalTicket,
 	listAllTickets,
 	listTicketsForUser,
 	replyToTicket,
@@ -125,6 +126,35 @@ opsTicketsRouter.openapi(
 	async (c) => {
 		const list = await listAllTickets();
 		return c.json(list);
+	},
+);
+
+/* ── POST /api/v1/tickets (staff creates internal ticket) ────────────────── */
+
+opsTicketsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/",
+		tags: ["Tickets"],
+		middleware: [requireAuth, requireMfa, requireModule("helpdesk")] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: createTicketSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: ticketSchema } },
+				description: "Internal ticket created",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const body = c.req.valid("json");
+		const created = await createInternalTicket(user, body);
+		return c.json(created, 201);
 	},
 );
 

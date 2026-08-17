@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ticketsApi, staffApi } from "century-nit-core/api";
 import type { Ticket } from "century-nit-shared";
-import type { InternalTicket, TicketStatus, TicketPriority, TicketCategory } from "century-nit-core/ops";
+import type { InternalTicket, TicketStatus, TicketCategory } from "century-nit-core/ops";
 
 /* ── Status / Priority mapping between DB enums and ops display values ──── */
 
@@ -19,7 +19,7 @@ const OPS_TO_DB_STATUS: Record<TicketStatus, string> = {
 	Resolved: "resolved",
 };
 
-const DB_TO_OPS_PRIORITY: Record<string, TicketPriority> = {
+const DB_TO_OPS_PRIORITY: Record<string, InternalTicket["priority"]> = {
 	low: "Low",
 	medium: "Medium",
 	high: "High",
@@ -28,11 +28,13 @@ const DB_TO_OPS_PRIORITY: Record<string, TicketPriority> = {
 
 /* ── Map a DB ticket into the InternalTicket shape the ops UI expects ──── */
 
-function mapDbTicket(t: Ticket, idx: number): InternalTicket {
+let refCounter = 0;
+
+function mapDbTicket(t: Ticket): InternalTicket {
 	return {
 		id: t.id,
-		ref: `TKT-${String(idx + 1).padStart(4, "0")}`,
-		source: "external",
+		ref: `TKT-${String(++refCounter).padStart(4, "0")}`,
+		source: (t.source as "internal" | "external") ?? "external",
 		title: t.subject,
 		description: t.messages?.[0]?.message || "",
 		category: (t.category as TicketCategory) || "Other",
@@ -67,28 +69,13 @@ export type StaffMember = {
 
 /* ── Hook ──── */
 
-export function useTicketsApi({
-	localInternalTickets,
-	onLocalCreate,
-	onLocalUpdate,
-	onLocalAssign,
-	onLocalEscalate,
-	onLocalReply,
-}: {
-	/** Internal (staff-to-staff) tickets from localStorage via OpsStateContext */
-	localInternalTickets: InternalTicket[];
-	onLocalCreate: (ticket: Omit<InternalTicket, "id" | "ref" | "createdAt" | "updatedAt" | "assignedTo" | "assignedToEmail" | "escalatedToAdmin" | "messages"> & { messages?: { id: string; author: string; role: "applicant" | "staff"; body: string; at: string }[] }) => void;
-	onLocalUpdate: (id: string, status: TicketStatus, by?: string) => void;
-	onLocalAssign: (id: string, to: { name: string; email: string } | null, by: string) => void;
-	onLocalEscalate: (id: string, by: string) => void;
-	onLocalReply: (id: string, body: string, author: string, role: "applicant" | "staff") => void;
-}) {
-	const [dbTickets, setDbTickets] = useState<InternalTicket[]>([]);
+export function useTicketsApi() {
+	const [tickets, setTickets] = useState<InternalTicket[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [staffList, setStaffList] = useState<StaffMember[]>([]);
 
-	/* ── Fetch external tickets from the DB ──── */
+	/* ── Fetch all tickets from the DB (both internal and external) ──── */
 
 	const refreshTickets = useCallback(() => {
 		let cancelled = false;
@@ -97,12 +84,13 @@ export function useTicketsApi({
 			.listAll()
 			.then((res) => {
 				if (cancelled) return;
-				setDbTickets(res.tickets.map((t, idx) => mapDbTicket(t, idx)));
+				refCounter = 0;
+				setTickets(res.tickets.map(mapDbTicket));
 				setError(null);
 			})
 			.catch((err: unknown) => {
 				if (cancelled) return;
-				setDbTickets([]);
+				setTickets([]);
 				setError(err instanceof Error ? err.message : "Could not load tickets.");
 			})
 			.finally(() => {
@@ -127,75 +115,60 @@ export function useTicketsApi({
 			.catch(() => {});
 	}, []);
 
-	/* ── Merge: DB external tickets + localStorage internal tickets ──── */
-
-	const tickets = useMemo(() => {
-		return [...dbTickets, ...localInternalTickets.filter((t) => t.source === "internal")];
-	}, [dbTickets, localInternalTickets]);
-
-	/* ── API-backed mutations for external tickets ──── */
+	/* ── All mutations go through the API ──── */
 
 	const assignTicket = useCallback(
-		async (id: string, to: { name: string; email: string } | null, by: string) => {
-			const isDb = dbTickets.some((t) => t.id === id);
-			if (isDb) {
-				// Find the staff member's ID from the list to set assignedStaffId
-				const staffMember = to ? staffList.find((s) => s.email === to.email) : null;
-				await ticketsApi.updateStatus(id, {
-					status: "pending",
-					assignedStaffId: staffMember?.id ?? null,
-				});
-				refreshTickets();
-			} else {
-				onLocalAssign(id, to, by);
-			}
+		async (id: string, to: { name: string; email: string } | null, _by: string) => {
+			const staffMember = to ? staffList.find((s) => s.email === to.email) : null;
+			await ticketsApi.updateStatus(id, {
+				status: "pending",
+				assignedStaffId: staffMember?.id ?? null,
+			});
+			refreshTickets();
 		},
-		[dbTickets, staffList, refreshTickets, onLocalAssign],
+		[staffList, refreshTickets],
 	);
 
 	const escalateTicket = useCallback(
-		async (id: string, by: string) => {
-			const isDb = dbTickets.some((t) => t.id === id);
-			if (isDb) {
-				// Escalation clears assignment — set assignedStaffId to null
-				await ticketsApi.updateStatus(id, {
-					status: "pending",
-					assignedStaffId: null,
-				});
-				refreshTickets();
-			} else {
-				onLocalEscalate(id, by);
-			}
+		async (id: string, _by: string) => {
+			await ticketsApi.updateStatus(id, {
+				status: "pending",
+				assignedStaffId: null,
+			});
+			refreshTickets();
 		},
-		[dbTickets, refreshTickets, onLocalEscalate],
+		[refreshTickets],
 	);
 
 	const updateTicketStatus = useCallback(
-		async (id: string, status: TicketStatus, by: string) => {
-			const isDb = dbTickets.some((t) => t.id === id);
-			if (isDb) {
-				await ticketsApi.updateStatus(id, {
-					status: OPS_TO_DB_STATUS[status] as "open" | "pending" | "resolved" | "closed",
-				});
-				refreshTickets();
-			} else {
-				onLocalUpdate(id, status, by);
-			}
+		async (id: string, status: TicketStatus, _by?: string) => {
+			await ticketsApi.updateStatus(id, {
+				status: OPS_TO_DB_STATUS[status] as "open" | "pending" | "resolved" | "closed",
+			});
+			refreshTickets();
 		},
-		[dbTickets, refreshTickets, onLocalUpdate],
+		[refreshTickets],
 	);
 
 	const replyToTicket = useCallback(
-		async (id: string, body: string, author: string, role: "applicant" | "staff") => {
-			const isDb = dbTickets.some((t) => t.id === id);
-			if (isDb) {
-				await ticketsApi.replyAsStaff(id, { message: body });
-				refreshTickets();
-			} else {
-				onLocalReply(id, body, author, role);
-			}
+		async (id: string, body: string, _author: string, _role: "applicant" | "staff") => {
+			await ticketsApi.replyAsStaff(id, { message: body });
+			refreshTickets();
 		},
-		[dbTickets, refreshTickets, onLocalReply],
+		[refreshTickets],
+	);
+
+	const createTicket = useCallback(
+		async (input: { title: string; description: string; category: TicketCategory; priority?: string }) => {
+			await ticketsApi.createInternal({
+				subject: input.title,
+				category: input.category,
+				message: input.description,
+				priority: (input.priority as any) ?? "medium",
+			});
+			refreshTickets();
+		},
+		[refreshTickets],
 	);
 
 	return {
@@ -207,7 +180,7 @@ export function useTicketsApi({
 		escalateTicket,
 		updateTicketStatus,
 		replyToTicket,
+		createTicket,
 		refreshTickets,
-		createTicket: onLocalCreate,
 	};
 }

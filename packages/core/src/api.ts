@@ -833,12 +833,17 @@ export const ticketsApi = {
 	},
 
 	/** Staff: list tickets across all applicants. */
-	listAll(filter: { status?: string } = {}): Promise<TicketList> {
+	listAll(filter: { status?: string; source?: string } = {}): Promise<TicketList> {
 		const query = new URLSearchParams(
 			Object.entries(filter).filter(([, v]) => v != null) as [string, string][],
 		);
 		const suffix = query.toString() ? `?${query}` : "";
 		return request(`${API_PREFIX}/tickets${suffix}`);
+	},
+
+	/** Staff: create an internal (staff-to-staff) ticket. */
+	createInternal(input: CreateTicket): Promise<Ticket> {
+		return request(`${API_PREFIX}/tickets`, { method: "POST", ...json(input) });
 	},
 
 	/** Staff: update ticket status, priority, or assign staff. */

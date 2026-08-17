@@ -827,6 +827,8 @@ type AppStateContextValue = {
 	markAllNotificationsRead: () => void;
 	pushNotification: (n: Omit<AppNotification, "id" | "at" | "read">) => void;
 	/** Pre-departure */
+	/** Force an immediate re-sync of server consultation / invoice state */
+	syncFromServer: () => Promise<void>;
 	preDepartureTasks: PreDepartureTask[];
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
@@ -948,9 +950,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 */
 	const [simAutopilot, setSimAutopilotState] = useState<boolean>(() => {
 		try {
-			return localStorage.getItem(SIM_AUTOPILOT_KEY) !== "off";
+			// Default is NOW "off" — autopilot was a demo-only feature.
+			// Only enables if user has explicitly turned it on.
+			return localStorage.getItem(SIM_AUTOPILOT_KEY) === "on";
 		} catch {
-			return true;
+			return false;
 		}
 	});
 
@@ -1230,8 +1234,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	/**
 	 * Handler-side application tracking simulation (applicant is read-only).
 	 * Advances: submitted → under_review → offer → accepted (first school).
+	 * Only runs in simAutopilot (demo) mode — in production, ops updates school status.
 	 */
 	useEffect(() => {
+		if (!simAutopilot) return;
 		if (!isAppInvoicePaid(application) || !application.schoolSelectionDoneAt) return;
 		const paidAt = application.applicationInvoice.paidAt;
 		if (!paidAt) return;
@@ -1368,6 +1374,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		const id = window.setInterval(applyProgress, 1_500);
 		return () => window.clearInterval(id);
 	}, [
+		simAutopilot,
 		application.applicationInvoice.status,
 		application.applicationInvoice.paidAt,
 		application.schoolSelectionDoneAt,
@@ -2154,72 +2161,81 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return () => window.clearInterval(id);
 	}, [simAutopilot, application.agencySettledAt, application.visaStatus]);
 
-	/** Sync real server consultation & applicant profile with AppState */
+	/**
+	 * Sync real server consultation, assignment, eligibility and applicant profile
+	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
+	 * and eligibility decisions from ops appear without requiring a page reload.
+	 */
+	const syncFromServer = useCallback(async () => {
+		if (!authUser) return;
+		try {
+			const res = await meApi.application();
+			if (res.consultation) {
+				const c = res.consultation;
+				const phase: BookingData["consultationPhase"] =
+					c.status === "COMPLETED"
+						? "outcome"
+						: c.status === "IN_ASSESSMENT"
+							? "assessment"
+							: c.status === "ASSIGNED"
+								? "assigned"
+								: "confirmed";
+				const outcome: EligibilityOutcome =
+					c.assessmentResult?.outcome?.toLowerCase() === "eligible"
+						? "eligible"
+						: c.assessmentResult?.outcome?.toLowerCase() === "conditional"
+							? "conditional"
+							: c.assessmentResult?.outcome?.toLowerCase() === "ineligible"
+								? "not_eligible"
+								: "pending";
+				setBooking((prev) => ({
+					...prev,
+					confirmationId: c.reference,
+					consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
+					branchId: c.branch,
+					consultantName: c.assignedOfficerName ?? prev.consultantName,
+					consultantId: c.assignedOfficerId ?? prev.consultantId,
+					consultationPhase: phase,
+					eligibilityOutcome: outcome,
+					eligibilityNote:
+						c.assessmentResult?.notes ||
+						(c.status === "COMPLETED"
+							? "Assessment complete. You are eligible to continue."
+							: "Your consultation case is under review by your advisor."),
+					outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
+					paymentStatus: "success",
+					paidAt: c.createdAt,
+					meetingLink: c.meetingUrl ?? prev.meetingLink,
+					date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
+				}));
+			}
+			if (res.applicant) {
+				const a = res.applicant;
+				setApplication((prev) => ({
+					...prev,
+					firstName: prev.firstName || a.name.split(" ")[0] || "",
+					lastName: prev.lastName || a.name.split(" ").slice(1).join(" ") || "",
+					phone: prev.phone || a.phone || "",
+					nationality: prev.nationality || a.profile?.nationality || "",
+					destinationId: prev.destinationId || a.targetCountry || "",
+				}));
+			}
+		} catch {
+			/* server state fallback — keep local values */
+		}
+	}, [authUser]);
+
+	/** Run on mount */
+	useEffect(() => {
+		void syncFromServer();
+	}, [syncFromServer]);
+
+	/** Poll every 30 seconds to surface assignment / eligibility from ops */
 	useEffect(() => {
 		if (!authUser) return;
-		let cancelled = false;
-		meApi
-			.application()
-			.then((res) => {
-				if (cancelled) return;
-				if (res.consultation) {
-					const c = res.consultation;
-					const phase: BookingData["consultationPhase"] =
-						c.status === "COMPLETED"
-							? "outcome"
-							: c.status === "IN_ASSESSMENT"
-								? "assessment"
-								: c.status === "ASSIGNED"
-									? "assigned"
-									: "confirmed";
-					const outcome: EligibilityOutcome =
-						c.assessmentResult?.outcome?.toLowerCase() === "eligible"
-							? "eligible"
-							: c.assessmentResult?.outcome?.toLowerCase() === "conditional"
-								? "conditional"
-								: c.assessmentResult?.outcome?.toLowerCase() === "ineligible"
-									? "not_eligible"
-									: "pending";
-					setBooking((prev) => ({
-						...prev,
-						confirmationId: c.reference,
-						consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
-						branchId: c.branch,
-						consultantName: c.assignedOfficerName ?? prev.consultantName,
-						consultantId: c.assignedOfficerId ?? prev.consultantId,
-						consultationPhase: phase,
-						eligibilityOutcome: outcome,
-						eligibilityNote:
-							c.assessmentResult?.notes ||
-							(c.status === "COMPLETED"
-								? "Assessment complete. You are eligible to continue."
-								: "Your consultation case is under review by your advisor."),
-						outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
-						paymentStatus: "success",
-						paidAt: c.createdAt,
-						meetingLink: c.meetingUrl ?? prev.meetingLink,
-						date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
-					}));
-				}
-				if (res.applicant) {
-					const a = res.applicant;
-					setApplication((prev) => ({
-						...prev,
-						firstName: prev.firstName || a.name.split(" ")[0] || "",
-						lastName: prev.lastName || a.name.split(" ").slice(1).join(" ") || "",
-						phone: prev.phone || a.phone || "",
-						nationality: prev.nationality || a.profile?.nationality || "",
-						destinationId: prev.destinationId || a.targetCountry || "",
-					}));
-				}
-			})
-			.catch(() => {
-				/* server state fallback */
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [authUser]);
+		const id = window.setInterval(() => void syncFromServer(), 30_000);
+		return () => window.clearInterval(id);
+	}, [authUser, syncFromServer]);
 
 	const unreadCount = useMemo(
 		() => notifications.filter((n) => !n.read).length,
@@ -2370,6 +2386,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			preDepartureTasks,
 			togglePreDepartureTask,
 			preDepartureProgress,
+			syncFromServer,
 		}),
 		[
 			application,
@@ -2432,6 +2449,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			preDepartureTasks,
 			togglePreDepartureTask,
 			preDepartureProgress,
+			syncFromServer,
 		],
 	);
 

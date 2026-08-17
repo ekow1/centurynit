@@ -26,6 +26,7 @@ import {
 	rescheduleBooking,
 	type BookingRow,
 } from "../services/booking.js";
+import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
 import {
 	assignBookingSchema,
 	assignableEmployeeSchema,
@@ -193,6 +194,27 @@ bookingsRouter.openapi(
 			},
 			serviceName,
 		});
+
+		// Immediately create the consultation row so ops see it in the intake queue.
+		// ensureCaseForBooking is idempotent — safe to call for every booking type
+		// but only actually creates a consultation row for serviceId "consultation".
+		if (body.serviceId === "consultation") {
+			try {
+				await ensureCaseForBooking({
+					id: booking.id,
+					reference: booking.reference,
+					clientUserId: user.id,
+					clientName: user.name ?? user.email,
+					clientEmail: user.email,
+					clientPhone: booking.clientPhone ?? null,
+					branchId: booking.branchId,
+					type: booking.type,
+				});
+			} catch {
+				// Non-fatal — booking still succeeds; ops can still find the booking
+			}
+		}
+
 		return c.json(toBookingResponse(booking), 201);
 	},
 );
@@ -485,6 +507,18 @@ bookingsRouter.openapi(
 			employeeId: body.employeeId,
 			actor: { opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
 		});
+
+		// Keep the consultation row assignment in sync with the booking assignment
+		try {
+			await syncConsultationAssignment(
+				id,
+				body.employeeId,
+				{ opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
+			);
+		} catch {
+			/* non-fatal — consultation may not exist yet */
+		}
+
 		const employee = await loadEmployee(updated.employeeId);
 		return c.json(toBookingResponse(updated, employee));
 	},

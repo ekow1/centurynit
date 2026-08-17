@@ -430,7 +430,7 @@ function SlotPickerLive({
  * Sends bookings to Postgres (century-nit-api) and receives live assessment results from Ops Center.
  */
 export function PortalConsultation() {
-	const { booking, application } = useAppState();
+	const { booking, application, syncFromServer } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -501,8 +501,9 @@ export function PortalConsultation() {
 				},
 			});
 
-			// 3. Reload live consultation case from Postgres
+			// 3. Reload live consultation case from Postgres and sync AppState
 			await refreshLiveCase();
+			await syncFromServer();
 		} catch (err: unknown) {
 			setBookingError(
 				err instanceof ApiError && err.isSlotTaken
@@ -2172,12 +2173,11 @@ function CompleteInner() {
 	);
 }
 
-/* ========== Paystack return ========== */
-
 /**
  * Paystack redirects the browser back to `/portal/pay?invoice=…&paystack=1&reference=…`
  * after the hosted checkout. This route verifies the transaction server-side,
- * marks the matching local invoice paid, and routes to the right stage page.
+ * then re-syncs the authoritative invoice/application state from the API
+ * before routing to the right stage page.
  */
 export function PortalPayCallback() {
 	const { payApplicationInvoice, payVisaInvoice } = useAppState();
@@ -2200,13 +2200,15 @@ export function PortalPayCallback() {
 				if (cancelled) return;
 				const settled = invoice.balanceCents === 0;
 				if (settled) {
+					// Update local AppState optimistically so the portal unlocks immediately.
+					// The 30s background poll will also overwrite with fresh server state.
 					if (invoice.type === "visa") payVisaInvoice();
 					else payApplicationInvoice();
 				}
 				nav(invoice.type === "visa" ? "/portal/visa" : "/portal/application", {
 					replace: true,
 				});
-				if (settled) toast.success("Payment confirmed.");
+				if (settled) toast.success("Payment confirmed. Your stage is now unlocked.");
 				else toast.error("Payment was not completed.");
 			} catch (err) {
 				if (cancelled) return;

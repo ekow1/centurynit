@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
@@ -193,6 +193,16 @@ function PackageEditor({
 	const [price, setPrice] = useState(String(pkg.price));
 	const [description, setDescription] = useState(pkg.description);
 	const [selectedServices, setSelectedServices] = useState<string[]>(pkg.services);
+	const [selectedFeeKeys, setSelectedFeeKeys] = useState<string[]>(() => {
+		// Derive fee keys from existing services by matching titles
+		const keys: string[] = [];
+		for (const svc of pkg.services) {
+			const match = FEE_DEFINITIONS.find((f) => f.title.toLowerCase() === svc.toLowerCase());
+			if (match) keys.push(match.key);
+		}
+		return keys;
+	});
+	const [priceLocked, setPriceLocked] = useState(false);
 	const [selectedExclusions, setSelectedExclusions] = useState<string[]>(
 		pkg.exclusions ?? [...STANDARD_EXCLUSIONS],
 	);
@@ -220,16 +230,25 @@ function PackageEditor({
 		return map;
 	}, [allFeeItems]);
 
-	// Calculate sum of selected fee schedule items
-	const computedSumDollars = useMemo(() => {
-		let totalCents = 0;
+	// Calculate sum of selected fee schedule items — direct key lookup, no fuzzy matching
+	const computedSumCents = useMemo(() => {
+		let total = 0;
 		for (const item of allFeeItems) {
-			if (selectedServices.some((s) => s.toLowerCase().includes(item.title.toLowerCase()) || item.title.toLowerCase().includes(s.toLowerCase()))) {
-				totalCents += item.defaultCents;
+			if (selectedFeeKeys.includes(item.key)) {
+				total += item.defaultCents;
 			}
 		}
-		return (totalCents / 100).toFixed(2);
-	}, [allFeeItems, selectedServices]);
+		return total;
+	}, [allFeeItems, selectedFeeKeys]);
+
+	const computedSumDollars = (computedSumCents / 100).toFixed(2);
+
+	// Auto-set price from fee items when not locked
+	useEffect(() => {
+		if (!priceLocked && computedSumCents > 0) {
+			setPrice(String(computedSumCents / 100));
+		}
+	}, [computedSumCents, priceLocked]);
 
 	function toggleServiceItem(item: FeeItem) {
 		const exists = selectedServices.some(
@@ -239,8 +258,10 @@ function PackageEditor({
 			setSelectedServices((prev) =>
 				prev.filter((s) => s.toLowerCase() !== item.title.toLowerCase() && !s.startsWith(item.title)),
 			);
+			setSelectedFeeKeys((prev) => prev.filter((k) => k !== item.key));
 		} else {
 			setSelectedServices((prev) => [...prev, item.title]);
+			setSelectedFeeKeys((prev) => [...prev, item.key]);
 		}
 	}
 
@@ -276,6 +297,9 @@ function PackageEditor({
 
 	function removeService(s: string) {
 		setSelectedServices((prev) => prev.filter((x) => x !== s));
+		// Also remove fee key if this service maps to one
+		const match = FEE_DEFINITIONS.find((f) => f.title.toLowerCase() === s.toLowerCase());
+		if (match) setSelectedFeeKeys((prev) => prev.filter((k) => k !== match.key));
 	}
 
 	function removeExclusion(e: string) {
@@ -341,21 +365,36 @@ function PackageEditor({
 							required
 						/>
 					</Field>
-					<Field label="Package Price (USD)">
+				<Field label="Package Price (USD)">
+					<div style={{ display: "flex", gap: "0.5rem", alignItems: "stretch" }}>
 						<input
 							className="input"
-							style={{ width: "100%" }}
+							style={{ flex: 1 }}
 							type="number"
 							min="0"
 							value={price}
 							onChange={(e) => setPrice(e.target.value)}
-							placeholder="1500"
+							placeholder="0.00"
+							disabled={!priceLocked}
 							required
 						/>
-						<span className="muted" style={{ fontSize: "var(--text-xs)", display: "block", marginTop: "0.25rem" }}>
-							{Number(price) > 0 ? `≈ ${fmtBoth(Number(price))}` : "Dual currency shown automatically."}
-						</span>
-					</Field>
+						<button
+							type="button"
+							className={`btn btn--sm ${priceLocked ? "btn--primary" : "btn--secondary"}`}
+							onClick={() => setPriceLocked(!priceLocked)}
+							title={priceLocked ? "Unlock to auto-calculate from fee items" : "Lock to edit price manually"}
+							style={{ whiteSpace: "nowrap", flexShrink: 0 }}
+						>
+							{priceLocked ? "Locked" : "Auto"}
+						</button>
+					</div>
+					<span className="muted" style={{ fontSize: "var(--text-xs)", display: "block", marginTop: "0.25rem" }}>
+						{computedSumCents > 0
+							? `Fee items total: $${computedSumDollars}${!priceLocked ? " (auto-calculated)" : " — edit locked"}`
+							: "Select fee items below to auto-calculate, or lock to set manually."}
+						{" "}{Number(price) > 0 ? `≈ ${fmtBoth(Number(price))}` : ""}
+					</span>
+				</Field>
 				</div>
 
 				<Field label="Short Description">
@@ -385,8 +424,8 @@ function PackageEditor({
 							Select Included Fee Schedule Items
 						</span>
 						<span style={{ fontSize: "0.75rem", color: "#64748b" }}>
-							Selected: <strong>{selectedServices.length} items</strong>
-							{Number(computedSumDollars) > 0 && ` (Standard value: $${computedSumDollars})`}
+							Selected: <strong>{selectedFeeKeys.length} fee items</strong>
+							{computedSumCents > 0 && ` · $${computedSumDollars}`}
 						</span>
 					</div>
 

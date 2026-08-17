@@ -26,7 +26,7 @@ import {
 	rescheduleBooking,
 	type BookingRow,
 } from "../services/booking.js";
-import { ensureCaseForBooking, syncConsultationAssignment, syncConsultationCancelled } from "../services/cases.js";
+import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
 import {
 	assignBookingSchema,
 	assignableEmployeeSchema,
@@ -413,12 +413,6 @@ bookingsRouter.openapi(
 			reason: body.reason,
 			actor: staff ? { name: staff.name, email: staff.email } : { name: user.name ?? user.email, email: user.email },
 		});
-
-		try {
-			await syncConsultationCancelled(id);
-		} catch {
-			/* non-fatal */
-		}
 
 		const employee = await loadEmployee(updated.employeeId);
 		return c.json(toBookingResponse(updated, employee));

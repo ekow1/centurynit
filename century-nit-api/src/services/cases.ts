@@ -231,16 +231,52 @@ export async function syncConsultationAssignment(
 		.where(eq(applicants.id, row.applicantId));
 }
 
+/**
+ * Sync the consultation status when a booking is cancelled.
+ *
+ * If an officer has been assigned, the consultation stays active so the
+ * applicant can reschedule instead of starting over from scratch.  Only
+ * unassigned consultations (no officer yet) are terminated.
+ */
 export async function syncConsultationCancelled(bookingId: string): Promise<void> {
+	// Look up the consultation linked to this booking.
+	const [row] = await db
+		.select({ id: consultations.id, assignedOfficerId: consultations.assignedOfficerId, status: consultations.status })
+		.from(consultations)
+		.where(eq(consultations.bookingId, bookingId))
+		.limit(1);
+
+	if (!row) return;
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") return;
+
+	// If an officer is assigned, keep the consultation alive — the applicant
+	// should reschedule, not start a brand-new consultation flow.
+	if (row.assignedOfficerId) return;
+
 	await db
 		.update(consultations)
 		.set({ status: "CANCELLED", updatedAt: new Date() })
-		.where(
-			and(
-				eq(consultations.bookingId, bookingId),
-				sql`${consultations.status} not in ('COMPLETED', 'CANCELLED')`,
-			),
-		);
+		.where(eq(consultations.id, row.id));
+}
+
+/**
+ * Force-cancel the entire consultation process (separate from cancelling a
+ * single booking).  Used by ops when the engagement should end entirely.
+ */
+export async function cancelConsultation(consultationId: string): Promise<void> {
+	const [row] = await db
+		.select({ id: consultations.id, status: consultations.status })
+		.from(consultations)
+		.where(eq(consultations.id, consultationId))
+		.limit(1);
+
+	if (!row) return;
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") return;
+
+	await db
+		.update(consultations)
+		.set({ status: "CANCELLED", updatedAt: new Date() })
+		.where(eq(consultations.id, row.id));
 }
 
 /* ── Serialise ───────────────────────────────────────────────────────────── */

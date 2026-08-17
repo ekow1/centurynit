@@ -525,6 +525,12 @@ export function PortalConsultation() {
 	const activeOutcome = activeCase?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
 	const activeNotes = activeCase?.assessmentResult?.notes ?? booking.eligibilityNote;
 
+	// When the consultation is active but all its bookings are cancelled/completed,
+	// the applicant should reschedule rather than seeing stale appointment details.
+	const [rescheduleMode, setRescheduleMode] = useState(false);
+	const hasUpcomingBooking = liveConsultation?.bookingId && liveConsultation?.slotConfirmed;
+	const needsReschedule = hasActiveCase && !isCancelled && !hasUpcomingBooking && !rescheduleMode;
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
@@ -543,7 +549,25 @@ export function PortalConsultation() {
 				<div className="card card--pad text-center py-5">
 					<p className="muted">Loading consultation case details…</p>
 				</div>
-			) : !hasActiveCase ? (
+			) : needsReschedule ? (
+				/* ── Reschedule Banner ── */
+				<div className="card card--pad mt-4" style={{ maxWidth: "720px", textAlign: "center" }}>
+					<p style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.5rem" }}>
+						Your consultation is active but needs a new appointment
+					</p>
+					<p className="muted mb-4" style={{ fontSize: "0.9rem" }}>
+						Your previous appointment was cancelled. Please reschedule with your assigned counselor{" "}
+						<strong>{activeOfficer}</strong>.
+					</p>
+					<button
+						type="button"
+						className="btn btn--primary"
+						onClick={() => setRescheduleMode(true)}
+					>
+						Reschedule Appointment
+					</button>
+				</div>
+			) : !hasActiveCase || rescheduleMode ? (
 				/* ── Live Booking Form ── */
 				<div className="card card--pad mt-4" style={{ maxWidth: "720px" }}>
 					<div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>

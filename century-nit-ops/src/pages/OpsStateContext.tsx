@@ -8,12 +8,7 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { safeSetItem, formatSlot, resolveBranchId } from "century-nit-core";
-import {
-	servicePackages as PUBLIC_SERVICE_PACKAGES,
-	type Lead,
-	type LeadStage,
-} from "century-nit-core";
+import { safeSetItem, formatSlot, resolveBranchId, type Lead, type LeadStage } from "century-nit-core";
 import {
 	EMPTY_DIRECTIVES,
 	EMPTY_LIVE_OVERLAY,
@@ -61,17 +56,9 @@ export const SEED_INVOICES: Invoice[] = [];
 const OPS_STATE_KEY = "century-nit-ops-state";
 
 /** Bump when seed data or shape changes so stale saved state is discarded. */
-const OPS_STATE_VERSION = 23;
+const OPS_STATE_VERSION = 25;
 
-const SEED_PACKAGES: ServicePackage[] = PUBLIC_SERVICE_PACKAGES.map((p) => ({
-	id: p.id,
-	name: p.name,
-	price: p.price,
-	description: p.description,
-	services: p.features,
-	exclusions: p.exclusions ?? [],
-	active: true,
-}));
+const SEED_PACKAGES: ServicePackage[] = [];
 
 /**
  * Ticket vocabulary lives in `century-nit-core` because both apps speak it:

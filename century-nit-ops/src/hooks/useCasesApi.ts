@@ -125,7 +125,48 @@ function toApplication(row: ApiApplication): MockApplication {
 	};
 }
 
-function toApplicant(row: ApiApplicant): MockApplicant {
+/** Map raw API stage strings to PROCESS_STAGES index (1-based). */
+function stageIndex(raw: string): number {
+	const map: Record<string, number> = {
+		Consultation: 1,
+		Eligibility: 2,
+		"School Package": 3,
+		"School Selection": 4,
+		"Application Invoice": 5,
+		"Application Tracking": 6,
+		"Visa Invoice": 7,
+		"Visa Tracking": 8,
+		"Pre-Departure": 9,
+		Completed: 10,
+		New: 0,
+	};
+	return map[raw] ?? 0;
+}
+
+function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplicant {
+	const app = allApps.filter((a) => a.applicantId === row.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+	const idx = stageIndex(row.currentStage);
+	const total = 10;
+
+	const financials = app
+		? {
+				totalAmount: "$0",
+				paidAmount: app.status === "ACCEPTED" ? "$0" : "$0",
+				outstanding: "$0",
+				plan: app.fundingTrack ?? "",
+			}
+		: { totalAmount: "$0", paidAmount: "$0", outstanding: "$0", plan: "" };
+
+	const timeline = app
+		? [
+				{ stage: "Application submitted", status: app.status === "UNDER_REVIEW" ? "Active" : app.status === "ACCEPTED" ? "Complete" : app.status, date: (app.submittedAt ?? app.createdAt).slice(0, 10) },
+				{ stage: "University", status: app.university || "—", date: "" },
+				{ stage: "Program", status: app.program || "—", date: "" },
+				{ stage: "Country", status: app.country || "—", date: "" },
+			]
+		: [];
+
 	return {
 		id: row.id,
 		applicantId: row.id.slice(0, 8).toUpperCase(),
@@ -135,20 +176,33 @@ function toApplicant(row: ApiApplicant): MockApplicant {
 		branch: row.branch,
 		assignedOfficer: row.assignedOfficerName ?? "",
 		assignedOfficerEmail: row.assignedOfficerEmail ?? "",
-		country: row.targetCountry ?? "",
-		university: "",
-		program: "",
-		package: "",
+		country: app?.country ?? row.targetCountry ?? "",
+		university: app?.university ?? "",
+		program: app?.program ?? "",
+		package: app?.fundingTrack ?? "",
 		currentStage: row.currentStage,
-		stageNumber: 1,
-		totalStages: 7,
+		stageNumber: idx,
+		totalStages: total,
 		status: row.status,
-		enrolledDate: "",
-		financials: { totalAmount: "$0", paidAmount: "$0", outstanding: "$0", plan: "" },
-		timeline: [],
-		documents: [],
-		messages: [],
-		auditLog: [],
+		enrolledDate: app ? (app.submittedAt ?? app.createdAt).slice(0, 10) : "",
+		financials,
+		timeline,
+		documents: app
+			? app.requestedDocuments.map((d) => ({ name: d, category: "Required", date: "", status: "Pending" }))
+			: [],
+		messages: app
+			? app.comments.filter((c) => c.kind === "comment").map((c) => ({ sender: c.author, time: c.at.slice(0, 10), text: c.text }))
+			: [],
+		auditLog: app
+			? app.comments.map((c) => ({ action: c.kind === "status" ? "Status update" : c.kind === "assignment" ? "Assignment" : c.kind === "document_request" ? "Document request" : c.kind === "recommendation" ? "Recommendation" : "Comment", user: c.author, timestamp: c.at.slice(0, 16) }))
+			: [],
+		visaStage: app?.visaStage as MockApplicant["visaStage"],
+		visaInvoicePaid: app?.visaInvoicePaid,
+		visaCounselorNote: app?.visaCounselorNote ?? undefined,
+		paymentPlanId: (app?.paymentPlanId as MockApplicant["paymentPlanId"]) ?? undefined,
+		agencyStageIndex: app?.agencyStageIndex,
+		agencySettled: app?.agencySettled,
+		travelClearance: app?.travelClearance as MockApplicant["travelClearance"],
 	};
 }
 
@@ -169,9 +223,10 @@ export function useCasesApi() {
 				applicantsApi.list(),
 				staffApi.list().catch(() => ({ staff: [] })),
 			]);
+			const apps = a.applications;
 			setConsultations(c.consultations.map(toConsultation));
-			setApplications(a.applications.map(toApplication));
-			setApplicants(p.applicants.map(toApplicant));
+			setApplications(apps.map(toApplication));
+			setApplicants(p.applicants.map((row) => toApplicant(row, apps)));
 			setAssignees(
 				staff.staff
 					.filter((s) => s.active && (s.role === "consultant" || s.role === "coordinator"))
@@ -236,6 +291,8 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.comment(id, { kind, text })),
 		requestConsultationDocs: async (id: string, documents: string[]) =>
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
+		cancelConsultation: async (id: string) =>
+			replaceConsultation(await consultationsApi.cancel(id)),
 		rescheduleConsultation: async (id: string, bookingId: string, date: string, time: string, reason: string) => {
 			await bookingsApi.reschedule(bookingId, { date, time, reason });
 			const consultation = await consultationsApi.get(id);

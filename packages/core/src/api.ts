@@ -544,6 +544,9 @@ export const consultationsApi = {
 			...json({ documents }),
 		});
 	},
+	cancel(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/cancel`, { method: "PATCH" });
+	},
 };
 
 export const applicationsApi = {

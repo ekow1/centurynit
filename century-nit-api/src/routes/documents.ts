@@ -541,7 +541,13 @@ documentsRouter.openapi(
 		try {
 			await (await getDocumentStorage()).remove(row.storageKey);
 		} catch (err) {
-			if (!(err instanceof StorageNotConfiguredError)) throw err;
+			if (err instanceof StorageNotConfiguredError) {
+				// Storage is not configured — the file cannot be removed.
+				// Log so this is visible rather than silently orphaning the object.
+				console.warn(`[documents] Storage not configured; cannot remove ${row.storageKey}`);
+			} else {
+				throw err;
+			}
 		}
 
 		await db.delete(applicantDocuments).where(eq(applicantDocuments.id, row.id));

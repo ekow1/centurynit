@@ -7,6 +7,7 @@ import {
 	applicantUserIdOfConsultation,
 	assignApplication,
 	assignConsultation,
+	cancelConsultation,
 	canSeeAllCases,
 	canSeeApplication,
 	canSeeConsultation,
@@ -310,6 +311,30 @@ consultationsRouter.openapi(
 			documents: c.req.valid("json").documents,
 			actor: actorFrom(c.get("staff")!),
 		});
+		return c.json(await serializeConsultation((await getConsultation(id))!));
+	},
+);
+
+/* ── PATCH /consultations/:id/cancel ─────────────────────────────────────── */
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/cancel",
+		tags: ["Consultations"],
+		summary: "Force-cancel a consultation (ops only)",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Consultation cancelled",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await cancelConsultation(id);
 		return c.json(await serializeConsultation((await getConsultation(id))!));
 	},
 );

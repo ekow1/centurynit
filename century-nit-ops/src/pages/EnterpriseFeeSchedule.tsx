@@ -16,7 +16,7 @@ interface SettingView {
 
 const STEP_UP_STORAGE_KEY = "century_nit_settings_step_up";
 
-interface FeeItem {
+export interface FeeItem {
 	key: string;
 	title: string;
 	category: string;
@@ -26,7 +26,7 @@ interface FeeItem {
 	badge: string;
 }
 
-const FEE_DEFINITIONS: FeeItem[] = [
+export const FEE_DEFINITIONS: FeeItem[] = [
 	{
 		key: "CONSULTATION_FEE_CENTS",
 		title: "Initial Advisory Consultation",
@@ -99,7 +99,36 @@ const FEE_DEFINITIONS: FeeItem[] = [
 		billingStage: "As Requested",
 		badge: "Translation",
 	},
+	{
+		key: "TRAVEL_COORDINATION_FEE_CENTS",
+		title: "Traveling & Flight Booking Assistance",
+		category: "Travel & Relocation",
+		description: "Flight itinerary coordination, student discount fares, and baggage allowance assistance.",
+		defaultCents: 5000,
+		billingStage: "Post-Visa Approval",
+		badge: "Travel",
+	},
+	{
+		key: "HOUSING_ASSISTANCE_FEE_CENTS",
+		title: "Student Housing & Accommodation Guidance",
+		category: "Travel & Relocation",
+		description: "University dorm reservation support, student apartment search, and lease review.",
+		defaultCents: 10000,
+		billingStage: "Pre-Departure Stage",
+		badge: "Housing",
+	},
+	{
+		key: "PRE_DEPARTURE_BRIEFING_FEE_CENTS",
+		title: "Pre-Departure & Airport Arrival Support",
+		category: "Travel & Relocation",
+		description: "Cultural & academic orientation, transit guidance, and airport arrival assistance.",
+		defaultCents: 4000,
+		billingStage: "Pre-Departure Stage",
+		badge: "Relocation",
+	},
 ];
+
+export const CUSTOM_FEES_STORAGE_KEY = "century_nit_custom_fees";
 
 function centsToDollars(cents: number | string | null): string {
 	if (cents === null || cents === undefined || cents === "") return "0.00";
@@ -113,8 +142,6 @@ function dollarsToCents(dollars: string): number {
 	if (Number.isNaN(float)) return 0;
 	return Math.round(float * 100);
 }
-
-const CUSTOM_FEES_STORAGE_KEY = "century_nit_custom_fees";
 
 export function EnterpriseFeeSchedule() {
 	const { opsRole } = useOpsAuth();

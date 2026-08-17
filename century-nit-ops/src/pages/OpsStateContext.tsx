@@ -61,7 +61,7 @@ export const SEED_INVOICES: Invoice[] = [];
 const OPS_STATE_KEY = "century-nit-ops-state";
 
 /** Bump when seed data or shape changes so stale saved state is discarded. */
-const OPS_STATE_VERSION = 22;
+const OPS_STATE_VERSION = 23;
 
 const SEED_PACKAGES: ServicePackage[] = PUBLIC_SERVICE_PACKAGES.map((p) => ({
 	id: p.id,
@@ -69,6 +69,7 @@ const SEED_PACKAGES: ServicePackage[] = PUBLIC_SERVICE_PACKAGES.map((p) => ({
 	price: p.price,
 	description: p.description,
 	services: p.features,
+	exclusions: p.exclusions ?? [],
 	active: true,
 }));
 

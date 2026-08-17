@@ -74,6 +74,7 @@ export type ServicePackage = {
 	currency: string;
 	description: string;
 	features: string[];
+	exclusions?: string[];
 	popular?: boolean;
 };
 
@@ -762,32 +763,50 @@ export const consultants: Consultant[] = [
 export const servicePackages: ServicePackage[] = [
 	{
 		id: "standard",
-		name: "Standard Admission",
+		name: "Official Study Abroad & Visa Advisory Package",
 		price: 1500,
 		priceGHS: 1500 * GHS_RATE,
 		currency: "USD",
-		description: "Basic university application processing.",
+		description:
+			"Complete study abroad guidance covering credential review, university matching, visa filing processes, and end-to-end advisor assistance.",
 		features: [
-			"Document review",
-			"University selection",
-			"Application filing",
+			"Comprehensive document reviewing & credential verification",
+			"University and academic program selection matching",
+			"Statement of Purpose (SOP) & essay review assistance",
+			"Visa application processes & consular document preparation",
+			"Embassy visa interview preparation & coaching",
+			"Traveling assistance (flight & accommodation coordination)",
+			"Dedicated case consultant & step-by-step advisory support",
+		],
+		exclusions: [
+			"School / university direct application fees",
+			"Embassy / government visa filing and biometrics fees",
+			"Initial advisory consultation fee",
 		],
 		popular: true,
 	},
 	{
 		id: "premium",
-		name: "Premium Study Package",
-		price: 3000,
-		priceGHS: 3000 * GHS_RATE,
+		name: "Comprehensive Admission, Visa & Relocation Package",
+		price: 2500,
+		priceGHS: 2500 * GHS_RATE,
 		currency: "USD",
-		description: "Full service including visa support and housing guidance.",
+		description:
+			"All-inclusive support including priority document notarization, scholarship audits, visa processing, pre-departure briefing, and housing assistance.",
 		features: [
-			"Document review",
-			"University selection",
-			"Application filing",
-			"Visa processing",
-			"Housing guidance",
-			"Priority support",
+			"Comprehensive document reviewing, notarization & credential evaluation",
+			"Priority multi-institution application processing & scholarship matching",
+			"End-to-end visa application filing process & document verification",
+			"1-on-1 mock embassy visa interview coaching sessions",
+			"Traveling assistance (flight itinerary, baggage allowance & travel insurance)",
+			"Student housing, accommodation search & airport pickup coordination",
+			"Pre-departure orientation & arrival transition support",
+			"Continuous dedicated senior advisor assistance from start to arrival",
+		],
+		exclusions: [
+			"School / university direct application fees",
+			"Embassy / government visa filing and biometrics fees",
+			"Initial advisory consultation fee",
 		],
 	},
 ];

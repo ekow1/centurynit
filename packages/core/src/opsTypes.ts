@@ -98,6 +98,7 @@ export interface ServicePackage {
 	price: number;
 	description: string;
 	services: string[];
+	exclusions?: string[];
 	active: boolean;
 }
 

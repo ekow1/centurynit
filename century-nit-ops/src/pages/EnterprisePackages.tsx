@@ -65,12 +65,36 @@ export function EnterprisePackages() {
 						<p className="muted mb-4">{pkg.description}</p>
 
 						<div style={{ flexGrow: 1 }}>
-							<p className="eyebrow mb-2">Included Services</p>
-							<ul style={{ paddingLeft: "1.2rem", fontSize: "0.875rem", marginBottom: "1.5rem" }}>
+							<p className="eyebrow mb-2" style={{ color: "var(--primary, #2563eb)", fontWeight: 600 }}>
+								✓ Included Services
+							</p>
+							<ul style={{ paddingLeft: "1.2rem", fontSize: "0.875rem", marginBottom: "1.25rem", lineHeight: "1.5" }}>
 								{pkg.services.map((s) => (
 									<li key={s}>{s}</li>
 								))}
 							</ul>
+
+							{pkg.exclusions && pkg.exclusions.length > 0 && (
+								<div
+									style={{
+										padding: "0.75rem",
+										background: "var(--surface-muted, #f8fafc)",
+										border: "1px dashed var(--border-color, #e2e8f0)",
+										borderRadius: "8px",
+										marginBottom: "1.5rem",
+										fontSize: "0.8rem",
+									}}
+								>
+									<p className="eyebrow mb-1" style={{ color: "#64748b", fontSize: "0.75rem" }}>
+										✕ Not Included (Separate Official Fees)
+									</p>
+									<ul style={{ paddingLeft: "1.1rem", margin: 0, color: "#64748b" }}>
+										{pkg.exclusions.map((e) => (
+											<li key={e}>{e}</li>
+										))}
+									</ul>
+								</div>
+							)}
 						</div>
 
 						{canEditPackages ? (
@@ -118,6 +142,7 @@ function PackageEditor({
 	const [price, setPrice] = useState(String(pkg.price));
 	const [description, setDescription] = useState(pkg.description);
 	const [services, setServices] = useState(pkg.services.join("\n"));
+	const [exclusions, setExclusions] = useState((pkg.exclusions ?? []).join("\n"));
 
 	function submit(e: React.FormEvent) {
 		e.preventDefault();
@@ -127,6 +152,10 @@ function PackageEditor({
 			price: Number(price) || 0,
 			description: description.trim(),
 			services: services
+				.split("\n")
+				.map((s) => s.trim())
+				.filter(Boolean),
+			exclusions: exclusions
 				.split("\n")
 				.map((s) => s.trim())
 				.filter(Boolean),
@@ -187,9 +216,19 @@ function PackageEditor({
 					<textarea
 						className="input"
 						style={{ width: "100%" }}
-						rows={5}
+						rows={4}
 						value={services}
 						onChange={(e) => setServices(e.target.value)}
+					/>
+				</Field>
+				<Field label="Not included (separate official fees) - one per line">
+					<textarea
+						className="input"
+						style={{ width: "100%" }}
+						rows={3}
+						value={exclusions}
+						onChange={(e) => setExclusions(e.target.value)}
+						placeholder="e.g. Embassy visa filing fee&#10;University application fee"
 					/>
 				</Field>
 

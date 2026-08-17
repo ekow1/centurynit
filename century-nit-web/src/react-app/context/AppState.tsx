@@ -12,7 +12,7 @@ import {
 	getCurrentSession,
 	signOut as authSignOut,
 } from "./authStore";
-import { safeGetJSON, safeRemoveItem, safeSetItem, safeSetJSON, meApi } from "century-nit-core";
+import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
 import {
 	APPLICATION_FEE,
 	APP_INVOICE_BASE,
@@ -37,7 +37,6 @@ import {
 	VISA_INVOICE_AMOUNT,
 	VISA_STAGE_FEE,
 	appInvoiceActualLines,
-	getProgram,
 	appInvoiceEstimateLines,
 	sumInvoiceLines,
 	visaInvoiceActualLines,
@@ -52,9 +51,6 @@ import {
 	type SchoolFundingTrack,
 	type SchoolTrackStatus,
 } from "century-nit-core";
-
-/** Toggles the built-in consultant/finance timers - see `simAutopilot`. */
-const SIM_AUTOPILOT_KEY = "century-nit-sim-autopilot";
 
 export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone";
 
@@ -789,9 +785,6 @@ type AppStateContextValue = {
 	applicationStageFee: number;
 	visaStageFee: number;
 	autosaveLabel: string;
-	/** When true, timers simulate the consultant/finance side (solo portal demo). */
-	simAutopilot: boolean;
-	setSimAutopilot: (on: boolean) => void;
 	chapterUnlocks: Record<PortalChapterId, boolean>;
 	journeyPhase: ReturnType<typeof getJourneyPhase>;
 	processStage: ProcessStageId;
@@ -948,25 +941,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * can be demoed on its own. Switch it off for the two-window demo, where the
 	 * Operations Center issues these decisions for real.
 	 */
-	const [simAutopilot, setSimAutopilotState] = useState<boolean>(() => {
-		try {
-			// Default is NOW "off" — autopilot was a demo-only feature.
-			// Only enables if user has explicitly turned it on.
-			return localStorage.getItem(SIM_AUTOPILOT_KEY) === "on";
-		} catch {
-			return false;
-		}
-	});
-
-	const setSimAutopilot = useCallback((on: boolean) => {
-		setSimAutopilotState(on);
-		try {
-			safeSetItem(SIM_AUTOPILOT_KEY, on ? "on" : "off");
-		} catch {
-			/* storage unavailable - keep the in-memory value */
-		}
-	}, []);
-
 	const [messages, setMessages] = useState<ChatMessage[]>(() => {
 		try {
 			const raw = localStorage.getItem(MESSAGES_KEY);
@@ -1127,36 +1101,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		schoolApplications.length,
 	]);
 
-	/** Consultant issues the ACTUAL application invoice (estimated → raised) */
-	useEffect(() => {
-		if (!simAutopilot) return; // ops issues this instead
-		if (application.applicationInvoice.status !== "estimated") return;
-		const t = window.setTimeout(() => {
-			setApplication((prev) => {
-				if (prev.applicationInvoice.status !== "estimated") return prev;
-				const count = schoolApplications.length || 1;
-				const actualLines = appInvoiceActualLines(count);
-				const actual = sumInvoiceLines(actualLines);
-				const now = new Date().toISOString();
-				return {
-					...prev,
-					applicationInvoice: {
-						...prev.applicationInvoice,
-						status: "raised",
-						raisedAt: prev.applicationInvoice.raisedAt ?? now,
-						amount: actual,
-						actualAmount: actual,
-						actualLines,
-						consultantNote:
-							"Actual invoice confirmed after review of your school list and document pack.",
-					},
-					counselorNote: `Actual invoice issued: ${formatDualCurrency(actual)} (estimated ${formatDualCurrency(prev.applicationInvoice.estimatedAmount)}).`,
-				};
-			});
-		}, 5000);
-		return () => window.clearTimeout(t);
-	}, [simAutopilot, application.applicationInvoice.status, schoolApplications.length]);
-
 	/**
 	 * Visa invoice ESTIMATE raised on admission - the consultant then issues
 	 * the ACTUAL invoice (separate effect), which is paid BEFORE visa starts.
@@ -1202,183 +1146,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}, 0);
 		return () => window.clearTimeout(t);
 	}, [schoolApplications, application.visaInvoice.status]);
-
-	/** Consultant issues the ACTUAL visa invoice (estimated → raised) */
-	useEffect(() => {
-		if (!simAutopilot) return; // ops issues this instead
-		if (application.visaInvoice.status !== "estimated") return;
-		const t = window.setTimeout(() => {
-			setApplication((prev) => {
-				if (prev.visaInvoice.status !== "estimated") return prev;
-				const actualLines = visaInvoiceActualLines();
-				const actual = sumInvoiceLines(actualLines);
-				const now = new Date().toISOString();
-				return {
-					...prev,
-					visaInvoice: {
-						...prev.visaInvoice,
-						status: "raised",
-						raisedAt: prev.visaInvoice.raisedAt ?? now,
-						amount: actual,
-						actualAmount: actual,
-						actualLines,
-						consultantNote: "Actual invoice confirmed after case file preparation.",
-					},
-					counselorNote: `Actual visa invoice issued: ${formatDualCurrency(actual)} (estimated ${formatDualCurrency(prev.visaInvoice.estimatedAmount)}).`,
-				};
-			});
-		}, 5000);
-		return () => window.clearTimeout(t);
-	}, [application.visaInvoice.status]);
-
-	/**
-	 * Handler-side application tracking simulation (applicant is read-only).
-	 * Advances: submitted → under_review → offer → accepted (first school).
-	 * Only runs in simAutopilot (demo) mode — in production, ops updates school status.
-	 */
-	useEffect(() => {
-		if (!simAutopilot) return;
-		if (!isAppInvoicePaid(application) || !application.schoolSelectionDoneAt) return;
-		const paidAt = application.applicationInvoice.paidAt;
-		if (!paidAt) return;
-
-		const paidMs = new Date(paidAt).getTime();
-		if (Number.isNaN(paidMs)) return;
-
-		const PIPELINE: {
-			at: number;
-			status: SchoolTrackStatus;
-			note: string;
-			financial?: string;
-		}[] = [
-			{
-				at: 0,
-				status: "submitted",
-				note: "Handler filed your application with the institution desk.",
-			},
-			{
-				at: 4_000,
-				status: "under_review",
-				note: "Institution is reviewing your file and documents on record.",
-			},
-			{
-				at: 10_000,
-				status: "offer",
-				note: "Conditional / full offer received from the institution.",
-				financial: "The university has set its tuition and the deposit that holds your place — the amount and deadline are in the offer terms above.",
-			},
-			{
-				at: 16_000,
-				status: "accepted",
-				note: "Offer accepted by handler on your behalf for pathway progression (sim).",
-				financial: "Your place is confirmed, which opens the visa stage with Century NIT. The tuition deposit is still paid directly to the university.",
-			},
-		];
-
-		const applyProgress = () => {
-			const nowIso = new Date().toISOString();
-			setSchoolApplications((prev) => {
-				let changed = false;
-				const next = prev.map((s, i) => {
-					// Terminal states (except we drive accepted via sim)
-					if (s.status === "rejected" || s.status === "withdrawn") return s;
-
-					const startMs = s.trackStartedAt
-						? new Date(s.trackStartedAt).getTime()
-						: paidMs + i * 3_000;
-					const elapsed = Date.now() - startMs;
-					if (elapsed < 0) return s;
-
-					// First school reaches accepted; others stop at offer for variety
-					const steps =
-						i === 0 ? PIPELINE : PIPELINE.filter((p) => p.status !== "accepted");
-
-					let target = steps[0];
-					for (const step of steps) {
-						if (elapsed >= step.at) target = step;
-					}
-
-					const order: SchoolTrackStatus[] = [
-						"queued",
-						"submitted",
-						"under_review",
-						"additional_info",
-						"offer",
-						"accepted",
-					];
-					const curIdx = order.indexOf(s.status);
-					const tgtIdx = order.indexOf(target.status);
-					if (tgtIdx <= curIdx && s.status !== "queued") {
-						// Still ensure trackStartedAt is set
-						if (!s.trackStartedAt) {
-							changed = true;
-							return { ...s, trackStartedAt: new Date(startMs).toISOString() };
-						}
-						return s;
-					}
-
-					const alreadyLogged = (s.events ?? []).some(
-						(e) => e.status === target.status && e.note === target.note,
-					);
-					const financial =
-						target.financial?.replace(
-							"estimate",
-							`$${8_000 + i * 500} est.`,
-						) ?? s.financialNote;
-
-					changed = true;
-					const events = alreadyLogged
-						? s.events ?? []
-						: [
-								...(s.events ?? []),
-								{
-									at: nowIso,
-									status: target.status,
-									note: target.note,
-									financialNote: financial,
-								},
-							];
-
-					// An offer carries real money: the institution's tuition and the
-					// deposit that holds the place. Derived from the programme so the
-					// figure agrees with what the schools board showed.
-					const prog = getProgram(s.programId);
-					const isOffer = target.status === "offer" || target.status === "accepted";
-					const tuitionUsd = s.offerTuitionUsd ?? (isOffer ? (prog?.tuitionUsd ?? null) : null);
-					const depositUsd =
-						s.offerDepositUsd ??
-						(isOffer && tuitionUsd ? Math.round((tuitionUsd * 0.2) / 50) * 50 : null);
-					const depositDueAt =
-						s.offerDepositDueAt ??
-						(isOffer ? new Date(Date.now() + 30 * 86_400_000).toISOString() : null);
-
-					return {
-						...s,
-						status: target.status,
-						handlerNote: target.note,
-						financialNote: financial,
-						events,
-						offerTuitionUsd: tuitionUsd,
-						offerTuitionLabel: s.offerTuitionLabel ?? (isOffer ? (prog?.tuition ?? null) : null),
-						offerDepositUsd: depositUsd,
-						offerDepositDueAt: depositDueAt,
-						trackStartedAt: s.trackStartedAt ?? new Date(startMs).toISOString(),
-						updatedAt: nowIso,
-					};
-				});
-				return changed ? next : prev;
-			});
-		};
-
-		applyProgress();
-		const id = window.setInterval(applyProgress, 1_500);
-		return () => window.clearInterval(id);
-	}, [
-		simAutopilot,
-		application.applicationInvoice.status,
-		application.applicationInvoice.paidAt,
-		application.schoolSelectionDoneAt,
-	]);
 
 	/** Visa tracking simulation only after visa invoice paid */
 	useEffect(() => {
@@ -2143,24 +1910,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
-	/** Pre-departure auto-simulation: once unlocked, tasks auto-complete one by one */
-	useEffect(() => {
-		if (!simAutopilot) return;
-		// Travel opens once the visa is granted; the service fee gates it
-		const visaDone = application.visaStatus === "complete";
-		if (!visaDone || !isAgencySettled(application)) return;
-
-		const id = window.setInterval(() => {
-			setPreDepartureTasks((prev) => {
-				const next = prev.find((t) => !t.done);
-				if (!next) return prev;
-				return prev.map((t) => (t.id === next.id ? { ...t, done: true } : t));
-			});
-		}, 3_000);
-
-		return () => window.clearInterval(id);
-	}, [simAutopilot, application.agencySettledAt, application.visaStatus]);
-
 	/**
 	 * Sync real server consultation, assignment, eligibility and applicant profile
 	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
@@ -2351,8 +2100,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			applicationStageFee: APP_INVOICE_BASE,
 			visaStageFee: VISA_STAGE_FEE,
 			autosaveLabel,
-			simAutopilot,
-			setSimAutopilot,
 			chapterUnlocks,
 			journeyPhase: effectiveJourneyPhase,
 			processStage,
@@ -2415,8 +2162,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			lockSchoolSelection,
 			updateSchoolTrack,
 			autosaveLabel,
-			simAutopilot,
-			setSimAutopilot,
 			chapterUnlocks,
 			effectiveJourneyPhase,
 			processStage,

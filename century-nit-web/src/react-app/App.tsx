@@ -1,9 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { AppStateProvider } from "./context/AppState";
-import { OpsDirectiveBridge } from "./context/OpsDirectiveBridge";
 import { NotifierProvider } from "./components/notifier/Notifier";
-import { DemoControls } from "./components/DemoControls";
 import { EnquiryWidget } from "./components/EnquiryWidget";
 import { NewsletterPopup } from "./components/NewsletterPopup";
 import { EnquiryProvider } from "./components/EnquiryContext";
@@ -202,12 +200,9 @@ export default function App() {
 		<BrowserRouter>
 			<NotifierProvider>
 				<AppStateProvider>
-					{/* Applies Operations Center decisions to the applicant's state */}
-					<OpsDirectiveBridge />
 					<EnquiryProvider>
 						<ScrollToTop />
 						<AppShell />
-						<DemoControls />
 					</EnquiryProvider>
 				</AppStateProvider>
 			</NotifierProvider>

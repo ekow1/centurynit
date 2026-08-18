@@ -137,6 +137,11 @@ export interface MockConsultation {
 	assessmentResult?: AssessmentResult;
 	/** Consultant has confirmed the assigned slot. */
 	slotConfirmed?: boolean;
+	
+	rescheduleRequestedAt?: string | null;
+	rescheduleRequestedStartsAt?: string | null;
+	rescheduleRequestReason?: string | null;
+
 	/** Empty string means unassigned - it sits in the manager's queue. */
 	comments?: CaseComment[];
 	/** Set when a consultant moves an assigned consultation. */

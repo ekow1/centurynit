@@ -44,6 +44,8 @@ export function EnterpriseConsultations() {
 		commentOnConsultation,
 		requestConsultationDocs,
 		rescheduleConsultation,
+		decideReschedule,
+		cancelConsultation,
 		refresh,
 	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -373,7 +375,55 @@ export function EnterpriseConsultations() {
 							</div>
 
 						{/* Status Action Bar */}
-						{active.status === "Under Review" && canAssignWork && (
+						{active.rescheduleRequestedAt && (
+							(() => {
+								const canActOnReschedule = 
+									(active.assignedOfficerEmail && opsUser?.email === active.assignedOfficerEmail) || 
+									(!active.assignedOfficerEmail && canAssignWork);
+								
+								return (
+									<div style={{ padding: "0.75rem 1.25rem", background: "var(--bg-warning)", borderBottom: "1px solid var(--border-light)", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontSize: "var(--text-sm)", color: "var(--text-warning)" }}>
+												<strong>Applicant requested a reschedule.</strong>
+											</p>
+											<p style={{ fontSize: "var(--text-xs)", color: "var(--text-warning)", marginTop: "0.2rem" }}>
+												They want to move this to <strong>{new Date(active.rescheduleRequestedStartsAt!).toLocaleString()}</strong>.
+												{active.rescheduleRequestReason && <><br/>Reason: {active.rescheduleRequestReason}</>}
+											</p>
+										</div>
+										<div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
+											{canActOnReschedule ? (
+												<>
+													<button
+														onClick={() => {
+															if (active.bookingId) void decideReschedule(active.bookingId, "reject");
+														}}
+														className="btn btn--sm btn--ghost"
+													>
+														Reject
+													</button>
+													<button
+														onClick={() => {
+															if (active.bookingId) void decideReschedule(active.bookingId, "approve");
+														}}
+														className="btn btn--sm btn--primary"
+													>
+														✓ Approve
+													</button>
+												</>
+											) : (
+												<span style={{ fontSize: "var(--text-xs)", color: "var(--text-warning)", fontWeight: 500 }}>
+													Waiting for {active.assignedOfficer ? "assigned consultant" : "manager"} to review
+												</span>
+											)}
+										</div>
+									</div>
+								);
+							})()
+						)}
+
+						{active.status === "Under Review" && !active.assignedOfficer && canAssignWork && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#fef3c7", borderBottom: "1px solid #fde68a", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#92400e" }}>
 									<strong>New booking awaiting assignment.</strong> Review the applicant's background below, then assign to a consultant using the panel.
@@ -524,8 +574,8 @@ export function EnterpriseConsultations() {
 												setSelectedConsultation(null);
 												void refresh();
 											})
-											.catch((e) => {
-												const msg = e instanceof Error ? e.message : "Could not cancel consultation.";
+											.catch((err: unknown) => {
+												const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
 												window.alert(msg);
 											});
 									}}

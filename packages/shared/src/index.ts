@@ -10,6 +10,7 @@ export * from "./schemas/avatar.js";
 export * from "./schemas/cases.js";
 export * from "./schemas/school.js";
 export * from "./schemas/ticket.js";
+export * from "./schemas/chat.js";
 export * from "./schemas/payment.js";
 export * from "./schemas/payment.js";
 export * from "./api-version.js";

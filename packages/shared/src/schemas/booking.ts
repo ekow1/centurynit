@@ -116,6 +116,11 @@ export const rescheduleBookingSchema = z.object({
 });
 export type RescheduleBooking = z.infer<typeof rescheduleBookingSchema>;
 
+export const rescheduleDecisionSchema = z.object({
+	decision: z.enum(["approve", "reject"]),
+});
+export type RescheduleDecision = z.infer<typeof rescheduleDecisionSchema>;
+
 export const cancelBookingSchema = z.object({
 	reason: z.string().max(1000).optional(),
 });
@@ -196,6 +201,12 @@ export const bookingSchema = z.object({
 	calendarSyncStatus: calendarSyncStatusSchema,
 
 	rescheduledAt: z.string().datetime().nullable(),
+	rescheduleRequestedAt: z.string().datetime().nullable(),
+	rescheduleRequestedStartsAt: z.string().datetime().nullable(),
+	rescheduleRequestedEndsAt: z.string().datetime().nullable(),
+	rescheduleRequestedTimezone: z.string().nullable(),
+	rescheduleRequestReason: z.string().nullable(),
+
 	cancelledAt: z.string().datetime().nullable(),
 	cancellationReason: z.string().nullable(),
 

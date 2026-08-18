@@ -237,3 +237,137 @@ export function creditInvoice(
 		body: JSON.stringify(body),
 	});
 }
+
+/* ── Chat ── */
+
+export type ChatParticipant = {
+	opsUserId: string;
+	name: string;
+	email: string;
+	role: "owner" | "member";
+	lastReadAt: string | null;
+	joinedAt: string;
+};
+
+export type ChatMessage = {
+	id: string;
+	conversationId: string;
+	senderOpsUserId: string;
+	senderName: string;
+	content: string;
+	messageType: "text" | "system" | "action";
+	replyToId: string | null;
+	createdAt: string;
+};
+
+export type ChatConversation = {
+	id: string;
+	type: "direct" | "entity" | "group";
+	title: string;
+	linkedEntityType: string | null;
+	linkedEntityId: string | null;
+	createdBy: string;
+	participants: ChatParticipant[];
+	lastMessage: ChatMessage | null;
+	unreadCount: number;
+	createdAt: string;
+	updatedAt: string;
+};
+
+export type ChatConversationListResponse = {
+	conversations: ChatConversation[];
+	total: number;
+};
+
+export type ChatMessageListResponse = {
+	messages: ChatMessage[];
+	total: number;
+	hasMore: boolean;
+};
+
+export type ChatUnreadResponse = {
+	totalUnread: number;
+	conversations: { conversationId: string; unreadCount: number }[];
+};
+
+export type StaffDirectoryEntry = {
+	opsUserId: string;
+	name: string;
+	email: string;
+	role: string;
+};
+
+export type StaffDirectoryResponse = {
+	staff: StaffDirectoryEntry[];
+};
+
+const CHAT = `${API_PREFIX}/chat`;
+
+export function listChatConversations(): Promise<ChatConversationListResponse> {
+	return apiFetch<ChatConversationListResponse>(`${CHAT}/conversations`);
+}
+
+export function createChatConversation(body: {
+	participantOpsUserId?: string;
+	linkedEntityType?: string;
+	linkedEntityId?: string;
+	title?: string;
+	participantOpsUserIds?: string[];
+	initialMessage?: string;
+}): Promise<ChatConversation> {
+	return apiFetch<ChatConversation>(`${CHAT}/conversations`, {
+		method: "POST",
+		body: JSON.stringify(body),
+	});
+}
+
+export function getChatConversation(id: string): Promise<ChatConversation> {
+	return apiFetch<ChatConversation>(`${CHAT}/conversations/${id}`);
+}
+
+export function getChatMessages(
+	conversationId: string,
+	params?: { limit?: number; before?: string },
+): Promise<ChatMessageListResponse> {
+	const qs = new URLSearchParams();
+	if (params?.limit) qs.set("limit", String(params.limit));
+	if (params?.before) qs.set("before", params.before);
+	const query = qs.toString();
+	return apiFetch<ChatMessageListResponse>(
+		`${CHAT}/conversations/${conversationId}/messages${query ? `?${query}` : ""}`,
+	);
+}
+
+export function sendChatMessage(
+	conversationId: string,
+	body: { content: string; replyToId?: string; mentions?: string[] },
+): Promise<ChatMessage> {
+	return apiFetch<ChatMessage>(`${CHAT}/conversations/${conversationId}/messages`, {
+		method: "POST",
+		body: JSON.stringify(body),
+	});
+}
+
+export function markChatConversationRead(conversationId: string): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/read`, {
+		method: "POST",
+	});
+}
+
+export function getChatUnread(): Promise<ChatUnreadResponse> {
+	return apiFetch<ChatUnreadResponse>(`${CHAT}/unread`);
+}
+
+export function addChatParticipant(
+	conversationId: string,
+	opsUserId: string,
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/participants`, {
+		method: "POST",
+		body: JSON.stringify({ opsUserId }),
+	});
+}
+
+export function getStaffDirectory(): Promise<StaffDirectoryResponse> {
+	return apiFetch<StaffDirectoryResponse>(`${CHAT}/staff-directory`);
+}

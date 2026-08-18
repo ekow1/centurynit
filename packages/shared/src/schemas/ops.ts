@@ -50,6 +50,7 @@ export const opsModuleSchema = z.enum([
 	"programs",
 	"packages",
 	"reports",
+	"chat",
 	// ── Platform administration (admin only) ──
 	"system",
 	"users",
@@ -81,6 +82,7 @@ export const MODULE_GROUPS: Array<{
 			{ id: "leads", label: "CRM & Leads", description: "Inbound leads, inquiry pipeline, and CRM" },
 			{ id: "appointments", label: "Appointments", description: "Calendar booking and consultant schedules" },
 			{ id: "helpdesk", label: "Helpdesk", description: "Support tickets and applicant inquiries" },
+			{ id: "chat", label: "Internal Chat", description: "Staff-to-staff messaging and team coordination" },
 			{ id: "marketing", label: "Marketing", description: "Campaigns and outreach tools" },
 		],
 	},
@@ -132,22 +134,22 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
 		"finance", "invoices", "ledger", "payments", "payment-config",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
-		"programs", "packages", "reports",
+		"programs", "packages", "reports", "chat",
 	],
 	coordinator: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
-		"programs", "packages", "reports",
+		"programs", "packages", "reports", "chat",
 	],
 	consultant: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing", "workflow",
-		"visa", "travel", "documents", "appointments", "universities", "programs", "packages", "reports",
+		"visa", "travel", "documents", "appointments", "universities", "programs", "packages", "reports", "chat",
 	],
 	finance: [
-		"dashboard", "finance", "invoices", "ledger", "payments", "payment-config", "packages", "reports", "helpdesk",
+		"dashboard", "finance", "invoices", "ledger", "payments", "payment-config", "packages", "reports", "helpdesk", "chat",
 	],
 	admin: [
-		"system", "users", "auth", "cms", "site", "notifications", "settings", "helpdesk",
+		"system", "users", "auth", "cms", "site", "notifications", "settings", "helpdesk", "chat",
 	],
 };
 

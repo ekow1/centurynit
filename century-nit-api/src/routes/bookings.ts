@@ -42,6 +42,9 @@ import {
 } from "century-nit-shared";
 import type { Booking } from "century-nit-shared";
 import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
+import { createPaystackCheckout, verifyPaystackTransaction } from "../services/paystack.js";
+import { ensureCaseForBooking } from "../services/cases.js";
+import { createConsultationInvoice } from "../services/invoice.js";
 
 const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
@@ -157,6 +160,122 @@ bookingsRouter.openapi(
 				reason: s.reason,
 			})),
 		});
+	},
+);
+
+/* ── POST /api/v1/bookings/checkout ─────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/checkout",
+		tags: ["Bookings"],
+		middleware: requireAuth,
+		request: {
+			body: {
+				content: { "application/json": { schema: createBookingSchema } },
+				description: "Booking details for checkout",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Checkout URL",
+				content: { "application/json": { schema: z.object({ authorizationUrl: z.string() }) } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const origin = c.req.header("origin") || env.FRONTEND_URL;
+		
+		const checkout = await createPaystackCheckout({
+			email: user.email,
+			amountCents: 7500, // Fixed consultation fee
+			callbackUrl: `${origin}/portal/pay?paystack=1&booking=consultation`,
+			customMetadata: { bookingPayload: body },
+		});
+		
+		return c.json({ authorizationUrl: checkout.authorizationUrl }, 200);
+	},
+);
+
+/* ── POST /api/v1/bookings/verify-payment ───────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/verify-payment",
+		tags: ["Bookings"],
+		middleware: requireAuth,
+		request: {
+			body: {
+				content: { "application/json": { schema: z.object({ reference: z.string() }) } },
+				description: "Paystack transaction reference",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Booking created after payment verification",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { reference } = c.req.valid("json");
+
+		const txn = await verifyPaystackTransaction(reference);
+		if (txn.status !== "success") {
+			throw new HttpError(400, "PAYMENT_FAILED", "Payment was not successful");
+		}
+		
+		const bookingPayload = txn.metadata?.bookingPayload as CreateBooking;
+		if (!bookingPayload) {
+			throw new HttpError(400, "BAD_REQUEST", "Transaction missing booking payload");
+		}
+		
+		const serviceName = resolveServiceName(bookingPayload.serviceId);
+		const booking = await createBooking({
+			data: bookingPayload,
+			client: {
+				id: user.id,
+				name: user.name ?? user.email,
+				email: user.email,
+			},
+			serviceName,
+		});
+
+		// Immediately create the consultation row so ops see it in the intake queue.
+		if (bookingPayload.serviceId === "consultation") {
+			try {
+				await ensureCaseForBooking({
+					id: booking.id,
+					reference: booking.reference,
+					clientUserId: user.id,
+					clientName: user.name ?? user.email,
+					clientEmail: user.email,
+					clientPhone: booking.clientPhone ?? null,
+					branchId: booking.branchId,
+					type: booking.type,
+				});
+				await createConsultationInvoice({
+					clientUserId: user.id,
+					applicantName: user.name ?? user.email,
+					applicantEmail: user.email,
+					bookingId: booking.id,
+					reference: booking.reference,
+					amountCents: txn.amountCents,
+					issuedBy: "System",
+				});
+			} catch {
+				// Non-fatal — booking still succeeds; ops can still find the booking
+			}
+		}
+
+		return c.json(toBookingResponse(booking), 200);
 	},
 );
 
@@ -605,6 +724,34 @@ bookingsRouter.openapi(
 		const employee = await loadEmployee(updated.employeeId);
 		return c.json(toBookingResponse(updated, employee));
 	},
+);
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/debug/reset-cancelled",
+		responses: {
+			200: { description: "Reset cancelled consultations" },
+		},
+	}),
+	async (c) => {
+		const cancelledConsultations = await db.select().from(consultations).where(eq(consultations.status, "CANCELLED"));
+		if (cancelledConsultations.length === 0) {
+			return c.json({ message: "No cancelled consultations found." }, 200);
+		}
+		for (const consultation of cancelledConsultations) {
+			await db.update(consultations)
+				.set({ status: "UNDER_REVIEW", isClosed: false, outcome: null })
+				.where(eq(consultations.id, consultation.id));
+				
+			if (consultation.bookingId) {
+				await db.update(bookings)
+					.set({ status: "UNASSIGNED" })
+					.where(eq(bookings.id, consultation.bookingId));
+			}
+		}
+		return c.json({ message: `Reset ${cancelledConsultations.length} consultations.` }, 200);
+	}
 );
 
 export { bookingsRouter };

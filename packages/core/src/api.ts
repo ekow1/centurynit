@@ -238,6 +238,15 @@ export const bookingsApi = {
 		return request(`${API_PREFIX}/bookings`, { method: "POST", ...json(input) });
 	},
 
+	checkout(input: CreateBooking): Promise<{ authorizationUrl: string }> {
+		return request(`${API_PREFIX}/bookings/checkout`, { method: "POST", ...json(input) });
+	},
+
+	verifyPayment(reference: string): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/verify-payment`, { method: "POST", ...json({ reference }) });
+	},
+
+
 	list(filter: { status?: BookingStatus; branchId?: string; employeeId?: string } = {}): Promise<{
 		bookings: Booking[];
 		total: number;
@@ -284,6 +293,26 @@ export const bookingsApi = {
 		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule`, {
 			method: "PATCH",
 			...json(input),
+		});
+	},
+
+	rescheduleRequest(
+		bookingId: string,
+		input: { date: string; time: string; timezone?: string; reason?: string },
+	): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule-request`, {
+			method: "PATCH",
+			...json(input),
+		});
+	},
+
+	rescheduleDecision(
+		bookingId: string,
+		decision: "approve" | "reject",
+	): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule-decision`, {
+			method: "PATCH",
+			...json({ decision }),
 		});
 	},
 
@@ -373,6 +402,45 @@ export const staffApi = {
 		active: boolean;
 	}> {
 		return request(`${API_PREFIX}/staff/${id}`, { method: "PATCH", ...json(patch) });
+	},
+
+	authStats(): Promise<{
+		totalStaff: number;
+		mfaEnrolled: number;
+		mfaRequired: number;
+		mfaNotEnrolled: number;
+		activeSessions: number;
+		providers: { id: string; label: string; enabled: boolean }[];
+	}> {
+		return request(`${API_PREFIX}/staff/auth-stats`);
+	},
+};
+
+/* ── Notification delivery log ────────────────────────────────────────────── */
+
+export type NotificationLogItem = {
+	id: string;
+	recipient: string;
+	subject: string;
+	template: string | null;
+	status: string;
+	reference: string | null;
+	errorMessage: string | null;
+	sentAt: string;
+};
+
+export const notificationsApi = {
+	log(limit?: number, status?: "sent" | "failed"): Promise<{
+		notifications: NotificationLogItem[];
+		total: number;
+		sent: number;
+		failed: number;
+	}> {
+		const params = new URLSearchParams();
+		if (limit) params.set("limit", String(limit));
+		if (status) params.set("status", status);
+		const qs = params.toString() ? `?${params.toString()}` : "";
+		return request(`${API_PREFIX}/notifications/log${qs}`);
 	},
 };
 

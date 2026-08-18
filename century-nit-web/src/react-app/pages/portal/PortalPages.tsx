@@ -1401,7 +1401,7 @@ function ConsultationReview({
 	);
 }
 
-export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () => Promise<void> }) {
+export function PortalConsultationBookingFlow() {
 	const {
 		booking,
 		updateBooking,
@@ -1428,7 +1428,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 		setPayState("processing");
 
 		try {
-			await bookingsApi.create({
+			const res = await bookingsApi.checkout({
 				serviceId: "consultation",
 				branchId: booking.branchId,
 				type: booking.consultationType || "online",
@@ -1439,7 +1439,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 				notes: "Preferred: " + booking.assessment.preferredCountries + ", " + booking.assessment.preferredLevel,
 			});
 
-		await meApi.updateProfile({
+			await meApi.updateProfile({
 				name: [booking.assessment.firstName, booking.assessment.middleName, booking.assessment.lastName].filter(Boolean).join(" "),
 				phone: booking.assessment.phone,
 				targetCountry: booking.assessment.preferredCountries,
@@ -1465,19 +1465,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 				},
 			});
 
-		setPayState("success");
-		updateBooking({
-		    paymentStatus: "success",
-		    paidAt: new Date().toISOString(),
-		    consultationPhase: "awaiting_assignment",
-        });
-            
-            await onComplete();
-
-			setTimeout(() => {
-				setSelectedTab(6);
-				setPayState("paid");
-			}, 2000);
+			window.location.href = res.authorizationUrl;
 		} catch (err) {
 			setPayState("method");
 			alert("Error creating booking: " + String(err));
@@ -1756,7 +1744,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 
 
 export function PortalConsultation() {
-	const { booking, syncFromServer } = useAppState();
+	const { booking } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -1800,7 +1788,7 @@ export function PortalConsultation() {
 					<p className="muted">Loading consultation case details…</p>
 				</div>
 			) : !hasActiveCase ? (
-				<PortalConsultationBookingFlow onComplete={async () => { await refreshLiveCase(); await syncFromServer(); }} />
+				<PortalConsultationBookingFlow />
 			) : (
 				/* ── Live Consultation File Dashboard ── */
 				<div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginTop: "1rem" }}>
@@ -3208,10 +3196,27 @@ export function PortalPayCallback() {
 		let cancelled = false;
 		(async () => {
 			try {
-				if (params.get("paystack") !== "1" || !invoiceId || !reference) {
+				if (params.get("paystack") !== "1" || !reference) {
 					nav("/portal/application", { replace: true });
 					return;
 				}
+				
+				if (params.get("booking") === "consultation") {
+					await bookingsApi.verifyPayment(reference);
+					if (cancelled) return;
+					
+					// Force a sync to get the new booking into AppState
+					// or we can optimistically update booking here, but a reload is safer.
+					nav("/portal/appointments", { replace: true });
+					toast.success("Payment confirmed. Your booking is now complete.");
+					return;
+				}
+
+				if (!invoiceId) {
+					nav("/portal/application", { replace: true });
+					return;
+				}
+
 				const { invoice } = await meApi.paystackVerify(invoiceId, reference);
 				if (cancelled) return;
 				const settled = invoice.balanceCents === 0;

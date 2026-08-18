@@ -199,7 +199,7 @@ function RescheduleForm({
 		setError(null);
 		try {
 			onDone(
-				await bookingsApi.reschedule(booking.id, {
+				await bookingsApi.rescheduleRequest(booking.id, {
 					date,
 					time,
 					reason: reason.trim() || undefined,
@@ -250,7 +250,7 @@ function RescheduleForm({
 			{error && <p className="appt-error">{error}</p>}
 			<div className="appt-actions">
 				<button type="submit" className="btn btn--primary btn--sm" disabled={busy || !time}>
-					{busy ? "Moving…" : "Confirm new time"}
+					{busy ? "Sending Request…" : "Request Reschedule"}
 				</button>
 				<button type="button" className="btn btn--ghost btn--sm" onClick={onCancel}>
 					Keep current time
@@ -272,9 +272,9 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 
 	async function cancel() {
 		const ok = await confirm({
-			title: "Cancel this appointment?",
-			message: "The selected time will be released back to other applicants.",
-			confirmText: "Cancel appointment",
+			title: "Cancel this consultation?",
+			message: "If you cancel this consultation appointment, your entire consultation process will be cancelled. You will need to start over and pay again. The selected time will also be released back to other applicants.",
+			confirmText: "Yes, Cancel",
 			tone: "danger",
 		});
 		if (!ok) return;
@@ -322,6 +322,14 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 			</dl>
 
 			{copy.note && <p className="appt-note">{copy.note}</p>}
+			
+			{booking.rescheduleRequestedAt && !isOver && (
+				<div className="appt-note" style={{ backgroundColor: "var(--bg-warning)", color: "var(--text-warning)" }}>
+					<strong>Reschedule Requested</strong>
+					<br/>
+					You requested to move this appointment to <strong>{new Date(booking.rescheduleRequestedStartsAt!).toLocaleString()}</strong>. Waiting for approval.
+				</div>
+			)}
 
 			{booking.meetingUrl && !isOver && (
 				<a className="btn btn--primary btn--sm" href={booking.meetingUrl} target="_blank" rel="noreferrer">
@@ -339,10 +347,10 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 
 			{error && <p className="appt-error">{error}</p>}
 
-			{!isOver && !rescheduling && (
+			{!isOver && !rescheduling && !booking.rescheduleRequestedAt && (
 				<div className="appt-actions">
 					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setRescheduling(true)}>
-						Reschedule
+						Request Reschedule
 					</button>
 					<button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={cancel}>
 						{busy ? "Cancelling…" : "Cancel"}

@@ -35,7 +35,8 @@ export async function paystackSecretKey(): Promise<string> {
 export async function createPaystackCheckout(input: {
 	email: string;
 	amountCents: number;
-	invoiceId: string;
+	invoiceId?: string;
+	customMetadata?: Record<string, any>;
 	callbackUrl: string;
 }): Promise<{ authorizationUrl: string; reference: string; amountCents: number }> {
 	const secretKey = await paystackSecretKey();
@@ -52,7 +53,10 @@ export async function createPaystackCheckout(input: {
 			currency: "USD",
 			reference,
 			callback_url: input.callbackUrl,
-			metadata: { invoiceId: input.invoiceId },
+			metadata: { 
+				...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+				...input.customMetadata,
+			},
 		}),
 	});
 	let body = (await response.json()) as {
@@ -108,6 +112,7 @@ export type PaystackVerifiedTransaction = {
 	amountCents: number;
 	currency: string;
 	invoiceId?: string;
+	metadata?: Record<string, any>;
 };
 
 /** Query Paystack for a transaction, cross-checking the invoice metadata. */
@@ -128,7 +133,7 @@ export async function verifyPaystackTransaction(
 			status?: string;
 			amount?: number;
 			currency?: string;
-			metadata?: { invoiceId?: string };
+			metadata?: { invoiceId?: string } & Record<string, any>;
 		};
 	};
 	if (!response.ok || !body.status || !body.data) {
@@ -139,6 +144,7 @@ export async function verifyPaystackTransaction(
 		amountCents: body.data.amount ?? 0,
 		currency: body.data.currency ?? "USD",
 		invoiceId: body.data.metadata?.invoiceId,
+		metadata: body.data.metadata,
 	};
 }
 

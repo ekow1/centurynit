@@ -92,6 +92,9 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 			: undefined,
 		slotBranchId: row.branch,
 		isLive: true,
+		rescheduleRequestedAt: row.rescheduleRequestedAt,
+		rescheduleRequestedStartsAt: row.rescheduleRequestedStartsAt,
+		rescheduleRequestReason: row.rescheduleRequestReason,
 	};
 }
 
@@ -269,6 +272,22 @@ export function useCasesApi() {
 		return match.id;
 	}, []);
 
+	const rescheduleConsultation = useCallback(
+		async (_id: string, bookingId: string, date: string, time: string, reason: string) => {
+			await bookingsApi.reschedule(bookingId, { date, time, reason });
+			await refresh();
+		},
+		[refresh],
+	);
+
+	const decideReschedule = useCallback(
+		async (bookingId: string, decision: "approve" | "reject") => {
+			await bookingsApi.rescheduleDecision(bookingId, decision);
+			await refresh();
+		},
+		[refresh],
+	);
+
 	return {
 		consultations,
 		applications,
@@ -295,11 +314,8 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
 		cancelConsultation: async (id: string, reason?: string) =>
 			replaceConsultation(await consultationsApi.cancel(id, reason)),
-		rescheduleConsultation: async (id: string, bookingId: string, date: string, time: string, reason: string) => {
-			await bookingsApi.reschedule(bookingId, { date, time, reason });
-			const consultation = await consultationsApi.get(id);
-			return replaceConsultation(consultation);
-		},
+		rescheduleConsultation,
+		decideReschedule,
 		assignApplication: async (id: string, to: Assignee) =>
 			replaceApplication(await applicationsApi.assign(id, await staffIdByEmail(to.email))),
 		acceptApplication: async (id: string) => replaceApplication(await applicationsApi.accept(id)),

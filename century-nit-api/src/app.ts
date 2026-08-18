@@ -28,7 +28,9 @@ import { meTicketsRouter, opsTicketsRouter } from "./routes/tickets.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { rolesRouter } from "./routes/roles.js";
 import { leadsRouter } from "./routes/leads.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
+import { chatRouter } from "./routes/chat.js";
 
 
 /**
@@ -135,8 +137,10 @@ export function createApp() {
 	app.route(`${API_PREFIX}/roles`, rolesRouter);
 	app.route(`${API_PREFIX}/leads`, leadsRouter);
 	app.route(`${API_PREFIX}/client-users`, clientUsersRouter);
+	app.route(`${API_PREFIX}/chat`, chatRouter);
 	app.route(`${API_PREFIX}/me`, meRouter);
 	app.route(`${API_PREFIX}/me`, avatarRouter);
+	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 
 
 	const openApiInfo = {
@@ -214,6 +218,12 @@ export function createApp() {
 			{
 				name: "Health",
 				description: "Liveness and readiness. Unversioned — monitoring, not contract.",
+			},
+			{
+				name: "Chat",
+				description:
+					"Internal staff-to-staff messaging. Conversations, messages, " +
+					"@mentions, and unread counts. All staff roles have access.",
 			},
 		],
 	};

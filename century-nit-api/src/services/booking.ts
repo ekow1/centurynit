@@ -4,6 +4,7 @@ import {
 	occupiesSlot,
 	type BookingStatus,
 	type CreateBooking,
+	type RescheduleBooking,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { bookingEvents, bookings, opsUsers } from "../db/schema.js";
@@ -560,6 +561,128 @@ export async function rescheduleBooking(input: {
 	if (employee) await scheduleReminders(updated, employee);
 
 	return updated;
+}
+
+export async function requestRescheduleBooking(
+	id: string,
+	input: RescheduleBooking & { actor: { id: string; email: string } },
+): Promise<BookingRow> {
+	const booking = await getBooking(id);
+	if (!booking) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+
+	if (booking.status === "CANCELLED" || booking.status === "COMPLETED") {
+		throw new HttpError(400, "INVALID_STATE", "Cannot reschedule a closed booking.");
+	}
+
+	const timezone = input.timezone ?? booking.timezone;
+	if (!isValidTimeZone(timezone)) {
+		throw new HttpError(400, "VALIDATION_ERROR", `Unknown timezone: ${timezone}`);
+	}
+
+	const startsAt = zonedTimeToUtc(input.date, input.time, timezone);
+	const endsAt = addMinutes(startsAt, booking.durationMinutes);
+
+	if (startsAt.getTime() <= Date.now()) {
+		throw new HttpError(400, SCHEDULING_ERROR_CODES.PAST_SLOT, "That time is in the past");
+	}
+
+	const [updated] = await db
+		.update(bookings)
+		.set({
+			rescheduleRequestedAt: new Date(),
+			rescheduleRequestedStartsAt: startsAt,
+			rescheduleRequestedEndsAt: endsAt,
+			rescheduleRequestedTimezone: timezone,
+			rescheduleRequestReason: input.reason ?? null,
+			updatedAt: new Date(),
+		})
+		.where(eq(bookings.id, booking.id))
+		.returning();
+
+	await audit(booking.id, "reschedule_requested", input.actor.email, {
+		to: startsAt.toISOString(),
+		reason: input.reason ?? null,
+	});
+
+	// Optionally we could send an email to ops here
+
+	return updated;
+}
+
+export async function decideRescheduleBooking(
+	id: string,
+	decision: "approve" | "reject",
+	actor: { id: string; email: string },
+): Promise<BookingRow> {
+	const booking = await getBooking(id);
+	if (!booking) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+
+	if (!booking.rescheduleRequestedStartsAt || !booking.rescheduleRequestedEndsAt) {
+		throw new HttpError(400, "INVALID_STATE", "No pending reschedule request.");
+	}
+
+	if (decision === "approve") {
+		// Update the actual booking fields to the requested slot and clear the request
+		let [updated] = await db
+			.update(bookings)
+			.set({
+				startsAt: booking.rescheduleRequestedStartsAt!,
+				endsAt: booking.rescheduleRequestedEndsAt!,
+				timezone: booking.rescheduleRequestedTimezone!,
+				status: booking.employeeId ? "RESCHEDULED" : "UNASSIGNED",
+				rescheduledAt: new Date(),
+				rescheduleRequestedAt: null,
+				rescheduleRequestedStartsAt: null,
+				rescheduleRequestedEndsAt: null,
+				rescheduleRequestedTimezone: null,
+				rescheduleRequestReason: null,
+				updatedAt: new Date(),
+			})
+			.where(eq(bookings.id, booking.id))
+			.returning();
+
+		await audit(booking.id, "reschedule_approved", actor.email, {
+			from: booking.startsAt.toISOString(),
+			to: booking.rescheduleRequestedStartsAt!.toISOString(),
+		});
+
+		if (updated.calendarEventId && updated.employeeId) {
+			updated = await updateCalendarForBooking(updated.id);
+		}
+
+		const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
+		const ctx = { ...(await notificationContext(updated, employee)), reason: "Your reschedule request was approved." };
+
+		await cancelQueued(`notify:reminder:client:${booking.reference}`);
+		await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+
+		await queueEmails([
+			mail.bookingRescheduled(ctx, "client"),
+			...(employee ? [mail.bookingRescheduled(ctx, "employee")] : []),
+		]);
+		if (employee) await scheduleReminders(updated, employee);
+
+		return updated;
+	} else {
+		// reject: just clear the request fields
+		const [cleared] = await db
+			.update(bookings)
+			.set({
+				rescheduleRequestedAt: null,
+				rescheduleRequestedStartsAt: null,
+				rescheduleRequestedEndsAt: null,
+				rescheduleRequestedTimezone: null,
+				rescheduleRequestReason: null,
+				updatedAt: new Date(),
+			})
+			.where(eq(bookings.id, booking.id))
+			.returning();
+
+		await audit(booking.id, "reschedule_rejected", actor.email);
+		
+		// Optionally we could send an email about rejection to client
+		return cleared;
+	}
 }
 
 export async function updateCalendarForBooking(bookingId: string): Promise<BookingRow> {

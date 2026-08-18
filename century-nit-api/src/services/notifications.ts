@@ -37,6 +37,10 @@ export type QueuedEmail = {
 	html: string;
 	/** §14 — the queue drops a duplicate rather than sending twice. */
 	idempotencyKey: string;
+	/** Human-readable template name for the notification log (e.g. "Booking created"). */
+	template?: string;
+	/** Business reference (booking ref, consultation ref) for the notification log. */
+	reference?: string;
 };
 
 function formatEmail(title: string, lines: string[], meetingUrl?: string | null, reference?: string): { html: string; text: string } {
@@ -65,6 +69,8 @@ export function bookingCreatedForClient(ctx: BookingNotificationContext): Queued
 		html,
 		text,
 		idempotencyKey: `notify:created:client:${ctx.reference}`,
+		template: "Booking received",
+		reference: ctx.reference,
 	};
 }
 
@@ -88,6 +94,8 @@ export function bookingCreatedForManagers(
 		html,
 		text,
 		idempotencyKey: `notify:created:manager:${ctx.reference}:${managerEmail}`,
+		template: "New booking awaiting assignment",
+		reference: ctx.reference,
 	};
 }
 
@@ -109,6 +117,8 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 		html,
 		text,
 		idempotencyKey: `notify:assigned:client:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
+		template: "Appointment confirmed",
+		reference: ctx.reference,
 	};
 }
 
@@ -129,6 +139,8 @@ export function bookingAssignedForEmployee(ctx: BookingNotificationContext): Que
 		html,
 		text,
 		idempotencyKey: `notify:assigned:employee:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
+		template: "Consultation assigned",
+		reference: ctx.reference,
 	};
 }
 
@@ -154,6 +166,8 @@ export function consultationAssigned(ctx: {
 		html,
 		text,
 		idempotencyKey: `notify:consultation:assigned:${ctx.reference}:${ctx.employeeEmail}`,
+		template: "Consultation assigned",
+		reference: ctx.reference,
 	};
 }
 
@@ -181,6 +195,8 @@ export function bookingRescheduled(
 		text,
 		// Keyed on the new time, so each distinct reschedule notifies once.
 		idempotencyKey: `notify:rescheduled:${recipient}:${ctx.reference}:${ctx.startsAt.toISOString()}`,
+		template: "Appointment rescheduled",
+		reference: ctx.reference,
 	};
 }
 
@@ -205,6 +221,8 @@ export function bookingCancelled(
 		html,
 		text,
 		idempotencyKey: `notify:cancelled:${recipient}:${ctx.reference}`,
+		template: "Appointment cancelled",
+		reference: ctx.reference,
 	};
 }
 
@@ -229,5 +247,29 @@ export function bookingReminder(
 		html,
 		text,
 		idempotencyKey: `notify:reminder:${recipient}:${ctx.reference}`,
+		template: "Appointment reminder",
+		reference: ctx.reference,
+	};
+}
+
+export function assessmentCompleteForClient(ctx: {
+	reference: string;
+	clientName: string;
+	clientEmail: string;
+}): QueuedEmail {
+	const to = ctx.clientEmail;
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`Your eligibility assessment for the consultation case is now complete.`,
+		`Please log in to your portal to view the outcome and your consultant's notes.`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+	];
+	const { html, text } = formatEmail("Assessment Complete", lines, null, ctx.reference);
+	return {
+		to,
+		subject: `Assessment Complete · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:assessment_complete:${ctx.reference}`,
 	};
 }

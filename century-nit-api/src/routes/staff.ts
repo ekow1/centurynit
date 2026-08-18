@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, count } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 import {
 	acceptInvitationSchema,
@@ -15,13 +15,14 @@ import {
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { opsUsers, users } from "../db/schema.js";
+import { opsUsers, users, sessions, accounts } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
 	requireRole,
+	requireModule,
 	type AuthVariables,
 } from "../middleware/auth.js";
 import { getAuthInstance } from "./auth.js";
@@ -638,5 +639,80 @@ staffRouter.openapi(
 );
 
 void AUTH_ERROR_CODES;
+
+/* ── GET /api/v1/staff/auth-stats ─────────────────────────────────────────── */
+
+staffRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/auth-stats",
+		tags: ["Staff"],
+		summary: "Authentication overview stats (auth module only)",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		responses: {
+			200: {
+				description: "Auth stats",
+				content: {
+					"application/json": {
+						schema: z.object({
+							totalStaff: z.number(),
+							mfaEnrolled: z.number(),
+							mfaRequired: z.number(),
+							mfaNotEnrolled: z.number(),
+							activeSessions: z.number(),
+							providers: z.array(
+								z.object({
+									id: z.string(),
+									label: z.string(),
+									enabled: z.boolean(),
+								}),
+							),
+						}),
+					},
+				},
+			},
+		},
+	}),
+	async (c) => {
+		const [totalRow] = await db.select({ total: count() }).from(opsUsers);
+		const [enrolledRow] = await db
+			.select({ total: count() })
+			.from(opsUsers)
+			.innerJoin(users, eq(opsUsers.userId, users.id))
+			.where(eq(users.twoFactorEnabled, true));
+
+		const total = totalRow?.total ?? 0;
+		const enrolled = enrolledRow?.total ?? 0;
+		const mfaRequiredCount = total;
+		const notEnrolled = Math.max(0, mfaRequiredCount - enrolled);
+
+		const [sessionRow] = await db
+			.select({ total: count() })
+			.from(sessions)
+			.where(sql`${sessions.expiresAt} > now()`);
+
+		const activeSessions = sessionRow?.total ?? 0;
+
+		const providerRows = await db
+			.select({ providerId: accounts.providerId })
+			.from(accounts)
+			.groupBy(accounts.providerId);
+
+		const knownProviders = new Set(providerRows.map((r) => r.providerId));
+		const providers = [
+			{ id: "credential", label: "Email & password", enabled: true },
+			{ id: "google", label: "Google", enabled: knownProviders.has("google") },
+		];
+
+		return c.json({
+			totalStaff: total,
+			mfaEnrolled: enrolled,
+			mfaRequired: mfaRequiredCount,
+			mfaNotEnrolled: notEnrolled,
+			activeSessions,
+			providers,
+		});
+	},
+);
 
 export { staffRouter };

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { CmsManager } from "./CmsManager";
 import { CMS_COLLECTIONS, resolveRecord } from "century-nit-core";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
-import { ApiError, staffApi } from "century-nit-core/api";
+import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "century-nit-core/api";
 import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsModule } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
@@ -89,15 +90,6 @@ const STAFF_ACCOUNTS: { name: string; email: string; role: OpsRole; branch: stri
 	{ name: "Ama Serwaa Boateng", email: "a.serwaa@century-nit.com", role: "finance", branch: "accra", status: "Active" },
 	{ name: "Kwabena Osei", email: "k.osei@century-nit.com", role: "admin", branch: "platform", status: "Active" },
 	{ name: "Yaw Darko", email: "y.darko@century-nit.com", role: "consultant", branch: "takoradi", status: "Suspended" },
-];
-
-const NOTIFICATION_TEMPLATES = [
-	{ name: "Application Approved", trigger: "Status changes to Offer Letter", channel: "Email", active: true, subject: "Your application has been approved", body: "Dear {{applicantName}},\n\nCongratulations! Your application has been approved. Please log in to your portal to view next steps.\n\nReference: {{appId}}" },
-	{ name: "Missing Documents Reminder", trigger: "Scheduled - weekly", channel: "Email + SMS", active: true, subject: "Action required: missing documents", body: "Dear {{applicantName}},\n\nOur records show you still have outstanding documents. Please upload them at your earliest convenience to avoid delays.\n\nMissing: {{missingDocs}}" },
-	{ name: "Payment Overdue", trigger: "Invoice more than 3 days overdue", channel: "Email", active: true, subject: "Payment overdue notice", body: "Dear {{applicantName}},\n\nYour invoice {{invoiceId}} for {{amount}} is now overdue. Please settle the balance to continue with your application.\n\nOutstanding: {{outstanding}}" },
-	{ name: "Consultation Reminder", trigger: "24 hours before appointment", channel: "SMS", active: false, subject: "Consultation tomorrow", body: "Hi {{applicantName}}, this is a reminder for your consultation tomorrow at {{dateTime}} with {{consultantName}}. Branch: {{branch}}." },
-	{ name: "Visa Decision Received", trigger: "Visa status updated", channel: "Email", active: true, subject: "Visa decision update", body: "Dear {{applicantName}},\n\nYour visa application status has been updated to: {{visaStatus}}. Please log in to your portal for full details.\n\nReference: {{visaRef}}" },
-	{ name: "Lead Follow-up", trigger: "Lead stage changes to contacted", channel: "Email", active: true, subject: "Following up on your inquiry", body: "Hi {{leadName}},\n\nThank you for your interest in Century NIT. One of our consultants will reach out to schedule a consultation.\n\nBest regards,\nThe Century NIT Team" },
 ];
 
 const AUDIT_LOG = [
@@ -1620,95 +1612,110 @@ function UsersAndRoles() {
 /* ─── Auth ─── */
 
 function AuthSettings() {
-	const [methods, setMethods] = useState({ email: true, google: true, apple: true, linkedin: true, sso: false });
-	const [mfa, setMfa] = useState("admins");
-	const [sessionLength, setSessionLength] = useState("8");
-	const [idleTimeout, setIdleTimeout] = useState("30");
-	const [pwMinLength, setPwMinLength] = useState("12");
-	const [maxAttempts, setMaxAttempts] = useState("5");
-	const [lockoutMin, setLockoutMin] = useState("15");
-	const [saved, setSaved] = useState(false);
+	const [stats, setStats] = useState<{
+		totalStaff: number;
+		mfaEnrolled: number;
+		mfaRequired: number;
+		mfaNotEnrolled: number;
+		activeSessions: number;
+		providers: { id: string; label: string; enabled: boolean }[];
+	} | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
-	function save() {
-		setSaved(true);
-		window.setTimeout(() => setSaved(false), 2500);
+	useEffect(() => {
+		let active = true;
+		staffApi
+			.authStats()
+			.then((s) => { if (active) { setStats(s); setError(null); } })
+			.catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load auth stats."); })
+			.finally(() => { if (active) setLoading(false); });
+		return () => { active = false; };
+	}, []);
+
+	if (loading) {
+		return (
+			<div className="card" style={{ textAlign: "center", padding: "3rem" }}>
+				<p className="muted">Loading authentication overview…</p>
+			</div>
+		);
 	}
+
+	if (error || !stats) {
+		return (
+			<div className="card" style={{ textAlign: "center", padding: "3rem" }}>
+				<p style={{ color: "#991b1b" }}>{error ?? "Could not load auth stats."}</p>
+			</div>
+		);
+	}
+
+	const mfaPct = stats.totalStaff > 0 ? Math.round((stats.mfaEnrolled / stats.totalStaff) * 100) : 0;
 
 	return (
 		<>
+			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+				<Stat label="Staff Accounts" value={String(stats.totalStaff)} note={`${stats.mfaEnrolled} with MFA`} />
+				<Stat label="MFA Enrolled" value={`${stats.mfaEnrolled}/${stats.mfaRequired}`} note={`${mfaPct}% coverage`} />
+				<Stat label="MFA Outstanding" value={String(stats.mfaNotEnrolled)} note={stats.mfaNotEnrolled > 0 ? "Action required" : "All enrolled"} inverted={stats.mfaNotEnrolled > 0} />
+				<Stat label="Active Sessions" value={String(stats.activeSessions)} note="Currently signed in" />
+			</div>
+
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
 				<div className="card">
 					<h2 className="section-title mb-3">Sign-in Methods</h2>
-					<div className="admin-toggle-list">
-						{(
-							[
-								["email", "Email & password", "Standard username/password login"],
-								["google", "Google", "OAuth 2.0 single sign-on"],
-								["apple", "Apple", "Sign in with Apple ID"],
-								["linkedin", "LinkedIn", "Professional identity verification"],
-								["sso", "Enterprise SAML SSO", "SAML 2.0 for enterprise identity providers"],
-							] as const
-						).map(([key, label, desc]) => (
-							<label key={key} className="admin-toggle-row">
+					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+						Configured authentication providers. Manage credentials in <Link to="/settings" className="underline">Platform Settings</Link>.
+					</p>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						{stats.providers.map((p) => (
+							<li key={p.id} style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 								<div>
-									<span className="admin-toggle-row__label">{label}</span>
-									<span className="admin-toggle-row__desc">{desc}</span>
+									<span style={{ fontWeight: 500 }}>{p.label}</span>
 								</div>
-								<input type="checkbox" checked={methods[key]} onChange={() => setMethods((m) => ({ ...m, [key]: !m[key] }))} />
-							</label>
+								<span className="portal-pill" style={{
+									background: p.enabled ? "#d1fae5" : "#f5f5f5",
+									color: p.enabled ? "#166534" : "#9ca3af",
+									fontSize: "var(--text-xs)",
+								}}>
+									{p.enabled ? "Enabled" : "Not configured"}
+								</span>
+							</li>
 						))}
-					</div>
+					</ul>
 				</div>
 
 				<div className="card">
-					<h2 className="section-title mb-3">Session & MFA</h2>
-					<div className="admin-form-grid">
-						<div className="field">
-							<label>MFA enforcement</label>
-							<select className="input input--full-border" value={mfa} onChange={(e) => setMfa(e.target.value)}>
-								<option value="off">Optional for everyone</option>
-								<option value="admins">Required for administrators</option>
-								<option value="all">Required for all staff</option>
-							</select>
+					<h2 className="section-title mb-3">MFA Policy</h2>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<Row label="Enforcement" value="Required for all staff" />
+						<Row label="Method" value="TOTP (Google Authenticator, 1Password, etc.)" />
+						<Row label="Backup codes" value="Available at enrolment" />
+						<Row label="Enrolled" value={`${stats.mfaEnrolled} of ${stats.totalStaff} staff`} />
+						<Row label="Outstanding" value={`${stats.mfaNotEnrolled} staff without MFA`} />
+					</ul>
+					{stats.mfaNotEnrolled > 0 && (
+						<div style={{ marginTop: "0.75rem", padding: "0.6rem 0.85rem", background: "#fef3c7", border: "1px solid #fde68a", fontSize: "var(--text-xs)", color: "#92400e" }}>
+							{stats.mfaNotEnrolled} staff member(s) have not enrolled a second factor. They will be prompted at next sign-in.
 						</div>
-						<div className="field">
-							<label>Session length (hours)</label>
-							<input className="input input--full-border" type="number" value={sessionLength} onChange={(e) => setSessionLength(e.target.value)} />
-						</div>
-						<div className="field">
-							<label>Idle timeout (minutes)</label>
-							<input className="input input--full-border" type="number" value={idleTimeout} onChange={(e) => setIdleTimeout(e.target.value)} />
-						</div>
-						<div className="field">
-							<label>Min password length</label>
-							<input className="input input--full-border" type="number" value={pwMinLength} onChange={(e) => setPwMinLength(e.target.value)} />
-						</div>
-						<div className="field">
-							<label>Max login attempts</label>
-							<input className="input input--full-border" type="number" value={maxAttempts} onChange={(e) => setMaxAttempts(e.target.value)} />
-						</div>
-						<div className="field">
-							<label>Lockout duration (min)</label>
-							<input className="input input--full-border" type="number" value={lockoutMin} onChange={(e) => setLockoutMin(e.target.value)} />
-						</div>
-					</div>
-					<div className="admin-settings-footer">
-						{saved && <span className="admin-saved-indicator">✓ Settings saved</span>}
-						<button className="btn btn--primary btn--sm" onClick={save}>{saved ? "Saved" : "Save settings"}</button>
-					</div>
-			</div>
+					)}
+				</div>
 			</div>
 
 			<div className="card">
-				<h2 className="section-title mb-3">Password Policy</h2>
-				<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-					<Row label="Minimum length" value={`${pwMinLength} characters`} />
-					<Row label="Breach database check" value="Enabled (HaveIBeenPwned)" />
-					<Row label="Require uppercase" value="Yes" />
-					<Row label="Require numbers" value="Yes" />
-					<Row label="Require special characters" value="Yes" />
-					<Row label="Password reuse prevention" value="Last 5 passwords" />
-				</ul>
+				<h2 className="section-title mb-3">Session & Password Policy</h2>
+				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<Row label="Session expiry" value="30 days (Better Auth default)" />
+						<Row label="Idle timeout" value="None enforced" />
+					</ul>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<Row label="Password hashing" value="Scrypt (Better Auth)" />
+						<Row label="Password reset" value="Email link, 1-hour expiry" />
+					</ul>
+				</div>
+				<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
+					Authentication is managed by Better Auth. These settings are code-defined and cannot be changed from this page.
+				</p>
 			</div>
 		</>
 	);
@@ -1819,33 +1826,57 @@ function SiteSettings() {
 
 /* ─── System notifications ─── */
 
+/* ─── System notifications ─── */
+
+const REAL_TEMPLATES = [
+	{ name: "Booking Received", trigger: "Client books a consultation", channel: "Email" },
+	{ name: "New Booking Awaiting Assignment", trigger: "New booking arrives unassigned", channel: "Email" },
+	{ name: "Appointment Confirmed", trigger: "Staff assigned to booking", channel: "Email" },
+	{ name: "Consultation Assigned", trigger: "Consultation assigned without booking", channel: "Email" },
+	{ name: "Appointment Rescheduled", trigger: "Booking time changed", channel: "Email" },
+	{ name: "Appointment Cancelled", trigger: "Booking or consultation cancelled", channel: "Email" },
+	{ name: "Appointment Reminder", trigger: "24 hours before appointment", channel: "Email" },
+];
+
 function SystemNotifications() {
-	const [templates, setTemplates] = useState(NOTIFICATION_TEMPLATES);
-	const [editing, setEditing] = useState<string | null>(null);
+	const [logs, setLogs] = useState<NotificationLogItem[]>([]);
+	const [stats, setStats] = useState<{ total: number; sent: number; failed: number }>({ total: 0, sent: 0, failed: 0 });
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+	const [statusFilter, setStatusFilter] = useState<"all" | "sent" | "failed">("all");
 
-	function toggle(name: string) {
-		setTemplates((prev) => prev.map((t) => (t.name === name ? { ...t, active: !t.active } : t)));
-	}
-
-	function updateTemplate(name: string, field: "subject" | "body", value: string) {
-		setTemplates((prev) => prev.map((t) => (t.name === name ? { ...t, [field]: value } : t)));
-	}
+	useEffect(() => {
+		let active = true;
+		const filter = statusFilter === "all" ? undefined : statusFilter;
+		notificationsApi
+			.log(50, filter)
+			.then((res) => {
+				if (!active) return;
+				setLogs(res.notifications);
+				setStats({ total: res.total, sent: res.sent, failed: res.failed });
+				setError(null);
+			})
+			.catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load notifications."); })
+			.finally(() => { if (active) setLoading(false); });
+		return () => { active = false; };
+	}, [statusFilter]);
 
 	return (
 		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Templates" value={String(templates.length)} note={`${templates.filter((t) => t.active).length} active`} />
-				<Stat label="Email" value={String(templates.filter((t) => t.channel.includes("Email")).length)} note="Email channels" />
-				<Stat label="SMS" value={String(templates.filter((t) => t.channel.includes("SMS")).length)} note="SMS channels" />
-				<Stat label="Inactive" value={String(templates.filter((t) => !t.active).length)} note="Disabled" inverted />
-			</div>
-
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
-				<h2 className="section-title">Notification Templates</h2>
-				<button className="btn btn--primary btn--sm">+ New Template</button>
+			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+				<Stat label="Total Sent" value={String(stats.total)} note="All time" />
+				<Stat label="Delivered" value={String(stats.sent)} note="Successfully sent" />
+				<Stat label="Failed" value={String(stats.failed)} note="Delivery errors" inverted={stats.failed > 0} />
+				<Stat label="Templates" value={String(REAL_TEMPLATES.length)} note="Email templates" />
 			</div>
 
 			<div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: "2rem" }}>
+				<div style={{ padding: "1.25rem 1.25rem 0.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+					<h2 className="section-title">Email Templates</h2>
+				</div>
+				<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "0 1.25rem 0.75rem" }}>
+					Templates are code-defined and sent automatically at the events described below. They cannot be edited from this page.
+				</p>
 				<div className="ops-table-wrap">
 					<table className="admin-table">
 						<thead>
@@ -1853,27 +1884,14 @@ function SystemNotifications() {
 								<th>Template</th>
 								<th>Trigger</th>
 								<th>Channel</th>
-								<th style={{ textAlign: "right" }}>Enabled</th>
-								<th style={{ textAlign: "right" }}>Edit</th>
 							</tr>
 						</thead>
 						<tbody>
-							{templates.map((t) => (
+							{REAL_TEMPLATES.map((t) => (
 								<tr key={t.name}>
 									<td style={{ fontWeight: 500 }}>{t.name}</td>
 									<td className="muted">{t.trigger}</td>
 									<td>{t.channel}</td>
-									<td style={{ textAlign: "right" }}>
-										<input type="checkbox" checked={t.active} onChange={() => toggle(t.name)} />
-									</td>
-									<td style={{ textAlign: "right" }}>
-										<button
-											className="btn btn--ghost btn--sm"
-											onClick={() => setEditing(editing === t.name ? null : t.name)}
-										>
-											{editing === t.name ? "Close" : "Edit"}
-										</button>
-									</td>
 								</tr>
 							))}
 						</tbody>
@@ -1881,37 +1899,64 @@ function SystemNotifications() {
 				</div>
 			</div>
 
-			{editing && templates.find((t) => t.name === editing) && (
-				<div className="card admin-form-card">
-					<h2 className="admin-form-card__title">Edit: {editing}</h2>
-					<div style={{ marginBottom: "1.25rem" }}>
-						<label className="eyebrow" style={{ display: "block", marginBottom: "0.4rem", fontSize: "var(--text-xs)" }}>
-							Subject line
-						</label>
-						<input
-							className="input input--full-border"
-							value={templates.find((t) => t.name === editing)!.subject}
-							onChange={(e) => updateTemplate(editing, "subject", e.target.value)}
-						/>
-					</div>
-					<div style={{ marginBottom: "1.25rem" }}>
-						<label className="eyebrow" style={{ display: "block", marginBottom: "0.4rem", fontSize: "var(--text-xs)" }}>
-							Body <span className="muted" style={{ fontWeight: 400 }}>(use {"{{variables}}"})</span>
-						</label>
-						<textarea
-							className="input input--full-border"
-							rows={8}
-							value={templates.find((t) => t.name === editing)!.body}
-							onChange={(e) => updateTemplate(editing, "body", e.target.value)}
-							style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", resize: "vertical" }}
-						/>
-					</div>
-					<div className="admin-form-card__actions">
-						<button className="btn btn--primary btn--sm" onClick={() => setEditing(null)}>Save template</button>
-						<button className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>Cancel</button>
+			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
+				<div style={{ padding: "1.25rem 1.25rem 0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+					<h2 className="section-title">Delivery Log</h2>
+					<div style={{ display: "flex", gap: "0.25rem" }}>
+						{(["all", "sent", "failed"] as const).map((s) => (
+							<button
+								key={s}
+								className={`btn btn--sm ${statusFilter === s ? "btn--primary" : "btn--ghost"}`}
+								onClick={() => setStatusFilter(s)}
+							>
+								{s === "all" ? "All" : s === "sent" ? "Delivered" : "Failed"}
+							</button>
+						))}
 					</div>
 				</div>
-			)}
+				{loading ? (
+					<p className="muted" style={{ padding: "1.25rem" }}>Loading delivery log…</p>
+				) : error ? (
+					<p style={{ padding: "1.25rem", color: "#991b1b" }}>{error}</p>
+				) : logs.length === 0 ? (
+					<p className="muted" style={{ padding: "1.25rem" }}>No notifications sent yet. Emails will appear here when bookings are created, assigned, rescheduled, or cancelled.</p>
+				) : (
+					<div className="ops-table-wrap">
+						<table className="admin-table">
+							<thead>
+								<tr>
+									<th>Recipient</th>
+									<th>Subject</th>
+									<th>Template</th>
+									<th>Status</th>
+									<th>Sent</th>
+								</tr>
+							</thead>
+							<tbody>
+								{logs.map((n) => (
+									<tr key={n.id}>
+										<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>{n.recipient}</td>
+										<td style={{ fontWeight: 500 }}>{n.subject}</td>
+										<td className="muted">{n.template ?? "—"}</td>
+										<td>
+											<span className="portal-pill" style={{
+												background: n.status === "sent" ? "#d1fae5" : "#fee2e2",
+												color: n.status === "sent" ? "#166534" : "#991b1b",
+												fontSize: "var(--text-xs)",
+											}}>
+												{n.status === "sent" ? "Delivered" : "Failed"}
+											</span>
+										</td>
+										<td className="muted" style={{ fontSize: "var(--text-xs)" }}>
+											{new Date(n.sentAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
 		</>
 	);
 }

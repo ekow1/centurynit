@@ -251,10 +251,6 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 	if (!row) return;
 	if (row.status === "COMPLETED" || row.status === "CANCELLED") return;
 
-	// If an officer is assigned, keep the consultation alive — the applicant
-	// should reschedule, not start a brand-new consultation flow.
-	if (row.assignedOfficerId) return;
-
 	await db
 		.update(consultations)
 		.set({ status: "CANCELLED", updatedAt: new Date() })
@@ -345,6 +341,9 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		startsAt: booking?.startsAt.toISOString() ?? null,
 		timezone: booking?.timezone ?? null,
 		meetingUrl: booking?.meetingUrl ?? null,
+		rescheduleRequestedAt: booking?.rescheduleRequestedAt?.toISOString() ?? null,
+		rescheduleRequestedStartsAt: booking?.rescheduleRequestedStartsAt?.toISOString() ?? null,
+		rescheduleRequestReason: booking?.rescheduleRequestReason ?? null,
 		assessmentResult: row.assessmentResult ?? null,
 		requestedDocuments: row.requestedDocuments ?? [],
 		comments: comments.map(toComment),
@@ -654,6 +653,20 @@ export async function completeConsultationAssessment(input: {
 
 	const eligible =
 		input.result.outcome === "Eligible" || input.result.outcome === "Conditionally Eligible";
+
+	const applicant = (await getApplicant(row.applicantId))!;
+	try {
+		await queueEmails([
+			mail.assessmentCompleteForClient({
+				reference: updated.reference,
+				clientName: applicant.name ?? "Client",
+				clientEmail: applicant.email ?? "",
+			}),
+		]);
+	} catch {
+		// Notification failure must not block the assessment completion.
+	}
+
 	if (!eligible) return { consultation: updated, application: null };
 
 	const [existing] = await db
@@ -662,8 +675,6 @@ export async function completeConsultationAssessment(input: {
 		.where(eq(applications.consultationId, row.id))
 		.limit(1);
 	if (existing) return { consultation: updated, application: existing };
-
-	const applicant = (await getApplicant(row.applicantId))!;
 	const checklist = (row.requestedDocuments ?? []).map((label, i) => ({
 		id: `chk-${i}`,
 		label,

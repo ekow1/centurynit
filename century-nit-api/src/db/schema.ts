@@ -364,6 +364,13 @@ export const bookings = pgTable(
 		calendarSyncAttempts: integer("calendar_sync_attempts").notNull().default(0),
 
 		rescheduledAt: timestamp("rescheduled_at", { withTimezone: true }),
+
+		rescheduleRequestedAt: timestamp("reschedule_requested_at", { withTimezone: true }),
+		rescheduleRequestedStartsAt: timestamp("reschedule_requested_starts_at", { withTimezone: true }),
+		rescheduleRequestedEndsAt: timestamp("reschedule_requested_ends_at", { withTimezone: true }),
+		rescheduleRequestedTimezone: varchar("reschedule_requested_timezone", { length: 64 }),
+		rescheduleRequestReason: text("reschedule_request_reason"),
+
 		cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
 		cancelledBy: text("cancelled_by"),
 		cancellationReason: text("cancellation_reason"),
@@ -1045,6 +1052,132 @@ export const paymentTransactions = pgTable(
 		byInvoice: index("payment_transactions_invoice_idx").on(t.invoiceId),
 		byReference: index("payment_transactions_ref_idx").on(t.reference),
 		byStatus: index("payment_transactions_status_idx").on(t.status),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Internal Chat — staff-to-staff messaging
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const conversationTypeEnum = pgEnum("conversation_type", [
+	"direct",
+	"entity",
+	"group",
+]);
+
+export const conversationRoleEnum = pgEnum("conversation_role", [
+	"owner",
+	"member",
+]);
+
+export const messageTypeEnum = pgEnum("message_type", [
+	"text",
+	"system",
+	"action",
+]);
+
+export const conversations = pgTable(
+	"conversations",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		type: conversationTypeEnum("type").notNull().default("direct"),
+		title: text("title").notNull(),
+		/** Which business entity this conversation is linked to, if any. */
+		linkedEntityType: varchar("linked_entity_type", { length: 48 }),
+		linkedEntityId: uuid("linked_entity_id"),
+		createdBy: uuid("created_by")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byType: index("conversations_type_idx").on(t.type, t.updatedAt),
+		byEntity: index("conversations_entity_idx").on(t.linkedEntityType, t.linkedEntityId),
+	}),
+);
+
+export const messages = pgTable(
+	"messages",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		conversationId: uuid("conversation_id")
+			.notNull()
+			.references(() => conversations.id, { onDelete: "cascade" }),
+		senderOpsUserId: uuid("sender_ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "set null" }),
+		/** Denormalised for fast rendering without joins. */
+		senderName: text("sender_name").notNull(),
+		content: text("content").notNull(),
+		messageType: messageTypeEnum("message_type").notNull().default("text"),
+		replyToId: uuid("reply_to_id"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byConversation: index("messages_conversation_idx").on(t.conversationId, t.createdAt),
+	}),
+);
+
+export const conversationParticipants = pgTable(
+	"conversation_participants",
+	{
+		conversationId: uuid("conversation_id")
+			.notNull()
+			.references(() => conversations.id, { onDelete: "cascade" }),
+		opsUserId: uuid("ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		role: conversationRoleEnum("role").notNull().default("member"),
+		lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+		joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		pk: index("conversation_participants_pk").on(t.conversationId, t.opsUserId),
+		byUser: index("conversation_participants_user_idx").on(t.opsUserId),
+	}),
+);
+
+export const messageMentions = pgTable(
+	"message_mentions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		messageId: uuid("message_id")
+			.notNull()
+			.references(() => messages.id, { onDelete: "cascade" }),
+		mentionedOpsUserId: uuid("mentioned_ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		readAt: timestamp("read_at", { withTimezone: true }),
+	},
+	(t) => ({
+		byMessage: index("message_mentions_message_idx").on(t.messageId),
+		byUser: index("message_mentions_user_idx").on(t.mentionedOpsUserId, t.readAt),
+	}),
+);
+
+/* ── Notification delivery log ───────────────────────────────────────────── */
+
+export const notificationLog = pgTable(
+	"notification_log",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		recipient: varchar("recipient", { length: 255 }).notNull(),
+		subject: varchar("subject", { length: 500 }).notNull(),
+		/** Which template produced this email (e.g. "Booking created", "Consultation assigned"). */
+		template: varchar("template", { length: 200 }),
+		/** "sent" or "failed" — the worker catches Resend errors and records the outcome. */
+		status: varchar("status", { length: 20 }).notNull().default("sent"),
+		/** The business reference (booking ref, consultation ref, etc.) for cross-linking. */
+		reference: varchar("reference", { length: 200 }),
+		/** Idempotency key from the queue — prevents duplicate log rows for the same email. */
+		idempotencyKey: varchar("idempotency_key", { length: 300 }),
+		errorMessage: text("error_message"),
+		sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		bySentAt: index("notification_log_sent_at_idx").on(t.sentAt),
+		byStatus: index("notification_log_status_idx").on(t.status),
 	}),
 );
 

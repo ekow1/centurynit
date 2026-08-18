@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
-import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { InvoiceBuilder } from "./InvoiceBuilder";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
@@ -30,9 +29,6 @@ const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "proforma", "issued", "pa
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
 	const { applicants } = useCasesApi();
-	const {
-		packages,
-	} = useOpsState();
 	const {
 		invoices,
 		loading,
@@ -321,7 +317,7 @@ export function EnterpriseInvoices() {
 					applicantId={building.applicantId}
 					applicantName={building.applicantName}
 					type={building.type}
-					packages={packages}
+					packages={[]}
 					applicantPackage=""
 					schoolCount={1}
 					onCancel={() => setBuilding(null)}

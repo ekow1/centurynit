@@ -1,7 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
-import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER, type Lead } from "century-nit-core";
@@ -71,7 +70,6 @@ function KPICard({ label, value, note, inverted }: { label: string; value: strin
 export function EnterpriseReports() {
 	const { opsUser, scopeRecords, canSeeAllBranches, requiresAssignmentScope } = useOpsAuth();
 	const { consultations, applications, applicants } = useCasesApi();
-	const { packages } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 
@@ -671,22 +669,6 @@ export function EnterpriseReports() {
 							</table>
 						</div>
 					)}
-				</div>
-
-				{/* Package Catalogue Status */}
-				<div className="card">
-					<h2 className="section-title mb-3">Package Catalogue Status</h2>
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
-						{packages.map((pkg) => (
-							<div key={pkg.id} style={{ padding: "0.75rem", border: "1px solid var(--border-light)", opacity: pkg.active ? 1 : 0.55 }}>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{pkg.name}</p>
-								<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>{fmtBoth(pkg.price)}</p>
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-									{pkg.active ? "Active" : "Retired"} · {pkg.services.length} services
-								</p>
-							</div>
-						))}
-					</div>
 				</div>
 			</>)}
 

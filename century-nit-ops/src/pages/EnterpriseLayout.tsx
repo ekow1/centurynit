@@ -386,6 +386,8 @@ export function EnterpriseLayout() {
 		<OpsTabBar
 			operationsNav={flattenNav(operationsNav)}
 			platformNav={flattenNav(platformNav)}
+			onRoleSwitch={() => {}}
+			switchableRoles={[]}
 			onReset={() => {
 				if (confirm("Reset all operations data back to the original seed state? This cannot be undone.")) {
 					resetOpsState();

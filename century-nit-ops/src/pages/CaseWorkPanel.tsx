@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-	CONSULTANT_ROSTER,
 	COMMENT_KIND_LABELS,
 	branchName,
 	type Assignee,
@@ -32,7 +31,7 @@ export function CaseWorkPanel({
 	onReschedule,
 	branchLabel = "",
 	currentWhen = "",
-	assignees = CONSULTANT_ROSTER,
+	assignees = [],
 }: {
 	assignedName: string;
 	assignedEmail: string;

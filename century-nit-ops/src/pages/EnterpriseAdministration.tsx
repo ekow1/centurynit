@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CmsManager } from "./CmsManager";
-import { CMS_COLLECTIONS, resolveRecord } from "century-nit-core";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
@@ -174,19 +173,7 @@ const SYSTEM_HEALTH = [
 ];
 
 function SystemOverview() {
-	const { activityLog, cmsOverlay } = useOpsState();
-	// Real counts from the site's own collections, not a hardcoded list
-	const content = useMemo(() => {
-		let all = 0;
-		let hidden = 0;
-		for (const c of CMS_COLLECTIONS) {
-			for (const rec of c.records()) {
-				all++;
-				if (resolveRecord(c.id, rec, cmsOverlay).status !== "Published") hidden++;
-			}
-		}
-		return { all, published: all - hidden };
-	}, [cmsOverlay]);
+	const { activityLog } = useOpsState();
 	const active = STAFF_ACCOUNTS.filter((u) => u.status === "Active").length;
 	const operationalCount = SYSTEM_HEALTH.filter((s) => s.status === "operational").length;
 
@@ -195,7 +182,6 @@ function SystemOverview() {
 			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
 				<Stat label="Staff Accounts" value={String(STAFF_ACCOUNTS.length)} note={`${active} active`} />
 				<Stat label="Roles Configured" value="5" note="Manager · Coordinator · Consultant · Finance · Admin" />
-				<Stat label="Published Content" value={String(content.published)} note={`${content.all} entries across ${CMS_COLLECTIONS.length} collections`} />
 				<Stat label="System Health" value={`${Math.round((operationalCount / SYSTEM_HEALTH.length) * 100)}%`} note={operationalCount === SYSTEM_HEALTH.length ? "All services operational" : `${operationalCount}/${SYSTEM_HEALTH.length} operational`} inverted />
 			</div>
 

@@ -187,29 +187,15 @@ export function OpsDocPreviewModal() {
 					>
 						{status === "Verified" && <CheckIcon />}
 						{status === "Rejected" && <XIcon />}
-						{statusStyle.label}
-					</span>
-					{previewDoc.isLive && (
-						<span
-							className="mono"
-							style={{
-								fontSize: "0.6rem",
-								background: "var(--foreground)",
-								color: "var(--background)",
-								padding: "0.15rem 0.45rem",
-								letterSpacing: "0.08em",
-							}}
-						>
-							LIVE
-						</span>
-					)}
-					<span
-						className="muted"
-						style={{ fontSize: "0.7rem", marginLeft: "auto", fontFamily: "var(--font-mono)" }}
-					>
-						Ref: DOC-{(previewDoc.name.length * 7).toString(16).toUpperCase().slice(0, 4)}-{previewDoc.name.length}
-					</span>
-				</div>
+					{statusStyle.label}
+				</span>
+				<span
+					className="muted"
+					style={{ fontSize: "0.7rem", marginLeft: "auto", fontFamily: "var(--font-mono)" }}
+				>
+					Ref: DOC-{(previewDoc.name.length * 7).toString(16).toUpperCase().slice(0, 4)}-{previewDoc.name.length}
+				</span>
+			</div>
 
 				{/* Document preview area */}
 				<div
@@ -323,7 +309,7 @@ export function OpsDocPreviewModal() {
 							className="muted"
 							style={{ fontSize: "0.8rem" }}
 						>
-							{previewDoc.isLive || localVerdict ? "Decision recorded" : "Reviewed"}
+							{localVerdict ? "Decision recorded" : "Reviewed"}
 						</span>
 					</div>
 				)}

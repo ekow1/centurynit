@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import {
 	LEAD_STAGE_LABELS,
@@ -157,7 +156,6 @@ function LeadCard({
 
 export function EnterpriseLeads() {
 	const { opsRole, opsUser, canSeeAllBranches } = useOpsAuth();
-	const { moveLead } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
@@ -229,7 +227,6 @@ export function EnterpriseLeads() {
 
 	const handleLeadMove = useCallback(
 		async (id: string, stage: LeadStage) => {
-			moveLead(id, stage);
 			setApiLeads((prev) =>
 				prev.map((l) => (l.id === id ? { ...l, stage: (LEAD_STAGE_TO_DB[stage] as ApiLead["stage"]) } : l)),
 			);
@@ -242,7 +239,7 @@ export function EnterpriseLeads() {
 				console.warn("[CRM] Stage update not persisted to API:", err);
 			}
 		},
-		[moveLead],
+		[],
 	);
 
 	const roleScopedLeads = useMemo(() => {

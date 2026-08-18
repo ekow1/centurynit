@@ -50,30 +50,6 @@ export function staffBranchName(id: string): string {
 /** Staff member a case can be assigned to. */
 export type Assignee = { name: string; email: string; branch: string };
 
-/** Consultants the manager can assign work to. Branch values are canonical ids. */
-export const CONSULTANT_ROSTER: Assignee[] = [
-	{ name: "Efua Owusu", email: "e.owusu@century-nit.com", branch: "accra" },
-	{ name: "Kwame Agyeman", email: "k.agyeman@century-nit.com", branch: "kumasi" },
-	{ name: "Abena Frimpong", email: "a.frimpong@century-nit.com", branch: "takoradi" },
-];
-
-/**
- * Everyone a support ticket can be routed to.
- *
- * Wider than CONSULTANT_ROSTER on purpose: a billing question belongs with
- * finance and a scheduling one with the coordinator, so restricting the
- * helpdesk to consultants left those tickets with nowhere correct to go — and
- * a ticket already assigned outside the roster rendered an empty dropdown.
- */
-export const SUPPORT_ROSTER: (Assignee & { role: string })[] = [
-	{ name: "Kojo Asante", email: "k.asante@century-nit.com", branch: "accra", role: "Coordinator" },
-	{ name: "Efua Owusu", email: "e.owusu@century-nit.com", branch: "accra", role: "Consultant" },
-	{ name: "Kwame Agyeman", email: "k.agyeman@century-nit.com", branch: "kumasi", role: "Consultant" },
-	{ name: "Abena Frimpong", email: "a.frimpong@century-nit.com", branch: "takoradi", role: "Consultant" },
-	{ name: "Ama Serwaa Boateng", email: "a.serwaa@century-nit.com", branch: "accra", role: "Finance" },
-	{ name: "Adjoa Mensah-Bonsu", email: "a.mensah@century-nit.com", branch: "accra", role: "Manager" },
-];
-
 export type CommentKind = "comment" | "recommendation" | "document_request" | "status" | "assignment";
 
 export type CaseComment = {

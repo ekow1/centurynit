@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	listChatConversations,
 	createChatConversation,
-	getChatConversation,
 	getChatMessages,
 	sendChatMessage,
 	markChatConversationRead,
@@ -10,7 +9,6 @@ import {
 	getStaffDirectory,
 	type ChatConversation,
 	type ChatMessage,
-	type ChatMessageListResponse,
 	type StaffDirectoryEntry,
 } from "../lib/api";
 

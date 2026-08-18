@@ -5,6 +5,7 @@ import { HttpError } from "../middleware/error.js";
 import {
 	createManualLead,
 	deleteLead,
+	getLeadEvents,
 	listLeads,
 	updateLead,
 } from "../services/leads.js";
@@ -26,6 +27,8 @@ const leadSchema = z.object({
 	targetCountry: z.string().nullable(),
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable().optional(),
+	consultationId: z.string().uuid().nullable(),
+	applicationId: z.string().uuid().nullable(),
 	notes: z.string().nullable(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
@@ -60,11 +63,22 @@ const updateLeadBodySchema = z.object({
 		.optional(),
 	targetCountry: z.string().optional().nullable(),
 	assignedStaffId: z.string().uuid().optional().nullable(),
+	consultationId: z.string().uuid().optional().nullable(),
+	applicationId: z.string().uuid().optional().nullable(),
 	notes: z.string().optional().nullable(),
 });
 
 const idParams = z.object({
 	id: z.string().uuid(),
+});
+
+const leadEventSchema = z.object({
+	id: z.string().uuid(),
+	leadId: z.string().uuid(),
+	type: z.string(),
+	actorName: z.string().nullable(),
+	payload: z.any().nullable(),
+	createdAt: z.string(),
 });
 
 export const leadsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
@@ -108,6 +122,38 @@ leadsRouter.openapi(
 			assignedStaffId,
 		});
 		return c.json({ leads: rows });
+	},
+);
+
+/* ── GET /api/v1/leads/:id/events ───────────────────────────────────────────── */
+
+leadsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/events",
+		tags: ["CRM Leads"],
+		middleware: [requireAuth, requireModule("leads")] as const,
+		request: {
+			params: idParams,
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							events: z.array(leadEventSchema),
+							total: z.number(),
+						}),
+					},
+				},
+				description: "Lead activity timeline",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const result = await getLeadEvents(id);
+		return c.json(result);
 	},
 );
 
@@ -164,7 +210,8 @@ leadsRouter.openapi(
 	async (c) => {
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
-		const updated = await updateLead(id, body);
+		const staff = c.get("staff");
+		const updated = await updateLead(id, body, staff?.name ?? null);
 		if (!updated) {
 			throw new HttpError(404, "NOT_FOUND", "Lead not found");
 		}

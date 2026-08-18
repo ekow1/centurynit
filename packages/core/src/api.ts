@@ -1071,6 +1071,84 @@ export const ticketsApi = {
 	},
 };
 
+/* ── CRM Leads ─────────────────────────────────────────────────────────── */
+
+export const leadsApi = {
+	list(params?: { stage?: string; search?: string }): Promise<{
+		leads: Array<{
+			id: string;
+			name: string;
+			email: string;
+			phone: string | null;
+			source: string;
+			stage: string;
+			targetCountry: string | null;
+			assignedStaffId: string | null;
+			assignedStaffName: string | null;
+			consultationId: string | null;
+			applicationId: string | null;
+			notes: string | null;
+			createdAt: string;
+			updatedAt: string;
+		}>;
+	}> {
+		const query = new URLSearchParams();
+		if (params?.stage) query.set("stage", params.stage);
+		if (params?.search) query.set("search", params.search);
+		const qs = query.toString();
+		return request(`${API_PREFIX}/leads${qs ? `?${qs}` : ""}`);
+	},
+
+	getEvents(leadId: string): Promise<{
+		events: Array<{
+			id: string;
+			leadId: string;
+			type: string;
+			actorName: string | null;
+			payload: unknown;
+			createdAt: string;
+		}>;
+		total: number;
+	}> {
+		return request(`${API_PREFIX}/leads/${leadId}/events`);
+	},
+
+	update(
+		leadId: string,
+		patch: Partial<{
+			name: string;
+			email: string;
+			phone: string | null;
+			stage: string;
+			targetCountry: string | null;
+			assignedStaffId: string | null;
+			consultationId: string | null;
+			applicationId: string | null;
+			notes: string | null;
+		}>,
+	): Promise<{
+		id: string;
+		name: string;
+		email: string;
+		phone: string | null;
+		source: string;
+		stage: string;
+		targetCountry: string | null;
+		assignedStaffId: string | null;
+		assignedStaffName: string | null;
+		consultationId: string | null;
+		applicationId: string | null;
+		notes: string | null;
+		createdAt: string;
+		updatedAt: string;
+	}> {
+		return request(`${API_PREFIX}/leads/${leadId}`, {
+			method: "PATCH",
+			...json(patch),
+		});
+	},
+};
+
 /* ── Payments Gateway (Paystack / Stripe) ────────────────────────────────── */
 
 export const paymentsApi = {

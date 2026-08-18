@@ -9,6 +9,7 @@ import {
 	type Lead,
 	type LeadStage,
 } from "century-nit-core";
+import { LEAD_STAGE_TO_DB, LEAD_STAGE_FROM_DB } from "century-nit-shared";
 import { fmtBoth } from "./currency";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -23,36 +24,18 @@ interface ApiLead {
 	targetCountry: string | null;
 	assignedStaffId: string | null;
 	assignedStaffName: string | null;
+	consultationId: string | null;
+	applicationId: string | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
 
-const STAGE_MAP_FROM_API: Record<string, LeadStage> = {
-	"New Lead": "new",
-	"Contacted": "contacted",
-	"Consultation Booked": "consultation_scheduled",
-	"Assessment Complete": "interested",
-	"Enrolled": "converted",
-	"Lost": "lost",
-};
-
-const STAGE_MAP_TO_API: Record<LeadStage, string> = {
-	new: "New Lead",
-	contacted: "Contacted",
-	consultation_scheduled: "Consultation Booked",
-	interested: "Assessment Complete",
-	consulted: "Assessment Complete",
-	converted: "Enrolled",
-	lost: "Lost",
-};
-
 const STAGE_COLORS: Record<LeadStage, string> = {
 	new: "#3b82f6",
 	contacted: "#8b5cf6",
-	interested: "#f59e0b",
-	consultation_scheduled: "#06b6d4",
-	consulted: "#10b981",
+	consultation_booked: "#06b6d4",
+	assessment_complete: "#f59e0b",
 	converted: "#22c55e",
 	lost: "#ef4444",
 };
@@ -60,9 +43,8 @@ const STAGE_COLORS: Record<LeadStage, string> = {
 const STAGE_ICONS: Record<LeadStage, string> = {
 	new: "✦",
 	contacted: "✉",
-	interested: "★",
-	consultation_scheduled: "◷",
-	consulted: "✓",
+	consultation_booked: "◷",
+	assessment_complete: "★",
 	converted: "◆",
 	lost: "✕",
 };
@@ -236,16 +218,18 @@ export function EnterpriseLeads() {
 				name: al.name,
 				email: al.email,
 				phone: al.phone || "-",
-				country: al.targetCountry || "Canada",
+				country: al.targetCountry || "Ghana",
 				degreeLevel: "Master's",
 				branch: "accra",
-				stage: STAGE_MAP_FROM_API[al.stage] ?? "new",
+				stage: LEAD_STAGE_FROM_DB[al.stage] ?? "new",
 				source: al.source || "Website Registration",
 				value: 3000,
 				createdAt: al.createdAt.slice(0, 10),
 				lastContactAt: al.updatedAt || al.createdAt,
 				notes: al.notes || "Captured automatically from client sign-in.",
 				assignedTo: al.assignedStaffName || (al.assignedStaffId ? "Assigned" : "Unassigned"),
+				consultationId: al.consultationId,
+				applicationId: al.applicationId,
 			});
 		}
 
@@ -259,7 +243,7 @@ export function EnterpriseLeads() {
 					name: liveCase.name || "Live Portal Client",
 					email: liveCase.email,
 					phone: liveCase.phone || "-",
-					country: liveCase.targetCountry || "Canada",
+					country: liveCase.targetCountry || "Ghana",
 					degreeLevel: liveCase.degreeLevel || "Master's",
 					branch: "accra",
 					stage: "new",

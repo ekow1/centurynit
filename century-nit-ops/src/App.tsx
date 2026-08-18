@@ -39,6 +39,7 @@ const EnterpriseAdministration = lazyNamed<{ section: string }>(() => import("./
 const EnterpriseConsultations = lazyNamed(() => import("./pages/EnterpriseConsultations"), "EnterpriseConsultations");
 const EnterpriseApplicants = lazyNamed(() => import("./pages/EnterpriseApplicants"), "EnterpriseApplicants");
 const EnterpriseUniversities = lazyNamed(() => import("./pages/EnterpriseUniversities"), "EnterpriseUniversities");
+const EnterpriseLookups = lazyNamed(() => import("./pages/EnterpriseLookups"), "EnterpriseLookups");
 const EnterprisePackages = lazyNamed(() => import("./pages/EnterprisePackages"), "EnterprisePackages");
 const EnterpriseReports = lazyNamed(() => import("./pages/EnterpriseReports"), "EnterpriseReports");
 const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppointments"), "EnterpriseAppointments");
@@ -134,6 +135,7 @@ export default function App() {
 									<Route path="finance" element={<Ops module="finance"><EnterpriseFinance /></Ops>} />
 									<Route path="appointments" element={<Ops module="appointments"><EnterpriseAppointments /></Ops>} />
 									<Route path="universities" element={<Ops module="universities"><EnterpriseUniversities /></Ops>} />
+									<Route path="lookups" element={<Ops module="lookups"><EnterpriseLookups /></Ops>} />
 									<Route path="programs" element={<Ops module="programs"><EnterpriseUniversities /></Ops>} />
 									<Route path="packages" element={<Ops module="packages"><EnterprisePackages /></Ops>} />
 									<Route path="reports" element={<Ops module="reports"><EnterpriseReports /></Ops>} />

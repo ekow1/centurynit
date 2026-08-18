@@ -41,6 +41,11 @@ export function EnterpriseChat() {
 	const staffDirectory = useStaffDirectory();
 	const { create: createConversation, creating } = useCreateConversation();
 
+	const currentOpsUserId = useMemo(
+		() => staffDirectory.find((s) => s.email === opsUser?.email)?.opsUserId ?? "",
+		[staffDirectory, opsUser?.email],
+	);
+
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [showNewChat, setShowNewChat] = useState(false);
 	const [searchStaff, setSearchStaff] = useState("");
@@ -153,13 +158,12 @@ export function EnterpriseChat() {
 					`}</style>
 
 					{active ? (
-						<ConversationThread
-							conversation={active}
-							currentUserId={opsUser?.opsUserId ?? ""}
-							currentUserName={opsUser?.name ?? "Staff"}
-							staffDirectory={staffDirectory}
-							onBack={() => setActiveId(null)}
-							onSent={() => {
+					<ConversationThread
+						conversation={active}
+						currentUserId={currentOpsUserId}
+						staffDirectory={staffDirectory}
+						onBack={() => setActiveId(null)}
+						onSent={() => {
 								refreshConversations();
 								refreshUnread();
 							}}
@@ -238,7 +242,7 @@ export function EnterpriseChat() {
 											refreshConversations();
 										}
 									}}
-									currentUserId={opsUser?.opsUserId ?? ""}
+									currentUserId={currentOpsUserId}
 								/>
 							)}
 
@@ -471,14 +475,12 @@ function NewChatForm({
 function ConversationThread({
 	conversation,
 	currentUserId,
-	currentUserName,
 	staffDirectory,
 	onBack,
 	onSent,
 }: {
 	conversation: ChatConversation;
 	currentUserId: string;
-	currentUserName: string;
 	staffDirectory: StaffDirectoryEntry[];
 	onBack: () => void;
 	onSent: () => void;

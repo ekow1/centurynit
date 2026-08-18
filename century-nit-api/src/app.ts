@@ -16,6 +16,7 @@ import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
 import { avatarRouter } from "./routes/avatar.js";
 import { settingsRouter } from "./routes/settings.js";
+import { lookupsRouter } from "./routes/lookups.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import {
 	applicantsRouter,
@@ -128,6 +129,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/auth-settings`, authSettings);
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
+	app.route(`${API_PREFIX}/lookups`, lookupsRouter);
 	app.route(`${API_PREFIX}/consultations`, consultationsRouter);
 	app.route(`${API_PREFIX}/applications`, applicationsRouter);
 	app.route(`${API_PREFIX}/applicants`, applicantsRouter);

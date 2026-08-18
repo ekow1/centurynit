@@ -1031,6 +1031,12 @@ export const leads = pgTable(
 		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
+		consultationId: uuid("consultation_id").references(() => consultations.id, {
+			onDelete: "set null",
+		}),
+		applicationId: uuid("application_id").references(() => applications.id, {
+			onDelete: "set null",
+		}),
 		notes: text("notes"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1039,6 +1045,27 @@ export const leads = pgTable(
 		byStage: index("leads_stage_idx").on(t.stage, t.createdAt),
 		byEmail: index("leads_email_idx").on(t.email),
 		byStaff: index("leads_staff_idx").on(t.assignedStaffId),
+		byConsultation: index("leads_consultation_idx").on(t.consultationId),
+		byApplication: index("leads_application_idx").on(t.applicationId),
+	}),
+);
+
+/* ── Lead activity audit trail ─────────────────────────────────────────── */
+
+export const leadEvents = pgTable(
+	"lead_events",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		leadId: uuid("lead_id")
+			.notNull()
+			.references(() => leads.id, { onDelete: "cascade" }),
+		type: varchar("type", { length: 48 }).notNull(),
+		actorName: text("actor_name"),
+		payload: jsonb("payload"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byLead: index("lead_events_lead_idx").on(t.leadId, t.createdAt),
 	}),
 );
 

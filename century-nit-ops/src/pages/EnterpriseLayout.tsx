@@ -103,6 +103,7 @@ const PLATFORM_NAV: NavEntry[] = [
 		blurb: "Pages & branding",
 		children: [
 			{ to: "/cms", module: "cms", label: "Content (CMS)", blurb: "Pages & posts", icon: "cms" },
+			{ to: "/lookups", module: "lookups", label: "Form Catalogue", blurb: "Dynamic form dropdowns", icon: "cms" },
 			{ to: "/site", module: "site", label: "Site & UI", blurb: "Branding & nav", icon: "site" },
 		],
 	},

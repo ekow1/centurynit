@@ -8,7 +8,6 @@ import {
 	enrollMfa,
 	confirmMfaOtp,
 	sendMfaOtp,
-	verifyMfaOtp,
 } from "../lib/api";
 
 /**

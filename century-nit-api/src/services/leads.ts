@@ -1,6 +1,6 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { leads, opsUsers } from "../db/schema.js";
+import { leads, leadEvents, opsUsers } from "../db/schema.js";
 
 export interface LeadView {
 	id: string;
@@ -12,15 +12,24 @@ export interface LeadView {
 	targetCountry: string | null;
 	assignedStaffId: string | null;
 	assignedStaffName?: string | null;
+	consultationId: string | null;
+	applicationId: string | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
 
+/** In-memory flag so sync only runs once per server lifetime, not per request. */
+let syncRan = false;
+
 /**
  * Backfill any existing registered client accounts into the CRM leads pipeline.
+ * Runs once per server boot, not on every listLeads() call.
  */
 export async function syncLeadsFromRegisteredUsers(): Promise<void> {
+	if (syncRan) return;
+	syncRan = true;
+
 	try {
 		const allUsers = await db.query.users.findMany();
 		const allStaff = await db.query.opsUsers.findMany();
@@ -112,6 +121,55 @@ export async function captureLeadFromUser(
 	}
 }
 
+/** Record an event in the lead audit trail. */
+export async function recordLeadEvent(
+	leadId: string,
+	type: string,
+	actorName: string | null,
+	payload?: Record<string, unknown>,
+): Promise<void> {
+	try {
+		await db.insert(leadEvents).values({
+			leadId,
+			type,
+			actorName,
+			payload: payload ?? null,
+		});
+	} catch (err) {
+		console.warn("[CRM] Failed to record lead event:", err);
+	}
+}
+
+/** Get the activity timeline for a lead. */
+export async function getLeadEvents(leadId: string): Promise<{
+	events: Array<{
+		id: string;
+		leadId: string;
+		type: string;
+		actorName: string | null;
+		payload: unknown;
+		createdAt: string;
+	}>;
+	total: number;
+}> {
+	const rows = await db.query.leadEvents.findMany({
+		where: eq(leadEvents.leadId, leadId),
+		orderBy: [desc(leadEvents.createdAt)],
+		limit: 100,
+	});
+	return {
+		events: rows.map((r) => ({
+			id: r.id,
+			leadId: r.leadId,
+			type: r.type,
+			actorName: r.actorName,
+			payload: r.payload,
+			createdAt: r.createdAt.toISOString(),
+		})),
+		total: rows.length,
+	};
+}
+
 export async function listLeads(query?: {
 	stage?: string;
 	search?: string;
@@ -154,6 +212,8 @@ export async function listLeads(query?: {
 		targetCountry: r.targetCountry,
 		assignedStaffId: r.assignedStaffId,
 		assignedStaffName: r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null,
+		consultationId: r.consultationId,
+		applicationId: r.applicationId,
 		notes: r.notes,
 		createdAt: r.createdAt.toISOString(),
 		updatedAt: r.updatedAt.toISOString(),
@@ -192,6 +252,8 @@ export async function createManualLead(input: {
 		stage: created.stage,
 		targetCountry: created.targetCountry,
 		assignedStaffId: created.assignedStaffId,
+		consultationId: created.consultationId,
+		applicationId: created.applicationId,
 		notes: created.notes,
 		createdAt: created.createdAt.toISOString(),
 		updatedAt: created.updatedAt.toISOString(),
@@ -207,9 +269,16 @@ export async function updateLead(
 		stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
 		targetCountry: string | null;
 		assignedStaffId: string | null;
+		consultationId: string | null;
+	_applicationId: string | null;
 		notes: string | null;
 	}>,
+	actorName?: string | null,
 ): Promise<LeadView | null> {
+	// Fetch current lead to detect stage changes
+	const current = await db.query.leads.findFirst({ where: eq(leads.id, id) });
+	if (!current) return null;
+
 	const [updated] = await db
 		.update(leads)
 		.set({
@@ -221,6 +290,34 @@ export async function updateLead(
 
 	if (!updated) return null;
 
+	// Record stage change event
+	if (patch.stage && patch.stage !== current.stage) {
+		await recordLeadEvent(id, "stage_changed", actorName, {
+			from: current.stage,
+			to: patch.stage,
+		});
+	}
+
+	// Record assignment event
+	if (patch.assignedStaffId !== undefined && patch.assignedStaffId !== current.assignedStaffId) {
+		await recordLeadEvent(id, "assigned", actorName, {
+			from: current.assignedStaffId,
+			to: patch.assignedStaffId,
+		});
+	}
+
+	// Record entity link events
+	if (patch.consultationId !== undefined && patch.consultationId !== current.consultationId) {
+		await recordLeadEvent(id, "linked_consultation", actorName, {
+			consultationId: patch.consultationId,
+		});
+	}
+	if (patch.applicationId !== undefined && patch.applicationId !== current.applicationId) {
+		await recordLeadEvent(id, "linked_application", actorName, {
+			applicationId: patch.applicationId,
+		});
+	}
+
 	return {
 		id: updated.id,
 		name: updated.name,
@@ -230,6 +327,8 @@ export async function updateLead(
 		stage: updated.stage,
 		targetCountry: updated.targetCountry,
 		assignedStaffId: updated.assignedStaffId,
+		consultationId: updated.consultationId,
+		applicationId: updated.applicationId,
 		notes: updated.notes,
 		createdAt: updated.createdAt.toISOString(),
 		updatedAt: updated.updatedAt.toISOString(),
@@ -239,4 +338,87 @@ export async function updateLead(
 export async function deleteLead(id: string): Promise<boolean> {
 	const res = await db.delete(leads).where(eq(leads.id, id)).returning({ id: leads.id });
 	return res.length > 0;
+}
+
+/**
+ * Find a lead by email (used for auto-linking consultations/applications).
+ */
+export async function findLeadByEmail(email: string): Promise<LeadView | null> {
+	const normalizedEmail = email.toLowerCase().trim();
+	const row = await db.query.leads.findFirst({
+		where: eq(leads.email, normalizedEmail),
+	});
+	if (!row) return null;
+
+	const staffMembers = await db.query.opsUsers.findMany();
+	const staffNameMap = new Map(staffMembers.map((s) => [s.id, s.name]));
+
+	return {
+		id: row.id,
+		name: row.name,
+		email: row.email,
+		phone: row.phone,
+		source: row.source,
+		stage: row.stage,
+		targetCountry: row.targetCountry,
+		assignedStaffId: row.assignedStaffId,
+		assignedStaffName: row.assignedStaffId ? staffNameMap.get(row.assignedStaffId) ?? null : null,
+		consultationId: row.consultationId,
+		applicationId: row.applicationId,
+		notes: row.notes,
+		createdAt: row.createdAt.toISOString(),
+		updatedAt: row.updatedAt.toISOString(),
+	};
+}
+
+/**
+ * Auto-link a consultation to a lead by email and advance the lead stage.
+ * Called when a consultation is created or moves to a booked/active state.
+ */
+export async function linkConsultationToLead(
+	consultationId: string,
+	email: string,
+	actorName?: string | null,
+): Promise<void> {
+	try {
+		const lead = await findLeadByEmail(email);
+		if (!lead) return;
+
+		const patch: Record<string, unknown> = { consultationId };
+		// Auto-advance stage if still early in the pipeline
+		if (lead.stage === "New Lead" || lead.stage === "Contacted") {
+			patch.stage = "Consultation Booked";
+		}
+
+		await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, lead.id));
+		await recordLeadEvent(lead.id, "linked_consultation", actorName, { consultationId });
+	} catch (err) {
+		console.warn("[CRM] Failed to auto-link consultation to lead:", err);
+	}
+}
+
+/**
+ * Auto-link an application to a lead by email and advance the lead stage.
+ * Called when an application is created.
+ */
+export async function linkApplicationToLead(
+	applicationId: string,
+	email: string,
+	actorName?: string | null,
+): Promise<void> {
+	try {
+		const lead = await findLeadByEmail(email);
+		if (!lead) return;
+
+		const patch: Record<string, unknown> = { applicationId };
+		// Advance to Assessment Complete if consultation is done, or keep at Consultation Booked
+		if (lead.stage === "Consultation Booked") {
+			patch.stage = "Assessment Complete";
+		}
+
+		await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, lead.id));
+		await recordLeadEvent(lead.id, "linked_application", actorName, { applicationId });
+	} catch (err) {
+		console.warn("[CRM] Failed to auto-link application to lead:", err);
+	}
 }

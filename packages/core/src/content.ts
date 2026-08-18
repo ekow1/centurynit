@@ -2438,7 +2438,7 @@ export const PRE_DEPARTURE_TASKS: PreDepartureTask[] = [
 
 /* ========== CRM Lead Pipeline ========== */
 
-export type LeadStage = "new" | "contacted" | "interested" | "consultation_scheduled" | "consulted" | "converted" | "lost";
+export type LeadStage = "new" | "contacted" | "consultation_booked" | "assessment_complete" | "converted" | "lost";
 
 export type Lead = {
 	id: string;
@@ -2456,24 +2456,24 @@ export type Lead = {
 	lastContactAt: string;
 	notes: string;
 	value: number;
+	consultationId?: string | null;
+	applicationId?: string | null;
 };
 
 export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
 	new: "New Lead",
 	contacted: "Contacted",
-	interested: "Interested",
-	consultation_scheduled: "Consultation Scheduled",
-	consulted: "Consulted",
-	converted: "Converted",
+	consultation_booked: "Consultation Booked",
+	assessment_complete: "Assessment Complete",
+	converted: "Enrolled",
 	lost: "Lost",
 };
 
 export const LEAD_STAGE_ORDER: LeadStage[] = [
 	"new",
 	"contacted",
-	"interested",
-	"consultation_scheduled",
-	"consulted",
+	"consultation_booked",
+	"assessment_complete",
 	"converted",
 	"lost",
 ];
@@ -2520,7 +2520,7 @@ export const SEED_LEADS: Lead[] = [
 		country: "Ghana",
 		degreeLevel: "PhD",
 		branch: "kumasi",
-		stage: "interested",
+		stage: "assessment_complete",
 		assignedTo: "Kwame Agyeman",
 		createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 4).toISOString(),
@@ -2536,7 +2536,7 @@ export const SEED_LEADS: Lead[] = [
 		country: "Ghana",
 		degreeLevel: "Master's",
 		branch: "accra",
-		stage: "consultation_scheduled",
+		stage: "consultation_booked",
 		assignedTo: "Efua Owusu",
 		createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 3).toISOString(),
@@ -2552,7 +2552,7 @@ export const SEED_LEADS: Lead[] = [
 		country: "Ghana",
 		degreeLevel: "Master's",
 		branch: "kumasi",
-		stage: "consulted",
+		stage: "assessment_complete",
 		assignedTo: "Kwame Agyeman",
 		createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 5).toISOString(),

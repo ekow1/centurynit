@@ -131,21 +131,21 @@ export type MfaEnrollmentStatus = {
 };
 
 export function getAuthSettings(): Promise<AuthSettingsResponse> {
-	return apiFetch<AuthSettingsResponse>("/api/auth-settings");
+	return apiFetch<AuthSettingsResponse>(`${API_PREFIX}/auth-settings`);
 }
 
 export function updateAuthSettings(patch: {
 	portal?: Partial<AuthSettingsResponse["portal"]>;
 	ops?: Partial<AuthSettingsResponse["ops"]>;
 }): Promise<AuthSettingsResponse> {
-	return apiFetch<AuthSettingsResponse>("/api/auth-settings", {
+	return apiFetch<AuthSettingsResponse>(`${API_PREFIX}/auth-settings`, {
 		method: "PUT",
 		body: JSON.stringify(patch),
 	});
 }
 
 export function getMfaEnrollment(): Promise<MfaEnrollmentStatus> {
-	return apiFetch<MfaEnrollmentStatus>("/api/auth-settings/mfa");
+	return apiFetch<MfaEnrollmentStatus>(`${API_PREFIX}/auth-settings/mfa`);
 }
 
 export function enrollMfa(method: "totp" | "email_otp", password: string): Promise<{
@@ -154,27 +154,27 @@ export function enrollMfa(method: "totp" | "email_otp", password: string): Promi
 	message?: string;
 	email?: string;
 }> {
-	return apiFetch("/api/auth-settings/mfa/enroll", {
+	return apiFetch(`${API_PREFIX}/auth-settings/mfa/enroll`, {
 		method: "POST",
 		body: JSON.stringify({ method, password }),
 	});
 }
 
 export function confirmMfaOtp(code: string): Promise<{ success: boolean }> {
-	return apiFetch("/api/auth-settings/mfa/confirm", {
+	return apiFetch(`${API_PREFIX}/auth-settings/mfa/confirm`, {
 		method: "POST",
 		body: JSON.stringify({ code }),
 	});
 }
 
 export function sendMfaOtp(): Promise<{ sent: boolean }> {
-	return apiFetch("/api/auth-settings/mfa/send-otp", {
+	return apiFetch(`${API_PREFIX}/auth-settings/mfa/send-otp`, {
 		method: "POST",
 	});
 }
 
 export function verifyMfaOtp(code: string): Promise<{ success: boolean }> {
-	return apiFetch("/api/auth-settings/mfa/verify-otp", {
+	return apiFetch(`${API_PREFIX}/auth-settings/mfa/verify-otp`, {
 		method: "POST",
 		body: JSON.stringify({ code }),
 	});

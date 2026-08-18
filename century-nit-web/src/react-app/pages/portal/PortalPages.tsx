@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { apiFetch } from "../../lib/api";
+import { API_PREFIX, LookupValue } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
@@ -447,6 +449,21 @@ function AssessmentForm({
 	onDocUpdate: (id: string, fileName: string | null, documentId?: string | null) => void;
 }) {
 	const [section, setSection] = useState(0);
+	const [lookups, setLookups] = useState<LookupValue[]>([]);
+	
+	useEffect(() => {
+		apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`)
+			.then((res) => {
+				if (res && res.lookups) setLookups(res.lookups);
+			})
+			.catch(console.error);
+	}, []);
+
+	const getLookupOptions = (category: string) => {
+		return lookups.filter(l => l.category === category).map(l => (
+			<option key={l.id} value={l.value}>{l.label}</option>
+		));
+	};
 	const [uploading, setUploading] = useState<Record<string, number>>({});
 	const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -537,11 +554,9 @@ function AssessmentForm({
 						<div className="field">
 							<label htmlFor="a-gender">Gender</label>
 							<select id="a-gender" className="select select--full-border" value={assessment.gender} onChange={(e) => onUpdate({ gender: e.target.value })}>
-								<option value="">Select</option>
-								<option value="male">Male</option>
-								<option value="female">Female</option>
-								<option value="other">Other</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('gender')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-nat">Nationality</label>
@@ -580,13 +595,9 @@ function AssessmentForm({
 						<div className="field">
 							<label htmlFor="a-edu">Highest education</label>
 							<select id="a-edu" className="select select--full-border" value={assessment.highestEducation} onChange={(e) => onUpdate({ highestEducation: e.target.value })}>
-								<option value="">Select</option>
-								<option value="high_school">High School / WASSCE</option>
-								<option value="diploma">Diploma</option>
-								<option value="bachelors">Bachelor's Degree</option>
-								<option value="masters">Master's Degree</option>
-								<option value="phd">PhD</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('highestEducation')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-inst">Institution</label>
@@ -612,12 +623,9 @@ function AssessmentForm({
 						<div className="field">
 							<label htmlFor="a-es">Employment status</label>
 							<select id="a-es" className="select select--full-border" value={assessment.employmentStatus} onChange={(e) => onUpdate({ employmentStatus: e.target.value })}>
-								<option value="">Select</option>
-								<option value="employed">Employed</option>
-								<option value="self_employed">Self-employed</option>
-								<option value="unemployed">Unemployed</option>
-								<option value="student">Student</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('employmentStatus')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-emp">Employer</label>
@@ -639,13 +647,9 @@ function AssessmentForm({
 						<div className="field">
 							<label htmlFor="a-et">English test taken</label>
 							<select id="a-et" className="select select--full-border" value={assessment.englishTest} onChange={(e) => onUpdate({ englishTest: e.target.value })}>
-								<option value="">Select</option>
-								<option value="ielts">IELTS</option>
-								<option value="toefl">TOEFL</option>
-								<option value="duolingo">Duolingo English Test</option>
-								<option value="pte">PTE Academic</option>
-								<option value="none">Not yet taken</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('englishTest')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-es-score">Score</label>
@@ -662,17 +666,17 @@ function AssessmentForm({
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-pc2">Preferred countries</label>
-							<input id="a-pc2" className="input input--full-border" value={assessment.preferredCountries} onChange={(e) => onUpdate({ preferredCountries: e.target.value })} placeholder="UK, Canada, Australia" />
+							<select id="a-pc2" className="select select--full-border" value={assessment.preferredCountries} onChange={(e) => onUpdate({ preferredCountries: e.target.value })}>
+		<option value="">Select</option>
+		{getLookupOptions('preferredCountries')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-pl">Preferred level</label>
 							<select id="a-pl" className="select select--full-border" value={assessment.preferredLevel} onChange={(e) => onUpdate({ preferredLevel: e.target.value })}>
-								<option value="">Select</option>
-								<option value="foundation">Foundation / Pathway</option>
-								<option value="bachelors">Bachelor's</option>
-								<option value="masters">Master's</option>
-								<option value="phd">PhD</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('preferredLevel')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-pf">Preferred field</label>

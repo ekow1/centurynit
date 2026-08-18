@@ -56,6 +56,7 @@ export const opsModuleSchema = z.enum([
 	"users",
 	"auth",
 	"cms",
+	"lookups",
 	"site",
 	"notifications",
 	"settings",
@@ -118,6 +119,7 @@ export const MODULE_GROUPS: Array<{
 			{ id: "users", label: "Users & Roles", description: "Staff directory, roles, and permissions matrix" },
 			{ id: "auth", label: "Authentication", description: "Sign-in methods, sessions, and MFA policy" },
 			{ id: "cms", label: "Content Management", description: "Public website content, destinations, and blog" },
+			{ id: "lookups", label: "Form Catalogue", description: "Manage dynamic form dropdowns" },
 			{ id: "site", label: "Site & UI", description: "Public website branding and navigation" },
 			{ id: "notifications", label: "Notifications", description: "Automated templates and communication channels" },
 			{ id: "settings", label: "System Configuration", description: "API keys, fee schedule, and integration credentials" },
@@ -149,7 +151,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 		"dashboard", "finance", "invoices", "ledger", "payments", "payment-config", "packages", "reports", "helpdesk", "chat",
 	],
 	admin: [
-		"system", "users", "auth", "cms", "site", "notifications", "settings", "helpdesk", "chat",
+		"system", "users", "auth", "cms", "lookups", "site", "notifications", "settings", "helpdesk", "chat",
 	],
 };
 

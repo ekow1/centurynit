@@ -14,7 +14,7 @@ function Spinner() {
 }
 
 export function OpsRequireAuth({ children }: { children: ReactNode }) {
-	const { opsUser, authInitializing, isMockSession } = useOpsAuth();
+	const { opsUser, authInitializing } = useOpsAuth();
 	const location = useLocation();
 
 	/**
@@ -41,13 +41,13 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 					.mfaStatus()
 					.then((s) => active && setMfaOk(!s.required || s.enabled))
 					.catch(() => {
-						if (active) setMfaOk(isMockSession);
+						if (active) setMfaOk(false);
 					});
 			});
 		return () => {
 			active = false;
 		};
-	}, [opsUser, isMockSession]);
+	}, [opsUser]);
 
 	if (authInitializing) return <Spinner />;
 

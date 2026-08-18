@@ -168,3 +168,15 @@ export async function verifyTotp(code: string) {
 	if (error) throw new Error(formatError(error, "That code was not accepted"));
 	return data;
 }
+
+export async function checkEmailExists(email: string): Promise<boolean> {
+	const baseURL = typeof window === "undefined" ? "" : window.location.origin;
+	const res = await fetch(`${baseURL}/api/auth/check-email`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ email: email.trim().toLowerCase() }),
+	});
+	if (!res.ok) return false;
+	const data = await res.json().catch(() => ({ exists: false }));
+	return data.exists;
+}

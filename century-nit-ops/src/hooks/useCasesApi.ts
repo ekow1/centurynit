@@ -81,7 +81,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 			intake: p.intake ?? "-",
 			major: p.major ?? "-",
 		},
-		documents: (row.requestedDocuments ?? []).map((name) => ({ name, status: "Pending Review" })),
+		documents: [],
 		assessmentResult: row.assessmentResult ?? undefined,
 		slotConfirmed: row.slotConfirmed,
 		comments: row.comments,
@@ -168,12 +168,12 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 
 	const financials = app
 		? {
-				totalAmount: "$0",
-				paidAmount: app.status === "ACCEPTED" ? "$0" : "$0",
-				outstanding: "$0",
+				totalAmount: "-",
+				paidAmount: "-",
+				outstanding: "-",
 				plan: app.fundingTrack ?? "",
 			}
-		: { totalAmount: "$0", paidAmount: "$0", outstanding: "$0", plan: "" };
+		: { totalAmount: "-", paidAmount: "-", outstanding: "-", plan: "" };
 
 	const timeline = app
 		? [

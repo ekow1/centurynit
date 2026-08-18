@@ -1,12 +1,30 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
 import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
-import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER } from "century-nit-core";
-import { JOURNEY_STAGE_LABELS } from "century-nit-shared";
+import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER, type Lead } from "century-nit-core";
+import { JOURNEY_STAGE_LABELS, API_PREFIX, LEAD_STAGE_FROM_DB } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
+
+interface ApiLead {
+	id: string;
+	name: string;
+	email: string;
+	phone: string | null;
+	source: string;
+	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+	targetCountry: string | null;
+	assignedStaffId: string | null;
+	assignedStaffName: string | null;
+	consultationId: string | null;
+	applicationId: string | null;
+	notes: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
 
 function journeyStageLabel(stage: string): string {
 	return (JOURNEY_STAGE_LABELS as Record<string, string>)[stage] ?? stage;
@@ -53,8 +71,44 @@ function KPICard({ label, value, note, inverted }: { label: string; value: strin
 export function EnterpriseReports() {
 	const { opsUser, scopeRecords, canSeeAllBranches, requiresAssignmentScope } = useOpsAuth();
 	const { consultations, applications, applicants } = useCasesApi();
-	const { leads, packages } = useOpsState();
+	const { packages } = useOpsState();
 	const { invoices } = useInvoiceApi();
+	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
+
+	const loadApiLeads = useCallback(async () => {
+		try {
+			const res = await apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`);
+			if (res && Array.isArray(res.leads)) {
+				setApiLeads(res.leads);
+			}
+		} catch (err) {
+			console.warn("[Reports] Could not fetch live leads from server API:", err);
+		}
+	}, []);
+
+	useEffect(() => {
+		void loadApiLeads();
+	}, [loadApiLeads]);
+
+	const leads = useMemo<Lead[]>(
+		() =>
+			apiLeads.map((al) => ({
+				id: al.id,
+				name: al.name,
+				email: al.email,
+				phone: al.phone || "-",
+				country: al.targetCountry || "Ghana",
+				stage: LEAD_STAGE_FROM_DB[al.stage] ?? "new",
+				source: al.source || "Website Registration",
+				createdAt: al.createdAt.slice(0, 10),
+				lastContactAt: al.updatedAt || al.createdAt,
+				notes: al.notes || "Captured automatically from client sign-in.",
+				assignedTo: al.assignedStaffName || (al.assignedStaffId ? "Assigned" : "Unassigned"),
+				consultationId: al.consultationId,
+				applicationId: al.applicationId,
+			})),
+		[apiLeads],
+	);
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
 	const [branchFilter, setBranchFilter] = useState("all");

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
 import { roleCanAccess, API_PREFIX } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
@@ -189,41 +189,10 @@ function MainNavGroup({
 	);
 }
 
-const SWITCHABLE_ROLES: OpsRole[] = ["manager", "coordinator", "consultant", "finance", "admin"];
-
-/** Path → module mapping for permission checks on role switch. */
-const PATH_MODULE: Record<string, OpsModule> = {
-	"/dashboard": "dashboard",
-	"/applications": "applications",
-	"/consultations": "consultations",
-	"/applicants": "applicants",
-	"/leads": "leads",
-	"/workflow": "workflow",
-	"/documents": "documents",
-	"/invoices": "invoices",
-	"/finance": "finance",
-	"/appointments": "appointments",
-	"/universities": "universities",
-	"/programs": "programs",
-	"/packages": "packages",
-	"/reports": "reports",
-	"/helpdesk": "helpdesk",
-	"/marketing": "marketing",
-	"/inbox": "dashboard",
-	"/system": "system",
-	"/users": "users",
-	"/auth": "auth",
-	"/cms": "cms",
-	"/site": "site",
-	"/notifications": "notifications",
-	"/settings": "settings",
-};
-
 export function EnterpriseLayout() {
-	const { opsUser, opsRole, opsSignIn, opsSignOut, hasPermission } = useOpsAuth();
+	const { opsUser, opsRole, opsSignOut, hasPermission } = useOpsAuth();
 	const isDev = import.meta.env.DEV;
 	const { openCommandPalette, resetOpsState } = useOpsState();
-	const navigate = useNavigate();
 	const location = useLocation();
 
 	const operationsNav = OPERATIONS_NAV.filter((entry) => {
@@ -272,19 +241,6 @@ export function EnterpriseLayout() {
 		}
 		return count;
 	}, [consultations, opsUser, apiLeads, opsRole]);
-
-	function handleRoleSwitch(role: OpsRole) {
-		opsSignIn(role);
-		const currentPath = location.pathname;
-		const requiredModule = PATH_MODULE[currentPath];
-		if (requiredModule) {
-			const allowed = roleCanAccess(role, requiredModule);
-			if (!allowed) {
-				navigate(ROLE_HOME[role] ?? "/dashboard", { replace: true });
-				return;
-			}
-		}
-	}
 
 	return (
 		<div className="portal">
@@ -361,20 +317,6 @@ export function EnterpriseLayout() {
 								</div>
 							</div>
 							<p style={{ fontSize: "var(--text-xs)", opacity: 0.8, color: "#fff" }}>{staffBranchName(opsUser.branch)}</p>
-							{isDev ? (
-							<div className="ops-sidebar-role-switch">
-								<span className="eyebrow" style={{ fontSize: "0.6rem", opacity: 0.8, color: "#fff" }}>View as</span>
-								<select
-									className="ops-sidebar-role-select"
-									value={opsRole ?? "admin"}
-									onChange={(e) => handleRoleSwitch(e.target.value as OpsRole)}
-								>
-									{SWITCHABLE_ROLES.map((r) => (
-										<option key={r} value={r}>{ROLE_LABELS[r]}</option>
-									))}
-								</select>
-							</div>
-							) : null}
 							<button type="button" className="btn btn--ghost btn--sm" onClick={opsSignOut} style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
 								Sign out
 							</button>
@@ -441,17 +383,15 @@ export function EnterpriseLayout() {
 				</div>
 			</div>
 
-			<OpsTabBar
-				operationsNav={flattenNav(operationsNav)}
-				platformNav={flattenNav(platformNav)}
-				switchableRoles={SWITCHABLE_ROLES}
-				onRoleSwitch={handleRoleSwitch}
-				onReset={() => {
-					if (confirm("Reset all operations data back to the original seed state? This cannot be undone.")) {
-						resetOpsState();
-					}
-				}}
-			/>
+		<OpsTabBar
+			operationsNav={flattenNav(operationsNav)}
+			platformNav={flattenNav(platformNav)}
+			onReset={() => {
+				if (confirm("Reset all operations data back to the original seed state? This cannot be undone.")) {
+					resetOpsState();
+				}
+			}}
+		/>
 
 			{/* Floating chat widget — persistent across all pages */}
 			{roleCanAccess(opsRole as OpsRole, "chat") && <EnterpriseChat />}

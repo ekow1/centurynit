@@ -16,6 +16,7 @@ import { renderPasswordResetEmail, renderOtpEmail } from "../lib/email-templates
 import { getSmsSender } from "../lib/sms.js";
 import { getSetting } from "../services/settings.js";
 import { captureLeadFromUser } from "../services/leads.js";
+import { rateLimit } from "../middleware/rate-limit.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
@@ -132,6 +133,7 @@ function createAuth(config: GoogleSocialConfig) {
 	},
 	emailAndPassword: {
 		enabled: true,
+		requireEmailVerification: true,
 		/*
 		 * 12 characters rather than the default 8. Staff accounts reach applicant
 		 * PII and financial records, and a short password is the weakest link in a
@@ -348,6 +350,24 @@ auth.get("/me", async (c) => {
 				: null,
 	});
 });
+
+auth.post("/check-email", async (c) => {
+	const body = await c.req.json().catch(() => null);
+	if (!body?.email || typeof body.email !== "string") {
+		return c.json({ exists: false }, 400);
+	}
+	const user = await db.query.users.findFirst({
+		where: eq(schema.users.email, body.email.trim().toLowerCase()),
+	});
+	return c.json({ exists: !!user });
+});
+
+auth.use("/sign-in/*", rateLimit(10, 60));
+auth.use("/sign-up/*", rateLimit(5, 60));
+auth.use("/phone-number/send-otp", rateLimit(3, 60));
+auth.use("/email-otp/send-verification-otp", rateLimit(3, 60));
+auth.use("/forget-password", rateLimit(3, 60));
+auth.use("/reset-password", rateLimit(5, 60));
 
 auth.all("/*", async (c) => {
 	return (await getAuthInstance()).handler(c.req.raw);

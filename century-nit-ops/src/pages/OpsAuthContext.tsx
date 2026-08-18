@@ -57,8 +57,6 @@ export const ROLE_HOME: Record<OpsRole, string> = {
 	admin: "/system",
 };
 
-/* ─── Mock User Profiles ─── */
-
 export interface OpsUser {
 	name: string;
 	email: string;
@@ -66,51 +64,6 @@ export interface OpsUser {
 	branch: string;
 	avatar: string;
 }
-
-const MOCK_USERS: Record<OpsRole, OpsUser> = {
-	super_admin: {
-		name: "Super Admin",
-		email: "sa@century-nit.com",
-		role: "super_admin",
-		branch: "platform",
-		avatar: "SA",
-	},
-	manager: {
-		name: "Adjoa Mensah-Bonsu",
-		email: "a.mensah@century-nit.com",
-		role: "manager",
-		branch: "accra",
-		avatar: "AM",
-	},
-	coordinator: {
-		name: "Kojo Asante",
-		email: "k.asante@century-nit.com",
-		role: "coordinator",
-		branch: "accra",
-		avatar: "KA",
-	},
-	consultant: {
-		name: "Efua Owusu",
-		email: "e.owusu@century-nit.com",
-		role: "consultant",
-		branch: "accra",
-		avatar: "EO",
-	},
-	finance: {
-		name: "Ama Serwaa Boateng",
-		email: "a.serwaa@century-nit.com",
-		role: "finance",
-		branch: "accra",
-		avatar: "AS",
-	},
-	admin: {
-		name: "Kwabena Osei",
-		email: "k.osei@century-nit.com",
-		role: "admin",
-		branch: "platform",
-		avatar: "KO",
-	},
-};
 
 export const ROLE_LABELS: Record<OpsRole, string> = {
 	super_admin: "Super Administrator",
@@ -191,10 +144,6 @@ interface OpsAuthContextValue {
 	opsVerifyEmailOtp: (code: string) => Promise<OpsUser>;
 	/** Send email OTP for MFA verification. */
 	opsSendMfaOtp: () => Promise<void>;
-	/** Mock sign-in by role selection (dev only). */
-	opsSignIn: (role: OpsRole) => void;
-	/** True when the session came from the prototype role picker, not the API. */
-	isMockSession: boolean;
 	opsSignOut: () => void;
 	hasPermission: (module: OpsModule) => boolean;
 	getAllowedModules: () => OpsModule[];
@@ -241,7 +190,6 @@ function staffToOpsUser(s: NonNullable<SessionResponse["staff"]>): OpsUser {
 export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
-	const [isMockSession, setIsMockSession] = useState(false);
 	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, OpsModule[]>>({});
 
 	const opsRole = opsUser?.role ?? null;
@@ -271,12 +219,11 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				if (staff) {
 					const user = staffToOpsUser(staff);
 					setOpsUser(user);
-					setIsMockSession(false);
 					saveSession(user);
 					void refreshPermissions();
 				}
 			} catch {
-				// API not reachable — keep a mock session only in development.
+				// API not reachable — no session.
 			} finally {
 				if (!cancelled) setAuthInitializing(false);
 			}
@@ -302,7 +249,6 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
-		setIsMockSession(false);
 		saveSession(user);
 		void refreshPermissions();
 		return { user };
@@ -319,7 +265,6 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
-		setIsMockSession(false);
 		saveSession(user);
 		void refreshPermissions();
 		return user;
@@ -332,7 +277,6 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
-		setIsMockSession(false);
 		saveSession(user);
 		void refreshPermissions();
 		return user;
@@ -342,24 +286,9 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		await sendMfaOtp();
 	}, []);
 
-	const opsSignIn = useCallback((role: OpsRole) => {
-		if (!import.meta.env.DEV) return;
-		const user = MOCK_USERS[role as keyof typeof MOCK_USERS] ?? {
-			name: role,
-			email: `${role}@century-nit.com`,
-			role,
-			branch: "platform",
-			avatar: role.slice(0, 2).toUpperCase(),
-		};
-		setOpsUser(user);
-		setIsMockSession(true);
-		saveSession(user);
-	}, []);
-
 	const opsSignOut = useCallback(() => {
 		apiSignOut().catch(() => {});
 		setOpsUser(null);
-		setIsMockSession(false);
 		saveSession(null);
 	}, []);
 
@@ -410,9 +339,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				opsVerifyTwoFactor,
 				opsVerifyEmailOtp,
 				opsSendMfaOtp,
-				opsSignIn,
 				opsSignOut,
-				isMockSession,
 				hasPermission,
 				getAllowedModules,
 				canSeeAllBranches,

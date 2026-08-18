@@ -11,6 +11,7 @@ import {
 	verifyEmailCode,
 	requestPasswordReset,
 	resetPassword,
+	checkEmailExists,
 } from "../context/authStore";
 import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
 
@@ -53,7 +54,9 @@ export function StartJourney() {
 	const [authSettings, setAuthSettings] = useState<AuthSettingsResponse | null>(null);
 	const [settingsLoading, setSettingsLoading] = useState(true);
 	const [email, setEmail] = useState("");
+	const [emailExists, setEmailExists] = useState<boolean | null>(null);
 	const [password, setPassword] = useState("");
+	const [passwordTouched, setPasswordTouched] = useState(false);
 	const [codeSentTo, setCodeSentTo] = useState<string | null>(null);
 	const [otpCode, setOtpCode] = useState("");
 	const [name, setName] = useState("");
@@ -135,6 +138,12 @@ export function StartJourney() {
 			setLoading(false);
 			setError(err instanceof Error ? err.message : "Google sign-in failed");
 		}
+	}
+
+	async function handleEmailBlur() {
+		if (!email.includes("@")) return;
+		const exists = await checkEmailExists(email);
+		setEmailExists(exists);
 	}
 
 	async function onEmail(e: FormEvent) {
@@ -388,7 +397,7 @@ export function StartJourney() {
 							<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--border-light)" }}>
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signin"); setError(""); }}
+									onClick={() => { setAuthMode("signin"); setError(""); setPasswordTouched(false); setEmailExists(null); }}
 									style={{
 										padding: "0.5rem 1rem",
 										borderBottom: authMode === "signin" ? "2px solid var(--primary)" : "2px solid transparent",
@@ -400,7 +409,7 @@ export function StartJourney() {
 								</button>
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signup"); setError(""); }}
+									onClick={() => { setAuthMode("signup"); setError(""); setPasswordTouched(false); setEmailExists(null); }}
 									style={{
 										padding: "0.5rem 1rem",
 										borderBottom: authMode === "signup" ? "2px solid var(--primary)" : "2px solid transparent",
@@ -426,6 +435,7 @@ export function StartJourney() {
 												setCodeSentTo(null);
 												setOtpCode("");
 												setError("");
+												setEmailExists(null);
 											}}
 										>
 											{label}
@@ -461,12 +471,13 @@ export function StartJourney() {
 											/>
 										</Field>
 									)}
-									<Field label="Email" htmlFor="sj-email">
+									<Field label="Email" htmlFor="sj-email" error={authMode === "signup" && emailExists ? "This email is already registered. Please log in." : undefined}>
 										<Input
 											id="sj-email"
 											type="email"
 											value={email}
-											onChange={(e) => setEmail(e.target.value)}
+											onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
+											onBlur={handleEmailBlur}
 											placeholder="you@example.com"
 											fullBorder
 										/>
@@ -474,18 +485,20 @@ export function StartJourney() {
 									<Field
 										label="Password"
 										htmlFor="sj-pass"
+										error={authMode === "signup" && passwordTouched && password.length < 12 ? "Password must be at least 12 characters" : undefined}
 									>
 										<Input
 											id="sj-pass"
 											type="password"
 											value={password}
 											onChange={(e) => setPassword(e.target.value)}
+											onBlur={() => setPasswordTouched(true)}
 											placeholder="••••••••"
 											fullBorder
 										/>
 									</Field>
 									<div className="auth-form__row">
-										<Button type="submit" block arrow>
+										<Button type="submit" block arrow disabled={loading || (authMode === "signup" && (password.length < 12 || emailExists === true))}>
 											{authMode === "signin" ? "Log in" : "Create account"}
 										</Button>
 										{authMode === "signin" && (
@@ -536,18 +549,20 @@ export function StartJourney() {
 											label="Email Address"
 											htmlFor="sj-otp-email"
 											hint="We will email you a one-time code - no password needed."
+											error={emailExists ? "This email is already registered. Please log in using a password." : undefined}
 										>
 											<Input
 												id="sj-otp-email"
 												type="email"
 												autoComplete="email"
 												value={email}
-												onChange={(e) => setEmail(e.target.value)}
+												onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
+												onBlur={handleEmailBlur}
 												placeholder="you@example.com"
 												fullBorder
 											/>
 										</Field>
-										<Button type="submit" block arrow disabled={loading || !email.trim()}>
+										<Button type="submit" block arrow disabled={loading || !email.trim() || emailExists === true}>
 											{loading ? "Sending..." : "Email me a code"}
 										</Button>
 									</form>

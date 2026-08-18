@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "../lib/api";
 import { API_PREFIX } from "century-nit-shared";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 const BRAND_HEADER = "Century NIT";
-const BRAND_FOOTER = "Century NIT  \u00b7  Accra, Ghana  \u00b7  century-nit.com";
+const BRAND_FOOTER = "Century NIT  ·  Accra, Ghana  ·  century-nit.com";
 const MKT = `${API_PREFIX}/marketing`;
 
 type Tab = "campaigns" | "templates" | "lists";
@@ -93,6 +94,23 @@ export function EnterpriseMarketing() {
 	const [tplFooter, setTplFooter] = useState("");
 	const [previewMode, setPreviewMode] = useState<"edit" | "preview">("edit");
 
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmTitle, setConfirmTitle] = useState("");
+	const [confirmMessage, setConfirmMessage] = useState("");
+	const [confirmDanger, setConfirmDanger] = useState(false);
+	const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+
+	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
+
+	const confirm = (title: string, message: string, action: () => void, danger = false) => {
+		setConfirmTitle(title);
+		setConfirmMessage(message);
+		setConfirmDanger(danger);
+		setConfirmAction(() => action);
+		setConfirmOpen(true);
+	};
+
 	const fetchCampaigns = useCallback(() => apiFetch<Campaign[]>(`${MKT}/campaigns`).then(setCampaigns).catch(console.error), []);
 	const fetchMailingLists = useCallback(() => apiFetch<MailingList[]>(`${MKT}/mailing-lists`).then(setMailingLists).catch(console.error), []);
 	const fetchTemplates = useCallback(() => apiFetch<EmailTemplate[]>(`${MKT}/templates`).then(setTemplates).catch(console.error), []);
@@ -145,27 +163,29 @@ export function EnterpriseMarketing() {
 		if (!campaignName.trim() || !body.trim() || !selectedList) return;
 		const list = mailingLists.find((l) => l.id === selectedList);
 		const count = list?.recipientCount ?? 0;
-		if (!window.confirm(`Send this campaign to ${count} contacts?`)) return;
-		try {
-			const res = await apiFetch<{ id: string }>(`${MKT}/campaigns`, {
-				method: "POST",
-				body: JSON.stringify({
-					name: campaignName.trim(),
-					type: channel,
-					channel,
-					subject: channel === "Email" ? subject : undefined,
-					body,
-					templateId: selectedTemplate || undefined,
-					mailingListId: selectedList,
-					audience: list?.name || "Unknown",
-				}),
-			});
-			await apiFetch(`${MKT}/campaigns/${res.id}/send`, { method: "POST" });
-			resetForm();
-			fetchCampaigns();
-		} catch (err) {
-			alert(`Failed to send campaign: ${err instanceof Error ? err.message : "Unknown error"}`);
-		}
+		confirm("Send Campaign", `Send this campaign to ${count} contacts?`, async () => {
+			try {
+				const res = await apiFetch<{ id: string }>(`${MKT}/campaigns`, {
+					method: "POST",
+					body: JSON.stringify({
+						name: campaignName.trim(),
+						type: channel,
+						channel,
+						subject: channel === "Email" ? subject : undefined,
+						body,
+						templateId: selectedTemplate || undefined,
+						mailingListId: selectedList,
+						audience: list?.name || "Unknown",
+					}),
+				});
+				await apiFetch(`${MKT}/campaigns/${res.id}/send`, { method: "POST" });
+				resetForm();
+				fetchCampaigns();
+				showToast("success", "Campaign sent successfully");
+			} catch (err) {
+				showToast("error", `Failed to send campaign: ${err instanceof Error ? err.message : "Unknown error"}`);
+			}
+		});
 	};
 
 	const handleCreateList = async (e: React.FormEvent) => {
@@ -180,8 +200,9 @@ export function EnterpriseMarketing() {
 			setListName("");
 			setListDesc("");
 			fetchMailingLists();
+			showToast("success", "List created");
 		} catch (err) {
-			alert(`Failed to create list: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to create list: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
@@ -197,19 +218,22 @@ export function EnterpriseMarketing() {
 			setListName("");
 			setListDesc("");
 			fetchMailingLists();
+			showToast("success", "List saved");
 		} catch (err) {
-			alert(`Failed to save list: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to save list: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
 	const handleDeleteList = async (id: string) => {
-		if (!window.confirm("Delete this mailing list?")) return;
-		try {
-			await apiFetch(`${MKT}/mailing-lists/${id}`, { method: "DELETE" });
-			fetchMailingLists();
-		} catch (err) {
-			alert(`Failed to delete list: ${err instanceof Error ? err.message : "Unknown error"}`);
-		}
+		confirm("Delete Mailing List", "Delete this mailing list?", async () => {
+			try {
+				await apiFetch(`${MKT}/mailing-lists/${id}`, { method: "DELETE" });
+				fetchMailingLists();
+				showToast("success", "List deleted");
+			} catch (err) {
+				showToast("error", `Failed to delete list: ${err instanceof Error ? err.message : "Unknown error"}`);
+			}
+		}, true);
 	};
 
 	const handleAddContact = async (e: React.FormEvent) => {
@@ -226,9 +250,9 @@ export function EnterpriseMarketing() {
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Unknown error";
 			if (msg.toLowerCase().includes("duplicate")) {
-				alert("This email already exists in the list.");
+				showToast("error", "This email already exists in the list.");
 			} else {
-				alert(`Failed to add contact: ${msg}`);
+				showToast("error", `Failed to add contact: ${msg}`);
 			}
 		}
 	};
@@ -239,7 +263,7 @@ export function EnterpriseMarketing() {
 			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}`, { method: "DELETE" });
 			fetchMailingLists();
 		} catch (err) {
-			alert(`Failed to remove contact: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to remove contact: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
@@ -248,8 +272,9 @@ export function EnterpriseMarketing() {
 		try {
 			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-leads`, { method: "POST" });
 			fetchMailingLists();
+			showToast("success", "Leads imported");
 		} catch (err) {
-			alert(`Failed to import leads: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to import leads: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
@@ -258,8 +283,9 @@ export function EnterpriseMarketing() {
 		try {
 			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-applicants`, { method: "POST" });
 			fetchMailingLists();
+			showToast("success", "Applicants imported");
 		} catch (err) {
-			alert(`Failed to import applicants: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to import applicants: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
@@ -294,19 +320,22 @@ export function EnterpriseMarketing() {
 			}
 			resetTplForm();
 			fetchTemplates();
+			showToast("success", editingTplId ? "Template saved" : "Template created");
 		} catch (err) {
-			alert(`Failed to save template: ${err instanceof Error ? err.message : "Unknown error"}`);
+			showToast("error", `Failed to save template: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
 	};
 
 	const handleDeleteTpl = async (id: string) => {
-		if (!window.confirm("Delete this template?")) return;
-		try {
-			await apiFetch(`${MKT}/templates/${id}`, { method: "DELETE" });
-			fetchTemplates();
-		} catch (err) {
-			alert(`Failed to delete template: ${err instanceof Error ? err.message : "Unknown error"}`);
-		}
+		confirm("Delete Template", "Delete this template?", async () => {
+			try {
+				await apiFetch(`${MKT}/templates/${id}`, { method: "DELETE" });
+				fetchTemplates();
+				showToast("success", "Template deleted");
+			} catch (err) {
+				showToast("error", `Failed to delete template: ${err instanceof Error ? err.message : "Unknown error"}`);
+			}
+		}, true);
 	};
 
 	const handleEditTpl = (tpl: EmailTemplate) => {
@@ -930,6 +959,17 @@ export function EnterpriseMarketing() {
 					)}
 				</>
 			)}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title={confirmTitle}
+				message={confirmMessage}
+				danger={confirmDanger}
+				confirmLabel={confirmDanger ? "Delete" : "Confirm"}
+				onConfirm={() => { confirmAction?.(); setConfirmOpen(false); setConfirmAction(null); }}
+				onCancel={() => { setConfirmOpen(false); setConfirmAction(null); }}
+			/>
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

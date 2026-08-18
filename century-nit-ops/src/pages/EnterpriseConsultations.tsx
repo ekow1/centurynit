@@ -4,6 +4,7 @@ import { useCasesApi } from "../hooks/useCasesApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { ReschedulePanel } from "./ReschedulePanel";
+import { Toast } from "./OpsDialogs";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
@@ -69,6 +70,8 @@ export function EnterpriseConsultations() {
 	const [showCoordinatorPicker, setShowCoordinatorPicker] = useState(false);
 	const [coordinatorNote, setCoordinatorNote] = useState("");
 	const [workloadData, setWorkloadData] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -587,7 +590,7 @@ export function EnterpriseConsultations() {
 											})
 											.catch((err: unknown) => {
 												const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
-												window.alert(msg);
+												showToast("error", msg);
 											});
 									}}
 									className="btn btn--sm"
@@ -618,7 +621,7 @@ export function EnterpriseConsultations() {
 																setCoordinatorNote("");
 																void refresh();
 															} catch (err: unknown) {
-																window.alert(err instanceof Error ? err.message : "Failed to delegate");
+																showToast("error", err instanceof Error ? err.message : "Failed to delegate");
 															}
 														}}
 														className="btn btn--sm btn--ghost"
@@ -966,6 +969,7 @@ export function EnterpriseConsultations() {
 					)}
 				</div>
 			</div>
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

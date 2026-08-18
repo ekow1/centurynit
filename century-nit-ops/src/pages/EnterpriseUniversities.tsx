@@ -1,70 +1,164 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { universities, programs, destinations, scholarships } from "century-nit-core/content";
+import { API_PREFIX } from "century-nit-shared";
+import { apiFetch, ApiError } from "../lib/api";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
+import { EnterpriseLookups } from "./EnterpriseLookups";
 
-type Tab = "universities" | "programs" | "countries" | "scholarships";
+type Tab = "universities" | "countries" | "form-dropdowns";
 
 export function EnterpriseUniversities() {
 	const { canEditUniversities } = useOpsAuth();
 	const [tab, setTab] = useState<Tab>("universities");
 	const [search, setSearch] = useState("");
-	const [countryFilter, setCountryFilter] = useState("all");
-	const [levelFilter, setLevelFilter] = useState("all");
+	
+	const [universities, setUniversities] = useState<any[]>([]);
+	const [destinations, setDestinations] = useState<any[]>([]);
+	const [loading, setLoading] = useState(true);
+
+	const [editingUni, setEditingUni] = useState<any | null>(null);
+	const [editingDest, setEditingDest] = useState<any | null>(null);
+	const [saving, setSaving] = useState(false);
+
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
+
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+
+	useEffect(() => {
+		loadData();
+	}, []);
+
+	async function loadData() {
+		setLoading(true);
+		try {
+			const [uniRes, destRes] = await Promise.all([
+				apiFetch<{ universities: any[] }>(`${API_PREFIX}/catalog/universities`),
+				apiFetch<{ destinations: any[] }>(`${API_PREFIX}/catalog/destinations`)
+			]);
+			setUniversities(uniRes.universities);
+			setDestinations(destRes.destinations);
+		} catch (err) {
+			console.error(err);
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	async function saveUniversity(e: React.FormEvent) {
+		e.preventDefault();
+		setSaving(true);
+		try {
+			const method = editingUni.id ? "PUT" : "POST";
+			const url = editingUni.id ? `${API_PREFIX}/catalog/universities/${editingUni.id}` : `${API_PREFIX}/catalog/universities`;
+			
+			// ensure id exists for POST
+			const payload = { ...editingUni };
+			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+			await apiFetch(url, {
+				method,
+				body: JSON.stringify(payload)
+			});
+			setEditingUni(null);
+			loadData();
+		} catch (err) {
+			showToast("error", err instanceof ApiError ? err.message : String(err));
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	async function saveDestination(e: React.FormEvent) {
+		e.preventDefault();
+		setSaving(true);
+		try {
+			const method = editingDest.id ? "PUT" : "POST";
+			const url = editingDest.id ? `${API_PREFIX}/catalog/destinations/${editingDest.id}` : `${API_PREFIX}/catalog/destinations`;
+			
+			const payload = { ...editingDest };
+			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+			await apiFetch(url, {
+				method,
+				body: JSON.stringify(payload)
+			});
+			setEditingDest(null);
+			loadData();
+		} catch (err) {
+			showToast("error", err instanceof ApiError ? err.message : String(err));
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	async function deleteUniversity(id: string) {
+		setConfirmAction(() => async () => {
+			try {
+				await apiFetch(`${API_PREFIX}/catalog/universities/${id}`, { method: "DELETE" });
+				loadData();
+			} catch (err) {
+				showToast("error", err instanceof ApiError ? err.message : String(err));
+			}
+		});
+		setConfirmOpen(true);
+	}
+
+	async function deleteDestination(id: string) {
+		setConfirmAction(() => async () => {
+			try {
+				await apiFetch(`${API_PREFIX}/catalog/destinations/${id}`, { method: "DELETE" });
+				loadData();
+			} catch (err) {
+				showToast("error", err instanceof ApiError ? err.message : String(err));
+			}
+		});
+		setConfirmOpen(true);
+	}
 
 	const q = search.toLowerCase();
 
 	const filteredUnis = universities.filter((u) => {
-		if (countryFilter !== "all" && u.destinationId !== countryFilter) return false;
-		if (q && !u.name.toLowerCase().includes(q) && !u.city.toLowerCase().includes(q) && !u.tags.some((t) => t.toLowerCase().includes(q))) return false;
-		return true;
-	});
-
-	const filteredPrograms = programs.filter((p) => {
-		if (countryFilter !== "all") {
-			const uni = universities.find((u) => u.id === p.universityId);
-			if (!uni || uni.destinationId !== countryFilter) return false;
-		}
-		if (levelFilter !== "all" && p.level !== levelFilter) return false;
-		if (q && !p.name.toLowerCase().includes(q) && !p.field.toLowerCase().includes(q) && !p.description.toLowerCase().includes(q)) return false;
+		if (q && !u.name.toLowerCase().includes(q) && !u.city?.toLowerCase().includes(q)) return false;
 		return true;
 	});
 
 	const filteredDestinations = destinations.filter((d) => {
-		if (q && !d.name.toLowerCase().includes(q) && !d.region.toLowerCase().includes(q) && !d.description.toLowerCase().includes(q)) return false;
+		if (q && !d.name.toLowerCase().includes(q) && !d.region.toLowerCase().includes(q)) return false;
 		return true;
 	});
 
-	const filteredScholarships = scholarships.filter((s) => {
-		if (q && !s.name.toLowerCase().includes(q) && !s.eligibility.toLowerCase().includes(q) && !s.description.toLowerCase().includes(q)) return false;
-		return true;
-	});
-
-	const programCountForUni = (uniId: string) => programs.filter((p) => p.universityId === uniId).length;
-	const uniForProgram = (uniId: string) => universities.find((u) => u.id === uniId);
+	function destName(destId: string): string {
+		return destinations.find((d) => d.id === destId)?.name ?? destId;
+	}
 
 	return (
-		<div className="page-content fade-in">
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+		<div className="admin-page fade-in">
+			<div className="admin-section-head" style={{ marginBottom: "2rem" }}>
 				<div>
-					<h1 className="page-title">Programs Directory</h1>
-					<p className="lead mt-2">Universities, programs, destinations, and scholarships — read-only reference catalog.</p>
+					<h2 className="section-title">Universities & Countries</h2>
+					<p className="muted" style={{ marginTop: "0.25rem" }}>
+						Manage the academic catalog schools and destinations.
+					</p>
 				</div>
-				{canEditUniversities ? (
-					<button className="btn btn--primary">Add University</button>
-				) : (
-					<span className="portal-pill" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-						🔒 Read only
-					</span>
-				)}
+				<div>
+					{tab === "universities" && canEditUniversities && (
+						<button className="btn btn--primary" onClick={() => setEditingUni({ name: "" })}>+ Add University</button>
+					)}
+					{tab === "countries" && canEditUniversities && (
+						<button className="btn btn--primary" onClick={() => setEditingDest({ name: "", region: "" })}>+ Add Country</button>
+					)}
+				</div>
 			</div>
 
 			{/* Tabs */}
 			<div style={{ display: "flex", gap: "1rem", marginBottom: "2rem", borderBottom: "1px solid var(--border-light)", overflowX: "auto", whiteSpace: "nowrap", paddingBottom: "2px" }}>
-				{([["universities", "Universities"], ["programs", "Programs"], ["countries", "Countries"], ["scholarships", "Scholarships"]] as const).map(([key, label]) => (
+				{([["universities", "Universities"], ["countries", "Countries"], ["form-dropdowns", "Form Dropdowns"]] as const).map(([key, label]) => (
 					<button
 						key={key}
-						onClick={() => { setTab(key); setSearch(""); setCountryFilter("all"); setLevelFilter("all"); }}
-						className="btn btn--ghost"
+						onClick={() => { setTab(key); setSearch(""); }}
+						className={`btn btn--ghost ${tab === key ? '' : 'muted'}`}
 						style={{ borderBottom: tab === key ? "2px solid var(--foreground)" : "2px solid transparent", borderRadius: 0, paddingBottom: "0.5rem" }}
 					>
 						{label}
@@ -73,222 +167,195 @@ export function EnterpriseUniversities() {
 			</div>
 
 			{/* Filters */}
+			{tab !== "form-dropdowns" && (
 			<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
 				<input
 					type="search"
-					placeholder={tab === "programs" ? "Search programs, fields, descriptions..." : tab === "scholarships" ? "Search scholarships..." : tab === "countries" ? "Search countries, regions..." : "Search universities, cities, tags..."}
+					placeholder={tab === "countries" ? "Search countries, regions..." : "Search universities, cities..."}
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
-					className="input input--sm"
-					style={{ maxWidth: "360px", flex: 1 }}
+					style={{ maxWidth: "400px" }}
 				/>
-				<select
-					className="input input--sm"
-					value={countryFilter}
-					onChange={(e) => setCountryFilter(e.target.value)}
-				>
-					<option value="all">All destinations</option>
-					{destinations.map((d) => (
-						<option key={d.id} value={d.id}>{d.name}</option>
-					))}
-				</select>
-				{tab === "programs" && (
-					<select
-						className="input input--sm"
-						value={levelFilter}
-						onChange={(e) => setLevelFilter(e.target.value)}
-					>
-						<option value="all">All levels</option>
-						<option value="Undergraduate">Undergraduate</option>
-						<option value="Postgraduate">Postgraduate</option>
-						<option value="PhD">PhD</option>
-						<option value="Diploma">Diploma</option>
-					</select>
-				)}
 			</div>
-
-			{/* Universities Tab */}
-			{tab === "universities" && (
-				<div className="card">
-					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "1rem" }}>Institution</th>
-									<th style={{ padding: "1rem" }}>City</th>
-									<th style={{ padding: "1rem" }}>Destination</th>
-									<th style={{ padding: "1rem" }}>Ranking</th>
-									<th style={{ padding: "1rem" }}>Type</th>
-									<th style={{ padding: "1rem" }}>Acceptance</th>
-									<th style={{ padding: "1rem" }}>Programs</th>
-									<th style={{ padding: "1rem" }}>Tags</th>
-								</tr>
-							</thead>
-							<tbody>
-								{filteredUnis.length === 0 ? (
-									<tr><td colSpan={8} style={{ padding: "2rem", textAlign: "center" }} className="muted">No universities match your filter.</td></tr>
-								) : filteredUnis.map((uni) => (
-									<tr key={uni.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-										<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{uni.name}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.city}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{destName(uni.destinationId)}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{uni.ranking}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.type}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{uni.acceptance}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{programCountForUni(uni.id)}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>
-											{uni.tags.map((t) => (
-												<span key={t} className="portal-pill" style={{ fontSize: "0.65rem", marginRight: "0.3rem", marginBottom: "0.2rem", display: "inline-block" }}>{t}</span>
-											))}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				</div>
 			)}
 
-			{/* Programs Tab */}
-			{tab === "programs" && (
-				<div className="card">
-					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "1rem" }}>Program</th>
-									<th style={{ padding: "1rem" }}>University</th>
-									<th style={{ padding: "1rem" }}>Level</th>
-									<th style={{ padding: "1rem" }}>Field</th>
-									<th style={{ padding: "1rem" }}>Duration</th>
-									<th style={{ padding: "1rem" }}>Tuition</th>
-									<th style={{ padding: "1rem" }}>USD</th>
-									<th style={{ padding: "1rem" }}>Intake</th>
-									<th style={{ padding: "1rem" }}>Deadline</th>
-								</tr>
-							</thead>
-							<tbody>
-								{filteredPrograms.length === 0 ? (
-									<tr><td colSpan={9} style={{ padding: "2rem", textAlign: "center" }} className="muted">No programs match your filter.</td></tr>
-								) : filteredPrograms.map((prog) => {
-									const uni = uniForProgram(prog.universityId);
-									return (
-										<tr key={prog.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-											<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{prog.name}</td>
-											<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni?.name ?? prog.universityId}</td>
-											<td style={{ padding: "1rem" }}>
-												<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{prog.level}</span>
-											</td>
-											<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{prog.field}</td>
-											<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{prog.duration}</td>
-											<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{prog.tuition}</td>
-											<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>${prog.tuitionUsd.toLocaleString()}</td>
-											<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{prog.intake.join(", ")}</td>
-											<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{prog.applicationDeadline ?? "—"}</td>
+			{loading ? (
+				<p className="muted">Loading catalog...</p>
+			) : (
+				<>
+					{/* Universities Tab */}
+					{tab === "universities" && (
+						<div className="card">
+							<div className="ops-table-wrap">
+								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+									<thead>
+										<tr style={{ borderBottom: "2px solid var(--border)" }}>
+											<th style={{ padding: "1rem" }}>University</th>
+											<th style={{ padding: "1rem" }}>Country</th>
+											<th style={{ padding: "1rem" }}>City</th>
+											<th style={{ padding: "1rem" }}>Type</th>
+											<th style={{ padding: "1rem" }}>Acceptance</th>
+											{canEditUniversities && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
 										</tr>
-									);
-								})}
-							</tbody>
-						</table>
+									</thead>
+									<tbody>
+										{filteredUnis.length === 0 ? (
+											<tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center" }} className="muted">No universities found.</td></tr>
+										) : filteredUnis.map((uni) => (
+											<tr key={uni.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+												<td style={{ padding: "1rem" }}>
+													<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{uni.name}</div>
+													{uni.ranking && <div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>Ranking: {uni.ranking}</div>}
+												</td>
+												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{destName(uni.destinationId)}</td>
+												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.city}</td>
+												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.type}</td>
+												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{uni.acceptance}</td>
+												{canEditUniversities && (
+													<td style={{ padding: "1rem", textAlign: "right" }}>
+														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingUni(uni)}>Edit</button>
+														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteUniversity(uni.id)}>Del</button>
+													</td>
+												)}
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					)}
+
+					{/* Countries Tab */}
+					{tab === "countries" && (
+						<div className="card">
+							<div className="ops-table-wrap">
+								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+									<thead>
+										<tr style={{ borderBottom: "2px solid var(--border)" }}>
+											<th style={{ padding: "1rem" }}>Country</th>
+											<th style={{ padding: "1rem" }}>Region</th>
+											<th style={{ padding: "1rem" }}>Tagline</th>
+											{canEditUniversities && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
+										</tr>
+									</thead>
+									<tbody>
+										{filteredDestinations.length === 0 ? (
+											<tr><td colSpan={4} style={{ padding: "2rem", textAlign: "center" }} className="muted">No destinations found.</td></tr>
+										) : filteredDestinations.map((dest) => (
+											<tr key={dest.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
+												<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{dest.name}</td>
+												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{dest.region}</td>
+												<td style={{ padding: "1rem", fontSize: "var(--text-sm)", fontStyle: "italic" }}>{dest.tagline}</td>
+												{canEditUniversities && (
+													<td style={{ padding: "1rem", textAlign: "right" }}>
+														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingDest(dest)}>Edit</button>
+														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteDestination(dest.id)}>Del</button>
+													</td>
+												)}
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</div>
+					)}
+
+					{/* Form Dropdowns Tab */}
+					{tab === "form-dropdowns" && (
+						<EnterpriseLookups />
+					)}
+				</>
+			)}
+
+			{/* Edit University Modal */}
+			{editingUni && (
+				<div className="modal-overlay" onClick={() => setEditingUni(null)}>
+					<div className="modal-content" style={{ maxWidth: "500px" }} onClick={(e) => e.stopPropagation()}>
+						<div className="modal-header">
+							<h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>{editingUni.id ? "Edit University" : "Add University"}</h3>
+							<button className="modal-close" onClick={() => setEditingUni(null)}>×</button>
+						</div>
+						<form onSubmit={saveUniversity} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+							<label className="field">
+								<span className="field-label">Name</span>
+								<input type="text" value={editingUni.name || ""} onChange={(e) => setEditingUni({ ...editingUni, name: e.target.value })} required />
+							</label>
+							<label className="field">
+								<span className="field-label">Destination</span>
+								<select value={editingUni.destinationId || ""} onChange={(e) => setEditingUni({ ...editingUni, destinationId: e.target.value })}>
+									<option value="">Select country...</option>
+									{destinations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+								</select>
+							</label>
+							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+								<label className="field">
+									<span className="field-label">City</span>
+									<input type="text" value={editingUni.city || ""} onChange={(e) => setEditingUni({ ...editingUni, city: e.target.value })} />
+								</label>
+								<label className="field">
+									<span className="field-label">Type (e.g. Public)</span>
+									<input type="text" value={editingUni.type || ""} onChange={(e) => setEditingUni({ ...editingUni, type: e.target.value })} />
+								</label>
+							</div>
+							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+								<label className="field">
+									<span className="field-label">Acceptance Rate</span>
+									<input type="text" value={editingUni.acceptance || ""} onChange={(e) => setEditingUni({ ...editingUni, acceptance: e.target.value })} />
+								</label>
+								<label className="field">
+									<span className="field-label">Ranking</span>
+									<input type="text" value={editingUni.ranking || ""} onChange={(e) => setEditingUni({ ...editingUni, ranking: e.target.value })} />
+								</label>
+							</div>
+							<div className="modal-actions" style={{ marginTop: "1rem" }}>
+								<button type="button" className="btn btn--ghost" onClick={() => setEditingUni(null)}>Cancel</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+							</div>
+						</form>
 					</div>
 				</div>
 			)}
 
-			{/* Countries Tab */}
-			{tab === "countries" && (
-				<div className="card">
-					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "1rem" }}>Country</th>
-									<th style={{ padding: "1rem" }}>Region</th>
-									<th style={{ padding: "1rem" }}>Tagline</th>
-									<th style={{ padding: "1rem" }}>Universities</th>
-									<th style={{ padding: "1rem" }}>Programs</th>
-									<th style={{ padding: "1rem" }}>Highlights</th>
-								</tr>
-							</thead>
-							<tbody>
-								{filteredDestinations.length === 0 ? (
-									<tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center" }} className="muted">No destinations match your filter.</td></tr>
-								) : filteredDestinations.map((dest) => (
-									<tr key={dest.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-										<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{dest.name}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{dest.region}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)", fontStyle: "italic" }}>{dest.tagline}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dest.universities}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{dest.programs}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>
-											{dest.highlights.map((h) => (
-												<span key={h} className="portal-pill" style={{ fontSize: "0.65rem", marginRight: "0.3rem", marginBottom: "0.2rem", display: "inline-block" }}>{h}</span>
-											))}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+			{/* Edit Destination Modal */}
+			{editingDest && (
+				<div className="modal-overlay" onClick={() => setEditingDest(null)}>
+					<div className="modal-content" style={{ maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
+						<div className="modal-header">
+							<h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>{editingDest.id ? "Edit Country" : "Add Country"}</h3>
+							<button className="modal-close" onClick={() => setEditingDest(null)}>×</button>
+						</div>
+						<form onSubmit={saveDestination} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+							<label className="field">
+								<span className="field-label">Name (e.g. Canada)</span>
+								<input type="text" value={editingDest.name || ""} onChange={(e) => setEditingDest({ ...editingDest, name: e.target.value })} required />
+							</label>
+							<label className="field">
+								<span className="field-label">Region (e.g. North America)</span>
+								<input type="text" value={editingDest.region || ""} onChange={(e) => setEditingDest({ ...editingDest, region: e.target.value })} required />
+							</label>
+							<label className="field">
+								<span className="field-label">Tagline</span>
+								<input type="text" value={editingDest.tagline || ""} onChange={(e) => setEditingDest({ ...editingDest, tagline: e.target.value })} />
+							</label>
+							<div className="modal-actions" style={{ marginTop: "1rem" }}>
+								<button type="button" className="btn btn--ghost" onClick={() => setEditingDest(null)}>Cancel</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+							</div>
+						</form>
 					</div>
 				</div>
-			)}
+		)}
 
-			{/* Scholarships Tab */}
-			{tab === "scholarships" && (
-				<div className="card">
-					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "1rem" }}>Scholarship</th>
-									<th style={{ padding: "1rem" }}>Amount</th>
-									<th style={{ padding: "1rem" }}>Type</th>
-									<th style={{ padding: "1rem" }}>Deadline</th>
-									<th style={{ padding: "1rem" }}>Eligibility</th>
-								</tr>
-							</thead>
-							<tbody>
-								{filteredScholarships.length === 0 ? (
-									<tr><td colSpan={5} style={{ padding: "2rem", textAlign: "center" }} className="muted">No scholarships match your filter.</td></tr>
-								) : filteredScholarships.map((s) => (
-									<tr key={s.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-										<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.name}</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{s.amount}</td>
-										<td style={{ padding: "1rem" }}>
-											<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{s.type}</span>
-										</td>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{s.deadline}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{s.eligibility}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			)}
-
-			{/* Stats Footer */}
-			<div style={{ marginTop: "1.5rem", display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-				<div>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Universities</p>
-					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-lg)", fontWeight: 600 }}>{universities.length}</p>
-				</div>
-				<div>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Programs</p>
-					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-lg)", fontWeight: 600 }}>{programs.length}</p>
-				</div>
-				<div>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Destinations</p>
-					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-lg)", fontWeight: 600 }}>{destinations.length}</p>
-				</div>
-				<div>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Scholarships</p>
-					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-lg)", fontWeight: 600 }}>{scholarships.length}</p>
-				</div>
-			</div>
+			<ConfirmDialog
+				open={confirmOpen}
+				title="Confirm Delete"
+				message="Are you sure you want to delete this item?"
+				danger
+				confirmLabel="Delete"
+				onConfirm={() => { confirmAction?.(); setConfirmOpen(false); setConfirmAction(null); }}
+				onCancel={() => { setConfirmOpen(false); setConfirmAction(null); }}
+			/>
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
-}
-
-function destName(destId: string): string {
-	return destinations.find((d) => d.id === destId)?.name ?? destId;
 }

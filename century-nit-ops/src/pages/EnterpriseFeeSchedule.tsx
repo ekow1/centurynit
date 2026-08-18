@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 interface SettingView {
 	key: string;
@@ -155,6 +156,28 @@ export function EnterpriseFeeSchedule() {
 	const [totpCode, setTotpCode] = useState<string>("");
 	const [saving, setSaving] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+
+	// Confirm dialog
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmTitle, setConfirmTitle] = useState("");
+	const [confirmMessage, setConfirmMessage] = useState("");
+	const [confirmDanger, setConfirmDanger] = useState(false);
+	const confirmActionRef = useRef<(() => void) | null>(null);
+
+	// Toast
+	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
+
+	function showToast(type: "error" | "success" | "info", message: string) {
+		setToast({ type, message });
+	}
+
+	function confirm(title: string, message: string, action: () => void, danger = true) {
+		setConfirmTitle(title);
+		setConfirmMessage(message);
+		setConfirmDanger(danger);
+		confirmActionRef.current = action;
+		setConfirmOpen(true);
+	}
 
 	// Custom dynamic fee definitions
 	const [customFees, setCustomFees] = useState<FeeItem[]>(() => {
@@ -315,11 +338,16 @@ export function EnterpriseFeeSchedule() {
 	}
 
 	function handleDeleteCustomFee(key: string, title: string) {
-		if (!window.confirm(`Are you sure you want to remove fee schedule "${title}"?`)) return;
-		const updated = customFees.filter((f) => f.key !== key);
-		setCustomFees(updated);
-		localStorage.setItem(CUSTOM_FEES_STORAGE_KEY, JSON.stringify(updated));
-		setFlash(`Fee "${title}" removed.`);
+		confirm(
+			"Remove Fee Schedule",
+			`Are you sure you want to remove fee schedule "${title}"? This action cannot be undone.`,
+			() => {
+				const updated = customFees.filter((f) => f.key !== key);
+				setCustomFees(updated);
+				localStorage.setItem(CUSTOM_FEES_STORAGE_KEY, JSON.stringify(updated));
+				setFlash(`Fee "${title}" removed.`);
+			},
+		);
 	}
 
 	async function handleSaveFee(e: React.FormEvent) {
@@ -840,6 +868,30 @@ export function EnterpriseFeeSchedule() {
 						</form>
 					</div>
 				</div>
+			)}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title={confirmTitle}
+				message={confirmMessage}
+				danger={confirmDanger}
+				onConfirm={() => {
+					setConfirmOpen(false);
+					confirmActionRef.current?.();
+					confirmActionRef.current = null;
+				}}
+				onCancel={() => {
+					setConfirmOpen(false);
+					confirmActionRef.current = null;
+				}}
+			/>
+
+			{toast && (
+				<Toast
+					type={toast.type}
+					message={toast.message}
+					onDone={() => setToast(null)}
+				/>
 			)}
 		</div>
 	);

@@ -3,6 +3,7 @@ import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 export interface ClientUser {
 	id: string;
@@ -52,7 +53,29 @@ export function ClientDirectory() {
 	const [revokeTarget, setRevokeTarget] = useState<ClientUser | null>(null);
 	const [revokeSubmitting, setRevokeSubmitting] = useState(false);
 
+	// Confirm dialog state
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmTitle, setConfirmTitle] = useState("");
+	const [confirmMessage, setConfirmMessage] = useState("");
+	const [confirmDanger, setConfirmDanger] = useState(false);
+	const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+
+	// Toast state
+	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
+
 	const canManageAccess = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager";
+
+	const showToast = (type: "error" | "success" | "info", message: string) => {
+		setToast({ type, message });
+	};
+
+	const confirm = (title: string, message: string, action: () => void, danger = false) => {
+		setConfirmTitle(title);
+		setConfirmMessage(message);
+		setConfirmDanger(danger);
+		setConfirmAction(() => action);
+		setConfirmOpen(true);
+	};
 
 	const say = (msg: string) => {
 		setFlash(msg);
@@ -163,16 +186,21 @@ export function ClientDirectory() {
 	};
 
 	const handleUnbanClient = async (c: ClientUser) => {
-		if (!window.confirm(`Are you sure you want to restore portal access for ${c.name} (${c.email})?`)) return;
-		try {
-			await apiFetch(`${API_PREFIX}/client-users/${c.id}/unban`, {
-				method: "POST",
-			});
-			say(`Account access restored for ${c.name}.`);
-			await fetchClients();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to restore account");
-		}
+		confirm(
+			"Restore Portal Access",
+			`Are you sure you want to restore portal access for ${c.name} (${c.email})?`,
+			async () => {
+				try {
+					await apiFetch(`${API_PREFIX}/client-users/${c.id}/unban`, {
+						method: "POST",
+					});
+					say(`Account access restored for ${c.name}.`);
+					await fetchClients();
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "Failed to restore account");
+				}
+			},
+		);
 	};
 
 	return (
@@ -486,5 +514,26 @@ export function ClientDirectory() {
 				</div>
 			)}
 		</div>
-	);
+
+		<ConfirmDialog
+			open={confirmOpen}
+			title={confirmTitle}
+			message={confirmMessage}
+			danger={confirmDanger}
+			onConfirm={() => {
+				setConfirmOpen(false);
+				confirmAction?.();
+			}}
+			onCancel={() => setConfirmOpen(false)}
+		/>
+
+		{toast && (
+			<Toast
+				type={toast.type}
+				message={toast.message}
+				onDone={() => setToast(null)}
+			/>
+		)}
+	</>
+);
 }

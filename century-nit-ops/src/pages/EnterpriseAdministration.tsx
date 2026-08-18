@@ -9,6 +9,7 @@ import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsM
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 import { ClientDirectory } from "./ClientDirectory";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 const INVITEABLE: Record<string, OpsRole[]> = {
 	super_admin: ["super_admin", "admin", "manager", "coordinator", "consultant", "finance"],
@@ -404,6 +405,13 @@ function UsersAndRoles() {
 	const [creatingRole, setCreatingRole] = useState(false);
 	const [draft, setDraft] = useState({ name: "", email: "", role: "consultant" as OpsRole, branch: "accra" });
 
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmTitle, setConfirmTitle] = useState("");
+	const [confirmMessage, setConfirmMessage] = useState("");
+	const [confirmDanger, setConfirmDanger] = useState(false);
+	const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
+	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
+
 	const [newRoleDraft, setNewRoleDraft] = useState<{
 		id: string;
 		name: string;
@@ -468,6 +476,18 @@ function UsersAndRoles() {
 		setFlash(msg);
 		window.setTimeout(() => setFlash(null), 4000);
 	};
+
+	function showToast(type: "error" | "success" | "info", message: string) {
+		setToast({ type, message });
+	}
+
+	function confirm(title: string, message: string, action: () => void, danger = false) {
+		setConfirmTitle(title);
+		setConfirmMessage(message);
+		setConfirmDanger(danger);
+		setConfirmAction(() => action);
+		setConfirmOpen(true);
+	}
 
 	async function submitInvite(e: React.FormEvent) {
 		e.preventDefault();
@@ -659,15 +679,21 @@ function UsersAndRoles() {
 	}
 
 	async function handleDeleteRole(roleId: string, roleName: string) {
-		if (!window.confirm(`Are you sure you want to delete custom role "${roleName}"?`)) return;
-		try {
-			await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
-			say(`Role "${roleName}" deleted.`);
-			setSelectedRoleId("super_admin");
-			await refresh();
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to delete role");
-		}
+		confirm(
+			`Delete role "${roleName}"?`,
+			"This action cannot be undone. All staff assigned to this role will need to be reassigned.",
+			async () => {
+				try {
+					await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
+					say(`Role "${roleName}" deleted.`);
+					setSelectedRoleId("super_admin");
+					await refresh();
+				} catch (err) {
+					setError(err instanceof ApiError ? err.message : "Failed to delete role");
+				}
+			},
+			true,
+		);
 	}
 
 	const allModuleIds = useMemo(() => {
@@ -1603,6 +1629,26 @@ function UsersAndRoles() {
 						</form>
 					</div>
 				</div>
+			)}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title={confirmTitle}
+				message={confirmMessage}
+				danger={confirmDanger}
+				confirmLabel={confirmDanger ? "Delete" : "Confirm"}
+				onConfirm={() => {
+					setConfirmOpen(false);
+					confirmAction?.();
+				}}
+				onCancel={() => setConfirmOpen(false)}
+			/>
+			{toast && (
+				<Toast
+					type={toast.type}
+					message={toast.message}
+					onDone={() => setToast(null)}
+				/>
 			)}
 		</>
 	);

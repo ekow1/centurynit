@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { API_PREFIX, LookupValue } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 type LoadState = "idle" | "loading" | "error" | "ready";
 
@@ -11,6 +12,12 @@ export function EnterpriseLookups() {
 
 	const [editing, setEditing] = useState<Partial<LookupValue> | null>(null);
 	const [saving, setSaving] = useState(false);
+
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
+
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null);
 
 	const loadAll = useCallback(async () => {
 		setLoadState("loading");
@@ -69,24 +76,26 @@ export function EnterpriseLookups() {
 			setEditing(null);
 			void loadAll();
 		} catch (err) {
-			alert(err instanceof ApiError ? err.message : String(err));
+			showToast("error", err instanceof ApiError ? err.message : String(err));
 		} finally {
 			setSaving(false);
 		}
 	}
 
 	async function handleDelete(id: string) {
-		if (!confirm("Are you sure you want to delete this lookup option?")) return;
-		try {
-			await apiFetch(`${API_PREFIX}/lookups/${id}`, { method: "DELETE" });
-			void loadAll();
-		} catch (err) {
-			alert(err instanceof ApiError ? err.message : String(err));
-		}
+		setConfirmAction(() => async () => {
+			try {
+				await apiFetch(`${API_PREFIX}/lookups/${id}`, { method: "DELETE" });
+				void loadAll();
+			} catch (err) {
+				showToast("error", err instanceof ApiError ? err.message : String(err));
+			}
+		});
+		setConfirmOpen(true);
 	}
 
 	return (
-		<div className="admin-page fade-in">
+		<div className="fade-in">
 			<div className="admin-section-head" style={{ marginBottom: "2rem" }}>
 				<div>
 					<h2 className="section-title">Form Options Catalogue</h2>
@@ -252,7 +261,18 @@ export function EnterpriseLookups() {
 						</form>
 					</div>
 				</div>
-			)}
+		)}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title="Delete Lookup"
+				message="Are you sure you want to delete this lookup option?"
+				danger
+				confirmLabel="Delete"
+				onConfirm={() => { confirmAction?.(); setConfirmOpen(false); setConfirmAction(null); }}
+				onCancel={() => { setConfirmOpen(false); setConfirmAction(null); }}
+			/>
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

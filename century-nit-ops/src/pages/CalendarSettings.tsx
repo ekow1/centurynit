@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ApiError, calendarApi, type CalendarStatus } from "century-nit-core/api";
+import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 /**
  * Employee Google Calendar connection (§4).
@@ -184,6 +185,26 @@ export function CalendarSettings() {
 	const [busy, setBusy] = useState(false);
 	const [params, setParams] = useSearchParams();
 
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const [confirmTitle, setConfirmTitle] = useState("");
+	const [confirmMessage, setConfirmMessage] = useState("");
+	const [confirmDanger, setConfirmDanger] = useState(false);
+	const confirmActionRef = useRef<() => void>(() => {});
+
+	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
+
+	function showToast(type: "error" | "success" | "info", message: string) {
+		setToast({ type, message });
+	}
+
+	function confirm(title: string, message: string, action: () => void, danger = false) {
+		setConfirmTitle(title);
+		setConfirmMessage(message);
+		setConfirmDanger(danger);
+		confirmActionRef.current = action;
+		setConfirmOpen(true);
+	}
+
 	const callback = params.get("calendar");
 	const banner = callback ? CALLBACK_MESSAGE[callback] : undefined;
 
@@ -236,18 +257,22 @@ export function CalendarSettings() {
 	}
 
 	async function disconnect() {
-		if (!window.confirm("Disconnect Google Calendar? New bookings will not create meeting links.")) {
-			return;
-		}
-		setBusy(true);
-		try {
-			await calendarApi.disconnect();
-			load();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not disconnect.");
-		} finally {
-			setBusy(false);
-		}
+		confirm(
+			"Disconnect Google Calendar?",
+			"New bookings will not create meeting links.",
+			async () => {
+				setBusy(true);
+				try {
+					await calendarApi.disconnect();
+					load();
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "Could not disconnect.");
+				} finally {
+					setBusy(false);
+				}
+			},
+			true,
+		);
 	}
 
 	return (
@@ -311,6 +336,20 @@ export function CalendarSettings() {
 			)}
 
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title={confirmTitle}
+				message={confirmMessage}
+				danger={confirmDanger}
+				onConfirm={() => {
+					setConfirmOpen(false);
+					confirmActionRef.current();
+				}}
+				onCancel={() => setConfirmOpen(false)}
+			/>
+
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</section>
 	);
 }

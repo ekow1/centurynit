@@ -882,7 +882,7 @@ function ConsultationOutcome({
 	autopilot: boolean;
 }) {
 	const outcome = booking.eligibilityOutcome;
-	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete");
+	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete" && booking.consultationPhase !== "cancelled");
 	const recs = CONSULTANT_RECOMMENDATIONS[outcome];
 	const [respondState, setRespondState] = useState<"idle" | "loading" | "done">("idle");
 	const [respondAction, setRespondAction] = useState<"accept" | "request_info" | null>(null);
@@ -924,6 +924,28 @@ function ConsultationOutcome({
 					</div>
 					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
 						Booking ref: {booking.confirmationId}
+					</p>
+				</div>
+			</>
+		);
+	}
+
+	if (booking.consultationPhase === "cancelled") {
+		return (
+			<>
+				<p className="eyebrow">Outcome</p>
+				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+					<p className="display" style={{ fontSize: "1.3rem" }}>Consultation cancelled</p>
+					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
+						Your consultation has been cancelled. If you'd like to continue, you can book a new appointment from the Appointments tab.
+					</p>
+					<div className="row mt-4" style={{ justifyContent: "center" }}>
+						<Button to="/portal/appointments" arrow>
+							Book a new appointment →
+						</Button>
+					</div>
+					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
+						Case ref: {booking.confirmationId}
 					</p>
 				</div>
 			</>
@@ -1351,6 +1373,20 @@ function ConsultationReview({
 						View outcome →
 					</Button>
 				</div>
+			) : phase === "cancelled" ? (
+				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>
+					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
+						Booking ref: {booking.confirmationId}
+					</p>
+					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+						This consultation was cancelled. Book a new appointment from the Appointments tab to continue.
+					</p>
+					<div className="row mt-3" style={{ justifyContent: "center" }}>
+						<Button to="/portal/appointments" variant="secondary" arrow>
+							Book a new appointment →
+						</Button>
+					</div>
+				</div>
 			) : phase !== "assessment_complete" ? (
 				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>
 					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
@@ -1378,7 +1414,7 @@ export function PortalConsultationBookingFlow({ onComplete }: { onComplete: () =
 	} = useAppState();
 	const [selectedTab, setSelectedTab] = useState(0);
 	const tab = useMemo(() => {
-		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete") {
+		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "cancelled") {
 			return CONSULT_TABS.length - 1;
 		}
 		return selectedTab;
@@ -1857,12 +1893,17 @@ export function PortalConsultation() {
 						<h3 className="section-title mb-2" style={{ fontSize: "1.1rem" }}>
 							Assigned Academic Counselor
 						</h3>
-						{liveConsultation?.status === "CANCELLED" ? (
-							<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
+					{liveConsultation?.status === "CANCELLED" ? (
+						<div>
+							<p className="muted" style={{ fontSize: "0.9rem", margin: "0 0 0.75rem 0" }}>
 								This consultation appointment was cancelled. If you would like to book a new appointment,
-								please proceed to the Appointments tab.
+								you can do so from the Appointments tab.
 							</p>
-						) : activeOfficer ? (
+							<Button to="/portal/appointments" variant="secondary" arrow>
+								Book a new appointment →
+							</Button>
+						</div>
+					) : activeOfficer ? (
 							<div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
 								<div
 									style={{

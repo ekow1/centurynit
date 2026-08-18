@@ -188,8 +188,8 @@ export function EnterpriseConsultations() {
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
 							{(canAssignWork
-								? ["All", "Under Review", "Assigned", "In Assessment", "Completed"]
-								: ["All", "Assigned", "In Assessment", "Completed"]
+								? ["All", "Under Review", "Assigned", "In Assessment", "Completed", "Cancelled"]
+								: ["All", "Assigned", "In Assessment", "Completed", "Cancelled"]
 							).map((tab) => (
 								<button
 									key={tab}
@@ -497,19 +497,50 @@ export function EnterpriseConsultations() {
 									</p>
 								</div>
 							)}
-							{active.status === "Completed" && (
-								<div style={{ padding: "0.75rem 1.25rem", background: "#d1fae5", borderBottom: "1px solid #6ee7b7", flexShrink: 0 }}>
-									<p style={{ fontSize: "var(--text-sm)", color: "#065f46" }}>
-										<strong>Assessment completed.</strong>
-										{active.assessmentResult ? ` Outcome: ${active.assessmentResult.outcome} - ${active.assessmentResult.recProgram} at ${active.assessmentResult.recUniversity} (${active.assessmentResult.recCountry}).` : ""}
-									</p>
-								</div>
-							)}
+						{active.status === "Completed" && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "#d1fae5", borderBottom: "1px solid #6ee7b7", flexShrink: 0 }}>
+								<p style={{ fontSize: "var(--text-sm)", color: "#065f46" }}>
+									<strong>Assessment completed.</strong>
+									{active.assessmentResult ? ` Outcome: ${active.assessmentResult.outcome} - ${active.assessmentResult.recProgram} at ${active.assessmentResult.recUniversity} (${active.assessmentResult.recCountry}).` : ""}
+								</p>
+							</div>
+						)}
+						{active.status === "Cancelled" && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "#fee2e2", borderBottom: "1px solid #fca5a5", flexShrink: 0 }}>
+								<p style={{ fontSize: "var(--text-sm)", color: "#991b1b" }}>
+									<strong>This consultation has been cancelled.</strong> The linked appointment was released and the applicant has been notified.
+								</p>
+							</div>
+						)}
+						{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
+							<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0, display: "flex", justifyContent: "flex-end" }}>
+								<button
+									type="button"
+									onClick={() => {
+										const reason = window.prompt("Enter a cancellation reason (optional):");
+										if (reason === null) return;
+										void cancelConsultation(active.id, reason || undefined)
+											.then(() => {
+												setSelectedConsultation(null);
+												void refresh();
+											})
+											.catch((e) => {
+												const msg = e instanceof Error ? e.message : "Could not cancel consultation.";
+												window.alert(msg);
+											});
+									}}
+									className="btn btn--sm"
+									style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
+								>
+									✕ Cancel Case
+								</button>
+							</div>
+						)}
 
 							{/* Detail Tabs */}
 							<div style={{ display: "flex", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 								{(["profile", "documents", "assessment"] as const).map((t) => {
-									const labels = { profile: "1. Background", documents: `2. Documents (${active.documents.length})`, assessment: "3. Decision" };
+									const labels = { profile: "1. Background", documents: `2. Documents (${realDocs.length})`, assessment: "3. Decision" };
 									const disabled = t === "assessment" && active.status === "Under Review";
 									return (
 										<button
@@ -549,12 +580,14 @@ export function EnterpriseConsultations() {
 									assignedEmail={active.assignedOfficerEmail}
 									comments={active.comments ?? []}
 									requestedDocuments={active.requestedDocuments ?? []}
-									canAssign={canAssignWork && active.status !== "Completed" && active.status !== "In Assessment"}
-									closedNote={
-										active.status === "Completed"
-											? "Read-only - this consultation is completed. Reopen it to make changes."
+								canAssign={canAssignWork && active.status !== "Completed" && active.status !== "In Assessment" && active.status !== "Cancelled"}
+								closedNote={
+									active.status === "Completed"
+										? "Read-only - this consultation is completed. Reopen it to make changes."
+										: active.status === "Cancelled"
+											? "Read-only - this consultation has been cancelled."
 											: undefined
-									}
+								}
 									actor={opsUser?.name ?? "Staff"}
 									isMine={isMine}
 									assignees={assignees}

@@ -56,6 +56,7 @@ import {
 	applicationSchema,
 	assignCaseSchema,
 	CASE_ERROR_CODES,
+	cancelConsultationSchema,
 	choosePackageSchema,
 	choosePaymentPlanSchema,
 	completeAssessmentSchema,
@@ -325,7 +326,14 @@ consultationsRouter.openapi(
 		tags: ["Consultations"],
 		summary: "Force-cancel a consultation (ops only)",
 		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: { params: idParams },
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: cancelConsultationSchema } },
+				description: "Cancellation reason",
+				required: true,
+			},
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: consultationSchema } },
@@ -335,7 +343,12 @@ consultationsRouter.openapi(
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
-		await cancelConsultation(id);
+		const body = c.req.valid("json") as { reason?: string };
+		const staff = c.get("staff");
+		const actor = staff
+			? { opsUserId: staff.opsUserId, name: staff.name, email: staff.email }
+			: { opsUserId: "", name: c.get("user").name ?? c.get("user").email, email: c.get("user").email };
+		await cancelConsultation(id, actor, body?.reason);
 		return c.json(await serializeConsultation((await getConsultation(id))!));
 	},
 );

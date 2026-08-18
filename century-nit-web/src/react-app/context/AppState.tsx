@@ -291,7 +291,8 @@ export type BookingData = {
 		| "awaiting_assignment_confirmation"
 		| "assessment"
 		| "assessment_complete"
-		| "outcome";
+		| "outcome"
+		| "cancelled";
 	consultantName: string | null;
 	/** id into `consultants` - resolves to title, photo, specialties */
 	consultantId: string | null;
@@ -1922,8 +1923,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			const res = await meApi.application();
 			if (res.consultation) {
 				const c = res.consultation;
-				const phase: BookingData["consultationPhase"] =
-					c.status === "COMPLETED"
+			const phase: BookingData["consultationPhase"] =
+				c.status === "CANCELLED"
+					? "cancelled"
+					: c.status === "COMPLETED"
 						? "outcome"
 						: c.status === "IN_ASSESSMENT"
 							? "assessment"

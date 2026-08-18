@@ -196,6 +196,10 @@ export const assignCaseSchema = z.object({
 	employeeId: z.string().uuid(),
 });
 export const completeAssessmentSchema = assessmentResultSchema;
+export const cancelConsultationSchema = z.object({
+	reason: z.string().max(1000).optional(),
+});
+export type CancelConsultation = z.infer<typeof cancelConsultationSchema>;
 export const addCommentSchema = z.object({
 	kind: commentKindSchema.default("comment"),
 	text: z.string().min(1).max(4000),

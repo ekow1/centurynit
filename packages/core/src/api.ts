@@ -544,8 +544,11 @@ export const consultationsApi = {
 			...json({ documents }),
 		});
 	},
-	cancel(id: string): Promise<ApiConsultation> {
-		return request(`${API_PREFIX}/consultations/${id}/cancel`, { method: "PATCH" });
+	cancel(id: string, reason?: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/cancel`, {
+			method: "PATCH",
+			body: JSON.stringify({ reason: reason ?? "" }),
+		});
 	},
 };
 

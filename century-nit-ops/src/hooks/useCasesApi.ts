@@ -293,8 +293,8 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.comment(id, { kind, text })),
 		requestConsultationDocs: async (id: string, documents: string[]) =>
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
-		cancelConsultation: async (id: string) =>
-			replaceConsultation(await consultationsApi.cancel(id)),
+		cancelConsultation: async (id: string, reason?: string) =>
+			replaceConsultation(await consultationsApi.cancel(id, reason)),
 		rescheduleConsultation: async (id: string, bookingId: string, date: string, time: string, reason: string) => {
 			await bookingsApi.reschedule(bookingId, { date, time, reason });
 			const consultation = await consultationsApi.get(id);

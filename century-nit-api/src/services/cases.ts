@@ -264,10 +264,17 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 /**
  * Force-cancel the entire consultation process (separate from cancelling a
  * single booking).  Used by ops when the engagement should end entirely.
+ *
+ * Cascades to the linked booking so that the calendar event is removed,
+ * reminders are cancelled, and the applicant + employee are notified by email.
  */
-export async function cancelConsultation(consultationId: string): Promise<void> {
+export async function cancelConsultation(
+	consultationId: string,
+	actor: { opsUserId: string; name: string; email: string },
+	reason?: string,
+): Promise<void> {
 	const [row] = await db
-		.select({ id: consultations.id, status: consultations.status })
+		.select({ id: consultations.id, status: consultations.status, bookingId: consultations.bookingId, applicantId: consultations.applicantId })
 		.from(consultations)
 		.where(eq(consultations.id, consultationId))
 		.limit(1);
@@ -279,6 +286,32 @@ export async function cancelConsultation(consultationId: string): Promise<void> 
 		.update(consultations)
 		.set({ status: "CANCELLED", updatedAt: new Date() })
 		.where(eq(consultations.id, row.id));
+
+	// Audit trail — record why the case was cancelled.
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "status",
+		text: `Consultation cancelled by ${actor.name}${reason ? `: ${reason}` : "."}`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+
+	// Cascade to the linked booking — this handles calendar cancellation,
+	// reminder cancellation, and email notifications to client + employee.
+	if (row.bookingId) {
+		try {
+			const { cancelBooking } = await import("./booking.js");
+			await cancelBooking({
+				bookingId: row.bookingId,
+				reason: reason ?? "Consultation cancelled by operations",
+				actor,
+			});
+		} catch {
+			// The booking may already be cancelled or in a terminal state.
+			// The consultation itself is already cancelled, which is what matters.
+		}
+	}
 }
 
 /* ── Serialise ───────────────────────────────────────────────────────────── */

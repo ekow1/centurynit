@@ -17,6 +17,7 @@ import {
 	type AssignScholarship,
 	type StudentScholarship,
 	type VisaStage,
+	type JourneyStage,
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -307,7 +308,7 @@ export function useCasesApi() {
 		loading,
 		error,
 		refresh,
-		setApplicationStage: async (appId: string, stage: string) => {
+		setApplicationStage: async (appId: string, stage: JourneyStage) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			replaceApplication(await applicationsApi.setStage(app.id, stage));

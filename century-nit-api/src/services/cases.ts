@@ -8,6 +8,8 @@ import {
 	type ApplicantProfile,
 	type AssessmentResult,
 	type CaseApplicationStatus,
+	JOURNEY_STAGES,
+	type JourneyStage,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
@@ -385,7 +387,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		assignedStaffId: row.assignedStaffId,
 		assignedStaffName: staff?.name ?? null,
 		assignedStaffEmail: staff?.email ?? null,
-		stage: row.stage,
+		stage: row.stage as JourneyStage,
 		status: row.status,
 		fundingTrack: row.fundingTrack,
 		notes: row.notes,
@@ -708,7 +710,7 @@ export async function completeConsultationAssessment(input: {
 				country: input.result.recCountry || row.targetCountry || applicant.targetCountry || "TBC",
 				degreeLevel: (applicant.profile as ApplicantProfile)?.degreeLevel || "Master's",
 				assignedStaffId: row.assignedOfficerId,
-				stage: "Document Verification",
+				stage: "document_verification",
 				status: "UNDER_REVIEW",
 				fundingTrack: input.result.recPackage || null,
 				notes: input.result.notes || "Opened from a completed consultation assessment.",
@@ -880,9 +882,12 @@ export async function acceptApplication(id: string, actor: Actor): Promise<Appli
 
 export async function setApplicationStage(
 	id: string,
-	stage: string,
+	stage: JourneyStage,
 	actor: Actor,
 ): Promise<ApplicationRow> {
+	if (!JOURNEY_STAGES.includes(stage)) {
+		throw new HttpError(400, "INVALID_STAGE", `Unknown journey stage: ${stage}`);
+	}
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 	const [updated] = await db

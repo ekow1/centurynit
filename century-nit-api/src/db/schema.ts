@@ -827,7 +827,7 @@ export const applications = pgTable(
 		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
-		stage: varchar("stage", { length: 80 }).notNull().default("Document Verification"),
+		stage: varchar("stage", { length: 80 }).notNull().default("document_verification"),
 		status: applicationStatusEnum("status").notNull().default("UNDER_REVIEW"),
 		fundingTrack: text("funding_track"),
 		notes: text("notes"),

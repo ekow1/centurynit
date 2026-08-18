@@ -5,6 +5,63 @@ import { z } from "zod";
  * profile they hang off. Commands, not CRUD, for every state change.
  */
 
+/**
+ * Unified journey stage enum — the single source of truth for the application
+ * pipeline. Both the ops console and the portal import this; the API validates
+ * against it. The portal derives its finer-grained `ProcessStageId` display
+ * stages from this value + invoice/payment signals.
+ *
+ * Stored in `applications.stage`. Ordered chronologically.
+ */
+export const journeyStageSchema = z.enum([
+	"document_verification",
+	"school_submission",
+	"offer_letter_review",
+	"visa_processing",
+	"payment_execution",
+	"travel_assistance",
+	"completed",
+]);
+export type JourneyStage = z.infer<typeof journeyStageSchema>;
+
+/** Ordered array for pipeline display / "advance to next" logic. */
+export const JOURNEY_STAGES: JourneyStage[] = [
+	"document_verification",
+	"school_submission",
+	"offer_letter_review",
+	"visa_processing",
+	"payment_execution",
+	"travel_assistance",
+	"completed",
+];
+
+/** Human-readable labels for the ops UI. */
+export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = {
+	document_verification: "Document Verification",
+	school_submission: "School Submission",
+	offer_letter_review: "Offer Letter Review",
+	visa_processing: "Visa Processing",
+	payment_execution: "Payment Execution",
+	travel_assistance: "Travel Assistance",
+	completed: "Completed",
+};
+
+/**
+ * Mapping from the coarse `JourneyStage` (stored in the DB) to the portal's
+ * fine-grained `ProcessStageId` (derived for UI display). The portal uses this
+ * to decide which chapter to show, but the *authoritative* value is the
+ * `JourneyStage` on the application row.
+ */
+export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
+	document_verification: "school_package",
+	school_submission: "school_tracking",
+	offer_letter_review: "school_tracking",
+	visa_processing: "visa",
+	payment_execution: "visa",
+	travel_assistance: "pre_departure",
+	completed: "completed",
+};
+
 export const consultationStatusSchema = z.enum([
 	"UNDER_REVIEW",
 	"ASSIGNED",
@@ -170,7 +227,7 @@ export const applicationSchema = z.object({
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable(),
 	assignedStaffEmail: z.string().email().nullable(),
-	stage: z.string(),
+	stage: journeyStageSchema,
 	status: applicationStatusSchema,
 	fundingTrack: z.string().nullable(),
 	notes: z.string().nullable(),
@@ -220,7 +277,7 @@ export const requestDocumentsSchema = z.object({
 	documents: z.array(z.string().min(1).max(200)).min(1).max(20),
 });
 export const setStageSchema = z.object({
-	stage: z.string().min(1).max(80),
+	stage: journeyStageSchema,
 });
 export const toggleChecklistSchema = z.object({
 	itemId: z.string().min(1),

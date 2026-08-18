@@ -75,6 +75,9 @@ import {
 	consultationListSchema,
 	consultationSchema,
 	delegateConsultationSchema,
+	JOURNEY_STAGES,
+	JOURNEY_STAGE_TO_PORTAL,
+	type JourneyStage,
 	invoiceSchema,
 	myApplicationSchema,
 	paystackCheckoutSchema,
@@ -1277,6 +1280,7 @@ meRouter.openapi(
 
 const journeySchema = z.object({
 	currentStage: z.string(),
+	portalStage: z.string(),
 	chapterUnlocks: z.object({
 		journey: z.boolean(),
 		consultation: z.boolean(),
@@ -1311,6 +1315,7 @@ meRouter.openapi(
 		if (!applicant) {
 			return c.json({
 				currentStage: "consultation",
+				portalStage: "consultation",
 				chapterUnlocks: {
 					journey: true,
 					consultation: true,
@@ -1360,7 +1365,7 @@ meRouter.openapi(
 		const isCompleted = application?.travelClearance === "cleared";
 
 		// ── Determine stage ────────────────────────────────────────────────
-		type Stage =
+		type PortalStage =
 			| "consultation"
 			| "eligibility"
 			| "school_package"
@@ -1372,30 +1377,68 @@ meRouter.openapi(
 			| "pre_departure"
 			| "completed";
 
-		let currentStage: Stage = "consultation";
+		let derivedPortalStage: PortalStage = "consultation";
 
 		if (isCompleted || (isVisaDone && isPreDepartureDone)) {
-			currentStage = "completed";
+			derivedPortalStage = "completed";
 		} else if (hasAdmitted && isVisaDone) {
-			currentStage = "pre_departure";
+			derivedPortalStage = "pre_departure";
 		} else if (hasAdmitted && isVisaInvoicePaid) {
-			currentStage = "visa";
+			derivedPortalStage = "visa";
 		} else if (hasAdmitted && !isVisaInvoicePaid) {
-			currentStage = "visa_invoice";
+			derivedPortalStage = "visa_invoice";
 		} else if (isAppInvoicePaid && hasSelection) {
-			currentStage = "school_tracking";
+			derivedPortalStage = "school_tracking";
 		} else if (hasSelection && !isAppInvoicePaid) {
-			currentStage = "application_invoice";
+			derivedPortalStage = "application_invoice";
 		} else if (hasPackage) {
-			currentStage = "school_select";
+			derivedPortalStage = "school_select";
 		} else if (isEligible && !hasPackage) {
-			currentStage = "school_package";
+			derivedPortalStage = "school_package";
 		} else if (hasConsultation) {
-			currentStage = "eligibility";
+			derivedPortalStage = "eligibility";
 		}
 
+		// ── Coarse stage from the DB (primary), fall back to derivation ──
+		const dbStage = application?.stage;
+		const coarseStage: JourneyStage | null =
+			dbStage && (JOURNEY_STAGES as string[]).includes(dbStage)
+				? (dbStage as JourneyStage)
+				: null;
+
+		// ── Portal stage: refine the coarse stage via JOURNEY_STAGE_TO_PORTAL ──
+		// with invoice signals. Falls back to the heuristic derivation when no
+		// coarse stage is available (e.g. before an application row exists).
+		let portalStage: PortalStage = derivedPortalStage;
+		if (coarseStage) {
+			const base = JOURNEY_STAGE_TO_PORTAL[coarseStage] as PortalStage;
+			portalStage = base;
+			if (coarseStage === "document_verification") {
+				if (hasPackage && !hasSelection) portalStage = "school_select";
+				else if (!hasPackage && isEligible) portalStage = "school_package";
+				else if (!isEligible && hasConsultation) portalStage = "eligibility";
+				else if (!hasConsultation) portalStage = "consultation";
+			} else if (coarseStage === "school_submission") {
+				if (hasSelection && !isAppInvoicePaid) portalStage = "application_invoice";
+				else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
+			} else if (coarseStage === "offer_letter_review") {
+				portalStage = "school_tracking";
+			} else if (coarseStage === "visa_processing" || coarseStage === "payment_execution") {
+				if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
+				else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
+				else portalStage = "visa";
+			} else if (coarseStage === "travel_assistance") {
+				if (isCompleted || (isVisaDone && isPreDepartureDone)) portalStage = "completed";
+				else portalStage = "pre_departure";
+			} else if (coarseStage === "completed") {
+				portalStage = "completed";
+			}
+		}
+
+		const currentStage: string = coarseStage ?? portalStage;
+
 		// ── Labels ─────────────────────────────────────────────────────────
-		const stageLabel: Record<Stage, string> = {
+		const stageLabel: Record<PortalStage, string> = {
 			consultation: "Stage I \u00b7 Consultation first",
 			eligibility: "Awaiting eligibility",
 			school_package: "Choose school application package",
@@ -1408,7 +1451,7 @@ meRouter.openapi(
 			completed: "Application complete",
 		};
 
-		const stageOrder: Stage[] = [
+		const stageOrder: PortalStage[] = [
 			"consultation",
 			"eligibility",
 			"school_package",
@@ -1421,7 +1464,7 @@ meRouter.openapi(
 			"completed",
 		];
 
-		const idx = stageOrder.indexOf(currentStage);
+		const idx = stageOrder.indexOf(portalStage);
 		const nextUnlock =
 			idx >= 0 && idx < stageOrder.length - 1
 				? stageLabel[stageOrder[idx + 1]]
@@ -1441,8 +1484,9 @@ meRouter.openapi(
 
 		return c.json({
 			currentStage,
+			portalStage,
 			chapterUnlocks,
-			label: stageLabel[currentStage],
+			label: stageLabel[portalStage],
 			nextUnlock,
 		});
 	},

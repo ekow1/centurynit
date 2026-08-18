@@ -815,7 +815,7 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 					degreeLevel: target.goals.degreeLevel || "Master's",
 					assignedStaff: target.assignedOfficer,
 					assignedStaffEmail: target.assignedOfficerEmail,
-					stage: "Document Verification",
+					stage: "document_verification",
 					status: "Under Review",
 					submittedDate: new Date().toISOString().split("T")[0],
 					fundingTrack: result.recPackage || "Standard Admission",

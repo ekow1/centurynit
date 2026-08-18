@@ -7,6 +7,7 @@ import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
+import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 export function EnterpriseCases() {
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
@@ -26,16 +27,9 @@ export function EnterpriseCases() {
 	/**
 	 * The pipeline a case advances through. Mirrors the Workflow Board columns
 	 * so "Advance to next stage" moves a case to the same place a drag would.
+	 * `JOURNEY_STAGES` is the shared source of truth; `JOURNEY_STAGE_LABELS`
+	 * provides the human-readable label for display.
 	 */
-	const STAGES = [
-		"Document Verification",
-		"School Submission",
-		"Offer Letter Review",
-		"Visa Processing",
-		"Payment Plan",
-		"Travel Assistance",
-		"Completed",
-	] as const;
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -86,14 +80,14 @@ export function EnterpriseCases() {
 
 	async function handleAdvanceStage() {
 		if (!selectedApp) return;
-		const idx = STAGES.indexOf(selectedApp.stage as (typeof STAGES)[number]);
+		const idx = JOURNEY_STAGES.indexOf(selectedApp.stage as JourneyStage);
 		if (idx < 0) return;
-		const next = STAGES[idx + 1];
+		const next = JOURNEY_STAGES[idx + 1];
 		if (!next) return;
 		try {
 			await setApplicationStage(selectedApp.appId, next);
 			setSelectedApp({ ...selectedApp, stage: next });
-			setActionSuccess(`Advanced to "${next}"`);
+			setActionSuccess(`Advanced to "${JOURNEY_STAGE_LABELS[next]}"`);
 			setTimeout(() => setActionSuccess(null), 4000);
 		} catch (err: unknown) {
 			setActionSuccess(null);
@@ -253,7 +247,7 @@ export function EnterpriseCases() {
 													{app.university} · {app.program}
 												</p>
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.5, marginTop: "0.15rem" }}>
-													{app.assignedStaff ? `Assigned: ${app.assignedStaff}` : "- unassigned"} · {app.stage}
+													{app.assignedStaff ? `Assigned: ${app.assignedStaff}` : "- unassigned"} · {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}
 												</p>
 											</div>
 											<span style={{ fontSize: "0.9rem", opacity: 0.4, flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
@@ -390,22 +384,22 @@ export function EnterpriseCases() {
 								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)", flexWrap: "wrap" }}>
 									<div>
 										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-											Current stage: {(liveSelected ?? selectedApp).stage}
+											Current stage: {JOURNEY_STAGE_LABELS[(liveSelected ?? selectedApp).stage as JourneyStage]}
 										</p>
 										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-											{(liveSelected ?? selectedApp).stage === "Completed"
+											{(liveSelected ?? selectedApp).stage === "completed"
 												? "This case has reached the final stage."
-												: `Next: ${STAGES[Math.min(STAGES.indexOf((liveSelected ?? selectedApp).stage as (typeof STAGES)[number]) + 1, STAGES.length - 1)] ?? "Completed"}`}
+												: `Next: ${JOURNEY_STAGE_LABELS[JOURNEY_STAGES[Math.min(JOURNEY_STAGES.indexOf((liveSelected ?? selectedApp).stage as JourneyStage) + 1, JOURNEY_STAGES.length - 1)]]}`}
 										</p>
 									</div>
 									<button
 										type="button"
 										onClick={handleAdvanceStage}
-										disabled={(liveSelected ?? selectedApp).stage === "Completed"}
+										disabled={(liveSelected ?? selectedApp).stage === "completed"}
 										className="btn btn--outline"
 										style={{ whiteSpace: "nowrap" }}
 									>
-										{(liveSelected ?? selectedApp).stage === "Completed"
+										{(liveSelected ?? selectedApp).stage === "completed"
 											? "✓ Completed"
 											: "Advance to next stage →"}
 									</button>

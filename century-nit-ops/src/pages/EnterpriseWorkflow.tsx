@@ -6,42 +6,34 @@ import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage, PreDepartureTask } from "century-nit-core/ops";
 import { listSchoolsForApplicant, updateSchoolStatus } from "../lib/api";
 import type { SchoolApplication } from "century-nit-shared";
+import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 /**
  * The pipeline every application moves through. Cards can be dragged between
  * columns or advanced with the arrow control - both write back to the ops store,
- * so the Applications table and dashboard update with them.
+ * so the Applications table and dashboard update with them. `JOURNEY_STAGES` is
+ * the shared source of truth; column keys are the enum values and labels come
+ * from `JOURNEY_STAGE_LABELS`.
  */
-const PIPELINE_STAGES = [
-	"Document Verification",
-	"School Submission",
-	"Offer Letter Review",
-	"Visa Processing",
-	"Payment Plan",
-	"Travel Assistance",
-	"Completed",
-] as const;
 
-type PipelineStage = (typeof PIPELINE_STAGES)[number];
-
-const STAGE_COLORS: Record<PipelineStage, string> = {
-	"Document Verification": "#3b82f6",
-	"School Submission": "#8b5cf6",
-	"Offer Letter Review": "#f59e0b",
-	"Visa Processing": "#06b6d4",
-	"Payment Plan": "#ec4899",
-	"Travel Assistance": "#f97316",
-	"Completed": "#22c55e",
+const STAGE_COLORS: Record<JourneyStage, string> = {
+	document_verification: "#3b82f6",
+	school_submission: "#8b5cf6",
+	offer_letter_review: "#f59e0b",
+	visa_processing: "#06b6d4",
+	payment_execution: "#ec4899",
+	travel_assistance: "#f97316",
+	completed: "#22c55e",
 };
 
-const STAGE_NUMBERS: Record<PipelineStage, number> = {
-	"Document Verification": 1,
-	"School Submission": 2,
-	"Offer Letter Review": 3,
-	"Visa Processing": 4,
-	"Payment Plan": 5,
-	"Travel Assistance": 6,
-	"Completed": 7,
+const STAGE_NUMBERS: Record<JourneyStage, number> = {
+	document_verification: 1,
+	school_submission: 2,
+	offer_letter_review: 3,
+	visa_processing: 4,
+	payment_execution: 5,
+	travel_assistance: 6,
+	completed: 7,
 };
 
 const VISA_STEPS: { id: VisaStage; label: string; detail: string }[] = [
@@ -94,9 +86,9 @@ function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 }
 
 /** Anything with an unrecognised stage lands in the first column. */
-function normaliseStage(stage: string): PipelineStage {
-	const match = PIPELINE_STAGES.find((s) => s.toLowerCase() === stage.toLowerCase());
-	return match ?? PIPELINE_STAGES[0];
+function normaliseStage(stage: string): JourneyStage {
+	const match = JOURNEY_STAGES.find((s) => s === stage);
+	return match ?? JOURNEY_STAGES[0];
 }
 
 function initials(name: string) {
@@ -113,7 +105,7 @@ export function EnterpriseWorkflow() {
 	const { opsUser, opsRole, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const { applications, setApplicationStage } = useCasesApi();
 	const [dragging, setDragging] = useState<string | null>(null);
-	const [dragOver, setDragOver] = useState<PipelineStage | null>(null);
+	const [dragOver, setDragOver] = useState<JourneyStage | null>(null);
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -145,21 +137,21 @@ export function EnterpriseWorkflow() {
 	}, [applications, scopeRecords, opsUser, ownerFilter, branchFilter]);
 
 	const columns = useMemo(() => {
-		const map = new Map<PipelineStage, MockApplication[]>();
-		for (const stage of PIPELINE_STAGES) map.set(stage, []);
+		const map = new Map<JourneyStage, MockApplication[]>();
+		for (const stage of JOURNEY_STAGES) map.set(stage, []);
 		for (const app of visible) {
 			map.get(normaliseStage(app.stage))!.push(app);
 		}
 		return map;
 	}, [visible]);
 
-	function move(appId: string, to: PipelineStage) {
+	function move(appId: string, to: JourneyStage) {
 		setApplicationStage(appId, to);
 	}
 
 	function advance(app: MockApplication) {
-		const idx = PIPELINE_STAGES.indexOf(normaliseStage(app.stage));
-		const next = PIPELINE_STAGES[idx + 1];
+		const idx = JOURNEY_STAGES.indexOf(normaliseStage(app.stage));
+		const next = JOURNEY_STAGES[idx + 1];
 		if (next) move(app.appId, next);
 	}
 
@@ -219,7 +211,7 @@ export function EnterpriseWorkflow() {
 
 			{/* Stage progress bar */}
 			<div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", alignItems: "center", overflowX: "auto", paddingBottom: "0.5rem" }}>
-				{PIPELINE_STAGES.map((stage, i) => {
+				{JOURNEY_STAGES.map((stage, i) => {
 					const count = columns.get(stage)?.length ?? 0;
 					const color = STAGE_COLORS[stage];
 					return (
@@ -243,11 +235,11 @@ export function EnterpriseWorkflow() {
 									{STAGE_NUMBERS[stage]}
 								</span>
 								<span className="muted" style={{ fontSize: "0.68rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-									{stage}
+									{JOURNEY_STAGE_LABELS[stage]}
 								</span>
 								<span style={{ marginLeft: "auto", fontSize: "0.68rem", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{count}</span>
 							</div>
-							{i < PIPELINE_STAGES.length - 1 && (
+							{i < JOURNEY_STAGES.length - 1 && (
 								<span className="muted" style={{ fontSize: "0.6rem", flexShrink: 0 }}>→</span>
 							)}
 						</div>
@@ -256,7 +248,7 @@ export function EnterpriseWorkflow() {
 			</div>
 
 			<div className="ops-board" style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: "1.5rem", alignItems: "flex-start" }}>
-				{PIPELINE_STAGES.map((stage) => {
+				{JOURNEY_STAGES.map((stage) => {
 					const cards = columns.get(stage) ?? [];
 					const isTarget = dragOver === stage;
 					const color = STAGE_COLORS[stage];
@@ -306,7 +298,7 @@ export function EnterpriseWorkflow() {
 									}}>
 										{STAGE_NUMBERS[stage]}
 									</span>
-									<h3 className="section-title" style={{ fontSize: "0.85rem", color: "inherit", margin: 0 }}>{stage}</h3>
+									<h3 className="section-title" style={{ fontSize: "0.85rem", color: "inherit", margin: 0 }}>{JOURNEY_STAGE_LABELS[stage]}</h3>
 								</div>
 								<span
 									className="portal-pill"
@@ -340,7 +332,7 @@ export function EnterpriseWorkflow() {
 									</div>
 								) : (
 									cards.map((app) => {
-										const isLast = normaliseStage(app.stage) === PIPELINE_STAGES[PIPELINE_STAGES.length - 1];
+										const isLast = normaliseStage(app.stage) === JOURNEY_STAGES[JOURNEY_STAGES.length - 1];
 										const done = app.checklist.filter((c) => c.checked).length;
 										const progress = app.checklist.length > 0 ? Math.round((done / app.checklist.length) * 100) : 0;
 										const stage = normaliseStage(app.stage);
@@ -414,8 +406,8 @@ export function EnterpriseWorkflow() {
 													<span style={{ fontWeight: 600 }}>{app.assignedStaff || "Unassigned"}</span>
 												</p>
 
-												{/* Stage-specific mini indicators */}
-												{stage === "Visa Processing" && app.visaStage && (
+											{/* Stage-specific mini indicators */}
+											{stage === "visa_processing" && app.visaStage && (
 													<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
 														<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
 														<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", textTransform: "capitalize" }}>
@@ -427,16 +419,16 @@ export function EnterpriseWorkflow() {
 													</div>
 												)}
 
-												{stage === "Payment Plan" && (
-													<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-														<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
-														<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)" }}>
-															{app.paymentPlanId === "installments" ? "Installments" : app.paymentPlanId === "full" ? "Full payment" : "Not selected"}
-														</span>
-													</div>
-												)}
+											{stage === "payment_execution" && (
+												<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+													<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
+													<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)" }}>
+														{app.paymentPlanId === "installments" ? "Installments" : app.paymentPlanId === "full" ? "Full payment" : "Not selected"}
+													</span>
+												</div>
+											)}
 
-												{stage === "Travel Assistance" && (
+											{stage === "travel_assistance" && (
 													<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
 														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.2rem" }}>
 															<span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)" }}>Pre-departure</span>
@@ -471,17 +463,17 @@ export function EnterpriseWorkflow() {
 													</div>
 												</div>
 
-												{canMoveCase(app) && !isLast && (
-													<button
-														type="button"
-														onClick={(e) => { e.stopPropagation(); advance(app); }}
-														className="btn btn--ghost btn--sm"
-														style={{ padding: "0.15rem 0.5rem", fontSize: "0.72rem", marginTop: "0.5rem", width: "100%" }}
-														title="Advance to next stage"
-													>
-														{"\u2192"} {PIPELINE_STAGES[PIPELINE_STAGES.indexOf(normaliseStage(app.stage)) + 1]}
-													</button>
-												)}
+											{canMoveCase(app) && !isLast && (
+												<button
+													type="button"
+													onClick={(e) => { e.stopPropagation(); advance(app); }}
+													className="btn btn--ghost btn--sm"
+													style={{ padding: "0.15rem 0.5rem", fontSize: "0.72rem", marginTop: "0.5rem", width: "100%" }}
+													title="Advance to next stage"
+												>
+													{"\u2192"} {JOURNEY_STAGE_LABELS[JOURNEY_STAGES[JOURNEY_STAGES.indexOf(normaliseStage(app.stage)) + 1]]}
+												</button>
+											)}
 											</div>
 										);
 									})
@@ -554,10 +546,10 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 			<aside className="wf-drawer">
 				{/* Header */}
 				<div className="wf-drawer__header" style={{ borderBottomColor: color }}>
-					<div style={{ flex: 1 }}>
-						<p className="eyebrow" style={{ color }}>
-							Stage {STAGE_NUMBERS[stage]} {"\u00b7"} {stage}
-						</p>
+				<div style={{ flex: 1 }}>
+					<p className="eyebrow" style={{ color }}>
+						Stage {STAGE_NUMBERS[stage]} {"\u00b7"} {JOURNEY_STAGE_LABELS[stage]}
+					</p>
 						<h2 className="page-title" style={{ fontSize: "1.2rem", marginTop: "0.3rem" }}>
 							{app.applicantName}
 						</h2>
@@ -652,7 +644,7 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 					</div>
 
 					{/* Stage-specific content */}
-					{stage === "Visa Processing" && (
+					{stage === "visa_processing" && (
 						<div className="wf-section">
 							<h3 className="wf-section__title">Visa Tracking</h3>
 
@@ -693,9 +685,9 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 						</div>
 					)}
 
-					{stage === "Payment Plan" && (
+					{stage === "payment_execution" && (
 						<div className="wf-section">
-							<h3 className="wf-section__title">Payment Plan</h3>
+							<h3 className="wf-section__title">Payment Execution</h3>
 							<div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
 								<div className={`wf-plan-card ${app.paymentPlanId === "full" ? "wf-plan-card--selected" : ""}`}>
 									<p className="wf-info-label">Full Payment</p>
@@ -720,7 +712,7 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 						</div>
 					)}
 
-					{stage === "Travel Assistance" && (
+					{stage === "travel_assistance" && (
 						<div className="wf-section">
 							<h3 className="wf-section__title">Travel & Pre-departure</h3>
 
@@ -807,7 +799,7 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 						</div>
 					)}
 
-					{stage === "Completed" && (
+					{stage === "completed" && (
 						<div className="wf-section">
 							<div className="alert alert--success" style={{ marginBottom: "1rem" }}>
 								<strong>Case completed.</strong> Student has travelled and all stages are settled.

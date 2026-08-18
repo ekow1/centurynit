@@ -33,10 +33,10 @@ export function EnterpriseApplicants() {
 			a.assignedOfficer.toLowerCase().includes(searchQuery.toLowerCase());
 		if (!matchesSearch) return false;
 		if (statusFilter === "All") return true;
-		if (statusFilter === "Pre-Visa") return ["Document Verification", "School Submission", "Offer Letter Review"].includes(a.currentStage);
-		if (statusFilter === "Visa Processing") return a.currentStage === "Visa Processing";
-		if (statusFilter === "Post-Visa") return ["Payment Plan", "Travel Assistance"].includes(a.currentStage);
-		if (statusFilter === "Completed") return a.currentStage === "Completed";
+		if (statusFilter === "Pre-Visa") return ["document_verification", "school_submission", "offer_letter_review"].includes(a.currentStage);
+		if (statusFilter === "Visa Processing") return a.currentStage === "visa_processing";
+		if (statusFilter === "Post-Visa") return ["payment_execution", "travel_assistance"].includes(a.currentStage);
+		if (statusFilter === "Completed") return a.currentStage === "completed";
 		return a.currentStage === statusFilter;
 	});
 

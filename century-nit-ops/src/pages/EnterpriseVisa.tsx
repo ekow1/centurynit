@@ -4,6 +4,7 @@ import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage } from "century-nit-core/ops";
+import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 const VISA_STEPS: { id: VisaStage; label: string }[] = [
 	{ id: "pending", label: "Case opened" },
@@ -46,10 +47,10 @@ export function EnterpriseVisa() {
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
 		return filtered.filter(
 			(a) =>
-				a.stage === "Visa Processing" ||
-				a.stage === "Payment Plan" ||
-				a.stage === "Travel Assistance" ||
-				a.stage === "Completed",
+				a.stage === "visa_processing" ||
+				a.stage === "payment_execution" ||
+				a.stage === "travel_assistance" ||
+				a.stage === "completed",
 		);
 	}, [applications, scopeRecords, opsUser, branchFilter]);
 
@@ -98,7 +99,7 @@ export function EnterpriseVisa() {
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Visa Processing</h1>
-					<p className="lead mt-1">Track visa sub-steps, manage invoices, and advance cases to payment plan.</p>
+					<p className="lead mt-1">Track visa sub-steps, manage invoices, and advance cases to payment execution.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
@@ -253,9 +254,9 @@ export function EnterpriseVisa() {
 										<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", opacity: 0.7 }}>
 											{active.appId}
 										</span>
-										<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
-											{active.stage}
-										</span>
+									<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
+										{JOURNEY_STAGE_LABELS[active.stage as JourneyStage]}
+									</span>
 									</div>
 									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
 										{active.applicantName}
@@ -425,22 +426,22 @@ export function EnterpriseVisa() {
 									)}
 								</div>
 
-								{/* Advance to Payment Plan */}
-								{active.visaStage === "complete" && active.stage === "Visa Processing" && (
-									<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved!</p>
-										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-											Ready to advance to payment plan stage.
-										</p>
-										<button
-											onClick={() => setApplicationStage(active.appId, "Payment Plan")}
-											className="btn btn--primary btn--sm"
-											style={{ marginTop: "0.5rem" }}
-										>
-											{"\u2192"} Advance to Payment Plan
-										</button>
-									</div>
-								)}
+							{/* Advance to Payment Execution */}
+							{active.visaStage === "complete" && active.stage === "visa_processing" && (
+								<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+									<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved!</p>
+									<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+										Ready to advance to payment execution stage.
+									</p>
+									<button
+										onClick={() => setApplicationStage(active.appId, "payment_execution")}
+										className="btn btn--primary btn--sm"
+										style={{ marginTop: "0.5rem" }}
+									>
+										{"\u2192"} Advance to Payment Execution
+									</button>
+								</div>
+							)}
 
 								{/* Case Meta */}
 								<div className="card">

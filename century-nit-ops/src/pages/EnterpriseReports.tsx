@@ -5,7 +5,12 @@ import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER } from "century-nit-core";
+import { JOURNEY_STAGE_LABELS } from "century-nit-shared";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
+
+function journeyStageLabel(stage: string): string {
+	return (JOURNEY_STAGE_LABELS as Record<string, string>)[stage] ?? stage;
+}
 
 function downloadCSV(filename: string, rows: string[][]) {
 	const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -489,13 +494,13 @@ export function EnterpriseReports() {
 									{[
 										{ stage: "Consultation → Assessment", avg: 3, min: 1, max: 7 },
 										{ stage: "Assessment → Application", avg: 5, min: 2, max: 14 },
-										{ stage: "Document Verification", avg: 4, min: 1, max: 10 },
-										{ stage: "School Submission", avg: 7, min: 3, max: 21 },
+										{ stage: "document_verification", avg: 4, min: 1, max: 10 },
+										{ stage: "school_submission", avg: 7, min: 3, max: 21 },
 										{ stage: "Offer Letter → Visa", avg: 12, min: 5, max: 30 },
-										{ stage: "Visa Processing", avg: 21, min: 7, max: 60 },
+										{ stage: "visa_processing", avg: 21, min: 7, max: 60 },
 									].map((r) => (
 										<tr key={r.stage} style={{ borderBottom: "1px solid var(--border-light)" }}>
-											<td style={{ padding: "0.6rem" }}>{r.stage}</td>
+											<td style={{ padding: "0.6rem" }}>{journeyStageLabel(r.stage)}</td>
 											<td style={{ padding: "0.6rem", fontWeight: 600 }}>{r.avg}</td>
 											<td style={{ padding: "0.6rem" }} className="muted">{r.min}</td>
 											<td style={{ padding: "0.6rem" }} className="muted">{r.max}</td>

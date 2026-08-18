@@ -4,6 +4,7 @@ import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
+import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 const AGENCY_STAGES = [
 	{ id: "agency_deposit", label: "Agency deposit", detail: "Secure agency file & coordinator", portion: "30%" },
@@ -35,7 +36,6 @@ export function EnterpriseTravel() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
-		setPaymentPlan,
 		advanceAgencyStage,
 		setTravelClearance,
 		togglePreDepartureTask,
@@ -56,9 +56,9 @@ export function EnterpriseTravel() {
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
 		return filtered.filter(
 			(a) =>
-				a.stage === "Payment Plan" ||
-				a.stage === "Travel Assistance" ||
-				a.stage === "Completed",
+				a.stage === "payment_execution" ||
+				a.stage === "travel_assistance" ||
+				a.stage === "completed",
 		);
 	}, [applications, scopeRecords, opsUser, branchFilter]);
 
@@ -69,9 +69,9 @@ export function EnterpriseTravel() {
 			a.university.toLowerCase().includes(searchQuery.toLowerCase());
 		if (!matchesSearch) return false;
 		if (statusFilter === "All") return true;
-		if (statusFilter === "Payment Plan") return a.stage === "Payment Plan";
-		if (statusFilter === "Travel") return a.stage === "Travel Assistance";
-		if (statusFilter === "Completed") return a.stage === "Completed";
+		if (statusFilter === "Payment Execution") return a.stage === "payment_execution";
+		if (statusFilter === "Travel") return a.stage === "travel_assistance";
+		if (statusFilter === "Completed") return a.stage === "completed";
 		return true;
 	});
 
@@ -130,7 +130,7 @@ export function EnterpriseTravel() {
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Payment Plan", "Travel", "Completed"].map((tab) => (
+							{["All", "Payment Execution", "Travel", "Completed"].map((tab) => (
 								<button
 									key={tab}
 									onClick={() => setStatusFilter(tab)}
@@ -186,15 +186,15 @@ export function EnterpriseTravel() {
 													<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600, opacity: 0.8 }}>
 														{app.appId}
 													</span>
-													<span className="portal-pill" style={{
-														fontSize: "var(--text-xs)",
-														padding: "0.15rem 0.4rem",
-														background: isSelected ? "var(--background)" : undefined,
-														color: isSelected ? "var(--foreground)" : undefined,
-														border: isSelected ? "none" : undefined,
-													}}>
-														{app.stage}
-													</span>
+												<span className="portal-pill" style={{
+													fontSize: "var(--text-xs)",
+													padding: "0.15rem 0.4rem",
+													background: isSelected ? "var(--background)" : undefined,
+													color: isSelected ? "var(--foreground)" : undefined,
+													border: isSelected ? "none" : undefined,
+												}}>
+													{JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}
+												</span>
 												</div>
 												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{app.applicantName}</p>
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
@@ -250,9 +250,9 @@ export function EnterpriseTravel() {
 										<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", opacity: 0.7 }}>
 											{active.appId}
 										</span>
-										<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
-											{active.stage}
-										</span>
+									<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
+										{JOURNEY_STAGE_LABELS[active.stage as JourneyStage]}
+									</span>
 									</div>
 									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
 										{active.applicantName}
@@ -294,47 +294,31 @@ export function EnterpriseTravel() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-								{/* Payment Plan */}
-								{active.stage === "Payment Plan" && (
-									<div className="card" style={{ background: "var(--muted)" }}>
-										<p className="eyebrow mb-1">Payment Plan</p>
-										<div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-											<button
-												type="button"
-												className={`btn btn--sm ${active.paymentPlanId === "full" ? "btn--primary" : "btn--ghost"}`}
-												onClick={() => setPaymentPlan(active.appId, "full")}
-											>
-												Full Payment
-											</button>
-											<button
-												type="button"
-												className={`btn btn--sm ${active.paymentPlanId === "installments" ? "btn--primary" : "btn--ghost"}`}
-												onClick={() => setPaymentPlan(active.appId, "installments")}
-											>
-												Installments
-											</button>
+							{/* Payment Execution */}
+							{active.stage === "payment_execution" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Payment Execution</p>
+									<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+										The applicant chose their payment plan during package selection. Collect the outstanding balance below.
+									</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+										<div>
+											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Applicant's plan</p>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{paymentPlanLabel(active.paymentPlanId)}</p>
 										</div>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-											{active.paymentPlanId === "full"
-												? "Pay remaining fees in one transaction. Discount eligible."
-												: active.paymentPlanId === "installments"
-													? "Split into 2-3 payments. Agency settlement follows."
-													: "Select a plan to proceed."}
-										</p>
-										{active.paymentPlanId && (
-											<button
-												onClick={() => setApplicationStage(active.appId, "Travel Assistance")}
-												className="btn btn--primary btn--sm"
-												style={{ marginTop: "0.75rem" }}
-											>
-												{"\u2192"} Advance to Travel Assistance
-											</button>
-										)}
 									</div>
-								)}
+									<button
+										onClick={() => setApplicationStage(active.appId, "travel_assistance")}
+										className="btn btn--primary btn--sm"
+										style={{ marginTop: "0.75rem" }}
+									>
+										{"\u2192"} Advance to Travel Assistance
+									</button>
+								</div>
+							)}
 
-								{/* Agency Settlement */}
-								{(active.stage === "Travel Assistance" || active.stage === "Completed") && (
+							{/* Agency Settlement */}
+							{(active.stage === "travel_assistance" || active.stage === "completed") && (
 									<div className="card">
 										<p className="eyebrow mb-3">Agency Settlement</p>
 										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -375,7 +359,7 @@ export function EnterpriseTravel() {
 															<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
 															<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.1rem" }}>{s.detail} {"\u00b7"} {s.portion}</p>
 														</div>
-														{current && !active.agencySettled && active.stage === "Travel Assistance" && (
+														{current && !active.agencySettled && active.stage === "travel_assistance" && (
 															<button
 																onClick={() => advanceAgencyStage(active.appId)}
 																className="btn btn--ghost btn--sm"
@@ -394,8 +378,8 @@ export function EnterpriseTravel() {
 									</div>
 								)}
 
-								{/* Travel Clearance */}
-								{(active.stage === "Travel Assistance" || active.stage === "Completed") && (
+							{/* Travel Clearance */}
+							{(active.stage === "travel_assistance" || active.stage === "completed") && (
 									<div className="card" style={{ background: "var(--muted)" }}>
 										<p className="eyebrow mb-1">Travel Clearance</p>
 										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -409,21 +393,21 @@ export function EnterpriseTravel() {
 														: "Grant clearance once all checks are satisfied."}
 												</p>
 											</div>
-											{active.stage === "Travel Assistance" && (
-												<button
-													onClick={() => setTravelClearance(active.appId, active.travelClearance !== "cleared")}
-													className={`btn btn--sm ${active.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
-													style={{ whiteSpace: "nowrap" }}
-												>
-													{active.travelClearance === "cleared" ? "Revoke clearance" : "Grant clearance"}
-												</button>
-											)}
+										{active.stage === "travel_assistance" && (
+											<button
+												onClick={() => setTravelClearance(active.appId, active.travelClearance !== "cleared")}
+												className={`btn btn--sm ${active.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
+												style={{ whiteSpace: "nowrap" }}
+											>
+												{active.travelClearance === "cleared" ? "Revoke clearance" : "Grant clearance"}
+											</button>
+										)}
 										</div>
 									</div>
 								)}
 
-								{/* Pre-departure Checklist */}
-								{(active.stage === "Travel Assistance" || active.stage === "Completed") && (
+							{/* Pre-departure Checklist */}
+							{(active.stage === "travel_assistance" || active.stage === "completed") && (
 									<div className="card">
 										<p className="eyebrow mb-2">Pre-departure Checklist</p>
 										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
@@ -457,13 +441,13 @@ export function EnterpriseTravel() {
 																{tasks.map((task) => (
 																	<div
 																		key={task.id}
-																		onClick={() => active.stage === "Travel Assistance" && togglePreDepartureTask(active.appId, task.id)}
+																		onClick={() => active.stage === "travel_assistance" && togglePreDepartureTask(active.appId, task.id)}
 																		style={{
 																			display: "flex",
 																			alignItems: "flex-start",
 																			gap: "0.5rem",
 																			padding: "0.4rem",
-																			cursor: active.stage === "Travel Assistance" ? "pointer" : "default",
+																			cursor: active.stage === "travel_assistance" ? "pointer" : "default",
 																			border: "1px solid var(--border-light)",
 																		}}
 																	>
@@ -503,22 +487,22 @@ export function EnterpriseTravel() {
 									</div>
 								)}
 
-								{/* Complete case */}
-								{active.stage === "Travel Assistance" && active.agencySettled && active.travelClearance === "cleared" && pdProg === 100 && (
-									<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear!</p>
-										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-											All milestones complete. Ready to mark case as Completed.
-										</p>
-										<button
-											onClick={() => setApplicationStage(active.appId, "Completed")}
-											className="btn btn--primary btn--sm"
-											style={{ marginTop: "0.5rem" }}
-										>
-											{"\u2192"} Mark case complete
-										</button>
-									</div>
-								)}
+							{/* Complete case */}
+							{active.stage === "travel_assistance" && active.agencySettled && active.travelClearance === "cleared" && pdProg === 100 && (
+								<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+									<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear!</p>
+									<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+										All milestones complete. Ready to mark case as Completed.
+									</p>
+									<button
+										onClick={() => setApplicationStage(active.appId, "completed")}
+										className="btn btn--primary btn--sm"
+										style={{ marginTop: "0.5rem" }}
+									>
+										{"\u2192"} Mark case complete
+									</button>
+								</div>
+							)}
 
 								{/* Case Meta */}
 								<div className="card">

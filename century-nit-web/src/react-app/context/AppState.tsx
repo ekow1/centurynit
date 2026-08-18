@@ -15,6 +15,10 @@ import {
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
 import { invoicesApi } from "century-nit-core/api";
 import {
+	JOURNEY_STAGE_TO_PORTAL,
+	type JourneyStage,
+} from "century-nit-shared";
+import {
 	APPLICATION_FEE,
 	APP_INVOICE_BASE,
 	AUTH_STORAGE_KEY,
@@ -196,6 +200,14 @@ export type ApplicationData = {
 	pipelineUpdatedAt: string | null;
 	onboardingCompleted: boolean;
 	referralSource: string;
+	/**
+	 * Coarse journey stage read from `applications.stage` on the server
+	 * (the shared `JourneyStage` enum). Empty until `syncFromServer`
+	 * populates it. `getCurrentProcessStage` uses this as the
+	 * authoritative floor and refines it into a fine-grained
+	 * `ProcessStageId` using invoice / school signals.
+	 */
+	journeyStage: JourneyStage | "";
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -394,6 +406,7 @@ const defaultApplication: ApplicationData = {
 	pipelineUpdatedAt: null,
 	onboardingCompleted: false,
 	referralSource: "",
+	journeyStage: "",
 };
 
 const defaultAssessment: AssessmentData = {
@@ -593,8 +606,42 @@ export function isAgencySettled(app: ApplicationData) {
 /**
  * Select schools → pay application invoice → tracking starts.
  * Admitted → pay visa invoice → visa tracking. Then payment plan → agency → complete.
+ *
+ * The authoritative coarse stage is `application.stage` (a shared `JourneyStage`)
+ * which `syncFromServer` writes into `app.journeyStage`. When present it is
+ * mapped via `JOURNEY_STAGE_TO_PORTAL` and used as a *floor* — the heuristic
+ * invoice / school signals may only advance the fine-grained `ProcessStageId`
+ * beyond that floor, never regress it. When `journeyStage` is empty (server
+ * unreachable / no application yet) the pure heuristic derivation is used.
  */
 export function getCurrentProcessStage(
+	app: ApplicationData,
+	booking: BookingData,
+	schools: SchoolApplicationTrack[],
+): ProcessStageId {
+	const heuristic = computeHeuristicProcessStage(app, booking, schools);
+
+	const coarseFromServer = app.journeyStage
+		? (JOURNEY_STAGE_TO_PORTAL[app.journeyStage] as ProcessStageId)
+		: null;
+	if (!coarseFromServer) return heuristic;
+
+	const order = PROCESS_STAGES.map((s) => s.id);
+	const coarseIdx = order.indexOf(coarseFromServer);
+	const heuristicIdx = order.indexOf(heuristic);
+	// The server stage is the authoritative minimum progress; local signals
+	// can only move the applicant forward, not backwards.
+	return heuristicIdx > coarseIdx ? heuristic : coarseFromServer;
+}
+
+/**
+ * Pure local heuristic — derives a fine-grained `ProcessStageId` from
+ * consultation, package, invoice, school, visa and pre-departure signals
+ * without consulting the server's `JourneyStage`. Used as the fallback when
+ * no server stage is available, and as the refinement candidate that the
+ * server stage floors.
+ */
+function computeHeuristicProcessStage(
 	app: ApplicationData,
 	booking: BookingData,
 	schools: SchoolApplicationTrack[],
@@ -669,7 +716,12 @@ export function getStageStatus(
 	return "locked";
 }
 
-/** Progressive unlocks - next stage opens when prior step is done */
+/** Progressive unlocks - next stage opens when prior step is done.
+ *
+ * The server-driven `JourneyStage` (floored through `getCurrentProcessStage`)
+ * guarantees a chapter is unlocked once the applicant has reached it on the
+ * server, even before local invoice / school signals catch up. Local signal
+ * gates are OR'd with the stage floor so they only ever *add* access. */
 export function getChapterUnlocks(
 	app: ApplicationData,
 	booking: BookingData,
@@ -683,20 +735,26 @@ export function getChapterUnlocks(
 	const visaDone = app.visaStatus === "complete";
 	const agencySettled = isAgencySettled(app);
 
+	const stage = getCurrentProcessStage(app, booking, schools);
+	const order = PROCESS_STAGES.map((s) => s.id);
+	const stageIdx = order.indexOf(stage);
+	const atOrBeyond = (id: ProcessStageId) => stageIdx >= order.indexOf(id);
+
 	return {
 		journey: true,
 		consultation: true,
-		package: eligible,
-		application: eligible && pkg,
+		package: eligible || atOrBeyond("school_package"),
+		application: (eligible && pkg) || atOrBeyond("school_select"),
 		// Tracking is its own page - only after application invoice paid
-		tracking: appPaid && Boolean(app.schoolSelectionDoneAt),
-		visa: admitted,
+		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
+		visa: admitted || atOrBeyond("visa"),
 		// Travel opens on visa approval AND agency settlement — the same
 		// `finished` check PreDepartureInner uses, so the gate and the page
 		// never disagree about who can enter.
-		pre_departure: admitted && visaPaid && visaDone && agencySettled,
+		pre_departure:
+			(admitted && visaPaid && visaDone && agencySettled) || atOrBeyond("pre_departure"),
 		// Completion needs the travel checklist finished, not a payment state
-		complete: Boolean(app.preDepartureCompletedAt),
+		complete: Boolean(app.preDepartureCompletedAt) || atOrBeyond("completed"),
 	};
 }
 
@@ -1903,19 +1961,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					destinationId: prev.destinationId || a.targetCountry || "",
 				}));
 			}
-			if (res.application) {
-				const a = res.application;
-				setApplication((prev) => ({
-					...prev,
-					applicationId: a.id || prev.applicationId,
-					destinationId: a.country || prev.destinationId,
-					universityId: a.university || prev.universityId,
-					programId: a.program || prev.programId,
-					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
-					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
-					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
-				}));
-			}
+		if (res.application) {
+			const a = res.application;
+			setApplication((prev) => ({
+				...prev,
+				applicationId: a.id || prev.applicationId,
+				destinationId: a.country || prev.destinationId,
+				universityId: a.university || prev.universityId,
+				programId: a.program || prev.programId,
+				schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
+				schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
+				visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
+				// Authoritative coarse journey stage from `applications.stage`.
+				// `getCurrentProcessStage` floors the fine-grained
+				// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
+				journeyStage: a.stage ?? prev.journeyStage,
+			}));
+		}
 		} catch {
 			/* server state fallback — keep local values */
 		}
@@ -2047,8 +2109,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// When the user is authenticated, fetch the authoritative stage from the
 	// API and prefer it over the locally computed one.  Falls back to local
 	// on network error so the portal never breaks.
+	//
+	// The server may return either:
+	//   • `currentStage` — the coarse `JourneyStage` enum value (e.g.
+	//     "visa_processing"), which we map via `JOURNEY_STAGE_TO_PORTAL`, or
+	//   • `portalStage` — the already-mapped fine-grained `ProcessStageId`,
+	//     preferred when present (lets the server override the mapping).
 	type ServerJourney = {
 		currentStage: string;
+		portalStage?: string;
 		chapterUnlocks: Record<string, boolean>;
 		label: string;
 		nextUnlock: string | null;
@@ -2078,14 +2147,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 	const effectiveJourneyPhase = useMemo(() => {
 		if (serverJourney) {
-			const meta = PROCESS_STAGES.find(
-				(s) => s.id === serverJourney.currentStage,
-			)!;
+			// Prefer an explicit `portalStage` from the server; otherwise map
+			// the coarse `currentStage` (a `JourneyStage`) through the shared
+			// `JOURNEY_STAGE_TO_PORTAL` table. If `currentStage` isn't a known
+			// `JourneyStage` (older server still emitting a `ProcessStageId`),
+			// fall back to using it directly so the portal doesn't regress.
+			let stageId: ProcessStageId;
+			if (serverJourney.portalStage) {
+				stageId = serverJourney.portalStage as ProcessStageId;
+			} else if (
+				serverJourney.currentStage &&
+				serverJourney.currentStage in JOURNEY_STAGE_TO_PORTAL
+			) {
+				stageId = JOURNEY_STAGE_TO_PORTAL[
+					serverJourney.currentStage as JourneyStage
+				] as ProcessStageId;
+			} else {
+				stageId = serverJourney.currentStage as ProcessStageId;
+			}
+			const meta = PROCESS_STAGES.find((s) => s.id === stageId)!;
 			return {
 				phase: meta.index,
 				label: serverJourney.label,
 				nextUnlock: serverJourney.nextUnlock,
-				stage: serverJourney.currentStage as ProcessStageId,
+				stage: stageId,
 			};
 		}
 		return journeyPhase;

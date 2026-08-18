@@ -498,37 +498,14 @@ export const EMPTY_DIRECTIVES: OpsDirectives = {
 };
 
 /**
- * Canonical mapping between the ops 7-stage pipeline and the portal's
- * 11 fine-grained ProcessStageId values.
- *
- * Each ops stage maps to the portal stage that should be active when the
- * application is at that ops stage. Used by the OpsDirectiveBridge to
- * translate ops stage changes into portal state updates.
+ * @deprecated The ops ↔ portal stage translation tables used to live here.
+ * Both sides now share the `JourneyStage` enum from `century-nit-shared`, and
+ * the portal maps it to its fine-grained `ProcessStageId` via
+ * `JOURNEY_STAGE_TO_PORTAL` (see `packages/shared/src/schemas/cases.ts`).
+ * The `ProcessStageId` is then refined by invoice / school signals in
+ * `getCurrentProcessStage` — there is no longer a separate ops-stage namespace
+ * to translate between.
  */
-export const OPS_TO_PORTAL_STAGE: Record<string, string> = {
-	"Document Verification": "school_package",
-	"School Submission": "school_tracking",
-	"Offer Letter Review": "school_tracking",
-	"Visa Processing": "visa",
-	// "Payment Plan" is no longer a portal stage — money lives on Financial
-	"Payment Plan": "visa",
-	"Travel Assistance": "pre_departure",
-	"Completed": "completed",
-};
-
-/** Reverse mapping: portal stage → ops stage. */
-export const PORTAL_TO_OPS_STAGE: Record<string, string> = {
-	consultation: "Document Verification",
-	eligibility: "Document Verification",
-	school_package: "Document Verification",
-	school_select: "School Submission",
-	application_invoice: "School Submission",
-	school_tracking: "Offer Letter Review",
-	visa_invoice: "Visa Processing",
-	visa: "Visa Processing",
-	pre_departure: "Travel Assistance",
-	completed: "Completed",
-};
 
 /**
  * Snapshot the portal pushes into the ops store so staff can see the live

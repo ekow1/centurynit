@@ -51,6 +51,7 @@ import type {
 	AvatarUploadTicket,
 	AvatarUrl,
 	RequestAvatarUpload,
+	JourneyStage,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
 
@@ -951,9 +952,16 @@ export const meApi = {
 		return meApi.avatarComplete(ticket.key);
 	},
 
-	/** Current journey stage and chapter unlocks derived server-side. */
+	/** Current journey stage and chapter unlocks derived server-side.
+	 *
+	 * `currentStage` is the coarse `JourneyStage` enum value stored on
+	 * `applications.stage` (e.g. "visa_processing"). The portal maps it to a
+	 * fine-grained `ProcessStageId` via `JOURNEY_STAGE_TO_PORTAL`. The server
+	 * may also send `portalStage` — an already-mapped `ProcessStageId` that
+	 * overrides the local mapping when present. */
 	journey(): Promise<{
-		currentStage: string;
+		currentStage: JourneyStage;
+		portalStage?: string;
 		chapterUnlocks: Record<string, boolean>;
 		label: string;
 		nextUnlock: string | null;

@@ -1303,3 +1303,127 @@ export const lookupValues = pgTable("lookup_values", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ─── Marketing ─── */
+
+export const marketingCampaigns = pgTable("marketing_campaigns", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	type: varchar("type", { length: 16 }).notNull(),
+	status: varchar("status", { length: 16 }).notNull().default("draft"),
+	channel: varchar("channel", { length: 16 }).notNull().default("email"),
+	audience: varchar("audience", { length: 255 }),
+	subject: varchar("subject", { length: 500 }),
+	body: text("body").notNull(),
+	templateId: uuid("template_id"),
+	mailingListId: uuid("mailing_list_id"),
+	sentBy: text("sent_by"),
+	sentAt: timestamp("sent_at", { withTimezone: true }),
+	recipientCount: integer("recipient_count").notNull().default(0),
+	deliveredCount: integer("delivered_count").notNull().default(0),
+	failedCount: integer("failed_count").notNull().default(0),
+	metadata: jsonb("metadata"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byStatus: index("campaigns_status_idx").on(t.status),
+	byType: index("campaigns_type_idx").on(t.type),
+}));
+
+export const mailingLists = pgTable("mailing_lists", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	description: text("description"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const mailingListContacts = pgTable("mailing_list_contacts", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	mailingListId: uuid("mailing_list_id").notNull().references(() => mailingLists.id, { onDelete: "cascade" }),
+	name: varchar("name", { length: 255 }),
+	email: varchar("email", { length: 255 }).notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byList: index("mlc_list_idx").on(t.mailingListId),
+	byEmail: index("mlc_email_idx").on(t.email),
+}));
+
+export const emailTemplate = pgTable("email_templates", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	name: varchar("name", { length: 255 }).notNull(),
+	type: varchar("type", { length: 16 }).notNull().default("email"),
+	subject: varchar("subject", { length: 500 }),
+	header: varchar("header", { length: 500 }),
+	body: text("body").notNull(),
+	footer: text("footer"),
+	isCustom: boolean("is_custom").notNull().default(false),
+	createdBy: text("created_by"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+
+
+// --- ACADEMIC CATALOGUE ---
+
+export const destinations = pgTable("destinations", {
+	id: text("id").primaryKey(), // e.g. "ca", "uk"
+	name: text("name").notNull(),
+	region: text("region").notNull(),
+	tagline: text("tagline"),
+	description: text("description"),
+	highlights: jsonb("highlights").$type<string[]>(), // Array of strings
+	universities: integer("universities").default(0),
+	programs: integer("programs").default(0),
+	image: text("image"),
+	flag: text("flag"),
+	isActive: boolean("is_active").default(true),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const catalogUniversities = pgTable("catalog_universities", {
+	id: text("id").primaryKey(),
+	name: text("name").notNull(),
+	destinationId: text("destination_id").references(() => destinations.id),
+	city: text("city"),
+	ranking: text("ranking"),
+	type: text("type"),
+	acceptance: text("acceptance"),
+	description: text("description"),
+	image: text("image"),
+	tags: jsonb("tags").$type<string[]>(), // Array of strings
+	isActive: boolean("is_active").default(true),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const catalogPrograms = pgTable("catalog_programs", {
+	id: text("id").primaryKey(),
+	name: text("name").notNull(),
+	universityId: text("university_id").references(() => catalogUniversities.id),
+	level: text("level"), // Undergraduate, Postgraduate, etc.
+	field: text("field"), // STEM, Arts, etc.
+	duration: text("duration"),
+	tuition: text("tuition"),
+	tuitionUsd: integer("tuition_usd"),
+	intake: jsonb("intake").$type<string[]>(), // ["Sept 2024", "Jan 2025"]
+	applicationDeadline: text("application_deadline"),
+	description: text("description"),
+	isActive: boolean("is_active").default(true),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const catalogScholarships = pgTable("catalog_scholarships", {
+	id: text("id").primaryKey(),
+	name: text("name").notNull(),
+	universityId: text("university_id").references(() => catalogUniversities.id),
+	amount: text("amount"),
+	type: text("type"),
+	deadline: text("deadline"),
+	eligibility: text("eligibility"),
+	isActive: boolean("is_active").default(true),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});

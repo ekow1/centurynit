@@ -17,6 +17,7 @@ import { documentsRouter } from "./routes/documents.js";
 import { avatarRouter } from "./routes/avatar.js";
 import { settingsRouter } from "./routes/settings.js";
 import { lookupsRouter } from "./routes/lookups.js";
+import { catalogRoutes } from "./routes/catalog.js";
 import { webhooksRouter } from "./routes/webhooks.js";
 import {
 	applicantsRouter,
@@ -33,6 +34,7 @@ import { notificationsRouter } from "./routes/notifications.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
 import { chatRouter } from "./routes/chat.js";
 import { authSettings } from "./routes/auth-settings.js";
+import { marketingRouter } from "./routes/marketing.js";
 
 
 /**
@@ -130,6 +132,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
 	app.route(`${API_PREFIX}/lookups`, lookupsRouter);
+	app.route(`${API_PREFIX}/catalog`, catalogRoutes);
 	app.route(`${API_PREFIX}/consultations`, consultationsRouter);
 	app.route(`${API_PREFIX}/applications`, applicationsRouter);
 	app.route(`${API_PREFIX}/applicants`, applicantsRouter);
@@ -145,6 +148,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/me`, meRouter);
 	app.route(`${API_PREFIX}/me`, avatarRouter);
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
+	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 
 
 	const openApiInfo = {

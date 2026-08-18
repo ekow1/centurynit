@@ -1,30 +1,71 @@
-import { useState } from "react";
-import { useOpsState } from "./OpsStateContext";
-import { useOpsAuth } from "./OpsAuthContext";
-import type { MailingList, EmailTemplate } from "./OpsStateContext";
+import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "../lib/api";
+import { API_PREFIX } from "century-nit-shared";
 
 const BRAND_HEADER = "Century NIT";
 const BRAND_FOOTER = "Century NIT  \u00b7  Accra, Ghana  \u00b7  century-nit.com";
+const MKT = `${API_PREFIX}/marketing`;
 
 type Tab = "campaigns" | "templates" | "lists";
 
-export function EnterpriseMarketing() {
-	const {
-		marketingCampaigns,
-		sendCampaign,
-		mailingLists,
-		createMailingList,
-		deleteMailingList,
-		addMailingListContact,
-		removeMailingListContact,
-		emailTemplates,
-		createEmailTemplate,
-		updateEmailTemplate,
-		deleteEmailTemplate,
-	} = useOpsState();
-	const { opsUser } = useOpsAuth();
+type Campaign = {
+	id: string;
+	name: string;
+	type: string;
+	status: string;
+	channel: string;
+	audience?: string;
+	subject?: string;
+	body: string;
+	templateId?: string;
+	mailingListId?: string;
+	sentBy?: string;
+	sentAt?: string;
+	recipientCount: number;
+	deliveredCount: number;
+	failedCount: number;
+	createdAt: string;
+};
 
+type Contact = {
+	id: string;
+	mailingListId: string;
+	name?: string;
+	email: string;
+	createdAt: string;
+};
+
+type MailingList = {
+	id: string;
+	name: string;
+	description?: string;
+	recipientCount?: number;
+	contacts?: Contact[];
+	createdAt: string;
+};
+
+type EmailTemplate = {
+	id: string;
+	name: string;
+	type: string;
+	subject?: string;
+	header?: string;
+	body: string;
+	footer?: string;
+	isCustom: boolean;
+	createdAt: string;
+	createdBy?: string;
+};
+
+export function EnterpriseMarketing() {
 	const [tab, setTab] = useState<Tab>("campaigns");
+
+	const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+	const [mailingLists, setMailingLists] = useState<MailingList[]>([]);
+	const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+
+	const [loading, setLoading] = useState(true);
+
 	const [isComposing, setIsComposing] = useState(false);
 	const [isCreatingList, setIsCreatingList] = useState(false);
 	const [editingListId, setEditingListId] = useState<string | null>(null);
@@ -52,13 +93,25 @@ export function EnterpriseMarketing() {
 	const [tplFooter, setTplFooter] = useState("");
 	const [previewMode, setPreviewMode] = useState<"edit" | "preview">("edit");
 
-	const handleTemplateChange = (templateId: string) => {
-		setSelectedTemplate(templateId);
-		const tpl = emailTemplates.find((t) => t.id === templateId);
-		if (tpl) {
-			setBody(tpl.body);
-			if (tpl.subject) setSubject(tpl.subject);
-		}
+	const fetchCampaigns = useCallback(() => apiFetch<Campaign[]>(`${MKT}/campaigns`).then(setCampaigns).catch(console.error), []);
+	const fetchMailingLists = useCallback(() => apiFetch<MailingList[]>(`${MKT}/mailing-lists`).then(setMailingLists).catch(console.error), []);
+	const fetchTemplates = useCallback(() => apiFetch<EmailTemplate[]>(`${MKT}/templates`).then(setTemplates).catch(console.error), []);
+
+	useEffect(() => {
+		Promise.all([fetchCampaigns(), fetchMailingLists(), fetchTemplates()]).finally(() => setLoading(false));
+	}, [fetchCampaigns, fetchMailingLists, fetchTemplates]);
+
+	const editingList = editingListId ? mailingLists.find((l) => l.id === editingListId) : null;
+
+	const filteredTemplates = templates.filter((t) => t.type === channel);
+
+	const stats = {
+		total: campaigns.length,
+		email: campaigns.filter((c) => c.type === "Email").length,
+		sms: campaigns.filter((c) => c.type === "SMS").length,
+		totalRecipients: campaigns.reduce((sum, c) => sum + c.recipientCount, 0),
+		totalDelivered: campaigns.reduce((sum, c) => sum + c.deliveredCount, 0),
+		totalFailed: campaigns.reduce((sum, c) => sum + c.failedCount, 0),
 	};
 
 	const handleChannelChange = (ch: "Email" | "SMS") => {
@@ -78,43 +131,136 @@ export function EnterpriseMarketing() {
 		setBody("");
 	};
 
-	const handleSend = (e: React.FormEvent) => {
+	const handleTemplateSelect = (templateId: string) => {
+		setSelectedTemplate(templateId);
+		const tpl = templates.find((t) => t.id === templateId);
+		if (tpl) {
+			if (tpl.subject) setSubject(tpl.subject);
+			setBody((tpl.header ? `<h1>${tpl.header}</h1>\n` : "") + tpl.body + (tpl.footer ? `\n<footer>${tpl.footer}</footer>` : ""));
+		}
+	};
+
+	const handleSend = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!campaignName.trim() || !body.trim() || !selectedList) return;
 		const list = mailingLists.find((l) => l.id === selectedList);
-		sendCampaign({
-			name: campaignName,
-			type: channel,
-			audience: list?.name || "Unknown",
-			sentBy: opsUser?.name || "System",
-			subject: channel === "Email" ? subject : undefined,
-			body,
-			templateId: selectedTemplate || undefined,
-		});
-		resetForm();
+		const count = list?.recipientCount ?? 0;
+		if (!window.confirm(`Send this campaign to ${count} contacts?`)) return;
+		try {
+			const res = await apiFetch<{ id: string }>(`${MKT}/campaigns`, {
+				method: "POST",
+				body: JSON.stringify({
+					name: campaignName.trim(),
+					type: channel,
+					channel,
+					subject: channel === "Email" ? subject : undefined,
+					body,
+					templateId: selectedTemplate || undefined,
+					mailingListId: selectedList,
+					audience: list?.name || "Unknown",
+				}),
+			});
+			await apiFetch(`${MKT}/campaigns/${res.id}/send`, { method: "POST" });
+			resetForm();
+			fetchCampaigns();
+		} catch (err) {
+			alert(`Failed to send campaign: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
 	};
 
-	const handleCreateList = (e: React.FormEvent) => {
+	const handleCreateList = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!listName.trim()) return;
-		createMailingList({ name: listName, description: listDesc });
-		setIsCreatingList(false);
-		setListName("");
-		setListDesc("");
+		try {
+			await apiFetch(`${MKT}/mailing-lists`, {
+				method: "POST",
+				body: JSON.stringify({ name: listName.trim(), description: listDesc.trim() || undefined }),
+			});
+			setIsCreatingList(false);
+			setListName("");
+			setListDesc("");
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to create list: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
 	};
 
-	const handleEditList = (list: MailingList) => {
-		setEditingListId(list.id);
-		setListName(list.name);
-		setListDesc(list.description);
-	};
-
-	const handleSaveEdit = (e: React.FormEvent) => {
+	const handleSaveEdit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!editingListId || !listName.trim()) return;
-		setEditingListId(null);
-		setListName("");
-		setListDesc("");
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}`, {
+				method: "PUT",
+				body: JSON.stringify({ name: listName.trim(), description: listDesc.trim() || undefined }),
+			});
+			setEditingListId(null);
+			setListName("");
+			setListDesc("");
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to save list: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
+	};
+
+	const handleDeleteList = async (id: string) => {
+		if (!window.confirm("Delete this mailing list?")) return;
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${id}`, { method: "DELETE" });
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to delete list: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
+	};
+
+	const handleAddContact = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!editingListId || !contactName.trim() || !contactEmail.trim()) return;
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts`, {
+				method: "POST",
+				body: JSON.stringify({ name: contactName.trim(), email: contactEmail.trim() }),
+			});
+			setContactName("");
+			setContactEmail("");
+			fetchMailingLists();
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Unknown error";
+			if (msg.toLowerCase().includes("duplicate")) {
+				alert("This email already exists in the list.");
+			} else {
+				alert(`Failed to add contact: ${msg}`);
+			}
+		}
+	};
+
+	const handleRemoveContact = async (contactId: string) => {
+		if (!editingListId) return;
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}`, { method: "DELETE" });
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to remove contact: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
+	};
+
+	const handleImportLeads = async () => {
+		if (!editingListId) return;
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-leads`, { method: "POST" });
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to import leads: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
+	};
+
+	const handleImportApplicants = async () => {
+		if (!editingListId) return;
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-applicants`, { method: "POST" });
+			fetchMailingLists();
+		} catch (err) {
+			alert(`Failed to import applicants: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
 	};
 
 	const resetTplForm = () => {
@@ -129,45 +275,59 @@ export function EnterpriseMarketing() {
 		setPreviewMode("edit");
 	};
 
-	const handleSaveTpl = (e: React.FormEvent) => {
+	const handleSaveTpl = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!tplName.trim() || !tplBody.trim()) return;
 		const payload = {
 			name: tplName.trim(),
 			type: tplType,
-			subject: tplSubject,
-			header: tplHeader,
+			subject: tplSubject || undefined,
+			header: tplHeader || undefined,
 			body: tplBody,
-			footer: tplFooter,
+			footer: tplFooter || undefined,
 		};
-		if (editingTplId) {
-			updateEmailTemplate(editingTplId, payload);
-		} else {
-			createEmailTemplate(payload);
+		try {
+			if (editingTplId) {
+				await apiFetch(`${MKT}/templates/${editingTplId}`, { method: "PUT", body: JSON.stringify(payload) });
+			} else {
+				await apiFetch(`${MKT}/templates`, { method: "POST", body: JSON.stringify(payload) });
+			}
+			resetTplForm();
+			fetchTemplates();
+		} catch (err) {
+			alert(`Failed to save template: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
-		resetTplForm();
+	};
+
+	const handleDeleteTpl = async (id: string) => {
+		if (!window.confirm("Delete this template?")) return;
+		try {
+			await apiFetch(`${MKT}/templates/${id}`, { method: "DELETE" });
+			fetchTemplates();
+		} catch (err) {
+			alert(`Failed to delete template: ${err instanceof Error ? err.message : "Unknown error"}`);
+		}
 	};
 
 	const handleEditTpl = (tpl: EmailTemplate) => {
 		setEditingTplId(tpl.id);
 		setTplName(tpl.name);
-		setTplType(tpl.type);
-		setTplSubject(tpl.subject);
-		setTplHeader(tpl.header);
+		setTplType(tpl.type as "Email" | "SMS");
+		setTplSubject(tpl.subject || "");
+		setTplHeader(tpl.header || "");
 		setTplBody(tpl.body);
-		setTplFooter(tpl.footer);
+		setTplFooter(tpl.footer || "");
 		setIsEditingTemplate(true);
 		setPreviewMode("edit");
 	};
 
-	const stats = {
-		total: marketingCampaigns.length,
-		email: marketingCampaigns.filter((c) => c.type === "Email").length,
-		sms: marketingCampaigns.filter((c) => c.type === "SMS").length,
-	};
-
-	const filteredTemplates = emailTemplates.filter((t) => t.type === channel);
-	const editingList = editingListId ? mailingLists.find((l) => l.id === editingListId) : null;
+	if (loading) {
+		return (
+			<div className="page-content fade-in" style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+				<span style={{ color: "var(--muted-foreground)" }}>Loading...</span>
+			</div>
+		);
+	}
 
 	return (
 		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -217,9 +377,9 @@ export function EnterpriseMarketing() {
 
 			{tab === "campaigns" && (
 				<>
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
 						<div className="card" style={{ padding: "1rem" }}>
-							<div className="eyebrow">Total Sent</div>
+							<div className="eyebrow">Total Campaigns</div>
 							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem" }}>{stats.total}</div>
 						</div>
 						<div className="card" style={{ padding: "1rem" }}>
@@ -231,8 +391,16 @@ export function EnterpriseMarketing() {
 							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem", color: "#10b981" }}>{stats.sms}</div>
 						</div>
 						<div className="card" style={{ padding: "1rem" }}>
-							<div className="eyebrow">Mailing Lists</div>
-							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem" }}>{mailingLists.length}</div>
+							<div className="eyebrow">Total Recipients</div>
+							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem" }}>{stats.totalRecipients}</div>
+						</div>
+						<div className="card" style={{ padding: "1rem" }}>
+							<div className="eyebrow">Total Delivered</div>
+							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem", color: "#10b981" }}>{stats.totalDelivered}</div>
+						</div>
+						<div className="card" style={{ padding: "1rem" }}>
+							<div className="eyebrow">Total Failed</div>
+							<div style={{ fontSize: "1.5rem", fontWeight: "bold", marginTop: "0.25rem", color: "#ef4444" }}>{stats.totalFailed}</div>
 						</div>
 					</div>
 
@@ -257,7 +425,7 @@ export function EnterpriseMarketing() {
 										<select className="input" value={selectedList} onChange={(e) => setSelectedList(e.target.value)}>
 											<option value="">Select audience...</option>
 											{mailingLists.map((ml) => (
-												<option key={ml.id} value={ml.id}>{ml.name} ({ml.recipientCount})</option>
+												<option key={ml.id} value={ml.id}>{ml.name} ({ml.recipientCount ?? 0} contacts)</option>
 											))}
 										</select>
 									</div>
@@ -265,7 +433,7 @@ export function EnterpriseMarketing() {
 
 								<div style={{ marginBottom: "1rem" }}>
 									<label className="label">Template (optional)</label>
-									<select className="input" value={selectedTemplate} onChange={(e) => handleTemplateChange(e.target.value)}>
+									<select className="input" value={selectedTemplate} onChange={(e) => handleTemplateSelect(e.target.value)}>
 										<option value="">Start from scratch</option>
 										{filteredTemplates.map((tpl) => (
 											<option key={tpl.id} value={tpl.id}>{tpl.name}</option>
@@ -320,25 +488,26 @@ export function EnterpriseMarketing() {
 										<th>Channel</th>
 										<th>Audience</th>
 										<th>Status</th>
+										<th>Recipients</th>
+										<th>Delivered</th>
+										<th>Failed</th>
 										<th>Sent</th>
-										<th>By</th>
 									</tr>
 								</thead>
 								<tbody>
-									{marketingCampaigns.length === 0 ? (
+									{campaigns.length === 0 ? (
 										<tr>
-											<td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "var(--muted-foreground)" }}>
+											<td colSpan={8} style={{ textAlign: "center", padding: "2rem", color: "var(--muted-foreground)" }}>
 												No campaigns sent yet.
 											</td>
 										</tr>
 									) : (
-										marketingCampaigns.map((camp) => (
+										campaigns.map((camp) => (
 											<tr key={camp.id}>
 												<td style={{ fontWeight: 600 }}>{camp.name}</td>
 												<td>
 													<span style={{
 														padding: "0.15rem 0.5rem",
-														borderRadius: "3px",
 														fontSize: "0.75rem",
 														fontWeight: 600,
 														background: camp.type === "Email" ? "rgba(59, 130, 246, 0.1)" : "rgba(16, 185, 129, 0.1)",
@@ -353,10 +522,12 @@ export function EnterpriseMarketing() {
 														{camp.status}
 													</span>
 												</td>
+												<td>{camp.recipientCount}</td>
+												<td style={{ color: "#10b981" }}>{camp.deliveredCount}</td>
+												<td style={{ color: camp.failedCount > 0 ? "#ef4444" : "var(--muted-foreground)" }}>{camp.failedCount}</td>
 												<td style={{ color: "var(--muted-foreground)" }}>
 													{camp.sentAt ? new Date(camp.sentAt).toLocaleDateString() : "-"}
 												</td>
-												<td style={{ color: "var(--muted-foreground)" }}>{camp.sentBy}</td>
 											</tr>
 										))
 									)}
@@ -400,7 +571,7 @@ export function EnterpriseMarketing() {
 
 								{tplType === "Email" && (
 									<>
-										<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+										<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
 											<div>
 												<label className="label">Subject Line</label>
 												<input type="text" className="input" placeholder="Email subject..." value={tplSubject} onChange={(e) => setTplSubject(e.target.value)} />
@@ -473,7 +644,7 @@ export function EnterpriseMarketing() {
 
 					{!isEditingTemplate && (
 						<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: "1.5rem" }}>
-							{emailTemplates.map((tpl) => (
+							{templates.map((tpl) => (
 								<div key={tpl.id} className="card" style={{ padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 									<div style={{
 										padding: "0.6rem 1rem",
@@ -485,13 +656,12 @@ export function EnterpriseMarketing() {
 									}}>
 										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
 											<span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{tpl.name}</span>
-											{tpl.custom && <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em" }}>Custom</span>}
+											{tpl.isCustom && <span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em" }}>Custom</span>}
 										</div>
 										<span style={{
 											fontSize: "0.65rem",
 											fontWeight: 700,
 											padding: "0.15rem 0.5rem",
-											borderRadius: "3px",
 											textTransform: "uppercase",
 											letterSpacing: "0.05em",
 											background: tpl.type === "Email" ? "rgba(59, 130, 246, 0.12)" : "rgba(16, 185, 129, 0.12)",
@@ -516,7 +686,6 @@ export function EnterpriseMarketing() {
 										<div style={{ padding: "1.25rem", flex: 1, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 											<div style={{
 												background: "var(--muted)",
-												borderRadius: "8px",
 												padding: "1rem",
 												fontSize: "0.85rem",
 												lineHeight: 1.6,
@@ -540,10 +709,10 @@ export function EnterpriseMarketing() {
 											onClick={() => {
 												setTab("campaigns");
 												setIsComposing(true);
-												setChannel(tpl.type);
+												setChannel(tpl.type as "Email" | "SMS");
 												setSelectedTemplate(tpl.id);
-												setBody(tpl.body);
 												if (tpl.subject) setSubject(tpl.subject);
+												setBody((tpl.header ? `<h1>${tpl.header}</h1>\n` : "") + tpl.body + (tpl.footer ? `\n<footer>${tpl.footer}</footer>` : ""));
 											}}
 										>
 											Use This
@@ -556,12 +725,12 @@ export function EnterpriseMarketing() {
 										>
 											Edit
 										</button>
-										{tpl.custom && (
+										{tpl.isCustom && (
 											<button
 												type="button"
 												className="btn btn--ghost"
 												style={{ fontSize: "0.8rem", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
-												onClick={() => deleteEmailTemplate(tpl.id)}
+												onClick={() => handleDeleteTpl(tpl.id)}
 											>
 												Delete
 											</button>
@@ -580,7 +749,7 @@ export function EnterpriseMarketing() {
 						<div className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem", borderLeft: "4px solid var(--primary)" }}>
 							<h3 style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>New Mailing List</h3>
 							<form onSubmit={handleCreateList}>
-								<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
 									<div>
 										<label className="label">List Name</label>
 										<input type="text" className="input" placeholder="e.g. UK Applicants" value={listName} onChange={(e) => setListName(e.target.value)} autoFocus />
@@ -606,7 +775,7 @@ export function EnterpriseMarketing() {
 						<div className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem", borderLeft: "4px solid var(--primary)" }}>
 							<h3 style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>Edit Mailing List</h3>
 							<form onSubmit={handleSaveEdit}>
-								<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
+								<div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
 									<div>
 										<label className="label">List Name</label>
 										<input type="text" className="input" value={listName} onChange={(e) => setListName(e.target.value)} autoFocus />
@@ -626,18 +795,21 @@ export function EnterpriseMarketing() {
 								</div>
 							</form>
 
-							{/* Contact management */}
-							<div style={{ marginTop: "1.5rem" }}>
-								<h4 style={{ fontSize: "0.95rem", fontWeight: 600, marginBottom: "0.75rem" }}>Contacts ({editingList.contacts.length})</h4>
+							<div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border-light)", paddingTop: "1.5rem" }}>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+									<h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>Contacts ({editingList.recipientCount ?? editingList.contacts?.length ?? 0})</h4>
+									<div style={{ display: "flex", gap: "0.5rem" }}>
+										<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportLeads}>
+											Import All Leads
+										</button>
+										<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportApplicants}>
+											Import Applicants
+										</button>
+									</div>
+								</div>
 
 								<form
-									onSubmit={(e) => {
-										e.preventDefault();
-										if (!contactName.trim() || !contactEmail.trim()) return;
-										addMailingListContact(editingList.id, contactName.trim(), contactEmail.trim());
-										setContactName("");
-										setContactEmail("");
-									}}
+									onSubmit={handleAddContact}
 									style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.75rem", marginBottom: "1rem" }}
 								>
 									<div>
@@ -655,9 +827,9 @@ export function EnterpriseMarketing() {
 									</div>
 								</form>
 
-								{editingList.contacts.length === 0 ? (
-									<p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", padding: "0.75rem 1rem", background: "var(--muted)", borderRadius: "6px" }}>
-										No contacts yet. Add recipients above.
+								{(!editingList.contacts || editingList.contacts.length === 0) ? (
+									<p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", padding: "0.75rem 1rem", background: "var(--muted)" }}>
+										No contacts yet. Add recipients above or import from leads/applicants.
 									</p>
 								) : (
 									<div className="ops-table-wrap">
@@ -673,15 +845,15 @@ export function EnterpriseMarketing() {
 											<tbody>
 												{editingList.contacts.map((c) => (
 													<tr key={c.id}>
-														<td style={{ fontWeight: 600 }}>{c.name}</td>
+														<td style={{ fontWeight: 600 }}>{c.name || "-"}</td>
 														<td style={{ color: "var(--muted-foreground)" }}>{c.email}</td>
-														<td style={{ color: "var(--muted-foreground)" }}>{new Date(c.addedAt).toLocaleDateString()}</td>
+														<td style={{ color: "var(--muted-foreground)" }}>{new Date(c.createdAt).toLocaleDateString()}</td>
 														<td>
 															<button
 																type="button"
 																className="btn btn--ghost"
 																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
-																onClick={() => removeMailingListContact(editingList.id, c.id)}
+																onClick={() => handleRemoveContact(c.id)}
 															>
 																Remove
 															</button>
@@ -721,7 +893,7 @@ export function EnterpriseMarketing() {
 												<tr key={ml.id}>
 													<td style={{ fontWeight: 600 }}>{ml.name}</td>
 													<td style={{ color: "var(--muted-foreground)" }}>{ml.description || "-"}</td>
-													<td>{ml.recipientCount}</td>
+													<td>{ml.recipientCount ?? 0}</td>
 													<td style={{ color: "var(--muted-foreground)" }}>{new Date(ml.createdAt).toLocaleDateString()}</td>
 													<td>
 														<div style={{ display: "flex", gap: "0.5rem" }}>
@@ -729,23 +901,20 @@ export function EnterpriseMarketing() {
 																type="button"
 																className="btn btn--ghost"
 																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}
-																onClick={() => handleEditList(ml)}
+																onClick={() => {
+																	setEditingListId(ml.id);
+																	setListName(ml.name);
+																	setListDesc(ml.description || "");
+																	setTab("lists");
+																}}
 															>
 																Edit
 															</button>
 															<button
 																type="button"
 																className="btn btn--ghost"
-																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}
-																onClick={() => handleEditList(ml)}
-															>
-																Contacts
-															</button>
-															<button
-																type="button"
-																className="btn btn--ghost"
 																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
-																onClick={() => deleteMailingList(ml.id)}
+																onClick={() => handleDeleteList(ml.id)}
 															>
 																Delete
 															</button>

@@ -10,6 +10,7 @@ export function OnboardingModal() {
 	const [saving, setSaving] = useState(false);
 	const [show, setShow] = useState(false);
 
+	const [fullName, setFullName] = useState("");
 	const [phone, setPhone] = useState("");
 	const [referralSource, setReferralSource] = useState("");
 
@@ -38,7 +39,13 @@ export function OnboardingModal() {
 					return;
 				}
 
-				// Pre-fill from server data
+				// Pre-fill name from server or auth (social sign-in populates authUser.name)
+				const serverName = app.name?.trim() || "";
+				const authName = authUser.name?.trim() || "";
+				const displayName = serverName || authName;
+				setFullName(displayName);
+
+				// Pre-fill phone
 				if (isPhoneAuth) {
 					setPhone(
 						authUser.email.replace("phone_", "").replace("@example.com", ""),
@@ -51,10 +58,11 @@ export function OnboardingModal() {
 					?.referralSource;
 				if (serverReferral) setReferralSource(serverReferral);
 
-				// Show modal if phone or referralSource is missing
+				// Show modal if any of the three fields are missing
+				const needsName = !displayName;
 				const needsPhone = isEmailAuth && !app.phone;
 				const needsReferral = !serverReferral;
-				setShow(needsPhone || needsReferral);
+				setShow(needsName || needsPhone || needsReferral);
 			})
 			.catch(() => {
 				/* don't block portal on network error */
@@ -74,14 +82,26 @@ export function OnboardingModal() {
 		setSaving(true);
 		try {
 			await meApi.updateProfile({
+				name: fullName.trim() || undefined,
 				...(isEmailAuth ? { phone } : {}),
 				profile: { referralSource },
 			});
-			updateApplication({
-				phone,
-				referralSource,
-				onboardingCompleted: true,
-			});
+			// Sync local auth state so the name shows immediately everywhere
+			if (fullName.trim()) {
+				updateApplication({
+					firstName: fullName.trim().split(" ")[0] || "",
+					lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
+					phone,
+					referralSource,
+					onboardingCompleted: true,
+				});
+			} else {
+				updateApplication({
+					phone,
+					referralSource,
+					onboardingCompleted: true,
+				});
+			}
 			setShow(false);
 		} catch {
 			// Still close — the data might have saved; user can retry on next refresh
@@ -131,6 +151,17 @@ export function OnboardingModal() {
 					Just a few more details to complete your account setup.
 				</p>
 				<form onSubmit={handleSubmit}>
+					<Field label="Full Name" htmlFor="ob-name">
+						<Input
+							id="ob-name"
+							type="text"
+							value={fullName}
+							onChange={(e) => setFullName(e.target.value)}
+							placeholder="e.g. Kwame Mensah"
+							required
+							fullBorder
+						/>
+					</Field>
 					{isEmailAuth && (
 						<Field label="Phone Number" htmlFor="ob-phone">
 							<Input

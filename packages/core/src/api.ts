@@ -37,7 +37,7 @@ import type {
 	VisaStage,
 	SchoolApplication,
 	SchoolApplicationList,
-	AddSchoolApplication,
+	AddSchoolApplication, OpsAddSchoolApplication,
 	UpdateSchoolStatus,
 	LockSchools,
 	Ticket,
@@ -780,6 +780,12 @@ export const applicationsApi = {
 			...json({ itemId, checked }),
 		});
 	},
+	addForApplicant(applicantId: string, input: Omit<OpsAddSchoolApplication, "applicantId">): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools`, {
+			method: "POST",
+			...json({ applicantId, ...input }),
+		});
+	},
 	setVisaStage(id: string, stage: VisaStage, note?: string): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/visa-stage`, {
 			method: "POST",
@@ -880,6 +886,18 @@ export const meApi = {
 		});
 	},
 
+	/**
+	 * Open Paystack hosted checkout for the applicant's agency service fee
+	 * (Stage IV settlement). The server resolves the agency invoice and amount
+	 * from the session — no invoice id is sent. Returns the hosted checkout
+	 * URL to redirect the browser to, like `paystackCheckout`.
+	 */
+	agencyPayment(): Promise<{ authorizationUrl: string }> {
+		return request(`${API_PREFIX}/me/application/agency-payment`, {
+			method: "POST",
+		});
+	},
+
 	/** A fresh signed URL for the signed-in user's photo, or null when none is set. */
 	avatarUrl(): Promise<AvatarUrl> {
 		return request(`${API_PREFIX}/me/avatar`);
@@ -941,6 +959,66 @@ export const meApi = {
 		nextUnlock: string | null;
 	}> {
 		return request(`${API_PREFIX}/me/journey`);
+	},
+
+	/** Fetch the signed-in applicant's persisted portal state. */
+	portalState(): Promise<Record<string, unknown>> {
+		return request(`${API_PREFIX}/me/portal-state`);
+	},
+
+	/** Merge partial updates into the applicant's portal state. */
+	updatePortalState(patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+		return request(`${API_PREFIX}/me/portal-state`, { method: "PATCH", ...json(patch) });
+	},
+
+	/** Fetch the signed-in applicant's in-app notifications. */
+	notifications(): Promise<{ notifications: Array<{ id: string; type: string; title: string; body: string; link: string | null; read: boolean; createdAt: string }> }> {
+		return request(`${API_PREFIX}/me/notifications`);
+	},
+
+	/** Mark a single notification as read. */
+	markNotificationRead(id: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/notifications/${id}/read`, { method: "PATCH" });
+	},
+
+	/** Mark all notifications as read. */
+	markAllNotificationsRead(): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/notifications/read-all`, { method: "POST" });
+	},
+
+	/** Get or create the applicant's conversation with their assigned consultant. */
+	getConversation(): Promise<{ id: string; title: string; consultantName: string | null }> {
+		return request(`${API_PREFIX}/me/conversation`);
+	},
+
+	/** Fetch messages in the applicant's conversation. */
+	getConversationMessages(params?: { limit?: number; before?: string }): Promise<{
+		messages: Array<{ id: string; conversationId: string; senderOpsUserId: string | null; senderName: string; content: string; messageType: string; replyToId?: string | null; createdAt: string }>;
+		total: number;
+		hasMore: boolean;
+	}> {
+		const qs = new URLSearchParams();
+		if (params?.limit) qs.set("limit", String(params.limit));
+		if (params?.before) qs.set("before", params.before);
+		const s = qs.toString();
+		return request(`${API_PREFIX}/me/conversation/messages${s ? `?${s}` : ""}`);
+	},
+
+	/** Send a message from the applicant into their conversation. */
+	sendConversationMessage(content: string): Promise<{
+		id: string;
+		conversationId: string;
+		senderOpsUserId: string | null;
+		senderName: string;
+		content: string;
+		messageType: string;
+		replyToId?: string | null;
+		createdAt: string;
+	}> {
+		return request(`${API_PREFIX}/me/conversation/messages`, {
+			method: "POST",
+			...json({ content }),
+		});
 	},
 };
 

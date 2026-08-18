@@ -65,9 +65,10 @@ export function ClientDirectory() {
 
 	const canManageAccess = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager";
 
-	const showToast = (type: "error" | "success" | "info", message: string) => {
+	const _showToast = (type: "error" | "success" | "info", message: string) => {
 		setToast({ type, message });
 	};
+	void _showToast;
 
 	const confirm = (title: string, message: string, action: () => void, danger = false) => {
 		setConfirmTitle(title);
@@ -204,7 +205,7 @@ export function ClientDirectory() {
 	};
 
 	return (
-		<div className="fade-in">
+		<><div className="fade-in">
 			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert" style={{ marginBottom: "1rem" }}>{error}</p> : null}
 

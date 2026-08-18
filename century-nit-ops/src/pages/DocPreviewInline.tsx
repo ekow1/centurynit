@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
 import { DocumentViewer } from "./DocumentViewer";
+import { documentsApi } from "century-nit-core/api";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
 	Verified: { bg: "var(--foreground)", text: "var(--background)", label: "Verified" },
@@ -40,6 +42,7 @@ export type DocPreviewData = {
 	status?: string;
 	isLive?: boolean;
 	docKey?: string;
+	documentId?: string;
 };
 
 /**
@@ -52,6 +55,8 @@ export function DocPreviewInline({
 	applicantName,
 	reference,
 	onBack,
+	documentId,
+	onVerdict,
 }: {
 	doc: DocPreviewData;
 	isMine?: boolean;
@@ -59,18 +64,42 @@ export function DocPreviewInline({
 	applicantName?: string;
 	reference?: string;
 	onBack: () => void;
+	/** Real document UUID. When provided, verdicts go to documentsApi.review
+	 *  instead of the demo useOpsState store. */
+	documentId?: string;
+	/** Fired after a successful real-API review so the parent can sync its
+	 *  document list with the updated status. */
+	onVerdict?: (status: "VERIFIED" | "REJECTED") => void;
 }) {
 	const { setDocVerdict, seededDocVerdicts } = useOpsState();
 	const { opsUser } = useOpsAuth();
 
 	const isLive = Boolean(doc.isLive);
 	const docKey = doc.docKey ?? doc.name;
+	const [overrideStatus, setOverrideStatus] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const liveStatus = isLive ? doc.status : (seededDocVerdicts[docKey] ?? doc.status);
-	const status = liveStatus ?? "Pending Review";
+	const status = overrideStatus ?? liveStatus ?? "Pending Review";
 	const statusStyle = STATUS_STYLES[status] ?? STATUS_STYLES["Pending Review"];
 	const settled = status === "Verified" || status === "Rejected";
 
-	function handleVerdict(verdict: "Verified" | "Rejected") {
+	async function handleVerdict(verdict: "Verified" | "Rejected") {
+		setError(null);
+		if (documentId) {
+			const apiStatus = verdict === "Verified" ? "VERIFIED" : "REJECTED";
+			setSaving(true);
+			try {
+				await documentsApi.review(documentId, { status: apiStatus });
+				setOverrideStatus(verdict);
+				onVerdict?.(apiStatus);
+			} catch (err: unknown) {
+				setError(err instanceof Error ? err.message : "Could not record verdict");
+			} finally {
+				setSaving(false);
+			}
+			return;
+		}
 		setDocVerdict(docKey, isLive, doc.name, verdict, opsUser?.name ?? "Consultant");
 	}
 
@@ -176,27 +205,34 @@ export function DocPreviewInline({
 				)}
 			</div>
 
-			{/* Action bar */}
-			{!settled && isMine && (
+		{/* Action bar */}
+		{!settled && isMine && (
+			<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+				{error && (
+					<p className="ops-modal__error" role="alert" style={{ fontSize: "0.78rem" }}>{error}</p>
+				)}
 				<div style={{ display: "flex", gap: "0.75rem" }}>
 					<button
-						onClick={() => handleVerdict("Verified")}
+						onClick={() => void handleVerdict("Verified")}
+						disabled={saving}
 						className="btn btn--sm"
 						style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
 					>
 						<CheckIcon />
-						Verify Document
+						{saving ? "Saving…" : "Verify Document"}
 					</button>
 					<button
-						onClick={() => handleVerdict("Rejected")}
+						onClick={() => void handleVerdict("Rejected")}
+						disabled={saving}
 						className="btn btn--ghost btn--sm"
 						style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
 					>
 						<XIcon />
-						Reject Document
+						{saving ? "Saving…" : "Reject Document"}
 					</button>
 				</div>
-			)}
+			</div>
+		)}
 
 			{!settled && !isMine && (
 				<div style={{

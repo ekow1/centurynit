@@ -10,6 +10,7 @@ import {
 	canViewBooking,
 	requireAuth,
 	requireMfa,
+	requireRole,
 	type AuthVariables,
 } from "../middleware/auth.js";
 import { zonedTimeToUtc } from "../lib/time.js";
@@ -734,8 +735,11 @@ bookingsRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/debug/reset-cancelled",
+		tags: ["Bookings"],
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		request: {},
 		responses: {
-			200: { description: "Reset cancelled consultations" },
+			200: { description: "Reset cancelled consultations (super admin only)" },
 		},
 	}),
 	async (c) => {

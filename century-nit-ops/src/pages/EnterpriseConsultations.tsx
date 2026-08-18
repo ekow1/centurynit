@@ -138,6 +138,20 @@ export function EnterpriseConsultations() {
 		void refresh();
 	}
 
+	async function handleReviewDoc(documentId: string, status: "VERIFIED" | "REJECTED") {
+		try {
+			const updated = await documentsApi.review(documentId, { status });
+			setRealDocs((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+			setPreviewingDoc((prev) =>
+				prev
+					? { ...prev, status: DOC_STATUS_MAP[updated.status] ?? updated.status, documentId: updated.id }
+					: prev,
+			);
+		} catch (err: unknown) {
+			showToast("error", err instanceof Error ? err.message : "Could not review document");
+		}
+	}
+
 	const active = liveSelected ?? selectedConsultation;
 	const docs = active ? docSummary(active, realDocs) : { total: 0, verified: 0, pending: 0, uploaded: 0 };
 	const isMine = Boolean(active && active.assignedOfficerEmail === opsUser?.email);
@@ -825,13 +839,15 @@ export function EnterpriseConsultations() {
 							{detailTab === "documents" && (
 								previewingDoc ? (
 									<div style={{ marginTop: "1rem" }}>
-										<DocPreviewInline
-											doc={previewingDoc}
-											isMine={isMine}
-											applicantName={active.applicantName}
-											reference={active.ref}
-											onBack={() => setPreviewingDoc(null)}
-										/>
+									<DocPreviewInline
+										doc={previewingDoc}
+										isMine={isMine}
+										applicantName={active.applicantName}
+										reference={active.ref}
+										documentId={previewingDoc.documentId}
+										onVerdict={(status) => void handleReviewDoc(previewingDoc.documentId!, status)}
+										onBack={() => setPreviewingDoc(null)}
+									/>
 									</div>
 								) : (
 									<div className="card" style={{ marginTop: "1rem" }}>
@@ -864,11 +880,11 @@ export function EnterpriseConsultations() {
 												return (
 													<li key={doc.id} style={{ padding: "0.75rem 0.5rem", borderBottom: idx < realDocs.length - 1 ? "1px solid var(--border-light)" : "none" }}>
 														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-															<button
-																type="button"
-																onClick={() => setPreviewingDoc({ name: doc.fileName, category: doc.documentType, status: displayStatus, isLive: true, docKey })}
-																style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: "0.75rem", flex: 1, minWidth: 0 }}
-															>
+														<button
+															type="button"
+															onClick={() => setPreviewingDoc({ name: doc.fileName, category: doc.documentType, status: displayStatus, isLive: true, docKey, documentId: doc.id })}
+															style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0, display: "flex", alignItems: "center", gap: "0.75rem", flex: 1, minWidth: 0 }}
+														>
 																<span style={{ fontSize: "1.1rem", fontFamily: "var(--font-mono)" }}>≡</span>
 																<div style={{ minWidth: 0 }}>
 																	<p style={{ fontWeight: 500, fontSize: "var(--text-sm)", textDecoration: "underline", textUnderlineOffset: "3px" }}>{doc.fileName}</p>
@@ -877,11 +893,27 @@ export function EnterpriseConsultations() {
 															</button>
 															<span className="portal-pill" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{displayStatus}</span>
 														</div>
-														{!settled && isMine && (
-															<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.5rem", paddingLeft: "1.875rem" }}>
-																<a href="/documents" className="btn btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
-															</div>
-														)}
+													{!settled && isMine && (
+														<div style={{ display: "flex", gap: "0.4rem", marginTop: "0.5rem", paddingLeft: "1.875rem", flexWrap: "wrap" }}>
+															<button
+																type="button"
+																onClick={() => void handleReviewDoc(doc.id, "VERIFIED")}
+																className="btn btn--sm"
+																style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}
+															>
+																✓ Verify
+															</button>
+															<button
+																type="button"
+																onClick={() => void handleReviewDoc(doc.id, "REJECTED")}
+																className="btn btn--ghost btn--sm"
+																style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}
+															>
+																✕ Reject
+															</button>
+															<a href="/documents" className="btn btn--ghost btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
+														</div>
+													)}
 														{!settled && !isMine && (
 															<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", paddingLeft: "1.875rem" }}>
 																Read-only - only the assigned consultant can verify documents.

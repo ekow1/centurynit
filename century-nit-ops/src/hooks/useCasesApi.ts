@@ -14,7 +14,12 @@ import {
 	type ApiConsultation,
 	type AssessmentResult,
 	type CommentKind,
+	type AssignScholarship,
+	type StudentScholarship,
+	type VisaStage,
+	API_PREFIX,
 } from "century-nit-shared";
+import { apiFetch } from "../lib/api";
 import type {
 	Assignee,
 	MockApplicant,
@@ -107,6 +112,7 @@ function toApplication(row: ApiApplication): MockApplication {
 	return {
 		id: row.id,
 		appId: row.appNumber,
+		applicantId: row.applicantId,
 		applicantName: row.applicantName,
 		email: row.email,
 		phone: row.phone ?? "",
@@ -301,6 +307,72 @@ export function useCasesApi() {
 		loading,
 		error,
 		refresh,
+		setApplicationStage: async (appId: string, stage: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setStage(app.id, stage));
+			await refresh();
+		},
+		setVisaStage: async (appId: string, stage: VisaStage, note?: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note));
+			await refresh();
+		},
+		setVisaInvoicePaid: async (appId: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ visaInvoicePaid: true }),
+			});
+			await refresh();
+		},
+		setVisaCounselorNote: async (appId: string, note: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ visaCounselorNote: note }),
+			});
+			await refresh();
+		},
+		setPaymentPlan: async (appId: string, plan: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ paymentPlanId: plan }),
+			});
+			await refresh();
+		},
+		advanceAgencyStage: async (appId: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			const nextIdx = Math.min((app.agencyStageIndex ?? 0) + 1, 2);
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ agencyStageIndex: nextIdx, agencySettled: nextIdx >= 2 }),
+			});
+			await refresh();
+		},
+		setTravelClearance: async (appId: string, cleared: boolean) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setTravelClearance(app.id, cleared));
+			await refresh();
+		},
+		togglePreDepartureTask: async (appId: string, taskId: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			const tasks = app.preDepartureTasks ?? [];
+			const updated = tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t));
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ preDepartureTasks: updated }),
+			});
+			await refresh();
+		},
 		assignConsultation: async (id: string, to: Assignee) =>
 			replaceConsultation(await consultationsApi.assign(id, await staffIdByEmail(to.email))),
 		confirmConsultationSlot: async (id: string) =>
@@ -321,6 +393,19 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.cancel(id, reason)),
 		rescheduleConsultation,
 		decideReschedule,
+		listScholarships: (applicantId: string) => 
+			apiFetch<{ scholarships: StudentScholarship[] }>(`${API_PREFIX}/schools/${applicantId}/scholarships`),
+		assignScholarship: (applicantId: string, data: AssignScholarship) =>
+			apiFetch<StudentScholarship>(`${API_PREFIX}/schools/${applicantId}/scholarships`, {
+				method: "POST",
+				body: JSON.stringify(data),
+			}),
+		removeScholarship: (applicantId: string, scholarshipId: string) =>
+			apiFetch(`${API_PREFIX}/schools/${applicantId}/scholarships/${scholarshipId}`, {
+				method: "DELETE",
+			}),
+		addApplication: async (applicantId: string, input: any) =>
+			applicationsApi.addForApplicant(applicantId, input),
 		assignApplication: async (id: string, to: Assignee) =>
 			replaceApplication(await applicationsApi.assign(id, await staffIdByEmail(to.email))),
 		acceptApplication: async (id: string) => replaceApplication(await applicationsApi.accept(id)),

@@ -1,4 +1,5 @@
 import { API_PREFIX } from "century-nit-shared";
+import type { SchoolApplication, SchoolApplicationList } from "century-nit-shared";
 /**
  * Thin fetch wrapper for the ops app.
  *
@@ -445,4 +446,20 @@ export function addChatParticipant(
 
 export function getStaffDirectory(): Promise<StaffDirectoryResponse> {
 	return apiFetch<StaffDirectoryResponse>(`${CHAT}/staff-directory`);
+}
+
+/* ── Schools (Ops) ── */
+
+export function listSchoolsForApplicant(applicantId: string): Promise<SchoolApplicationList> {
+	return apiFetch<SchoolApplicationList>(`${API_PREFIX}/schools/${applicantId}`);
+}
+
+export function updateSchoolStatus(
+	id: string,
+	body: { status: string; note?: string },
+): Promise<SchoolApplication> {
+	return apiFetch<SchoolApplication>(`${API_PREFIX}/schools/${id}/status`, {
+		method: "PATCH",
+		body: JSON.stringify(body),
+	});
 }

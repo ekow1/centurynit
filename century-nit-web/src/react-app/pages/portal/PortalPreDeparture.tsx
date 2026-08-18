@@ -244,12 +244,15 @@ function PreDepartureInner() {
 			<div className="card card--pad mt-5">
 				<p className="eyebrow">Need help?</p>
 				<p className="muted mt-2">
-					Message your consultant through the Messages tab if you have questions about any of
-					these tasks. We're here to help you prepare for departure.
+					Message your consultant through the chat widget at the bottom right of
+					the portal if you have questions about any of these tasks. We're here to
+					help you prepare for departure.
 				</p>
 				<div className="row mt-3">
-					<Button to="/portal/messages" variant="ghost">
-						Message consultant
+					{/* There is no /portal/messages route — FloatingChat is a widget, not
+					    a page. Send the applicant home and point them at the FAB. */}
+					<Button to="/portal/home" variant="ghost">
+						Open chat (bottom right)
 					</Button>
 				</div>
 			</div>

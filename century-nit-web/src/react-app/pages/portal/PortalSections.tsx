@@ -770,6 +770,31 @@ export function PortalFinancial() {
 	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
 	const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 
+	// Agency service-fee payment: redirect to Paystack hosted checkout, with
+	// a "Processing…" state while we wait for the redirect and surfaced errors
+	// if the API refuses (e.g. "No agency invoice found").
+	const [agencyPaying, setAgencyPaying] = useState(false);
+
+	async function handlePayAgency() {
+		if (agencyPaying) return;
+		setAgencyPaying(true);
+		try {
+			await payAgencyInstallment();
+			// On success the browser is redirected to Paystack; nothing else
+			// to do here. If the redirect didn't fire, payAgencyInstallment
+			// throws, so we land in the catch below.
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: err instanceof Error && err.message
+						? err.message
+						: "Could not start the payment. Please try again.",
+			);
+			setAgencyPaying(false);
+		}
+	}
+
 	useEffect(() => {
 		async function load() {
 			try {
@@ -850,6 +875,13 @@ export function PortalFinancial() {
 
 	return (
 		<div className="portal-page">
+			{agencyPaying ? (
+				<div className="loading-overlay" role="status" aria-live="polite">
+					<div className="spinner" aria-hidden />
+					<p className="mono">Contacting payment provider…</p>
+					<p className="muted">Redirecting you to Paystack to pay your service fee</p>
+				</div>
+			) : null}
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">Financial</p>
@@ -927,9 +959,9 @@ export function PortalFinancial() {
 						<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
 							A {Math.round(AGENCY_DEPOSIT_PORTION * 100)}% deposit (<MoneyInline usd={Math.round(a.agencyTotal * AGENCY_DEPOSIT_PORTION)} />) is required before you can choose a payment plan for the remaining balance.
 						</p>
-						<Button variant="primary" onClick={payAgencyInstallment} className="mt-3">
-							Pay deposit · <MoneyInline usd={Math.round(a.agencyTotal * AGENCY_DEPOSIT_PORTION)} />
-						</Button>
+					<Button variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying} className="mt-3">
+						{agencyPaying ? "Processing…" : <>Pay deposit · <MoneyInline usd={Math.round(a.agencyTotal * AGENCY_DEPOSIT_PORTION)} /></>}
+					</Button>
 					</div>
 				) : null}
 
@@ -1040,11 +1072,11 @@ export function PortalFinancial() {
 														{settled ? "Paid" : "Due now"}
 													</span>
 													<span className="ledger-item__detail muted">Pay the remaining 90% in one payment</span>
-													{!settled && (
-														<Button size="sm" variant="primary" onClick={payAgencyInstallment}>
-															Pay in full
-														</Button>
-													)}
+												{!settled && (
+													<Button size="sm" variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying}>
+														{agencyPaying ? "Processing…" : "Pay in full"}
+													</Button>
+												)}
 												</div>
 											</div>
 										) : (
@@ -1073,11 +1105,11 @@ export function PortalFinancial() {
 																	{preDepCovered ? "Paid" : preDepCurrent ? "Due now" : "Upcoming"}
 																</span>
 																<span className="ledger-item__detail muted">{preDep.detail}</span>
-																{preDepCurrent && (
-																	<Button size="sm" variant="primary" onClick={payAgencyInstallment}>
-																		Pay pre-departure
-																	</Button>
-																)}
+															{preDepCurrent && (
+																<Button size="sm" variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying}>
+																	{agencyPaying ? "Processing…" : "Pay pre-departure"}
+																</Button>
+															)}
 															</div>
 														</div>
 
@@ -1151,11 +1183,11 @@ export function PortalFinancial() {
 																			<span className="ledger-item__detail muted">
 																				{i === 0 ? `${schedule.graceDays}-day grace, then every ${schedule.intervalDays} days` : `Every ${schedule.intervalDays} days`}
 																			</span>
-																			{canPay && (
-																				<Button size="sm" variant="primary" onClick={payAgencyInstallment}>
-																					Pay {schedule.label} {a.postArrivalPaymentIndex + 1} of {schedule.payments}
-																				</Button>
-																			)}
+																		{canPay && (
+																			<Button size="sm" variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying}>
+																				{agencyPaying ? "Processing…" : <>Pay {schedule.label} {a.postArrivalPaymentIndex + 1} of {schedule.payments}</>}
+																			</Button>
+																		)}
 																		</div>
 																	</div>
 																);

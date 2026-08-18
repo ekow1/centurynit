@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage, PreDepartureTask } from "century-nit-core/ops";
+import { listSchoolsForApplicant, updateSchoolStatus } from "../lib/api";
+import type { SchoolApplication } from "century-nit-shared";
 
 /**
  * The pipeline every application moves through. Cards can be dragged between
@@ -66,6 +68,26 @@ const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> 
 	orientation: { label: "Orientation", icon: "\u25cb" },
 };
 
+/**
+ * Per-school application statuses. These match the server's
+ * `schoolTrackStatusSchema` enum — the dropdown writes back through
+ * `PATCH /api/v1/schools/:id/status`, so the values must be ones the API
+ * accepts (the simplified labels in the spec are mapped onto these).
+ */
+const SCHOOL_STATUSES = [
+	"Draft",
+	"Preparing Application",
+	"Documents under review",
+	"Submitted to University",
+	"Conditional Offer Received",
+	"Unconditional Offer",
+	"Offer Accepted",
+	"Offer Declined",
+	"Application Rejected",
+	"Waitlisted",
+	"Withdrawn",
+] as const;
+
 function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 	if (!tasks || tasks.length === 0) return 0;
 	return Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100);
@@ -89,7 +111,7 @@ function initials(name: string) {
 
 export function EnterpriseWorkflow() {
 	const { opsUser, opsRole, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applications, setApplicationStage } = useOpsState();
+	const { applications, setApplicationStage } = useCasesApi();
 	const [dragging, setDragging] = useState<string | null>(null);
 	const [dragOver, setDragOver] = useState<PipelineStage | null>(null);
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
@@ -132,7 +154,7 @@ export function EnterpriseWorkflow() {
 	}, [visible]);
 
 	function move(appId: string, to: PipelineStage) {
-		setApplicationStage(appId, to, opsUser?.name ?? "Staff");
+		setApplicationStage(appId, to);
 	}
 
 	function advance(app: MockApplication) {
@@ -492,6 +514,40 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 
+	const [schools, setSchools] = useState<SchoolApplication[]>([]);
+	const [schoolsLoading, setSchoolsLoading] = useState(false);
+	const [schoolError, setSchoolError] = useState<string | null>(null);
+	const [savingSchoolId, setSavingSchoolId] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!app.applicantId) { setSchools([]); return; }
+		let cancelled = false;
+		setSchoolsLoading(true);
+		setSchoolError(null);
+		listSchoolsForApplicant(app.applicantId)
+			.then((res) => { if (!cancelled) setSchools(res.schools); })
+			.catch((err: unknown) => {
+				if (!cancelled) {
+					setSchools([]);
+					setSchoolError(err instanceof Error ? err.message : "Could not load school applications");
+				}
+			})
+			.finally(() => { if (!cancelled) setSchoolsLoading(false); });
+		return () => { cancelled = true; };
+	}, [app.applicantId]);
+
+	async function handleStatusChange(school: SchoolApplication, status: string) {
+		setSavingSchoolId(school.id);
+		try {
+			const updated = await updateSchoolStatus(school.id, { status });
+			setSchools((prev) => prev.map((s) => (s.id === school.id ? updated : s)));
+		} catch (err: unknown) {
+			setSchoolError(err instanceof Error ? err.message : "Could not update school status");
+		} finally {
+			setSavingSchoolId(null);
+		}
+	}
+
 	return (
 		<>
 			<div className="wf-drawer-overlay" onClick={onClose} />
@@ -533,6 +589,66 @@ function CaseDetailDrawer({ app, onClose }: { app: MockApplication; onClose: () 
 							<p className="wf-info-label">Officer</p>
 							<p className="wf-info-value">{app.assignedStaff || "Unassigned"}</p>
 						</div>
+					</div>
+
+					{/* School applications — per-school offer decisions */}
+					<div className="wf-section">
+						<h3 className="wf-section__title">School Applications</h3>
+						{schoolError && (
+							<p className="ops-modal__error" role="alert" style={{ marginBottom: "0.75rem" }}>{schoolError}</p>
+						)}
+						{schoolsLoading ? (
+							<p className="muted" style={{ fontSize: "0.82rem" }}>Loading school applications…</p>
+						) : schools.length === 0 ? (
+							<p className="muted" style={{ fontSize: "0.82rem" }}>
+								No school applications recorded for this applicant yet.
+							</p>
+						) : (
+							<ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+								{schools.map((school) => (
+									<li
+										key={school.id}
+										style={{
+											padding: "0.6rem 0.75rem",
+											border: "1px solid var(--border-light)",
+											background: "var(--card)",
+										}}
+									>
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+											<div style={{ minWidth: 0 }}>
+												<p style={{ fontWeight: 600, fontSize: "0.82rem" }}>
+													{school.universityId}
+												</p>
+												<p className="muted" style={{ fontSize: "0.72rem", marginTop: "0.15rem" }}>
+													{school.programId} · Intake {school.intake}
+												</p>
+											</div>
+											<label style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+												<span className="muted" style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
+													Status
+												</span>
+												<select
+													value={school.status}
+													disabled={savingSchoolId === school.id}
+													onChange={(e) => void handleStatusChange(school, e.target.value)}
+													className="input input--sm"
+													style={{ fontSize: "0.78rem", padding: "0.25rem 0.4rem" }}
+												>
+													{SCHOOL_STATUSES.map((s) => (
+														<option key={s} value={s}>{s}</option>
+													))}
+												</select>
+											</label>
+										</div>
+										{school.handlerNote && (
+											<p className="muted" style={{ fontSize: "0.72rem", marginTop: "0.4rem" }}>
+												Note: {school.handlerNote}
+											</p>
+										)}
+									</li>
+								))}
+							</ul>
+						)}
 					</div>
 
 					{/* Stage-specific content */}

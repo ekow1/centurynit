@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -20,7 +21,8 @@ import { POST_ARRIVAL_SCHEDULES } from "century-nit-core";
  * view and aging breakdown.
  */
 export function EnterpriseLedger() {
-	const { applicants, liveCase } = useOpsState();
+	const { applicants } = useCasesApi();
+	const { liveCase } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [search, setSearch] = useState("");

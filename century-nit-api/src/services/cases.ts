@@ -17,6 +17,7 @@ import {
 	caseComments,
 	consultationActivities,
 	consultations,
+	notifications,
 	opsUsers,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
@@ -443,6 +444,7 @@ async function serializeApplicant(row: ApplicantRow): Promise<ApiApplicant> {
 		assignedOfficerName: officer?.name ?? null,
 		assignedOfficerEmail: officer?.email ?? null,
 		profile: (row.profile as ApplicantProfile) ?? emptyProfile(),
+		portalState: (row.portalState as Record<string, unknown>) ?? {},
 		currentStage,
 		status,
 		createdAt: row.createdAt.toISOString(),
@@ -1585,6 +1587,24 @@ export async function recordAssignment(consultationId: string, officerName: stri
 		actorOpsUserId: actor.opsUserId,
 		actorName: actor.name,
 		payload: { officerName },
+	});
+}
+
+/* ── In-app notifications ─────────────────────────────────────────────────── */
+
+export async function createNotification(input: {
+	userId: string;
+	type: string;
+	title: string;
+	body: string;
+	link?: string;
+}): Promise<void> {
+	await db.insert(notifications).values({
+		userId: input.userId,
+		type: input.type,
+		title: input.title,
+		body: input.body,
+		link: input.link ?? null,
 	});
 }
 

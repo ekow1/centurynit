@@ -109,6 +109,7 @@ export const applicantSchema = z.object({
 	assignedOfficerName: z.string().nullable(),
 	assignedOfficerEmail: z.string().email().nullable(),
 	profile: applicantProfileSchema,
+	portalState: z.record(z.unknown()).default({}),
 	currentStage: z.string(),
 	status: z.string(),
 	createdAt: z.string().datetime(),

@@ -1,6 +1,6 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { leads, leadEvents, opsUsers } from "../db/schema.js";
+import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
 
 export interface LeadView {
 	id: string;
@@ -23,12 +23,48 @@ export interface LeadView {
 let syncRan = false;
 
 /**
+ * Remove any leads that belong to staff members (ops_users) or accepted invitations.
+ * Called once on server boot to clean up the race condition from invitation acceptance.
+ */
+export async function cleanupStaffLeads(): Promise<void> {
+	try {
+		const staffMembers = await db.query.opsUsers.findMany();
+		const staffEmails = new Set(staffMembers.map((s) => s.email.toLowerCase().trim()));
+
+		// Also include emails of accepted invitations
+		const acceptedInvites = await db.query.staffInvitations.findMany();
+		for (const inv of acceptedInvites) {
+			if (inv.status === "ACCEPTED" || inv.status === "PENDING") {
+				staffEmails.add(inv.email.toLowerCase().trim());
+			}
+		}
+
+		const allLeads = await db.query.leads.findMany();
+		let removed = 0;
+		for (const lead of allLeads) {
+			if (staffEmails.has(lead.email.toLowerCase().trim())) {
+				await db.delete(leads).where(eq(leads.id, lead.id));
+				removed++;
+			}
+		}
+		if (removed > 0) {
+			console.log(`[CRM] Cleaned up ${removed} staff leads`);
+		}
+	} catch (err) {
+		console.warn("[CRM] cleanupStaffLeads error:", err);
+	}
+}
+
+/**
  * Backfill any existing registered client accounts into the CRM leads pipeline.
  * Runs once per server boot, not on every listLeads() call.
  */
 export async function syncLeadsFromRegisteredUsers(): Promise<void> {
 	if (syncRan) return;
 	syncRan = true;
+
+	// First, clean up any staff leads from the race condition
+	await cleanupStaffLeads();
 
 	try {
 		const allUsers = await db.query.users.findMany();
@@ -81,6 +117,14 @@ export async function captureLeadFromUser(
 			where: eq(opsUsers.email, normalizedEmail),
 		});
 		if (isStaff) {
+			return;
+		}
+
+		// 1b. Also check for pending staff invitations — staff are invited before opsUsers row exists
+		const pendingInvite = await db.query.staffInvitations.findFirst({
+			where: eq(staffInvitations.email, normalizedEmail),
+		});
+		if (pendingInvite && pendingInvite.status === "PENDING") {
 			return;
 		}
 

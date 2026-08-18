@@ -4,6 +4,8 @@ import type {
 	SchoolApplication,
 	SchoolApplicationList,
 	UpdateSchoolStatus,
+	AssignScholarship,
+	StudentScholarship,
 } from "century-nit-shared";
 
 import { db } from "../db/index.js";
@@ -14,6 +16,8 @@ import {
 	invoices,
 	schoolApplications,
 	schoolTrackEvents,
+	studentScholarships,
+	catalogScholarships,
 } from "../db/schema.js";
 import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
@@ -305,4 +309,60 @@ export async function updateSchoolStatus(
 	});
 
 	return serializeSchool(updated);
+}
+
+export async function listScholarshipsForApplicant(applicantId: string): Promise<StudentScholarship[]> {
+	const rows = await db
+		.select()
+		.from(studentScholarships)
+		.where(eq(studentScholarships.applicantId, applicantId));
+	return rows.map((r) => ({
+		id: r.id,
+		applicantId: r.applicantId,
+		scholarshipId: r.scholarshipId,
+		awardedAt: r.awardedAt!.toISOString(),
+		notes: r.notes,
+	}));
+}
+
+export async function assignScholarshipForApplicant(
+	applicantId: string,
+	data: AssignScholarship,
+): Promise<StudentScholarship> {
+	// Verify scholarship exists
+	const [scholarship] = await db
+		.select()
+		.from(catalogScholarships)
+		.where(eq(catalogScholarships.id, data.scholarshipId));
+	if (!scholarship) {
+		throw new HttpError(404, "SCHOLARSHIP_NOT_FOUND", "Scholarship not found in catalog");
+	}
+
+	const [created] = await db
+		.insert(studentScholarships)
+		.values({
+			applicantId,
+			scholarshipId: data.scholarshipId,
+			notes: data.notes,
+		})
+		.returning();
+
+	return {
+		id: created.id,
+		applicantId: created.applicantId,
+		scholarshipId: created.scholarshipId,
+		awardedAt: created.awardedAt!.toISOString(),
+		notes: created.notes,
+	};
+}
+
+export async function removeScholarshipForApplicant(applicantId: string, scholarshipId: string): Promise<void> {
+	await db
+		.delete(studentScholarships)
+		.where(
+			and(
+				eq(studentScholarships.applicantId, applicantId),
+				eq(studentScholarships.scholarshipId, scholarshipId)
+			)
+		);
 }

@@ -469,6 +469,7 @@ function liveApplication(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockAppl
 	return {
 		id: LIVE_APPLICATION_ID,
 		appId: snap.applicationId ?? snap.consultationRef ?? "APP-LIVE",
+		applicantId: "f6d333a4-8463-4554-b4a8-9d567bb48e00",
 		applicantName: snap.name,
 		email: snap.email,
 		phone: snap.phone || "-",
@@ -803,6 +804,7 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 				const newApp: MockApplication = {
 					id: `app-${Date.now()}`,
 					appId: `APP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+					applicantId: target.id,
 					applicantName: target.applicantName,
 					email: target.email,
 					phone: target.phone,

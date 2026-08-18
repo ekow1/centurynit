@@ -169,6 +169,36 @@
       "when": 1787047449118,
       "tag": "0023_curved_lilith",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0024_portal_state_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787049049189,
+      "tag": "0025_awesome_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0024_portal_state_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0025_applicant_chat",
+      "breakpoints": true
     }
+  ]
+}
   ]
 }

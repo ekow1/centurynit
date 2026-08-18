@@ -200,6 +200,7 @@ export type { PreDepartureTask };
 export interface MockApplication {
 	id: string;
 	appId: string;
+	applicantId: string;
 	applicantName: string;
 	email: string;
 	phone: string;

@@ -1,6 +1,8 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import {
+	assignScholarshipSchema,
+	studentScholarshipSchema,
 	addSchoolApplicationSchema,
 	lockSchoolsSchema,
 	schoolApplicationListSchema,
@@ -16,6 +18,9 @@ import {
 	lockSchoolsForApplicant,
 	removeSchoolForApplicant,
 	updateSchoolStatus,
+	assignScholarshipForApplicant,
+	removeScholarshipForApplicant,
+	listScholarshipsForApplicant,
 } from "../services/schools.js";
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -138,8 +143,34 @@ meSchoolsRouter.openapi(
 	},
 );
 
-/* ── PATCH /api/v1/schools/:id/status (Ops) ────────────────────────────────── */
+/* ── GET /api/v1/schools/:applicantId (Ops) ───────────────────────────────── */
+/* Staff list of an applicant's school application tracks, so the ops console
+   can show per-school offer decisions in the workflow board. */
 
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{applicantId}",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: z.object({ applicantId: z.string().uuid() }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: schoolApplicationListSchema } },
+				description: "Applicant's school application tracks",
+			},
+		},
+	}),
+	async (c) => {
+		const { applicantId } = c.req.valid("param");
+		const list = await listSchoolsForApplicant(applicantId);
+		return c.json(list);
+	},
+);
+
+/* ── PATCH /api/v1/schools/:id/status (Ops) ────────────────────────────────── */
 opsSchoolsRouter.openapi(
 	createRoute({
 		method: "patch",
@@ -167,5 +198,85 @@ opsSchoolsRouter.openapi(
 		const body = c.req.valid("json");
 		const updated = await updateSchoolStatus(id, body, staff.name);
 		return c.json(updated);
+	},
+);
+
+/* ── GET /api/v1/schools/:applicantId/scholarships (Ops) ─────────────────── */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{applicantId}/scholarships",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: z.object({ applicantId: z.string().uuid() }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ scholarships: z.array(studentScholarshipSchema) }) } },
+				description: "List scholarships for applicant",
+			},
+		},
+	}),
+	async (c) => {
+		const { applicantId } = c.req.valid("param");
+		const list = await listScholarshipsForApplicant(applicantId);
+		return c.json({ scholarships: list });
+	},
+);
+
+/* ── POST /api/v1/schools/:applicantId/scholarships (Ops) ────────────────── */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{applicantId}/scholarships",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: z.object({ applicantId: z.string().uuid() }),
+			body: {
+				content: { "application/json": { schema: assignScholarshipSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: studentScholarshipSchema } },
+				description: "Scholarship assigned",
+			},
+		},
+	}),
+	async (c) => {
+		const { applicantId } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const created = await assignScholarshipForApplicant(applicantId, body);
+		return c.json(created, 201);
+	},
+);
+
+/* ── DELETE /api/v1/schools/:applicantId/scholarships/:scholarshipId (Ops) ─ */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{applicantId}/scholarships/{scholarshipId}",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: z.object({ 
+				applicantId: z.string().uuid(),
+				scholarshipId: z.string().min(1),
+			}),
+		},
+		responses: {
+			204: { description: "Scholarship removed" },
+		},
+	}),
+	async (c) => {
+		const { applicantId, scholarshipId } = c.req.valid("param");
+		await removeScholarshipForApplicant(applicantId, scholarshipId);
+		return c.body(null, 204);
 	},
 );

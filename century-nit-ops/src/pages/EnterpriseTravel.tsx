@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
@@ -40,7 +40,7 @@ export function EnterpriseTravel() {
 		setTravelClearance,
 		togglePreDepartureTask,
 		setApplicationStage,
-	} = useOpsState();
+	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -302,14 +302,14 @@ export function EnterpriseTravel() {
 											<button
 												type="button"
 												className={`btn btn--sm ${active.paymentPlanId === "full" ? "btn--primary" : "btn--ghost"}`}
-												onClick={() => setPaymentPlan(active.appId, "full", opsUser?.name ?? "Staff")}
+												onClick={() => setPaymentPlan(active.appId, "full")}
 											>
 												Full Payment
 											</button>
 											<button
 												type="button"
 												className={`btn btn--sm ${active.paymentPlanId === "installments" ? "btn--primary" : "btn--ghost"}`}
-												onClick={() => setPaymentPlan(active.appId, "installments", opsUser?.name ?? "Staff")}
+												onClick={() => setPaymentPlan(active.appId, "installments")}
 											>
 												Installments
 											</button>
@@ -323,7 +323,7 @@ export function EnterpriseTravel() {
 										</p>
 										{active.paymentPlanId && (
 											<button
-												onClick={() => setApplicationStage(active.appId, "Travel Assistance", opsUser?.name ?? "Staff")}
+												onClick={() => setApplicationStage(active.appId, "Travel Assistance")}
 												className="btn btn--primary btn--sm"
 												style={{ marginTop: "0.75rem" }}
 											>
@@ -377,7 +377,7 @@ export function EnterpriseTravel() {
 														</div>
 														{current && !active.agencySettled && active.stage === "Travel Assistance" && (
 															<button
-																onClick={() => advanceAgencyStage(active.appId, opsUser?.name ?? "Staff")}
+																onClick={() => advanceAgencyStage(active.appId)}
 																className="btn btn--ghost btn--sm"
 																style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.6rem" }}
 															>
@@ -411,7 +411,7 @@ export function EnterpriseTravel() {
 											</div>
 											{active.stage === "Travel Assistance" && (
 												<button
-													onClick={() => setTravelClearance(active.appId, active.travelClearance !== "cleared", opsUser?.name ?? "Staff")}
+													onClick={() => setTravelClearance(active.appId, active.travelClearance !== "cleared")}
 													className={`btn btn--sm ${active.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
 													style={{ whiteSpace: "nowrap" }}
 												>
@@ -511,7 +511,7 @@ export function EnterpriseTravel() {
 											All milestones complete. Ready to mark case as Completed.
 										</p>
 										<button
-											onClick={() => setApplicationStage(active.appId, "Completed", opsUser?.name ?? "Staff")}
+											onClick={() => setApplicationStage(active.appId, "Completed")}
 											className="btn btn--primary btn--sm"
 											style={{ marginTop: "0.5rem" }}
 										>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
@@ -45,8 +46,9 @@ function KPICard({ label, value, note, inverted }: { label: string; value: strin
 }
 
 export function EnterpriseReports() {
-	const { opsUser, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants, leads, packages } = useOpsState();
+	const { opsUser, scopeRecords, canSeeAllBranches, requiresAssignmentScope } = useOpsAuth();
+	const { consultations, applications, applicants } = useCasesApi();
+	const { leads, packages } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const [dateFrom, setDateFrom] = useState("");
 	const [dateTo, setDateTo] = useState("");
@@ -75,8 +77,11 @@ export function EnterpriseReports() {
 		[scopeRecords, applicants, me],
 	);
 	const scopedLeads = useMemo(
-		() => scopeRecords(leads, (l) => l.assignedTo === me),
-		[scopeRecords, leads, me],
+		() => {
+			if (canSeeAllBranches) return leads;
+			return requiresAssignmentScope ? leads.filter((l) => l.assignedTo === me) : leads;
+		},
+		[leads, me, canSeeAllBranches, requiresAssignmentScope],
 	);
 	const myConsultations = scopedConsultations;
 	const myApplications = scopedApplications;

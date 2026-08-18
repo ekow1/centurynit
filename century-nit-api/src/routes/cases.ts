@@ -1,5 +1,8 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
+import { and, desc, eq } from "drizzle-orm";
+import { db } from "../db/index.js";
+import * as schema from "../db/schema.js";
 import {
 	acceptApplication,
 	addCaseComment,
@@ -53,6 +56,11 @@ import {
 } from "../services/paystack.js";
 import { listSchoolsForApplicant } from "../services/schools.js";
 import {
+	getOrCreateApplicantConversation,
+	getApplicantMessages,
+	sendApplicantMessage,
+} from "../services/chat.js";
+import {
 	addCommentSchema,
 	applicantListSchema,
 	applicantSchema,
@@ -81,6 +89,9 @@ import {
 	setVisaStageSchema,
 	toggleChecklistSchema,
 	updateMyProfileSchema,
+	portalStateSchema,
+	updatePortalStateSchema,
+	notificationSchema,
 } from "century-nit-shared";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -937,6 +948,16 @@ meRouter.openapi(
 		}
 		const body = c.req.valid("json");
 		const updated = await patchApplicant(applicant.id, body);
+
+		// Keep the auth user row in sync when the name changes so the portal
+		// sidebar, session probes, and email templates reflect the new name.
+		if (body.name !== undefined && body.name.trim() !== applicant.name) {
+			await db
+				.update(schema.users)
+				.set({ name: body.name.trim(), updatedAt: new Date() })
+				.where(eq(schema.users.id, user.id));
+		}
+
 		return c.json(await serializeApplicant(updated));
 	},
 );
@@ -1193,6 +1214,67 @@ meRouter.openapi(
 
 /* ── Journey stage ─────────────────────────────────────────────────────── */
 
+/**
+ * Applicant self-service: pay the agency/service fee for their application via
+ * Paystack hosted checkout.
+ *
+ * Resolves the applicant's `agency` invoice automatically — no invoice id is
+ * sent. Refuses with 404 if no agency invoice exists, 409 if it is still a
+ * proforma (not yet issued by staff), and 409 if it is already paid. Otherwise
+ * initializes a Paystack checkout for the outstanding balance and returns the
+ * authorization URL to redirect the browser to.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/agency-payment",
+		tags: ["Invoices"],
+		middleware: [requireAuth] as const,
+		request: {},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ authorizationUrl: z.string().url() }),
+					},
+				},
+				description: "Paystack checkout to redirect the browser to",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const invoices = await listInvoicesForClient(user.id);
+		const row = invoices.find((i) => i.type === "agency");
+		if (!row) {
+			throw new HttpError(
+				404,
+				"INVOICE_NOT_FOUND",
+				"No agency invoice found. Please ask your consultant to raise one.",
+			);
+		}
+		if (row.status === "proforma") {
+			throw new HttpError(
+				409,
+				"INVOICE_PROFORMA",
+				"Invoice not yet issued. Please ask your consultant to issue it.",
+			);
+		}
+		const serialized = await serializeInvoice(row);
+		if (row.status === "paid" || serialized.balanceCents <= 0) {
+			throw new HttpError(409, "INVOICE_PAID", "Invoice already paid.");
+		}
+		const origin = c.req.header("origin") || env.FRONTEND_URL;
+		const checkout = await createPaystackCheckout({
+			email: user.email,
+			amountCents: serialized.balanceCents,
+			invoiceId: row.id,
+			callbackUrl: `${origin}/portal/pay?invoice=${row.id}&paystack=1`,
+		});
+		return c.json({ authorizationUrl: checkout.authorizationUrl });
+	},
+);
+
 const journeySchema = z.object({
 	currentStage: z.string(),
 	chapterUnlocks: z.object({
@@ -1412,6 +1494,279 @@ meRouter.openapi(
 			note: body.note,
 		});
 		return c.json({ ok: true });
+	},
+);
+
+/* ── /me portal-state ─────────────────────────────────────────────────────── */
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/portal-state",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: portalStateSchema } },
+				description: "The portal state",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			return c.json({});
+		}
+		return c.json((applicant.portalState as Record<string, unknown>) ?? {});
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/portal-state",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: updatePortalStateSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: portalStateSchema } },
+				description: "Updated portal state",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const body = c.req.valid("json");
+		const current = (applicant.portalState as Record<string, unknown>) ?? {};
+		const merged = { ...current, ...body };
+		await db
+			.update(schema.applicants)
+			.set({ portalState: merged, updatedAt: new Date() })
+			.where(eq(schema.applicants.id, applicant.id));
+		return c.json(merged);
+	},
+);
+
+/* ── /me notifications ────────────────────────────────────────────────────── */
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/notifications",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ notifications: z.array(notificationSchema) }),
+					},
+				},
+				description: "Notifications for the current user",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const rows = await db.query.notifications.findMany({
+			where: eq(schema.notifications.userId, user.id),
+			orderBy: [desc(schema.notifications.createdAt)],
+			limit: 50,
+		});
+		return c.json({
+			notifications: rows.map((r) => ({
+				id: r.id,
+				type: r.type,
+				title: r.title,
+				body: r.body,
+				link: r.link,
+				read: r.read,
+				createdAt: r.createdAt.toISOString(),
+			})),
+		});
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/notifications/{id}/read",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ ok: z.boolean() }) } },
+				description: "Notification marked as read",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const id = c.req.valid("param").id;
+		await db
+			.update(schema.notifications)
+			.set({ read: true })
+			.where(and(eq(schema.notifications.id, id), eq(schema.notifications.userId, user.id)));
+		return c.json({ ok: true });
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/notifications/read-all",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ ok: z.boolean() }) } },
+				description: "All notifications marked as read",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		await db
+			.update(schema.notifications)
+			.set({ read: true })
+			.where(and(eq(schema.notifications.userId, user.id), eq(schema.notifications.read, false)));
+		return c.json({ ok: true });
+	},
+);
+
+/* ── /me/conversation — applicant-to-staff chat ──────────────────────────── */
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/conversation",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							id: z.string().uuid(),
+							title: z.string(),
+							consultantName: z.string().nullable(),
+						}),
+					},
+				},
+				description: "The applicant's conversation with their assigned consultant",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const conv = await getOrCreateApplicantConversation(user.id);
+		return c.json(conv);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/conversation/messages",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			query: z.object({
+				limit: z.number().int().optional(),
+				before: z.string().uuid().optional(),
+			}),
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							messages: z.array(
+								z.object({
+									id: z.string().uuid(),
+									conversationId: z.string().uuid(),
+									senderOpsUserId: z.string().uuid().nullable(),
+									senderName: z.string(),
+									content: z.string(),
+									messageType: z.string(),
+									replyToId: z.string().uuid().nullable().optional(),
+									createdAt: z.string().datetime(),
+								}),
+							),
+							total: z.number().int(),
+							hasMore: z.boolean(),
+						}),
+					},
+				},
+				description: "Messages in the applicant's conversation",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const query = c.req.valid("query");
+		const conv = await getOrCreateApplicantConversation(user.id);
+		const result = await getApplicantMessages(conv.id, user.id, query);
+		return c.json(result);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversation/messages",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ content: z.string().min(1).max(5000) }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							id: z.string().uuid(),
+							conversationId: z.string().uuid(),
+							senderOpsUserId: z.string().uuid().nullable(),
+							senderName: z.string(),
+							content: z.string(),
+							messageType: z.string(),
+							replyToId: z.string().uuid().nullable().optional(),
+							createdAt: z.string().datetime(),
+						}),
+					},
+				},
+				description: "The sent message",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const conv = await getOrCreateApplicantConversation(user.id);
+		const msg = await sendApplicantMessage(conv.id, user.id, user.name ?? "Applicant", body.content);
+		return c.json(msg);
 	},
 );
 

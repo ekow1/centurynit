@@ -3,6 +3,8 @@ import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { BranchScopeFilter } from "./BranchScopeFilter";
+import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
+import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
 
@@ -17,12 +19,30 @@ export function EnterpriseCases() {
 		assignApplication,
 		commentOnApplication,
 		requestApplicationDocs,
+		addApplication,
+		setApplicationStage,
 	} = useCasesApi();
+
+	/**
+	 * The pipeline a case advances through. Mirrors the Workflow Board columns
+	 * so "Advance to next stage" moves a case to the same place a drag would.
+	 */
+	const STAGES = [
+		"Document Verification",
+		"School Submission",
+		"Offer Letter Review",
+		"Visa Processing",
+		"Payment Plan",
+		"Travel Assistance",
+		"Completed",
+	] as const;
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
 
 	const canSeeAll = canSeeAllBranches;
 	const unassignedCases = applications.filter((a) => !a.assignedStaff).length;
@@ -64,6 +84,24 @@ export function EnterpriseCases() {
 		setSelectedApp(updated);
 	}
 
+	async function handleAdvanceStage() {
+		if (!selectedApp) return;
+		const idx = STAGES.indexOf(selectedApp.stage as (typeof STAGES)[number]);
+		if (idx < 0) return;
+		const next = STAGES[idx + 1];
+		if (!next) return;
+		try {
+			await setApplicationStage(selectedApp.appId, next);
+			setSelectedApp({ ...selectedApp, stage: next });
+			setActionSuccess(`Advanced to "${next}"`);
+			setTimeout(() => setActionSuccess(null), 4000);
+		} catch (err: unknown) {
+			setActionSuccess(null);
+			const msg = err instanceof Error ? err.message : "Could not advance stage";
+			window.alert(msg);
+		}
+	}
+
 	return (
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -72,6 +110,13 @@ export function EnterpriseCases() {
 					<p className="lead mt-1">Manage, review, and approve staff-assigned applications.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+					<button
+						className="btn btn--primary"
+						onClick={() => setIsAddModalOpen(true)}
+						style={{ whiteSpace: "nowrap" }}
+					>
+						+ Add School Application
+					</button>
 					{canAssignWork && unassignedCases > 0 && (
 						<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)", whiteSpace: "nowrap" }}>
 							{unassignedCases} awaiting assignment
@@ -80,6 +125,24 @@ export function EnterpriseCases() {
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
+
+			{isAddModalOpen && (
+				<AddSchoolApplicationModal
+					onClose={() => setIsAddModalOpen(false)}
+					onAdd={async (applicantId, destinationId, universityId, programId, intake) => {
+						await addApplication(applicantId, { destinationId, universityId, programId, intake });
+						setActionSuccess("School application added successfully!");
+						setTimeout(() => setActionSuccess(null), 4000);
+					}}
+				/>
+			)}
+
+			{isScholarshipModalOpen && selectedApp && (
+				<AssignScholarshipModal
+					applicantId={selectedApp.applicantId}
+					onClose={() => setIsScholarshipModalOpen(false)}
+				/>
+			)}
 
 			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
 
@@ -298,35 +361,63 @@ export function EnterpriseCases() {
 									}
 								/>
 
-								{/* Action Control */}
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Application Lifecycle Action</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												Status: {selectedApp.status}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												{selectedApp.status === "Accepted"
-													? "This application is Accepted & Active in Applicants directory."
-													: "Accepting will mark this application as Approved & create/activate the Applicant record."}
-											</p>
-										</div>
-										{selectedApp.status !== "Accepted" && (
-											<button
-												onClick={() => handleAcceptApplication(selectedApp.appId)}
-												className="btn btn--primary"
-												style={{ whiteSpace: "nowrap" }}
-											>
-												✓ Accept & Approve
-											</button>
-										)}
+							{/* Action Control */}
+							<div className="card" style={{ background: "var(--muted)" }}>
+								<p className="eyebrow mb-1">Application Lifecycle Action</p>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+									<div>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+											Status: {selectedApp.status}
+										</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+											{selectedApp.status === "Accepted"
+												? "This application is Accepted & Active in Applicants directory."
+												: "Accepting will mark this application as Approved & create/activate the Applicant record."}
+										</p>
 									</div>
+									{selectedApp.status !== "Accepted" && (
+										<button
+											onClick={() => handleAcceptApplication(selectedApp.appId)}
+											className="btn btn--primary"
+											style={{ whiteSpace: "nowrap" }}
+										>
+											✓ Accept & Approve
+										</button>
+									)}
 								</div>
+
+								{/* Stage advance */}
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)", flexWrap: "wrap" }}>
+									<div>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+											Current stage: {(liveSelected ?? selectedApp).stage}
+										</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+											{(liveSelected ?? selectedApp).stage === "Completed"
+												? "This case has reached the final stage."
+												: `Next: ${STAGES[Math.min(STAGES.indexOf((liveSelected ?? selectedApp).stage as (typeof STAGES)[number]) + 1, STAGES.length - 1)] ?? "Completed"}`}
+										</p>
+									</div>
+									<button
+										type="button"
+										onClick={handleAdvanceStage}
+										disabled={(liveSelected ?? selectedApp).stage === "Completed"}
+										className="btn btn--outline"
+										style={{ whiteSpace: "nowrap" }}
+									>
+										{(liveSelected ?? selectedApp).stage === "Completed"
+											? "✓ Completed"
+											: "Advance to next stage →"}
+									</button>
+								</div>
+							</div>
 
 								{/* Application Meta */}
 								<div className="card">
-									<p className="eyebrow mb-2">Target & Assignment</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+										<p className="eyebrow mb-0">Target & Assignment</p>
+										<button className="btn btn--outline btn--sm" onClick={() => setIsScholarshipModalOpen(true)}>Manage Scholarships</button>
+									</div>
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{selectedApp.university}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{selectedApp.program}</p></div>

@@ -11,6 +11,7 @@ import type {
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
+	applicants,
 	conversations,
 	conversationParticipants,
 	messages,
@@ -560,4 +561,150 @@ async function notifyOfflineParticipants(
 
 		await queueEmail(email);
 	}
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Applicant-facing chat — lets applicants message their assigned consultant
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Get or create a conversation between an applicant and their assigned
+ * consultant. The conversation is typed as `"applicant"` and linked to the
+ * applicant via `conversations.userId`.
+ */
+export async function getOrCreateApplicantConversation(userId: string): Promise<{
+	id: string;
+	title: string;
+	consultantName: string | null;
+}> {
+	// Check if a conversation already exists for this user
+	const [existing] = await db
+		.select()
+		.from(conversations)
+		.where(and(eq(conversations.userId, userId), eq(conversations.type, "applicant")))
+		.limit(1);
+
+	if (existing) {
+		const [participant] = await db
+			.select({ name: opsUsers.name })
+			.from(conversationParticipants)
+			.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
+			.where(eq(conversationParticipants.conversationId, existing.id))
+			.limit(1);
+		return {
+			id: existing.id,
+			title: existing.title,
+			consultantName: participant?.name ?? null,
+		};
+	}
+
+	// Look up the applicant to find their assigned officer
+	const [appRow] = await db
+		.select({
+			id: applicants.id,
+			name: applicants.name,
+			assignedOfficerId: applicants.assignedOfficerId,
+		})
+		.from(applicants)
+		.where(eq(applicants.userId, userId))
+		.limit(1);
+
+	if (!appRow) {
+		throw new HttpError(404, "APPLICANT_NOT_FOUND", "No applicant on file");
+	}
+
+	// Get the assigned officer details
+	let officerName = "Consultant";
+	const officerId = appRow.assignedOfficerId;
+
+	if (officerId) {
+		const officer = await getParticipantOpsUser(officerId);
+		if (officer) officerName = officer.name;
+	}
+
+	// Create the conversation — createdBy needs a valid opsUserId
+	// If no officer is assigned yet, we still need a value for the NOT NULL column.
+	// We'll use a placeholder that will be updated when an officer is assigned.
+	if (!officerId) {
+		throw new HttpError(409, "NO_ASSIGNED_OFFICER", "Your case has not been assigned to a consultant yet");
+	}
+
+	const [conv] = await db
+		.insert(conversations)
+		.values({
+			type: "applicant",
+			title: appRow.name,
+			userId,
+			createdBy: officerId,
+		})
+		.returning();
+
+	// Add the assigned officer as a participant
+	await db.insert(conversationParticipants).values({
+		conversationId: conv.id,
+		opsUserId: officerId,
+		role: "owner",
+	});
+
+	return {
+		id: conv.id,
+		title: conv.title,
+		consultantName: officerName,
+	};
+}
+
+/**
+ * Get messages for an applicant's conversation.
+ */
+export async function getApplicantMessages(
+	conversationId: string,
+	userId: string,
+	opts: { limit?: number; before?: string } = {},
+): Promise<ChatMessageList> {
+	// Verify the conversation belongs to this user
+	const [conv] = await db
+		.select({ id: conversations.id })
+		.from(conversations)
+		.where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
+		.limit(1);
+	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
+
+	return getMessages(conversationId, "", opts);
+}
+
+/**
+ * Send a message from an applicant into their conversation.
+ */
+export async function sendApplicantMessage(
+	conversationId: string,
+	userId: string,
+	userName: string,
+	content: string,
+): Promise<ChatMessage> {
+	// Verify the conversation belongs to this user
+	const [conv] = await db
+		.select({ id: conversations.id })
+		.from(conversations)
+		.where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
+		.limit(1);
+	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
+
+	const [created] = await db
+		.insert(messages)
+		.values({
+			conversationId,
+			senderUserId: userId,
+			senderName: userName,
+			content,
+			messageType: "text",
+		})
+		.returning();
+
+	// Update conversation timestamp
+	await db
+		.update(conversations)
+		.set({ updatedAt: new Date() })
+		.where(eq(conversations.id, conversationId));
+
+	return serializeMessage(created);
 }

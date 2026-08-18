@@ -15,4 +15,6 @@ export * from "./schemas/payment.js";
 export * from "./schemas/leads.js";
 export * from "./api-version.js";
 export * from "./fee-schedule.js";
+export * from "./schemas/portal.js";
 
+export * from "./schemas/catalog.js";

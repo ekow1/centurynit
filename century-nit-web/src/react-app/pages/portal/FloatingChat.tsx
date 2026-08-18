@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo, type FormEvent } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, type FormEvent } from "react";
 import { useAppState } from "../../context/AppState";
 import { useApplicantTickets } from "../../data/opsTicketBridge";
-import { formatDualCurrency, CONSULTATION_FEE, type ChatMessage } from "century-nit-core";
+import { formatDualCurrency, CONSULTATION_FEE, meApi, type ChatMessage } from "century-nit-core";
 
 type ChatTab = "ai" | "consultant" | "support";
 
@@ -235,12 +235,44 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 }
 
 export function FloatingChat() {
-	const { messages, sendMessage, authUser, booking, application } = useAppState();
+	const { authUser, booking, application } = useAppState();
 	const { tickets: myTickets, createTicket, replyToTicket } = useApplicantTickets(authUser?.email);
 	const [open, setOpen] = useState(false);
 	const [tab, setTab] = useState<ChatTab>("ai");
 	const [input, setInput] = useState("");
 	const [typing, setTyping] = useState(false);
+
+	// Consultant messages now come from the real API, not localStorage
+	const [consultantMessages, setConsultantMessages] = useState<ChatMessage[]>([]);
+	const [consultantName, setConsultantName] = useState<string | null>(null);
+	const [sendingMessage, setSendingMessage] = useState(false);
+
+	const refreshConsultantMessages = useCallback(async () => {
+		if (!authUser) return;
+		try {
+			const conv = await meApi.getConversation();
+			setConsultantName(conv.consultantName);
+			const res = await meApi.getConversationMessages({ limit: 50 });
+			setConsultantMessages(
+				res.messages.map((m) => ({
+					id: m.id,
+					sender: m.senderOpsUserId ? "consultant" : "applicant",
+					authorName: m.senderName,
+					text: m.content,
+					at: m.createdAt,
+				})),
+			);
+		} catch {
+			// keep local values
+		}
+	}, [authUser]);
+
+	useEffect(() => {
+		if (!authUser) return;
+		void refreshConsultantMessages();
+		const id = window.setInterval(refreshConsultantMessages, 10_000);
+		return () => window.clearInterval(id);
+	}, [authUser, refreshConsultantMessages]);
 	const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
 		{
 			id: "ai-1",
@@ -285,7 +317,7 @@ export function FloatingChat() {
 	}, [openTicket, authUser]);
 
 	const currentMessages =
-		tab === "ai" ? aiMessages : tab === "consultant" ? messages : supportMessages;
+		tab === "ai" ? aiMessages : tab === "consultant" ? consultantMessages : supportMessages;
 
 	useEffect(() => {
 		if (scrollRef.current) {
@@ -303,7 +335,7 @@ export function FloatingChat() {
 		if (tab === "ai") return "AI Assistant";
 		// Replies must come from the consultant this applicant was actually
 		// assigned, or the thread contradicts the appointment card
-		if (tab === "consultant") return booking.consultantName ?? "Your consultant";
+		if (tab === "consultant") return consultantName ?? booking.consultantName ?? "Your consultant";
 		return openTicket?.assignedTo || "Century Support";
 	}
 
@@ -324,7 +356,8 @@ export function FloatingChat() {
 			at: new Date().toISOString(),
 		};
 		if (tab === "consultant") {
-			sendMessage(text);
+			// Consultant replies come from the server via polling, not scripted
+			return;
 		} else {
 			const setter = getSetter();
 			if (setter) setter((prev) => [...prev, reply]);
@@ -345,7 +378,14 @@ export function FloatingChat() {
 		};
 
 		if (tab === "consultant") {
-			sendMessage(trimmed);
+			// Real API: send message to server, no scripted reply
+			setSendingMessage(true);
+			meApi.sendConversationMessage(trimmed)
+				.then(() => refreshConsultantMessages())
+				.catch(() => { /* keep local */ })
+				.finally(() => setSendingMessage(false));
+			setInput("");
+			return;
 		} else if (tab === "support") {
 			// Real ticketing: append to the open request, or raise a new one.
 			// No scripted reply here — a person answers from the ops helpdesk.
@@ -388,8 +428,8 @@ export function FloatingChat() {
 	// Name the consultant the flow actually assigned, not a hardcoded one
 	const base = TAB_META[tab];
 	const meta =
-		tab === "consultant" && booking.consultantName
-			? { ...base, subtitle: `${booking.consultantName} · responds within 24h` }
+		tab === "consultant" && (consultantName ?? booking.consultantName)
+			? { ...base, subtitle: `${consultantName ?? booking.consultantName} · responds within 24h` }
 			: tab === "support" && openTicket
 				? {
 						...base,
@@ -582,7 +622,7 @@ export function FloatingChat() {
 						/>
 						<button
 							type="submit"
-							disabled={!input.trim()}
+							disabled={!input.trim() || sendingMessage}
 							style={{
 								width: "36px",
 								height: "36px",

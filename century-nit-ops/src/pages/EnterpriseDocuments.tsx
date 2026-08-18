@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { DocumentReviewQueue } from "./DocumentReviewQueue";
@@ -116,7 +117,8 @@ function CloseIcon() {
 
 export function EnterpriseDocuments() {
 	const { opsUser } = useOpsAuth();
-	const { applicants, consultations, setDocVerdict, seededDocVerdicts, logActivity } = useOpsState();
+	const { applicants, consultations } = useCasesApi();
+	const { setDocVerdict, seededDocVerdicts, logActivity } = useOpsState();
 	const [filter, setFilter] = useState<"All" | "Pending Review" | "Verified">("All");
 	const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 	const [selectedDoc, setSelectedDoc] = useState<DocRow | null>(null);

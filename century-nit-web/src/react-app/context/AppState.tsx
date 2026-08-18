@@ -13,6 +13,7 @@ import {
 	signOut as authSignOut,
 } from "./authStore";
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
+import { invoicesApi } from "century-nit-core/api";
 import {
 	APPLICATION_FEE,
 	APP_INVOICE_BASE,
@@ -29,7 +30,6 @@ import {
 	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_FUNDING_TRACKS,
 	AGENCY_DEPOSIT_PORTION,
-	POST_ARRIVAL_SCHEDULES,
 	serviceFeeFor,
 	SEED_MESSAGES,
 	SEED_NOTIFICATIONS,
@@ -681,6 +681,7 @@ export function getChapterUnlocks(
 	const admitted = hasAcceptedOffer(schools);
 	const visaPaid = isVisaInvoicePaid(app);
 	const visaDone = app.visaStatus === "complete";
+	const agencySettled = isAgencySettled(app);
 
 	return {
 		journey: true,
@@ -690,8 +691,10 @@ export function getChapterUnlocks(
 		// Tracking is its own page - only after application invoice paid
 		tracking: appPaid && Boolean(app.schoolSelectionDoneAt),
 		visa: admitted,
-		// Travel opens on visa approval; the service fee gates it from inside
-		pre_departure: admitted && visaPaid && visaDone,
+		// Travel opens on visa approval AND agency settlement — the same
+		// `finished` check PreDepartureInner uses, so the gate and the page
+		// never disagree about who can enter.
+		pre_departure: admitted && visaPaid && visaDone && agencySettled,
 		// Completion needs the travel checklist finished, not a payment state
 		complete: Boolean(app.preDepartureCompletedAt),
 	};
@@ -756,9 +759,13 @@ type AppStateContextValue = {
 	/** Custom schedules created by ops that the portal may show */
 	customPostArrivalSchedules: { id: string; label: string; detail: string; payments: number; intervalDays: number; graceDays: number }[];
 	setCustomPostArrivalSchedules: (schedules: { id: string; label: string; detail: string; payments: number; intervalDays: number; graceDays: number }[]) => void;
-	payAgencyInstallment: () => void;
+	payAgencyInstallment: () => Promise<void>;
 	/** Multi-school tracking (no new docs - consultation already has them) */
 	schoolApplications: SchoolApplicationTrack[];
+	/** Replace the full school applications list (used by server-poll sync). */
+	setSchoolApplications: (
+		next: SchoolApplicationTrack[] | ((prev: SchoolApplicationTrack[]) => SchoolApplicationTrack[]),
+	) => void;
 	addSchoolApplication: (input: {
 		destinationId: string;
 		universityId: string;
@@ -1027,6 +1034,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		safeSetJSON(PRE_DEPARTURE_KEY, preDepartureTasks);
 	}, [preDepartureTasks]);
 
+	/** Persist portal state to server whenever key fields change (debounced). */
+	useEffect(() => {
+		if (!authUser) return;
+		const t = window.setTimeout(() => {
+			void meApi.updatePortalState({
+				preDepartureTasks,
+				postArrivalScheduleId: application.postArrivalSchedule,
+				enabledPostArrivalSchedules,
+				customPostArrivalSchedules,
+			}).catch(() => { /* keep local */ });
+		}, 1500);
+		return () => window.clearTimeout(t);
+	}, [authUser, preDepartureTasks, application.postArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules]);
+
 	/** Prefill profile from consultation when eligible (no invoice yet) */
 	useEffect(() => {
 		if (!isConsultationEligible(booking)) return;
@@ -1149,60 +1170,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return () => window.clearTimeout(t);
 	}, [schoolApplications, application.visaInvoice.status]);
 
-	/** Visa tracking simulation only after visa invoice paid */
-	useEffect(() => {
-		if (application.visaInvoice.status !== "paid" || !application.visaInvoice.paidAt) return;
-		if (application.visaStatus === "complete") return;
-
-		const start = new Date(application.visaInvoice.paidAt).getTime();
-		const steps: { at: number; status: VisaStatus; note: string }[] = [
-			{ at: 0, status: "pending", note: "Visa case opened (simulated). Amount paid recorded." },
-			{
-				at: 5_000,
-				status: "biometrics",
-				note: "Biometrics / appointment window open (simulated).",
-			},
-			{
-				at: 12_000,
-				status: "decision",
-				note: `Visa decision in progress. Fee paid: $${application.visaInvoice.amount} USD.`,
-			},
-			{
-				at: 18_000,
-				status: "complete",
-				note: "Visa processing complete (simulated). Choose payment plan next.",
-			},
-		];
-		const order: VisaStatus[] = ["locked", "pending", "biometrics", "decision", "complete"];
-
-		const tick = () => {
-			const elapsed = Date.now() - start;
-			const step = [...steps].reverse().find((s) => elapsed >= s.at);
-			if (!step) return;
-			setApplication((prev) => {
-				if (prev.visaStatus === "complete") return prev;
-				const prevIdx = order.indexOf(prev.visaStatus);
-				const nextIdx = order.indexOf(step.status);
-				if (nextIdx <= prevIdx && prev.visaStatus !== "locked") return prev;
-				const now = new Date().toISOString();
-				return {
-					...prev,
-					visaStatus: step.status,
-					visaUpdatedAt: now,
-					counselorNote: step.note,
-				};
-			});
-		};
-
-		tick();
-		const id = window.setInterval(tick, 1_000);
-		return () => window.clearInterval(id);
-	}, [
-		application.visaInvoice.status,
-		application.visaInvoice.paidAt,
-		application.visaInvoice.amount,
-		application.visaStatus,
-	]);
+	/** Visa tracking simulation REMOVED — visaStage is now server-driven via syncFromServer */
 
 	const updateApplication = useCallback((patch: Partial<ApplicationData>) => {
 		setApplication((prev) => ({ ...prev, ...patch }));
@@ -1546,98 +1514,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}));
 	}, []);
 
-	const payAgencyInstallment = useCallback(() => {
-		setApplication((prev) => {
-			if (prev.agencySettledAt) return prev;
-			const total = prev.agencyTotal || serviceFeeFor(prev.schoolFundingTrack);
-			const now = new Date().toISOString();
-
-			// Step 1: Pay the deposit first (gates plan selection)
-			if (!prev.agencyDepositPaid) {
-				const depositAmount = Math.round(total * AGENCY_DEPOSIT_PORTION);
-				return {
-					...prev,
-					agencyPaid: prev.agencyPaid + depositAmount,
-					agencyDepositPaid: true,
-					agencyStageIndex: 0,
-					counselorNote: `Service fee deposit paid (${Math.round(AGENCY_DEPOSIT_PORTION * 100)}%). Choose your payment plan for the remaining balance.`,
-				};
-			}
-
-			// Step 2+: Pay remaining balance per chosen plan
-			const plan = prev.paymentPlanId;
-			if (!plan) return prev; // deposit paid but no plan chosen yet
-
-			if (plan === "full") {
-				return {
-					...prev,
-					agencyPaid: total,
-					agencyStageIndex: 3,
-					agencySettledAt: now,
-					completedAt: prev.visaStatus === "complete" ? now : prev.completedAt,
-					counselorNote: "Service fee paid in full. Settlement complete.",
-				};
-			}
-
-			// Installment plan:
-			//   idx 0 = pre-departure (50% lump sum)
-			//   idx 1 = post-arrival recurring payments (40% split per schedule)
-			const idx = prev.agencyStageIndex;
-
-			// Pre-departure milestone
-			if (idx === 0) {
-				const add = Math.round(total * 0.5);
-				const paid = prev.agencyPaid + add;
-				return {
-					...prev,
-					agencyPaid: paid,
-					agencyStageIndex: 1,
-					agencySettledAt: null,
-					counselorNote: "Pre-departure milestone paid. Choose your post-arrival payment schedule.",
-				};
-			}
-
-			// Post-arrival recurring payments
-			if (idx >= 1) {
-				const schedule = [...POST_ARRIVAL_SCHEDULES, ...customPostArrivalSchedulesRef.current].find((s) => s.id === prev.postArrivalSchedule);
-				if (!schedule) return prev; // schedule not chosen yet
-
-				const postArrivalTotal = Math.round(total * 0.4);
-				const perPayment = Math.round(postArrivalTotal / schedule.payments);
-				const payIdx = prev.postArrivalPaymentIndex;
-
-				if (payIdx >= schedule.payments) {
-					return {
-						...prev,
-						agencyPaid: total,
-						agencySettledAt: now,
-						completedAt: prev.visaStatus === "complete" ? now : prev.completedAt,
-					};
-				}
-
-				const add = payIdx === schedule.payments - 1
-					? total - prev.agencyPaid  // final payment: settle exact remainder
-					: perPayment;
-				const paid = Math.min(total, prev.agencyPaid + add);
-				const nextPayIdx = payIdx + 1;
-				const settled = nextPayIdx >= schedule.payments || paid >= total;
-
-				return {
-					...prev,
-					agencyPaid: settled ? total : paid,
-					agencyStageIndex: 1,
-					postArrivalPaymentIndex: nextPayIdx,
-					agencySettledAt: settled ? now : null,
-					completedAt:
-						settled && prev.visaStatus === "complete" ? now : prev.completedAt,
-					counselorNote: settled
-						? "All post-arrival payments complete. Service fee fully settled."
-						: `Post-arrival payment ${nextPayIdx} of ${schedule.payments} recorded (${schedule.label}).`,
-				};
-			}
-
-			return prev;
-		});
+	/**
+	 * Initiate an agency service-fee payment through Paystack hosted checkout.
+	 *
+	 * The server resolves the agency invoice and outstanding balance from the
+	 * session, returns a Paystack `authorizationUrl`, and we redirect the
+	 * browser there — same pattern as `paystackCheckout` for stage invoices.
+	 * On return, `PortalPayCallback` detects `?type=agency` and re-syncs
+	 * the authoritative agency invoice state from the server via
+	 * `syncFromServer`, which maps the invoice's `paidCents`/`balanceCents`
+	 * onto `agencyPaid` / `agencyDepositPaid` / `agencyStageIndex` /
+	 * `agencySettledAt`. Local-only settlement (the old `setApplication` step
+	 * math) is gone — the server is now the source of truth.
+	 *
+	 * Errors (e.g. "No agency invoice found") propagate to the caller so the
+	 * Financial page can surface them instead of silently mutating state.
+	 */
+	const payAgencyInstallment = useCallback(async () => {
+		const { authorizationUrl } = await meApi.agencyPayment();
+		if (authorizationUrl && /^https?:\/\//i.test(authorizationUrl)) {
+			window.location.href = authorizationUrl;
+			return;
+		}
+		throw new Error("Could not initialize Paystack checkout.");
 	}, []);
 
 	const updateBooking = useCallback((patch: Partial<BookingData>) => {
@@ -1878,22 +1777,49 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 	}, []);
 
-	const revealOutcome = useCallback(() => {
+	const revealOutcome = useCallback(async () => {
+		// Read the actual outcome from the server rather than forcing "eligible".
+		// If the consultant hasn't posted one yet, we surface "Pending" instead.
+		let outcome: EligibilityOutcome = "pending";
+		let note =
+			"Pending — your consultant has not posted an eligibility outcome yet.";
+		try {
+			const res = await meApi.application();
+			const result = res.consultation?.assessmentResult;
+			if (result?.outcome) {
+				const o = result.outcome.toLowerCase();
+				outcome =
+					o === "eligible"
+						? "eligible"
+						: o.includes("conditional")
+							? "conditional"
+							: o.includes("ineligible") || o.includes("not eligible")
+								? "not_eligible"
+								: o.includes("info")
+									? "needs_info"
+									: "pending";
+				if (result.notes) note = result.notes;
+			}
+		} catch {
+			/* keep the "Pending" defaults — do not force a value */
+		}
 		setBooking((prev) => {
 			if (prev.consultationPhase !== "assessment_complete") return prev;
 			return {
 				...prev,
 				consultationPhase: "outcome",
-				eligibilityOutcome: "eligible",
+				eligibilityOutcome: outcome,
 				outcomeAt: new Date().toISOString(),
-				eligibilityNote:
-					"Eligible - the consultant recommends suitable countries, universities, and programmes. You may proceed to the official application stage.",
+				eligibilityNote: note,
 			};
 		});
 		pushNotification({
 			type: "stage",
 			title: "Eligibility outcome viewed",
-			body: "You are eligible. Check your recommendations and next steps.",
+			body:
+				outcome === "eligible"
+					? "You are eligible. Check your recommendations and next steps."
+					: "Your eligibility outcome is now available.",
 			link: "/portal/consultation",
 		});
 	}, [pushNotification]);
@@ -1987,10 +1913,98 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					programId: a.program || prev.programId,
 					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
+					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 				}));
 			}
 		} catch {
 			/* server state fallback — keep local values */
+		}
+
+		/* ── Sync portal state (pre-departure tasks, post-arrival schedules) ── */
+		try {
+			const ps = await meApi.portalState();
+			if (ps && typeof ps === "object") {
+				if (Array.isArray(ps.preDepartureTasks) && ps.preDepartureTasks.length > 0) {
+					setPreDepartureTasks((prev) => {
+						const serverTasks = ps.preDepartureTasks as PreDepartureTask[];
+						return prev.map((t) => {
+							const server = serverTasks.find((s) => s.id === t.id);
+							return server ?? t;
+						});
+					});
+				}
+				if (ps.postArrivalScheduleId) {
+					setApplication((prev) => ({
+						...prev,
+						postArrivalSchedule: ps.postArrivalScheduleId as string,
+					}));
+				}
+				if (Array.isArray(ps.enabledPostArrivalSchedules)) {
+					setEnabledPostArrivalSchedules(ps.enabledPostArrivalSchedules as string[]);
+				}
+				if (Array.isArray(ps.customPostArrivalSchedules) && ps.customPostArrivalSchedules.length > 0) {
+					setCustomPostArrivalSchedules(ps.customPostArrivalSchedules as any);
+				}
+			}
+		} catch {
+			/* keep local values */
+		}
+
+		/* ── Sync in-app notifications from server ── */
+		try {
+			const notifRes = await meApi.notifications();
+			if (notifRes?.notifications?.length) {
+				const serverNotifs: AppNotification[] = notifRes.notifications.map((n) => ({
+					id: n.id,
+					type: n.type as AppNotification["type"],
+					title: n.title,
+					body: n.body,
+					read: n.read,
+					at: n.createdAt,
+					link: n.link ?? undefined,
+				}));
+				setNotifications(serverNotifs);
+			}
+		} catch {
+			/* keep local values */
+		}
+
+		/* ── Sync agency service-fee invoice (Stage IV settlement) ──
+		 * The agency invoice is the server's record of truth for the service
+		 * fee. Map its paid/balance cents onto the local agency state so the
+		 * Financial page reflects real settlement progress after a Paystack
+		 * return (and on every poll). Deposit is "paid" once any money lands;
+		 * stage index is derived from how far through the plan the payments
+		 * have gone (deposit 10% → pre-departure +50% → post-arrival 40%). */
+		try {
+			const { invoices: agencyInvoices } = await invoicesApi.list({ type: "agency" });
+			const agencyInvoice = agencyInvoices[0];
+			if (agencyInvoice) {
+				const totalUsd = agencyInvoice.subtotalCents / 100;
+				const paidUsd = agencyInvoice.paidCents / 100;
+				const settled = agencyInvoice.balanceCents === 0 && agencyInvoice.paidCents > 0;
+				const depositThreshold = totalUsd * AGENCY_DEPOSIT_PORTION;
+				const depositPaid = paidUsd > 0 && paidUsd >= depositThreshold - 0.5;
+				const preDepDone = paidUsd >= depositThreshold + totalUsd * 0.5 - 0.5;
+				setApplication((prev) => ({
+					...prev,
+					agencyTotal: totalUsd > 0 ? totalUsd : prev.agencyTotal,
+					agencyPaid: paidUsd,
+					agencyDepositPaid: depositPaid,
+					agencyStageIndex: settled
+						? (prev.paymentPlanId === "full" ? 3 : 1)
+						: preDepDone
+							? 1
+							: 0,
+					agencySettledAt: settled ? agencyInvoice.updatedAt : null,
+					completedAt:
+						settled && prev.visaStatus === "complete"
+							? agencyInvoice.updatedAt
+							: prev.completedAt,
+				}));
+			}
+		} catch {
+			/* keep local values — server may be unreachable */
 		}
 	}, [authUser]);
 
@@ -2112,6 +2126,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			},
 			payAgencyInstallment,
 			schoolApplications,
+			setSchoolApplications,
 			addSchoolApplication,
 			removeSchoolApplication,
 			lockSchoolSelection,
@@ -2177,6 +2192,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			customPostArrivalSchedules,
 			payAgencyInstallment,
 			schoolApplications,
+			setSchoolApplications,
 			addSchoolApplication,
 			removeSchoolApplication,
 			lockSchoolSelection,

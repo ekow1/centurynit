@@ -126,7 +126,7 @@ export function StartJourney() {
 		nav("/portal", { replace: true });
 	}
 
-	async function social(provider: "google") {
+	async function social(_provider: "google") {
 		try {
 			setLoading(true);
 			setError("");
@@ -163,7 +163,7 @@ export function StartJourney() {
 					: await signUpWithEmail({ email: mail, password, name: displayName });
 
 			// Check if MFA is required via the Better Auth twoFactorRedirect
-			if (data?.twoFactorRedirect) {
+			if ((data as Record<string, unknown>)?.twoFactorRedirect) {
 				// For now, we show the TOTP code input (Better Auth handles this)
 				// In the future this can branch based on the user's mfa_method
 				setLoading(false);

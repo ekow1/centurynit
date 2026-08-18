@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-do
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
 import { roleCanAccess, API_PREFIX } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { EnterpriseChat } from "./EnterpriseChat";
 import { useLivePortalCase } from "./useLivePortalCase";
@@ -103,7 +104,6 @@ const PLATFORM_NAV: NavEntry[] = [
 		blurb: "Pages & branding",
 		children: [
 			{ to: "/cms", module: "cms", label: "Content (CMS)", blurb: "Pages & posts", icon: "cms" },
-			{ to: "/lookups", module: "lookups", label: "Form Catalogue", blurb: "Dynamic form dropdowns", icon: "cms" },
 			{ to: "/site", module: "site", label: "Site & UI", blurb: "Branding & nav", icon: "site" },
 		],
 	},
@@ -253,7 +253,7 @@ export function EnterpriseLayout() {
 	});
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
 
-	const { consultations, leads } = useOpsState();
+	const { consultations } = useCasesApi();
 	const [apiLeads, setApiLeads] = useState<Array<{ id: string; stage: string }>>([]);
 
 	useEffect(() => {
@@ -287,13 +287,8 @@ export function EnterpriseLayout() {
 		for (const al of apiLeads) {
 			if (al.stage === "New Lead") count++;
 		}
-		for (const l of leads) {
-			if (l.stage === "new" && (!l.assignedTo || l.assignedTo === opsUser.name || opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager" || opsRole === "coordinator")) {
-				// only if not already counted
-			}
-		}
 		return count;
-	}, [consultations, opsUser, apiLeads, leads, opsRole]);
+	}, [consultations, opsUser, apiLeads, opsRole]);
 
 	function handleRoleSwitch(role: OpsRole) {
 		opsSignIn(role);

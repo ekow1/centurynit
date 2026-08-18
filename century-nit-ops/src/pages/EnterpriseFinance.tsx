@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -16,7 +17,8 @@ const RANGES = [
 ] as const;
 
 export function EnterpriseFinance() {
-	const { applicants, liveCase } = useOpsState();
+	const { applicants } = useCasesApi();
+	const { liveCase } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const { opsRole } = useOpsAuth();
 	const [branchFilter, setBranchFilter] = useState("all");

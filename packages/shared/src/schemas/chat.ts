@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /* ── Enums ─────────────────────────────────────────────────────────────── */
 
-export const conversationTypeSchema = z.enum(["direct", "entity", "group"]);
+export const conversationTypeSchema = z.enum(["direct", "entity", "group", "applicant"]);
 export type ConversationType = z.infer<typeof conversationTypeSchema>;
 
 export const conversationRoleSchema = z.enum(["owner", "member"]);
@@ -16,7 +16,7 @@ export type ChatMessageType = z.infer<typeof messageTypeSchema>;
 export const chatMessageSchema = z.object({
 	id: z.string().uuid(),
 	conversationId: z.string().uuid(),
-	senderOpsUserId: z.string().uuid(),
+	senderOpsUserId: z.string().uuid().nullable(),
 	senderName: z.string(),
 	content: z.string(),
 	messageType: messageTypeSchema,

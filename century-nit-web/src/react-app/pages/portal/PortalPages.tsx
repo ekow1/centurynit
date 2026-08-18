@@ -450,12 +450,27 @@ function AssessmentForm({
 }) {
 	const [section, setSection] = useState(0);
 	const [lookups, setLookups] = useState<LookupValue[]>([]);
+	const [catalogUnis, setCatalogUnis] = useState<any[]>([]);
+	const [catalogDestinations, setCatalogDestinations] = useState<any[]>([]);
+	const [catalogPrograms, setCatalogPrograms] = useState<any[]>([]);
 	
 	useEffect(() => {
 		apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`)
 			.then((res) => {
 				if (res && res.lookups) setLookups(res.lookups);
 			})
+			.catch(console.error);
+
+		apiFetch<{ universities: any[] }>(`${API_PREFIX}/catalog/universities`)
+			.then(res => setCatalogUnis(res.universities))
+			.catch(console.error);
+
+		apiFetch<{ destinations: any[] }>(`${API_PREFIX}/catalog/destinations`)
+			.then(res => setCatalogDestinations(res.destinations))
+			.catch(console.error);
+
+		apiFetch<{ programs: any[] }>(`${API_PREFIX}/catalog/programs`)
+			.then(res => setCatalogPrograms(res.programs))
 			.catch(console.error);
 	}, []);
 
@@ -603,14 +618,14 @@ function AssessmentForm({
 							<label htmlFor="a-inst">Institution</label>
 							<select id="a-inst" className="select select--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })}>
 		<option value="">Select</option>
-		{getLookupOptions('institution')}
+		{catalogUnis.map(u => (<option key={u.id} value={u.name}>{u.name}</option>))}
 	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-fos">Field of study</label>
 							<select id="a-fos" className="select select--full-border" value={assessment.fieldOfStudy} onChange={(e) => onUpdate({ fieldOfStudy: e.target.value })}>
 		<option value="">Select</option>
-		{getLookupOptions('fieldOfStudy')}
+		{Array.from(new Set(catalogPrograms.map(p => p.field).filter(Boolean))).map(f => (<option key={f} value={f}>{f}</option>))}
 	</select>
 						</div>
 						<div className="field">
@@ -674,7 +689,7 @@ function AssessmentForm({
 							<label htmlFor="a-pc2">Preferred countries</label>
 							<select id="a-pc2" className="select select--full-border" value={assessment.preferredCountries} onChange={(e) => onUpdate({ preferredCountries: e.target.value })}>
 		<option value="">Select</option>
-		{getLookupOptions('preferredCountries')}
+		{catalogDestinations.map(d => (<option key={d.id} value={d.name}>{d.name}</option>))}
 	</select>
 						</div>
 						<div className="field">
@@ -688,7 +703,7 @@ function AssessmentForm({
 							<label htmlFor="a-pf">Preferred field</label>
 							<select id="a-pf" className="select select--full-border" value={assessment.preferredField} onChange={(e) => onUpdate({ preferredField: e.target.value })}>
 		<option value="">Select</option>
-		{getLookupOptions('preferredField')}
+		{Array.from(new Set(catalogPrograms.map(p => p.field).filter(Boolean))).map(f => (<option key={f} value={f}>{f}</option>))}
 	</select>
 						</div>
 						<div className="field">
@@ -832,47 +847,6 @@ const OUTCOME_PILLS: Record<EligibilityOutcome, string> = {
 	not_eligible: "portal-pill--needs_info",
 };
 
-const CONSULTANT_RECOMMENDATIONS: Record<EligibilityOutcome, { countries: string[]; programs: string[]; notes: string[] }> = {
-	pending: { countries: [], programs: [], notes: [] },
-	eligible: {
-		countries: ["United Kingdom", "Canada", "Australia"],
-		programs: ["MSc Data Science", "MSc Business Analytics", "MA International Relations"],
-		notes: [
-			"Strong academic background matches top-tier universities.",
-			"English proficiency meets requirements for most partner institutions.",
-			"Financial capacity is sufficient for the proposed budget range.",
-			"Recommended to apply to 3–5 universities for best outcomes.",
-		],
-	},
-	conditional: {
-		countries: ["United Kingdom", "Ireland"],
-		programs: ["Pre-Master's Pathway", "MSc Management"],
-		notes: [
-			"English score slightly below requirement - recommend retaking IELTS (target 6.5+).",
-			"Consider a pathway/foundation programme as an entry route.",
-			"Submit updated transcripts with degree certificate once available.",
-		],
-	},
-	needs_info: {
-		countries: [],
-		programs: [],
-		notes: [
-			"Please upload your passport bio page.",
-			"Submit your most recent academic transcript.",
-			"Provide proof of English proficiency (IELTS/TOEFL/Duolingo).",
-		],
-	},
-	not_eligible: {
-		countries: [],
-		programs: [],
-		notes: [
-			"Current qualifications do not meet minimum entry requirements for the preferred pathways.",
-			"Consider upgrading qualifications or exploring alternative programmes.",
-			"Re-apply after completing the recommended preparatory steps.",
-		],
-	},
-};
-
 function ConsultationOutcome({
 	booking,
 	onMockOutcome,
@@ -886,7 +860,40 @@ function ConsultationOutcome({
 }) {
 	const outcome = booking.eligibilityOutcome;
 	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete" && booking.consultationPhase !== "cancelled");
-	const recs = CONSULTANT_RECOMMENDATIONS[outcome];
+	const { toast } = useNotifier();
+	// Recommendations live on the server consultation record, not in a
+	// hardcoded lookup table. Fetch them when an outcome is shown so the
+	// applicant sees what their consultant actually recommended.
+	const [recs, setRecs] = useState<{ countries: string[]; programs: string[]; university: string | null; notes: string | null }>({
+		countries: [],
+		programs: [],
+		university: null,
+		notes: null,
+	});
+	useEffect(() => {
+		if (isPending) return;
+		let active = true;
+		(async () => {
+			try {
+				const res = await meApi.application();
+				if (!active) return;
+				const r = res.consultation?.assessmentResult;
+				if (!r) return;
+				setRecs({
+					countries: r.recCountry ? [r.recCountry] : [],
+					programs: r.recProgram ? [r.recProgram] : [],
+					university: r.recUniversity || null,
+					notes: r.notes || null,
+				});
+			} catch {
+				/* keep defaults — server may be unreachable */
+			}
+		})();
+		return () => {
+			active = false;
+		};
+	}, [isPending]);
+
 	const [respondState, setRespondState] = useState<"idle" | "loading" | "done">("idle");
 	const [respondAction, setRespondAction] = useState<"accept" | "request_info" | null>(null);
 
@@ -896,9 +903,14 @@ function ConsultationOutcome({
 		try {
 			await meApi.respondToOutcome({ action });
 			setRespondState("done");
-		} catch {
+		} catch (err) {
 			setRespondState("idle");
 			setRespondAction(null);
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: "Could not submit your response. Please try again.",
+			);
 		}
 	}
 
@@ -1011,48 +1023,50 @@ function ConsultationOutcome({
 					) : null}
 				</div>
 
-				<div className="card card--pad mt-4">
-					<p className="eyebrow">Consultant's feedback</p>
-					<p className="mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-						{booking.eligibilityNote}
+			<div className="card card--pad mt-4">
+				<p className="eyebrow">Consultant's feedback</p>
+				<p className="mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+					{booking.eligibilityNote}
+				</p>
+			</div>
+
+			{recs.notes ? (
+				<div className="card card--pad mt-3">
+					<p className="eyebrow">Recommendations</p>
+					<p className="mt-2" style={{ fontSize: "0.9rem", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+						{recs.notes}
 					</p>
 				</div>
+			) : null}
 
-				{recs.notes.length > 0 ? (
-					<div className="card card--pad mt-3">
-						<p className="eyebrow">Recommendations</p>
-						<ul style={{ listStyle: "none", margin: 0, padding: 0, marginTop: "0.75rem" }}>
-							{recs.notes.map((note, i) => (
-								<li key={i} style={{ padding: "0.5rem 0", borderBottom: i < recs.notes.length - 1 ? "1px solid var(--border-light)" : "none", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-									<span style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>→</span>
-									<span style={{ fontSize: "0.9rem", lineHeight: 1.5 }}>{note}</span>
-								</li>
-							))}
-						</ul>
-					</div>
-				) : null}
+			{recs.university ? (
+				<div className="card card--pad mt-3">
+					<p className="eyebrow">Recommended institution</p>
+					<p className="mt-2" style={{ fontSize: "0.95rem", fontWeight: 600 }}>{recs.university}</p>
+				</div>
+			) : null}
 
-				{recs.countries.length > 0 ? (
-					<div className="card card--pad mt-3">
-						<p className="eyebrow">Recommended destinations</p>
-						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-							{recs.countries.map((c) => (
-								<span key={c} className="portal-pill" style={{ fontSize: "0.8rem" }}>{c}</span>
-							))}
-						</div>
+			{recs.countries.length > 0 ? (
+				<div className="card card--pad mt-3">
+					<p className="eyebrow">Recommended destinations</p>
+					<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+						{recs.countries.map((c) => (
+							<span key={c} className="portal-pill" style={{ fontSize: "0.8rem" }}>{c}</span>
+						))}
 					</div>
-				) : null}
+				</div>
+			) : null}
 
-				{recs.programs.length > 0 ? (
-					<div className="card card--pad mt-3">
-						<p className="eyebrow">Suggested programmes</p>
-						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-							{recs.programs.map((p) => (
-								<span key={p} className="portal-pill" style={{ fontSize: "0.8rem" }}>{p}</span>
-							))}
-						</div>
+			{recs.programs.length > 0 ? (
+				<div className="card card--pad mt-3">
+					<p className="eyebrow">Suggested programmes</p>
+					<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+						{recs.programs.map((p) => (
+							<span key={p} className="portal-pill" style={{ fontSize: "0.8rem" }}>{p}</span>
+						))}
 					</div>
-				) : null}
+				</div>
+			) : null}
 
 			{(outcome === "eligible" || outcome === "conditional") ? (
 				<div className="card card--pad mt-4 next-action">
@@ -1415,6 +1429,7 @@ export function PortalConsultationBookingFlow() {
 		revealOutcome,
 		
 	} = useAppState();
+	const { toast } = useNotifier();
 	const [selectedTab, setSelectedTab] = useState(0);
 	const tab = useMemo(() => {
 		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "cancelled") {
@@ -1428,6 +1443,12 @@ export function PortalConsultationBookingFlow() {
 
 	async function startPayment() {
 		if (payState === "paid" || payState === "processing" || payState === "success") return;
+		// Gate payment on the required booking fields — Paystack will reject
+		// an incomplete booking anyway, so fail fast with a clear message.
+		if (!booking.branchId || !booking.date || !booking.time) {
+			toast.error("Please complete all steps before paying");
+			return;
+		}
 		setPayState("processing");
 
 		try {
@@ -2531,9 +2552,56 @@ export function PortalTrackingPage() {
 }
 
 function TrackingPageInner() {
-	const { schoolApplications, application } = useAppState();
+	const { schoolApplications, application, setSchoolApplications } = useAppState();
 	const paid = application.applicationInvoice.status === "paid";
 	const acceptedCount = schoolApplications.filter((s) => s.status === "accepted").length;
+
+	// Poll the server for the authoritative school application statuses. The
+	// local state is the seed; the server is the source of truth once the
+	// invoice is paid and handlers start posting updates.
+	useEffect(() => {
+		if (!paid) return;
+		let active = true;
+		const sync = async () => {
+			try {
+				const res = await schoolsApi.list();
+				if (!active) return;
+				const mapped: SchoolApplicationTrack[] = res.schools.map((s) => ({
+					id: s.id,
+					destinationId: s.destinationId,
+					universityId: s.universityId,
+					programId: s.programId,
+					intake: s.intake,
+					status: mapServerStatusToLocal(s.status),
+					handlerNote: s.handlerNote,
+					financialNote: s.financialNote,
+					events: (s.events ?? []).map((e) => ({
+						at: e.at,
+						status: mapServerStatusToLocal(e.status),
+						note: e.note,
+						financialNote: e.financialNote ?? undefined,
+					})),
+					createdAt: s.createdAt,
+					updatedAt: s.updatedAt,
+					trackStartedAt: null,
+					offerTuitionUsd: null,
+					offerTuitionLabel: null,
+					offerDepositUsd: null,
+					offerDepositDueAt: null,
+					offerDepositPaidAt: null,
+				}));
+				setSchoolApplications(mapped);
+			} catch {
+				/* keep local state on network drop */
+			}
+		};
+		void sync();
+		const id = window.setInterval(() => void sync(), 30_000);
+		return () => {
+			active = false;
+			window.clearInterval(id);
+		};
+	}, [paid, setSchoolApplications]);
 
 	if (!paid) {
 		return (
@@ -2718,6 +2786,25 @@ const TRACK_PIPELINE: SchoolTrackStatus[] = [
 	"offer",
 	"accepted",
 ];
+
+/**
+ * Map the server's human-readable SchoolTrackStatus (e.g. "Offer Accepted")
+ * to the local lowercase enum the portal UI is built against. The two sides
+ * drifted when the API switched to title-case strings; this keeps the
+ * tracking page in sync without rewriting every status check in the UI.
+ */
+function mapServerStatusToLocal(status: string): SchoolTrackStatus {
+	const s = status.toLowerCase();
+	if (s.includes("accepted")) return "accepted";
+	if (s.includes("unconditional") || s.includes("offer received") || s === "conditional offer received") return "offer";
+	if (s.includes("rejected")) return "rejected";
+	if (s.includes("withdrawn") || s.includes("declined")) return "withdrawn";
+	if (s.includes("under review") || s.includes("documents under")) return "under_review";
+	if (s.includes("submitted")) return "submitted";
+	if (s.includes("preparing") || s === "draft") return "queued";
+	if (s.includes("waitlist") || s.includes("additional")) return "additional_info";
+	return "queued";
+}
 
 /** Read-only school card - applicant sees handler updates, cannot edit them */
 function SchoolTrackCard({
@@ -3187,7 +3274,7 @@ function CompleteInner() {
  * before routing to the right stage page.
  */
 export function PortalPayCallback() {
-	const { payApplicationInvoice, payVisaInvoice } = useAppState();
+	const { payApplicationInvoice, payVisaInvoice, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [failed, setFailed] = useState(false);
@@ -3212,6 +3299,19 @@ export function PortalPayCallback() {
 					// or we can optimistically update booking here, but a reload is safer.
 					nav("/portal/appointments", { replace: true });
 					toast.success("Payment confirmed. Your booking is now complete.");
+					return;
+				}
+
+				// Agency service-fee payment (Stage IV). There is no invoice id
+				// in the URL — the server resolved it from the session. Re-sync
+				// the authoritative agency invoice state, which syncFromServer
+				// maps onto agencyPaid / agencyDepositPaid / agencyStageIndex /
+				// agencySettledAt, then route back to the Financial page.
+				if (params.get("type") === "agency" || params.get("booking") === "agency") {
+					await syncFromServer();
+					if (cancelled) return;
+					nav("/portal/financial", { replace: true });
+					toast.success("Payment confirmed. Your service fee has been updated.");
 					return;
 				}
 
@@ -3245,7 +3345,7 @@ export function PortalPayCallback() {
 		return () => {
 			cancelled = true;
 		};
-	}, [nav, payApplicationInvoice, payVisaInvoice, toast]);
+	}, [nav, payApplicationInvoice, payVisaInvoice, syncFromServer, toast]);
 
 	if (failed) {
 		return (

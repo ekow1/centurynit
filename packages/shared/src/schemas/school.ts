@@ -32,6 +32,11 @@ export const addSchoolApplicationSchema = z.object({
 });
 export type AddSchoolApplication = z.infer<typeof addSchoolApplicationSchema>;
 
+export const opsAddSchoolApplicationSchema = addSchoolApplicationSchema.extend({
+	applicantId: z.string().uuid(),
+});
+export type OpsAddSchoolApplication = z.infer<typeof opsAddSchoolApplicationSchema>;
+
 export const schoolApplicationSchema = z.object({
 	id: z.string().uuid(),
 	applicantId: z.string().uuid(),
@@ -69,3 +74,18 @@ export const lockSchoolsSchema = z.object({
 	note: z.string().max(1000).optional(),
 });
 export type LockSchools = z.infer<typeof lockSchoolsSchema>;
+
+export const studentScholarshipSchema = z.object({
+	id: z.string().uuid(),
+	applicantId: z.string().uuid(),
+	scholarshipId: z.string(),
+	awardedAt: z.string().datetime(),
+	notes: z.string().nullable().optional(),
+});
+export type StudentScholarship = z.infer<typeof studentScholarshipSchema>;
+
+export const assignScholarshipSchema = z.object({
+	scholarshipId: z.string().min(1),
+	notes: z.string().optional(),
+});
+export type AssignScholarship = z.infer<typeof assignScholarshipSchema>;

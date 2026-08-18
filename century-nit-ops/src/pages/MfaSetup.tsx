@@ -264,7 +264,7 @@ export function MfaSetup() {
 								</span>
 								<div>
 									<div style={{ fontWeight: 600 }}>Authenticator App</div>
-									<div style={{ fontSize: "var(--text-sm)", color: "var(--muted)" }}>
+									<div style={{ fontSize: "var(--text-sm)", color: "var(--muted-foreground)" }}>
 										Google Authenticator, Authy, 1Password — scan a QR code
 									</div>
 								</div>
@@ -291,7 +291,7 @@ export function MfaSetup() {
 								</span>
 								<div>
 									<div style={{ fontWeight: 600 }}>Email One-Time Code</div>
-									<div style={{ fontSize: "var(--text-sm)", color: "var(--muted)" }}>
+									<div style={{ fontSize: "var(--text-sm)", color: "var(--muted-foreground)" }}>
 										Get a 6-digit code sent to your email each time you sign in
 									</div>
 								</div>

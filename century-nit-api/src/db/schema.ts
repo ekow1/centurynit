@@ -519,6 +519,7 @@ export const invoiceTypeEnum = pgEnum("invoice_type", [
 	"application",
 	"visa",
 	"consultation",
+	"agency",
 	"custom",
 ]);
 
@@ -747,6 +748,7 @@ export const applicants = pgTable(
 			onDelete: "set null",
 		}),
 		profile: jsonb("profile").$type<Record<string, string>>().notNull().default({}),
+		portalState: jsonb("portal_state").$type<Record<string, unknown>>().notNull().default({}),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -899,9 +901,9 @@ export const schoolApplications = pgTable(
 		applicationId: uuid("application_id").references(() => applications.id, {
 			onDelete: "set null",
 		}),
-		destinationId: varchar("destination_id", { length: 64 }).notNull(),
-		universityId: text("university_id").notNull(),
-		programId: text("program_id").notNull(),
+		destinationId: varchar("destination_id", { length: 64 }).notNull().references(() => destinations.id),
+		universityId: text("university_id").notNull().references(() => catalogUniversities.id),
+		programId: text("program_id").notNull().references(() => catalogPrograms.id),
 		intake: varchar("intake", { length: 64 }).notNull(),
 		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
 		handlerNote: text("handler_note"),
@@ -1116,6 +1118,7 @@ export const conversationTypeEnum = pgEnum("conversation_type", [
 	"direct",
 	"entity",
 	"group",
+	"applicant",
 ]);
 
 export const conversationRoleEnum = pgEnum("conversation_role", [
@@ -1141,12 +1144,15 @@ export const conversations = pgTable(
 		createdBy: uuid("created_by")
 			.notNull()
 			.references(() => opsUsers.id, { onDelete: "set null" }),
+		/** For applicant-staff conversations, the applicant's user ID. */
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
 		byType: index("conversations_type_idx").on(t.type, t.updatedAt),
 		byEntity: index("conversations_entity_idx").on(t.linkedEntityType, t.linkedEntityId),
+		byUser: index("conversations_user_idx").on(t.userId),
 	}),
 );
 
@@ -1158,8 +1164,9 @@ export const messages = pgTable(
 			.notNull()
 			.references(() => conversations.id, { onDelete: "cascade" }),
 		senderOpsUserId: uuid("sender_ops_user_id")
-			.notNull()
 			.references(() => opsUsers.id, { onDelete: "set null" }),
+		/** For messages sent by applicants (not staff). */
+		senderUserId: text("sender_user_id").references(() => users.id, { onDelete: "set null" }),
 		/** Denormalised for fast rendering without joins. */
 		senderName: text("sender_name").notNull(),
 		content: text("content").notNull(),
@@ -1235,6 +1242,27 @@ export const consultationActivities = pgTable(
 	},
 	(t) => ({
 		byConsultation: index("consultation_activities_consultation_idx").on(t.consultationId, t.createdAt),
+	}),
+);
+
+/* ── In-app notifications ──────────────────────────────────────────────────── */
+
+export const notifications = pgTable(
+	"notifications",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		type: varchar("type", { length: 50 }).notNull(),
+		title: varchar("title", { length: 200 }).notNull(),
+		body: text("body").notNull(),
+		link: varchar("link", { length: 500 }),
+		read: boolean("read").notNull().default(false),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		userIdIdx: index("notifications_user_idx").on(t.userId),
 	}),
 );
 
@@ -1427,3 +1455,18 @@ export const catalogScholarships = pgTable("catalog_scholarships", {
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
+
+export const studentScholarships = pgTable("student_scholarships", {
+	id: uuid("id").primaryKey().defaultRandom(),
+	applicantId: uuid("applicant_id")
+		.notNull()
+		.references(() => applicants.id, { onDelete: "cascade" }),
+	scholarshipId: text("scholarship_id")
+		.notNull()
+		.references(() => catalogScholarships.id, { onDelete: "cascade" }),
+	awardedAt: timestamp("awarded_at", { withTimezone: true }).defaultNow(),
+	notes: text("notes"),
+}, (t) => ({
+	byApplicant: index("student_scholarships_applicant_idx").on(t.applicantId),
+	uniqueAward: uniqueIndex("student_scholarships_unique_idx").on(t.applicantId, t.scholarshipId)
+}));

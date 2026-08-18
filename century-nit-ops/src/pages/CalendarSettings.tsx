@@ -193,9 +193,10 @@ export function CalendarSettings() {
 
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
 
-	function showToast(type: "error" | "success" | "info", message: string) {
+	function _showToast(type: "error" | "success" | "info", message: string) {
 		setToast({ type, message });
 	}
+	void _showToast;
 
 	function confirm(title: string, message: string, action: () => void, danger = false) {
 		setConfirmTitle(title);

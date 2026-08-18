@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
+import { useCasesApi } from "../hooks/useCasesApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage } from "century-nit-core/ops";
@@ -28,7 +28,7 @@ export function EnterpriseVisa() {
 		setVisaInvoicePaid,
 		setVisaCounselorNote,
 		setApplicationStage,
-	} = useOpsState();
+	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -80,7 +80,7 @@ export function EnterpriseVisa() {
 		const cur = app.visaStage ?? "locked";
 		const idx = VISA_ORDER.indexOf(cur);
 		const next = VISA_ORDER[idx + 1];
-		if (next) setVisaStage(app.appId, next, opsUser?.name ?? "Staff");
+		if (next) setVisaStage(app.appId, next);
 	}
 
 	function saveNote() {
@@ -313,7 +313,7 @@ export function EnterpriseVisa() {
 										</div>
 										{!active.visaInvoicePaid && (
 											<button
-												onClick={() => setVisaInvoicePaid(active.appId, opsUser?.name ?? "Staff")}
+												onClick={() => setVisaInvoicePaid(active.appId)}
 												className="btn btn--primary"
 												style={{ whiteSpace: "nowrap" }}
 											>
@@ -433,7 +433,7 @@ export function EnterpriseVisa() {
 											Ready to advance to payment plan stage.
 										</p>
 										<button
-											onClick={() => setApplicationStage(active.appId, "Payment Plan", opsUser?.name ?? "Staff")}
+											onClick={() => setApplicationStage(active.appId, "Payment Plan")}
 											className="btn btn--primary btn--sm"
 											style={{ marginTop: "0.5rem" }}
 										>

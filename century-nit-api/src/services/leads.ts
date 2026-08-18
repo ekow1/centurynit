@@ -270,7 +270,7 @@ export async function updateLead(
 		targetCountry: string | null;
 		assignedStaffId: string | null;
 		consultationId: string | null;
-	_applicationId: string | null;
+		applicationId: string | null;
 		notes: string | null;
 	}>,
 	actorName?: string | null,
@@ -292,7 +292,7 @@ export async function updateLead(
 
 	// Record stage change event
 	if (patch.stage && patch.stage !== current.stage) {
-		await recordLeadEvent(id, "stage_changed", actorName, {
+		await recordLeadEvent(id, "stage_changed", actorName ?? null, {
 			from: current.stage,
 			to: patch.stage,
 		});
@@ -300,7 +300,7 @@ export async function updateLead(
 
 	// Record assignment event
 	if (patch.assignedStaffId !== undefined && patch.assignedStaffId !== current.assignedStaffId) {
-		await recordLeadEvent(id, "assigned", actorName, {
+		await recordLeadEvent(id, "assigned", actorName ?? null, {
 			from: current.assignedStaffId,
 			to: patch.assignedStaffId,
 		});
@@ -308,12 +308,12 @@ export async function updateLead(
 
 	// Record entity link events
 	if (patch.consultationId !== undefined && patch.consultationId !== current.consultationId) {
-		await recordLeadEvent(id, "linked_consultation", actorName, {
+		await recordLeadEvent(id, "linked_consultation", actorName ?? null, {
 			consultationId: patch.consultationId,
 		});
 	}
 	if (patch.applicationId !== undefined && patch.applicationId !== current.applicationId) {
-		await recordLeadEvent(id, "linked_application", actorName, {
+		await recordLeadEvent(id, "linked_application", actorName ?? null, {
 			applicationId: patch.applicationId,
 		});
 	}
@@ -391,7 +391,7 @@ export async function linkConsultationToLead(
 		}
 
 		await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, lead.id));
-		await recordLeadEvent(lead.id, "linked_consultation", actorName, { consultationId });
+		await recordLeadEvent(lead.id, "linked_consultation", actorName ?? null, { consultationId });
 	} catch (err) {
 		console.warn("[CRM] Failed to auto-link consultation to lead:", err);
 	}
@@ -417,7 +417,7 @@ export async function linkApplicationToLead(
 		}
 
 		await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, lead.id));
-		await recordLeadEvent(lead.id, "linked_application", actorName, { applicationId });
+		await recordLeadEvent(lead.id, "linked_application", actorName ?? null, { applicationId });
 	} catch (err) {
 		console.warn("[CRM] Failed to auto-link application to lead:", err);
 	}

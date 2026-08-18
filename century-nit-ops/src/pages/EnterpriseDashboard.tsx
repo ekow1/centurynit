@@ -79,7 +79,7 @@ export function EnterpriseDashboard() {
 		return [
 			{ label: LEAD_STAGE_LABELS.new, value: 0, to: "/crm" },
 			{ label: LEAD_STAGE_LABELS.contacted, value: 0, to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.interested, value: 0, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.assessment_complete, value: 0, to: "/crm" },
 			{ label: "Consultations", value: stats.consultations, to: "/consultations" },
 			{ label: "Applications", value: stats.applications, to: "/applications" },
 			{ label: "Applicants", value: stats.applicants, to: "/applicants" },

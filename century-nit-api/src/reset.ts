@@ -17,7 +17,7 @@ async function run() {
 			
 			// Reset consultation to UNDER_REVIEW
 			await db.update(consultations)
-				.set({ status: "UNDER_REVIEW", isClosed: false, outcome: null })
+				.set({ status: "UNDER_REVIEW" })
 				.where(eq(consultations.id, c.id));
 				
 			if (c.bookingId) {

@@ -264,12 +264,12 @@ export function EnterpriseLeads() {
 		async (id: string, stage: LeadStage) => {
 			moveLead(id, stage);
 			setApiLeads((prev) =>
-				prev.map((l) => (l.id === id ? { ...l, stage: (STAGE_MAP_TO_API[stage] as ApiLead["stage"]) } : l)),
+				prev.map((l) => (l.id === id ? { ...l, stage: (LEAD_STAGE_TO_DB[stage] as ApiLead["stage"]) } : l)),
 			);
 			try {
 				await apiFetch(`${API_PREFIX}/leads/${id}`, {
 					method: "PATCH",
-					body: JSON.stringify({ stage: STAGE_MAP_TO_API[stage] }),
+					body: JSON.stringify({ stage: LEAD_STAGE_TO_DB[stage] }),
 				});
 			} catch (err) {
 				console.warn("[CRM] Stage update not persisted to API:", err);

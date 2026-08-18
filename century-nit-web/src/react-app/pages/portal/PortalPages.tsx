@@ -601,11 +601,17 @@ function AssessmentForm({
 						</div>
 						<div className="field">
 							<label htmlFor="a-inst">Institution</label>
-							<input id="a-inst" className="input input--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })} placeholder="University of Ghana" />
+							<select id="a-inst" className="select select--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })}>
+		<option value="">Select</option>
+		{getLookupOptions('institution')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-fos">Field of study</label>
-							<input id="a-fos" className="input input--full-border" value={assessment.fieldOfStudy} onChange={(e) => onUpdate({ fieldOfStudy: e.target.value })} placeholder="Computer Science" />
+							<select id="a-fos" className="select select--full-border" value={assessment.fieldOfStudy} onChange={(e) => onUpdate({ fieldOfStudy: e.target.value })}>
+		<option value="">Select</option>
+		{getLookupOptions('fieldOfStudy')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-gy">Graduation year</label>
@@ -680,7 +686,10 @@ function AssessmentForm({
 						</div>
 						<div className="field">
 							<label htmlFor="a-pf">Preferred field</label>
-							<input id="a-pf" className="input input--full-border" value={assessment.preferredField} onChange={(e) => onUpdate({ preferredField: e.target.value })} placeholder="Data Science, Business" />
+							<select id="a-pf" className="select select--full-border" value={assessment.preferredField} onChange={(e) => onUpdate({ preferredField: e.target.value })}>
+		<option value="">Select</option>
+		{getLookupOptions('preferredField')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-intake">Intake preference</label>
@@ -700,23 +709,16 @@ function AssessmentForm({
 						<div className="field">
 							<label htmlFor="a-fs">Funding source</label>
 							<select id="a-fs" className="select select--full-border" value={assessment.fundingSource} onChange={(e) => onUpdate({ fundingSource: e.target.value })}>
-								<option value="">Select</option>
-								<option value="self">Self-funded</option>
-								<option value="family">Family / Parents</option>
-								<option value="sponsor">Sponsor</option>
-								<option value="loan">Education loan</option>
-								<option value="scholarship">Scholarship / Grant</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('fundingSource')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-br">Budget range (GHS / USD per year)</label>
 							<select id="a-br" className="select select--full-border" value={assessment.budgetRange} onChange={(e) => onUpdate({ budgetRange: e.target.value })}>
-								<option value="">Select</option>
-								<option value="under_15k">Under $15,000</option>
-								<option value="15k_30k">$15,000 – $30,000</option>
-								<option value="30k_50k">$30,000 – $50,000</option>
-								<option value="over_50k">Over $50,000</option>
-							</select>
+		<option value="">Select</option>
+		{getLookupOptions('budgetRange')}
+	</select>
 						</div>
 						<div className="field">
 							<label htmlFor="a-sn">Sponsor name</label>

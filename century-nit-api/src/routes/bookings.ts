@@ -40,11 +40,10 @@ import {
 	createBookingSchema,
 	rescheduleBookingSchema,
 } from "century-nit-shared";
-import type { Booking } from "century-nit-shared";
+import type { Booking, CreateBooking } from "century-nit-shared";
 import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
 import { createPaystackCheckout, verifyPaystackTransaction } from "../services/paystack.js";
-import { ensureCaseForBooking } from "../services/cases.js";
-import { createConsultationInvoice } from "../services/invoice.js";
+import { consultations, bookings as bookingsTable } from "../db/schema.js";
 
 const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
@@ -116,6 +115,11 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 		calendarEventId: row.calendarEventId ?? null,
 		calendarSyncStatus: row.calendarSyncStatus,
 		rescheduledAt: row.rescheduledAt?.toISOString() ?? null,
+		rescheduleRequestedAt: row.rescheduleRequestedAt?.toISOString() ?? null,
+		rescheduleRequestedStartsAt: row.rescheduleRequestedStartsAt?.toISOString() ?? null,
+		rescheduleRequestedEndsAt: row.rescheduleRequestedEndsAt?.toISOString() ?? null,
+		rescheduleRequestedTimezone: row.rescheduleRequestedTimezone ?? null,
+		rescheduleRequestReason: row.rescheduleRequestReason ?? null,
 		cancelledAt: row.cancelledAt?.toISOString() ?? null,
 		cancellationReason: row.cancellationReason ?? null,
 		createdAt: row.createdAt.toISOString(),
@@ -188,7 +192,7 @@ bookingsRouter.openapi(
 	async (c) => {
 		const user = c.get("user");
 		const body = c.req.valid("json");
-		const origin = c.req.header("origin") || env.FRONTEND_URL;
+		const origin = c.req.header("origin") || c.req.header("referer")?.split("/").slice(0, 3).join("/") || "https://centurynit.softclicksolutions.com";
 		
 		const checkout = await createPaystackCheckout({
 			email: user.email,
@@ -741,13 +745,13 @@ bookingsRouter.openapi(
 		}
 		for (const consultation of cancelledConsultations) {
 			await db.update(consultations)
-				.set({ status: "UNDER_REVIEW", isClosed: false, outcome: null })
+				.set({ status: "UNDER_REVIEW" })
 				.where(eq(consultations.id, consultation.id));
 				
 			if (consultation.bookingId) {
-				await db.update(bookings)
+				await db.update(bookingsTable)
 					.set({ status: "UNASSIGNED" })
-					.where(eq(bookings.id, consultation.bookingId));
+					.where(eq(bookingsTable.id, consultation.bookingId));
 			}
 		}
 		return c.json({ message: `Reset ${cancelledConsultations.length} consultations.` }, 200);

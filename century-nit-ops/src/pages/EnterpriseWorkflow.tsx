@@ -352,7 +352,7 @@ export function EnterpriseWorkflow() {
 													padding: "0.85rem",
 													cursor: "pointer",
 													boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-													border: app.isLive ? "2px solid var(--foreground)" : "1px solid var(--border)",
+													border: "1px solid var(--border)",
 													background: "var(--background)",
 													color: "var(--foreground)",
 													opacity: dragging === app.appId ? 0.4 : 1,
@@ -362,14 +362,6 @@ export function EnterpriseWorkflow() {
 													<div style={{ minWidth: 0 }}>
 														<p style={{ fontWeight: 600, fontSize: "0.875rem" }}>
 															{app.applicantName}
-															{app.isLive && (
-																<span
-																	className="mono"
-																	style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.7 }}
-																>
-																		LIVE
-																</span>
-															)}
 														</p>
 														<p className="muted mt-1" style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)" }}>
 															{app.appId}

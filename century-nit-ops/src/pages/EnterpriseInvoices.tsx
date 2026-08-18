@@ -15,16 +15,6 @@ import {
 	type InvoiceType,
 	type OpsInvoiceLine,
 } from "century-nit-core/ops";
-import {
-	APP_INVOICE_BASE,
-	APP_INVOICE_PER_SCHOOL,
-	APP_DOC_VERIFY_FEE,
-	APP_MATCH_REVIEW_FEE,
-	VISA_INVOICE_AMOUNT,
-	VISA_BIOMETRICS_FEE,
-	VISA_TRANSLATION_FEE,
-	CONSULTATION_FEE_AMOUNT,
-} from "century-nit-core";
 
 /**
  * Invoices — the transactional half of finance.
@@ -41,7 +31,6 @@ export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
 	const { applicants } = useCasesApi();
 	const {
-		liveCase,
 		packages,
 	} = useOpsState();
 	const {
@@ -131,15 +120,6 @@ export function EnterpriseInvoices() {
 			.sort((a, b) => b.overdue - a.overdue || b.balance - a.balance);
 	}, [rows]);
 
-	const liveApplicant = liveCase?.present
-		? {
-				id: liveCase.applicationId ?? liveCase.consultationRef ?? "live",
-				name: liveCase.name,
-				pkg: liveCase.fundingTrack ?? "",
-				schools: liveCase.schools.length,
-			}
-		: null;
-
 	return (
 		<div className="page-content fade-in">
 			<div className="inv-head">
@@ -150,9 +130,9 @@ export function EnterpriseInvoices() {
 				<button
 					type="button"
 					className="btn btn--primary"
-					disabled={!liveApplicant && applicants.length === 0}
+					disabled={applicants.length === 0}
 					onClick={() => {
-						const target = liveApplicant ?? { id: applicants[0].id, name: applicants[0].name };
+						const target = { id: applicants[0].id, name: applicants[0].name };
 						setBuilding({ applicantId: target.id, applicantName: target.name, type: "Application" });
 					}}
 				>
@@ -163,67 +143,6 @@ export function EnterpriseInvoices() {
 			{flash ? <div className="inv-flash">✓ {flash}</div> : null}
 		{invoiceError ? <div className="inv-flash" style={{ background: "var(--danger-bg, #fee)" }}>⚠ {invoiceError}</div> : null}
 		{loading ? <div className="route-loading" role="status" aria-live="polite"><span className="route-loading__spinner" aria-hidden="true" /></div> : null}
-
-			{/* Live applicant billing summary */}
-			{liveCase?.present ? (
-				<div className="card" style={{ marginBottom: "2rem", border: "2px solid var(--foreground)" }}>
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
-						<div>
-							<p className="eyebrow" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-								<span className="ops-live-dot" aria-hidden style={{ display: "inline-block" }} />
-								Live applicant · billing
-							</p>
-							<p style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: "0.3rem" }}>{liveCase.name}</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-								{liveCase.email}
-								{liveCase.consultationRef ? ` · ${liveCase.consultationRef}` : ""}
-								{liveCase.applicationId ? ` · ${liveCase.applicationId}` : ""}
-							</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-								Stage: {liveCase.stageLabel}
-								{liveCase.fundingTrack ? ` · ${liveCase.fundingTrack}` : ""}
-								{liveCase.schools.length ? ` · ${liveCase.schools.length} school(s)` : ""}
-							</p>
-						</div>
-					</div>
-
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
-						{/* Consultation invoice */}
-						<LiveBillingRow
-							label="Consultation invoice"
-							status={liveCase.consultationPaid ? "paid" : "not_raised"}
-							amount={liveCase.consultationPaid ? liveCase.consultationAmount : CONSULTATION_FEE_AMOUNT}
-							onRaise={liveCase.consultationPaid ? undefined : () => setBuilding({ applicantId: liveApplicant!.id, applicantName: liveApplicant!.name, type: "Consultation" })}
-						/>
-
-						{/* Application invoice */}
-						<LiveBillingRow
-							label="Application invoice"
-							status={liveCase.appInvoiceStatus === "paid" ? "paid" : liveCase.appInvoiceStatus === "raised" ? "raised" : "not_raised"}
-							amount={liveCase.appInvoiceAmount || (APP_INVOICE_BASE + APP_INVOICE_PER_SCHOOL * Math.max(1, liveCase.schools.length) + APP_DOC_VERIFY_FEE + APP_MATCH_REVIEW_FEE)}
-							onRaise={liveCase.appInvoiceStatus === "none" ? () => setBuilding({ applicantId: liveApplicant!.id, applicantName: liveApplicant!.name, type: "Application" }) : undefined}
-						/>
-
-						{/* Visa invoice */}
-						<LiveBillingRow
-							label="Visa invoice"
-							status={liveCase.visaInvoiceStatus === "paid" ? "paid" : liveCase.visaInvoiceStatus === "raised" ? "raised" : "not_raised"}
-							amount={liveCase.visaInvoiceAmount || (VISA_INVOICE_AMOUNT + VISA_BIOMETRICS_FEE + VISA_TRANSLATION_FEE)}
-							onRaise={liveCase.visaInvoiceStatus === "none" ? () => setBuilding({ applicantId: liveApplicant!.id, applicantName: liveApplicant!.name, type: "Visa" }) : undefined}
-						/>
-
-						{/* Agency service fee */}
-						<LiveBillingRow
-							label="Agency service fee"
-							status={liveCase.agencySettled ? "paid" : liveCase.agencyTotal > 0 ? "partial" : "not_raised"}
-							amount={liveCase.agencyTotal}
-							paid={liveCase.agencyPaid}
-							plan={liveCase.paymentPlanId ?? undefined}
-							schedule={liveCase.postArrivalSchedule ?? undefined}
-						/>
-					</div>
-				</div>
-			) : null}
 
 			<div className="inv-stats">
 				<Stat label="Outstanding" primary={fmtGhs(totals.outstanding)} sub={fmtUsd(totals.outstanding)} />
@@ -403,18 +322,14 @@ export function EnterpriseInvoices() {
 					applicantName={building.applicantName}
 					type={building.type}
 					packages={packages}
-					applicantPackage={liveApplicant?.pkg ?? ""}
-					schoolCount={liveApplicant?.schools ?? 1}
+					applicantPackage=""
+					schoolCount={1}
 					onCancel={() => setBuilding(null)}
 					onIssue={async (lines: OpsInvoiceLine[], note: string, type: InvoiceType) => {
 						const subtotal = lines.reduce((n, l) => n + l.amount, 0);
 						try {
 							const match = applicants.find((a) => a.id === building.applicantId);
-							const applicantEmail =
-								match?.email ||
-								(liveCase?.email && liveCase.name === building.applicantName
-									? liveCase.email
-									: undefined);
+							const applicantEmail = match?.email;
 							await apiCreateInvoice({
 								applicantName: building.applicantName,
 								applicantEmail,
@@ -805,66 +720,3 @@ function Stat({ label, primary, sub, inverted, urgent }: { label: string; primar
 	);
 }
 
-function LiveBillingRow({
-	label,
-	status,
-	amount,
-	paid,
-	plan,
-	schedule,
-	onRaise,
-}: {
-	label: string;
-	status: "paid" | "raised" | "partial" | "not_raised";
-	amount: number;
-	paid?: number;
-	plan?: string;
-	schedule?: string;
-	onRaise?: () => void;
-}) {
-	const statusLabel =
-		status === "paid" ? "Paid" :
-		status === "raised" ? "Issued" :
-		status === "partial" ? "Partial" :
-		"Not yet issued";
-
-	const statusClass =
-		status === "paid" ? "inv-status--paid" :
-		status === "raised" ? "inv-status--issued" :
-		status === "partial" ? "inv-status--partial" :
-		"inv-status--issued";
-
-	return (
-		<div className="card" style={{ padding: "1rem 1.25rem" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
-				<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{label}</span>
-				<span className={`inv-status ${statusClass}`} style={{ fontSize: "var(--text-xs)" }}>{statusLabel}</span>
-			</div>
-			<p className="mono" style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-				{fmtGhs(amount)}
-				<span className="muted" style={{ fontWeight: 400, fontSize: "var(--text-xs)", marginLeft: "0.4rem" }}>≈ {fmtUsd(amount)}</span>
-			</p>
-			{paid !== undefined && paid > 0 && paid < amount ? (
-				<p className="mono muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-					Paid {fmtGhs(paid)} · Balance {fmtGhs(amount - paid)}
-				</p>
-			) : null}
-			{plan ? (
-				<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-					Plan: {plan === "full" ? "Full payment" : "Installment"}
-					{schedule ? ` · ${schedule}` : ""}
-				</p>
-			) : null}
-			{onRaise ? (
-				<button
-					type="button"
-					className="btn btn--primary btn--sm"
-					style={{ marginTop: "0.6rem", width: "100%" }}
-					onClick={onRaise}
-				>
-					Raise invoice
-				</button>
-			) : null}
-		</div>
-	);
-}

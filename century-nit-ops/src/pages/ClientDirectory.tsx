@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
-import { useOpsState } from "./OpsStateContext";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 export interface ClientUser {
@@ -36,7 +35,6 @@ interface ClientListResponse {
 
 export function ClientDirectory() {
 	const { opsRole } = useOpsAuth();
-	const { liveCase } = useOpsState();
 	const [clients, setClients] = useState<ClientUser[]>([]);
 	const [metrics, setMetrics] = useState({ total: 0, active: 0, inactive: 0, banned: 0 });
 	const [loading, setLoading] = useState(true);
@@ -108,28 +106,6 @@ export function ClientDirectory() {
 	// Integrate active browser portal session if present
 	const displayedClients = useMemo(() => {
 		const list = [...clients];
-		const emailSet = new Set(list.map((c) => c.email.toLowerCase().trim()));
-
-		if (liveCase?.present && liveCase.email && !emailSet.has(liveCase.email.toLowerCase().trim())) {
-			list.unshift({
-				id: "live-client-session",
-				name: liveCase.name || "Live Portal Client",
-				email: liveCase.email,
-				phoneNumber: liveCase.phone || null,
-				emailVerified: true,
-				banned: false,
-				banReason: null,
-				bannedAt: null,
-				bannedBy: null,
-				activeSessionsCount: 1,
-				lastActiveAt: new Date().toISOString(),
-				status: "active",
-				leadStage: "New Lead",
-				applicantStatus: "Applicant",
-				createdAt: new Date().toISOString(),
-				updatedAt: new Date().toISOString(),
-			});
-		}
 
 		return list.filter((c) => {
 			const matchesStatus =
@@ -147,7 +123,7 @@ export function ClientDirectory() {
 
 			return matchesStatus && matchesSearch;
 		});
-	}, [clients, liveCase, statusFilter, search]);
+	}, [clients, statusFilter, search]);
 
 	const handleRevokeSessions = async () => {
 		if (!revokeTarget) return;

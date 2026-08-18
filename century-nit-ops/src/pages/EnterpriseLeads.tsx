@@ -157,7 +157,7 @@ function LeadCard({
 
 export function EnterpriseLeads() {
 	const { opsRole, opsUser, canSeeAllBranches } = useOpsAuth();
-	const { moveLead, liveCase } = useOpsState();
+	const { moveLead } = useOpsState();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
@@ -224,29 +224,8 @@ export function EnterpriseLeads() {
 			});
 		}
 
-		// 2. Active client portal session
-		if (liveCase?.present && liveCase.email) {
-			const liveEmail = liveCase.email.toLowerCase();
-			if (!emailSet.has(liveEmail)) {
-				emailSet.add(liveEmail);
-				result.unshift({
-					id: "lead-live-session",
-					name: liveCase.name || "Live Portal Client",
-					email: liveCase.email,
-					phone: liveCase.phone || "-",
-					country: liveCase.targetCountry || "Ghana",
-					stage: "new",
-					source: "Live Portal Sign-In",
-					createdAt: new Date().toISOString().slice(0, 10),
-					lastContactAt: new Date().toISOString(),
-					notes: `Active client portal session at stage: ${liveCase.stageLabel || "New Client"}.`,
-					assignedTo: "Unassigned",
-				});
-			}
-		}
-
 		return result;
-	}, [apiLeads, liveCase]);
+	}, [apiLeads]);
 
 	const handleLeadMove = useCallback(
 		async (id: string, stage: LeadStage) => {

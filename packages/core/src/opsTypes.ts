@@ -239,38 +239,12 @@ export interface MockApplication {
 }
 
 /**
- * Staff actions taken against the live portal case. The case itself is derived
- * from the portal's storage each tick, so anything ops does to it has to be
- * held separately and merged back in.
+ * @deprecated The `LiveOverlay` type and `EMPTY_LIVE_OVERLAY` constant were
+ * removed when the live-portal-overlay system was retired in favor of
+ * API-only data. Staff actions against an applicant now persist directly to
+ * the API-backed record (see `useCasesApi`), which sets `isLive: true` on the
+ * Mock* record to mark it as API-backed rather than demo seed data.
  */
-export type LiveOverlay = {
-	assignedOfficer: string;
-	assignedOfficerEmail: string;
-	assignedStage: string;
-	comments: CaseComment[];
-	rescheduledTo: string | null;
-	/** Structured form of `rescheduledTo`, so the moved slot is visible to the
-	 *  conflict check. Null until the live case has actually been moved. */
-	rescheduledSlot: { date: string; time: string } | null;
-	requestedDocuments: string[];
-	slotConfirmed: boolean;
-	assessmentStarted: boolean;
-	/** Verification decisions on the live applicant's documents, keyed by name. */
-	documentStatuses: Record<string, string>;
-};
-
-export const EMPTY_LIVE_OVERLAY: LiveOverlay = {
-	assignedOfficer: "",
-	assignedOfficerEmail: "",
-	assignedStage: "",
-	comments: [],
-	rescheduledTo: null,
-	rescheduledSlot: null,
-	requestedDocuments: [],
-	slotConfirmed: false,
-	assessmentStarted: false,
-	documentStatuses: {},
-};
 
 export interface MockApplicant {
 	id: string;
@@ -508,44 +482,12 @@ export const EMPTY_DIRECTIVES: OpsDirectives = {
  */
 
 /**
- * Snapshot the portal pushes into the ops store so staff can see the live
- * applicant alongside the seeded demo records.
+ * @deprecated The `LiveCaseSnapshot` type was removed when the live-portal
+ * projection system was retired in favor of API-only data. The ops side now
+ * reads applicant state directly from the API via `useCasesApi`, which marks
+ * API-backed records with `isLive: true` on the corresponding Mock* type. There
+ * is no longer a separate snapshot projected from the portal's localStorage.
  */
-export type LiveCaseSnapshot = {
-	present: boolean;
-	name: string;
-	email: string;
-	phone: string;
-	stage: string;
-	stageLabel: string;
-	stageIndex: number;
-	totalStages: number;
-	consultationRef: string | null;
-	applicationId: string | null;
-	consultationPaid: boolean;
-	consultationAmount: number;
-	eligibility: string;
-	targetCountry: string;
-	university: string;
-	program: string;
-	fundingTrack: string;
-	degreeLevel: string;
-	schools: { id: string; university: string; program: string; status: string }[];
-	appInvoiceStatus: string;
-	appInvoiceAmount: number;
-	visaInvoiceStatus: string;
-	visaInvoiceAmount: number;
-	agencyTotal: number;
-	agencyPaid: number;
-	agencyDepositPaid: boolean;
-	paymentPlanId: string | null;
-	postArrivalSchedule: string | null;
-	postArrivalPaymentIndex: number;
-	agencyStageIndex: number;
-	agencySettled: boolean;
-	documents: { name: string; category: string; status: string }[];
-	updatedAt: string;
-};
 
 /* ─── Ledger & Payments Log ─── */
 

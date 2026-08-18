@@ -3,7 +3,6 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 	type ReactNode,
@@ -11,16 +10,13 @@ import {
 import { safeSetItem, formatSlot, resolveBranchId, type Lead, type LeadStage } from "century-nit-core";
 import {
 	EMPTY_DIRECTIVES,
-	EMPTY_LIVE_OVERLAY,
 	branchName,
 	type Assignee,
 	type CaseComment,
 	type CommentKind,
-	type LiveOverlay,
 	type ServicePackage,
 	type EligibilityDirective,
 	type InvoiceDirective,
-	type LiveCaseSnapshot,
 	type MockApplicant,
 	type MockApplication,
 	type MockConsultation,
@@ -322,8 +318,6 @@ type PersistedOpsState = {
 	packages: ServicePackage[];
 	directives: OpsDirectives;
 	activityLog: OpsActivityEntry[];
-	/** Staff actions against the derived live portal case. */
-	liveOverlay: LiveOverlay;
 	/** Verification decisions on seeded (non-live) documents, keyed by unique doc key. */
 	seededDocVerdicts: Record<string, "Verified" | "Rejected">;
 	/** Historical invoice records for all applicants. */
@@ -346,7 +340,6 @@ function defaultPersisted(): PersistedOpsState {
 		packages: SEED_PACKAGES,
 		directives: EMPTY_DIRECTIVES,
 		activityLog: [],
-		liveOverlay: EMPTY_LIVE_OVERLAY,
 		seededDocVerdicts: {},
 		invoices: [],
 		cmsOverlay: {},
@@ -374,7 +367,6 @@ function loadPersisted(): PersistedOpsState {
 			packages: parsed.packages ?? base.packages,
 			directives: { ...EMPTY_DIRECTIVES, ...(parsed.directives ?? {}) },
 			activityLog: parsed.activityLog ?? [],
-			liveOverlay: { ...EMPTY_LIVE_OVERLAY, ...(parsed.liveOverlay ?? {}) },
 			seededDocVerdicts: parsed.seededDocVerdicts ?? {},
 			invoices: parsed.invoices ?? base.invoices,
 			cmsOverlay: parsed.cmsOverlay ?? base.cmsOverlay,
@@ -410,160 +402,6 @@ function withLog(
 	};
 }
 
-/* ─── Live case projection ─── */
-
-const LIVE_CONSULTATION_ID = "live-consultation";
-const LIVE_APPLICATION_ID = "live-application";
-const LIVE_APPLICANT_ID = "live-applicant";
-
-/**
- * The live applicant arrives UNASSIGNED - clients book themselves, and routing
- * the booking to a consultant is the manager's job.
- */
-function liveConsultation(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockConsultation {
-	return {
-		id: LIVE_CONSULTATION_ID,
-		applicantId: snap.email || LIVE_APPLICANT_ID,
-		ref: snap.consultationRef ?? "CNS-LIVE",
-		bookingId: null,
-		applicantName: snap.name,
-		email: snap.email,
-		phone: snap.phone || "-",
-		branch: "accra",
-		dateTime: overlay.rescheduledTo ?? "Live · portal session",
-		type: "Online",
-		assignedOfficer: overlay.assignedOfficer,
-		assignedOfficerEmail: overlay.assignedOfficerEmail,
-		targetCountry: snap.targetCountry || "-",
-		status:
-			snap.eligibility === "eligible" || snap.eligibility === "conditional"
-				? "Completed"
-				: overlay.assignedOfficer
-					? overlay.assessmentStarted
-						? "In Assessment"
-						: "Assigned"
-					: "Under Review",
-		personal: { nationality: "-", residence: "-", dob: "-" },
-		passport: { number: "-", expiry: "-", previousRefusals: "None" },
-		education: { degree: "-", institution: "-", gpa: "-", gradYear: "-" },
-		employment: { currentRole: "-", company: "-", experienceYears: "-" },
-		financial: { source: snap.fundingTrack || "-", budget: "-" },
-		goals: {
-			degreeLevel: snap.degreeLevel || "-",
-			intake: "Fall 2026",
-			major: snap.program || "-",
-		},
-		documents: snap.documents.map((d) => ({
-			name: d.name,
-			status: overlay.documentStatuses[d.name] ?? d.status,
-		})),
-		comments: overlay.comments,
-		rescheduledTo: overlay.rescheduledTo,
-		requestedDocuments: overlay.requestedDocuments,
-		slotConfirmed: overlay.slotConfirmed,
-		isLive: true,
-	};
-}
-
-function liveApplication(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockApplication {
-	return {
-		id: LIVE_APPLICATION_ID,
-		appId: snap.applicationId ?? snap.consultationRef ?? "APP-LIVE",
-		applicantId: "f6d333a4-8463-4554-b4a8-9d567bb48e00",
-		applicantName: snap.name,
-		email: snap.email,
-		phone: snap.phone || "-",
-		branch: "accra",
-		university: snap.university || "-",
-		program: snap.program || "-",
-		country: snap.targetCountry || "-",
-		degreeLevel: snap.degreeLevel || "-",
-		assignedStaff: overlay.assignedOfficer,
-		assignedStaffEmail: overlay.assignedOfficerEmail,
-		stage: snap.stageLabel,
-		status: snap.stage === "completed" ? "Accepted" : "Under Review",
-		submittedDate: snap.updatedAt.slice(0, 10),
-		fundingTrack: snap.fundingTrack || "-",
-		notes: "Live record projected from the applicant portal session.",
-		checklist: snap.documents.map((d, i) => ({
-			id: `live-chk-${i}`,
-			label: d.name,
-			checked: (overlay.documentStatuses[d.name] ?? d.status) === "Verified",
-		})),
-		comments: overlay.comments,
-		requestedDocuments: overlay.requestedDocuments,
-		isLive: true,
-	};
-}
-
-function liveApplicant(snap: LiveCaseSnapshot, overlay: LiveOverlay): MockApplicant {
-	const consultationPaid = snap.consultationPaid ? snap.consultationAmount : 0;
-	const appPaid = snap.appInvoiceStatus === "paid" ? snap.appInvoiceAmount : 0;
-	const visaPaid = snap.visaInvoiceStatus === "paid" ? snap.visaInvoiceAmount : 0;
-	const agencyPaid = snap.agencyPaid;
-
-	const totalBilled =
-		snap.consultationAmount +
-		snap.appInvoiceAmount +
-		snap.visaInvoiceAmount +
-		snap.agencyTotal;
-	const paid = consultationPaid + appPaid + visaPaid + agencyPaid;
-	const outstanding = Math.max(0, totalBilled - paid);
-
-	return {
-		id: LIVE_APPLICANT_ID,
-		applicantId: snap.applicationId ?? snap.consultationRef ?? "APP-LIVE",
-		name: snap.name,
-		email: snap.email,
-		phone: snap.phone || "-",
-		branch: "accra",
-		assignedOfficer: overlay.assignedOfficer,
-		assignedOfficerEmail: overlay.assignedOfficerEmail,
-		country: snap.targetCountry || "-",
-		university: snap.university || "-",
-		program: snap.program || "-",
-		package: snap.fundingTrack || "-",
-		currentStage: snap.stageLabel,
-		stageNumber: snap.stageIndex,
-		totalStages: snap.totalStages,
-		status: snap.stage === "completed" ? "Enrolled" : "Active",
-		enrolledDate: "Fall 2026",
-		paymentPlanId: snap.paymentPlanId as PaymentPlanId | undefined,
-		agencyStageIndex: snap.agencyStageIndex,
-		agencySettled: snap.agencySettled,
-		financials: {
-			totalAmount: `$${totalBilled.toLocaleString()}`,
-			paidAmount: `$${paid.toLocaleString()}`,
-			outstanding: `$${outstanding.toLocaleString()}`,
-			plan: snap.agencyTotal > 0
-				? `${snap.paymentPlanId === "full" ? "Full" : snap.paymentPlanId === "installment" ? "Installment" : "No plan"} · ${snap.agencyDepositPaid ? "deposit paid" : "deposit pending"}${snap.postArrivalSchedule ? ` · ${snap.postArrivalSchedule}${snap.paymentPlanId === "installment" && snap.postArrivalPaymentIndex > 0 ? ` (${snap.postArrivalPaymentIndex} paid)` : ""}` : ""}`
-				: "Live portal session",
-		},
-		timeline: snap.schools.map((s, i) => ({
-			stage: `${i + 1}. ${s.university}`,
-			status: s.status,
-			date: snap.updatedAt.slice(0, 10),
-		})),
-		documents: snap.documents.map((d) => ({
-			name: d.name,
-			category: d.category,
-			date: snap.updatedAt.slice(0, 10),
-			status: overlay.documentStatuses[d.name] ?? d.status,
-		})),
-		messages: [
-			{ sender: "System", time: "Live", text: `Applicant is at stage: ${snap.stageLabel}.` },
-		],
-		auditLog: [
-			{
-				action: "Live portal session projected into ops",
-				user: "SimBridge",
-				timestamp: snap.updatedAt.replace("T", " ").slice(0, 16),
-			},
-		],
-		isLive: true,
-	};
-}
-
 /* ─── CONTEXT INTERFACE ─── */
 
 interface OpsStateContextValue {
@@ -572,8 +410,6 @@ interface OpsStateContextValue {
 	applicants: MockApplicant[];
 	/** Seeded records only - excludes the live portal projection */
 	seededApplications: MockApplication[];
-	liveCase: LiveCaseSnapshot | null;
-	liveOverlay: LiveOverlay;
 	directives: OpsDirectives;
 	activityLog: OpsActivityEntry[];
 
@@ -625,11 +461,8 @@ interface OpsStateContextValue {
 	) => void;
 	rescheduleConsultation: (id: string, date: string, time: string, reason: string, by: string) => void;
 
-	/** Verify or reject a document on the live applicant's file. Persists to the overlay. */
-	verifyDocument: (docName: string, verdict: "Verified" | "Rejected", by: string) => void;
-
-	/** Unified document verdict - works for both live and seeded documents. */
-	setDocVerdict: (docKey: string, isLive: boolean, docName: string, verdict: "Verified" | "Rejected", by: string) => void;
+	/** Unified document verdict for seeded (demo) documents. */
+	setDocVerdict: (docKey: string, docName: string, verdict: "Verified" | "Rejected", by: string) => void;
 	seededDocVerdicts: Record<string, "Verified" | "Rejected">;
 
 	/** Service packages - finance owns these */
@@ -638,7 +471,6 @@ interface OpsStateContextValue {
 	togglePackage: (id: string, by: string) => void;
 
 	/** Ops → portal directives */
-	publishLiveCase: (snap: LiveCaseSnapshot | null) => void;
 	issueEligibility: (d: Omit<EligibilityDirective, "at">) => void;
 	issueAppInvoice: (amount: number, lines: OpsInvoiceLine[], note: string, by: string) => void;
 	issueVisaInvoice: (amount: number, lines: OpsInvoiceLine[], note: string, by: string) => void;
@@ -647,7 +479,7 @@ interface OpsStateContextValue {
 	issueAgencyAdvance: (stageIndex: number, settled: boolean, by: string) => void;
 	issueTravelClearance: (cleared: boolean, by: string) => void;
 	issueScheduleConfig: (enabledScheduleIds: string[], by: string, customSchedules?: CustomSchedule[]) => void;
-	/** Build and issue a custom invoice to any applicant. Also writes a directive for the live case. */
+	/** Build and issue a custom invoice to any applicant. */
 	createInvoice: (invoice: Omit<Invoice, "id" | "invoiceNumber" | "issuedAt" | "status">) => void;
 	recordInvoicePayment: (id: string, amount: number, method: string, reference: string, by: string) => void;
 	voidInvoice: (id: string, reason: string, by: string) => void;
@@ -723,7 +555,6 @@ const OpsStateContext = createContext<OpsStateContextValue | null>(null);
 
 export function OpsStateProvider({ children }: { children: ReactNode }) {
 	const [persisted, setPersisted] = useState<PersistedOpsState>(loadPersisted);
-	const [liveCase, setLiveCase] = useState<LiveCaseSnapshot | null>(null);
 	const [isCommandOpen, setIsCommandOpen] = useState(false);
 	const [previewDoc, setPreviewDoc] = useState<{ name: string; category?: string; status?: string; isLive?: boolean; docKey?: string } | null>(null);
 
@@ -789,12 +620,10 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 				);
 				const next = { ...prev, consultations };
 
-				const eligible =
-					result.outcome === "Eligible" || result.outcome === "Conditionally Eligible";
+			const eligible =
+				result.outcome === "Eligible" || result.outcome === "Conditionally Eligible";
 
-				// The live portal case is driven by an eligibility directive instead,
-				// so we never fabricate a second record for it.
-				if (!eligible || target.isLive) return next;
+			if (!eligible) return next;
 
 				const alreadyExists = prev.applications.some(
 					(a) => a.email === target.email && a.university === result.recUniversity,
@@ -849,7 +678,7 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 			const next = { ...prev, applications };
 
 			const exists = prev.applicants.some((ap) => ap.applicantId === target.appId);
-			if (exists || target.isLive) return next;
+			if (exists) return next;
 
 			const newApplicant: MockApplicant = {
 				id: `applicant-${Date.now()}`,
@@ -953,25 +782,17 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		setPersisted((prev) => {
 			const target = prev.applications.find((a) => a.appId === appId);
 			if (!target) return prev;
-			const isLive = target.id === LIVE_APPLICATION_ID;
-			const next = withLog(
+			return withLog(
 				{
 					...prev,
 					applications: prev.applications.map((a) =>
 						a.appId === appId ? { ...a, visaStage: stage } : a,
 					),
-					directives: isLive
-						? {
-								...prev.directives,
-								visaStage: { stage, note: target.visaCounselorNote ?? "", at: new Date().toISOString(), by: actor },
-							}
-						: prev.directives,
 				},
 				actor,
 				"Visa stage updated",
 				`${target.applicantName}: visa → ${stage}`,
 			);
-			return next;
 		});
 	}, []);
 
@@ -1014,16 +835,12 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		setPersisted((prev) => {
 			const target = prev.applications.find((a) => a.appId === appId);
 			if (!target) return prev;
-			const isLive = target.id === LIVE_APPLICATION_ID;
 			return withLog(
 				{
 					...prev,
 					applications: prev.applications.map((a) =>
 						a.appId === appId ? { ...a, paymentPlanId: plan } : a,
 					),
-					directives: isLive
-						? { ...prev.directives, paymentPlan: { plan, at: new Date().toISOString(), by: actor } }
-						: prev.directives,
 				},
 				actor,
 				"Payment plan set",
@@ -1039,7 +856,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 			const curIdx = target.agencyStageIndex ?? 0;
 			const nextIdx = Math.min(curIdx + 1, 2);
 			const settled = nextIdx >= 2;
-			const isLive = target.id === LIVE_APPLICATION_ID;
 			return withLog(
 				{
 					...prev,
@@ -1048,9 +864,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 							? { ...a, agencyStageIndex: nextIdx, agencySettled: settled }
 							: a,
 					),
-					directives: isLive
-						? { ...prev.directives, agencyAdvance: { stageIndex: nextIdx, settled, at: new Date().toISOString(), by: actor } }
-						: prev.directives,
 				},
 				actor,
 				"Agency milestone advanced",
@@ -1063,7 +876,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		setPersisted((prev) => {
 			const target = prev.applications.find((a) => a.appId === appId);
 			if (!target) return prev;
-			const isLive = target.id === LIVE_APPLICATION_ID;
 			return withLog(
 				{
 					...prev,
@@ -1072,9 +884,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 							? { ...a, travelClearance: cleared ? "cleared" : "pending" }
 							: a,
 					),
-					directives: isLive
-						? { ...prev.directives, travelClearance: { cleared, at: new Date().toISOString(), by: actor } }
-						: prev.directives,
 				},
 				actor,
 				cleared ? "Travel cleared" : "Travel clearance revoked",
@@ -1099,8 +908,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		}));
 	}, []);
 
-	const LIVE_IDS = { consultation: LIVE_CONSULTATION_ID, application: LIVE_APPLICATION_ID };
-
 	function makeComment(author: string, kind: CommentKind, text: string): CaseComment {
 		return {
 			id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -1115,25 +922,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 	const assignConsultation = useCallback((id: string, to: Assignee, by: string) => {
 		setPersisted((prev) => {
 			const note = makeComment(by, "assignment", `Assigned to ${to.name} (${branchName(to.branch)}).`);
-
-			if (id === LIVE_IDS.consultation) {
-				return withLog(
-					{
-						...prev,
-						liveOverlay: {
-							...prev.liveOverlay,
-							assignedOfficer: to.name,
-							assignedOfficerEmail: to.email,
-							slotConfirmed: false,
-							assessmentStarted: false,
-							comments: [...prev.liveOverlay.comments, note],
-						},
-					},
-					by,
-					"Consultation assigned",
-					`Live portal applicant → ${to.name}`,
-				);
-			}
 
 			const target = prev.consultations.find((c) => c.id === id);
 			if (!target) return prev;
@@ -1165,22 +953,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		setPersisted((prev) => {
 			const note = makeComment(by, "status", "Slot confirmed - consultant accepted the booking time.");
 
-			if (id === LIVE_IDS.consultation) {
-				return withLog(
-					{
-						...prev,
-						liveOverlay: {
-							...prev.liveOverlay,
-							slotConfirmed: true,
-							comments: [...prev.liveOverlay.comments, note],
-						},
-					},
-					by,
-					"Slot confirmed",
-					"Live portal applicant",
-				);
-			}
-
 			const target = prev.consultations.find((c) => c.id === id);
 			if (!target) return prev;
 			const isOnline = target.type === "online";
@@ -1209,20 +981,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 	/** Consultant starts assessment → status becomes "In Assessment". */
 	const startConsultationAssessment = useCallback((id: string, by: string) => {
 		setPersisted((prev) => {
-			if (id === LIVE_IDS.consultation) {
-				return withLog(
-					{
-						...prev,
-						liveOverlay: {
-							...prev.liveOverlay,
-							assessmentStarted: true,
-						},
-					},
-					by,
-					"Assessment started",
-					"Live portal applicant",
-				);
-			}
 			const target = prev.consultations.find((c) => c.id === id);
 			if (!target) return prev;
 			return withLog(
@@ -1244,24 +1002,7 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		setPersisted((prev) => {
 			const note = makeComment(by, "assignment", `Assigned to ${to.name} (${branchName(to.branch)}).`);
 			const target = prev.applications.find((a) => a.appId === appId);
-
-			if (!target) {
-				// Live case - held on the overlay instead.
-				return withLog(
-					{
-						...prev,
-						liveOverlay: {
-							...prev.liveOverlay,
-							assignedOfficer: to.name,
-							assignedOfficerEmail: to.email,
-							comments: [...prev.liveOverlay.comments, note],
-						},
-					},
-					by,
-					"Case assigned",
-					`Live portal applicant → ${to.name}`,
-				);
-			}
+			if (!target) return prev;
 
 			return withLog(
 				{
@@ -1290,12 +1031,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 			setPersisted((prev) => {
 				const note = makeComment(by, kind, text);
 
-				if (target.id === LIVE_IDS.consultation || target.id === LIVE_IDS.application) {
-					return {
-						...prev,
-						liveOverlay: { ...prev.liveOverlay, comments: [...prev.liveOverlay.comments, note] },
-					};
-				}
 				if (target.type === "consultation") {
 					return {
 						...prev,
@@ -1321,21 +1056,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 			setPersisted((prev) => {
 				const note = makeComment(by, "document_request", `Requested: ${docs.join(", ")}.`);
 
-				if (target.id === LIVE_IDS.consultation || target.id === LIVE_IDS.application) {
-					return withLog(
-						{
-							...prev,
-							liveOverlay: {
-								...prev.liveOverlay,
-								comments: [...prev.liveOverlay.comments, note],
-								requestedDocuments: [...prev.liveOverlay.requestedDocuments, ...docs],
-							},
-						},
-						by,
-						"Documents requested",
-						docs.join(", "),
-					);
-				}
 				if (target.type === "consultation") {
 					return withLog(
 						{
@@ -1391,23 +1111,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 			setPersisted((prev) => {
 				const note = makeComment(by, "status", `Rescheduled to ${when}. ${reason}`.trim());
 
-				if (id === LIVE_IDS.consultation) {
-					return withLog(
-						{
-							...prev,
-							liveOverlay: {
-								...prev.liveOverlay,
-								rescheduledTo: when,
-								rescheduledSlot: { date, time },
-								comments: [...prev.liveOverlay.comments, note],
-							},
-						},
-						by,
-						"Consultation rescheduled",
-						`Live portal applicant → ${when}`,
-					);
-				}
-
 				const target = prev.consultations.find((c) => c.id === id);
 				if (!target) return prev;
 				return withLog(
@@ -1436,49 +1139,17 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		[],
 	);
 
-	/** Consultant verifies or rejects a document on the live applicant's file. */
-	const verifyDocument = useCallback((docName: string, verdict: "Verified" | "Rejected", by: string) => {
+	/** Record a document verdict on a seeded (demo) document. */
+	const setDocVerdict = useCallback((docKey: string, docName: string, verdict: "Verified" | "Rejected", by: string) => {
 		setPersisted((prev) =>
 			withLog(
 				{
 					...prev,
-					liveOverlay: {
-						...prev.liveOverlay,
-						documentStatuses: {
-							...prev.liveOverlay.documentStatuses,
-							[docName]: verdict,
-						},
+					seededDocVerdicts: {
+						...prev.seededDocVerdicts,
+						[docKey]: verdict,
 					},
 				},
-				by,
-				verdict === "Verified" ? "Document verified" : "Document rejected",
-				docName,
-			),
-		);
-	}, []);
-
-	/** Unified document verdict - routes to liveOverlay or seededDocVerdicts. */
-	const setDocVerdict = useCallback((docKey: string, isLive: boolean, docName: string, verdict: "Verified" | "Rejected", by: string) => {
-		setPersisted((prev) =>
-			withLog(
-				isLive
-					? {
-							...prev,
-							liveOverlay: {
-								...prev.liveOverlay,
-								documentStatuses: {
-									...prev.liveOverlay.documentStatuses,
-									[docName]: verdict,
-								},
-							},
-						}
-					: {
-							...prev,
-							seededDocVerdicts: {
-								...prev.seededDocVerdicts,
-								[docKey]: verdict,
-							},
-						},
 				by,
 				verdict === "Verified" ? "Document verified" : "Document rejected",
 				docName,
@@ -1522,10 +1193,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	/* ─── Directives (ops → portal) ─── */
-
-	const publishLiveCase = useCallback((snap: LiveCaseSnapshot | null) => {
-		setLiveCase(snap);
-	}, []);
 
 	const issueEligibility = useCallback((d: Omit<EligibilityDirective, "at">) => {
 		const directive: EligibilityDirective = { ...d, at: new Date().toISOString() };
@@ -1799,24 +1466,6 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 					invoices: [invoice, ...prev.invoices],
 				};
 
-				// If this is the live applicant, also push a directive to their portal.
-				if (liveCase?.present && input.applicantId === (liveCase.applicationId ?? liveCase.consultationRef)) {
-					const kind = input.type === "Visa" ? "visaInvoice" : "appInvoice";
-					const directive: InvoiceDirective = {
-						amount: invoice.subtotal,
-						lines: invoice.lines,
-						note: invoice.note,
-						by: invoice.issuedBy,
-						at: invoice.issuedAt,
-					};
-					return withLog(
-						{ ...next, directives: { ...prev.directives, [kind]: directive } },
-						invoice.issuedBy,
-						`${invoice.type} invoice issued`,
-						`${invoice.applicantName} - ${fmtBoth(invoice.subtotal)}`,
-					);
-				}
-
 				return withLog(
 					next,
 					invoice.issuedBy,
@@ -1825,7 +1474,7 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 				);
 			});
 		},
-		[liveCase],
+		[],
 	);
 
 	const clearDirectives = useCallback(() => {
@@ -2197,36 +1846,19 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 	);
 	const closeDocPreview = useCallback(() => setPreviewDoc(null), []);
 
-	/* ─── Merge the live portal case into the visible lists ─── */
+	/* ─── Visible lists ─── */
 
-	const consultations = useMemo(
-		() => (liveCase?.present ? [liveConsultation(liveCase, persisted.liveOverlay), ...persisted.consultations] : persisted.consultations),
-		[liveCase, persisted.consultations, persisted.liveOverlay],
-	);
+	const consultations = persisted.consultations;
 
-	const applications = useMemo(
-		() =>
-			liveCase?.present && liveCase.consultationPaid
-				? [liveApplication(liveCase, persisted.liveOverlay), ...persisted.applications]
-				: persisted.applications,
-		[liveCase, persisted.applications, persisted.liveOverlay],
-	);
+	const applications = persisted.applications;
 
-	const applicants = useMemo(
-		() =>
-			liveCase?.present && liveCase.applicationId
-				? [liveApplicant(liveCase, persisted.liveOverlay), ...persisted.applicants]
-				: persisted.applicants,
-		[liveCase, persisted.applicants, persisted.liveOverlay],
-	);
+	const applicants = persisted.applicants;
 
 	const value: OpsStateContextValue = {
 		consultations,
 		applications,
 		applicants,
 		seededApplications: persisted.applications,
-		liveCase,
-		liveOverlay: persisted.liveOverlay,
 		directives: persisted.directives,
 		activityLog: persisted.activityLog,
 		completeConsultationAssessment,
@@ -2247,13 +1879,11 @@ export function OpsStateProvider({ children }: { children: ReactNode }) {
 		addCaseComment,
 		requestDocuments,
 		rescheduleConsultation,
-		verifyDocument,
 		setDocVerdict,
 		seededDocVerdicts: persisted.seededDocVerdicts,
 		packages: persisted.packages,
 		savePackage,
 		togglePackage,
-		publishLiveCase,
 		issueEligibility,
 		issueAppInvoice,
 		issueVisaInvoice,

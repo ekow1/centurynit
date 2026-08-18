@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCasesApi } from "../hooks/useCasesApi";
-import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -18,7 +17,6 @@ const RANGES = [
 
 export function EnterpriseFinance() {
 	const { applicants } = useCasesApi();
-	const { liveCase } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const { opsRole } = useOpsAuth();
 	const [branchFilter, setBranchFilter] = useState("all");
@@ -122,74 +120,6 @@ export function EnterpriseFinance() {
 					<BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />
 				</div>
 			</div>
-
-
-			{/* Live applicant billing */}
-			{liveCase?.present ? (
-				<div className="card" style={{ marginBottom: "2rem", border: "2px solid var(--foreground)" }}>
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}>
-						<div>
-							<p className="eyebrow" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-								<span className="ops-live-dot" aria-hidden style={{ display: "inline-block" }} />
-								Live applicant · billing
-							</p>
-							<p style={{ fontWeight: 700, fontSize: "1.1rem", marginTop: "0.3rem" }}>{liveCase.name}</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-								{liveCase.email}
-								{liveCase.consultationRef ? ` · ${liveCase.consultationRef}` : ""}
-								{liveCase.applicationId ? ` · ${liveCase.applicationId}` : ""}
-							</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-								Stage: {liveCase.stageLabel}
-								{liveCase.fundingTrack ? ` · ${liveCase.fundingTrack}` : ""}
-								{liveCase.schools.length ? ` · ${liveCase.schools.length} school(s)` : ""}
-							</p>
-						</div>
-						<Link to="/invoices" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
-							Open invoices →
-						</Link>
-					</div>
-
-					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
-						<div className="card" style={{ padding: "0.85rem 1rem" }}>
-							<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Consultation</p>
-							<p className="mono" style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.2rem" }}>
-								{liveCase.consultationPaid ? fmtGhs(liveCase.consultationAmount) : "Not raised"}
-							</p>
-							<span className={`inv-status ${liveCase.consultationPaid ? "inv-status--paid" : "inv-status--issued"}`} style={{ fontSize: "var(--text-xs)", marginTop: "0.3rem", display: "inline-block" }}>
-								{liveCase.consultationPaid ? "Paid" : "Pending"}
-							</span>
-						</div>
-						<div className="card" style={{ padding: "0.85rem 1rem" }}>
-							<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Application inv.</p>
-							<p className="mono" style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.2rem" }}>
-								{liveCase.appInvoiceAmount ? fmtGhs(liveCase.appInvoiceAmount) : "Not raised"}
-							</p>
-							<span className={`inv-status ${liveCase.appInvoiceStatus === "paid" ? "inv-status--paid" : liveCase.appInvoiceStatus === "raised" ? "inv-status--issued" : "inv-status--issued"}`} style={{ fontSize: "var(--text-xs)", marginTop: "0.3rem", display: "inline-block" }}>
-								{liveCase.appInvoiceStatus === "paid" ? "Paid" : liveCase.appInvoiceStatus === "raised" ? "Issued" : "Pending"}
-							</span>
-						</div>
-						<div className="card" style={{ padding: "0.85rem 1rem" }}>
-							<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Visa inv.</p>
-							<p className="mono" style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.2rem" }}>
-								{liveCase.visaInvoiceAmount ? fmtGhs(liveCase.visaInvoiceAmount) : "Not raised"}
-							</p>
-							<span className={`inv-status ${liveCase.visaInvoiceStatus === "paid" ? "inv-status--paid" : liveCase.visaInvoiceStatus === "raised" ? "inv-status--issued" : "inv-status--issued"}`} style={{ fontSize: "var(--text-xs)", marginTop: "0.3rem", display: "inline-block" }}>
-								{liveCase.visaInvoiceStatus === "paid" ? "Paid" : liveCase.visaInvoiceStatus === "raised" ? "Issued" : "Pending"}
-							</span>
-						</div>
-						<div className="card" style={{ padding: "0.85rem 1rem" }}>
-							<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Agency fee</p>
-							<p className="mono" style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.2rem" }}>
-								{liveCase.agencyTotal > 0 ? fmtGhs(liveCase.agencyTotal) : "Not set"}
-							</p>
-							<span className={`inv-status ${liveCase.agencySettled ? "inv-status--paid" : liveCase.agencyTotal > 0 ? "inv-status--partial" : "inv-status--issued"}`} style={{ fontSize: "var(--text-xs)", marginTop: "0.3rem", display: "inline-block" }}>
-								{liveCase.agencySettled ? "Settled" : liveCase.agencyTotal > 0 ? `${Math.round((liveCase.agencyPaid / liveCase.agencyTotal) * 100)}% paid` : "Pending"}
-							</span>
-						</div>
-					</div>
-				</div>
-			) : null}
 
 			{/* Totals */}
 			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem", marginBottom: "2rem" }}>

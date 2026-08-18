@@ -46,7 +46,7 @@ function FileIcon() {
 }
 
 export function OpsDocPreviewModal() {
-	const { previewDoc, closeDocPreview, verifyDocument, logActivity } = useOpsState();
+	const { previewDoc, closeDocPreview, logActivity } = useOpsState();
 	const { opsUser } = useOpsAuth();
 	const [localVerdict, setLocalVerdict] = useState<"Verified" | "Rejected" | undefined>(undefined);
 
@@ -57,11 +57,7 @@ export function OpsDocPreviewModal() {
 	const settled = status === "Verified" || status === "Rejected";
 
 	function handleVerdict(verdict: "Verified" | "Rejected") {
-		if (previewDoc?.isLive) {
-			verifyDocument(previewDoc.name, verdict, opsUser?.name ?? "Consultant");
-		} else {
-			setLocalVerdict(verdict);
-		}
+		setLocalVerdict(verdict);
 		logActivity(
 			opsUser?.name ?? "Assessment",
 			verdict === "Verified" ? "Document approved" : "Document rejected",

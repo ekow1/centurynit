@@ -227,7 +227,7 @@ export function EnterpriseDocuments() {
 	}
 
 	function decide(row: DocRow, verdict: "Verified" | "Rejected") {
-		setDocVerdict(row.key, row.isLive, row.name, verdict, opsUser?.name ?? "Consultant");
+		setDocVerdict(row.key, row.name, verdict, opsUser?.name ?? "Consultant");
 		logActivity(
 			opsUser?.name ?? "Assessment",
 			verdict === "Verified" ? "Document approved" : "Document rejected",

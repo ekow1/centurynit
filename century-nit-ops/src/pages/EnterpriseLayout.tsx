@@ -6,7 +6,6 @@ import { useOpsState } from "./OpsStateContext";
 import { useCasesApi } from "../hooks/useCasesApi";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { EnterpriseChat } from "./EnterpriseChat";
-import { useLivePortalCase } from "./useLivePortalCase";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
@@ -192,22 +191,6 @@ function MainNavGroup({
 
 const SWITCHABLE_ROLES: OpsRole[] = ["manager", "coordinator", "consultant", "finance", "admin"];
 
-/**
- * Mirrors the applicant portal's localStorage into the ops store so staff see
- * the live portal session alongside the seeded records. Read-only - see
- * useLivePortalCase.
- */
-function LiveCaseSync() {
-	const live = useLivePortalCase();
-	const { publishLiveCase } = useOpsState();
-
-	useEffect(() => {
-		publishLiveCase(live);
-	}, [live, publishLiveCase]);
-
-	return null;
-}
-
 /** Path → module mapping for permission checks on role switch. */
 const PATH_MODULE: Record<string, OpsModule> = {
 	"/dashboard": "dashboard",
@@ -239,7 +222,7 @@ const PATH_MODULE: Record<string, OpsModule> = {
 export function EnterpriseLayout() {
 	const { opsUser, opsRole, opsSignIn, opsSignOut, hasPermission } = useOpsAuth();
 	const isDev = import.meta.env.DEV;
-	const { openCommandPalette, liveCase, resetOpsState } = useOpsState();
+	const { openCommandPalette, resetOpsState } = useOpsState();
 	const navigate = useNavigate();
 	const location = useLocation();
 
@@ -305,7 +288,6 @@ export function EnterpriseLayout() {
 
 	return (
 		<div className="portal">
-			<LiveCaseSync />
 			<OpsCommandPalette />
 
 			<aside className="portal__aside">
@@ -422,14 +404,6 @@ export function EnterpriseLayout() {
 						</p>
 					</div>
 					<div className="portal__topbar-right">
-						{/* Live portal session indicator */}
-						{liveCase?.present && opsRole !== "admin" && (
-							<span className="ops-live-badge" title={`Live portal session · ${liveCase.email}`}>
-								<span className="ops-live-dot" aria-hidden />
-								LIVE · {liveCase.name.split(" ")[0]} · {liveCase.stageLabel}
-							</span>
-						)}
-
 						<button
 							type="button"
 							onClick={openCommandPalette}

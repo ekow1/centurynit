@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useCasesApi } from "../hooks/useCasesApi";
-import { useOpsState } from "./OpsStateContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
@@ -9,9 +8,7 @@ import {
 	invoiceBalance,
 	invoiceAgeDays,
 	type LedgerEntry,
-	type InstallmentRow,
 } from "century-nit-core/ops";
-import { POST_ARRIVAL_SCHEDULES } from "century-nit-core";
 
 /**
  * Client Ledger — a per-applicant financial journal.
@@ -22,17 +19,10 @@ import { POST_ARRIVAL_SCHEDULES } from "century-nit-core";
  */
 export function EnterpriseLedger() {
 	const { applicants } = useCasesApi();
-	const { liveCase } = useOpsState();
 	const { invoices } = useInvoiceApi();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [search, setSearch] = useState("");
 	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const [now, setNow] = useState(() => Date.now());
-
-	useEffect(() => {
-		const id = window.setInterval(() => setNow(Date.now()), 60_000);
-		return () => window.clearInterval(id);
-	}, []);
 
 	const scopedApplicants = useMemo(
 		() =>
@@ -53,24 +43,7 @@ export function EnterpriseLedger() {
 		);
 	}, [scopedApplicants, search]);
 
-	// Include live case if present
-	const liveApplicant = liveCase?.present
-		? {
-				id: liveCase.applicationId ?? liveCase.consultationRef ?? "live",
-				name: liveCase.name,
-				email: liveCase.email ?? "",
-				branch: "",
-				applicantId: liveCase.applicationId ?? liveCase.consultationRef ?? "live",
-				financials: {
-					totalAmount: String(liveCase.agencyTotal),
-					paidAmount: String(liveCase.agencyPaid),
-					outstanding: String(liveCase.agencyTotal - liveCase.agencyPaid),
-					plan: liveCase.paymentPlanId ?? "",
-				},
-			}
-		: null;
-
-	const allClients = liveApplicant ? [liveApplicant, ...filteredApplicants] : filteredApplicants;
+	const allClients = filteredApplicants;
 
 	const selected = allClients.find((a) => a.id === selectedId) ?? null;
 
@@ -145,40 +118,6 @@ export function EnterpriseLedger() {
 			return { ...e, balance: Math.max(0, running) };
 		});
 	}, [selected, invoices]);
-
-	// Derive installment schedule for the selected client
-	const installments = useMemo<InstallmentRow[]>(() => {
-		if (!selected) return [];
-		const live = liveCase?.present && selected.id === (liveCase.applicationId ?? liveCase.consultationRef ?? "live")
-			? liveCase
-			: null;
-
-		const scheduleId = live?.postArrivalSchedule ?? null;
-		if (!scheduleId) return [];
-
-		const schedule = POST_ARRIVAL_SCHEDULES.find((s) => s.id === scheduleId);
-		if (!schedule) return [];
-
-		const total = money(selected.financials.totalAmount);
-		const postArrivalTotal = Math.round(total * 0.4);
-		const perPayment = Math.round(postArrivalTotal / schedule.payments);
-		const paidIndex = live?.postArrivalPaymentIndex ?? 0;
-
-		const rows: InstallmentRow[] = [];
-		for (let i = 0; i < schedule.payments; i++) {
-			const dueDate = new Date(now + (schedule.graceDays + i * schedule.intervalDays) * 86_400_000).toISOString();
-			const isPaid = i < paidIndex;
-			const isOverdue = !isPaid && new Date(dueDate).getTime() < now;
-			rows.push({
-				index: i + 1,
-				dueDate,
-				amount: perPayment,
-				status: isPaid ? "paid" : isOverdue ? "overdue" : "pending",
-				paidDate: isPaid ? new Date(now - (schedule.intervalDays * (paidIndex - i - 1)) * 86_400_000).toISOString() : null,
-			});
-		}
-		return rows;
-	}, [selected, liveCase, now]);
 
 	// Aging breakdown
 	const aging = useMemo(() => {
@@ -338,50 +277,6 @@ export function EnterpriseLedger() {
 											</p>
 										</div>
 									))}
-								</div>
-							</div>
-						)}
-
-						{/* Installment schedule */}
-						{installments.length > 0 && (
-							<div className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem" }}>
-								<h3 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "1rem" }}>Installment Schedule</h3>
-								<div className="ops-table-wrap">
-									<table className="admin-table">
-										<thead>
-											<tr>
-												<th>#</th>
-												<th>Due Date</th>
-												<th>Amount</th>
-												<th>Status</th>
-												<th>Paid Date</th>
-											</tr>
-										</thead>
-										<tbody>
-											{installments.map((row) => (
-												<tr key={row.index}>
-													<td style={{ fontWeight: 600 }}>{row.index}</td>
-													<td style={{ color: "var(--muted-foreground)" }}>{new Date(row.dueDate).toLocaleDateString()}</td>
-													<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtBoth(row.amount)}</td>
-													<td>
-														<span
-															className="portal-pill"
-															style={{
-																fontSize: "var(--text-xs)",
-																color: row.status === "paid" ? "#10b981" : row.status === "overdue" ? "#ef4444" : "var(--muted-foreground)",
-																background: row.status === "paid" ? "rgba(16, 185, 129, 0.1)" : row.status === "overdue" ? "rgba(239, 68, 68, 0.1)" : "var(--muted)",
-															}}
-														>
-															{row.status === "paid" ? "Paid" : row.status === "overdue" ? "Overdue" : "Pending"}
-														</span>
-													</td>
-													<td style={{ color: "var(--muted-foreground)" }}>
-														{row.paidDate ? new Date(row.paidDate).toLocaleDateString() : "—"}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
 								</div>
 							</div>
 						)}

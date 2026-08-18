@@ -100,7 +100,7 @@ export function DocPreviewInline({
 			}
 			return;
 		}
-		setDocVerdict(docKey, isLive, doc.name, verdict, opsUser?.name ?? "Consultant");
+		setDocVerdict(docKey, doc.name, verdict, opsUser?.name ?? "Consultant");
 	}
 
 	return (

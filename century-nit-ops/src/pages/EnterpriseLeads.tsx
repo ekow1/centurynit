@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { BranchScopeFilter } from "./BranchScopeFilter";
-import { branchName } from "century-nit-core/ops";
 import {
 	LEAD_STAGE_LABELS,
 	LEAD_STAGE_ORDER,
@@ -10,7 +8,6 @@ import {
 	type LeadStage,
 } from "century-nit-core";
 import { LEAD_STAGE_TO_DB, LEAD_STAGE_FROM_DB } from "century-nit-shared";
-import { fmtBoth } from "./currency";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 
@@ -112,8 +109,7 @@ function LeadCard({
 				{lead.email}
 			</p>
 
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "var(--text-xs)" }}>
-				<span className="mono" style={{ fontWeight: 600 }}>{fmtBoth(lead.value)}</span>
+			<div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", fontSize: "var(--text-xs)" }}>
 				<span className="muted">{timeAgo(lead.lastContactAt)}</span>
 			</div>
 
@@ -121,8 +117,7 @@ function LeadCard({
 				<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)", fontSize: "var(--text-xs)" }}>
 					<p style={{ margin: "0 0 0.25rem" }}><strong>Phone:</strong> {lead.phone}</p>
 					<p style={{ margin: "0 0 0.25rem" }}><strong>Source:</strong> {lead.source}</p>
-					<p style={{ margin: "0 0 0.25rem" }}><strong>Branch:</strong> {branchName(lead.branch)}</p>
-					<p style={{ margin: "0 0 0.5rem" }}><strong>Assigned:</strong> {lead.assignedTo}</p>
+					<p style={{ margin: "0 0 0.25rem" }}><strong>Assigned:</strong> {lead.assignedTo}</p>
 					<p className="muted" style={{ margin: "0 0 0.75rem", fontStyle: "italic" }}>{lead.notes}</p>
 
 					{canMove && (
@@ -166,7 +161,6 @@ export function EnterpriseLeads() {
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [search, setSearch] = useState("");
-	const [branchFilter, setBranchFilter] = useState("all");
 	const [assignFilter, setAssignFilter] = useState<"all" | "mine">("all");
 
 	const canSeeAll =
@@ -219,11 +213,8 @@ export function EnterpriseLeads() {
 				email: al.email,
 				phone: al.phone || "-",
 				country: al.targetCountry || "Ghana",
-				degreeLevel: "Master's",
-				branch: "accra",
 				stage: LEAD_STAGE_FROM_DB[al.stage] ?? "new",
 				source: al.source || "Website Registration",
-				value: 3000,
 				createdAt: al.createdAt.slice(0, 10),
 				lastContactAt: al.updatedAt || al.createdAt,
 				notes: al.notes || "Captured automatically from client sign-in.",
@@ -244,11 +235,8 @@ export function EnterpriseLeads() {
 					email: liveCase.email,
 					phone: liveCase.phone || "-",
 					country: liveCase.targetCountry || "Ghana",
-					degreeLevel: liveCase.degreeLevel || "Master's",
-					branch: "accra",
 					stage: "new",
 					source: "Live Portal Sign-In",
-					value: 3000,
 					createdAt: new Date().toISOString().slice(0, 10),
 					lastContactAt: new Date().toISOString(),
 					notes: `Active client portal session at stage: ${liveCase.stageLabel || "New Client"}.`,
@@ -295,30 +283,19 @@ export function EnterpriseLeads() {
 		);
 	}, [canSeeAll, assignFilter, mergedLeads, opsUser?.name]);
 
-	const branchScopedLeads = useMemo(
-		() =>
-			branchFilter === "all"
-				? roleScopedLeads
-				: roleScopedLeads.filter((l) => l.branch === branchFilter),
-		[roleScopedLeads, branchFilter],
-	);
-
-	const filtered = branchScopedLeads.filter(
+	const filtered = roleScopedLeads.filter(
 		(l) =>
 			l.name.toLowerCase().includes(search.toLowerCase()) ||
 			l.email.toLowerCase().includes(search.toLowerCase()) ||
 			l.country.toLowerCase().includes(search.toLowerCase()),
 	);
 
-	const totalValue = branchScopedLeads
-		.filter((l) => l.stage !== "lost")
-		.reduce((sum, l) => sum + l.value, 0);
-	const convertedCount = branchScopedLeads.filter((l) => l.stage === "converted").length;
-	const activeCount = branchScopedLeads.filter(
+	const convertedCount = roleScopedLeads.filter((l) => l.stage === "converted").length;
+	const activeCount = roleScopedLeads.filter(
 		(l) => l.stage !== "converted" && l.stage !== "lost",
 	).length;
-	const conversionRate = branchScopedLeads.length > 0
-		? Math.round((convertedCount / branchScopedLeads.length) * 100)
+	const conversionRate = roleScopedLeads.length > 0
+		? Math.round((convertedCount / roleScopedLeads.length) * 100)
 		: 0;
 
 	return (
@@ -363,9 +340,8 @@ export function EnterpriseLeads() {
 					)}
 
 					<span className="portal-pill" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-						{canSeeAll ? `Active: ${branchScopedLeads.length}` : "Assigned to you"}
+						{canSeeAll ? `Active: ${roleScopedLeads.length}` : "Assigned to you"}
 					</span>
-					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
 
@@ -388,18 +364,14 @@ export function EnterpriseLeads() {
 							: `${roleScopedLeads.length} leads assigned to you`}
 					</p>
 				</div>
-				<span className="mono" style={{ fontSize: "var(--text-xs)", opacity: 0.8 }}>
-					{branchName(branchFilter)}
-				</span>
 			</div>
 
 			{/* KPI Summary Tiles */}
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<StatTile label="Total Leads" value={String(branchScopedLeads.length)} accent="var(--foreground)" />
+				<StatTile label="Total Leads" value={String(roleScopedLeads.length)} accent="var(--foreground)" />
 				<StatTile label="Active Leads" value={String(activeCount)} accent="#3b82f6" />
 				<StatTile label="Converted" value={String(convertedCount)} accent="#22c55e" />
 				<StatTile label="Conversion Rate" value={`${conversionRate}%`} accent="#8b5cf6" />
-				<StatTile label="Pipeline Value" value={fmtBoth(totalValue)} accent="#f59e0b" />
 			</div>
 
 			{/* Search */}

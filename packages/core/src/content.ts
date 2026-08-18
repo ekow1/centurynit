@@ -2447,15 +2447,11 @@ export type Lead = {
 	phone: string;
 	source: string;
 	country: string;
-	degreeLevel: string;
-	/** Canonical ops branch id the lead belongs to (see opsTypes OPS_BRANCHES). */
-	branch: string;
 	stage: LeadStage;
 	assignedTo: string;
 	createdAt: string;
 	lastContactAt: string;
 	notes: string;
-	value: number;
 	consultationId?: string | null;
 	applicationId?: string | null;
 };
@@ -2486,14 +2482,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 24 555 0123",
 		source: "Website form",
 		country: "Ghana",
-		degreeLevel: "Master's",
-		branch: "accra",
 		stage: "new",
 		assignedTo: "Efua Owusu",
 		createdAt: new Date(Date.now() - 86400000).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000).toISOString(),
 		notes: "Interested in UK computer science programs.",
-		value: 3000,
 	},
 	{
 		id: "lead-2",
@@ -2502,14 +2495,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 27 765 4321",
 		source: "Instagram ad",
 		country: "Ghana",
-		degreeLevel: "Bachelor's",
-		branch: "accra",
 		stage: "contacted",
 		assignedTo: "Efua Owusu",
 		createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 2).toISOString(),
 		notes: "Looking for scholarship options in Canada.",
-		value: 3000,
 	},
 	{
 		id: "lead-3",
@@ -2518,14 +2508,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 24 123 4567",
 		source: "Referral",
 		country: "Ghana",
-		degreeLevel: "PhD",
-		branch: "kumasi",
 		stage: "assessment_complete",
 		assignedTo: "Kwame Agyeman",
 		createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 4).toISOString(),
 		notes: "PhD in Engineering - full funding required.",
-		value: 5000,
 	},
 	{
 		id: "lead-4",
@@ -2534,14 +2521,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 20 334 5566",
 		source: "Google search",
 		country: "Ghana",
-		degreeLevel: "Master's",
-		branch: "accra",
 		stage: "consultation_booked",
 		assignedTo: "Efua Owusu",
 		createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 3).toISOString(),
 		notes: "Consultation booked for Friday. Interested in Australia.",
-		value: 3000,
 	},
 	{
 		id: "lead-5",
@@ -2550,14 +2534,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 20 987 6543",
 		source: "Career fair",
 		country: "Ghana",
-		degreeLevel: "Master's",
-		branch: "kumasi",
 		stage: "assessment_complete",
 		assignedTo: "Kwame Agyeman",
 		createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 5).toISOString(),
 		notes: "Strong candidate - 3.8 GPA, 2 years experience. Recommended UK MSc programs.",
-		value: 3000,
 	},
 	{
 		id: "lead-6",
@@ -2566,14 +2547,11 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 26 998 1122",
 		source: "Referral",
 		country: "Ghana",
-		degreeLevel: "Bachelor's",
-		branch: "accra",
 		stage: "converted",
 		assignedTo: "Efua Owusu",
 		createdAt: new Date(Date.now() - 86400000 * 15).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 8).toISOString(),
 		notes: "Converted to applicant. Now in active application pipeline.",
-		value: 3000,
 	},
 	{
 		id: "lead-7",
@@ -2582,13 +2560,10 @@ export const SEED_LEADS: Lead[] = [
 		phone: "+233 24 667 8899",
 		source: "Website form",
 		country: "Ghana",
-		degreeLevel: "Master's",
-		branch: "kumasi",
 		stage: "lost",
 		assignedTo: "Kwame Agyeman",
 		createdAt: new Date(Date.now() - 86400000 * 20).toISOString(),
 		lastContactAt: new Date(Date.now() - 86400000 * 14).toISOString(),
 		notes: "Decided to apply independently. No longer interested in agency services.",
-		value: 0,
 	},
 ];

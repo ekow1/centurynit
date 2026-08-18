@@ -144,7 +144,7 @@ authSettings.get(
 		// Determine the effective enrolled state
 		// For TOTP users: twoFactorEnabled is true
 		// For email_otp users: mfaEnrolled is true
-		const enrolled = dbUser?.mfaEnrolled ?? dbUser?.twoFactorEnabled ?? false;
+		const enrolled = Boolean(dbUser?.mfaEnrolled || dbUser?.twoFactorEnabled);
 		const method = dbUser?.mfaMethod ?? (dbUser?.twoFactorEnabled ? "totp" : null);
 
 		return c.json({

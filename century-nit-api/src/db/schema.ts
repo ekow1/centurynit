@@ -38,6 +38,21 @@ export const users = pgTable("users", {
 	twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
 
 	/**
+	 * Which MFA method the user chose during enrollment.
+	 * "totp" = authenticator app (Better Auth twoFactor plugin)
+	 * "email_otp" = email one-time code (custom implementation)
+	 * null = MFA not yet enrolled or method not yet chosen.
+	 */
+	mfaMethod: text("mfa_method"),
+
+	/**
+	 * Whether the user has completed MFA enrollment.
+	 * Separate from twoFactorEnabled because email_otp users don't use the
+	 * twoFactor plugin — this flag covers both methods.
+	 */
+	mfaEnrolled: boolean("mfa_enrolled").notNull().default(false),
+
+	/**
 	 * Access control / suspension.
 	 * When banned is true, Better Auth and API reject all session attempts.
 	 */
@@ -756,11 +771,21 @@ export const consultations = pgTable(
 		type: varchar("type", { length: 32 }).notNull().default("online"),
 		targetCountry: varchar("target_country", { length: 80 }),
 		status: consultationStatusEnum("status").notNull().default("UNDER_REVIEW"),
+		/** The consultant who does the assessment. Assigned by the coordinator. */
 		assignedOfficerId: uuid("assigned_officer_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
 		assignedAt: timestamp("assigned_at", { withTimezone: true }),
 		assignedBy: uuid("assigned_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		/** The coordinator who manages this case. Delegated by manager/owner. */
+		coordinatorId: uuid("coordinator_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		coordinatorAssignedAt: timestamp("coordinator_assigned_at", { withTimezone: true }),
+		coordinatorAssignedBy: uuid("coordinator_assigned_by").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		delegationNote: text("delegation_note"),
 		slotConfirmed: boolean("slot_confirmed").notNull().default(false),
 		assessmentResult: jsonb("assessment_result").$type<{
 			outcome: string;
@@ -777,6 +802,7 @@ export const consultations = pgTable(
 	(t) => ({
 		byApplicant: index("consultations_applicant_idx").on(t.applicantId),
 		byOfficer: index("consultations_officer_idx").on(t.assignedOfficerId, t.status),
+		byCoordinator: index("consultations_coordinator_idx").on(t.coordinatorId, t.status),
 		byStatus: index("consultations_status_idx").on(t.status),
 	}),
 );
@@ -1156,6 +1182,35 @@ export const messageMentions = pgTable(
 	}),
 );
 
+/**
+ * Append-only activity timeline for consultations.
+ *
+ * Records every meaningful state change — delegation, assignment, status
+ * change, document request, assessment — so managers and owners can see
+ * the full history without digging through comments.
+ */
+export const consultationActivities = pgTable(
+	"consultation_activities",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		consultationId: uuid("consultation_id")
+			.notNull()
+			.references(() => consultations.id, { onDelete: "cascade" }),
+		type: varchar("type", { length: 48 }).notNull(),
+		/** Who performed the action (null for system-generated activities). */
+		actorOpsUserId: uuid("actor_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		actorName: text("actor_name"),
+		/** Structured payload — what changed. */
+		payload: jsonb("payload"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byConsultation: index("consultation_activities_consultation_idx").on(t.consultationId, t.createdAt),
+	}),
+);
+
 /* ── Notification delivery log ───────────────────────────────────────────── */
 
 export const notificationLog = pgTable(
@@ -1180,4 +1235,44 @@ export const notificationLog = pgTable(
 		byStatus: index("notification_log_status_idx").on(t.status),
 	}),
 );
+
+/* ── Auth configuration ──────────────────────────────────────────────────── */
+
+/**
+ * Admin-configurable auth settings for portal and ops console.
+ *
+ * Key-value store where keys follow a dot-notation convention:
+ *   portal.email_password   — boolean, enable email+password login for portal
+ *   portal.social_google    — boolean, enable Google OAuth for portal
+ *   portal.email_otp        — boolean, enable email OTP (passwordless) for portal
+ *   portal.mfa_required     — boolean, require MFA for portal after password/social login
+ *   portal.mfa_methods      — string[], available MFA methods for portal users
+ *   ops.email_password      — boolean, always true (staff always use email+password)
+ *   ops.google_sso          — boolean, enable Google SSO for ops console
+ *   ops.mfa_required        — boolean, always true (staff always require MFA)
+ *   ops.mfa_methods         — string[], available MFA methods for staff
+ */
+export const authSettings = pgTable("auth_settings", {
+	key: varchar("key", { length: 128 }).primaryKey(),
+	value: jsonb("value").notNull(),
+	updatedBy: text("updated_by"),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+
+/**
+ * Global Lookup Values
+ * Used for dynamic dropdowns in forms (e.g. Assessment Form).
+ * Configured in Ops dashboard.
+ */
+export const lookupValues = pgTable("lookup_values", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	category: varchar("category", { length: 64 }).notNull(),
+	value: varchar("value", { length: 128 }).notNull(),
+	label: varchar("label", { length: 255 }).notNull(),
+	sortOrder: integer("sort_order").notNull().default(0),
+	isActive: boolean("is_active").notNull().default(true),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 

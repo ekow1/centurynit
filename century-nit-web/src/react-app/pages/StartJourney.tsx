@@ -1,5 +1,5 @@
 import { Navigate, useNavigate, Link } from "react-router-dom";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Button } from "../components/ui/Button";
 import { Field, Input } from "../components/ui/Field";
 import { useAppState, type AuthMethod } from "../context/AppState";
@@ -7,13 +7,12 @@ import {
 	signInWithEmail,
 	signUpWithEmail,
 	signInWithGoogle,
-	sendPhoneCode,
-	verifyPhoneCode,
 	sendEmailCode,
 	verifyEmailCode,
 	requestPasswordReset,
 	resetPassword,
 } from "../context/authStore";
+import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
 
 function GoogleIcon() {
 	return (
@@ -38,28 +37,6 @@ function GoogleIcon() {
 	);
 }
 
-function AppleIcon() {
-	return (
-		<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-			<path d="M17.05 12.04c.03 3.21 2.81 4.28 2.85 4.3-.03.08-.45 1.53-1.48 3.03-.89 1.3-1.82 2.6-3.28 2.62-1.43.03-1.89-.84-3.53-.84-1.64 0-2.15.81-3.5.87-1.41.05-2.48-1.41-3.38-2.7C2.6 16.71 1.15 12.93 2.7 10.36c.77-1.27 2.15-2.08 3.64-2.1 1.38-.03 2.68.93 3.53.93.85 0 2.44-1.15 4.12-.98.7.03 2.67.28 3.93 2.12-.1.06-2.35 1.37-2.32 4.08M14.3 6.93c.75-.91 1.26-2.18 1.12-3.44-1.08.04-2.39.72-3.17 1.63-.7.8-1.31 2.09-1.15 3.33 1.2.09 2.45-.61 3.2-1.52" />
-		</svg>
-	);
-}
-
-function LinkedInIcon() {
-	return (
-		<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-			<path d="M20.45 20.45h-3.55v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z" />
-		</svg>
-	);
-}
-
-const PROVIDERS = [
-	{ id: "google" as const, label: "Google", Icon: GoogleIcon },
-	{ id: "apple" as const, label: "Apple", Icon: AppleIcon },
-	{ id: "linkedin" as const, label: "LinkedIn", Icon: LinkedInIcon },
-];
-
 const FEATURES = [
 	"Consultation booking",
 	"University & program tracking",
@@ -67,17 +44,16 @@ const FEATURES = [
 	"Visa & payment timeline",
 ];
 
-type AuthStep = "signin" | "forgot" | "verify" | "set" | "done";
+type AuthStep = "signin" | "forgot" | "verify" | "set" | "done" | "mfa_otp";
 
 export function StartJourney() {
 	const { isAuthenticated, signIn, sessionStatus } = useAppState();
 	const nav = useNavigate();
 	const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-	const [tab, setTab] = useState<"social" | "email" | "phone" | "otp">("social");
+	const [authSettings, setAuthSettings] = useState<AuthSettingsResponse | null>(null);
+	const [settingsLoading, setSettingsLoading] = useState(true);
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [phone, setPhone] = useState("");
-	/** Set once a code has been sent, so the same tab shows the code step. */
 	const [codeSentTo, setCodeSentTo] = useState<string | null>(null);
 	const [otpCode, setOtpCode] = useState("");
 	const [name, setName] = useState("");
@@ -91,16 +67,51 @@ export function StartJourney() {
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [error, setError] = useState("");
 
-	// While the session probe is in flight, neither show the sign-in form nor
-	// bounce — the user may already be signed in server-side, in which case
-	// `sessionStatus` will flip to `authenticated` and the redirect below
-	// fires on the next render. Showing the form now would flash the login
-	// screen at a logged-in user.
-	if (sessionStatus === "checking") {
+	// Default settings (all enabled)
+	const defaults: AuthSettingsResponse = {
+		portal: { email_password: true, social_google: true, email_otp: true, mfa_required: true, mfa_methods: ["totp", "email_otp"] },
+		ops: { email_password: true, google_sso: false, mfa_required: true, mfa_methods: ["totp", "email_otp"] },
+	};
+	const s = authSettings ?? defaults;
+
+	// Which tabs to show
+	const showSocial = s.portal.social_google;
+	const showEmail = s.portal.email_password;
+	const showOtp = s.portal.email_otp;
+
+	// Build tab list
+	type TabId = "social" | "email" | "otp";
+	const tabs: [TabId, string][] = [];
+	if (showSocial) tabs.push(["social", "Social"]);
+	if (showEmail) tabs.push(["email", "Email & Password"]);
+	if (showOtp) tabs.push(["otp", "Email Code"]);
+
+	const [tab, setTab] = useState<TabId>("social");
+
+	// Set initial tab to first available
+	useEffect(() => {
+		if (!authSettings) return;
+		const first = tabs[0];
+		if (first && !tabs.find(([id]) => id === tab)) {
+			setTab(first[0]);
+		}
+	}, [authSettings]);
+
+	// Fetch auth settings
+	useEffect(() => {
+		let active = true;
+		getAuthSettings()
+			.then((st) => { if (active) setAuthSettings(st); })
+			.catch(() => { /* Use defaults */ })
+			.finally(() => { if (active) setSettingsLoading(false); });
+		return () => { active = false; };
+	}, []);
+
+	if (sessionStatus === "checking" || settingsLoading) {
 		return (
 			<div className="route-loading" role="status" aria-live="polite">
 				<span className="route-loading__spinner" aria-hidden="true" />
-				<span className="sr-only">Checking your session…</span>
+				<span className="sr-only">Loading...</span>
 			</div>
 		);
 	}
@@ -115,11 +126,7 @@ export function StartJourney() {
 		nav("/portal", { replace: true });
 	}
 
-	async function social(provider: "google" | "apple" | "linkedin") {
-		if (provider !== "google") {
-			setError(`${provider} sign-in is not configured yet.`);
-			return;
-		}
+	async function social(provider: "google") {
 		try {
 			setLoading(true);
 			setError("");
@@ -154,6 +161,16 @@ export function StartJourney() {
 				authMode === "signin"
 					? await signInWithEmail({ email: mail, password })
 					: await signUpWithEmail({ email: mail, password, name: displayName });
+
+			// Check if MFA is required via the Better Auth twoFactorRedirect
+			if (data?.twoFactorRedirect) {
+				// For now, we show the TOTP code input (Better Auth handles this)
+				// In the future this can branch based on the user's mfa_method
+				setLoading(false);
+				setError("MFA verification required. Please use the ops console to set up your MFA method.");
+				return;
+			}
+
 			const user = data?.user;
 			if (!user) throw new Error("No user returned");
 			const finalName = user.name || displayName;
@@ -164,27 +181,14 @@ export function StartJourney() {
 		}
 	}
 
-	/** Step 1 — send the SMS code. */
-	async function onPhone(e: FormEvent) {
-		e.preventDefault();
-		setError("");
-		setLoading(true);
-		try {
-			setCodeSentTo(await sendPhoneCode(phone));
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not send the code");
-		} finally {
-			setLoading(false);
-		}
-	}
-
-	/** Step 1 — send the one-time email code. */
+	/** Step 1 - send the email OTP code for passwordless login. */
 	async function onOtp(e: FormEvent) {
 		e.preventDefault();
 		setError("");
 		setLoading(true);
 		try {
-			setCodeSentTo(await sendEmailCode(email));
+			const target = await sendEmailCode(email);
+			setCodeSentTo(target);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not send the code");
 		} finally {
@@ -192,26 +196,17 @@ export function StartJourney() {
 		}
 	}
 
-	/**
-	 * Step 2 — exchange the code for a session.
-	 *
-	 * Both channels land here; which one is in play is decided by the tab, so
-	 * there is one code form rather than two near-identical ones.
-	 */
+	/** Step 2 - verify the email OTP code. */
 	async function onCodeSubmit(e: FormEvent) {
 		e.preventDefault();
 		if (!codeSentTo) return;
 		setError("");
 		setLoading(true);
 		try {
-			const result =
-				tab === "phone"
-					? await verifyPhoneCode(codeSentTo, otpCode)
-					: await verifyEmailCode(codeSentTo, otpCode);
-
+			const result = await verifyEmailCode(codeSentTo, otpCode);
 			const user = (result as { user?: { id?: string; name?: string; email?: string } } | null)?.user;
 			finish(
-				tab === "phone" ? "phone" : "otp",
+				"otp",
 				user?.name || codeSentTo,
 				user?.email || codeSentTo,
 				user?.id,
@@ -222,7 +217,6 @@ export function StartJourney() {
 		}
 	}
 
-	/** Leave the code step to correct a mistyped number or address. */
 	function restartCode() {
 		setCodeSentTo(null);
 		setOtpCode("");
@@ -300,7 +294,7 @@ export function StartJourney() {
 			<div className="loading-overlay">
 				<div className="spinner" aria-hidden />
 				<p className="mono">
-					{step === "forgot" ? "Sending reset code…" : "Opening your dashboard…"}
+					{step === "forgot" ? "Sending reset code..." : "Opening your dashboard..."}
 				</p>
 			</div>
 		);
@@ -351,7 +345,7 @@ export function StartJourney() {
 					</ul>
 				</div>
 				<p className="start-journey__brand-footer mono">
-					Licensed consultancy · Accra & Kumasi
+					Licensed consultancy - Accra & Kumasi
 				</p>
 			</div>
 
@@ -418,51 +412,42 @@ export function StartJourney() {
 								</button>
 							</div>
 
-							<div className="auth-tabs" role="tablist">
-								{(
-									[
-										["social", "Social"],
-										["email", "Email & Password"],
-										["phone", "Phone (OTP)"],
-										["otp", "Email Code"],
-									] as const
-								).map(([id, label]) => (
-									<button
-										key={id}
-										type="button"
-										role="tab"
-										aria-selected={tab === id}
-										className={`auth-tab${tab === id ? " auth-tab--active" : ""}`}
-										onClick={() => {
-											setTab(id);
-											setCodeSentTo(null);
-											setOtpCode("");
-											setError("");
-										}}
-									>
-										{label}
-									</button>
-								))}
-							</div>
-
-							{tab === "social" ? (
-								<div className="auth-social">
-									{PROVIDERS.map(({ id, label, Icon }) => (
+							{tabs.length > 1 && (
+								<div className="auth-tabs" role="tablist">
+									{tabs.map(([id, label]) => (
 										<button
 											key={id}
 											type="button"
-											className="auth-social__btn"
-											onClick={() => social(id)}
+											role="tab"
+											aria-selected={tab === id}
+											className={`auth-tab${tab === id ? " auth-tab--active" : ""}`}
+											onClick={() => {
+												setTab(id);
+												setCodeSentTo(null);
+												setOtpCode("");
+												setError("");
+											}}
 										>
-											<span className="auth-social__icon" aria-hidden>
-												<Icon />
-											</span>
-											Continue with {label}
+											{label}
 										</button>
 									))}
-									<p className="auth-social__note mono">Apple &amp; LinkedIn not available yet</p>
 								</div>
-							) : tab === "email" ? (
+							)}
+
+							{tab === "social" && showSocial ? (
+								<div className="auth-social">
+									<button
+										type="button"
+										className="auth-social__btn"
+										onClick={() => social("google")}
+									>
+										<span className="auth-social__icon" aria-hidden>
+											<GoogleIcon />
+										</span>
+										Continue with Google
+									</button>
+								</div>
+							) : tab === "email" && showEmail ? (
 								<form className="auth-form" onSubmit={onEmail} noValidate>
 									{authMode === "signup" && (
 										<Field label="Full Name" htmlFor="sj-name">
@@ -518,76 +503,56 @@ export function StartJourney() {
 										)}
 									</div>
 								</form>
-							) : codeSentTo ? (
-								/* One code step serves both channels — the tab decides which. */
-								<form className="auth-form" onSubmit={onCodeSubmit} noValidate>
-									<Field
-										label="Enter the 6-digit code"
-										htmlFor="sj-code"
-										hint={`Sent to ${codeSentTo}. It expires shortly.`}
-									>
-										<Input
-											id="sj-code"
-											type="text"
-											inputMode="numeric"
-											autoComplete="one-time-code"
-											maxLength={6}
-											value={otpCode}
-											onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-											placeholder="000000"
-											fullBorder
-										/>
-									</Field>
-									<Button type="submit" block arrow disabled={loading || otpCode.length !== 6}>
-										{loading ? "Checking…" : "Continue"}
-									</Button>
-									<button type="button" className="start-journey__guest" onClick={restartCode}>
-										Use a different {tab === "phone" ? "number" : "address"}
-									</button>
-								</form>
-							) : tab === "phone" ? (
-								<form className="auth-form" onSubmit={onPhone} noValidate>
-									<Field
-										label="Phone Number"
-										htmlFor="sj-phone"
-										hint="International format, e.g. +233 24 123 4567. We will text you a code."
-									>
-										<Input
-											id="sj-phone"
-											type="tel"
-											autoComplete="tel"
-											value={phone}
-											onChange={(e) => setPhone(e.target.value)}
-											placeholder="+233 24 123 4567"
-											fullBorder
-										/>
-									</Field>
-									<Button type="submit" block arrow disabled={loading || !phone.trim()}>
-										{loading ? "Sending…" : "Send code by SMS"}
-									</Button>
-								</form>
-							) : (
-								<form className="auth-form" onSubmit={onOtp} noValidate>
-									<Field
-										label="Email Address"
-										htmlFor="sj-otp-email"
-										hint="We will email you a one-time code — no password needed."
-									>
-										<Input
-											id="sj-otp-email"
-											type="email"
-											autoComplete="email"
-											value={email}
-											onChange={(e) => setEmail(e.target.value)}
-											placeholder="you@example.com"
-											fullBorder
-										/>
-									</Field>
-									<Button type="submit" block arrow disabled={loading || !email.trim()}>
-										{loading ? "Sending…" : "Email me a code"}
-									</Button>
-								</form>
-							)}
+							) : tab === "otp" && showOtp ? (
+								codeSentTo ? (
+									<form className="auth-form" onSubmit={onCodeSubmit} noValidate>
+										<Field
+											label="Enter the 6-digit code"
+											htmlFor="sj-code"
+											hint={`Sent to ${codeSentTo}. It expires shortly.`}
+										>
+											<Input
+												id="sj-code"
+												type="text"
+												inputMode="numeric"
+												autoComplete="one-time-code"
+												maxLength={6}
+												value={otpCode}
+												onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+												placeholder="000000"
+												fullBorder
+											/>
+										</Field>
+										<Button type="submit" block arrow disabled={loading || otpCode.length !== 6}>
+											{loading ? "Checking..." : "Continue"}
+										</Button>
+										<button type="button" className="start-journey__guest" onClick={restartCode}>
+											Use a different address
+										</button>
+									</form>
+								) : (
+									<form className="auth-form" onSubmit={onOtp} noValidate>
+										<Field
+											label="Email Address"
+											htmlFor="sj-otp-email"
+											hint="We will email you a one-time code - no password needed."
+										>
+											<Input
+												id="sj-otp-email"
+												type="email"
+												autoComplete="email"
+												value={email}
+												onChange={(e) => setEmail(e.target.value)}
+												placeholder="you@example.com"
+												fullBorder
+											/>
+										</Field>
+										<Button type="submit" block arrow disabled={loading || !email.trim()}>
+											{loading ? "Sending..." : "Email me a code"}
+										</Button>
+									</form>
+								)
+							) : null}
 
 							</>
 					) : null}
@@ -673,7 +638,7 @@ export function StartJourney() {
 					{step === "done" ? (
 						<div className="auth-done">
 							<p className="auth-done__mark" aria-hidden>
-								✓
+								Done
 							</p>
 							<p className="auth-done__text">
 								Your password has been updated. Sign in with your new password to continue.
@@ -686,7 +651,7 @@ export function StartJourney() {
 
 					{step === "signin" ? (
 						<p className="start-journey__legal mono">
-							By continuing you agree to our terms. This is a prototype - no real data is stored.
+							By continuing you agree to our terms.
 						</p>
 					) : null}
 				</div>

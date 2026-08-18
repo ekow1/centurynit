@@ -34,3 +34,25 @@ export type HealthResponse = {
 export async function getHealth(): Promise<HealthResponse> {
 	return apiFetch<HealthResponse>("/api/health");
 }
+
+export type PortalAuthSettings = {
+	email_password: boolean;
+	social_google: boolean;
+	email_otp: boolean;
+	mfa_required: boolean;
+	mfa_methods: ("totp" | "email_otp")[];
+};
+
+export type AuthSettingsResponse = {
+	portal: PortalAuthSettings;
+	ops: {
+		email_password: boolean;
+		google_sso: boolean;
+		mfa_required: boolean;
+		mfa_methods: ("totp" | "email_otp")[];
+	};
+};
+
+export async function getAuthSettings(): Promise<AuthSettingsResponse> {
+	return apiFetch<AuthSettingsResponse>("/api/auth-settings");
+}

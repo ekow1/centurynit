@@ -166,6 +166,12 @@ export interface MockConsultation {
 	meetingLink?: string;
 	/** Google Maps URL for in-person consultations */
 	mapsUrl?: string;
+	/** The coordinator who manages this case. */
+	coordinatorName?: string | null;
+	coordinatorEmail?: string | null;
+	coordinatorAssignedAt?: string | null;
+	coordinatorAssignedByName?: string | null;
+	delegationNote?: string | null;
 }
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";

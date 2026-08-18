@@ -305,7 +305,7 @@ async function findDirectConversation(userId1: string, userId2: string) {
 
 export async function getMessages(
 	conversationId: string,
-	opsUserId: string,
+	_opsUserId: string,
 	opts: { limit?: number; before?: string } = {},
 ): Promise<ChatMessageList> {
 	const limit = Math.min(opts.limit ?? 50, 100);

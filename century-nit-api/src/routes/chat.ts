@@ -74,7 +74,7 @@ chatRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const body = c.req.valid("json");
-		const created = await createConversation(staff, body);
+		const created = await createConversation({ id: staff.opsUserId, name: staff.name, email: staff.email }, body);
 		return c.json(created, 201);
 	},
 );
@@ -160,7 +160,7 @@ chatRouter.openapi(
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
-		const msg = await sendMessage(id, staff, body);
+		const msg = await sendMessage(id, { id: staff.opsUserId, name: staff.name, email: staff.email }, body);
 		return c.json(msg, 201);
 	},
 );

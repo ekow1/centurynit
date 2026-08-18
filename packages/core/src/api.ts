@@ -416,6 +416,90 @@ export const staffApi = {
 	},
 };
 
+/* ── Auth settings ───────────────────────────────────────────────────────── */
+
+export type AuthSettingsResponse = {
+	portal: {
+		email_password: boolean;
+		social_google: boolean;
+		email_otp: boolean;
+		mfa_required: boolean;
+		mfa_methods: string[];
+	};
+	ops: {
+		email_password: boolean;
+		google_sso: boolean;
+		mfa_required: boolean;
+		mfa_methods: string[];
+	};
+};
+
+export type MfaEnrollmentStatus = {
+	enrolled: boolean;
+	method: string | null;
+	required: boolean;
+	availableMethods: string[];
+};
+
+export const authSettingsApi = {
+	/** Read all auth settings (admin/manager). */
+	get(): Promise<AuthSettingsResponse> {
+		return request(`${API_PREFIX}/auth-settings`);
+	},
+
+	/** Update auth settings (admin/manager). */
+	update(patch: Partial<{
+		portal: Partial<AuthSettingsResponse["portal"]>;
+		ops: Partial<AuthSettingsResponse["ops"]>;
+	}>): Promise<AuthSettingsResponse> {
+		return request(`${API_PREFIX}/auth-settings`, {
+			method: "PUT",
+			...json(patch),
+		});
+	},
+
+	/** Current user's MFA enrollment status. */
+	mfaStatus(): Promise<MfaEnrollmentStatus> {
+		return request(`${API_PREFIX}/auth-settings/mfa`);
+	},
+
+	/** Choose MFA method and begin enrollment. Returns TOTP URI for "totp" or sends email for "email_otp". */
+	enrollMfa(method: "totp" | "email_otp", password: string): Promise<{
+		totpURI?: string;
+		backupCodes?: string[];
+		message?: string;
+		email?: string;
+	}> {
+		return request(`${API_PREFIX}/auth-settings/mfa/enroll`, {
+			method: "POST",
+			...json({ method, password }),
+		});
+	},
+
+	/** Confirm email OTP enrollment with the code sent to the user. */
+	confirmMfaOtp(code: string): Promise<{ success: boolean }> {
+		return request(`${API_PREFIX}/auth-settings/mfa/confirm`, {
+			method: "POST",
+			...json({ code }),
+		});
+	},
+
+	/** Send OTP for email MFA verification (during login). */
+	sendMfaOtp(): Promise<{ sent: boolean }> {
+		return request(`${API_PREFIX}/auth-settings/mfa/send-otp`, {
+			method: "POST",
+		});
+	},
+
+	/** Verify OTP for email MFA login. */
+	verifyMfaOtp(code: string): Promise<{ success: boolean }> {
+		return request(`${API_PREFIX}/auth-settings/mfa/verify-otp`, {
+			method: "POST",
+			...json({ code }),
+		});
+	},
+};
+
 /* ── Notification delivery log ────────────────────────────────────────────── */
 
 export type NotificationLogItem = {
@@ -617,6 +701,54 @@ export const consultationsApi = {
 			method: "PATCH",
 			body: JSON.stringify({ reason: reason ?? "" }),
 		});
+	},
+	delegate(
+		id: string,
+		body: { coordinatorOpsUserId: string; delegationNote?: string },
+	): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/delegate`, {
+			method: "POST",
+			...json(body),
+		});
+	},
+	reassign(
+		id: string,
+		body: { newCoordinatorOpsUserId: string; reason?: string },
+	): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/delegate`, {
+			method: "PUT",
+			...json(body),
+		});
+	},
+	workload(): Promise<{
+		coordinators: Array<{
+			opsUserId: string;
+			name: string;
+			email: string;
+			role: string;
+			activeCases: number;
+			overdueCases: number;
+			maxCapacity: number;
+			capacityPercent: number;
+		}>;
+		maxCapacityPerCoordinator: number;
+	}> {
+		return request(`${API_PREFIX}/consultations/workload`);
+	},
+	getActivity(
+		id: string,
+	): Promise<{
+		activities: Array<{
+			id: string;
+			consultationId: string;
+			type: string;
+			actorName: string | null;
+			payload: unknown;
+			createdAt: string;
+		}>;
+		total: number;
+	}> {
+		return request(`${API_PREFIX}/consultations/${id}/activity`);
 	},
 };
 

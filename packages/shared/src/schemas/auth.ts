@@ -181,3 +181,58 @@ export const AUTH_ERROR_CODES = {
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];
+
+/* ── Auth settings ───────────────────────────────────────────────────────── */
+
+/** MFA method options. */
+export const mfaMethodSchema = z.enum(["totp", "email_otp"]);
+export type MfaMethod = z.infer<typeof mfaMethodSchema>;
+
+/** Portal login method toggles. */
+export const portalAuthSettingsSchema = z.object({
+	email_password: z.boolean(),
+	social_google: z.boolean(),
+	email_otp: z.boolean(),
+	mfa_required: z.boolean(),
+	mfa_methods: z.array(mfaMethodSchema).min(1),
+});
+export type PortalAuthSettings = z.infer<typeof portalAuthSettingsSchema>;
+
+/** Ops console auth settings. */
+export const opsAuthSettingsSchema = z.object({
+	email_password: z.literal(true), // always true for staff
+	google_sso: z.boolean(),
+	mfa_required: z.literal(true), // always true for staff
+	mfa_methods: z.array(mfaMethodSchema).min(1),
+});
+export type OpsAuthSettings = z.infer<typeof opsAuthSettingsSchema>;
+
+/** Full auth settings response. */
+export const authSettingsSchema = z.object({
+	portal: portalAuthSettingsSchema,
+	ops: opsAuthSettingsSchema,
+});
+export type AuthSettingsResponse = z.infer<typeof authSettingsSchema>;
+
+/** Update auth settings — partial, any field can be sent. */
+export const updateAuthSettingsSchema = z.object({
+	portal: portalAuthSettingsSchema.partial().optional(),
+	ops: opsAuthSettingsSchema.partial().optional(),
+});
+export type UpdateAuthSettings = z.infer<typeof updateAuthSettingsSchema>;
+
+/** MFA enrollment — user picks their method. */
+export const enrollMfaSchema = z.object({
+	method: mfaMethodSchema,
+	password: z.string().min(12),
+});
+export type EnrollMfa = z.infer<typeof enrollMfaSchema>;
+
+/** MFA enrollment status. */
+export const mfaEnrollmentSchema = z.object({
+	enrolled: z.boolean(),
+	method: mfaMethodSchema.nullable(),
+	required: z.boolean(),
+	availableMethods: z.array(mfaMethodSchema),
+});
+export type MfaEnrollment = z.infer<typeof mfaEnrollmentSchema>;

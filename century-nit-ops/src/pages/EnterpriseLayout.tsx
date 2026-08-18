@@ -4,6 +4,7 @@ import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from
 import { roleCanAccess, API_PREFIX } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 import { OpsCommandPalette } from "./OpsCommandPalette";
+import { EnterpriseChat } from "./EnterpriseChat";
 import { useLivePortalCase } from "./useLivePortalCase";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
@@ -481,6 +482,9 @@ export function EnterpriseLayout() {
 					}
 				}}
 			/>
+
+			{/* Floating chat widget — persistent across all pages */}
+			{roleCanAccess(opsRole as OpsRole, "chat") && <EnterpriseChat />}
 		</div>
 	);
 }

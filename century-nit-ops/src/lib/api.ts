@@ -105,6 +105,81 @@ export function signOut(): Promise<unknown> {
 	});
 }
 
+/* ── Auth Settings ── */
+
+export type AuthSettingsResponse = {
+	portal: {
+		email_password: boolean;
+		social_google: boolean;
+		email_otp: boolean;
+		mfa_required: boolean;
+		mfa_methods: string[];
+	};
+	ops: {
+		email_password: boolean;
+		google_sso: boolean;
+		mfa_required: boolean;
+		mfa_methods: string[];
+	};
+};
+
+export type MfaEnrollmentStatus = {
+	enrolled: boolean;
+	method: string | null;
+	required: boolean;
+	availableMethods: string[];
+};
+
+export function getAuthSettings(): Promise<AuthSettingsResponse> {
+	return apiFetch<AuthSettingsResponse>("/api/auth-settings");
+}
+
+export function updateAuthSettings(patch: {
+	portal?: Partial<AuthSettingsResponse["portal"]>;
+	ops?: Partial<AuthSettingsResponse["ops"]>;
+}): Promise<AuthSettingsResponse> {
+	return apiFetch<AuthSettingsResponse>("/api/auth-settings", {
+		method: "PUT",
+		body: JSON.stringify(patch),
+	});
+}
+
+export function getMfaEnrollment(): Promise<MfaEnrollmentStatus> {
+	return apiFetch<MfaEnrollmentStatus>("/api/auth-settings/mfa");
+}
+
+export function enrollMfa(method: "totp" | "email_otp", password: string): Promise<{
+	totpURI?: string;
+	backupCodes?: string[];
+	message?: string;
+	email?: string;
+}> {
+	return apiFetch("/api/auth-settings/mfa/enroll", {
+		method: "POST",
+		body: JSON.stringify({ method, password }),
+	});
+}
+
+export function confirmMfaOtp(code: string): Promise<{ success: boolean }> {
+	return apiFetch("/api/auth-settings/mfa/confirm", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
+export function sendMfaOtp(): Promise<{ sent: boolean }> {
+	return apiFetch("/api/auth-settings/mfa/send-otp", {
+		method: "POST",
+	});
+}
+
+export function verifyMfaOtp(code: string): Promise<{ success: boolean }> {
+	return apiFetch("/api/auth-settings/mfa/verify-otp", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
 /* ── Invoices ── */
 
 export type ApiInvoice = {

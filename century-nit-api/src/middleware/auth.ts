@@ -132,12 +132,20 @@ export const requireMfa: MiddlewareHandler<{ Variables: AuthVariables }> = async
 	}
 
 	const [row] = await db
-		.select({ twoFactorEnabled: users.twoFactorEnabled })
+		.select({
+			twoFactorEnabled: users.twoFactorEnabled,
+			mfaEnrolled: users.mfaEnrolled,
+			mfaMethod: users.mfaMethod,
+		})
 		.from(users)
 		.where(eq(users.id, user.id))
 		.limit(1);
 
-	if (!row?.twoFactorEnabled) {
+	// Staff passes MFA check if they have either TOTP or email OTP enrolled
+	const hasTotp = row?.twoFactorEnabled === true;
+	const hasEmailOtp = row?.mfaEnrolled === true && row?.mfaMethod === "email_otp";
+
+	if (!hasTotp && !hasEmailOtp) {
 		throw new HttpError(
 			403,
 			AUTH_ERROR_CODES.MFA_NOT_ENROLLED,

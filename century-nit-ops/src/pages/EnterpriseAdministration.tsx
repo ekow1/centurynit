@@ -7,7 +7,7 @@ import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "century-nit-core/api";
 import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsModule } from "century-nit-shared";
-import { apiFetch } from "../lib/api";
+import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 import { ClientDirectory } from "./ClientDirectory";
 
@@ -1612,6 +1612,7 @@ function UsersAndRoles() {
 /* ─── Auth ─── */
 
 function AuthSettings() {
+	const [settings, setSettings] = useState<AuthSettingsResponse | null>(null);
 	const [stats, setStats] = useState<{
 		totalStaff: number;
 		mfaEnrolled: number;
@@ -1621,86 +1622,260 @@ function AuthSettings() {
 		providers: { id: string; label: string; enabled: boolean }[];
 	} | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [saved, setSaved] = useState(false);
 
 	useEffect(() => {
 		let active = true;
-		staffApi
-			.authStats()
-			.then((s) => { if (active) { setStats(s); setError(null); } })
-			.catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Could not load auth stats."); })
+		Promise.all([
+			getAuthSettings(),
+			staffApi.authStats(),
+		])
+			.then(([s, st]) => {
+				if (!active) return;
+				setSettings(s);
+				setStats(st);
+				setError(null);
+			})
+			.catch((e: unknown) => {
+				if (active) setError(e instanceof Error ? e.message : "Could not load auth settings.");
+			})
 			.finally(() => { if (active) setLoading(false); });
 		return () => { active = false; };
 	}, []);
 
+	async function updateSettings(patch: { portal?: Partial<AuthSettingsResponse["portal"]>; ops?: Partial<AuthSettingsResponse["ops"]> }) {
+		if (!settings) return;
+		setSaving(true);
+		setError(null);
+		setSaved(false);
+		try {
+			const updated = await updateAuthSettingsApi(patch);
+			setSettings(updated);
+			setSaved(true);
+			setTimeout(() => setSaved(false), 3000);
+		} catch (e: unknown) {
+			setError(e instanceof Error ? e.message : "Could not save settings.");
+		} finally {
+			setSaving(false);
+		}
+	}
+
 	if (loading) {
 		return (
 			<div className="card" style={{ textAlign: "center", padding: "3rem" }}>
-				<p className="muted">Loading authentication overview…</p>
+				<p className="muted">Loading authentication settings...</p>
 			</div>
 		);
 	}
 
-	if (error || !stats) {
+	if (error && !settings) {
 		return (
 			<div className="card" style={{ textAlign: "center", padding: "3rem" }}>
-				<p style={{ color: "#991b1b" }}>{error ?? "Could not load auth stats."}</p>
+				<p style={{ color: "#991b1b" }}>{error}</p>
 			</div>
 		);
 	}
 
-	const mfaPct = stats.totalStaff > 0 ? Math.round((stats.mfaEnrolled / stats.totalStaff) * 100) : 0;
+	const s = settings!;
+	const mfaPct = stats && stats.totalStaff > 0 ? Math.round((stats.mfaEnrolled / stats.totalStaff) * 100) : 0;
 
 	return (
 		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Staff Accounts" value={String(stats.totalStaff)} note={`${stats.mfaEnrolled} with MFA`} />
-				<Stat label="MFA Enrolled" value={`${stats.mfaEnrolled}/${stats.mfaRequired}`} note={`${mfaPct}% coverage`} />
-				<Stat label="MFA Outstanding" value={String(stats.mfaNotEnrolled)} note={stats.mfaNotEnrolled > 0 ? "Action required" : "All enrolled"} inverted={stats.mfaNotEnrolled > 0} />
-				<Stat label="Active Sessions" value={String(stats.activeSessions)} note="Currently signed in" />
-			</div>
-
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Sign-in Methods</h2>
-					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
-						Configured authentication providers. Manage credentials in <Link to="/settings" className="underline">Platform Settings</Link>.
-					</p>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{stats.providers.map((p) => (
-							<li key={p.id} style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-								<div>
-									<span style={{ fontWeight: 500 }}>{p.label}</span>
-								</div>
-								<span className="portal-pill" style={{
-									background: p.enabled ? "#d1fae5" : "#f5f5f5",
-									color: p.enabled ? "#166534" : "#9ca3af",
-									fontSize: "var(--text-xs)",
-								}}>
-									{p.enabled ? "Enabled" : "Not configured"}
-								</span>
-							</li>
-						))}
-					</ul>
+			{/* Stats row */}
+			{stats && (
+				<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+					<Stat label="Staff Accounts" value={String(stats.totalStaff)} note={`${stats.mfaEnrolled} with MFA`} />
+					<Stat label="MFA Enrolled" value={`${stats.mfaEnrolled}/${stats.mfaRequired}`} note={`${mfaPct}% coverage`} />
+					<Stat label="MFA Outstanding" value={String(stats.mfaNotEnrolled)} note={stats.mfaNotEnrolled > 0 ? "Action required" : "All enrolled"} inverted={stats.mfaNotEnrolled > 0} />
+					<Stat label="Active Sessions" value={String(stats.activeSessions)} note="Currently signed in" />
 				</div>
+			)}
 
-				<div className="card">
-					<h2 className="section-title mb-3">MFA Policy</h2>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<Row label="Enforcement" value="Required for all staff" />
-						<Row label="Method" value="TOTP (Google Authenticator, 1Password, etc.)" />
-						<Row label="Backup codes" value="Available at enrolment" />
-						<Row label="Enrolled" value={`${stats.mfaEnrolled} of ${stats.totalStaff} staff`} />
-						<Row label="Outstanding" value={`${stats.mfaNotEnrolled} staff without MFA`} />
-					</ul>
-					{stats.mfaNotEnrolled > 0 && (
-						<div style={{ marginTop: "0.75rem", padding: "0.6rem 0.85rem", background: "#fef3c7", border: "1px solid #fde68a", fontSize: "var(--text-xs)", color: "#92400e" }}>
-							{stats.mfaNotEnrolled} staff member(s) have not enrolled a second factor. They will be prompted at next sign-in.
+			{error && (
+				<div style={{ padding: "0.75rem 1rem", background: "#fee2e2", border: "1px solid #fca5a5", color: "#991b1b", fontSize: "var(--text-sm)", marginBottom: "1.5rem" }}>
+					{error}
+				</div>
+			)}
+			{saved && (
+				<div style={{ padding: "0.75rem 1rem", background: "#d1fae5", border: "1px solid #a7f3d0", color: "#166534", fontSize: "var(--text-sm)", marginBottom: "1.5rem" }}>
+					Settings saved. Changes take effect on next login.
+				</div>
+			)}
+
+			{/* Portal Login Methods */}
+			<div className="card" style={{ marginBottom: "1.5rem" }}>
+				<h2 className="section-title mb-3">Portal Login Methods</h2>
+				<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+					Configure which sign-in methods are available to applicants on the client portal.
+				</p>
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+					<label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>Email + Password</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>Traditional email and password sign-in. Requires MFA if enabled.</div>
 						</div>
-					)}
+						<input
+							type="checkbox"
+							checked={s.portal.email_password}
+							onChange={(e) => updateSettings({ portal: { email_password: e.target.checked } })}
+							disabled={saving}
+						/>
+					</label>
+					<label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>Social Login (Google)</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>OAuth sign-in via Google. Requires MFA if enabled. Credentials managed in Platform Settings.</div>
+						</div>
+						<input
+							type="checkbox"
+							checked={s.portal.social_google}
+							onChange={(e) => updateSettings({ portal: { social_google: e.target.checked } })}
+							disabled={saving}
+						/>
+					</label>
+					<label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>Email OTP (Passwordless)</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>No password needed. User enters email, receives a 6-digit code, enters it to log in.</div>
+						</div>
+						<input
+							type="checkbox"
+							checked={s.portal.email_otp}
+							onChange={(e) => updateSettings({ portal: { email_otp: e.target.checked } })}
+							disabled={saving}
+						/>
+					</label>
 				</div>
 			</div>
 
+			{/* Portal MFA */}
+			<div className="card" style={{ marginBottom: "1.5rem" }}>
+				<h2 className="section-title mb-3">Portal MFA</h2>
+				<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+					Multi-factor authentication for portal users after email/password or social login. Email OTP login is already 2FA and does not require additional MFA.
+				</p>
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+					<div>
+						<div style={{ fontWeight: 500 }}>Require MFA for portal</div>
+						<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>When enabled, users who sign in with email+password or social login must set up MFA.</div>
+					</div>
+					<input
+						type="checkbox"
+						checked={s.portal.mfa_required}
+						onChange={(e) => updateSettings({ portal: { mfa_required: e.target.checked } })}
+						disabled={saving}
+					/>
+				</div>
+				<div style={{ padding: "0.75rem 0" }}>
+					<div style={{ fontWeight: 500, marginBottom: "0.5rem" }}>Available MFA Methods</div>
+					<div style={{ display: "flex", gap: "1rem" }}>
+						<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+							<input
+								type="checkbox"
+								checked={s.portal.mfa_methods.includes("totp")}
+								onChange={(e) => {
+									const methods = e.target.checked
+										? [...s.portal.mfa_methods, "totp"]
+										: s.portal.mfa_methods.filter((m) => m !== "totp");
+									if (methods.length > 0) updateSettings({ portal: { mfa_methods: methods as ("totp" | "email_otp")[] } });
+								}}
+								disabled={saving}
+							/>
+							<span style={{ fontSize: "var(--text-sm)" }}>Authenticator App (TOTP)</span>
+						</label>
+						<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+							<input
+								type="checkbox"
+								checked={s.portal.mfa_methods.includes("email_otp")}
+								onChange={(e) => {
+									const methods = e.target.checked
+										? [...s.portal.mfa_methods, "email_otp"]
+										: s.portal.mfa_methods.filter((m) => m !== "email_otp");
+									if (methods.length > 0) updateSettings({ portal: { mfa_methods: methods as ("totp" | "email_otp")[] } });
+								}}
+								disabled={saving}
+							/>
+							<span style={{ fontSize: "var(--text-sm)" }}>Email OTP</span>
+						</label>
+					</div>
+				</div>
+			</div>
+
+			{/* Ops Console */}
+			<div className="card" style={{ marginBottom: "1.5rem" }}>
+				<h2 className="section-title mb-3">Ops Console (Staff)</h2>
+				<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+					Staff authentication settings. Email + password and MFA are always enforced for staff accounts.
+				</p>
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>Email + Password</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>Always enabled for staff. Cannot be disabled.</div>
+						</div>
+						<input type="checkbox" checked disabled style={{ opacity: 0.5 }} />
+					</div>
+					<label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>Google SSO</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>Allow staff to sign in via Google OAuth. Requires credentials in Platform Settings.</div>
+						</div>
+						<input
+							type="checkbox"
+							checked={s.ops.google_sso}
+							onChange={(e) => updateSettings({ ops: { google_sso: e.target.checked } })}
+							disabled={saving}
+						/>
+					</label>
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+						<div>
+							<div style={{ fontWeight: 500 }}>MFA Required</div>
+							<div style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>Always enforced for all staff roles. Cannot be disabled.</div>
+						</div>
+						<input type="checkbox" checked disabled style={{ opacity: 0.5 }} />
+					</div>
+					<div style={{ padding: "0.75rem 0" }}>
+						<div style={{ fontWeight: 500, marginBottom: "0.5rem" }}>Available MFA Methods</div>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem" }}>
+							Staff choose their preferred method during MFA enrollment. Both methods are available by default.
+						</p>
+						<div style={{ display: "flex", gap: "1rem" }}>
+							<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+								<input
+									type="checkbox"
+									checked={s.ops.mfa_methods.includes("totp")}
+									onChange={(e) => {
+										const methods = e.target.checked
+											? [...s.ops.mfa_methods, "totp"]
+											: s.ops.mfa_methods.filter((m) => m !== "totp");
+										if (methods.length > 0) updateSettings({ ops: { mfa_methods: methods as ("totp" | "email_otp")[] } });
+									}}
+									disabled={saving}
+								/>
+								<span style={{ fontSize: "var(--text-sm)" }}>Authenticator App (TOTP)</span>
+							</label>
+							<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+								<input
+									type="checkbox"
+									checked={s.ops.mfa_methods.includes("email_otp")}
+									onChange={(e) => {
+										const methods = e.target.checked
+											? [...s.ops.mfa_methods, "email_otp"]
+											: s.ops.mfa_methods.filter((m) => m !== "email_otp");
+										if (methods.length > 0) updateSettings({ ops: { mfa_methods: methods as ("totp" | "email_otp")[] } });
+									}}
+									disabled={saving}
+								/>
+								<span style={{ fontSize: "var(--text-sm)" }}>Email OTP</span>
+							</label>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* Session & Password Policy */}
 			<div className="card">
 				<h2 className="section-title mb-3">Session & Password Policy</h2>
 				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -1714,7 +1889,7 @@ function AuthSettings() {
 					</ul>
 				</div>
 				<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
-					Authentication is managed by Better Auth. These settings are code-defined and cannot be changed from this page.
+					These are code-defined defaults and cannot be changed from this page.
 				</p>
 			</div>
 		</>

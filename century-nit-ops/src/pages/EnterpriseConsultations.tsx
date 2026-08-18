@@ -46,6 +46,8 @@ export function EnterpriseConsultations() {
 		rescheduleConsultation,
 		decideReschedule,
 		cancelConsultation,
+		delegateCoordinator,
+		getWorkload,
 		refresh,
 	} = useCasesApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -64,6 +66,9 @@ export function EnterpriseConsultations() {
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
+	const [showCoordinatorPicker, setShowCoordinatorPicker] = useState(false);
+	const [coordinatorNote, setCoordinatorNote] = useState("");
+	const [workloadData, setWorkloadData] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -265,6 +270,12 @@ export function EnterpriseConsultations() {
 												</p>
 												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", opacity: 0.5, marginTop: "0.2rem" }}>
 													<span>{c.assignedOfficer ? `Assigned: ${c.assignedOfficer}` : "Unassigned"}</span>
+													{c.coordinatorName && (
+														<>
+															<span>·</span>
+															<span style={{ color: "#0c4a6e", fontWeight: 500 }}>Coord: {c.coordinatorName}</span>
+														</>
+													)}
 													<span>·</span>
 													<span>{d.verified}/{d.total} docs verified{d.pending > 0 ? ` · ${d.pending} pending` : ""}</span>
 												</div>
@@ -583,6 +594,109 @@ export function EnterpriseConsultations() {
 									style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
 								>
 									✕ Cancel Case
+								</button>
+							</div>
+						)}
+
+						{/* Coordinator section — managers/owners can delegate */}
+						{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && !active.coordinatorName && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0 }}>
+								{showCoordinatorPicker ? (
+									<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+										<p style={{ fontSize: "var(--text-sm)", color: "#0c4a6e", fontWeight: 600 }}>
+											Select a coordinator:
+										</p>
+										{workloadData ? (
+											<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+												{workloadData.coordinators.map((c) => (
+													<button
+														key={c.opsUserId}
+														onClick={async () => {
+															try {
+																await delegateCoordinator(active.id, c.opsUserId, coordinatorNote || undefined);
+																setShowCoordinatorPicker(false);
+																setCoordinatorNote("");
+																void refresh();
+															} catch (err: unknown) {
+																window.alert(err instanceof Error ? err.message : "Failed to delegate");
+															}
+														}}
+														className="btn btn--sm btn--ghost"
+														style={{
+															display: "flex",
+															flexDirection: "column",
+															alignItems: "flex-start",
+															padding: "0.4rem 0.75rem",
+															border: "1px solid var(--border)",
+															borderRadius: "6px",
+														}}
+													>
+														<span style={{ fontWeight: 500 }}>{c.name}</span>
+														<span style={{ fontSize: "10px", opacity: 0.7 }}>
+															{c.activeCases}/{c.maxCapacity} cases
+															{c.overdueCases > 0 && <span style={{ color: "#dc2626" }}> · {c.overdueCases} overdue</span>}
+														</span>
+													</button>
+												))}
+											</div>
+										) : (
+											<p style={{ fontSize: "var(--text-xs)", opacity: 0.6 }}>Loading workload…</p>
+										)}
+										<input
+											value={coordinatorNote}
+											onChange={(e) => setCoordinatorNote(e.target.value)}
+											placeholder="Delegation note (optional)"
+											style={{ fontSize: "var(--text-xs)", padding: "0.3rem 0.5rem", border: "1px solid var(--border)", borderRadius: "4px" }}
+										/>
+										<button
+											onClick={() => { setShowCoordinatorPicker(false); setCoordinatorNote(""); }}
+											className="btn btn--sm btn--ghost"
+											style={{ alignSelf: "flex-start" }}
+										>
+											Cancel
+										</button>
+									</div>
+								) : (
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+										<p style={{ fontSize: "var(--text-sm)", color: "#0c4a6e" }}>
+											No coordinator assigned. Delegate to a coordinator for case management.
+										</p>
+										<button
+											onClick={async () => {
+												setShowCoordinatorPicker(true);
+												if (!workloadData) {
+													try {
+														setWorkloadData(await getWorkload());
+													} catch { /* ignore */ }
+												}
+											}}
+											className="btn btn--primary btn--sm"
+											style={{ whiteSpace: "nowrap" }}
+										>
+											Delegate to Coordinator →
+										</button>
+									</div>
+								)}
+							</div>
+						)}
+						{active.coordinatorName && (
+							<div style={{ padding: "0.5rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e" }}>
+									<strong>Coordinator:</strong> {active.coordinatorName}
+									{active.coordinatorAssignedByName && <span style={{ opacity: 0.7 }}> (assigned by {active.coordinatorAssignedByName})</span>}
+									{active.delegationNote && <span style={{ opacity: 0.7 }}> — {active.delegationNote}</span>}
+								</p>
+								<button
+									onClick={async () => {
+										setShowCoordinatorPicker(true);
+										if (!workloadData) {
+											try { setWorkloadData(await getWorkload()); } catch { /* ignore */ }
+										}
+									}}
+									className="btn btn--sm btn--ghost"
+									style={{ whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}
+								>
+									Reassign
 								</button>
 							</div>
 						)}

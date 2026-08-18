@@ -295,8 +295,8 @@ function SchoolPackageInner() {
  * rules the Operations Center's reschedule panel does, from the same module —
  * when the two drifted, one side offered slots the other considered taken.
  */
-function upcomingDates(count = 21): { value: string; label: string }[] {
-	const out: { value: string; label: string }[] = [];
+function upcomingDates(count = 21): { value: string; weekday: string; dayMonth: string }[] {
+	const out: { value: string; weekday: string; dayMonth: string }[] = [];
 	const cursor = new Date();
 	cursor.setHours(0, 0, 0, 0);
 	cursor.setDate(cursor.getDate() + 1);
@@ -307,11 +307,8 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 		if (cursor.getDay() !== 0) {
 			out.push({
 				value: `${y}-${m}-${d}`,
-				label: cursor.toLocaleDateString(undefined, {
-					weekday: "short",
-					day: "numeric",
-					month: "short",
-				}),
+				weekday: cursor.toLocaleDateString("en-US", { weekday: "short" }),
+				dayMonth: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
 			});
 		}
 		cursor.setDate(cursor.getDate() + 1);
@@ -376,8 +373,8 @@ function SlotPickerLive({
 						}}
 						className={`resched__day${date === d.value ? " resched__day--on" : ""}`}
 					>
-						<span className="resched__day-wd">{d.label.split(",")[0]}</span>
-						<span className="resched__day-num">{d.label.split(",")[1]?.trim()}</span>
+						<span className="resched__day-wd">{d.weekday}</span>
+						<span className="resched__day-num">{d.dayMonth}</span>
 					</button>
 				))}
 			</div>
@@ -385,7 +382,7 @@ function SlotPickerLive({
 			<p className="resched__label mono mt-3">
 				Time{" "}
 				<span className="muted">
-					· {CONSULTATION_DURATIONS.find((d) => d.id === String(45))?.label ?? "45 min"} · branch local
+					· {CONSULTATION_DURATIONS.find((d) => d.id === String(durationMinutes))?.label ?? `${durationMinutes} min`} · branch local
 				</span>
 			</p>
 			{error && <p style={{ color: "#dc2626", fontSize: "0.85rem" }}>{error}</p>}
@@ -1576,7 +1573,7 @@ export function PortalConsultationBookingFlow() {
 						<p className="eyebrow">Branch</p>
 						<div className="card-grid card-grid--2 mt-3">
 							{[
-								{ id: "accra", name: "Accra Headquarters" },
+								{ id: "accra-hq", name: "Accra Headquarters" },
 								{ id: "kumasi", name: "Kumasi Branch" },
 								{ id: "takoradi", name: "Takoradi Branch" },
 							].map((b) => (

@@ -95,6 +95,11 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		rescheduleRequestedAt: row.rescheduleRequestedAt,
 		rescheduleRequestedStartsAt: row.rescheduleRequestedStartsAt,
 		rescheduleRequestReason: row.rescheduleRequestReason,
+		coordinatorName: row.coordinatorName ?? null,
+		coordinatorEmail: row.coordinatorEmail ?? null,
+		coordinatorAssignedAt: row.coordinatorAssignedAt ?? null,
+		coordinatorAssignedByName: row.coordinatorAssignedByName ?? null,
+		delegationNote: row.delegationNote ?? null,
 	};
 }
 
@@ -325,5 +330,11 @@ export function useCasesApi() {
 			replaceApplication(await applicationsApi.comment(id, { kind, text })),
 		requestApplicationDocs: async (id: string, documents: string[]) =>
 			replaceApplication(await applicationsApi.requestDocuments(id, documents)),
+		delegateCoordinator: async (id: string, coordinatorOpsUserId: string, note?: string) =>
+			replaceConsultation(await consultationsApi.delegate(id, { coordinatorOpsUserId, delegationNote: note })),
+		reassignCoordinator: async (id: string, newCoordinatorOpsUserId: string, reason?: string) =>
+			replaceConsultation(await consultationsApi.reassign(id, { newCoordinatorOpsUserId, reason })),
+		getWorkload: () => consultationsApi.workload(),
+		getActivity: (id: string) => consultationsApi.getActivity(id),
 	};
 }

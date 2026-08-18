@@ -15,6 +15,7 @@ import {
 	applications,
 	bookings,
 	caseComments,
+	consultationActivities,
 	consultations,
 	opsUsers,
 } from "../db/schema.js";
@@ -313,9 +314,11 @@ export async function cancelConsultation(
 /* ── Serialise ───────────────────────────────────────────────────────────── */
 
 async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultation> {
-	const [applicant, officer, booking, comments] = await Promise.all([
+	const [applicant, officer, coordinator, coordinatorAssigner, booking, comments] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.assignedOfficerId),
+		loadStaff(row.coordinatorId),
+		loadStaff(row.coordinatorAssignedBy),
 		row.bookingId
 			? db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1).then((r) => r[0] ?? null)
 			: Promise.resolve(null),
@@ -337,6 +340,12 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		assignedOfficerId: row.assignedOfficerId,
 		assignedOfficerName: officer?.name ?? null,
 		assignedOfficerEmail: officer?.email ?? null,
+		coordinatorId: row.coordinatorId,
+		coordinatorName: coordinator?.name ?? null,
+		coordinatorEmail: coordinator?.email ?? null,
+		coordinatorAssignedAt: row.coordinatorAssignedAt?.toISOString() ?? null,
+		coordinatorAssignedByName: coordinatorAssigner?.name ?? null,
+		delegationNote: row.delegationNote ?? null,
 		slotConfirmed: row.slotConfirmed,
 		startsAt: booking?.startsAt.toISOString() ?? null,
 		timezone: booking?.timezone ?? null,
@@ -450,7 +459,9 @@ export async function listConsultations(staff: StaffContext): Promise<Consultati
 	return db
 		.select()
 		.from(consultations)
-		.where(eq(consultations.assignedOfficerId, staff.opsUserId))
+		.where(
+			sql`${consultations.assignedOfficerId} = ${staff.opsUserId} OR ${consultations.coordinatorId} = ${staff.opsUserId}`,
+		)
 		.orderBy(desc(consultations.createdAt));
 }
 
@@ -1110,6 +1121,471 @@ export async function latestApplicationForApplicant(
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
 	return row ?? null;
+}
+
+/* ── Coordinator delegation ─────────────────────────────────────────────── */
+
+const STAFF_ACTIVE = eq(opsUsers.active, true);
+
+/**
+ * Delegate a consultation to a coordinator.
+ *
+ * Only manager / owner / super_admin may delegate.  The coordinator must
+ * exist and be active.  On success the case is also auto-assigned to the
+ * coordinator as its `assignedOfficerId` so it shows up in their queue.
+ */
+export async function delegateCoordinator(input: {
+	consultationId: string;
+	coordinatorOpsUserId: string;
+	note?: string;
+	actor: Actor;
+}): Promise<ConsultationRow> {
+	const row = await getConsultation(input.consultationId);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
+	}
+
+	const coordinator = await loadStaff(input.coordinatorOpsUserId);
+	if (!coordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+
+	const now = new Date();
+	const [updated] = await db
+		.update(consultations)
+		.set({
+			coordinatorId: input.coordinatorOpsUserId,
+			coordinatorAssignedAt: now,
+			coordinatorAssignedBy: input.actor.opsUserId,
+			delegationNote: input.note ?? row.delegationNote,
+			updatedAt: now,
+		})
+		.where(eq(consultations.id, row.id))
+		.returning();
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "assignment",
+		text: `Delegated to coordinator ${coordinator.name}${input.note ? `: ${input.note}` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	await recordActivity({
+		consultationId: row.id,
+		type: "coordinator_delegated",
+		actorOpsUserId: input.actor.opsUserId,
+		actorName: input.actor.name,
+		payload: {
+			coordinatorName: coordinator.name,
+			coordinatorOpsUserId: coordinator.id,
+			note: input.note ?? null,
+		},
+	});
+
+	// Auto-create a chat conversation between the delegating manager and the coordinator,
+	// with the consultation linked so it shows up in case context.
+	try {
+		const { createConversation } = await import("./chat.js");
+		const manager = await loadStaff(input.actor.opsUserId);
+		if (manager) {
+			await createConversation(
+				{ id: manager.id, name: manager.name, email: manager.email },
+				{
+					title: `Case ${row.reference} — ${coordinator.name}`,
+					participantOpsUserId: input.coordinatorOpsUserId,
+					linkedEntityType: "consultation",
+					linkedEntityId: row.id,
+					initialMessage: input.note
+						? `I've delegated consultation ${row.reference} to you. ${input.note}`
+						: `I've delegated consultation ${row.reference} to you. Please review and take ownership.`,
+				},
+			);
+		}
+	} catch {
+		// Chat creation failure must not block the delegation.
+	}
+
+	return updated;
+}
+
+/**
+ * Reassign a consultation to a different coordinator.
+ *
+ * Records why in the activity timeline.  Does NOT change status — the
+ * consultation stays in whatever state it was in.
+ */
+export async function reassignCoordinator(input: {
+	consultationId: string;
+	newCoordinatorOpsUserId: string;
+	reason?: string;
+	actor: Actor;
+}): Promise<ConsultationRow> {
+	const row = await getConsultation(input.consultationId);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
+	}
+
+	const newCoordinator = await loadStaff(input.newCoordinatorOpsUserId);
+	if (!newCoordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+
+	const oldCoordinator = row.coordinatorId ? await loadStaff(row.coordinatorId) : null;
+	const now = new Date();
+	const [updated] = await db
+		.update(consultations)
+		.set({
+			coordinatorId: input.newCoordinatorOpsUserId,
+			coordinatorAssignedAt: now,
+			coordinatorAssignedBy: input.actor.opsUserId,
+			updatedAt: now,
+		})
+		.where(eq(consultations.id, row.id))
+		.returning();
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "assignment",
+		text: `Coordinator reassigned from ${oldCoordinator?.name ?? "none"} to ${newCoordinator.name}${input.reason ? `: ${input.reason}` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	await recordActivity({
+		consultationId: row.id,
+		type: "coordinator_reassigned",
+		actorOpsUserId: input.actor.opsUserId,
+		actorName: input.actor.name,
+		payload: {
+			fromCoordinatorName: oldCoordinator?.name ?? null,
+			toCoordinatorName: newCoordinator.name,
+			reason: input.reason ?? null,
+		},
+	});
+
+	return updated;
+}
+
+/* ── Workload ──────────────────────────────────────────────────────────── */
+
+const DEFAULT_MAX_CAPACITY = 10;
+
+/** Active statuses that count towards a coordinator's workload. */
+const ACTIVE_CONSULTATION_STATUSES = ["UNDER_REVIEW", "ASSIGNED", "IN_ASSESSMENT"] as const;
+
+/**
+ * Get per-coordinator workload across the platform.
+ *
+ * Returns one entry per coordinator with their active / overdue counts and
+ * a capacity percentage.  Used for the heatmap and the delegation picker.
+ */
+export async function getCoordinatorWorkload(branch?: string): Promise<{
+	coordinators: Array<{
+		opsUserId: string;
+		name: string;
+		email: string;
+		role: string;
+		activeCases: number;
+		overdueCases: number;
+		maxCapacity: number;
+		capacityPercent: number;
+	}>;
+	maxCapacityPerCoordinator: number;
+}> {
+	const coordinators = await db
+		.select()
+		.from(opsUsers)
+		.where(and(STAFF_ACTIVE, branch ? eq(opsUsers.branch, branch) : undefined));
+
+	const coordinatorIds = coordinators.map((c) => c.id);
+	if (coordinatorIds.length === 0) {
+		return { coordinators: [], maxCapacityPerCoordinator: DEFAULT_MAX_CAPACITY };
+	}
+
+	const activeCases = await db
+		.select({
+			coordinatorId: consultations.coordinatorId,
+			status: consultations.status,
+		})
+		.from(consultations)
+		.where(
+			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(coordinatorIds.map((id) => sql`${id}`), sql`, `)})`} 
+				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`}`,
+		);
+
+	const overdueThreshold = new Date(Date.now() - 4 * 60 * 60 * 1000);
+	const overdueCases = await db
+		.select({ coordinatorId: consultations.coordinatorId })
+		.from(consultations)
+		.where(
+			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(coordinatorIds.map((id) => sql`${id}`), sql`, `)})`} 
+				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`} 
+				AND ${consultations.coordinatorAssignedAt} < ${overdueThreshold}`,
+		);
+
+	const countMap = new Map<string, number>();
+	for (const row of activeCases) {
+		if (!row.coordinatorId) continue;
+		countMap.set(row.coordinatorId, (countMap.get(row.coordinatorId) ?? 0) + 1);
+	}
+
+	const overdueMap = new Map<string, number>();
+	for (const row of overdueCases) {
+		if (!row.coordinatorId) continue;
+		overdueMap.set(row.coordinatorId, (overdueMap.get(row.coordinatorId) ?? 0) + 1);
+	}
+
+	const result = coordinators.map((c) => {
+		const active = countMap.get(c.id) ?? 0;
+		const overdue = overdueMap.get(c.id) ?? 0;
+		return {
+			opsUserId: c.id,
+			name: c.name,
+			email: c.email,
+			role: c.role,
+			activeCases: active,
+			overdueCases: overdue,
+			maxCapacity: DEFAULT_MAX_CAPACITY,
+			capacityPercent: Math.round((active / DEFAULT_MAX_CAPACITY) * 100),
+		};
+	});
+
+	result.sort((a, b) => a.capacityPercent - b.capacityPercent);
+
+	return {
+		coordinators: result,
+		maxCapacityPerCoordinator: DEFAULT_MAX_CAPACITY,
+	};
+}
+
+/* ── Activity timeline ─────────────────────────────────────────────────── */
+
+async function recordActivity(input: {
+	consultationId: string;
+	type: string;
+	actorOpsUserId?: string | null;
+	actorName?: string | null;
+	payload?: Record<string, unknown> | null;
+}): Promise<void> {
+	await db.insert(consultationActivities).values({
+		consultationId: input.consultationId,
+		type: input.type,
+		actorOpsUserId: input.actorOpsUserId ?? null,
+		actorName: input.actorName ?? null,
+		payload: input.payload ?? null,
+	});
+}
+
+/**
+ * Return the activity timeline for a consultation, newest first.
+ */
+export async function getConsultationActivity(
+	consultationId: string,
+	limit = 50,
+): Promise<Array<{
+	id: string;
+	consultationId: string;
+	type: string;
+	actorName: string | null;
+	payload: unknown;
+	createdAt: Date;
+}>> {
+	return db
+		.select()
+		.from(consultationActivities)
+		.where(eq(consultationActivities.consultationId, consultationId))
+		.orderBy(desc(consultationActivities.createdAt))
+		.limit(limit);
+}
+
+/* ── Auto-escalation ───────────────────────────────────────────────────── */
+
+/**
+ * Reassign stale consultations whose coordinator hasn't responded within
+ * `hoursBeforeEscalation` hours.  Picks the coordinator with the lowest
+ * capacity.  Intended to be called from a scheduled job (BullMQ).
+ *
+ * Returns the IDs of consultations that were escalated.
+ */
+export async function checkAndEscalate(options?: {
+	hoursBeforeEscalation?: number;
+}): Promise<string[]> {
+	const hours = options?.hoursBeforeEscalation ?? 4;
+	const staleThreshold = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+	const stale = await db
+		.select()
+		.from(consultations)
+		.where(
+			sql`${consultations.coordinatorId} IS NOT NULL 
+				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`} 
+				AND ${consultations.coordinatorAssignedAt} < ${staleThreshold}`,
+		);
+
+	if (stale.length === 0) return [];
+
+	const workload = await getCoordinatorWorkload();
+	const leastBusy = workload.coordinators.find((c) => c.capacityPercent < 100);
+	if (!leastBusy) return [];
+
+	const escalated: string[] = [];
+
+	for (const row of stale) {
+		if (row.coordinatorId === leastBusy.opsUserId) continue;
+
+		await db
+			.update(consultations)
+			.set({
+				coordinatorId: leastBusy.opsUserId,
+				coordinatorAssignedAt: new Date(),
+				coordinatorAssignedBy: null,
+				updatedAt: new Date(),
+			})
+			.where(eq(consultations.id, row.id));
+
+		await recordActivity({
+			consultationId: row.id,
+			type: "auto_escalated",
+			payload: {
+				fromCoordinatorId: row.coordinatorId,
+				toCoordinatorId: leastBusy.opsUserId,
+				reason: `Auto-escalated after ${hours}h without coordinator action`,
+			},
+		});
+
+		await db.insert(caseComments).values({
+			targetType: "consultation",
+			targetId: row.id,
+			kind: "status",
+			text: `Auto-escalated to ${leastBusy.name} — no coordinator action for ${hours}h`,
+			authorName: "System",
+			authorOpsUserId: null,
+		});
+
+		escalated.push(row.id);
+	}
+
+	return escalated;
+}
+
+/* ── Daily digest ──────────────────────────────────────────────────────── */
+
+/**
+ * Build and send a daily coordination digest email.
+ *
+ * Lists all active consultations and their current state — useful for
+ * manager/owner to review at the start of the day.
+ */
+export async function sendDailyDigest(): Promise<void> {
+	const active = await db
+		.select({
+			id: consultations.id,
+			reference: consultations.reference,
+			status: consultations.status,
+			coordinatorId: consultations.coordinatorId,
+			assignedOfficerId: consultations.assignedOfficerId,
+			createdAt: consultations.createdAt,
+			applicantId: consultations.applicantId,
+		})
+		.from(consultations)
+		.where(sql`${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`}`)
+		.orderBy(consultations.createdAt);
+
+	if (active.length === 0) return;
+
+	const rows = await Promise.all(
+		active.map(async (c) => {
+			const coordinator = c.coordinatorId ? await loadStaff(c.coordinatorId) : null;
+			const officer = c.assignedOfficerId ? await loadStaff(c.assignedOfficerId) : null;
+			const applicant = await db
+				.select({ name: applicants.name })
+				.from(applicants)
+				.where(eq(applicants.id, c.applicantId))
+				.limit(1)
+				.then((r) => r[0]);
+			return {
+				reference: c.reference,
+				clientName: applicant?.name ?? "Unknown",
+				status: c.status,
+				coordinatorName: coordinator?.name ?? "Unassigned",
+				officerName: officer?.name ?? "Unassigned",
+				createdAt: c.createdAt,
+			};
+		}),
+	);
+
+	const rowsHtml = rows
+		.map(
+			(r) => `<tr>
+				<td style="padding:8px;border-bottom:1px solid #eee">${r.reference}</td>
+				<td style="padding:8px;border-bottom:1px solid #eee">${r.clientName}</td>
+				<td style="padding:8px;border-bottom:1px solid #eee">${r.status}</td>
+				<td style="padding:8px;border-bottom:1px solid #eee">${r.coordinatorName}</td>
+				<td style="padding:8px;border-bottom:1px solid #eee">${r.officerName}</td>
+			</tr>`,
+		)
+		.join("");
+
+	const html = `
+		<h2>Daily Consultation Digest</h2>
+		<p><strong>${rows.length}</strong> active consultation(s) require attention.</p>
+		<table style="border-collapse:collapse;width:100%">
+			<tr style="background:#f5f5f5">
+				<th style="padding:8px;text-align:left">Reference</th>
+				<th style="padding:8px;text-align:left">Client</th>
+				<th style="padding:8px;text-align:left">Status</th>
+				<th style="padding:8px;text-align:left">Coordinator</th>
+				<th style="padding:8px;text-align:left">Consultant</th>
+			</tr>
+			${rowsHtml}
+		</table>
+	`;
+
+	try {
+		const { opsUsers: allStaff } = await import("../db/schema.js");
+		const managers = await db
+			.select({ email: allStaff.email })
+			.from(allStaff)
+			.where(sql`${allStaff.role} IN ('super_admin', 'manager') AND ${allStaff.active} = true`);
+
+		const recipients = managers.map((m) => m.email);
+		if (recipients.length === 0) return;
+
+		await queueEmails([
+			{
+				to: recipients.join(","),
+				subject: `Daily Consultation Digest — ${rows.length} active`,
+				text: `You have ${rows.length} active consultations. View them in the operations dashboard.`,
+				html,
+				idempotencyKey: `daily-digest-${new Date().toISOString().slice(0, 10)}`,
+			},
+		]);
+	} catch {
+		// Digest failure must not block the scheduler.
+	}
+}
+
+/** Record a status change activity (used by status-change routes). */
+export async function recordStatusChange(consultationId: string, fromStatus: string, toStatus: string, actor: Actor): Promise<void> {
+	await recordActivity({
+		consultationId,
+		type: "status_changed",
+		actorOpsUserId: actor.opsUserId,
+		actorName: actor.name,
+		payload: { fromStatus, toStatus },
+	});
+}
+
+/** Record an assignment activity (used by assignConsultation). */
+export async function recordAssignment(consultationId: string, officerName: string, actor: Actor): Promise<void> {
+	await recordActivity({
+		consultationId,
+		type: "consultant_assigned",
+		actorOpsUserId: actor.opsUserId,
+		actorName: actor.name,
+		payload: { officerName },
+	});
 }
 
 

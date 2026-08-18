@@ -31,6 +31,7 @@ import { leadsRouter } from "./routes/leads.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
 import { chatRouter } from "./routes/chat.js";
+import { authSettings } from "./routes/auth-settings.js";
 
 
 /**
@@ -124,6 +125,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/calendar`, calendarRouter);
 	app.route(`${API_PREFIX}/invoices`, invoicesRouter);
 	app.route(`${API_PREFIX}/staff`, staffRouter);
+	app.route(`${API_PREFIX}/auth-settings`, authSettings);
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
 	app.route(`${API_PREFIX}/consultations`, consultationsRouter);

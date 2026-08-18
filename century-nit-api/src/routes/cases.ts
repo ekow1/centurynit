@@ -13,16 +13,20 @@ import {
 	canSeeConsultation,
 	completeConsultationAssessment,
 	confirmConsultationSlot,
+	delegateCoordinator,
 	getApplicant,
 	getApplicantByUserId,
 	getApplication,
 	getConsultation,
+	getConsultationActivity,
+	getCoordinatorWorkload,
 	latestApplicationForApplicant,
 	latestConsultationForApplicant,
 	listApplicants,
 	listApplications,
 	listConsultations,
 	patchApplicant,
+	reassignCoordinator,
 	respondToOutcome,
 	requestCaseDocuments,
 	serializeApplicant,
@@ -62,12 +66,14 @@ import {
 	completeAssessmentSchema,
 	consultationListSchema,
 	consultationSchema,
+	delegateConsultationSchema,
 	invoiceSchema,
 	myApplicationSchema,
 	paystackCheckoutSchema,
 	paystackVerifyResponseSchema,
 	paystackVerifySchema,
 	patchApplicantSchema,
+	reassignCoordinatorSchema,
 	recordPaymentSchema,
 	requestDocumentsSchema,
 	setStageSchema,
@@ -691,6 +697,177 @@ applicantsRouter.openapi(
 	async (c) => {
 		const updated = await patchApplicant(c.req.valid("param").id, c.req.valid("json"));
 		return c.json(await serializeApplicant(updated));
+	},
+);
+
+/* ── Coordinator delegation ─────────────────────────────────────────────── */
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/delegate",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: delegateConsultationSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Consultation delegated to coordinator",
+			},
+			404: { description: "Consultation or coordinator not found" },
+			409: { description: "Consultation is closed" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may delegate consultations");
+		}
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const updated = await delegateCoordinator({
+			consultationId: id,
+			coordinatorOpsUserId: body.coordinatorOpsUserId,
+			note: body.delegationNote,
+			actor: actorFrom(staff),
+		});
+		return c.json(await serializeConsultation(updated));
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/{id}/delegate",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: reassignCoordinatorSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Coordinator reassigned",
+			},
+			404: { description: "Consultation or coordinator not found" },
+			409: { description: "Consultation is closed" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may reassign coordinators");
+		}
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const updated = await reassignCoordinator({
+			consultationId: id,
+			newCoordinatorOpsUserId: body.newCoordinatorOpsUserId,
+			reason: body.reason,
+			actor: actorFrom(staff),
+		});
+		return c.json(await serializeConsultation(updated));
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/workload",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							coordinators: z.array(
+								z.object({
+									opsUserId: z.string().uuid(),
+									name: z.string(),
+									email: z.string(),
+									role: z.string(),
+									activeCases: z.number().int(),
+									overdueCases: z.number().int(),
+									maxCapacity: z.number().int(),
+									capacityPercent: z.number(),
+								}),
+							),
+							maxCapacityPerCoordinator: z.number().int(),
+						}),
+					},
+				},
+				description: "Workload per coordinator",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may view workload");
+		}
+		return c.json(await getCoordinatorWorkload());
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/activity",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							activities: z.array(
+								z.object({
+									id: z.string().uuid(),
+									consultationId: z.string().uuid(),
+									type: z.string(),
+									actorName: z.string().nullable(),
+									payload: z.any().nullable(),
+									createdAt: z.string().datetime(),
+								}),
+							),
+							total: z.number().int(),
+						}),
+					},
+				},
+				description: "Activity timeline for this consultation",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		const user = c.get("user");
+		if (!staff && !user) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		const { id } = c.req.valid("param");
+		const consultation = await getConsultation(id);
+		if (!consultation) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+		const activities = await getConsultationActivity(id);
+		return c.json({
+			activities: activities.map((a) => ({
+				...a,
+				createdAt: a.createdAt.toISOString(),
+			})),
+			total: activities.length,
+		});
 	},
 );
 

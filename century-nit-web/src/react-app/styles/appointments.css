@@ -173,3 +173,96 @@
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 }
+
+/* ── Slot Picker Live (resched) ── */
+
+.resched__days {
+	display: flex;
+	gap: 0.5rem;
+	overflow-x: auto;
+	padding-bottom: 0.5rem;
+	scrollbar-width: none;
+}
+.resched__days::-webkit-scrollbar {
+	display: none;
+}
+
+.resched__day {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-width: 4.5rem;
+	padding: 0.75rem 0.5rem;
+	border: var(--thin);
+	background: var(--background);
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.resched__day:hover {
+	background: var(--border);
+	color: var(--background);
+}
+
+.resched__day--on {
+	background: var(--text);
+	color: var(--background);
+	border-color: var(--text);
+}
+
+.resched__day-wd {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	opacity: 0.8;
+}
+
+.resched__day-num {
+	font-size: 1.125rem;
+	margin-top: 0.1rem;
+}
+
+.resched__slots {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+	gap: 0.5rem;
+}
+
+.resched__slot {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 0.75rem 0.5rem;
+	border: var(--thin);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: var(--text-sm, 0.875rem);
+	cursor: pointer;
+}
+
+.resched__slot:hover:not(:disabled) {
+	background: var(--border);
+	color: var(--background);
+}
+
+.resched__slot--on {
+	background: var(--text);
+	color: var(--background);
+	border-color: var(--text);
+}
+
+.resched__slot:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+	text-decoration: line-through;
+}
+
+.resched__slot-tag {
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	margin-top: 0.2rem;
+}
+

@@ -24,14 +24,16 @@ const SEARCH_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const SHIELD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 
 export function OpsLogin() {
-	const { opsSignIn, opsSignInWithCredentials, opsVerifyTwoFactor, opsUser, authInitializing } = useOpsAuth();
+	const { opsSignIn, opsSignInWithCredentials, opsVerifyTwoFactor, opsVerifyEmailOtp, opsSendMfaOtp, opsUser, authInitializing } = useOpsAuth();
 	const navigate = useNavigate();
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [showForm, setShowForm] = useState(!import.meta.env.DEV);
 	const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+	const [mfaMethod, setMfaMethod] = useState<string | null>(null);
 	const [twoFactorCode, setTwoFactorCode] = useState("");
 	const [useBackupCode, setUseBackupCode] = useState(false);
+	const [otpSent, setOtpSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
@@ -58,6 +60,16 @@ export function OpsLogin() {
 			const res = await opsSignInWithCredentials(email, password);
 			if (res.twoFactorRequired) {
 				setTwoFactorRequired(true);
+				setMfaMethod(res.mfaMethod ?? "totp");
+				// If email OTP method, auto-send the code
+				if (res.mfaMethod === "email_otp") {
+					try {
+						await opsSendMfaOtp();
+						setOtpSent(true);
+					} catch {
+						// Code sending failed — user can retry
+					}
+				}
 				return;
 			}
 			if (res.user) {
@@ -75,13 +87,20 @@ export function OpsLogin() {
 		setError(null);
 		setLoading(true);
 		try {
-			const user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode);
+			let user;
+			if (mfaMethod === "email_otp") {
+				user = await opsVerifyEmailOtp(twoFactorCode);
+			} else {
+				user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode);
+			}
 			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
 		} catch (err) {
 			setError(
 				err instanceof Error
 					? err.message
-					: "Invalid two-factor code. Check your authenticator app and try again.",
+					: mfaMethod === "email_otp"
+						? "Invalid code. Check your email and try again."
+						: "Invalid two-factor code. Check your authenticator app and try again.",
 			);
 		} finally {
 			setLoading(false);
@@ -129,54 +148,65 @@ export function OpsLogin() {
 			{/* Right panel - login form / role selection */}
 			<div className="ops-login__main">
 				<div className="ops-login__card">
-					{twoFactorRequired ? (
-						<>
-							<div className="ops-login__head">
-								<h1 className="ops-login__title">Two-Factor Authentication</h1>
-								<p className="ops-login__subtitle">
-									{useBackupCode
+				{twoFactorRequired ? (
+					<>
+						<div className="ops-login__head">
+							<h1 className="ops-login__title">Two-Factor Authentication</h1>
+							<p className="ops-login__subtitle">
+								{mfaMethod === "email_otp"
+									? (otpSent
+										? `Enter the 6-digit code sent to ${email}`
+										: "Sending you a verification code...")
+									: (useBackupCode
 										? "Enter one of your 10-character backup recovery codes"
-										: "Enter the current 6-digit code from your authenticator app"}
-								</p>
+										: "Enter the current 6-digit code from your authenticator app")}
+							</p>
+						</div>
+
+						<form onSubmit={handleTwoFactorSubmit} className="ops-login__form">
+							<div className="ops-login__field">
+								<label className="ops-login__label">
+									<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
+									{mfaMethod === "email_otp"
+										? "Email Code"
+										: (useBackupCode ? "Backup Recovery Code" : "Authenticator Code")}
+								</label>
+								<input
+									type="text"
+									value={twoFactorCode}
+									onChange={(e) =>
+										setTwoFactorCode(
+											(mfaMethod === "email_otp" || !useBackupCode)
+												? e.target.value.replace(/\D/g, "").slice(0, 6)
+												: e.target.value.trim(),
+										)
+									}
+									placeholder={
+										mfaMethod === "email_otp"
+											? "000000"
+											: (useBackupCode ? "e.g. a1b2c3d4e5" : "000000")
+									}
+									inputMode={(mfaMethod === "email_otp" || !useBackupCode) ? "numeric" : "text"}
+									autoComplete="one-time-code"
+									pattern={(mfaMethod === "email_otp" || !useBackupCode) ? "[0-9]{6}" : undefined}
+									maxLength={mfaMethod === "email_otp" ? 6 : (useBackupCode ? 32 : 6)}
+									className="ops-login__input mono"
+									required
+									autoFocus
+								/>
 							</div>
 
-							<form onSubmit={handleTwoFactorSubmit} className="ops-login__form">
-								<div className="ops-login__field">
-									<label className="ops-login__label">
-										<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
-										{useBackupCode ? "Backup Recovery Code" : "Authenticator Code"}
-									</label>
-									<input
-										type="text"
-										value={twoFactorCode}
-										onChange={(e) =>
-											setTwoFactorCode(
-												useBackupCode
-													? e.target.value.trim()
-													: e.target.value.replace(/\D/g, "").slice(0, 6),
-											)
-										}
-										placeholder={useBackupCode ? "e.g. a1b2c3d4e5" : "000000"}
-										inputMode={useBackupCode ? "text" : "numeric"}
-										autoComplete="one-time-code"
-										pattern={useBackupCode ? undefined : "[0-9]{6}"}
-										maxLength={useBackupCode ? 32 : 6}
-										className="ops-login__input mono"
-										required
-										autoFocus
-									/>
-								</div>
+							{error ? (
+								<p className="ops-login__error" role="alert">{error}</p>
+							) : null}
 
-								{error ? (
-									<p className="ops-login__error" role="alert">{error}</p>
-								) : null}
+							<button type="submit" disabled={loading || !twoFactorCode} className="btn btn--primary ops-login__submit">
+								<span>{loading ? "Verifying..." : "Verify & Sign In"}</span>
+								{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
+							</button>
 
-								<button type="submit" disabled={loading || !twoFactorCode} className="btn btn--primary ops-login__submit">
-									<span>{loading ? "Verifying…" : "Verify & Sign In"}</span>
-									{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
-								</button>
-
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem", fontSize: "var(--text-xs)" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem", fontSize: "var(--text-xs)" }}>
+								{mfaMethod !== "email_otp" && (
 									<button
 										type="button"
 										onClick={() => {
@@ -189,21 +219,42 @@ export function OpsLogin() {
 									>
 										{useBackupCode ? "Use Authenticator App" : "Use a backup recovery code"}
 									</button>
+								)}
+								{mfaMethod === "email_otp" && otpSent && (
 									<button
 										type="button"
-										onClick={() => {
-											setTwoFactorRequired(false);
-											setTwoFactorCode("");
+										onClick={async () => {
 											setError(null);
+											try {
+												await opsSendMfaOtp();
+												setOtpSent(true);
+											} catch {
+												setError("Could not resend code");
+											}
 										}}
-										className="ops-login__back"
-										style={{ margin: 0 }}
+										className="btn btn--ghost btn--xs"
+										style={{ padding: "0.25rem 0.5rem" }}
 									>
-										Back to login
+										Resend code
 									</button>
-								</div>
-							</form>
-						</>
+								)}
+								<button
+									type="button"
+									onClick={() => {
+										setTwoFactorRequired(false);
+										setMfaMethod(null);
+										setTwoFactorCode("");
+										setError(null);
+										setOtpSent(false);
+									}}
+									className="ops-login__back"
+									style={{ margin: 0 }}
+								>
+									Back to login
+								</button>
+							</div>
+						</form>
+					</>
 					) : showForm ? (
 						<>
 							<div className="ops-login__head">

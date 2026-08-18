@@ -17,6 +17,9 @@ import {
 	verifyTotp as apiVerifyTotp,
 	verifyBackupCode as apiVerifyBackupCode,
 	apiFetch,
+	sendMfaOtp,
+	verifyMfaOtp,
+	getMfaEnrollment,
 	type SessionResponse,
 } from "../lib/api";
 
@@ -176,10 +179,18 @@ interface OpsAuthContextValue {
 	opsRole: OpsRole | null;
 	/** True until the initial session check completes. */
 	authInitializing: boolean;
-	/** Sign in with real credentials via Better Auth. */
-	opsSignInWithCredentials: (email: string, password: string) => Promise<{ user?: OpsUser; twoFactorRequired?: boolean }>;
+	/** Sign in with real credentials via Better Auth. Returns MFA method if 2FA is required. */
+	opsSignInWithCredentials: (email: string, password: string) => Promise<{
+		user?: OpsUser;
+		twoFactorRequired?: boolean;
+		mfaMethod?: string | null;
+	}>;
 	/** Complete sign in via 2FA TOTP or backup recovery code. */
 	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean) => Promise<OpsUser>;
+	/** Complete sign in via email OTP MFA. */
+	opsVerifyEmailOtp: (code: string) => Promise<OpsUser>;
+	/** Send email OTP for MFA verification. */
+	opsSendMfaOtp: () => Promise<void>;
 	/** Mock sign-in by role selection (dev only). */
 	opsSignIn: (role: OpsRole) => void;
 	/** True when the session came from the prototype role picker, not the API. */
@@ -276,7 +287,16 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string) => {
 		const res = await apiSignIn(email, password);
 		if (res?.twoFactorRedirect) {
-			return { twoFactorRequired: true };
+			// Check which MFA method the user has enrolled
+			let mfaMethod: string | null = null;
+			try {
+				const enrollment = await getMfaEnrollment();
+				mfaMethod = enrollment.method;
+			} catch {
+				// Fallback: assume TOTP
+				mfaMethod = "totp";
+			}
+			return { twoFactorRequired: true, mfaMethod };
 		}
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
@@ -304,6 +324,23 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		void refreshPermissions();
 		return user;
 	}, [refreshPermissions]);
+
+	const opsVerifyEmailOtp = useCallback(async (code: string) => {
+		const cleanCode = code.trim().replace(/\s+/g, "");
+		await verifyMfaOtp(cleanCode);
+		const { staff } = await getSession();
+		if (!staff) throw new Error("No staff profile linked to this account.");
+		const user = staffToOpsUser(staff);
+		setOpsUser(user);
+		setIsMockSession(false);
+		saveSession(user);
+		void refreshPermissions();
+		return user;
+	}, [refreshPermissions]);
+
+	const opsSendMfaOtp = useCallback(async () => {
+		await sendMfaOtp();
+	}, []);
 
 	const opsSignIn = useCallback((role: OpsRole) => {
 		if (!import.meta.env.DEV) return;
@@ -371,6 +408,8 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				authInitializing,
 				opsSignInWithCredentials,
 				opsVerifyTwoFactor,
+				opsVerifyEmailOtp,
+				opsSendMfaOtp,
 				opsSignIn,
 				opsSignOut,
 				isMockSession,

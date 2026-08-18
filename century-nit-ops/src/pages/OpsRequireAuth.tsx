@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { staffApi } from "century-nit-core/api";
+import { getMfaEnrollment } from "../lib/api";
 import { useOpsAuth, ROLE_HOME, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
 import type { ReactNode } from "react";
 
@@ -33,13 +34,15 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (!opsUser) return;
 		let active = true;
-		staffApi
-			.mfaStatus()
-			.then((s) => active && setMfaOk(!s.required || s.enabled))
+		getMfaEnrollment()
+			.then((s) => active && setMfaOk(!s.required || s.enrolled))
 			.catch(() => {
-				// Prototype role-picker sessions have no API MFA to check.
-				// A real session that cannot prove enrolment is sent to setup.
-				if (active) setMfaOk(isMockSession);
+				staffApi
+					.mfaStatus()
+					.then((s) => active && setMfaOk(!s.required || s.enabled))
+					.catch(() => {
+						if (active) setMfaOk(isMockSession);
+					});
 			});
 		return () => {
 			active = false;

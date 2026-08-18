@@ -131,6 +131,13 @@ export const consultationSchema = z.object({
 	assignedOfficerId: z.string().uuid().nullable(),
 	assignedOfficerName: z.string().nullable(),
 	assignedOfficerEmail: z.string().email().nullable(),
+	/** The coordinator who manages this case (delegated by manager/owner). */
+	coordinatorId: z.string().uuid().nullable(),
+	coordinatorName: z.string().nullable(),
+	coordinatorEmail: z.string().email().nullable(),
+	coordinatorAssignedAt: z.string().datetime().nullable(),
+	coordinatorAssignedByName: z.string().nullable(),
+	delegationNote: z.string().nullable(),
 	slotConfirmed: z.boolean(),
 	startsAt: z.string().datetime().nullable(),
 	timezone: z.string().nullable(),
@@ -272,3 +279,63 @@ export const CASE_ERROR_CODES = {
 	APPLICATION_NOT_FOUND: "APPLICATION_NOT_FOUND",
 	CASE_CLOSED: "CASE_CLOSED",
 } as const;
+
+/* ── Coordinator Delegation ────────────────────────────────────────────── */
+
+export const delegateConsultationSchema = z.object({
+	coordinatorOpsUserId: z.string().uuid(),
+	delegationNote: z.string().max(2000).optional(),
+});
+export type DelegateConsultation = z.infer<typeof delegateConsultationSchema>;
+
+export const reassignCoordinatorSchema = z.object({
+	newCoordinatorOpsUserId: z.string().uuid(),
+	reason: z.string().max(2000).optional(),
+});
+export type ReassignCoordinator = z.infer<typeof reassignCoordinatorSchema>;
+
+/* ── Workload ──────────────────────────────────────────────────────────── */
+
+export const workloadEntrySchema = z.object({
+	opsUserId: z.string().uuid(),
+	name: z.string(),
+	email: z.string(),
+	role: z.string(),
+	activeCases: z.number().int(),
+	overdueCases: z.number().int(),
+	maxCapacity: z.number().int(),
+	capacityPercent: z.number(),
+});
+export type WorkloadEntry = z.infer<typeof workloadEntrySchema>;
+
+export const workloadSchema = z.object({
+	coordinators: z.array(workloadEntrySchema),
+	maxCapacityPerCoordinator: z.number().int(),
+});
+export type Workload = z.infer<typeof workloadSchema>;
+
+/* ── Activity Timeline ─────────────────────────────────────────────────── */
+
+export const consultationActivitySchema = z.object({
+	id: z.string().uuid(),
+	consultationId: z.string().uuid(),
+	type: z.string(),
+	actorName: z.string().nullable(),
+	payload: z.any().nullable(),
+	createdAt: z.string().datetime(),
+});
+export type ConsultationActivity = z.infer<typeof consultationActivitySchema>;
+
+export const consultationActivityListSchema = z.object({
+	activities: z.array(consultationActivitySchema),
+	total: z.number().int(),
+});
+export type ConsultationActivityList = z.infer<typeof consultationActivityListSchema>;
+
+/* ── Escalation Config ─────────────────────────────────────────────────── */
+
+export const escalationConfigSchema = z.object({
+	hoursBeforeEscalation: z.number().int().min(1).max(72).default(4),
+	maxCapacityPerCoordinator: z.number().int().min(1).max(50).default(10),
+});
+export type EscalationConfig = z.infer<typeof escalationConfigSchema>;

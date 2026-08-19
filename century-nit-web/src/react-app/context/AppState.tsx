@@ -13,6 +13,7 @@ import {
 	signOut as authSignOut,
 } from "./authStore";
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { invoicesApi } from "century-nit-core/api";
 import {
 	API_PREFIX,
@@ -975,6 +976,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		"checking" | "authenticated" | "unauthenticated"
 	>("checking");
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
+
+	/**
+	 * Silent Web Push subscription — active whenever the user is signed in.
+	 * The permission prompt is never shown automatically; this only resubscribes
+	 * returning users who previously granted permission. `subscribe()` is
+	 * exposed (via the hook return) for an explicit "enable notifications" UI.
+	 */
+	usePushNotifications({ isAuthenticated: !!authUser });
 
 	const [enabledPostArrivalSchedules, setEnabledPostArrivalSchedules] =
 		useState<string[] | null>(() => {

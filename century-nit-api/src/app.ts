@@ -37,6 +37,7 @@ import { meCommunicationRouter, communicationRouter } from "./routes/communicati
 import { authSettings } from "./routes/auth-settings.js";
 import { marketingRouter } from "./routes/marketing.js";
 import { pushRouter } from "./routes/push.js";
+import { eventsRouter } from "./routes/events.js";
 
 
 /**
@@ -154,6 +155,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/push`, pushRouter);
+	app.route(`${API_PREFIX}/events`, eventsRouter);
 
 
 	const openApiInfo = {

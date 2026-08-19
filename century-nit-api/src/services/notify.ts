@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
 import { notifications } from "../db/schema.js";
 import { connection } from "../worker/queues.js";
+import { queuePush } from "../worker/queues.js";
 
 /**
  * Unified in-app notification service.
@@ -69,6 +70,19 @@ export async function notify(event: NotifyEvent): Promise<typeof notifications.$
 	} catch (err) {
 		console.warn("[notify] redis publish failed:", err instanceof Error ? err.message : err);
 	}
+
+	// Best-effort browser push — fire-and-forget, failures must never roll back
+	// the notification row.
+	queuePush({
+		userId: event.recipientUserId,
+		notification: {
+			id: row.id,
+			type: row.type,
+			title: row.title,
+			body: row.body,
+			link: row.link,
+		},
+	}).catch(() => {});
 
 	return row;
 }

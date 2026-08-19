@@ -70,7 +70,6 @@ export function PortalProfile() {
 		updateAssessment,
 		updateAccount,
 		setAvatarImage,
-		pushNotification,
 	} = useAppState();
 	const a = application;
 	const ass = booking.assessment;
@@ -130,12 +129,6 @@ export function PortalProfile() {
 	function done() {
 		setEditing(null);
 		setJustSaved(true);
-		pushNotification({
-			type: "stage",
-			title: "Profile updated",
-			body: "Your details have been saved. Century NIT will use the latest information on file.",
-			link: "/portal/profile",
-		});
 	}
 
 	async function saveAccount() {
@@ -496,12 +489,6 @@ export function PortalProfile() {
 				onClose={() => setAvatarOpen(false)}
 				onSaved={() => {
 					setAvatarImage("set");
-					pushNotification({
-						type: "stage",
-						title: "Photo updated",
-						body: "Your new profile photo has been saved.",
-						link: "/portal/profile",
-					});
 				}}
 			/>
 		</div>

@@ -1,4 +1,4 @@
-import { Navigate, useNavigate, Link } from "react-router-dom";
+import { Navigate, useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useState, useEffect, type FormEvent } from "react";
 import { Button } from "../components/ui/Button";
 import { Field, Input } from "../components/ui/Field";
@@ -45,11 +45,12 @@ const FEATURES = [
 	"Visa & payment timeline",
 ];
 
-type AuthStep = "signin" | "forgot" | "verify" | "set" | "done" | "mfa_otp";
+type AuthStep = "signin" | "forgot" | "verify" | "set" | "done" | "mfa_otp" | "verify_email";
 
 export function StartJourney() {
 	const { isAuthenticated, signIn, sessionStatus } = useAppState();
 	const nav = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 	const [authSettings, setAuthSettings] = useState<AuthSettingsResponse | null>(null);
 	const [settingsLoading, setSettingsLoading] = useState(true);
@@ -69,6 +70,7 @@ export function StartJourney() {
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [error, setError] = useState("");
+	const [verificationBanner, setVerificationBanner] = useState<"verified" | "error" | null>(null);
 
 	// Default settings (all enabled)
 	const defaults: AuthSettingsResponse = {
@@ -109,6 +111,22 @@ export function StartJourney() {
 			.finally(() => { if (active) setSettingsLoading(false); });
 		return () => { active = false; };
 	}, []);
+
+	// Detect the redirect back from Better Auth's email verification endpoint.
+	// On success it redirects to callbackURL with ?verified=true; on failure
+	// it adds ?error=... . Show a banner and clear the param so a refresh
+	// doesn't re-show it.
+	useEffect(() => {
+		const verified = searchParams.get("verified");
+		const verifyError = searchParams.get("error");
+		if (verified === "true") {
+			setVerificationBanner("verified");
+			setSearchParams({}, { replace: true });
+		} else if (verifyError) {
+			setVerificationBanner("error");
+			setSearchParams({}, { replace: true });
+		}
+	}, [searchParams, setSearchParams]);
 
 	if (sessionStatus === "checking" || settingsLoading) {
 		return (
@@ -182,6 +200,19 @@ export function StartJourney() {
 
 			const user = data?.user;
 			if (!user) throw new Error("No user returned");
+
+			// Sign-up with requireEmailVerification: true returns a user but no
+			// session. Navigating to /portal would immediately bounce back to
+			// /start because probeSession() finds no cookie. Show the "check
+			// your email" state instead — the user clicks the verification link
+			// in the email, lands back here with ?verified=true, then signs in.
+			if (authMode === "signup" && !(data as Record<string, unknown>)?.session) {
+				setResetEmail(mail);
+				setLoading(false);
+				setStep("verify_email");
+				return;
+			}
+
 			const finalName = user.name || displayName;
 			finish("email", finalName, user.email, user.id);
 		} catch (err) {
@@ -318,10 +349,12 @@ export function StartJourney() {
 					? "Choose a new password"
 					: step === "done"
 						? "Password updated"
-						: "Start your journey";
+						: step === "verify_email"
+							? "Check your email"
+							: "Start your journey";
 
 	const stepEyebrow =
-		step === "signin" ? (authMode === "signin" ? "Welcome back" : "Create an account") : "Password reset";
+		step === "signin" ? (authMode === "signin" ? "Welcome back" : "Create an account") : step === "verify_email" ? "Account created" : "Password reset";
 
 	return (
 		<div className="start-journey">
@@ -379,12 +412,27 @@ export function StartJourney() {
 							<p className="start-journey__sub">
 								Pick a new password for <strong>{resetEmail}</strong>.
 							</p>
+						) : step === "verify_email" ? (
+							<p className="start-journey__sub">
+								We sent a verification link to <strong>{resetEmail}</strong>. Click it to activate your account, then sign in below.
+							</p>
 						) : (
 							<p className="start-journey__sub">
 								You're all set - sign back in with your new password.
 							</p>
 						)}
 					</div>
+
+					{verificationBanner === "verified" ? (
+						<div className="auth-error" role="status" style={{ color: "var(--foreground)", borderColor: "var(--foreground)" }}>
+							Your email is verified. You can sign in now.
+						</div>
+					) : null}
+					{verificationBanner === "error" ? (
+						<div className="auth-error" role="alert">
+							The verification link was invalid or expired. Please sign up again to request a new one.
+						</div>
+					) : null}
 
 					{error ? (
 						<div className="auth-error" role="alert">
@@ -657,6 +705,20 @@ export function StartJourney() {
 							</p>
 							<p className="auth-done__text">
 								Your password has been updated. Sign in with your new password to continue.
+							</p>
+							<Button block arrow onClick={backToSignIn}>
+								Return to sign in
+							</Button>
+						</div>
+					) : null}
+
+					{step === "verify_email" ? (
+						<div className="auth-done">
+							<p className="auth-done__mark" aria-hidden>
+								✉
+							</p>
+							<p className="auth-done__text">
+								Check <strong>{resetEmail}</strong> for a verification link from Century NIT. Click it to activate your account, then return here to sign in.
 							</p>
 							<Button block arrow onClick={backToSignIn}>
 								Return to sign in

@@ -1441,9 +1441,17 @@ export const notifications = pgTable(
 		link: varchar("link", { length: 500 }),
 		read: boolean("read").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		eventId: varchar("event_id", { length: 200 }),
+		priority: varchar("priority", { length: 20 }).notNull().default("normal"),
+		entityType: varchar("entity_type", { length: 50 }),
+		entityId: varchar("entity_id", { length: 100 }),
+		caseId: varchar("case_id", { length: 100 }),
+		readAt: timestamp("read_at", { withTimezone: true }),
+		deliveredAt: timestamp("delivered_at", { withTimezone: true }),
 	},
 	(t) => ({
 		userIdIdx: index("notifications_user_idx").on(t.userId),
+		caseIdx: index("notifications_case_idx").on(t.caseId),
 	}),
 );
 

@@ -1874,16 +1874,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				eligibilityNote: note,
 			};
 		});
-		pushNotification({
-			type: "stage",
-			title: "Eligibility outcome viewed",
-			body:
-				outcome === "eligible"
-					? "You are eligible. Check your recommendations and next steps."
-					: "Your eligibility outcome is now available.",
-			link: "/portal/consultation",
-		});
-	}, [pushNotification]);
+	}, []);
 
 	const togglePreDepartureTask = useCallback((id: string) => {
 		setPreDepartureTasks((prev) => {

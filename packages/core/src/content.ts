@@ -2352,8 +2352,6 @@ export type AppNotification = {
 	link?: string;
 };
 
-export const SEED_NOTIFICATIONS: AppNotification[] = [];
-
 /* ========== Pre-departure checklist ========== */
 
 export type PreDepartureTask = {

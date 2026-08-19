@@ -242,6 +242,61 @@ export function renderPasswordResetEmail(data: {
 	};
 }
 
+/* ── 2b. Email Verification Template ─────────────────────────────────────── */
+
+export function renderVerificationEmail(data: {
+	name?: string;
+	verificationUrl: string;
+}): { html: string; text: string } {
+	const greeting = data.name ? `Hello <strong>${escapeHtml(data.name)}</strong>,` : `Hello,`;
+
+	const bodyHtml = `
+		<p style="margin:0 0 16px 0;font-size:16px;color:#000000;">${greeting}</p>
+		<p style="margin:0 0 20px 0;color:#000000;">
+			Welcome to Century NIT. Confirm your email address to activate your account and start your application journey:
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.verificationUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Verify Email
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;margin-bottom:16px;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Or copy and paste this link:</p>
+			<a href="${data.verificationUrl}" style="color:#000000;text-decoration:underline;">${data.verificationUrl}</a>
+		</div>
+
+		<p style="margin:0;font-size:13px;color:#666666;">
+			If you did not create a Century NIT account, you can safely ignore this email.
+		</p>
+	`;
+
+	const text = [
+		`Hello,`,
+		``,
+		`Welcome to Century NIT. Confirm your email address to activate your account:`,
+		``,
+		data.verificationUrl,
+		``,
+		`If you did not create an account, you can safely ignore this email.`,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: "Verify Your Email Address",
+			preheader: "Confirm your Century NIT account email",
+			bodyHtml,
+			footerNote: "This verification link expires after 24 hours.",
+		}),
+		text,
+	};
+}
+
 /* ── 3. Verification / Sign-In OTP Email Template ────────────────────────── */
 
 export function renderOtpEmail(data: {

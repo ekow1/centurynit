@@ -36,8 +36,8 @@ import { chatRouter } from "./routes/chat.js";
 import { meCommunicationRouter, communicationRouter } from "./routes/communication.js";
 import { authSettings } from "./routes/auth-settings.js";
 import { marketingRouter } from "./routes/marketing.js";
-import { pushRouter } from "./routes/push.js";
 import { eventsRouter } from "./routes/events.js";
+import { pushRouter } from "./routes/push.js";
 
 
 /**
@@ -153,6 +153,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/me`, meRouter);
 	app.route(`${API_PREFIX}/me`, avatarRouter);
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
+	app.route(`${API_PREFIX}/events`, eventsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/push`, pushRouter);
 	app.route(`${API_PREFIX}/events`, eventsRouter);
@@ -239,6 +240,13 @@ export function createApp() {
 			description:
 				"Internal staff-to-staff messaging. Conversations, messages, " +
 				"@mentions, and unread counts. All staff roles have access.",
+		},
+		{
+			name: "Notifications",
+			description:
+				"Real-time in-app notifications via Server-Sent Events, plus " +
+				"Web Push subscription management. Each authenticated user gets " +
+				"a personal SSE stream at /events/stream.",
 		},
 		{
 			name: "Web Push",

@@ -88,7 +88,7 @@ export function EnterpriseInbox() {
 	useEffect(() => {
 		void loadApiLeads();
 		void loadReviewDocuments();
-		const leadTimer = setInterval(loadApiLeads, 10000);
+		const leadTimer = setInterval(loadApiLeads, 30000);
 		const docTimer = setInterval(loadReviewDocuments, 30000);
 		return () => {
 			clearInterval(leadTimer);

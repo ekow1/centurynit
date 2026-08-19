@@ -45,7 +45,10 @@ export async function signUpWithEmail(input: SignUp) {
 	if (!parsed.success) {
 		throw new Error(parsed.error.issues.map((i) => i.message).join(", "));
 	}
-	const { data, error } = await authClient.signUp.email(parsed.data);
+	const { data, error } = await authClient.signUp.email({
+		...parsed.data,
+		callbackURL: "/start",
+	});
 	if (error) throw new Error(formatError(error, "Could not create account"));
 	return data;
 }

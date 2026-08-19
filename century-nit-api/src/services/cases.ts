@@ -791,8 +791,25 @@ export async function respondToOutcome(input: {
 					text,
 					html: `<p>${text}</p><p>Consultation ref: ${row.reference}</p>`,
 					idempotencyKey: `notify:outcome:${row.id}:${input.action}`,
+					template: input.action === "accept" ? "Outcome accepted" : "Applicant needs more info",
+					reference: row.reference,
 				},
 			]);
+
+			const officerUserId = await getStaffUserId(row.assignedOfficerId);
+			if (officerUserId) {
+				notify({
+					recipientUserId: officerUserId,
+					type: input.action === "accept" ? "outcome.accepted" : "outcome.info_requested",
+					title: input.action === "accept"
+						? `${applicant.name} accepted the outcome`
+						: `${applicant.name} requested more info`,
+					body: text,
+					link: "/ops/cases",
+					entityType: "case",
+					entityId: row.id,
+				}).catch(() => {});
+			}
 		}
 	}
 }

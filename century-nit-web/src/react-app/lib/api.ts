@@ -45,7 +45,9 @@ export type PortalAuthSettings = {
 
 export type AuthSettingsResponse = {
 	portal: PortalAuthSettings;
-	ops: {
+	/** Ops settings are only returned by the staff-gated endpoint; absent on
+	 * the public portal-facing response. */
+	ops?: {
 		email_password: boolean;
 		google_sso: boolean;
 		mfa_required: boolean;
@@ -54,5 +56,5 @@ export type AuthSettingsResponse = {
 };
 
 export async function getAuthSettings(): Promise<AuthSettingsResponse> {
-	return apiFetch<AuthSettingsResponse>("/api/auth-settings");
+	return apiFetch<AuthSettingsResponse>("/api/v1/auth-settings/portal");
 }

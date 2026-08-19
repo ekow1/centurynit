@@ -18,6 +18,24 @@ import { renderOtpEmail } from "../lib/email-templates.js";
 
 const authSettings = new OpenAPIHono();
 
+/* ── GET /auth-settings/portal — PUBLIC portal-facing auth settings ────────
+ * The login screen needs to know which sign-in methods an admin has enabled
+ * (email/password, Google, OTP) BEFORE the user is authenticated. The
+ * staff-gated `GET /` returns the ops settings too, which must never be
+ * public. This endpoint exposes only the portal subset, unauthenticated. */
+authSettings.get("/portal", async (c) => {
+	const raw = await getAuthSettings();
+	return c.json({
+		portal: {
+			email_password: raw["portal.email_password"],
+			social_google: raw["portal.social_google"],
+			email_otp: raw["portal.email_otp"],
+			mfa_required: raw["portal.mfa_required"],
+			mfa_methods: raw["portal.mfa_methods"],
+		},
+	});
+});
+
 /* ── GET /auth-settings — read all settings ──────────────────────────────── */
 
 authSettings.get(

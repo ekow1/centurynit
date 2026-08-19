@@ -33,8 +33,10 @@ import { leadsRouter } from "./routes/leads.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
 import { chatRouter } from "./routes/chat.js";
+import { meCommunicationRouter, communicationRouter } from "./routes/communication.js";
 import { authSettings } from "./routes/auth-settings.js";
 import { marketingRouter } from "./routes/marketing.js";
+import { eventsRouter } from "./routes/events.js";
 
 
 /**
@@ -145,10 +147,13 @@ export function createApp() {
 	app.route(`${API_PREFIX}/leads`, leadsRouter);
 	app.route(`${API_PREFIX}/client-users`, clientUsersRouter);
 	app.route(`${API_PREFIX}/chat`, chatRouter);
+	app.route(`${API_PREFIX}/communication`, communicationRouter);
+	app.route(`${API_PREFIX}/me/communication`, meCommunicationRouter);
 	app.route(`${API_PREFIX}/me`, meRouter);
 	app.route(`${API_PREFIX}/me`, avatarRouter);
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
+	app.route(`${API_PREFIX}/events`, eventsRouter);
 
 
 	const openApiInfo = {

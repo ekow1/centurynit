@@ -52,6 +52,11 @@ import type {
 	AvatarUrl,
 	RequestAvatarUpload,
 	JourneyStage,
+	ChatMessage as ApiChatMessage,
+	ChatConversation as ApiChatConversation,
+	CommunicationContext,
+	ContactCard,
+	PreviousContact,
 } from "century-nit-shared";
 import { API_PREFIX } from "century-nit-shared";
 
@@ -1028,6 +1033,57 @@ export const meApi = {
 			...json({ content }),
 		});
 	},
+
+	/* ── Context-Aware Case Communication (services/communication.ts) ── */
+
+	/** The full payload the portal Communication Center renders. */
+	getCommunicationContext(): Promise<CommunicationContext> {
+		return request(`${API_PREFIX}/me/communication/context`);
+	},
+
+	/** Route the customer's "Chat" click to the right conversation. */
+	routeCommunication(body?: { caseId?: string; stageKey?: string }): Promise<ApiChatConversation> {
+		return request(`${API_PREFIX}/me/communication/route`, {
+			method: "POST",
+			...json(body ?? {}),
+		});
+	},
+
+	/** List customer-visible conversations. */
+	listCommunicationConversations(): Promise<{ conversations: ApiChatConversation[]; total: number }> {
+		return request(`${API_PREFIX}/me/communication/conversations`);
+	},
+
+	/** Paginated messages in a conversation. */
+	getCommunicationMessages(
+		conversationId: string,
+		params?: { limit?: number; before?: string },
+	): Promise<{ messages: ApiChatMessage[]; total: number; hasMore: boolean }> {
+		const qs = new URLSearchParams();
+		if (params?.limit) qs.set("limit", String(params.limit));
+		if (params?.before) qs.set("before", params.before);
+		const s = qs.toString();
+		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/messages${s ? `?${s}` : ""}`);
+	},
+
+	/** Send a customer message. */
+	sendCommunicationMessage(conversationId: string, content: string): Promise<ApiChatMessage> {
+		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/messages`, {
+			method: "POST",
+			...json({ content }),
+		});
+	},
+
+	/** Mark a conversation read. */
+	markCommunicationRead(conversationId: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/read`, { method: "POST" });
+	},
+};
+
+export type {
+	ContactCard as ApiContactCard,
+	PreviousContact as ApiPreviousContact,
+	CommunicationContext as ApiCommunicationContext,
 };
 
 export const invoicesApi = {

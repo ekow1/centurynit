@@ -40,6 +40,7 @@ export type DocPreviewData = {
 	status?: string;
 	docKey?: string;
 	documentId?: string;
+	isLive?: boolean;
 };
 
 /**

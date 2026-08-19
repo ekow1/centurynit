@@ -320,7 +320,7 @@ export type ChatParticipant = {
 	opsUserId: string;
 	name: string;
 	email: string;
-	role: "owner" | "member";
+	role: "owner" | "member" | "former";
 	lastReadAt: string | null;
 	joinedAt: string;
 };
@@ -328,7 +328,7 @@ export type ChatParticipant = {
 export type ChatMessage = {
 	id: string;
 	conversationId: string;
-	senderOpsUserId: string;
+	senderOpsUserId: string | null;
 	senderName: string;
 	content: string;
 	messageType: "text" | "system" | "action";
@@ -338,11 +338,13 @@ export type ChatMessage = {
 
 export type ChatConversation = {
 	id: string;
-	type: "direct" | "entity" | "group";
+	type: "direct" | "entity" | "group" | "applicant" | "support" | "case" | "stage" | "internal" | "escalation";
 	title: string;
 	linkedEntityType: string | null;
 	linkedEntityId: string | null;
-	createdBy: string;
+	createdBy: string | null;
+	stageKey?: string | null;
+	status?: "open" | "closed" | "archived";
 	participants: ChatParticipant[];
 	lastMessage: ChatMessage | null;
 	unreadCount: number;
@@ -446,6 +448,73 @@ export function addChatParticipant(
 
 export function getStaffDirectory(): Promise<StaffDirectoryResponse> {
 	return apiFetch<StaffDirectoryResponse>(`${CHAT}/staff-directory`);
+}
+
+/* ── Communication (context-aware case chat — /communication) ── */
+
+const COMM = `${API_PREFIX}/communication`;
+
+export type StaffPresence = "available" | "busy" | "on_leave" | "offline";
+
+export type StaffDirectoryEntryDetailed = {
+	opsUserId: string;
+	name: string;
+	email: string;
+	role: string;
+	branch: string | null;
+	presence: StaffPresence;
+	lastSeenAt?: string | null;
+	unreadCount: number;
+	activeCaseCount: number;
+	currentAssignmentSummary?: string | null;
+};
+
+export type StaffDirectoryDetailedResponse = {
+	staff: StaffDirectoryEntryDetailed[];
+};
+
+export type StageAssignment = {
+	id: string;
+	applicationId: string;
+	stage: string;
+	opsUserId: string;
+	opsUserName?: string;
+	status: "active" | "reassigned" | "on_leave" | "completed";
+	assignedAt: string;
+	assignedBy?: string | null;
+	endedAt?: string | null;
+	endedReason?: string | null;
+};
+
+export function getCommunicationStaffDirectory(): Promise<StaffDirectoryDetailedResponse> {
+	return apiFetch<StaffDirectoryDetailedResponse>(`${COMM}/staff-directory`);
+}
+
+export function updateCommunicationPresence(status: StaffPresence): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${COMM}/presence`, {
+		method: "POST",
+		body: JSON.stringify({ status }),
+	});
+}
+
+export function communicationHeartbeat(): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${COMM}/heartbeat`, { method: "POST" });
+}
+
+export function createStageAssignment(body: {
+	applicationId: string;
+	stage: string;
+	opsUserId: string;
+	reason?: string;
+}): Promise<StageAssignment> {
+	return apiFetch<StageAssignment>(`${COMM}/stage-assignments`, {
+		method: "POST",
+		body: JSON.stringify(body),
+	});
+}
+
+export function listStageAssignments(applicationId: string): Promise<{ assignments: StageAssignment[] }> {
+	return apiFetch<{ assignments: StageAssignment[] }>(`${COMM}/stage-assignments?applicationId=${applicationId}`);
 }
 
 /* ── Schools (Ops) ── */

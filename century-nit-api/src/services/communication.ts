@@ -37,12 +37,10 @@ import {
 	conversationParticipants,
 	conversations,
 	messages,
-	messageMentions,
 	notifications,
 	opsUsers,
 	stageAssignments,
 	staffPresence,
-	users,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
@@ -426,7 +424,7 @@ export async function findOrCreateConversation(
 			linkedEntityType,
 			linkedEntityId,
 			userId: input.userId ?? null,
-			createdBy: input.createdByOpsUserId,
+			createdBy: input.createdByOpsUserId || null,
 			stageKey,
 			emailInboxToken: randomUUID(),
 			status: "open",
@@ -434,11 +432,13 @@ export async function findOrCreateConversation(
 		.returning();
 
 	// Add creator + participants.
-	await db.insert(conversationParticipants).values({
-		conversationId: created.id,
-		opsUserId: input.createdByOpsUserId,
-		role: "owner",
-	});
+	if (input.createdByOpsUserId) {
+		await db.insert(conversationParticipants).values({
+			conversationId: created.id,
+			opsUserId: input.createdByOpsUserId,
+			role: "owner",
+		});
+	}
 	for (const pid of input.participantOpsUserIds ?? []) {
 		if (pid === input.createdByOpsUserId) continue;
 		await db.insert(conversationParticipants).values({
@@ -770,7 +770,13 @@ export async function routeCustomerChat(
 
 	// Verify the customer owns this case.
 	const [app] = await db
-		.select({ id: applications.id, appNumber: applications.appNumber, stage: applications.stage })
+		.select({
+			id: applications.id,
+			appNumber: applications.appNumber,
+			stage: applications.stage,
+			assignedStaffId: applications.assignedStaffId,
+			applicantId: applications.applicantId,
+		})
 		.from(applications)
 		.where(eq(applications.id, caseId))
 		.limit(1);
@@ -778,7 +784,7 @@ export async function routeCustomerChat(
 	const [applicant] = await db
 		.select({ userId: applicants.userId })
 		.from(applicants)
-		.where(eq(applicants.id, (await db.select({ applicantId: applications.applicantId }).from(applications).where(eq(applications.id, caseId)).limit(1))[0]?.applicantId ?? ""))
+		.where(eq(applicants.id, app.applicantId))
 		.limit(1);
 	if (applicant?.userId !== userId) {
 		throw new HttpError(403, "FORBIDDEN", "This is not your case");
@@ -816,13 +822,7 @@ export async function routeCustomerChat(
 	}
 
 	// No stage officer — case-level thread with the assigned staff / case manager.
-	const { row: appRow } = await db
-		.select({ assignedStaffId: applications.assignedStaffId })
-		.from(applications)
-		.where(eq(applications.id, caseId))
-		.limit(1)
-		.then(([r]) => ({ row: r }));
-	const ownerId = appRow?.assignedStaffId ?? opts.createdByOpsUserId;
+	const ownerId = app.assignedStaffId ?? opts.createdByOpsUserId;
 	const { row } = await findOrCreateConversation({
 		type: "case",
 		userId,
@@ -1157,7 +1157,7 @@ export async function heartbeat(opsUserId: string): Promise<void> {
 
 /* ── Staff directory (OPS hub) ──────────────────────────────────────────── */
 
-export async function getStaffDirectoryDetailed(viewerOpsUserId: string): Promise<StaffDirectoryDetailed> {
+export async function getStaffDirectoryDetailed(): Promise<StaffDirectoryDetailed> {
 	const staffRows = await db
 		.select({
 			opsUserId: opsUsers.id,
@@ -1183,15 +1183,8 @@ export async function getStaffDirectoryDetailed(viewerOpsUserId: string): Promis
 						eq(stageAssignments.status, "active"),
 					),
 				);
-			// Unread DM/internal count for this viewer (staff chat side).
-			const [selfMember] = await db
-				.select({ conversationId: conversationParticipants.conversationId })
-				.from(conversationParticipants)
-				.where(eq(conversationParticipants.opsUserId, s.opsUserId))
-				.limit(1);
-			// Per-staff unread from the viewer's perspective is not needed here;
-			// the directory shows the staff's own unread of messages from others.
-			const unread = 0; // simplified: the FAB badge uses getUnreadCounts(viewer)
+			// Per-staff unread of messages from others is computed by the FAB badge
+			// via getUnreadCounts(viewer); the directory shows presence + load only.
 			return {
 				opsUserId: s.opsUserId,
 				name: s.name,
@@ -1199,8 +1192,8 @@ export async function getStaffDirectoryDetailed(viewerOpsUserId: string): Promis
 				role: s.role,
 				branch: s.branch,
 				presence,
-				lastSeenAt: undefined,
-				unreadCount: unread,
+				lastSeenAt: undefined as string | null | undefined,
+				unreadCount: 0,
 				activeCaseCount: activeCount,
 				currentAssignmentSummary:
 					activeCount > 0 ? `Handling ${activeCount} active case${activeCount === 1 ? "" : "s"}` : null,

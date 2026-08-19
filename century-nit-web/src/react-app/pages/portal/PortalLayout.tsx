@@ -16,7 +16,7 @@ import {
 	IconLifebuoy,
 } from "../../components/ui/Icons";
 import { NotificationBell } from "./NotificationBell";
-import { FloatingChat } from "./FloatingChat";
+import { CommunicationCenter } from "./CommunicationCenter";
 import { PortalAppBar, PortalTabBar } from "./PortalMobileNav";
 import { OnboardingModal } from "../../components/portal/OnboardingModal";
 
@@ -179,7 +179,7 @@ export function PortalLayout() {
 					)}
 				</footer>
 			</div>
-			<FloatingChat />
+			<CommunicationCenter />
 			<PortalTabBar />
 			<OnboardingModal />
 		</div>

@@ -69,7 +69,7 @@ export const chatConversationSchema = z.object({
 	title: z.string(),
 	linkedEntityType: z.string().nullable().optional(),
 	linkedEntityId: z.string().uuid().nullable().optional(),
-	createdBy: z.string().uuid(),
+	createdBy: z.string().uuid().nullable(),
 	/** Journey stage key this conversation is scoped to (for `stage` type). */
 	stageKey: z.string().nullable().optional(),
 	/** Lifecycle: open / closed / archived. */

@@ -1149,7 +1149,7 @@ export const conversationStatusEnum = pgEnum("conversation_status", [
  * `available` means actively accepting work; `busy` is online but at capacity;
  * `on_leave` is out of office; `offline` is no recent heartbeat.
  */
-export const staffPresenceEnum = pgEnum("staff_presence", [
+export const staffPresenceEnum = pgEnum("staff_presence_status", [
 	"available",
 	"busy",
 	"on_leave",
@@ -1180,7 +1180,6 @@ export const conversations = pgTable(
 		linkedEntityType: varchar("linked_entity_type", { length: 48 }),
 		linkedEntityId: uuid("linked_entity_id"),
 		createdBy: uuid("created_by")
-			.notNull()
 			.references(() => opsUsers.id, { onDelete: "set null" }),
 		/** For applicant-staff conversations, the applicant's user ID. */
 		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
@@ -1445,6 +1444,28 @@ export const notifications = pgTable(
 	},
 	(t) => ({
 		userIdIdx: index("notifications_user_idx").on(t.userId),
+	}),
+);
+
+/* ── Push subscriptions (Web Push) ───────────────────────────────────────── */
+
+export const pushSubscriptions = pgTable(
+	"push_subscriptions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		endpoint: text("endpoint").notNull(),
+		/** Web Push keys: { p256dh, auth } */
+		keys: jsonb("keys").notNull(),
+		userAgent: text("user_agent"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+	},
+	(t) => ({
+		byUser: index("push_subs_user_idx").on(t.userId),
+		uniqueEndpoint: uniqueIndex("push_subs_endpoint_idx").on(t.endpoint),
 	}),
 );
 

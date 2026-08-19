@@ -25,7 +25,7 @@ ALTER TYPE "conversation_role" ADD VALUE 'former';
 -- 3. New enums.
 CREATE TYPE "conversation_status" AS ENUM('open', 'closed', 'archived');
 --> statement-breakpoint
-CREATE TYPE "staff_presence" AS ENUM('available', 'busy', 'on_leave', 'offline');
+CREATE TYPE "staff_presence_status" AS ENUM('available', 'busy', 'on_leave', 'offline');
 --> statement-breakpoint
 CREATE TYPE "stage_assignment_status" AS ENUM('active', 'reassigned', 'on_leave', 'completed');
 --> statement-breakpoint
@@ -110,7 +110,7 @@ CREATE UNIQUE INDEX "stage_assignments_active_unique_idx" ON "stage_assignments"
 -- 7. Staff presence.
 CREATE TABLE "staff_presence" (
   "ops_user_id" uuid PRIMARY KEY,
-  "status" "staff_presence" NOT NULL DEFAULT 'offline',
+  "status" "staff_presence_status" NOT NULL DEFAULT 'offline',
   "last_seen_at" timestamp with time zone,
   "status_set_at" timestamp with time zone NOT NULL DEFAULT now(),
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
@@ -159,3 +159,9 @@ CREATE INDEX "communication_events_action_idx" ON "communication_events" USING b
 -- 10. Backfill: any existing `applicant` conversations remain valid; the
 --     communication service also writes a `participant_user_id` row going
 --     forward so applicants get read receipts. No data migration required.
+--> statement-breakpoint
+
+-- 11. `conversations.created_by` was NOT NULL, but a customer-initiated
+--     support conversation has no staff creator. Make it nullable so the
+--     service can create SUPPORT conversations without a synthetic staff ID.
+ALTER TABLE "conversations" ALTER COLUMN "created_by" DROP NOT NULL;

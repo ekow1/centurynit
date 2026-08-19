@@ -5,7 +5,7 @@ import { roleCanAccess, API_PREFIX } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 import { useCasesApi } from "../hooks/useCasesApi";
 import { OpsCommandPalette } from "./OpsCommandPalette";
-import { EnterpriseChat } from "./EnterpriseChat";
+import { CommunicationHub } from "./CommunicationHub";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
@@ -395,8 +395,8 @@ export function EnterpriseLayout() {
 			}}
 		/>
 
-			{/* Floating chat widget — persistent across all pages */}
-			{roleCanAccess(opsRole as OpsRole, "chat") && <EnterpriseChat />}
+			{/* Floating communication hub — context-aware case chat (§6) */}
+			{roleCanAccess(opsRole as OpsRole, "chat") && <CommunicationHub />}
 		</div>
 	);
 }

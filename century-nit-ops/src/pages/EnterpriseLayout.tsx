@@ -335,20 +335,21 @@ export function EnterpriseLayout() {
 
 						<button
 							type="button"
-							onClick={pushState.permission === "granted" ? pushState.unsubscribe : pushState.subscribe}
+							onClick={pushState.subscription ? pushState.unsubscribe : pushState.subscribe}
 							style={{
 								fontSize: "0.65rem",
 								fontWeight: 600,
-								color: pushState.permission === "granted" ? "#18181b" : "#71717a",
+								color: pushState.subscription ? "#18181b" : "#71717a",
 								cursor: "pointer",
-								background: pushState.permission === "granted" ? "#18181b" : "transparent",
-								border: pushState.permission === "granted" ? "1px solid #18181b" : "1px solid #e4e4e7",
-								padding: pushState.permission === "granted" ? "0.2rem 0.5rem" : "0.2rem 0.5rem",
+								background: pushState.subscription ? "#18181b" : "transparent",
+								border: pushState.subscription ? "1px solid #18181b" : "1px solid #e4e4e7",
+								padding: "0.2rem 0.5rem",
 								transition: "all 0.2s ease",
 								whiteSpace: "nowrap",
 							}}
+							title={pushState.subscription ? "Stop receiving push alerts on this device" : "Enable push alerts on this device"}
 						>
-							{pushState.permission === "granted" ? "Alerts on" : "Enable alerts"}
+							{pushState.subscription ? "Alerts on" : "Enable alerts"}
 						</button>
 
 						{isDev ? (

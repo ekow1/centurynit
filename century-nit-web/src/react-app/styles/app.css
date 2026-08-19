@@ -124,8 +124,25 @@
 .input--error,
 .select--error,
 .textarea--error {
-	border-bottom-color: var(--foreground);
-	border-bottom-width: 3px;
+	border-color: #dc2626 !important;
+	border-bottom-color: #dc2626 !important;
+	border-bottom-width: 2px;
+	background-color: #fef2f2;
+}
+
+.input--error:focus,
+.select--error:focus,
+.textarea--error:focus {
+	border-color: #b91c1c !important;
+	outline-color: #b91c1c !important;
+}
+
+.field-error-text {
+	color: #dc2626;
+	font-size: 0.8125rem;
+	font-weight: 500;
+	margin-top: 0.35rem;
+	display: block;
 }
 
 .select--full-border {
@@ -1724,7 +1741,9 @@ a:hover .blog-img img {
 }
 
 .alert--error {
-	background: var(--muted);
+	background-color: #fef2f2 !important;
+	border: 1px solid #fecaca !important;
+	color: #991b1b !important;
 }
 
 /* Mobile nav body lock */

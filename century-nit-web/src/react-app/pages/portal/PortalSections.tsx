@@ -138,24 +138,54 @@ export function PortalProfile() {
 		});
 	}
 
-	function saveAccount() {
+	async function saveAccount() {
 		const name = draft.name?.trim() || fullName;
 		const email = draft.email?.trim() || authUser?.email || "";
 		updateAccount({ name, email });
+		try {
+			await meApi.updateProfile({ name });
+		} catch (e) {
+			console.warn("Could not sync profile to server", e);
+		}
 		done();
 	}
 
-	function saveAssessment() {
+	async function saveAssessment() {
 		const patch: Record<string, string> = {};
 		for (const f of ASSESSMENT_FIELDS) patch[f.key] = draft[f.key] ?? "";
 		updateAssessment(patch);
+		try {
+			await meApi.updateProfile({
+				name: [patch.firstName || ass.firstName, patch.lastName || ass.lastName].filter(Boolean).join(" ") || undefined,
+				phone: patch.phone || ass.phone || undefined,
+				profile: {
+					nationality: patch.nationality || ass.nationality || undefined,
+					dob: patch.dateOfBirth || ass.dateOfBirth || undefined,
+					degree: patch.highestEducation || ass.highestEducation || undefined,
+					institution: patch.institution || ass.institution || undefined,
+					gpa: patch.gpa || ass.gpa || undefined,
+					gradYear: patch.graduationYear || ass.graduationYear || undefined,
+					currentRole: patch.jobTitle || ass.jobTitle || undefined,
+					experienceYears: patch.yearsExperience || ass.yearsExperience || undefined,
+				},
+			});
+		} catch (e) {
+			console.warn("Could not sync assessment to server", e);
+		}
 		done();
 	}
 
-	function savePreferences() {
+	async function savePreferences() {
 		const patch: Record<string, string> = {};
 		for (const f of PREFERENCE_FIELDS) patch[f.key] = draft[f.key] ?? "";
 		updateAssessment(patch);
+		try {
+			await meApi.updateProfile({
+				targetCountry: patch.preferredCountries || undefined,
+			});
+		} catch (e) {
+			console.warn("Could not sync preferences to server", e);
+		}
 		done();
 	}
 

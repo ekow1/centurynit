@@ -2338,36 +2338,7 @@ export type ChatMessage = {
 	at: string;
 };
 
-export const SEED_MESSAGES: ChatMessage[] = [
-	{
-		id: "msg-1",
-		sender: "consultant",
-		authorName: "Efua Owusu",
-		text: "Welcome to Century NIT! I'm your assigned consultant. Feel free to ask any questions about your application journey.",
-		at: new Date(Date.now() - 86400000 * 3).toISOString(),
-	},
-	{
-		id: "msg-2",
-		sender: "consultant",
-		authorName: "Efua Owusu",
-		text: "Your consultation is booked. Please have your passport and transcripts ready for the meeting.",
-		at: new Date(Date.now() - 86400000 * 2).toISOString(),
-	},
-	{
-		id: "msg-3",
-		sender: "applicant",
-		authorName: "You",
-		text: "Thank you! Should I also bring my English test results?",
-		at: new Date(Date.now() - 86400000 * 2 + 3600000).toISOString(),
-	},
-	{
-		id: "msg-4",
-		sender: "consultant",
-		authorName: "Efua Owusu",
-		text: "Yes, please bring your IELTS/TOEFL results as well. The more documents we have on file, the smoother the process.",
-		at: new Date(Date.now() - 86400000 * 2 + 7200000).toISOString(),
-	},
-];
+export const SEED_MESSAGES: ChatMessage[] = [];
 
 /* ========== Notifications ========== */
 
@@ -2381,35 +2352,7 @@ export type AppNotification = {
 	link?: string;
 };
 
-export const SEED_NOTIFICATIONS: AppNotification[] = [
-	{
-		id: "ntf-1",
-		type: "stage",
-		title: "Consultation booked",
-		body: "Your consultation has been confirmed. Check the consultation tab for details.",
-		at: new Date(Date.now() - 86400000 * 2).toISOString(),
-		read: true,
-		link: "/portal/consultation",
-	},
-	{
-		id: "ntf-2",
-		type: "document",
-		title: "Documents under review",
-		body: "Your consultant is reviewing your uploaded documents. We'll notify you when verification is complete.",
-		at: new Date(Date.now() - 86400000).toISOString(),
-		read: false,
-		link: "/portal/documents",
-	},
-	{
-		id: "ntf-3",
-		type: "message",
-		title: "New message from Efua Owusu",
-		body: "Yes, please bring your IELTS/TOEFL results as well...",
-		at: new Date(Date.now() - 86400000 * 2 + 7200000).toISOString(),
-		read: false,
-		link: "/portal/messages",
-	},
-];
+export const SEED_NOTIFICATIONS: AppNotification[] = [];
 
 /* ========== Pre-departure checklist ========== */
 

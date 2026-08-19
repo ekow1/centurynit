@@ -1,7 +1,6 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
 import { useAppState } from "../../context/AppState";
-import { useNotifier } from "../../components/notifier/Notifier";
 import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
 
@@ -38,10 +37,7 @@ export function DashboardHome() {
 		booking,
 		schoolApplications,
 		authUser,
-		resetJourney,
 	} = useAppState();
-	const { confirm, toast } = useNotifier();
-	const nav = useNavigate();
 	const current = journeyPhase.stage;
 	const cta = currentStageCta(current);
 	const meta = STAGE_META[current];
@@ -52,20 +48,6 @@ export function DashboardHome() {
 	// application ID exists once the application invoice is paid.
 	const consultationRef = booking.confirmationId;
 	const applicationId = application.applicationId;
-
-	async function onReset() {
-		const ok = await confirm({
-			title: "Reset your journey?",
-			message:
-				"Consultation, schools, invoices, visa, and payments will clear. You stay signed in.",
-			confirmText: "Reset journey",
-			tone: "danger",
-		});
-		if (!ok) return;
-		resetJourney();
-		toast.success("Journey reset. You can start again from the top.");
-		nav("/portal/home", { replace: true });
-	}
 
 	return (
 		<div className="portal-page dash-home">
@@ -140,19 +122,12 @@ export function DashboardHome() {
 				</div>
 			</div>
 
-			{/* The band above already carries the primary CTA - no need to repeat it here */}
-			<div className="row mt-5" style={{ flexWrap: "wrap" }}>
-				<Button type="button" variant="ghost" onClick={onReset}>
-					Reset entire process
-				</Button>
+			{/* Return to marketing website link */}
+			<div className="row mt-5">
 				<Link to="/" className="link-arrow">
-					← Public site
+					← Public website
 				</Link>
 			</div>
-			<p className="mono muted mt-2">
-				Reset clears consultation, schools, invoices, visa & payments for this simulation. You stay
-				signed in.
-			</p>
 		</div>
 	);
 }

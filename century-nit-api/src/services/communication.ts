@@ -1192,16 +1192,25 @@ export async function updatePresence(opsUserId: string, status: StaffPresence): 
 
 export async function heartbeat(opsUserId: string): Promise<void> {
 	const now = new Date();
+	// Insert with status='available' (the DB default is 'offline' — a fresh
+	// user who is clearly online because they're heartbeating should not show
+	// as offline). On conflict, only flip offline→available; a user who
+	// explicitly set busy/on_leave keeps that status.
 	await db
 		.insert(staffPresence)
 		.values({
 			opsUserId,
+			status: "available",
 			lastSeenAt: now,
 			updatedAt: now,
 		})
 		.onConflictDoUpdate({
 			target: staffPresence.opsUserId,
-			set: { lastSeenAt: now, updatedAt: now },
+			set: {
+				lastSeenAt: now,
+				updatedAt: now,
+				status: sql`CASE WHEN ${staffPresence.status} = 'offline' THEN 'available' ELSE ${staffPresence.status} END`,
+			},
 		});
 }
 

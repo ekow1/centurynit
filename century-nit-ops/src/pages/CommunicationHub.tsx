@@ -74,15 +74,27 @@ export function CommunicationHub() {
 		try {
 			const res = await getCommunicationStaffDirectory();
 			setDirectory(res.staff);
+			// Sync our own presence from the server so the dropdown reflects
+			// the stored status, not just the local default.
+			const me = res.staff.find((s) => s.email === opsUser?.email);
+			if (me) setPresenceStatus(me.presence);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Couldn't load staff directory");
 		} finally {
 			setDirLoading(false);
 		}
-	}, []);
+	}, [opsUser?.email]);
 
 	useEffect(() => {
 		if (open && mode === "internal") void loadDirectory();
+	}, [open, mode, loadDirectory]);
+
+	// Refresh the directory every 30s while the hub is open in internal mode,
+	// so presence changes from other staff are reflected without a manual reopen.
+	useEffect(() => {
+		if (!open || mode !== "internal") return;
+		const id = setInterval(() => { void loadDirectory(); }, 30_000);
+		return () => clearInterval(id);
 	}, [open, mode, loadDirectory]);
 
 	/* ── Set presence ── */
@@ -161,15 +173,17 @@ export function CommunicationHub() {
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 
 	const filteredDirectory = useMemo(() => {
-		if (!searchQuery.trim()) return directory;
+		// Exclude yourself — you don't need to DM yourself.
+		const withoutSelf = directory.filter((s) => s.email !== opsUser?.email);
+		if (!searchQuery.trim()) return withoutSelf;
 		const q = searchQuery.toLowerCase();
-		return directory.filter(
+		return withoutSelf.filter(
 			(s) =>
 				s.name.toLowerCase().includes(q) ||
 				s.role.toLowerCase().includes(q) ||
 				(s.branch || "").toLowerCase().includes(q),
 		);
-	}, [directory, searchQuery]);
+	}, [directory, searchQuery, opsUser?.email]);
 
 	return (
 		<>
@@ -450,6 +464,16 @@ export function CommunicationHub() {
 									)}
 									{messages.map((m) => {
 										const isMe = m.senderName === opsUser?.name || m.senderName === "You";
+										// Read receipt: my message is "read" when every OTHER participant's
+										// lastReadAt is at or after the message's createdAt.
+										const isRead = isMe && activeConv ? (() => {
+											const others = activeConv.participants.filter(
+												(p) => p.email !== opsUser?.email && p.role !== "former",
+											);
+											if (others.length === 0) return true; // solo conversation
+											const msgTime = new Date(m.createdAt).getTime();
+											return others.every((p) => p.lastReadAt && new Date(p.lastReadAt).getTime() >= msgTime);
+										})() : false;
 										return (
 											<div
 												key={m.id}
@@ -468,6 +492,11 @@ export function CommunicationHub() {
 													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
 													<div style={bubbleTimeStyle}>
 														{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+														{isMe && (
+															<span style={{ marginLeft: "4px", fontSize: "9px", opacity: isRead ? 1 : 0.5 }}>
+																{isRead ? "✓✓ Read" : "✓ Sent"}
+															</span>
+														)}
 													</div>
 												</div>
 											</div>

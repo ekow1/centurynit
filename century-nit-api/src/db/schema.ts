@@ -10,6 +10,7 @@ import {
 	pgEnum,
 	index,
 	uniqueIndex,
+	primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -1119,11 +1120,48 @@ export const conversationTypeEnum = pgEnum("conversation_type", [
 	"entity",
 	"group",
 	"applicant",
+	"support",
+	"case",
+	"stage",
+	"internal",
+	"escalation",
 ]);
 
 export const conversationRoleEnum = pgEnum("conversation_role", [
 	"owner",
 	"member",
+	"former",
+]);
+
+/**
+ * Lifecycle status of a conversation. `open` is the default; `closed` freezes
+ * the conversation for customers (staff can still append internal notes);
+ * `archived` hides it from active lists.
+ */
+export const conversationStatusEnum = pgEnum("conversation_status", [
+	"open",
+	"closed",
+	"archived",
+]);
+
+/**
+ * Staff availability — distinct from the static `opsUsers.active` flag.
+ * `available` means actively accepting work; `busy` is online but at capacity;
+ * `on_leave` is out of office; `offline` is no recent heartbeat.
+ */
+export const staffPresenceEnum = pgEnum("staff_presence", [
+	"available",
+	"busy",
+	"on_leave",
+	"offline",
+]);
+
+/** Lifecycle of a per-stage assignment. Only one `active` row per (case, stage). */
+export const stageAssignmentStatusEnum = pgEnum("stage_assignment_status", [
+	"active",
+	"reassigned",
+	"on_leave",
+	"completed",
 ]);
 
 export const messageTypeEnum = pgEnum("message_type", [
@@ -1146,6 +1184,24 @@ export const conversations = pgTable(
 			.references(() => opsUsers.id, { onDelete: "set null" }),
 		/** For applicant-staff conversations, the applicant's user ID. */
 		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		/**
+		 * Journey stage key this conversation is scoped to (when `type` is
+		 * `stage`). Null for `support`/`case`/`internal`/`escalation` that are
+		 * not stage-scoped. See JOURNEY_STAGES in century-nit-shared.
+		 */
+		stageKey: varchar("stage_key", { length: 80 }),
+		/** Opaque unguessable token for inbound email threading (§11). */
+		emailInboxToken: varchar("email_inbox_token", { length: 64 }).unique(),
+		/** For escalations — who escalated and why. */
+		escalatedByOpsUserId: uuid("escalated_by_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		escalationReason: text("escalation_reason"),
+		/** Denormalised last-activity timestamp for sorting / unread queries. */
+		lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+		/** Lifecycle: open (default) / closed (read-only for customers) / archived. */
+		status: conversationStatusEnum("status").notNull().default("open"),
+		closedAt: timestamp("closed_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -1153,6 +1209,7 @@ export const conversations = pgTable(
 		byType: index("conversations_type_idx").on(t.type, t.updatedAt),
 		byEntity: index("conversations_entity_idx").on(t.linkedEntityType, t.linkedEntityId),
 		byUser: index("conversations_user_idx").on(t.userId),
+		byStage: index("conversations_stage_idx").on(t.linkedEntityType, t.linkedEntityId, t.stageKey),
 	}),
 );
 
@@ -1185,16 +1242,23 @@ export const conversationParticipants = pgTable(
 		conversationId: uuid("conversation_id")
 			.notNull()
 			.references(() => conversations.id, { onDelete: "cascade" }),
-		opsUserId: uuid("ops_user_id")
-			.notNull()
-			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		opsUserId: uuid("ops_user_id").references(() => opsUsers.id, { onDelete: "cascade" }),
+		/**
+		 * Symmetric participant pointer for non-staff (applicants/customers).
+		 * Exactly one of `opsUserId` / `participantUserId` is set per row.
+		 */
+		participantUserId: text("participant_user_id").references(() => users.id, {
+			onDelete: "cascade",
+		}),
 		role: conversationRoleEnum("role").notNull().default("member"),
 		lastReadAt: timestamp("last_read_at", { withTimezone: true }),
 		joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
-		pk: index("conversation_participants_pk").on(t.conversationId, t.opsUserId),
-		byUser: index("conversation_participants_user_idx").on(t.opsUserId),
+		// Composite PK — also guarantees no duplicate (conversation, participant) rows.
+		pk: primaryKey({ columns: [t.conversationId, t.opsUserId, t.participantUserId] }),
+		byOpsUser: index("conversation_participants_user_idx").on(t.opsUserId),
+		byParticipantUser: index("conversation_participants_part_user_idx").on(t.participantUserId),
 	}),
 );
 
@@ -1213,6 +1277,124 @@ export const messageMentions = pgTable(
 	(t) => ({
 		byMessage: index("message_mentions_message_idx").on(t.messageId),
 		byUser: index("message_mentions_user_idx").on(t.mentionedOpsUserId, t.readAt),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Context-Aware Case Communication — stage assignments, presence,
+ * notification preferences, and the audit trail.
+ *
+ * See services/communication.ts for the routing logic that ties a customer
+ * to the staff member currently responsible for their case stage.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Per-stage assignment of an officer to a case (application).
+ *
+ * Distinct from `applications.assignedStaffId` (the fallback/whole-case owner)
+ * and `applicants.assignedOfficerId` (the primary coordinator / case manager).
+ * A customer's journey typically moves through several stages, each handled
+ * by a different specialist; this table records who owns which stage right now.
+ */
+export const stageAssignments = pgTable(
+	"stage_assignments",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
+		/** Journey stage key this assignment covers (JOURNEY_STAGES). */
+		stage: varchar("stage", { length: 80 }).notNull(),
+		opsUserId: uuid("ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		status: stageAssignmentStatusEnum("status").notNull().default("active"),
+		assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+		assignedBy: uuid("assigned_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		endedAt: timestamp("ended_at", { withTimezone: true }),
+		endedReason: text("ended_reason"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplication: index("stage_assignments_application_idx").on(t.applicationId, t.stage),
+		byOpsUser: index("stage_assignments_ops_user_idx").on(t.opsUserId, t.status),
+	}),
+);
+
+/**
+ * Live staff availability. Backed by a heartbeat from the ops frontend and
+ * (in future) Redis for fast lookup; this table is the durable source of truth
+ * the API serves to clients. Distinct from `opsUsers.active` (enabled flag).
+ */
+export const staffPresence = pgTable(
+	"staff_presence",
+	{
+		opsUserId: uuid("ops_user_id")
+			.primaryKey()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		status: staffPresenceEnum("status").notNull().default("offline"),
+		lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+		statusSetAt: timestamp("status_set_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+);
+
+/**
+ * Per-user notification preferences. Drives the fan-out in the unified
+ * `notify(event)` service (§10). `channelFlags` is a map of event type →
+ * `{ inApp, email, push, sms }` booleans.
+ */
+export const notificationPreferences = pgTable(
+	"notification_preferences",
+	{
+		userId: text("user_id")
+			.primaryKey()
+			.references(() => users.id, { onDelete: "cascade" }),
+		channelFlags: jsonb("channel_flags").$type<Record<string, {
+			inApp?: boolean;
+			email?: boolean;
+			push?: boolean;
+			sms?: boolean;
+		}>>().notNull().default({}),
+		/** Quiet hours, e.g. `{ start: "21:00", end: "07:00", timezone: "Africa/Accra" }`. */
+		quietHours: jsonb("quiet_hours").$type<{
+			start?: string;
+			end?: string;
+			timezone?: string;
+		}>(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+);
+
+/**
+ * Append-only audit trail for every meaningful communication event.
+ *
+ * Records Actor → Action → Timestamp → Case → Stage → Conversation, with
+ * arbitrary structured metadata. Complements `consultation_activities` (which
+ * tracks case-state changes only); over time the two should converge.
+ */
+export const communicationEvents = pgTable(
+	"communication_events",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		/** Who performed the action — one of these is set. */
+		actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+		actorOpsUserId: uuid("actor_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		action: varchar("action", { length: 64 }).notNull(),
+		conversationId: uuid("conversation_id").references(() => conversations.id, {
+			onDelete: "cascade",
+		}),
+		applicationId: uuid("application_id"),
+		stageKey: varchar("stage_key", { length: 80 }),
+		metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byConversation: index("communication_events_conversation_idx").on(t.conversationId, t.createdAt),
+		byApplication: index("communication_events_application_idx").on(t.applicationId, t.createdAt),
+		byAction: index("communication_events_action_idx").on(t.action, t.createdAt),
 	}),
 );
 

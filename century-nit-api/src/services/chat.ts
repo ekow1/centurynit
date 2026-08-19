@@ -99,14 +99,17 @@ async function serializeConversation(
 
 	return {
 		id: row.id,
-		type: row.type,
+		type: row.type as "applicant" | "direct" | "entity" | "group",
+		status: (row as any).status ?? "open",
 		title: row.title,
 		linkedEntityType: row.linkedEntityType,
 		linkedEntityId: row.linkedEntityId,
 		createdBy: row.createdBy,
-		participants: participants.map((p) => ({
-			opsUserId: p.opsUserId,
-			name: p.name,
+		participants: participants
+			.filter(p => p.opsUserId != null)
+			.map((p) => ({
+				opsUserId: p.opsUserId as string,
+				name: p.name,
 			email: p.email,
 			role: p.role as "owner" | "member",
 			lastReadAt: p.lastReadAt?.toISOString() ?? null,
@@ -508,6 +511,7 @@ async function notifyOfflineParticipants(
 	const conversationUrl = `${frontendUrl}/chat?conversation=${conversationId}`;
 
 	for (const p of participants) {
+		if (!p.opsUserId) continue;
 		if (p.opsUserId === sender.id) continue;
 
 		// Check if user has a linked auth user (to get their email from the users table)

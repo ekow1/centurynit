@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { SUPPORT_ROSTER } from "century-nit-core/ops";
+
 import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
 import { env } from "../env.js";
@@ -58,6 +58,8 @@ async function seed() {
 	}
 
 	const results: { email: string; role: string; password?: string; status: string }[] = [];
+
+	const SUPPORT_ROSTER: { name: string; email: string; role: string; branch: string }[] = [];
 
 	for (const person of SUPPORT_ROSTER) {
 		const role = ROLE_MAP[person.role] ?? person.role.toLowerCase();

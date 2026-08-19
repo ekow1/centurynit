@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, Next } from "hono";
 import { connection } from "../worker/queues.js";
 import { HttpError } from "./error.js";
 
@@ -11,7 +11,7 @@ import { HttpError } from "./error.js";
  * @param limit Maximum number of requests allowed in the window.
  * @param windowSeconds Time window in seconds.
  */
-import type { Context, Next } from "hono";
+
 
 export async function rateLimit(c: Context, next: Next) {
 	const ip = c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || "unknown-ip";

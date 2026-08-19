@@ -47,10 +47,11 @@ export function useChatConversations(enabled = true) {
 		void refresh();
 	}, [enabled, refresh]);
 
-	// SSE: a new conversation was created (by us or someone else) — reload.
+	// SSE: a new conversation or an incoming message both change the list
+	// (ordering, lastMessage preview, unread badge) — reload on either.
 	useChatStream(useCallback((ev) => {
 		if (!enabled) return;
-		if (ev.type === "chat.conversation.created") void refresh();
+		if (ev.type === "chat.conversation.created" || ev.type === "chat.message") void refresh();
 	}, [enabled, refresh]));
 
 	return { conversations, loading, error, refresh };

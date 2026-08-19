@@ -156,7 +156,6 @@ export function createApp() {
 	app.route(`${API_PREFIX}/events`, eventsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/push`, pushRouter);
-	app.route(`${API_PREFIX}/events`, eventsRouter);
 
 
 	const openApiInfo = {

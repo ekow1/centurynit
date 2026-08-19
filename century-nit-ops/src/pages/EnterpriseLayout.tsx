@@ -195,6 +195,7 @@ export function EnterpriseLayout() {
 	const isDev = import.meta.env.DEV;
 	const { openCommandPalette, resetOpsState } = useOpsState();
 	const location = useLocation();
+	const [confirmReset, setConfirmReset] = useState(false);
 
 	const operationsNav = OPERATIONS_NAV.filter((entry) => {
 		if (isGroup(entry)) return entry.children.some((c) => hasPermission(c.module));
@@ -354,11 +355,7 @@ export function EnterpriseLayout() {
 						<button
 							type="button"
 							className="btn btn--ghost btn--sm ops-reset-btn"
-							onClick={() => {
-								if (confirm("Reset all operations data back to the original seed state? This cannot be undone.")) {
-									resetOpsState();
-								}
-							}}
+							onClick={() => setConfirmReset(true)}
 						>
 							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
 							Reset
@@ -377,11 +374,44 @@ export function EnterpriseLayout() {
 			onRoleSwitch={() => {}}
 			switchableRoles={[]}
 			onReset={() => {
-				if (confirm("Reset all operations data back to the original seed state? This cannot be undone.")) {
-					resetOpsState();
-				}
+				// Reset is a dev-only tool — same gate as the header button.
+				if (isDev) setConfirmReset(true);
 			}}
 		/>
+
+			{/* In-app confirm for the dev-only data reset — no native dialogs. */}
+			{confirmReset && (
+				<div
+					role="dialog"
+					aria-modal="true"
+					aria-label="Confirm reset"
+					style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+					onClick={() => setConfirmReset(false)}
+				>
+					<div
+						style={{ background: "var(--background)", border: "1px solid var(--border-light)", padding: "1.5rem", maxWidth: "420px", width: "90%" }}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<h2 style={{ fontSize: "var(--text-base)", fontWeight: 700, marginBottom: "0.5rem" }}>Reset operations data?</h2>
+						<p style={{ fontSize: "var(--text-sm)", color: "var(--muted-foreground)", marginBottom: "1rem" }}>
+							This resets all operations data back to the original seed state. This cannot be undone.
+						</p>
+						<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmReset(false)}>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn--sm"
+								style={{ color: "#991b1b", borderColor: "#fca5a5" }}
+								onClick={() => { setConfirmReset(false); resetOpsState(); }}
+							>
+								Reset Data
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Floating communication hub — context-aware case chat (§6) */}
 			{roleCanAccess(opsRole as OpsRole, "chat") && <CommunicationHub />}

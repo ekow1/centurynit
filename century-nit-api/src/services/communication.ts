@@ -37,7 +37,6 @@ import {
 	conversationParticipants,
 	conversations,
 	messages,
-	notifications,
 	opsUsers,
 	stageAssignments,
 	staffPresence,
@@ -45,7 +44,8 @@ import {
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
-import { queuePush } from "../worker/queues.js";
+import { publishChatEvent } from "./chat.js";
+import { notifyMany } from "./notify.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -921,6 +921,47 @@ export async function sendCustomerMessage(
 		metadata: { messageId: created.id, sender: "customer" },
 	});
 
+	// Real-time: push the customer's message to every staff participant's SSE
+	// stream so their chat UI appends it instantly without polling.
+	publishChatEvent(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(created),
+	});
+
+	// In-app + push: alert the staff participants that the customer replied.
+	// Fire-and-forget so a notification hiccup never blocks the send.
+	(async () => {
+		try {
+			const preview = content.length > 160 ? `${content.slice(0, 160)}…` : content;
+			const staffParticipants = await db
+				.select({ userId: opsUsers.userId })
+				.from(conversationParticipants)
+				.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conversationId),
+						ne(conversationParticipants.role, "former"),
+					),
+				);
+			const recipients = staffParticipants
+				.map((p) => p.userId)
+				.filter((id): id is string => id != null);
+			if (recipients.length === 0) return;
+			await notifyMany(
+				recipients.map((recipientUserId) => ({
+					recipientUserId,
+					type: "chat.message",
+					title: `${user.name ?? "A client"} sent a message`,
+					body: preview,
+					link: "/ops/chat",
+				})),
+			);
+		} catch {
+			// Notification failure must not block the message send.
+		}
+	})().catch(() => {});
+
 	return serializeMessage(created);
 }
 
@@ -1182,7 +1223,17 @@ export async function getStaffDirectoryDetailed(): Promise<StaffDirectoryDetaile
 	// Presence + active case counts in parallel.
 	const out = await Promise.all(
 		staffRows.map(async (s) => {
-			const presence = await getPresence(s.opsUserId);
+			const [presenceRow] = await db
+				.select({ status: staffPresence.status, lastSeenAt: staffPresence.lastSeenAt })
+				.from(staffPresence)
+				.where(eq(staffPresence.opsUserId, s.opsUserId))
+				.limit(1);
+			// Same auto-flip rule as getPresence: no heartbeat for 15 min = offline.
+			let presence: StaffPresence = presenceRow?.status ?? "offline";
+			if (presence !== "offline" && presenceRow?.lastSeenAt) {
+				const ageMs = Date.now() - presenceRow.lastSeenAt.getTime();
+				if (ageMs > 15 * 60 * 1000) presence = "offline";
+			}
 			const [{ activeCount }] = await db
 				.select({ activeCount: sql<number>`count(*)::int` })
 				.from(stageAssignments)
@@ -1201,7 +1252,7 @@ export async function getStaffDirectoryDetailed(): Promise<StaffDirectoryDetaile
 				role: s.role,
 				branch: s.branch,
 				presence,
-				lastSeenAt: undefined as string | null | undefined,
+				lastSeenAt: presenceRow?.lastSeenAt?.toISOString() ?? null,
 				unreadCount: 0,
 				activeCaseCount: activeCount,
 				currentAssignmentSummary:
@@ -1212,44 +1263,3 @@ export async function getStaffDirectoryDetailed(): Promise<StaffDirectoryDetaile
 	return { staff: out };
 }
 
-/* ── Notifications (lightweight — write to notifications table) ─────────── */
-
-export async function notifyUser(input: {
-	userId: string;
-	type: string;
-	title: string;
-	body: string;
-	link?: string;
-}): Promise<void> {
-	const [row] = await db
-		.insert(notifications)
-		.values({
-			userId: input.userId,
-			type: input.type,
-			title: input.title,
-			body: input.body,
-			link: input.link ?? null,
-			read: false,
-		})
-		.returning({ id: notifications.id });
-
-	/*
-	 * Fan the notification out to the recipient's browsers via the push queue.
-	 * The job is idempotent (`push:{id}:{userId}`) so a retried notify cannot
-	 * double-deliver. The `.catch` keeps push failures from rolling back the
-	 * in-app notification — push is a best-effort channel, the in-app row is
-	 * the source of truth.
-	 */
-	if (row?.id) {
-		await queuePush({
-			userId: input.userId,
-			notification: {
-				id: row.id,
-				type: input.type,
-				title: input.title,
-				body: input.body,
-				link: input.link ?? null,
-			},
-		}).catch(() => {});
-	}
-}

@@ -70,7 +70,7 @@ async function getParticipantUserIds(conversationId: string): Promise<string[]> 
 }
 
 /** Publish a chat event to every participant's SSE channel (fire-and-forget). */
-function publishChatEvent(
+export function publishChatEvent(
 	conversationId: string,
 	payload: { type: string; conversationId: string; [key: string]: unknown },
 	excludeOpsUserId?: string,
@@ -362,9 +362,30 @@ async function findDirectConversation(userId1: string, userId2: string) {
 
 export async function getMessages(
 	conversationId: string,
-	_opsUserId: string,
+	opsUserId: string,
 	opts: { limit?: number; before?: string } = {},
 ): Promise<ChatMessageList> {
+	// Authorization: only participants may read a conversation. Without this
+	// check any staff member with chat access could read any conversation —
+	// including applicant ↔ consultant threads — by iterating IDs.
+	// An empty opsUserId is the internal/trusted path (e.g. the applicant
+	// route, which does its own ownership check before calling in).
+	if (opsUserId) {
+		const [membership] = await db
+			.select({ conversationId: conversationParticipants.conversationId })
+			.from(conversationParticipants)
+			.where(
+				and(
+					eq(conversationParticipants.conversationId, conversationId),
+					eq(conversationParticipants.opsUserId, opsUserId),
+				),
+			)
+			.limit(1);
+		if (!membership) {
+			throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+		}
+	}
+
 	const limit = Math.min(opts.limit ?? 50, 100);
 
 	const conditions = [eq(messages.conversationId, conversationId)];

@@ -72,6 +72,8 @@ export function EnterpriseConsultations() {
 	const [workloadData, setWorkloadData] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
 	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
+	const [showCancelForm, setShowCancelForm] = useState(false);
+	const [cancelReason, setCancelReason] = useState("");
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -591,27 +593,54 @@ export function EnterpriseConsultations() {
 							</div>
 						)}
 						{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
-							<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0, display: "flex", justifyContent: "flex-end" }}>
-								<button
-									type="button"
-									onClick={() => {
-										const reason = window.prompt("Enter a cancellation reason (optional):");
-										if (reason === null) return;
-										void cancelConsultation(active.id, reason || undefined)
-											.then(() => {
-												setSelectedConsultation(null);
-												void refresh();
-											})
-											.catch((err: unknown) => {
-												const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
-												showToast("error", msg);
-											});
-									}}
-									className="btn btn--sm"
-									style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
-								>
-									✕ Cancel Case
-								</button>
+							<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end" }}>
+								{showCancelForm ? (
+									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", width: "100%", justifyContent: "flex-end" }}>
+										<input
+											type="text"
+											value={cancelReason}
+											onChange={(e) => setCancelReason(e.target.value)}
+											placeholder="Cancellation reason (optional)"
+											style={{ flex: 1, maxWidth: "320px", padding: "0.4rem 0.6rem", border: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}
+										/>
+										<button
+											type="button"
+											className="btn btn--sm"
+											style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
+											onClick={() => {
+												void cancelConsultation(active.id, cancelReason.trim() || undefined)
+													.then(() => {
+														setShowCancelForm(false);
+														setCancelReason("");
+														setSelectedConsultation(null);
+														void refresh();
+													})
+													.catch((err: unknown) => {
+														const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
+														showToast("error", msg);
+													});
+											}}
+										>
+											Confirm Cancel
+										</button>
+										<button
+											type="button"
+											className="btn btn--sm"
+											onClick={() => { setShowCancelForm(false); setCancelReason(""); }}
+										>
+											Keep Case
+										</button>
+									</div>
+								) : (
+									<button
+										type="button"
+										onClick={() => setShowCancelForm(true)}
+										className="btn btn--sm"
+										style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
+									>
+										✕ Cancel Case
+									</button>
+								)}
 							</div>
 						)}
 

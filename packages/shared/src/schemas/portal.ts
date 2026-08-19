@@ -2,9 +2,18 @@ import { z } from "zod";
 
 /* ── Pre-departure checklist ──────────────────────────────────────────────── */
 
+/*
+ * `category` and `detail` are optional rather than required: the previous
+ * version of this schema omitted them, and z.object strips unknown keys, so
+ * every task persisted before the fix is missing both. Requiring them would
+ * reject the round-trip of that data. The portal re-hydrates missing fields
+ * from the PRE_DEPARTURE_TASKS seed by id.
+ */
 const preDepartureTaskSchema = z.object({
 	id: z.string(),
+	category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
 	label: z.string(),
+	detail: z.string().optional(),
 	done: z.boolean(),
 });
 

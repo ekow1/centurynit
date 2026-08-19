@@ -34,6 +34,7 @@ export function EnterpriseCases() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+	const [actionError, setActionError] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
@@ -92,7 +93,8 @@ export function EnterpriseCases() {
 		} catch (err: unknown) {
 			setActionSuccess(null);
 			const msg = err instanceof Error ? err.message : "Could not advance stage";
-			window.alert(msg);
+			setActionError(msg);
+			setTimeout(() => setActionError(null), 6000);
 		}
 	}
 
@@ -143,6 +145,12 @@ export function EnterpriseCases() {
 			{actionSuccess && (
 				<div style={{ padding: "0.85rem 1.25rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1rem" }}>
 					✓ {actionSuccess}
+				</div>
+			)}
+
+			{actionError && (
+				<div role="alert" style={{ padding: "0.85rem 1.25rem", background: "#b91c1c", color: "#fff", marginBottom: "1rem" }}>
+					{actionError}
 				</div>
 			)}
 

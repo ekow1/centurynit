@@ -4,6 +4,7 @@ import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from
 import { roleCanAccess } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 import { useOpsNotifications } from "../hooks/useOpsNotifications";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
 import { staffBranchName } from "century-nit-core/ops";
@@ -208,6 +209,11 @@ export function EnterpriseLayout() {
 	// heuristic derived from polled leads/consultations. Those still get polled
 	// by their own pages (inbox, consultations, leads) for their own lists.
 	const { unreadCount } = useOpsNotifications();
+
+	// Silent Web Push subscription — active while a staff member is signed in.
+	// The permission prompt is never shown automatically; this only resubscribes
+	// returning staff who previously granted permission.
+	usePushNotifications({ isAuthenticated: Boolean(opsUser) });
 
 	return (
 		<div className="portal">

@@ -36,7 +36,7 @@ import { chatRouter } from "./routes/chat.js";
 import { meCommunicationRouter, communicationRouter } from "./routes/communication.js";
 import { authSettings } from "./routes/auth-settings.js";
 import { marketingRouter } from "./routes/marketing.js";
-import { eventsRouter } from "./routes/events.js";
+import { pushRouter } from "./routes/push.js";
 
 
 /**
@@ -153,7 +153,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/me`, avatarRouter);
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
-	app.route(`${API_PREFIX}/events`, eventsRouter);
+	app.route(`${API_PREFIX}/push`, pushRouter);
 
 
 	const openApiInfo = {
@@ -232,13 +232,19 @@ export function createApp() {
 				name: "Health",
 				description: "Liveness and readiness. Unversioned — monitoring, not contract.",
 			},
-			{
-				name: "Chat",
-				description:
-					"Internal staff-to-staff messaging. Conversations, messages, " +
-					"@mentions, and unread counts. All staff roles have access.",
-			},
-		],
+		{
+			name: "Chat",
+			description:
+				"Internal staff-to-staff messaging. Conversations, messages, " +
+				"@mentions, and unread counts. All staff roles have access.",
+		},
+		{
+			name: "Web Push",
+			description:
+				"Browser push notifications. Subscribe a browser, fetch the VAPID " +
+				"public key, and unsubscribe.",
+		},
+	],
 	};
 
 	/**

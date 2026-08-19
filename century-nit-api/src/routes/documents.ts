@@ -12,7 +12,7 @@ import {
 	uploadTicketSchema,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applicantDocuments, bookings, users } from "../db/schema.js";
+import { applicantDocuments, applicants, bookings, users } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
@@ -22,6 +22,12 @@ import {
 	type StaffContext,
 } from "../middleware/auth.js";
 import { getDocumentStorage, StorageNotConfiguredError } from "../services/storage/index.js";
+import {
+	notify,
+	notifyMany,
+	getManagerAndCoordinatorUserIds,
+	getStaffUserId,
+} from "../services/notify.js";
 
 /**
  * Applicant documents.
@@ -279,6 +285,51 @@ documentsRouter.openapi(
 			});
 		}
 
+		// In-app: let the assigned consultant know a document was uploaded, or
+		// fall back to managers/coordinators when nobody is assigned yet.
+		(async () => {
+			try {
+				const [applicant] = await db
+					.select({ name: applicants.name, assignedOfficerId: applicants.assignedOfficerId })
+					.from(applicants)
+					.where(eq(applicants.userId, user.id))
+					.limit(1);
+
+				const applicantName = applicant?.name ?? "An applicant";
+				const body = `${applicantName} uploaded ${updated.documentType}`;
+
+				const officerId = applicant?.assignedOfficerId ?? null;
+				if (officerId) {
+					const userId = await getStaffUserId(officerId);
+					if (userId) {
+						await notify({
+							recipientUserId: userId,
+							type: "document.uploaded",
+							title: "New document uploaded",
+							body,
+							link: "/ops/documents",
+						});
+						return;
+					}
+				}
+
+				// No consultant linked (or not yet an auth user) — surface to the
+				// triage queue so somebody picks it up.
+				const managers = await getManagerAndCoordinatorUserIds();
+				await notifyMany(
+					managers.map((m) => ({
+						recipientUserId: m.userId,
+						type: "document.uploaded",
+						title: "New document uploaded",
+						body,
+						link: "/ops/documents",
+					})),
+				);
+			} catch {
+				// Notification failure must not block the upload completion.
+			}
+		})().catch(() => {});
+
 		return c.json(toResponse(updated));
 	},
 );
@@ -486,6 +537,19 @@ documentsRouter.openapi(
 				DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND,
 				"No uploaded document with that id",
 			);
+		}
+
+		// In-app: tell the document owner their document was approved or rejected.
+		const approved = body.status === "VERIFIED";
+		const rejected = body.status === "REJECTED";
+		if (approved || rejected) {
+			notify({
+				recipientUserId: updated.ownerUserId,
+				type: approved ? "document.approved" : "document.rejected",
+				title: approved ? "Your document was approved" : "Your document was rejected",
+				body: `Your ${updated.documentType} was ${approved ? "approved" : "rejected"}.`,
+				link: "/portal/documents",
+			}).catch(() => {});
 		}
 
 		return c.json(toResponse(updated));

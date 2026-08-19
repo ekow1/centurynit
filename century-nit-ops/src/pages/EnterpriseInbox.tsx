@@ -1,7 +1,10 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCasesApi } from "../hooks/useCasesApi";
+import { useOpsNotifications } from "../hooks/useOpsNotifications";
+import { documentsApi } from "century-nit-core/api";
+import type { ApplicantDocument } from "century-nit-shared";
 import { money } from "./currency";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -53,8 +56,11 @@ const TYPE_META: Record<NotificationItem["type"], { label: string; color: string
 export function EnterpriseInbox() {
 	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
 	const { consultations, applications, applicants } = useCasesApi();
+	const { notifications: realNotifications, unreadCount: realUnreadCount, markRead, markAllRead } = useOpsNotifications();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
+	const [reviewDocuments, setReviewDocuments] = useState<ApplicantDocument[]>([]);
 	const [filter, setFilter] = useState<"all" | "unread">("all");
+	const navigate = useNavigate();
 
 	const loadApiLeads = useCallback(async () => {
 		try {
@@ -67,11 +73,28 @@ export function EnterpriseInbox() {
 		}
 	}, []);
 
+	const loadReviewDocuments = useCallback(async () => {
+		try {
+			const res = await documentsApi.list();
+			if (res?.documents) {
+				// A document that is UPLOADED is awaiting staff review.
+				setReviewDocuments(res.documents.filter((d) => d.status === "UPLOADED"));
+			}
+		} catch {
+			// ignore if offline or forbidden
+		}
+	}, []);
+
 	useEffect(() => {
 		void loadApiLeads();
-		const timer = setInterval(loadApiLeads, 10000);
-		return () => clearInterval(timer);
-	}, [loadApiLeads]);
+		void loadReviewDocuments();
+		const leadTimer = setInterval(loadApiLeads, 10000);
+		const docTimer = setInterval(loadReviewDocuments, 30000);
+		return () => {
+			clearInterval(leadTimer);
+			clearInterval(docTimer);
+		};
+	}, [loadApiLeads, loadReviewDocuments]);
 
 	const meEmail = opsUser?.email ?? "";
 
@@ -144,18 +167,6 @@ export function EnterpriseInbox() {
 
 		const scopedApplicants = scopeRecords(applicants, (a) => a.assignedOfficerEmail === meEmail);
 		for (const a of scopedApplicants) {
-			const pending = a.documents.filter((d) => d.status === "Pending Review");
-			for (const d of pending) {
-				items.push({
-					id: `doc-${a.id}-${d.name}`,
-					type: "document",
-					title: `Document pending review: ${d.name}`,
-					detail: `${a.name} · ${a.applicantId}`,
-					time: d.date,
-					link: "/documents",
-					unread: true,
-				});
-			}
 			const outstanding = money(a.financials.outstanding);
 			if (outstanding > 0 && hasPermission("finance")) {
 				items.push({
@@ -168,6 +179,23 @@ export function EnterpriseInbox() {
 					unread: false,
 				});
 			}
+		}
+
+		// Real documents awaiting review — pulled from the documents API, where a
+		// status of UPLOADED means the applicant has uploaded it and it is waiting
+		// on staff. (The old heuristic filtered mock `requestedDocuments` on a
+		// "Pending Review" status that never existed in the enum, so it never showed
+		// anything.)
+		for (const d of reviewDocuments) {
+			items.push({
+				id: `doc-${d.id}`,
+				type: "document",
+				title: `Document pending review: ${d.documentType}`,
+				detail: `${d.fileName}${d.ownerEmail ? ` · ${d.ownerEmail}` : ""}`,
+				time: relativeTime(d.uploadedAt ?? d.createdAt),
+				link: "/documents",
+				unread: true,
+			});
 		}
 
 		for (const al of apiLeads) {
@@ -188,10 +216,19 @@ export function EnterpriseInbox() {
 			if (a.unread !== b.unread) return a.unread ? -1 : 1;
 			return 0;
 		});
-	}, [consultations, applications, applicants, apiLeads, meEmail, opsRole, scopeRecords, hasPermission]);
+	}, [consultations, applications, applicants, apiLeads, reviewDocuments, meEmail, opsRole, scopeRecords, hasPermission]);
 
 	const filtered = filter === "unread" ? notifications.filter((n) => n.unread) : notifications;
 	const unreadCount = notifications.filter((n) => n.unread).length;
+	const totalUnread = realUnreadCount + unreadCount;
+
+	const handleNotificationClick = useCallback(
+		(id: string, link: string | null) => {
+			void markRead(id);
+			if (link) navigate(link);
+		},
+		[markRead, navigate],
+	);
 
 	return (
 		<div className="page-content fade-in">
@@ -199,10 +236,19 @@ export function EnterpriseInbox() {
 				<div>
 					<h1 className="page-title">Notifications</h1>
 					<p className="lead mt-2">
-						{unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? "s" : ""}` : "You're all caught up"}
+						{totalUnread > 0 ? `${totalUnread} unread notification${totalUnread > 1 ? "s" : ""}` : "You're all caught up"}
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem" }}>
+					{realUnreadCount > 0 && (
+						<button
+							type="button"
+							className="btn btn--sm btn--ghost"
+							onClick={() => void markAllRead()}
+						>
+							Mark all read
+						</button>
+					)}
 					<button
 						type="button"
 						className={`btn btn--sm ${filter === "all" ? "btn--primary" : "btn--ghost"}`}
@@ -220,6 +266,81 @@ export function EnterpriseInbox() {
 				</div>
 			</div>
 
+			{/* Real, server-pushed notifications */}
+			{realNotifications.length > 0 && (
+				<div className="card" style={{ marginBottom: "1.5rem" }}>
+					<p className="eyebrow" style={{ padding: "0.85rem 1rem 0.5rem", fontSize: "0.6rem" }}>
+						Inbox
+					</p>
+					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						{realNotifications.map((n) => (
+							<li
+								key={n.id}
+								style={{
+									display: "flex",
+									alignItems: "flex-start",
+									gap: "0.85rem",
+									padding: "0.85rem 1rem",
+									borderBottom: "1px solid var(--border-light)",
+									background: n.read ? "transparent" : "var(--muted)",
+									cursor: n.link ? "pointer" : "default",
+								}}
+								onClick={() => handleNotificationClick(n.id, n.link)}
+								role={n.link ? "button" : undefined}
+							>
+								<span
+									style={{
+										width: "8px",
+										height: "8px",
+										borderRadius: "50%",
+										background: n.read ? "var(--muted-foreground)" : "#3b82f6",
+										flexShrink: 0,
+										marginTop: "0.4rem",
+									}}
+									aria-hidden
+								/>
+								<div style={{ flex: 1, minWidth: 0 }}>
+									<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
+										<span
+											style={{
+												fontFamily: "var(--font-mono)",
+												fontSize: "0.6rem",
+												textTransform: "uppercase",
+												letterSpacing: "0.08em",
+												color: "var(--muted-foreground)",
+											}}
+										>
+											{n.type}
+										</span>
+										{!n.read && (
+											<span
+												style={{
+													fontFamily: "var(--font-mono)",
+													fontSize: "0.6rem",
+													textTransform: "uppercase",
+													letterSpacing: "0.08em",
+													color: "#3b82f6",
+												}}
+											>
+												New
+											</span>
+										)}
+									</div>
+									<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{n.title}</p>
+									{n.body && (
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>{n.body}</p>
+									)}
+								</div>
+								<span className="muted" style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
+									{relativeTime(n.createdAt)}
+								</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
+			<p className="eyebrow" style={{ marginBottom: "0.5rem", fontSize: "0.6rem" }}>Case activity</p>
 			<div className="card">
 				{filtered.length === 0 ? (
 					<p className="muted" style={{ padding: "2rem", textAlign: "center", fontSize: "var(--text-sm)" }}>

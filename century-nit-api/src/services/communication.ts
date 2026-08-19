@@ -45,6 +45,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
+import { queuePush } from "../worker/queues.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -97,11 +98,12 @@ function availabilityNote(presence: StaffPresence): string | null {
 }
 
 async function toContactCard(
-	opsUserId: string,
+	opsUserId: string | null | undefined,
 	opts: { stageKey?: string | null } = {},
-): Promise<ContactCard> {
+): Promise<ContactCard | null> {
+	if (!opsUserId || !opsUserId.trim()) return null;
 	const staff = await getOpsUser(opsUserId);
-	if (!staff) throw new HttpError(404, "STAFF_NOT_FOUND", "Assigned staff member not found");
+	if (!staff) return null;
 	const presence = await getPresence(opsUserId);
 	return {
 		opsUserId: staff.id,
@@ -368,7 +370,7 @@ export interface FindOrCreateInput {
 	/** Customer (applicant) user ID — required for customer-visible types. */
 	userId?: string;
 	/** Staff who initiated (for internal/escalation) or who owns (for applicant creation). */
-	createdByOpsUserId: string;
+	createdByOpsUserId?: string | null;
 	linkedEntityType?: "application" | "consultation" | "booking" | null;
 	linkedEntityId?: string | null;
 	stageKey?: string | null;
@@ -388,6 +390,9 @@ export async function findOrCreateConversation(
 	const stageKey = input.stageKey ?? null;
 	const linkedEntityType = input.linkedEntityType ?? null;
 	const linkedEntityId = input.linkedEntityId ?? null;
+	const validCreatorId = input.createdByOpsUserId && input.createdByOpsUserId.trim().length > 0
+		? input.createdByOpsUserId.trim()
+		: null;
 
 	// Look up by the natural identity.
 	const [existing] = await db
@@ -424,7 +429,7 @@ export async function findOrCreateConversation(
 			linkedEntityType,
 			linkedEntityId,
 			userId: input.userId ?? null,
-			createdBy: input.createdByOpsUserId || null,
+			createdBy: validCreatorId,
 			stageKey,
 			emailInboxToken: randomUUID(),
 			status: "open",
@@ -432,18 +437,18 @@ export async function findOrCreateConversation(
 		.returning();
 
 	// Add creator + participants.
-	if (input.createdByOpsUserId) {
+	if (validCreatorId) {
 		await db.insert(conversationParticipants).values({
 			conversationId: created.id,
-			opsUserId: input.createdByOpsUserId,
+			opsUserId: validCreatorId,
 			role: "owner",
 		});
 	}
 	for (const pid of input.participantOpsUserIds ?? []) {
-		if (pid === input.createdByOpsUserId) continue;
+		if (!pid || !pid.trim() || pid === validCreatorId) continue;
 		await db.insert(conversationParticipants).values({
 			conversationId: created.id,
-			opsUserId: pid,
+			opsUserId: pid.trim(),
 			role: "member",
 		});
 	}
@@ -574,34 +579,38 @@ export async function resolveCurrentContact(userId: string): Promise<{
 
 	if (escalation && escalation.escalatedByOpsUserId) {
 		const contact = await toContactCard(escalation.escalatedByOpsUserId);
-		return {
-			current: {
-				kind: "escalation",
-				contact,
-				caseRef,
-				reason: escalation.escalationReason ?? null,
-			},
-			activeCaseId: app.id,
-			activeCaseRef: caseRef,
-			activeStageKey: stageKey,
-		};
+		if (contact) {
+			return {
+				current: {
+					kind: "escalation",
+					contact,
+					caseRef,
+					reason: escalation.escalationReason ?? null,
+				},
+				activeCaseId: app.id,
+				activeCaseRef: caseRef,
+				activeStageKey: stageKey,
+			};
+		}
 	}
 
 	if (stageAssignment) {
 		const contact = await toContactCard(stageAssignment.opsUserId, { stageKey });
-		return {
-			current: {
-				kind: "stage_officer",
-				contact,
-				caseRef,
-				stageKey,
-				stageLabel: STAGE_LABEL(stageKey) ?? stageKey,
-				caseManager,
-			},
-			activeCaseId: app.id,
-			activeCaseRef: caseRef,
-			activeStageKey: stageKey,
-		};
+		if (contact) {
+			return {
+				current: {
+					kind: "stage_officer",
+					contact,
+					caseRef,
+					stageKey,
+					stageLabel: STAGE_LABEL(stageKey) ?? stageKey,
+					caseManager,
+				},
+				activeCaseId: app.id,
+				activeCaseRef: caseRef,
+				activeStageKey: stageKey,
+			};
+		}
 	}
 
 	if (caseManager) {
@@ -745,7 +754,7 @@ export async function getCommunicationContext(userId: string): Promise<Communica
 
 export async function routeCustomerChat(
 	userId: string,
-	opts: { caseId?: string; stageKey?: string; createdByOpsUserId: string },
+	opts: { caseId?: string; stageKey?: string; createdByOpsUserId?: string | null } = {},
 ): Promise<ChatConversation> {
 	// Resolve the active case if none specified.
 	let caseId = opts.caseId;
@@ -762,7 +771,7 @@ export async function routeCustomerChat(
 		const { row } = await findOrCreateConversation({
 			type: "support",
 			userId,
-			createdByOpsUserId: opts.createdByOpsUserId,
+			createdByOpsUserId: opts.createdByOpsUserId || null,
 			title: "Support",
 		});
 		return serializeConversation(row, { userId });
@@ -822,7 +831,7 @@ export async function routeCustomerChat(
 	}
 
 	// No stage officer — case-level thread with the assigned staff / case manager.
-	const ownerId = app.assignedStaffId ?? opts.createdByOpsUserId;
+	const ownerId = app.assignedStaffId ?? (opts.createdByOpsUserId || null);
 	const { row } = await findOrCreateConversation({
 		type: "case",
 		userId,
@@ -1212,12 +1221,35 @@ export async function notifyUser(input: {
 	body: string;
 	link?: string;
 }): Promise<void> {
-	await db.insert(notifications).values({
-		userId: input.userId,
-		type: input.type,
-		title: input.title,
-		body: input.body,
-		link: input.link ?? null,
-		read: false,
-	});
+	const [row] = await db
+		.insert(notifications)
+		.values({
+			userId: input.userId,
+			type: input.type,
+			title: input.title,
+			body: input.body,
+			link: input.link ?? null,
+			read: false,
+		})
+		.returning({ id: notifications.id });
+
+	/*
+	 * Fan the notification out to the recipient's browsers via the push queue.
+	 * The job is idempotent (`push:{id}:{userId}`) so a retried notify cannot
+	 * double-deliver. The `.catch` keeps push failures from rolling back the
+	 * in-app notification — push is a best-effort channel, the in-app row is
+	 * the source of truth.
+	 */
+	if (row?.id) {
+		await queuePush({
+			userId: input.userId,
+			notification: {
+				id: row.id,
+				type: input.type,
+				title: input.title,
+				body: input.body,
+				link: input.link ?? null,
+			},
+		}).catch(() => {});
+	}
 }

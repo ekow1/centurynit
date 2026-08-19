@@ -15,6 +15,7 @@ import {
 	tickets,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
 
 /* ── Category-based routing ────────────────────────────────────────────────── */
 
@@ -185,6 +186,42 @@ export async function createTicket(
 		senderName: applicantName,
 		message: input.message,
 	});
+
+	// In-app: alert the assigned staff member, or the triage queue when nobody
+	// is assigned yet. Fire-and-forget so it never blocks ticket creation.
+	(async () => {
+		try {
+			const title = `New ticket: ${created.subject}`;
+			const body = `${applicantName} — ${created.category}`;
+
+			if (created.assignedStaffId) {
+				const staffUserId = await getStaffUserId(created.assignedStaffId);
+				if (staffUserId) {
+					await notify({
+						recipientUserId: staffUserId,
+						type: "ticket.new",
+						title,
+						body,
+						link: "/ops/helpdesk",
+					});
+					return;
+				}
+			}
+
+			const managers = await getManagerAndCoordinatorUserIds();
+			await notifyMany(
+				managers.map((m) => ({
+					recipientUserId: m.userId,
+					type: "ticket.new",
+					title,
+					body,
+					link: "/ops/helpdesk",
+				})),
+			);
+		} catch {
+			// Notification failure must not block the ticket creation.
+		}
+	})().catch(() => {});
 
 	return serializeTicket(created);
 }

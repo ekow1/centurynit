@@ -16,33 +16,19 @@ import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import { roleCanAccess } from "century-nit-shared";
 
 /**
- * OPS Staff Communication Hub — Floating & Expandable Monochrome Workstation.
+ * OPS Staff Communication Workstation — Strict Brutalist Monochrome Design.
  *
- * Conforms strictly to the Century NIT Monochrome Design System.
- * Features:
- *   1. Internal Mode — Staff Directory with live presence indicators.
- *      Clicking any staff member opens a private 1-on-1 isolated DM session.
- *   2. External Mode — Assigned Client Case Conversations from the applicant portal.
- *   3. Dual Viewport — Standard floating card (420px) & Expanded 2-column workstation (880px).
+ * Rules:
+ *   - Strict 0px border-radius (no rounded corners).
+ *   - Pure monochrome palette (#000000, #09090b, #18181b, #27272a, #ffffff).
+ *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
+ *   - 2 Modes: INTERNAL (Staff DMs with 1-on-1 isolation), EXTERNAL (Client threads).
+ *   - Expandable Workstation: Standard 420px floating window <-> 880px widescreen workspace.
  */
 
 const HEARTBEAT_MS = 60_000;
 
 type Mode = "internal" | "external";
-
-const PRESENCE_DOT: Record<StaffPresence, string> = {
-	available: "#10b981",
-	busy: "#f59e0b",
-	on_leave: "#a78bfa",
-	offline: "#71717a",
-};
-
-const PRESENCE_LABEL: Record<StaffPresence, string> = {
-	available: "Available",
-	busy: "Busy",
-	on_leave: "On leave",
-	offline: "Offline",
-};
 
 export function CommunicationHub() {
 	const { opsRole, opsUser } = useOpsAuth();
@@ -175,21 +161,26 @@ export function CommunicationHub() {
 
 	return (
 		<>
-			{/* Floating Launcher Button */}
+			{/* Floating Square Launcher Button (Pure SVG icon, 0px border-radius) */}
 			<button
 				type="button"
 				onClick={() => setOpen((prev) => !prev)}
-				style={launcherStyle}
-				aria-label="Open OPS Communication Hub"
+				style={launcherSquareBtnStyle}
+				aria-label="Open OPS Chat"
 			>
-				<span style={{ fontSize: "16px" }}>💬</span>
-				<div style={launcherTextCol}>
-					<span style={launcherTitleStyle}>OPS Communication</span>
-					<span style={launcherSubtitleStyle}>
-						{totalUnread > 0 ? `${totalUnread} Unread` : "Staff DMs & Client Threads"}
-					</span>
-				</div>
-				{totalUnread > 0 && <span style={launcherBadgeStyle}>{totalUnread}</span>}
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2"
+					strokeLinecap="square"
+					strokeLinejoin="miter"
+				>
+					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+				</svg>
+				{totalUnread > 0 && <span style={unreadSquareBadgeStyle}>{totalUnread}</span>}
 			</button>
 
 			{/* Floating Hub Window */}
@@ -198,30 +189,27 @@ export function CommunicationHub() {
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={{ width: "8px", height: "8px", borderRadius: "50%", background: PRESENCE_DOT[presenceStatus] }} />
-							<div>
-								<h2 style={headerTitleStyle}>OPS COMMUNICATION WORKSTATION</h2>
-								<p style={headerSubtitleStyle}>STAFF DIRECT & CLIENT CHANNELS</p>
-							</div>
+							<span style={indicatorDotStyle} />
+							<span style={headerTitleStyle}>OPS CHAT</span>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
 							{/* Presence Selector */}
 							<select
 								value={presenceStatus}
 								onChange={(e) => changePresence(e.target.value as StaffPresence)}
 								style={presenceSelectStyle}
-								aria-label="Set my presence"
+								aria-label="Set presence"
 							>
-								<option value="available">● Available</option>
-								<option value="busy">● Busy</option>
-								<option value="on_leave">● On leave</option>
-								<option value="offline">● Offline</option>
+								<option value="available">ONLINE</option>
+								<option value="busy">BUSY</option>
+								<option value="on_leave">ON LEAVE</option>
+								<option value="offline">OFFLINE</option>
 							</select>
 							<button
 								type="button"
 								onClick={() => setExpanded((prev) => !prev)}
 								style={controlBtnStyle}
-								title={expanded ? "Restore down" : "Expand to widescreen"}
+								title={expanded ? "Restore" : "Expand"}
 							>
 								{expanded ? "⤡" : "⤢"}
 							</button>
@@ -229,14 +217,14 @@ export function CommunicationHub() {
 								type="button"
 								onClick={() => setOpen(false)}
 								style={controlBtnStyle}
-								title="Close hub"
+								title="Close"
 							>
 								✕
 							</button>
 						</div>
 					</header>
 
-					{/* Navigation Switcher: Internal Staff DMs vs External Clients */}
+					{/* Navigation Switcher */}
 					<nav style={channelNavStyle}>
 						<button
 							type="button"
@@ -249,7 +237,7 @@ export function CommunicationHub() {
 								...(mode === "internal" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span>🔒 Internal (Staff DMs)</span>
+							<span>STAFF DMs</span>
 						</button>
 						<button
 							type="button"
@@ -262,7 +250,7 @@ export function CommunicationHub() {
 								...(mode === "external" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span>🌐 External (Clients)</span>
+							<span>CLIENTS</span>
 							{externalConversations.some((c) => c.unreadCount > 0) && (
 								<span style={tabDotBadgeStyle} />
 							)}
@@ -272,7 +260,7 @@ export function CommunicationHub() {
 					{/* Error Banner */}
 					{error && (
 						<div style={errorBannerStyle}>
-							<span>⚠ {error}</span>
+							<span>{error}</span>
 							<button type="button" onClick={() => setError(null)} style={errorCloseStyle}>✕</button>
 						</div>
 					)}
@@ -283,12 +271,12 @@ export function CommunicationHub() {
 						{mode === "internal" && !activeConvId && (
 							<div style={directoryContainerStyle}>
 								{/* Search */}
-								<div style={{ padding: "10px 12px", borderBottom: "1px solid #27272a" }}>
+								<div style={{ padding: "8px 10px", borderBottom: "1px solid #27272a" }}>
 									<input
 										type="text"
 										value={searchQuery}
 										onChange={(e) => setSearchQuery(e.target.value)}
-										placeholder="Search colleagues by name, role or branch..."
+										placeholder="Filter colleagues by name, role or branch..."
 										style={searchInputStyle}
 									/>
 								</div>
@@ -297,7 +285,7 @@ export function CommunicationHub() {
 								{internalConversations.length > 0 && !searchQuery && (
 									<div style={{ borderBottom: "1px solid #27272a" }}>
 										<div style={sectionHeaderStyle}>ACTIVE 1-ON-1 SESSIONS</div>
-										<div style={{ maxHeight: "160px", overflowY: "auto" }}>
+										<div style={{ maxHeight: "150px", overflowY: "auto" }}>
 											{internalConversations.map((c) => (
 												<button
 													key={c.id}
@@ -310,15 +298,15 @@ export function CommunicationHub() {
 															{c.title.slice(0, 2).toUpperCase()}
 														</span>
 														<div style={{ textAlign: "left" }}>
-															<div style={{ fontSize: "12px", fontWeight: 600, color: "#f4f4f5" }}>
-																{c.title}
+															<div style={{ fontSize: "11px", fontWeight: 700, color: "#f4f4f5", letterSpacing: "0.02em" }}>
+																{c.title.toUpperCase()}
 															</div>
-															<div style={{ fontSize: "11px", color: "#71717a", fontFamily: "monospace" }}>
+															<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
 																{c.lastMessage?.content.slice(0, 32) || "No messages yet"}
 															</div>
 														</div>
 													</div>
-													{c.unreadCount > 0 && <span style={unreadBadgeStyle}>{c.unreadCount}</span>}
+													{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
 												</button>
 											))}
 										</div>
@@ -326,15 +314,15 @@ export function CommunicationHub() {
 								)}
 
 								{/* Full Staff Directory */}
-								<div style={sectionHeaderStyle}>ALL STAFF MEMBERS (CLICK TO CHAT)</div>
-								<div style={{ flex: 1, overflowY: "auto", padding: "6px" }}>
+								<div style={sectionHeaderStyle}>STAFF DIRECTORY (CLICK TO CHAT)</div>
+								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
 									{dirLoading ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "12px" }}>
-											Loading staff directory...
+										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+											LOADING DIRECTORY...
 										</div>
 									) : filteredDirectory.length === 0 ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "12px" }}>
-											No staff members found.
+										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+											NO STAFF FOUND.
 										</div>
 									) : (
 										filteredDirectory.map((staff) => (
@@ -344,30 +332,20 @@ export function CommunicationHub() {
 												onClick={() => startDM(staff)}
 												style={staffCardBtnStyle}
 											>
-												<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-													<div style={{ position: "relative" }}>
-														<span style={avatarPillStyle}>
-															{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
-														</span>
-														<span
-															style={{
-																...presenceDotMiniStyle,
-																background: PRESENCE_DOT[staff.presence],
-															}}
-														/>
-													</div>
+												<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+													<span style={avatarPillStyle}>
+														{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+													</span>
 													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 600, fontSize: "12px", color: "#f4f4f5" }}>
-															{staff.name}
+														<div style={{ fontWeight: 700, fontSize: "11px", color: "#f4f4f5", letterSpacing: "0.02em" }}>
+															{staff.name.toUpperCase()}
 														</div>
-														<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
-															{staff.role} · {staff.branch}
+														<div style={{ fontSize: "10px", color: "#a1a1aa", fontFamily: "monospace" }}>
+															{staff.role.toUpperCase()} · {(staff.branch || "").toUpperCase()}
 														</div>
 													</div>
 												</div>
-												<div style={{ textAlign: "right" }}>
-													<span style={presenceBadgeStyle}>{PRESENCE_LABEL[staff.presence]}</span>
-												</div>
+												<span style={presenceBadgeStyle}>{staff.presence.toUpperCase()}</span>
 											</button>
 										))
 									)}
@@ -378,17 +356,17 @@ export function CommunicationHub() {
 						{/* Mode 2: External Client Case Chats */}
 						{mode === "external" && !activeConvId && (
 							<div style={directoryContainerStyle}>
-								<div style={sectionHeaderStyle}>ASSIGNED APPLICANT CONVERSATIONS</div>
-								<div style={{ flex: 1, overflowY: "auto", padding: "6px" }}>
+								<div style={sectionHeaderStyle}>ASSIGNED CLIENT CHATS</div>
+								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
 									{convsLoading ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "12px" }}>
-											Loading client conversations...
+										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+											LOADING CLIENT CHATS...
 										</div>
 									) : externalConversations.length === 0 ? (
 										<div style={{ textAlign: "center", color: "#71717a", padding: "40px 20px" }}>
-											<p style={{ fontWeight: 600, color: "#e4e4e7", fontSize: "13px" }}>No Client Chats Assigned</p>
-											<p style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "4px" }}>
-												When applicants send messages in their portal, their case threads appear here.
+											<p style={{ fontWeight: 700, color: "#f4f4f5", fontSize: "12px", letterSpacing: "0.04em" }}>NO ACTIVE CLIENT CHATS</p>
+											<p style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "4px" }}>
+												Client case messages will appear here.
 											</p>
 										</div>
 									) : (
@@ -399,22 +377,22 @@ export function CommunicationHub() {
 												onClick={() => openConversation(c)}
 												style={clientChatCardBtnStyle}
 											>
-												<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+												<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
 													<span style={avatarPillStyle}>
 														{c.title.slice(0, 2).toUpperCase()}
 													</span>
 													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 600, fontSize: "12px", color: "#f4f4f5" }}>
-															{c.title}
+														<div style={{ fontWeight: 700, fontSize: "11px", color: "#f4f4f5", letterSpacing: "0.02em" }}>
+															{c.title.toUpperCase()}
 														</div>
-														<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
-															{c.lastMessage?.content.slice(0, 40) || "No messages yet"}
+														<div style={{ fontSize: "10px", color: "#a1a1aa", fontFamily: "monospace" }}>
+															{c.lastMessage?.content.slice(0, 36) || "No messages yet"}
 														</div>
 													</div>
 												</div>
 												<div style={{ textAlign: "right" }}>
 													<span style={stagePillMiniStyle}>{c.type.toUpperCase()}</span>
-													{c.unreadCount > 0 && <span style={unreadBadgeStyle}>{c.unreadCount}</span>}
+													{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
 												</div>
 											</button>
 										))
@@ -423,24 +401,24 @@ export function CommunicationHub() {
 							</div>
 						)}
 
-						{/* Active Conversation Stream (Used for both 1-on-1 Staff DMs and Client Chats) */}
+						{/* Active Conversation Stream */}
 						{activeConvId && (
 							<div style={streamContainerStyle}>
-								{/* Conversation Header */}
+								{/* Header */}
 								<div style={threadHeaderStyle}>
 									<button
 										type="button"
 										onClick={() => setActiveConvId(null)}
 										style={backBtnStyle}
 									>
-										← Back
+										[ BACK ]
 									</button>
 									<div>
-										<div style={{ fontWeight: 700, fontSize: "13px", color: "#ffffff" }}>
-											{activeConv?.title || "Conversation"}
+										<div style={{ fontWeight: 700, fontSize: "12px", color: "#ffffff", letterSpacing: "0.04em" }}>
+											{activeConv?.title.toUpperCase() || "CONVERSATION"}
 										</div>
-										<div style={{ fontSize: "10px", color: "#a1a1aa", fontFamily: "monospace" }}>
-											{mode === "internal" ? "🔒 1-on-1 Private Staff Thread" : "🌐 Client Case Thread"}
+										<div style={{ fontSize: "9px", color: "#71717a", fontFamily: "monospace" }}>
+											{mode === "internal" ? "ISOLATED STAFF THREAD" : "CLIENT CASE THREAD"}
 										</div>
 									</div>
 									<span style={stagePillMiniStyle}>
@@ -452,9 +430,9 @@ export function CommunicationHub() {
 								<div style={messageListStyle}>
 									{messages.length === 0 && !msgsLoading && (
 										<div style={{ textAlign: "center", color: "#71717a", padding: "40px 20px" }}>
-											<p style={{ fontSize: "13px", color: "#e4e4e7" }}>Direct Session Started</p>
-											<p style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "4px" }}>
-												Messages sent here are private and isolated between participants.
+											<p style={{ fontSize: "12px", color: "#f4f4f5", fontWeight: 700 }}>SESSION STARTED</p>
+											<p style={{ fontSize: "10px", color: "#a1a1aa", marginTop: "4px", fontFamily: "monospace" }}>
+												Messages sent here are isolated to participants.
 											</p>
 										</div>
 									)}
@@ -474,7 +452,7 @@ export function CommunicationHub() {
 														...(isMe ? myBubbleStyle : theirBubbleStyle),
 													}}
 												>
-													<div style={bubbleAuthorStyle}>{isMe ? "You" : m.senderName}</div>
+													<div style={bubbleAuthorStyle}>{isMe ? "YOU" : m.senderName.toUpperCase()}</div>
 													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
 													<div style={bubbleTimeStyle}>
 														{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -484,13 +462,13 @@ export function CommunicationHub() {
 										);
 									})}
 									{msgsLoading && (
-										<div style={{ textAlign: "center", color: "#71717a", fontSize: "11px", padding: "10px" }}>
-											Loading messages...
+										<div style={{ textAlign: "center", color: "#71717a", fontSize: "10px", padding: "10px", fontFamily: "monospace" }}>
+											LOADING MESSAGES...
 										</div>
 									)}
 								</div>
 
-								{/* Send Input */}
+								{/* Send Form */}
 								<form onSubmit={onSend} style={formStyle}>
 									<input
 										type="text"
@@ -501,7 +479,7 @@ export function CommunicationHub() {
 										disabled={sending}
 									/>
 									<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-										{sending ? "..." : "Send ➔"}
+										{sending ? "..." : "SEND"}
 									</button>
 								</form>
 							</div>
@@ -513,52 +491,38 @@ export function CommunicationHub() {
 	);
 }
 
-/* ── Monochrome Styles for OPS Hub ─────────────────────────────────────── */
+/* ── Strict Brutalist Styles for OPS Hub ───────────────────────────────── */
 
-const launcherStyle: CSSProperties = {
+const launcherSquareBtnStyle: CSSProperties = {
 	position: "fixed",
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
+	width: "48px",
+	height: "48px",
 	display: "flex",
 	alignItems: "center",
-	gap: "10px",
-	padding: "10px 18px",
-	background: "#09090b",
+	justifyContent: "center",
+	background: "#000000",
 	color: "#ffffff",
 	border: "1px solid #27272a",
-	borderRadius: "9999px",
-	boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
+	borderRadius: "0px",
+	boxShadow: "0 10px 30px rgba(0,0,0,0.8)",
 	cursor: "pointer",
 };
 
-const launcherTextCol: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "flex-start",
-	textAlign: "left",
-};
-
-const launcherTitleStyle: CSSProperties = {
-	fontSize: "13px",
-	fontWeight: 700,
-	color: "#fafafa",
-};
-
-const launcherSubtitleStyle: CSSProperties = {
-	fontSize: "11px",
-	color: "#a1a1aa",
+const unreadSquareBadgeStyle: CSSProperties = {
+	position: "absolute",
+	top: "-6px",
+	right: "-6px",
+	background: "#ffffff",
+	color: "#000000",
+	fontSize: "10px",
+	fontWeight: 800,
 	fontFamily: "monospace",
-};
-
-const launcherBadgeStyle: CSSProperties = {
-	background: "#dc2626",
-	color: "#ffffff",
-	fontSize: "11px",
-	fontWeight: 700,
-	padding: "2px 7px",
-	borderRadius: "9999px",
-	marginLeft: "4px",
+	padding: "1px 5px",
+	border: "1px solid #000000",
+	borderRadius: "0px",
 };
 
 const windowContainerStyle: CSSProperties = {
@@ -571,13 +535,13 @@ const windowContainerStyle: CSSProperties = {
 	maxHeight: "calc(100vh - 100px)",
 	background: "#09090b",
 	border: "1px solid #27272a",
-	borderRadius: "8px",
-	boxShadow: "0 25px 50px -12px rgba(0,0,0,0.8)",
+	borderRadius: "0px",
+	boxShadow: "0 25px 50px rgba(0,0,0,0.9)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
 	color: "#fafafa",
-	transition: "width 0.25s ease, height 0.25s ease",
+	transition: "width 0.2s ease, height 0.2s ease",
 };
 
 const windowExpandedStyle: CSSProperties = {
@@ -590,33 +554,34 @@ const headerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "12px 16px",
+	padding: "10px 14px",
 	background: "#000000",
 	borderBottom: "1px solid #27272a",
 };
 
+const indicatorDotStyle: CSSProperties = {
+	width: "6px",
+	height: "6px",
+	background: "#ffffff",
+	borderRadius: "0px",
+};
+
 const headerTitleStyle: CSSProperties = {
-	fontSize: "12px",
+	fontSize: "11px",
 	fontWeight: 700,
-	letterSpacing: "0.06em",
-	margin: 0,
+	letterSpacing: "0.08em",
+	fontFamily: "monospace",
 	color: "#ffffff",
 };
 
-const headerSubtitleStyle: CSSProperties = {
-	fontSize: "9px",
-	color: "#71717a",
-	fontFamily: "monospace",
-	margin: 0,
-};
-
 const presenceSelectStyle: CSSProperties = {
-	background: "#18181b",
+	background: "#121215",
 	color: "#fafafa",
 	border: "1px solid #27272a",
-	borderRadius: "4px",
-	fontSize: "11px",
-	padding: "4px 8px",
+	borderRadius: "0px",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	padding: "3px 6px",
 	outline: "none",
 };
 
@@ -624,21 +589,21 @@ const controlBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "1px solid #27272a",
 	color: "#a1a1aa",
-	width: "26px",
-	height: "26px",
-	borderRadius: "4px",
+	width: "24px",
+	height: "24px",
+	borderRadius: "0px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	fontSize: "12px",
+	fontSize: "11px",
 };
 
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr",
 	borderBottom: "1px solid #27272a",
-	background: "#09090b",
+	background: "#000000",
 };
 
 const channelBtnStyle: CSSProperties = {
@@ -647,26 +612,29 @@ const channelBtnStyle: CSSProperties = {
 	border: "none",
 	borderBottom: "2px solid transparent",
 	color: "#71717a",
-	fontSize: "12px",
-	fontWeight: 600,
+	fontSize: "11px",
+	fontWeight: 700,
+	letterSpacing: "0.06em",
+	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	gap: "6px",
+	gap: "4px",
 	cursor: "pointer",
+	borderRadius: "0px",
 };
 
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#ffffff",
 	borderBottomColor: "#ffffff",
-	background: "#18181b",
+	background: "#121215",
 };
 
 const tabDotBadgeStyle: CSSProperties = {
-	width: "6px",
-	height: "6px",
-	borderRadius: "50%",
-	background: "#dc2626",
+	width: "4px",
+	height: "4px",
+	background: "#ffffff",
+	borderRadius: "0px",
 };
 
 const workspaceStandardStyle: CSSProperties = {
@@ -692,21 +660,22 @@ const directoryContainerStyle: CSSProperties = {
 
 const searchInputStyle: CSSProperties = {
 	width: "100%",
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	color: "#fafafa",
-	padding: "8px 12px",
-	fontSize: "12px",
+	padding: "6px 10px",
+	fontSize: "11px",
+	fontFamily: "monospace",
 	outline: "none",
 	boxSizing: "border-box",
 };
 
 const sectionHeaderStyle: CSSProperties = {
-	padding: "8px 12px",
-	background: "#0c0c0e",
+	padding: "6px 10px",
+	background: "#000000",
 	color: "#71717a",
-	fontSize: "10px",
+	fontSize: "9px",
 	fontWeight: 700,
 	letterSpacing: "0.08em",
 	fontFamily: "monospace",
@@ -718,10 +687,11 @@ const activeChatRowStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "8px 12px",
+	padding: "8px 10px",
 	background: "transparent",
 	border: "none",
 	borderBottom: "1px solid #1c1c1f",
+	borderRadius: "0px",
 	cursor: "pointer",
 	textAlign: "left",
 };
@@ -731,11 +701,11 @@ const staffCardBtnStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "10px 12px",
+	padding: "8px 10px",
 	background: "transparent",
 	border: "none",
 	borderBottom: "1px solid #1c1c1f",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	cursor: "pointer",
 };
 
@@ -744,78 +714,72 @@ const clientChatCardBtnStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "12px 14px",
+	padding: "10px 12px",
 	background: "transparent",
 	border: "none",
 	borderBottom: "1px solid #1c1c1f",
+	borderRadius: "0px",
 	cursor: "pointer",
 };
 
 const avatarPillStyle: CSSProperties = {
-	width: "32px",
-	height: "32px",
-	borderRadius: "4px",
+	width: "28px",
+	height: "28px",
+	borderRadius: "0px",
 	background: "#ffffff",
 	color: "#000000",
 	fontWeight: 800,
-	fontSize: "12px",
+	fontSize: "11px",
+	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 };
 
 const avatarMiniStyle: CSSProperties = {
-	width: "26px",
-	height: "26px",
-	borderRadius: "4px",
+	width: "24px",
+	height: "24px",
+	borderRadius: "0px",
 	background: "#27272a",
 	color: "#ffffff",
 	fontWeight: 700,
-	fontSize: "11px",
+	fontSize: "10px",
+	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 };
 
-const presenceDotMiniStyle: CSSProperties = {
-	position: "absolute",
-	bottom: "-2px",
-	right: "-2px",
-	width: "8px",
-	height: "8px",
-	borderRadius: "50%",
-	border: "1px solid #09090b",
-};
-
 const presenceBadgeStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontFamily: "monospace",
 	color: "#a1a1aa",
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
-	padding: "2px 6px",
-	borderRadius: "2px",
+	padding: "2px 5px",
+	borderRadius: "0px",
 };
 
 const stagePillMiniStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontFamily: "monospace",
 	fontWeight: 700,
 	color: "#a1a1aa",
-	background: "#18181b",
+	background: "#000000",
 	border: "1px solid #27272a",
-	padding: "2px 6px",
-	borderRadius: "2px",
+	padding: "2px 5px",
+	borderRadius: "0px",
 };
 
-const unreadBadgeStyle: CSSProperties = {
-	background: "#dc2626",
-	color: "#ffffff",
-	fontSize: "10px",
-	fontWeight: 700,
-	padding: "2px 6px",
-	borderRadius: "9999px",
-	marginLeft: "6px",
+const unreadSquareBadgeInlineStyle: CSSProperties = {
+	background: "#ffffff",
+	color: "#000000",
+	fontSize: "9px",
+	fontWeight: 800,
+	fontFamily: "monospace",
+	padding: "1px 5px",
+	border: "1px solid #000000",
+	borderRadius: "0px",
 };
 
 const streamContainerStyle: CSSProperties = {
@@ -829,7 +793,7 @@ const threadHeaderStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "10px 14px",
+	padding: "8px 12px",
 	background: "#121215",
 	borderBottom: "1px solid #27272a",
 };
@@ -838,19 +802,20 @@ const backBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "1px solid #27272a",
 	color: "#fafafa",
-	padding: "4px 8px",
-	borderRadius: "4px",
-	fontSize: "11px",
+	padding: "3px 6px",
+	borderRadius: "0px",
+	fontSize: "10px",
+	fontFamily: "monospace",
 	cursor: "pointer",
 };
 
 const messageListStyle: CSSProperties = {
 	flex: 1,
 	overflowY: "auto",
-	padding: "14px",
+	padding: "12px",
 	display: "flex",
 	flexDirection: "column",
-	gap: "10px",
+	gap: "8px",
 };
 
 const messageRowStyle: CSSProperties = {
@@ -860,14 +825,14 @@ const messageRowStyle: CSSProperties = {
 
 const messageBubbleStyle: CSSProperties = {
 	maxWidth: "80%",
-	padding: "10px 14px",
-	borderRadius: "4px",
-	fontSize: "13px",
+	padding: "8px 12px",
+	borderRadius: "0px",
+	fontSize: "12px",
 };
 
 const myBubbleStyle: CSSProperties = {
 	background: "#ffffff",
-	color: "#09090b",
+	color: "#000000",
 	border: "1px solid #ffffff",
 };
 
@@ -878,16 +843,16 @@ const theirBubbleStyle: CSSProperties = {
 };
 
 const bubbleAuthorStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontWeight: 700,
-	textTransform: "uppercase",
-	letterSpacing: "0.05em",
+	fontFamily: "monospace",
+	letterSpacing: "0.06em",
 	opacity: 0.6,
 	marginBottom: "4px",
 };
 
 const bubbleTimeStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontFamily: "monospace",
 	opacity: 0.5,
 	marginTop: "4px",
@@ -896,20 +861,20 @@ const bubbleTimeStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
 	display: "flex",
-	padding: "10px 12px",
+	padding: "8px 10px",
 	background: "#000000",
 	borderTop: "1px solid #27272a",
-	gap: "8px",
+	gap: "6px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	color: "#fafafa",
-	padding: "8px 12px",
-	fontSize: "13px",
+	padding: "8px 10px",
+	fontSize: "12px",
 	outline: "none",
 };
 
@@ -917,10 +882,12 @@ const sendBtnStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#000000",
 	border: "none",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	padding: "8px 14px",
 	fontWeight: 700,
-	fontSize: "12px",
+	fontSize: "11px",
+	fontFamily: "monospace",
+	letterSpacing: "0.05em",
 	cursor: "pointer",
 };
 
@@ -928,17 +895,18 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#450a0a",
-	color: "#fecaca",
-	padding: "6px 12px",
-	fontSize: "11px",
-	borderBottom: "1px solid #7f1d1d",
+	background: "#27272a",
+	color: "#ffffff",
+	padding: "6px 10px",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	borderBottom: "1px solid #3f3f46",
 };
 
 const errorCloseStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
-	color: "#fecaca",
+	color: "#ffffff",
 	cursor: "pointer",
 	fontWeight: 700,
 };

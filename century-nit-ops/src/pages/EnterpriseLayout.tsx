@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
-import { roleCanAccess, API_PREFIX } from "century-nit-shared";
+import { roleCanAccess } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useOpsNotifications } from "../hooks/useOpsNotifications";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
 import { publicSiteUrl } from "../lib/publicSite";
-import { apiFetch } from "../lib/api";
 
 type NavItem = { to: string; module: OpsModule; label: string; blurb: string; icon: string };
 type NavGroup = { group: string; icon: string; blurb: string; children: NavItem[] };
@@ -205,42 +204,10 @@ export function EnterpriseLayout() {
 	});
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
 
-	const { consultations } = useCasesApi();
-	const [apiLeads, setApiLeads] = useState<Array<{ id: string; stage: string }>>([]);
-
-	useEffect(() => {
-		let isMounted = true;
-		const fetchLeads = async () => {
-			try {
-				const res = await apiFetch<{ leads: Array<{ id: string; stage: string }> }>(`${API_PREFIX}/leads`);
-				if (isMounted && res && Array.isArray(res.leads)) {
-					setApiLeads(res.leads);
-				}
-			} catch {
-				// ignore
-			}
-		};
-		void fetchLeads();
-		const interval = setInterval(fetchLeads, 10000);
-		return () => {
-			isMounted = false;
-			clearInterval(interval);
-		};
-	}, []);
-
-	const unreadCount = useMemo(() => {
-		if (!opsUser) return 0;
-		let count = 0;
-		for (const c of consultations) {
-			if (c.status === "Under Review" && !c.assignedOfficer) count++;
-			if (c.assignedOfficer === opsUser.name && c.status === "Assigned" && !c.slotConfirmed) count++;
-		}
-		// Count new captured CRM leads
-		for (const al of apiLeads) {
-			if (al.stage === "New Lead") count++;
-		}
-		return count;
-	}, [consultations, opsUser, apiLeads, opsRole]);
+	// The bell badge reflects the real, server-side notification count — not a
+	// heuristic derived from polled leads/consultations. Those still get polled
+	// by their own pages (inbox, consultations, leads) for their own lists.
+	const { unreadCount } = useOpsNotifications();
 
 	return (
 		<div className="portal">

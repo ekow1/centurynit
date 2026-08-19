@@ -1,6 +1,7 @@
 import { calendarWorker } from "./calendar.js";
 import { emailWorker } from "./email.js";
-import { calendarQueue, connection, emailQueue } from "./queues.js";
+import { pushWorker } from "./push.js";
+import { calendarQueue, connection, emailQueue, pushQueue } from "./queues.js";
 
 /**
  * Background worker process.
@@ -25,6 +26,7 @@ import { calendarQueue, connection, emailQueue } from "./queues.js";
 const workers = [
 	{ name: "email", worker: emailWorker },
 	{ name: "calendar", worker: calendarWorker },
+	{ name: "push", worker: pushWorker },
 ];
 
 console.log(
@@ -57,7 +59,7 @@ async function shutdown(signal: string) {
 
 	try {
 		await Promise.all(workers.map(({ worker }) => worker.close()));
-		await Promise.all([emailQueue.close(), calendarQueue.close()]);
+		await Promise.all([emailQueue.close(), calendarQueue.close(), pushQueue.close()]);
 		await connection.quit();
 		clearTimeout(timeout);
 		console.log("Workers stopped cleanly.");

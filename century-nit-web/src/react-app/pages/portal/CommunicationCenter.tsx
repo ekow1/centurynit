@@ -3,14 +3,14 @@ import { meApi } from "century-nit-core";
 import type { CommunicationContext, ChatMessage } from "century-nit-shared";
 
 /**
- * Unified Monochrome Floating Communication Hub for Century NIT Client Portal.
+ * Strict Monochrome Brutalist Floating Communication Hub for Century NIT Client Portal.
  *
- * Conforms strictly to the Century NIT Brutalist Monochrome Design System.
- * Features:
- *   1. Support Desk (Default) — Always available 24/7 direct helpdesk.
- *   2. Assigned Officer — Direct 1-on-1 chat with the assigned consultant / stage specialist.
- *   3. Century AI Assistant — Instant study-abroad guidance and knowledge assistant.
- *   4. Expandable Workstation — Dual mode (Standard 390px docked floating window & Expanded 820px split workstation).
+ * Rules:
+ *   - Strict 0px border-radius (no rounded corners).
+ *   - Pure monochrome palette (#000000, #09090b, #18181b, #27272a, #ffffff).
+ *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
+ *   - 3 Clean Channels: SUPPORT (Default), ASSIGNED OFFICER, AI ADVISOR.
+ *   - Expandable Workstation: Standard 390px floating card <-> 820px widescreen workspace.
  */
 
 const POLL_MS = 10_000;
@@ -37,7 +37,7 @@ export function CommunicationCenter() {
 	const [expanded, setExpanded] = useState(false);
 	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("support");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
-	
+
 	// Server Chat State (Support & Officer)
 	const [activeConvId, setActiveConvId] = useState<string | null>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -51,7 +51,7 @@ export function CommunicationCenter() {
 		{
 			id: "ai-welcome",
 			sender: "ai",
-			text: "Hello! I am your Century NIT AI Advisor. Ask me anything about university admissions, visa requirements, scholarships, or application stages.",
+			text: "Century NIT AI Advisor online. Inquire about university admissions, visa requirements, scholarships, or application stages.",
 			at: new Date().toISOString(),
 		},
 	]);
@@ -187,7 +187,7 @@ export function CommunicationCenter() {
 
 		setTimeout(() => {
 			const lower = query.toLowerCase();
-			let replyText = "I understand your query. For detailed personal evaluation of your profile, our admissions team can guide you through the required documentation and university options. You can also chat directly with our Support Desk on the Support tab.";
+			let replyText = "Query received. For specific profile evaluations, our admissions and visa officers are available on the Support desk.";
 
 			if (lower.includes("visa") || lower.includes("embassy") || lower.includes("cas") || lower.includes("i-20")) {
 				replyText = AI_KNOWLEDGE_BASE.visa;
@@ -210,7 +210,7 @@ export function CommunicationCenter() {
 
 			setAiMessages((prev) => [...prev, aiMsg]);
 			setAiTyping(false);
-		}, 600);
+		}, 400);
 	}, [aiDraft, aiTyping]);
 
 	// Auto-scroll on new messages
@@ -222,24 +222,29 @@ export function CommunicationCenter() {
 
 	return (
 		<>
-			{/* Floating Capsule Launcher Button */}
+			{/* Floating Square Launcher Button (Pure SVG icon, no text, 0px border-radius) */}
 			<button
 				type="button"
 				onClick={() => {
 					setOpen((prev) => !prev);
 					if (!open) handleSelectChannel(activeChannel);
 				}}
-				style={launcherStyle}
-				aria-label="Open Communication Hub"
+				style={launcherSquareBtnStyle}
+				aria-label="Open Chat"
 			>
-				<span style={launcherIconStyle}>💬</span>
-				<div style={launcherTextCol}>
-					<span style={launcherTitleStyle}>Century Communication</span>
-					<span style={launcherSubtitleStyle}>
-						{totalUnread > 0 ? `${totalUnread} new message${totalUnread > 1 ? "s" : ""}` : "Support · Consultant · AI"}
-					</span>
-				</div>
-				{totalUnread > 0 && <span style={launcherBadgeStyle}>{totalUnread}</span>}
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2"
+					strokeLinecap="square"
+					strokeLinejoin="miter"
+				>
+					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+				</svg>
+				{totalUnread > 0 && <span style={unreadSquareBadgeStyle}>{totalUnread}</span>}
 			</button>
 
 			{/* Floating Hub Window */}
@@ -248,19 +253,16 @@ export function CommunicationCenter() {
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={headerDotStyle} />
-							<div>
-								<h2 style={headerTitleStyle}>COMMUNICATION HUB</h2>
-								<p style={headerSubtitleStyle}>CENTURY NIT APPLICANT NETWORK</p>
-							</div>
+							<span style={indicatorDotStyle} />
+							<span style={headerTitleStyle}>CHAT</span>
 						</div>
-						<div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
 							<button
 								type="button"
 								onClick={() => setExpanded((prev) => !prev)}
 								style={controlBtnStyle}
-								title={expanded ? "Restore down" : "Expand to widescreen"}
-								aria-label={expanded ? "Restore down" : "Expand"}
+								title={expanded ? "Restore" : "Expand"}
+								aria-label={expanded ? "Restore" : "Expand"}
 							>
 								{expanded ? "⤡" : "⤢"}
 							</button>
@@ -268,7 +270,7 @@ export function CommunicationCenter() {
 								type="button"
 								onClick={() => setOpen(false)}
 								style={controlBtnStyle}
-								title="Close hub"
+								title="Close"
 								aria-label="Close"
 							>
 								✕
@@ -276,7 +278,7 @@ export function CommunicationCenter() {
 						</div>
 					</header>
 
-					{/* Channel Segmented Switcher */}
+					{/* Channel Tabs */}
 					<nav style={channelNavStyle} aria-label="Chat Channels">
 						<button
 							type="button"
@@ -286,8 +288,7 @@ export function CommunicationCenter() {
 								...(activeChannel === "support" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span style={{ fontSize: "14px" }}>🛡️</span>
-							<span>Support</span>
+							SUPPORT
 						</button>
 						<button
 							type="button"
@@ -297,19 +298,8 @@ export function CommunicationCenter() {
 								...(activeChannel === "officer" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span style={{ fontSize: "14px" }}>👤</span>
-							<span>Assigned Officer</span>
-							{isOfficerAssigned && (
-								<span
-									style={{
-										width: "6px",
-										height: "6px",
-										borderRadius: "50%",
-										background: "#10b981",
-										marginLeft: "4px",
-									}}
-								/>
-							)}
+							OFFICER
+							{isOfficerAssigned && <span style={assignedDotStyle} />}
 						</button>
 						<button
 							type="button"
@@ -319,15 +309,14 @@ export function CommunicationCenter() {
 								...(activeChannel === "ai" ? activeChannelBtnStyle : {}),
 							}}
 						>
-							<span style={{ fontSize: "14px" }}>✨</span>
-							<span>Century AI</span>
+							AI
 						</button>
 					</nav>
 
 					{/* Error Notification */}
 					{error && (
 						<div style={errorBannerStyle}>
-							<span>⚠ {error}</span>
+							<span>{error}</span>
 							<button type="button" onClick={() => setError(null)} style={errorCloseStyle}>✕</button>
 						</div>
 					)}
@@ -338,15 +327,12 @@ export function CommunicationCenter() {
 						{activeChannel === "support" && (
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
-									<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-										<span style={avatarPillStyle}>CN</span>
-										<div>
-											<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
-												Century Support Desk
-											</div>
-											<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
-												● 24/7 Helpdesk & Triage Desk
-											</div>
+									<div>
+										<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+											CENTURY SUPPORT DESK
+										</div>
+										<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+											24/7 HELPDESK & TRIAGE
 										</div>
 									</div>
 									<span style={stagePillStyle}>SUPPORT</span>
@@ -356,18 +342,18 @@ export function CommunicationCenter() {
 								<div style={messageListStyle}>
 									{messages.length === 0 && !loadingMsgs && (
 										<div style={emptySupportPromptStyle}>
-											<p style={{ fontWeight: 600, color: "#e4e4e7", marginBottom: "6px" }}>
-												How can we help you today?
+											<p style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", marginBottom: "6px", letterSpacing: "0.04em" }}>
+												DIRECT SUPPORT QUEUE
 											</p>
-											<p style={{ fontSize: "12px", color: "#a1a1aa", marginBottom: "12px", lineHeight: 1.4 }}>
-												Send a message directly to our central support team. Responses appear here in real-time.
+											<p style={{ fontSize: "11px", color: "#a1a1aa", marginBottom: "12px", lineHeight: 1.4 }}>
+												Send a message directly to central support. Responses appear here in real-time.
 											</p>
 											<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
 												{["Payment & Invoices", "Document Review Status", "Visa Consultation"].map((t) => (
 													<button
 														key={t}
 														type="button"
-														onClick={() => setDraft(`Inquiry regarding ${t}: `)}
+														onClick={() => setDraft(`Inquiry: ${t} - `)}
 														style={quickChipStyle}
 													>
 														{t}
@@ -394,7 +380,7 @@ export function CommunicationCenter() {
 													}}
 												>
 													<div style={bubbleAuthorStyle}>
-														{isMe ? "You" : m.senderName}
+														{isMe ? "YOU" : m.senderName.toUpperCase()}
 													</div>
 													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
 													<div style={bubbleTimeStyle}>
@@ -405,8 +391,8 @@ export function CommunicationCenter() {
 										);
 									})}
 									{loadingMsgs && (
-										<div style={{ textAlign: "center", color: "#71717a", fontSize: "12px", padding: "10px" }}>
-											Loading conversation...
+										<div style={{ textAlign: "center", color: "#71717a", fontSize: "11px", padding: "10px", fontFamily: "monospace" }}>
+											LOADING CONVERSATION...
 										</div>
 									)}
 									<div ref={messagesEndRef} />
@@ -418,12 +404,12 @@ export function CommunicationCenter() {
 										type="text"
 										value={draft}
 										onChange={(e) => setDraft(e.target.value)}
-										placeholder="Message support desk..."
+										placeholder="Type a message..."
 										style={inputStyle}
 										disabled={sending}
 									/>
 									<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-										{sending ? "..." : "Send ➔"}
+										{sending ? "..." : "SEND"}
 									</button>
 								</form>
 							</div>
@@ -435,21 +421,12 @@ export function CommunicationCenter() {
 								{isOfficerAssigned ? (
 									<>
 										<div style={officerHeaderCardStyle}>
-											<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-												<span style={avatarPillStyle}>
-													{currentContact.contact.name
-														.split(" ")
-														.map((n) => n[0])
-														.slice(0, 2)
-														.join("")}
-												</span>
-												<div>
-													<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
-														{currentContact.contact.name}
-													</div>
-													<div style={{ fontSize: "11px", color: "#10b981", fontFamily: "monospace" }}>
-														● {currentContact.contact.role} · {currentContact.contact.branch} Branch
-													</div>
+											<div>
+												<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+													{currentContact.contact.name.toUpperCase()}
+												</div>
+												<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+													{(currentContact.contact.role || "").toUpperCase()} · {(currentContact.contact.branch || "").toUpperCase()}
 												</div>
 											</div>
 											<span style={stagePillStyle}>{currentContact.stageLabel.toUpperCase()}</span>
@@ -458,9 +435,11 @@ export function CommunicationCenter() {
 										<div style={messageListStyle}>
 											{messages.length === 0 && !loadingMsgs && (
 												<div style={{ textAlign: "center", color: "#71717a", padding: "30px 20px" }}>
-													<p style={{ fontSize: "13px", color: "#e4e4e7" }}>Direct Officer Thread</p>
-													<p style={{ fontSize: "12px", marginTop: "4px" }}>
-														You are connected directly with {currentContact.contact.name}. Send your questions regarding {currentContact.stageLabel}.
+													<p style={{ fontSize: "12px", color: "#f4f4f5", fontWeight: 700, letterSpacing: "0.04em" }}>
+														DIRECT OFFICER THREAD
+													</p>
+													<p style={{ fontSize: "11px", marginTop: "4px" }}>
+														Connected directly with {currentContact.contact.name}.
 													</p>
 												</div>
 											)}
@@ -480,7 +459,7 @@ export function CommunicationCenter() {
 																...(isMe ? myBubbleStyle : theirBubbleStyle),
 															}}
 														>
-															<div style={bubbleAuthorStyle}>{isMe ? "You" : m.senderName}</div>
+															<div style={bubbleAuthorStyle}>{isMe ? "YOU" : m.senderName.toUpperCase()}</div>
 															<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
 															<div style={bubbleTimeStyle}>
 																{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -502,25 +481,24 @@ export function CommunicationCenter() {
 												disabled={sending}
 											/>
 											<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-												{sending ? "..." : "Send ➔"}
+												{sending ? "..." : "SEND"}
 											</button>
 										</form>
 									</>
 								) : (
 									<div style={unassignedStateStyle}>
-										<div style={{ fontSize: "28px", marginBottom: "12px" }}>👤</div>
-										<h3 style={{ fontSize: "15px", fontWeight: 700, color: "#f4f4f5", marginBottom: "8px" }}>
+										<div style={{ fontSize: "12px", fontWeight: 700, color: "#f4f4f5", marginBottom: "8px", letterSpacing: "0.04em" }}>
 											CONSULTANT BEING ASSIGNED
-										</h3>
-										<p style={{ fontSize: "12px", color: "#a1a1aa", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
-											Your case coordinator or branch will assign your dedicated specialist once your booking or application milestone is active.
+										</div>
+										<p style={{ fontSize: "11px", color: "#a1a1aa", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
+											Your dedicated specialist will appear here once your application milestone or consultation is active.
 										</p>
 										<button
 											type="button"
 											onClick={() => handleSelectChannel("support")}
 											style={switchChannelActionBtnStyle}
 										>
-											Chat with Support Desk Instead ➔
+											SWITCH TO SUPPORT
 										</button>
 									</div>
 								)}
@@ -531,18 +509,15 @@ export function CommunicationCenter() {
 						{activeChannel === "ai" && (
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
-									<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-										<span style={{ ...avatarPillStyle, background: "#27272a", color: "#fafafa" }}>AI</span>
-										<div>
-											<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
-												Century AI Advisor
-											</div>
-											<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
-												● Study Abroad Knowledge Assistant
-											</div>
+									<div>
+										<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+											CENTURY AI
+										</div>
+										<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+											KNOWLEDGE ASSISTANT
 										</div>
 									</div>
-									<span style={stagePillStyle}>24/7 ADVISOR</span>
+									<span style={stagePillStyle}>AI ENGINE</span>
 								</div>
 
 								<div style={messageListStyle}>
@@ -562,7 +537,7 @@ export function CommunicationCenter() {
 														...(isMe ? myBubbleStyle : theirBubbleStyle),
 													}}
 												>
-													<div style={bubbleAuthorStyle}>{isMe ? "You" : "Century AI"}</div>
+													<div style={bubbleAuthorStyle}>{isMe ? "YOU" : "CENTURY AI"}</div>
 													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
 													<div style={bubbleTimeStyle}>
 														{new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -572,8 +547,8 @@ export function CommunicationCenter() {
 										);
 									})}
 									{aiTyping && (
-										<div style={{ display: "flex", alignItems: "center", gap: "4px", padding: "8px 12px", color: "#71717a", fontSize: "12px" }}>
-											<span>Century AI is generating answer...</span>
+										<div style={{ padding: "8px 12px", color: "#71717a", fontSize: "11px", fontFamily: "monospace" }}>
+											GENERATING RESPONSE...
 										</div>
 									)}
 									<div ref={messagesEndRef} />
@@ -582,10 +557,10 @@ export function CommunicationCenter() {
 								{/* AI Quick Prompts */}
 								<div style={aiPromptsRowStyle}>
 									{[
-										"What are the visa requirements?",
-										"Scholarships available?",
-										"Required documents?",
-										"Payment plan options?",
+										"Visa requirements",
+										"Scholarships",
+										"Required documents",
+										"Payment plan",
 									].map((prompt) => (
 										<button
 											key={prompt}
@@ -603,11 +578,11 @@ export function CommunicationCenter() {
 										type="text"
 										value={aiDraft}
 										onChange={(e) => setAiDraft(e.target.value)}
-										placeholder="Ask Century AI anything..."
+										placeholder="Ask Century AI..."
 										style={inputStyle}
 									/>
 									<button type="submit" disabled={!aiDraft.trim() || aiTyping} style={sendBtnStyle}>
-										Ask ➔
+										ASK
 									</button>
 								</form>
 							</div>
@@ -619,58 +594,38 @@ export function CommunicationCenter() {
 	);
 }
 
-/* ── Monochrome Styles ─────────────────────────────────────────────────── */
+/* ── Strict Monochrome Brutalist Styles ───────────────────────────────── */
 
-const launcherStyle: CSSProperties = {
+const launcherSquareBtnStyle: CSSProperties = {
 	position: "fixed",
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
+	width: "48px",
+	height: "48px",
 	display: "flex",
 	alignItems: "center",
-	gap: "10px",
-	padding: "10px 18px",
-	background: "#09090b",
+	justifyContent: "center",
+	background: "#000000",
 	color: "#ffffff",
 	border: "1px solid #27272a",
-	borderRadius: "9999px",
-	boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
+	borderRadius: "0px",
+	boxShadow: "0 10px 30px rgba(0,0,0,0.8)",
 	cursor: "pointer",
-	transition: "transform 0.2s, border-color 0.2s",
 };
 
-const launcherIconStyle: CSSProperties = {
-	fontSize: "18px",
-};
-
-const launcherTextCol: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "flex-start",
-	textAlign: "left",
-};
-
-const launcherTitleStyle: CSSProperties = {
-	fontSize: "13px",
-	fontWeight: 700,
-	letterSpacing: "-0.01em",
-	color: "#fafafa",
-};
-
-const launcherSubtitleStyle: CSSProperties = {
-	fontSize: "11px",
-	color: "#a1a1aa",
+const unreadSquareBadgeStyle: CSSProperties = {
+	position: "absolute",
+	top: "-6px",
+	right: "-6px",
+	background: "#ffffff",
+	color: "#000000",
+	fontSize: "10px",
+	fontWeight: 800,
 	fontFamily: "monospace",
-};
-
-const launcherBadgeStyle: CSSProperties = {
-	background: "#dc2626",
-	color: "#ffffff",
-	fontSize: "11px",
-	fontWeight: 700,
-	padding: "2px 7px",
-	borderRadius: "9999px",
-	marginLeft: "4px",
+	padding: "1px 5px",
+	border: "1px solid #000000",
+	borderRadius: "0px",
 };
 
 const windowContainerStyle: CSSProperties = {
@@ -678,18 +633,18 @@ const windowContainerStyle: CSSProperties = {
 	bottom: "84px",
 	right: "24px",
 	zIndex: 9999,
-	width: "400px",
+	width: "390px",
 	height: "580px",
 	maxHeight: "calc(100vh - 100px)",
 	background: "#09090b",
 	border: "1px solid #27272a",
-	borderRadius: "8px",
-	boxShadow: "0 25px 50px -12px rgba(0,0,0,0.75)",
+	borderRadius: "0px",
+	boxShadow: "0 25px 50px rgba(0,0,0,0.9)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
 	color: "#fafafa",
-	transition: "width 0.25s ease, height 0.25s ease",
+	transition: "width 0.2s ease, height 0.2s ease",
 };
 
 const windowExpandedStyle: CSSProperties = {
@@ -702,53 +657,45 @@ const headerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "12px 16px",
+	padding: "10px 14px",
 	background: "#000000",
 	borderBottom: "1px solid #27272a",
 };
 
-const headerDotStyle: CSSProperties = {
-	width: "8px",
-	height: "8px",
-	borderRadius: "50%",
-	background: "#22c55e",
+const indicatorDotStyle: CSSProperties = {
+	width: "6px",
+	height: "6px",
+	background: "#ffffff",
+	borderRadius: "0px",
 };
 
 const headerTitleStyle: CSSProperties = {
-	fontSize: "12px",
+	fontSize: "11px",
 	fontWeight: 700,
-	letterSpacing: "0.06em",
-	margin: 0,
-	color: "#ffffff",
-};
-
-const headerSubtitleStyle: CSSProperties = {
-	fontSize: "9px",
-	color: "#71717a",
-	fontFamily: "monospace",
 	letterSpacing: "0.08em",
-	margin: 0,
+	fontFamily: "monospace",
+	color: "#ffffff",
 };
 
 const controlBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "1px solid #27272a",
 	color: "#a1a1aa",
-	width: "26px",
-	height: "26px",
-	borderRadius: "4px",
+	width: "24px",
+	height: "24px",
+	borderRadius: "0px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	fontSize: "12px",
+	fontSize: "11px",
 };
 
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr 1fr",
 	borderBottom: "1px solid #27272a",
-	background: "#09090b",
+	background: "#000000",
 };
 
 const channelBtnStyle: CSSProperties = {
@@ -757,20 +704,29 @@ const channelBtnStyle: CSSProperties = {
 	border: "none",
 	borderBottom: "2px solid transparent",
 	color: "#71717a",
-	fontSize: "12px",
-	fontWeight: 600,
+	fontSize: "11px",
+	fontWeight: 700,
+	letterSpacing: "0.06em",
+	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	gap: "6px",
+	gap: "4px",
 	cursor: "pointer",
-	transition: "color 0.15s, border-color 0.15s",
+	borderRadius: "0px",
 };
 
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#ffffff",
 	borderBottomColor: "#ffffff",
-	background: "#18181b",
+	background: "#121215",
+};
+
+const assignedDotStyle: CSSProperties = {
+	width: "4px",
+	height: "4px",
+	background: "#ffffff",
+	borderRadius: "0px",
 };
 
 const bodyStandardStyle: CSSProperties = {
@@ -803,34 +759,21 @@ const officerHeaderCardStyle: CSSProperties = {
 	borderBottom: "1px solid #27272a",
 };
 
-const avatarPillStyle: CSSProperties = {
-	width: "32px",
-	height: "32px",
-	borderRadius: "4px",
-	background: "#ffffff",
-	color: "#000000",
-	fontWeight: 800,
-	fontSize: "12px",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-};
-
 const stagePillStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontFamily: "monospace",
 	fontWeight: 700,
 	color: "#a1a1aa",
-	background: "#18181b",
+	background: "#000000",
 	border: "1px solid #27272a",
 	padding: "2px 6px",
-	borderRadius: "2px",
+	borderRadius: "0px",
 };
 
 const messageListStyle: CSSProperties = {
 	flex: 1,
 	overflowY: "auto",
-	padding: "14px",
+	padding: "12px",
 	display: "flex",
 	flexDirection: "column",
 	gap: "10px",
@@ -843,14 +786,14 @@ const messageRowStyle: CSSProperties = {
 
 const messageBubbleStyle: CSSProperties = {
 	maxWidth: "85%",
-	padding: "10px 14px",
-	borderRadius: "4px",
-	fontSize: "13px",
+	padding: "8px 12px",
+	borderRadius: "0px",
+	fontSize: "12px",
 };
 
 const myBubbleStyle: CSSProperties = {
 	background: "#ffffff",
-	color: "#09090b",
+	color: "#000000",
 	border: "1px solid #ffffff",
 };
 
@@ -861,16 +804,16 @@ const theirBubbleStyle: CSSProperties = {
 };
 
 const bubbleAuthorStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontWeight: 700,
-	textTransform: "uppercase",
-	letterSpacing: "0.05em",
+	fontFamily: "monospace",
+	letterSpacing: "0.06em",
 	opacity: 0.6,
 	marginBottom: "4px",
 };
 
 const bubbleTimeStyle: CSSProperties = {
-	fontSize: "10px",
+	fontSize: "9px",
 	fontFamily: "monospace",
 	opacity: 0.5,
 	marginTop: "4px",
@@ -879,20 +822,20 @@ const bubbleTimeStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
 	display: "flex",
-	padding: "10px 12px",
+	padding: "8px 10px",
 	background: "#000000",
 	borderTop: "1px solid #27272a",
-	gap: "8px",
+	gap: "6px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	color: "#fafafa",
-	padding: "8px 12px",
-	fontSize: "13px",
+	padding: "8px 10px",
+	fontSize: "12px",
 	outline: "none",
 };
 
@@ -900,28 +843,31 @@ const sendBtnStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#000000",
 	border: "none",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	padding: "8px 14px",
 	fontWeight: 700,
-	fontSize: "12px",
+	fontSize: "11px",
+	fontFamily: "monospace",
+	letterSpacing: "0.05em",
 	cursor: "pointer",
 };
 
 const emptySupportPromptStyle: CSSProperties = {
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
-	borderRadius: "4px",
-	padding: "16px",
+	borderRadius: "0px",
+	padding: "14px",
 	margin: "auto 0",
 };
 
 const quickChipStyle: CSSProperties = {
-	background: "#09090b",
+	background: "#000000",
 	border: "1px solid #27272a",
 	color: "#d4d4d8",
-	fontSize: "11px",
+	fontSize: "10px",
+	fontFamily: "monospace",
 	padding: "4px 8px",
-	borderRadius: "4px",
+	borderRadius: "0px",
 	cursor: "pointer",
 };
 
@@ -929,19 +875,20 @@ const aiPromptsRowStyle: CSSProperties = {
 	display: "flex",
 	gap: "6px",
 	overflowX: "auto",
-	padding: "6px 12px",
-	background: "#09090b",
+	padding: "6px 10px",
+	background: "#000000",
 	borderTop: "1px solid #27272a",
 };
 
 const aiQuickChipStyle: CSSProperties = {
 	whiteSpace: "nowrap",
-	background: "#18181b",
+	background: "#121215",
 	border: "1px solid #27272a",
 	color: "#a1a1aa",
-	fontSize: "11px",
-	padding: "4px 8px",
-	borderRadius: "4px",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	padding: "3px 6px",
+	borderRadius: "0px",
 	cursor: "pointer",
 };
 
@@ -959,10 +906,12 @@ const switchChannelActionBtnStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#000000",
 	border: "none",
-	borderRadius: "4px",
-	padding: "10px 16px",
+	borderRadius: "0px",
+	padding: "8px 14px",
 	fontWeight: 700,
-	fontSize: "12px",
+	fontSize: "11px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
 	cursor: "pointer",
 };
 
@@ -970,17 +919,18 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#450a0a",
-	color: "#fecaca",
-	padding: "6px 12px",
-	fontSize: "11px",
-	borderBottom: "1px solid #7f1d1d",
+	background: "#27272a",
+	color: "#ffffff",
+	padding: "6px 10px",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	borderBottom: "1px solid #3f3f46",
 };
 
 const errorCloseStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
-	color: "#fecaca",
+	color: "#ffffff",
 	cursor: "pointer",
 	fontWeight: 700,
 };

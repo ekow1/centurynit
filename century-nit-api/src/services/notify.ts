@@ -1,46 +1,44 @@
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { notifications, opsUsers } from "../db/schema.js";
-import { eq, and } from "drizzle-orm";
+import { opsUsers, users } from "../db/schema.js";
+import { notifications } from "../db/schema.js";
 import { connection } from "../worker/queues.js";
 
 /**
- * Unified notification service.
+ * Unified in-app notification service.
  *
- * Every business event that needs to tell someone something flows through
- * `notify()`. This inserts a row into the `notifications` table (so the
- * portal/ops bell can list it) and publishes to Redis pub/sub (so any
- * connected SSE client pushes it in real-time).
+ * `notify()` is the single producer for the `notifications` table. It writes a
+ * row (the source of truth, so a notification survives a Redis hiccup) and then
+ * publishes the same payload to Redis pub/sub so any connected SSE/WebSocket
+ * listener can push it to the client in real time.
  *
- * Email and push are handled by their own queues — `notify()` is the in-app
- * channel only. Callers that also need email should call `queueEmails()`
- * alongside `notify()` (or use `notifyWith()` for convenience).
+ * Every call site wraps `notify()` in `.catch(() => {})` — a notification
+ * failure must never roll back the business operation that triggered it
+ * (§13), the same contract the email queue already honours.
  */
 
-export type NotificationPriority = "critical" | "high" | "normal" | "low";
+export type NotificationPriority = "low" | "normal" | "high";
 
-export type NotificationEvent = {
-	/** The `users.id` of the recipient — same table for clients and staff. */
+export type NotifyEvent = {
 	recipientUserId: string;
 	type: string;
 	title: string;
 	body: string;
-	link?: string;
+	link?: string | null;
 	priority?: NotificationPriority;
 };
 
-/** A notification row as returned to the client. */
-export type NotificationRow = {
-	id: string;
-	type: string;
-	title: string;
-	body: string;
-	link: string | null;
-	read: boolean;
-	createdAt: string;
-};
+/** Redis channel clients subscribe to for real-time delivery. */
+export const NOTIFICATION_CHANNEL = "century-nit:notifications";
 
-/** Insert a notification and publish it to Redis for SSE delivery. */
-export async function notify(event: NotificationEvent): Promise<void> {
+/**
+ * Insert a notification and publish it to Redis pub/sub.
+ *
+ * Returns the created row on success. Callers that treat this as fire-and-
+ * forget should chain `.catch(() => {})` so a transient Redis/DB error does not
+ * surface as a 500 on the triggering request.
+ */
+export async function notify(event: NotifyEvent): Promise<typeof notifications.$inferSelect> {
 	const [row] = await db
 		.insert(notifications)
 		.values({
@@ -52,67 +50,68 @@ export async function notify(event: NotificationEvent): Promise<void> {
 		})
 		.returning();
 
-	const channel = `user:${event.recipientUserId}:notifications`;
-	const payload = JSON.stringify({
-		id: row.id,
-		type: row.type,
-		title: row.title,
-		body: row.body,
-		link: row.link,
-		createdAt: row.createdAt.toISOString(),
-	});
+	// Best-effort realtime fan-out. A failed publish just means the client polls
+	// on its next request — the row is already persisted.
+	try {
+		await connection.publish(
+			NOTIFICATION_CHANNEL,
+			JSON.stringify({
+				id: row.id,
+				userId: row.userId,
+				type: row.type,
+				title: row.title,
+				body: row.body,
+				link: row.link,
+				createdAt: row.createdAt.toISOString(),
+				priority: event.priority ?? "normal",
+			}),
+		);
+	} catch (err) {
+		console.warn("[notify] redis publish failed:", err instanceof Error ? err.message : err);
+	}
 
-	await connection.publish(channel, payload).catch(() => {
-		/* Redis pub/sub is best-effort — SSE clients fall back to polling */
-	});
+	return row;
 }
 
-/** Notify multiple recipients. */
-export async function notifyMany(events: NotificationEvent[]): Promise<void> {
+/**
+ * Batch variant of {@link notify}. Inserts all rows in one statement and
+ * publishes each payload. Use this when several recipients get the same event
+ * (e.g. every manager is told about a new booking).
+ */
+export async function notifyMany(events: NotifyEvent[]): Promise<void> {
+	if (events.length === 0) return;
 	await Promise.all(events.map((e) => notify(e).catch(() => {})));
 }
 
 /**
- * Resolve ops staff user IDs for a given role (or all active staff).
- * Returns `users.id` values suitable for `notify()`.
+ * Every active manager, coordinator and super admin — the roles that triage
+ * unassigned work. Returns the `users.id` (what `notifications.userId` stores)
+ * alongside the name and email for callers that also send an email.
  */
-export async function getStaffUserIdsByRole(
-	roles?: string[],
-): Promise<{ userId: string; name: string; email: string }[]> {
-	const conditions = [eq(opsUsers.active, true)];
-	if (roles && roles.length > 0) {
-		conditions.push(
-			roles.length === 1
-				? eq(opsUsers.role, roles[0])
-				: (() => {
-						throw new Error("Use query builder for multiple roles");
-					})(),
-		);
-	}
-
-	const rows = await db
-		.select({ userId: opsUsers.userId, name: opsUsers.name, email: opsUsers.email })
-		.from(opsUsers)
-		.where(and(...conditions));
-
-	return rows.filter((r): r is { userId: string; name: string; email: string } => r.userId !== null);
-}
-
-/** Get all active managers and coordinators (for new-lead / unassigned-booking alerts). */
 export async function getManagerAndCoordinatorUserIds(): Promise<
 	{ userId: string; name: string; email: string }[]
 > {
 	const rows = await db
-		.select({ userId: opsUsers.userId, name: opsUsers.name, email: opsUsers.email, role: opsUsers.role })
+		.select({
+			userId: opsUsers.userId,
+			name: opsUsers.name,
+			email: opsUsers.email,
+		})
 		.from(opsUsers)
-		.where(eq(opsUsers.active, true));
+		.where(
+			and(
+				eq(opsUsers.active, true),
+				inArray(opsUsers.role, ["manager", "coordinator", "super_admin"]),
+			),
+		);
 
-	return rows
-		.filter((r) => r.userId !== null && (r.role === "manager" || r.role === "coordinator" || r.role === "super_admin"))
-		.map((r) => ({ userId: r.userId!, name: r.name, email: r.email }));
+	// `userId` is nullable on opsUsers (a staff row may exist before the auth
+	// link is made). Drop any that are not yet linked — they cannot receive an
+	// in-app notification until they are.
+	return rows.filter((r): r is { userId: string; name: string; email: string } => Boolean(r.userId));
 }
 
-/** Resolve a single staff member's userId from their opsUserId. */
+/** Resolve an `ops_users.id` to the `users.id` that owns the session. */
 export async function getStaffUserId(opsUserId: string): Promise<string | null> {
 	const [row] = await db
 		.select({ userId: opsUsers.userId })
@@ -122,7 +121,7 @@ export async function getStaffUserId(opsUserId: string): Promise<string | null> 
 	return row?.userId ?? null;
 }
 
-/** Resolve a single staff member's userId from their email. */
+/** Resolve a staff member's email to the `users.id` that owns the session. */
 export async function getStaffUserIdByEmail(email: string): Promise<string | null> {
 	const [row] = await db
 		.select({ userId: opsUsers.userId })
@@ -130,4 +129,17 @@ export async function getStaffUserIdByEmail(email: string): Promise<string | nul
 		.where(eq(opsUsers.email, email))
 		.limit(1);
 	return row?.userId ?? null;
+}
+
+/**
+ * Resolve a client/applicant's `users.id` from their email. Used by callers
+ * that have a booking's `clientEmail` snapshot rather than the user id.
+ */
+export async function getUserIdByEmail(email: string): Promise<string | null> {
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, email))
+		.limit(1);
+	return row?.id ?? null;
 }

@@ -20,6 +20,7 @@ import {
 	CalendarAuthError,
 } from "./calendar/index.js";
 import * as mail from "./notifications.js";
+import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserIdByEmail } from "./notify.js";
 import { queueCalendar, queueEmails, queueReminder, cancelQueued, releaseCalendarJob } from "../worker/queues.js";
 
 /**
@@ -227,6 +228,23 @@ export async function createBooking(input: {
 		...managers.map((m) => mail.bookingCreatedForManagers(ctx, m.email)),
 	]);
 
+	// In-app notification to every manager/coordinator/super_admin: a new
+	// booking is waiting to be assigned. Fire-and-forget so a notification
+	// hiccup never rolls back the booking (§13).
+	getManagerAndCoordinatorUserIds()
+		.then((recipients) =>
+			notifyMany(
+				recipients.map((r) => ({
+					recipientUserId: r.userId,
+					type: "booking.new",
+					title: "New booking awaiting assignment",
+					body: `${booking.clientName} booked a consultation. Ref: ${booking.reference}`,
+					link: "/ops/cases",
+				})),
+			),
+		)
+		.catch(() => {});
+
 	return booking;
 }
 
@@ -328,6 +346,23 @@ export async function assignBooking(input: {
 	const ctx = await notificationContext(updated, employee);
 	await queueEmails([mail.bookingAssignedForClient(ctx), mail.bookingAssignedForEmployee(ctx)]);
 	await scheduleReminders(updated, employee);
+
+	// In-app notification to the assigned employee about their new consultation.
+	if (employee?.email) {
+		getStaffUserIdByEmail(employee.email)
+			.then((userId) =>
+				userId
+					? notify({
+							recipientUserId: userId,
+							type: "booking.assigned",
+							title: "New consultation assigned",
+							body: `${updated.clientName}'s consultation has been assigned to you. Ref: ${updated.reference}`,
+							link: "/ops/cases",
+						}).catch(() => {})
+					: undefined,
+			)
+			.catch(() => {});
+	}
 
 	const { syncConsultationAssignment } = await import("./cases.js");
 	await syncConsultationAssignment(updated.id, employeeId, actor);
@@ -560,6 +595,30 @@ export async function rescheduleBooking(input: {
 	]);
 	if (employee) await scheduleReminders(updated, employee);
 
+	// In-app: tell the client and (if assigned) the employee the slot moved.
+	notify({
+		recipientUserId: updated.clientUserId,
+		type: "booking.rescheduled",
+		title: "Your appointment has been rescheduled",
+		body: `Your consultation has been moved to a new time. Ref: ${updated.reference}`,
+		link: "/portal/tracking",
+	}).catch(() => {});
+	if (employee?.email) {
+		getStaffUserIdByEmail(employee.email)
+			.then((userId) =>
+				userId
+					? notify({
+							recipientUserId: userId,
+							type: "booking.rescheduled",
+							title: "Consultation rescheduled",
+							body: `${updated.clientName}'s consultation has been rescheduled. Ref: ${updated.reference}`,
+							link: "/ops/cases",
+						}).catch(() => {})
+					: undefined,
+			)
+			.catch(() => {});
+	}
+
 	return updated;
 }
 
@@ -661,6 +720,30 @@ export async function decideRescheduleBooking(
 			...(employee ? [mail.bookingRescheduled(ctx, "employee")] : []),
 		]);
 		if (employee) await scheduleReminders(updated, employee);
+
+		// In-app: the approved reschedule is communicated to client + employee.
+		notify({
+			recipientUserId: updated.clientUserId,
+			type: "booking.rescheduled",
+			title: "Your reschedule request was approved",
+			body: `Your consultation has been moved to a new time. Ref: ${updated.reference}`,
+			link: "/portal/tracking",
+		}).catch(() => {});
+		if (employee?.email) {
+			getStaffUserIdByEmail(employee.email)
+				.then((userId) =>
+					userId
+						? notify({
+								recipientUserId: userId,
+								type: "booking.rescheduled",
+								title: "Consultation rescheduled",
+								body: `${updated.clientName}'s consultation has been rescheduled. Ref: ${updated.reference}`,
+								link: "/ops/cases",
+							}).catch(() => {})
+						: undefined,
+				)
+				.catch(() => {});
+		}
 
 		return updated;
 	} else {
@@ -770,6 +853,31 @@ export async function cancelBooking(input: {
 		mail.bookingCancelled(ctx, "client"),
 		...(employee ? [mail.bookingCancelled(ctx, "employee")] : []),
 	]);
+
+	// In-app: the client and (if assigned) the employee are told the booking
+	// is gone.
+	notify({
+		recipientUserId: updated.clientUserId,
+		type: "booking.cancelled",
+		title: "Your appointment has been cancelled",
+		body: `Your consultation on ${updated.reference} has been cancelled.`,
+		link: "/portal/tracking",
+	}).catch(() => {});
+	if (employee?.email) {
+		getStaffUserIdByEmail(employee.email)
+			.then((userId) =>
+				userId
+					? notify({
+							recipientUserId: userId,
+							type: "booking.cancelled",
+							title: "Consultation cancelled",
+							body: `${updated.clientName}'s consultation has been cancelled. Ref: ${updated.reference}`,
+							link: "/ops/cases",
+						}).catch(() => {})
+					: undefined,
+			)
+			.catch(() => {});
+	}
 
 	return updated;
 }

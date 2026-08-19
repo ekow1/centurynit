@@ -1,6 +1,7 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
+import { notifyMany, getManagerAndCoordinatorUserIds } from "./notify.js";
 
 export interface LeadView {
 	id: string;
@@ -160,6 +161,9 @@ export async function captureLeadFromUser(
 		});
 
 		console.log(`[CRM] Auto-captured new lead for user: ${normalizedEmail} (source: ${source})`);
+
+		// In-app: surface the new lead to managers/coordinators/super_admins.
+		notifyManagersOfNewLead(displayName, source).catch(() => {});
 	} catch (err) {
 		console.error("[CRM] Failed to capture lead from user auth:", err);
 	}
@@ -182,6 +186,24 @@ export async function recordLeadEvent(
 	} catch (err) {
 		console.warn("[CRM] Failed to record lead event:", err);
 	}
+}
+
+/**
+ * Surface a freshly-captured lead to every manager/coordinator/super_admin so
+ * it is not left sitting unread. Fire-and-forget at the call site.
+ */
+async function notifyManagersOfNewLead(name: string, source: string): Promise<void> {
+	const recipients = await getManagerAndCoordinatorUserIds();
+	if (recipients.length === 0) return;
+	await notifyMany(
+		recipients.map((r) => ({
+			recipientUserId: r.userId,
+			type: "lead.new",
+			title: "New lead received",
+			body: `${name} — ${source}`,
+			link: "/ops/leads",
+		})),
+	);
 }
 
 /** Get the activity timeline for a lead. */
@@ -286,6 +308,9 @@ export async function createManualLead(input: {
 			stage: "New Lead",
 		})
 		.returning();
+
+	// In-app: surface the manually-created lead to managers/coordinators.
+	notifyManagersOfNewLead(created.name, created.source).catch(() => {});
 
 	return {
 		id: created.id,

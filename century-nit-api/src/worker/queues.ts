@@ -31,6 +31,7 @@ const RETRY: JobsOptions = {
 
 export const emailQueue = new Queue("email", { connection });
 export const calendarQueue = new Queue("calendar", { connection });
+export const pushQueue = new Queue("push", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -111,4 +112,35 @@ export async function cancelQueued(idempotencyKey: string): Promise<void> {
 			/* already gone or running — nothing to do */
 		});
 	}
+}
+
+/* ── Push (browser notifications) ────────────────────────────────────────── */
+
+/**
+ * One push fan-out: deliver a single notification to every subscription owned
+ * by `userId`. The worker reads the subscriptions from the DB at run time, so
+ * a browser that subscribes after the job was enqueued still receives it as
+ * long as the job has not yet been picked up.
+ */
+export type PushJob = {
+	userId: string;
+	notification: {
+		id: string;
+		type: string;
+		title: string;
+		body: string;
+		link?: string | null;
+	};
+};
+
+/**
+ * Queue a push fan-out for a notification row.
+ *
+ * The idempotency key is `push:{notificationId}:{userId}`, so re-running the
+ * same logical notification collapses onto the existing job instead of
+ * lighting up every browser a second time.
+ */
+export async function queuePush(job: PushJob): Promise<void> {
+	const id = `push:${job.notification.id}:${job.userId}`;
+	await pushQueue.add("send", job, { ...RETRY, jobId: toJobId(id) });
 }

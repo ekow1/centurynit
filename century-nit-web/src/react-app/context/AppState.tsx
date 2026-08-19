@@ -15,6 +15,7 @@ import {
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
 import { invoicesApi } from "century-nit-core/api";
 import {
+	API_PREFIX,
 	JOURNEY_STAGE_TO_PORTAL,
 	type JourneyStage,
 } from "century-nit-shared";
@@ -25,7 +26,6 @@ import {
 	BOOKING_STORAGE_KEY,
 	formatDualCurrency,
 	MESSAGES_KEY,
-	NOTIFICATIONS_KEY,
 	PORTAL_INTERVIEW_KEY,
 	PRE_DEPARTURE_KEY,
 	PRE_DEPARTURE_TASKS,
@@ -36,7 +36,6 @@ import {
 	AGENCY_DEPOSIT_PORTION,
 	serviceFeeFor,
 	SEED_MESSAGES,
-	SEED_NOTIFICATIONS,
 	STORAGE_KEY,
 	VISA_INVOICE_AMOUNT,
 	VISA_STAGE_FEE,
@@ -1019,16 +1018,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 	});
 
-	const [notifications, setNotifications] = useState<AppNotification[]>(() => {
-		try {
-			const raw = localStorage.getItem(NOTIFICATIONS_KEY);
-			if (!raw) return SEED_NOTIFICATIONS;
-			const parsed = JSON.parse(raw) as AppNotification[];
-			return Array.isArray(parsed) ? parsed : SEED_NOTIFICATIONS;
-		} catch {
-			return SEED_NOTIFICATIONS;
-		}
-	});
+	/**
+	 * Notifications are now server-driven (polling + SSE). The server is the
+	 * source of truth — no localStorage seeding or persistence. `syncFromServer`
+	 * hydrates the list on mount and every 30s; the SSE `EventSource` (below)
+	 * prepends new notifications in real time.
+	 */
+	const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
 	const [preDepartureTasks, setPreDepartureTasks] = useState<PreDepartureTask[]>(() => {
 		try {
@@ -1083,10 +1079,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		safeSetJSON(MESSAGES_KEY, messages);
 	}, [messages]);
-
-	useEffect(() => {
-		safeSetJSON(NOTIFICATIONS_KEY, notifications);
-	}, [notifications]);
 
 	useEffect(() => {
 		safeSetJSON(PRE_DEPARTURE_KEY, preDepartureTasks);
@@ -1829,10 +1821,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		setNotifications((prev) =>
 			prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
 		);
+		void meApi.markNotificationRead(id).catch(() => { /* keep local */ });
 	}, []);
 
 	const markAllNotificationsRead = useCallback(() => {
 		setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+		void meApi.markAllNotificationsRead().catch(() => { /* keep local */ });
 	}, []);
 
 	const revealOutcome = useCallback(async () => {
@@ -2015,18 +2009,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		/* ── Sync in-app notifications from server ── */
 		try {
 			const notifRes = await meApi.notifications();
-			if (notifRes?.notifications?.length) {
-				const serverNotifs: AppNotification[] = notifRes.notifications.map((n) => ({
-					id: n.id,
-					type: n.type as AppNotification["type"],
-					title: n.title,
-					body: n.body,
-					read: n.read,
-					at: n.createdAt,
-					link: n.link ?? undefined,
-				}));
-				setNotifications(serverNotifs);
-			}
+			const serverNotifs: AppNotification[] = (notifRes?.notifications ?? []).map((n) => ({
+				id: n.id,
+				type: n.type as AppNotification["type"],
+				title: n.title,
+				body: n.body,
+				read: n.read,
+				at: n.createdAt,
+				link: n.link ?? undefined,
+			}));
+			setNotifications(serverNotifs);
 		} catch {
 			/* keep local values */
 		}
@@ -2081,6 +2073,59 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		const id = window.setInterval(() => void syncFromServer(), 30_000);
 		return () => window.clearInterval(id);
 	}, [authUser, syncFromServer]);
+
+	/**
+	 * Real-time notifications via Server-Sent Events. SSE is the primary
+	 * delivery channel; the 30s `syncFromServer` poll (above) is a fallback
+	 * that catches anything missed while the stream is disconnected. The
+	 * `EventSource` is same-origin against the portal's `/api/v1` proxy, so
+	 * it rides the existing auth cookie — no headers needed.
+	 */
+	useEffect(() => {
+		if (!authUser) return;
+		const url = `${API_PREFIX}/events/stream`;
+		const es = new EventSource(url);
+
+		es.addEventListener("connected", () => {
+			console.log("[SSE] notifications stream connected");
+		});
+
+		es.addEventListener("notification", (event) => {
+			try {
+				const data = JSON.parse((event as MessageEvent).data) as {
+					id: string;
+					type: string;
+					title: string;
+					body: string;
+					link: string | null;
+					createdAt: string;
+				};
+				const notif: AppNotification = {
+					id: data.id,
+					type: data.type as AppNotification["type"],
+					title: data.title,
+					body: data.body,
+					at: data.createdAt,
+					read: false,
+					link: data.link ?? undefined,
+				};
+				setNotifications((prev) =>
+					prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
+				);
+			} catch {
+				/* ignore malformed payloads */
+			}
+		});
+
+		es.addEventListener("error", () => {
+			// EventSource auto-reconnects; just log for debugging.
+			console.warn("[SSE] notifications stream error — reconnecting");
+		});
+
+		return () => {
+			es.close();
+		};
+	}, [authUser]);
 
 	const unreadCount = useMemo(
 		() => notifications.filter((n) => !n.read).length,

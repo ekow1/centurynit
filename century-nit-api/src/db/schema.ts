@@ -1447,8 +1447,20 @@ export const notifications = pgTable(
 	}),
 );
 
-/* ── Push subscriptions (Web Push) ───────────────────────────────────────── */
-
+/**
+ * Web Push (browser push notification) subscriptions.
+ *
+ * A user may have several subscriptions — one per browser/device. Each row
+ * stores the PushSubscription endpoint and keys (p256dh + auth) that the
+ * browser produced via `pushManager.subscribe()`. The push worker fans a
+ * notification out to every subscription for the recipient and prunes any that
+ * the push service reports as 410 Gone / 404 (the subscription expired or was
+ * revoked by the user).
+ *
+ * `UNIQUE(endpoint)` doubles as the dedup target for the upsert: re-subscribing
+ * the same browser updates the keys and refreshes `lastUsedAt` rather than
+ * accumulating duplicate rows.
+ */
 export const pushSubscriptions = pgTable(
 	"push_subscriptions",
 	{
@@ -1456,16 +1468,14 @@ export const pushSubscriptions = pgTable(
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		endpoint: text("endpoint").notNull(),
-		/** Web Push keys: { p256dh, auth } */
-		keys: jsonb("keys").notNull(),
+		endpoint: text("endpoint").notNull().unique(),
+		keys: jsonb("keys").$type<{ p256dh: string; auth: string }>().notNull(),
 		userAgent: text("user_agent"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
 	},
 	(t) => ({
 		byUser: index("push_subs_user_idx").on(t.userId),
-		uniqueEndpoint: uniqueIndex("push_subs_endpoint_idx").on(t.endpoint),
 	}),
 );
 

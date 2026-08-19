@@ -26,6 +26,7 @@ import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
+import { notify, getStaffUserId } from "./notify.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -584,6 +585,18 @@ export async function assignConsultation(input: {
 				employeeEmail: employee.email,
 			});
 			await queueEmails([email]);
+
+			// In-app notification to the assigned consultant.
+			const userId = await getStaffUserId(employee.id);
+			if (userId) {
+				await notify({
+					recipientUserId: userId,
+					type: "consultation.assigned",
+					title: "New consultation assigned",
+					body: `${applicant?.name ?? "A client"}'s consultation has been assigned to you. Ref: ${updated.reference}`,
+					link: "/ops/cases",
+				}).catch(() => {});
+			}
 		} catch {
 			// Notification failure must not block the assignment.
 		}
@@ -682,6 +695,17 @@ export async function completeConsultationAssessment(input: {
 		// Notification failure must not block the assessment completion.
 	}
 
+	// In-app: tell the client their assessment is ready to view.
+	if (applicant.userId) {
+		notify({
+			recipientUserId: applicant.userId,
+			type: "assessment.complete",
+			title: "Your assessment is complete",
+			body: "Your eligibility assessment has been completed. View your results.",
+			link: "/portal/tracking",
+		}).catch(() => {});
+	}
+
 	if (!eligible) return { consultation: updated, application: null };
 
 	const [existing] = await db
@@ -766,7 +790,7 @@ export async function respondToOutcome(input: {
 						: `Applicant needs more info — ${applicant.name}`,
 					text,
 					html: `<p>${text}</p><p>Consultation ref: ${row.reference}</p>`,
-					idempotencyKey: `outcome-respond-${row.id}-${input.action}-${Date.now()}`,
+					idempotencyKey: `notify:outcome:${row.id}:${input.action}`,
 				},
 			]);
 		}
@@ -903,6 +927,19 @@ export async function setApplicationStage(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	// In-app: let the client know their case has progressed.
+	const clientUserId = await applicantUserIdOfApplication(id);
+	if (clientUserId) {
+		notify({
+			recipientUserId: clientUserId,
+			type: "stage.changed",
+			title: "Your case has moved to the next stage",
+			body: `Your application has advanced to: ${stage}.`,
+			link: "/portal/tracking",
+		}).catch(() => {});
+	}
+
 	return updated;
 }
 
@@ -949,6 +986,19 @@ export async function setApplicationVisaStage(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	// In-app: keep the client informed of visa processing progress.
+	const clientUserId = await applicantUserIdOfApplication(id);
+	if (clientUserId) {
+		notify({
+			recipientUserId: clientUserId,
+			type: "visa.stage_changed",
+			title: "Visa processing update",
+			body: `Your visa processing stage is now: ${stage}.`,
+			link: "/portal/tracking",
+		}).catch(() => {});
+	}
+
 	return updated;
 }
 

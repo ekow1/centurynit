@@ -24,6 +24,7 @@ import { queueEmail } from "../worker/queues.js";
 import type { QueuedEmail } from "./notifications.js";
 import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
+import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -374,6 +375,31 @@ async function sendMessageInternal(
 	// Notify offline participants via email
 	await notifyOfflineParticipants(conversationId, sender, created);
 
+	// In-app: when a staff member replies into an applicant conversation, alert
+	// the applicant so they see the reply without polling. Fire-and-forget.
+	(async () => {
+		try {
+			const [conv] = await db
+				.select({ type: conversations.type, userId: conversations.userId })
+				.from(conversations)
+				.where(eq(conversations.id, conversationId))
+				.limit(1);
+
+			if (conv?.type === "applicant" && conv.userId && conv.userId !== sender.id) {
+				const preview = created.content.length > 160 ? `${created.content.slice(0, 160)}…` : created.content;
+				await notify({
+					recipientUserId: conv.userId,
+					type: "chat.reply",
+					title: `${sender.name} replied`,
+					body: preview,
+					link: "/portal/chat",
+				});
+			}
+		} catch {
+			// Notification failure must not block the message send.
+		}
+	})().catch(() => {});
+
 	return serializeMessage(created);
 }
 
@@ -709,6 +735,51 @@ export async function sendApplicantMessage(
 		.update(conversations)
 		.set({ updatedAt: new Date() })
 		.where(eq(conversations.id, conversationId));
+
+	// In-app: alert the assigned consultant (or the triage queue) that the
+	// applicant sent a message. Fire-and-forget so a notification hiccup never
+	// blocks the message the applicant just sent.
+	(async () => {
+		try {
+			const preview = content.length > 160 ? `${content.slice(0, 160)}…` : content;
+			const title = `${userName} sent a message`;
+
+			const [applicant] = await db
+				.select({ assignedOfficerId: applicants.assignedOfficerId })
+				.from(applicants)
+				.where(eq(applicants.userId, userId))
+				.limit(1);
+
+			const officerId = applicant?.assignedOfficerId ?? null;
+			if (officerId) {
+				const staffUserId = await getStaffUserId(officerId);
+				if (staffUserId) {
+					await notify({
+						recipientUserId: staffUserId,
+						type: "chat.message",
+						title,
+						body: preview,
+						link: "/ops/chat",
+					});
+					return;
+				}
+			}
+
+			// No consultant linked yet — surface to managers/coordinators.
+			const managers = await getManagerAndCoordinatorUserIds();
+			await notifyMany(
+				managers.map((m) => ({
+					recipientUserId: m.userId,
+					type: "chat.message",
+					title,
+					body: preview,
+					link: "/ops/chat",
+				})),
+			);
+		} catch {
+			// Notification failure must not block the message send.
+		}
+	})().catch(() => {});
 
 	return serializeMessage(created);
 }

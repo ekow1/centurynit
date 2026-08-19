@@ -153,6 +153,16 @@ const schema = z.object({
 	 * `platform_settings` via the ops Settings screen, which overrides this.
 	 */
 	PAYSTACK_SECRET_KEY: z.string().optional(),
+
+	/**
+	 * Web Push (VAPID) keys — optional.
+	 *
+	 * If unset here and in platform_settings, the API auto-generates a pair on
+	 * first use and stores it in platform_settings, so this is a fallback /
+	 * bootstrap path rather than the primary source.
+	 */
+	VAPID_PUBLIC_KEY: z.string().optional(),
+	VAPID_PRIVATE_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

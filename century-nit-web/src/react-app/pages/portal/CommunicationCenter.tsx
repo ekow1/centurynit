@@ -601,18 +601,18 @@ const launcherSquareBtnStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "48px",
-	height: "48px",
-	background: "#000000",
+	width: "56px",
+	height: "56px",
+	background: "#18181b",
 	color: "#ffffff",
-	border: "2px solid #000000",
-	borderRadius: "0px",
-	boxShadow: "4px 4px 0px rgba(0,0,0,0.5)",
+	border: "none",
+	borderRadius: "50%",
+	boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	transition: "transform 0.1s ease",
+	transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
 };
 
 const unreadSquareBadgeStyle: CSSProperties = {
@@ -638,14 +638,14 @@ const windowContainerStyle: CSSProperties = {
 	height: "600px",
 	maxHeight: "calc(100vh - 48px)",
 	background: "#ffffff",
-	border: "2px solid #000000",
-	borderRadius: "0px",
-	boxShadow: "6px 6px 0px rgba(0,0,0,1)",
+	border: "1px solid #e4e4e7",
+	borderRadius: "16px",
+	boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15), 0 4px 6px -2px rgba(0,0,0,0.05)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
-	color: "#000000",
-	transition: "width 0.2s ease, height 0.2s ease",
+	color: "#18181b",
+	transition: "width 0.2s ease, height 0.2s ease, transform 0.2s ease",
 };
 
 const windowExpandedStyle: CSSProperties = {
@@ -658,9 +658,9 @@ const headerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "10px 14px",
+	padding: "12px 16px",
 	background: "#ffffff",
-	borderBottom: "2px solid #000000",
+	borderBottom: "1px solid #f4f4f5",
 };
 
 const indicatorDotStyle: CSSProperties = {
@@ -671,59 +671,54 @@ const indicatorDotStyle: CSSProperties = {
 };
 
 const headerTitleStyle: CSSProperties = {
-	fontSize: "12px",
-	fontWeight: 800,
-	letterSpacing: "0.08em",
-	fontFamily: "monospace",
-	color: "#000000",
-	textTransform: "uppercase",
+	fontSize: "13px",
+	fontWeight: 700,
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	color: "#18181b",
 };
 
 const controlBtnStyle: CSSProperties = {
-	background: "#ffffff",
-	border: "2px solid #000000",
-	color: "#000000",
-	width: "24px",
-	height: "24px",
-	borderRadius: "0px",
+	background: "transparent",
+	border: "none",
+	color: "#71717a",
+	width: "28px",
+	height: "28px",
+	borderRadius: "50%",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	fontSize: "12px",
-	fontWeight: 800,
+	fontSize: "14px",
+	transition: "background 0.2s ease, color 0.2s ease",
 };
 
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr 1fr",
-	borderBottom: "2px solid #000000",
-	background: "#ffffff",
+	borderBottom: "1px solid #f4f4f5",
+	background: "#fafafa",
 };
 
 const channelBtnStyle: CSSProperties = {
-	padding: "10px 8px",
-	background: "#ffffff",
+	padding: "12px 8px",
+	background: "transparent",
 	border: "none",
-	borderRight: "2px solid #000000",
-	borderBottom: "2px solid #000000",
-	color: "#000000",
-	fontSize: "11px",
-	fontWeight: 800,
-	letterSpacing: "0.06em",
-	fontFamily: "monospace",
+	borderBottom: "2px solid transparent",
+	color: "#71717a",
+	fontSize: "12px",
+	fontWeight: 600,
+	fontFamily: "system-ui, -apple-system, sans-serif",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	gap: "6px",
 	cursor: "pointer",
-	borderRadius: "0px",
-	textTransform: "uppercase",
+	transition: "color 0.2s ease",
 };
 
 const activeChannelBtnStyle: CSSProperties = {
-	color: "#ffffff",
-	background: "#000000",
+	color: "#18181b",
+	borderBottomColor: "#18181b",
 };
 
 const assignedDotStyle: CSSProperties = {
@@ -758,20 +753,20 @@ const officerHeaderCardStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "10px 14px",
+	padding: "12px 16px",
 	background: "#ffffff",
-	borderBottom: "2px solid #000000",
+	borderBottom: "1px solid #f4f4f5",
 };
 
 const stagePillStyle: CSSProperties = {
 	fontSize: "10px",
-	fontFamily: "monospace",
-	fontWeight: 800,
-	color: "#000000",
-	background: "#ffffff",
-	border: "2px solid #000000",
-	padding: "2px 6px",
-	borderRadius: "0px",
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	fontWeight: 600,
+	color: "#52525b",
+	background: "#f4f4f5",
+	border: "none",
+	padding: "2px 8px",
+	borderRadius: "12px",
 };
 
 const messageListStyle: CSSProperties = {
@@ -789,24 +784,25 @@ const messageRowStyle: CSSProperties = {
 };
 
 const messageBubbleStyle: CSSProperties = {
-	maxWidth: "80%",
+	maxWidth: "75%",
 	padding: "10px 14px",
-	borderRadius: "0px",
 	fontSize: "13px",
-	fontWeight: 500,
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	lineHeight: "1.4",
 };
 
 const myBubbleStyle: CSSProperties = {
-	background: "#ffffff",
-	color: "#000000",
-	border: "2px solid #000000",
-	boxShadow: "2px 2px 0px #000000",
+	background: "#18181b",
+	color: "#ffffff",
+	border: "none",
+	borderRadius: "16px 16px 4px 16px",
 };
 
 const theirBubbleStyle: CSSProperties = {
 	background: "#f4f4f5",
-	color: "#000000",
-	border: "2px solid #000000",
+	color: "#18181b",
+	border: "none",
+	borderRadius: "16px 16px 16px 4px",
 };
 
 const bubbleAuthorStyle: CSSProperties = {
@@ -828,35 +824,38 @@ const bubbleTimeStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
 	display: "flex",
-	padding: "10px",
+	padding: "12px 16px",
 	background: "#ffffff",
-	borderTop: "2px solid #000000",
-	gap: "8px",
+	borderTop: "1px solid #f4f4f5",
+	gap: "10px",
+	alignItems: "center",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
-	background: "#ffffff",
-	border: "2px solid #000000",
-	borderRadius: "0px",
-	color: "#000000",
-	padding: "8px 12px",
+	background: "#f4f4f5",
+	border: "1px solid transparent",
+	borderRadius: "20px",
+	color: "#18181b",
+	padding: "10px 16px",
 	fontSize: "13px",
-	fontWeight: 600,
+	fontFamily: "system-ui, -apple-system, sans-serif",
 	outline: "none",
+	transition: "background 0.2s ease",
 };
 
 const sendBtnStyle: CSSProperties = {
-	background: "#000000",
+	background: "#18181b",
 	color: "#ffffff",
 	border: "none",
-	borderRadius: "0px",
-	padding: "8px 16px",
-	fontWeight: 800,
-	fontSize: "12px",
-	fontFamily: "monospace",
-	letterSpacing: "0.05em",
+	borderRadius: "50%",
+	width: "36px",
+	height: "36px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
 	cursor: "pointer",
+	transition: "transform 0.1s ease, background 0.2s ease",
 };
 
 const emptySupportPromptStyle: CSSProperties = {

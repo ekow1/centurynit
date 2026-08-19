@@ -25,6 +25,7 @@ import type { QueuedEmail } from "./notifications.js";
 import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
+import { publishToUser } from "../worker/pubsub.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -50,6 +51,50 @@ async function getParticipants(conversationId: string) {
 		.from(conversationParticipants)
 		.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
 		.where(eq(conversationParticipants.conversationId, conversationId));
+}
+
+/**
+ * Resolve the Better Auth user.id for each ops participant in a conversation.
+ * SSE channels are keyed by user.id (the `user:{userId}:events` channel), not
+ * opsUserId, so we must translate before publishing.
+ */
+async function getParticipantUserIds(conversationId: string): Promise<string[]> {
+	const rows = await db
+		.select({ userId: opsUsers.userId })
+		.from(conversationParticipants)
+		.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
+		.where(eq(conversationParticipants.conversationId, conversationId));
+	return rows
+		.map((r) => r.userId)
+		.filter((id): id is string => id != null);
+}
+
+/** Publish a chat event to every participant's SSE channel (fire-and-forget). */
+function publishChatEvent(
+	conversationId: string,
+	payload: { type: string; conversationId: string; [key: string]: unknown },
+	excludeOpsUserId?: string,
+): void {
+	(async () => {
+		try {
+			let userIds = await getParticipantUserIds(conversationId);
+			if (excludeOpsUserId) {
+				const [excluded] = await db
+					.select({ userId: opsUsers.userId })
+					.from(opsUsers)
+					.where(eq(opsUsers.id, excludeOpsUserId))
+					.limit(1);
+				if (excluded?.userId) {
+					userIds = userIds.filter((id) => id !== excluded.userId);
+				}
+			}
+			for (const userId of userIds) {
+				publishToUser(userId, payload);
+			}
+		} catch {
+			// SSE is best-effort — a publish failure must not block the send.
+		}
+	})().catch(() => {});
 }
 
 async function countUnread(conversationId: string, opsUserId: string): Promise<number> {
@@ -275,6 +320,13 @@ export async function createConversation(
 		});
 	}
 
+	// Real-time: notify all participants (including creator) that a new
+	// conversation exists so their conversation list refreshes instantly.
+	publishChatEvent(created.id, {
+		type: "chat.conversation.created",
+		conversationId: created.id,
+	});
+
 	return getConversation(created.id, creatorOpsUser.id);
 }
 
@@ -372,6 +424,19 @@ async function sendMessageInternal(
 		);
 	}
 
+	// Real-time: push the new message to all online participants via SSE so
+	// their chat UI appends it instantly without polling. The sender is
+	// excluded — their own send call already returned the message.
+	publishChatEvent(
+		conversationId,
+		{
+			type: "chat.message",
+			conversationId,
+			message: serializeMessage(created),
+		},
+		sender.id,
+	);
+
 	// Notify offline participants via email
 	await notifyOfflineParticipants(conversationId, sender, created);
 
@@ -440,6 +505,20 @@ export async function markAsRead(conversationId: string, opsUserId: string): Pro
 				eq(conversationParticipants.opsUserId, opsUserId),
 			),
 		);
+
+	// Real-time: let the caller's other tabs/devices know unread state changed
+	// so their badge updates without a poll. Published to the caller only.
+	const [staff] = await db
+		.select({ userId: opsUsers.userId })
+		.from(opsUsers)
+		.where(eq(opsUsers.id, opsUserId))
+		.limit(1);
+	if (staff?.userId) {
+		publishToUser(staff.userId, {
+			type: "chat.read",
+			conversationId,
+		});
+	}
 }
 
 /* ── Unread counts ──────────────────────────────────────────────────────── */
@@ -735,6 +814,14 @@ export async function sendApplicantMessage(
 		.update(conversations)
 		.set({ updatedAt: new Date() })
 		.where(eq(conversations.id, conversationId));
+
+	// Real-time: push the applicant's message to all staff participants so
+	// the consultant's chat UI appends it instantly without polling.
+	publishChatEvent(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(created),
+	});
 
 	// In-app: alert the assigned consultant (or the triage queue) that the
 	// applicant sent a message. Fire-and-forget so a notification hiccup never

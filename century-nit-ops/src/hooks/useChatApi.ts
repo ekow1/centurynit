@@ -12,10 +12,9 @@ import {
 	type StaffDirectoryEntry,
 } from "../lib/api";
 import { ApiError } from "../lib/api";
+import { useChatStream } from "./useChatStream";
 
-const POLL_INTERVAL = 30_000;
-
-/** A 403 means the role can't access chat or MFA isn't enrolled — polling won't fix it. */
+/** A 403 means the role can't access chat or MFA isn't enrolled — fetching won't fix it. */
 function isForbidden(e: unknown): boolean {
 	return e instanceof ApiError && e.status === 403;
 }
@@ -26,37 +25,33 @@ export function useChatConversations(enabled = true) {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const forbiddenRef = useRef(false);
 
 	const refresh = useCallback(async () => {
+		if (forbiddenRef.current) return;
 		try {
 			const res = await listChatConversations();
 			setConversations(res.conversations);
 			setError(null);
 		} catch (e: any) {
+			if (isForbidden(e)) { forbiddenRef.current = true; return; }
 			setError(e.message ?? "Failed to load conversations");
-			// Stop polling on 403 — role/MFA won't change mid-session.
-			if (isForbidden(e)) return false as const;
 		} finally {
 			setLoading(false);
 		}
-		return true as const;
 	}, []);
 
+	// Initial load only — SSE keeps the list live after that.
 	useEffect(() => {
-		if (!enabled) return;
-		let active = true;
-		let timer: ReturnType<typeof setInterval> | undefined;
-		const tick = async () => {
-			const keepGoing = await refresh();
-			if (!keepGoing || !active) {
-				if (timer) clearInterval(timer);
-				return;
-			}
-		};
-		void tick();
-		timer = setInterval(tick, POLL_INTERVAL);
-		return () => { active = false; if (timer) clearInterval(timer); };
+		if (!enabled) { setLoading(false); return; }
+		void refresh();
 	}, [enabled, refresh]);
+
+	// SSE: a new conversation was created (by us or someone else) — reload.
+	useChatStream(useCallback((ev) => {
+		if (!enabled) return;
+		if (ev.type === "chat.conversation.created") void refresh();
+	}, [enabled, refresh]));
 
 	return { conversations, loading, error, refresh };
 }
@@ -65,32 +60,29 @@ export function useChatConversations(enabled = true) {
 
 export function useChatUnread(enabled = true) {
 	const [unread, setUnread] = useState({ totalUnread: 0, conversations: [] as { conversationId: string; unreadCount: number }[] });
+	const forbiddenRef = useRef(false);
 
 	const refresh = useCallback(async () => {
+		if (forbiddenRef.current) return;
 		try {
 			setUnread(await getChatUnread());
 		} catch (e) {
-			// Stop polling on 403 — silent for other errors.
-			if (isForbidden(e)) return false as const;
+			if (isForbidden(e)) { forbiddenRef.current = true; }
 		}
-		return true as const;
 	}, []);
 
 	useEffect(() => {
 		if (!enabled) return;
-		let active = true;
-		let timer: ReturnType<typeof setInterval> | undefined;
-		const tick = async () => {
-			const keepGoing = await refresh();
-			if (!keepGoing || !active) {
-				if (timer) clearInterval(timer);
-				return;
-			}
-		};
-		void tick();
-		timer = setInterval(tick, POLL_INTERVAL);
-		return () => { active = false; if (timer) clearInterval(timer); };
+		void refresh();
 	}, [enabled, refresh]);
+
+	// SSE: a new message bumps unread for that conversation; a read event
+	// clears it. We re-fetch on either rather than mutate locally, because
+	// the unread count depends on per-participant lastReadAt on the server.
+	useChatStream(useCallback((ev) => {
+		if (!enabled) return;
+		if (ev.type === "chat.message" || ev.type === "chat.read") void refresh();
+	}, [enabled, refresh]));
 
 	return { unread, refresh };
 }
@@ -156,16 +148,24 @@ export function useChatMessages(conversationId: string | null) {
 		}
 	}, [conversationId]);
 
-	// Poll for new messages
+	// Load on open, then rely on SSE for live updates — no polling.
 	useEffect(() => {
 		if (!conversationId) return;
 		load();
-		const timer = setInterval(load, POLL_INTERVAL);
 		return () => {
-			clearInterval(timer);
 			abortRef.current?.abort();
 		};
 	}, [conversationId, load]);
+
+	// SSE: append incoming messages for this conversation in real time.
+	useChatStream(useCallback((ev) => {
+		if (ev.type !== "chat.message") return;
+		if (ev.conversationId !== conversationId) return;
+		setMessages((prev) => {
+			if (prev.some((m) => m.id === ev.message.id)) return prev;
+			return [...prev, ev.message];
+		});
+	}, [conversationId]));
 
 	return { messages, hasMore, loading, sending, load, loadMore, send, markRead };
 }

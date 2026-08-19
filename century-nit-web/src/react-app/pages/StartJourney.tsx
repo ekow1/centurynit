@@ -9,6 +9,7 @@ import {
 	signInWithGoogle,
 	sendEmailCode,
 	verifyEmailCode,
+	verifyTotp,
 	requestPasswordReset,
 	resetPassword,
 	checkEmailExists,
@@ -62,6 +63,8 @@ export function StartJourney() {
 	const [otpCode, setOtpCode] = useState("");
 	const [name, setName] = useState("");
 	const [loading, setLoading] = useState(false);
+	const [resendCooldown, setResendCooldown] = useState(0);
+	const [mfaCode, setMfaCode] = useState("");
 
 	// Password-reset flow
 	const [step, setStep] = useState<AuthStep>("signin");
@@ -128,6 +131,21 @@ export function StartJourney() {
 		}
 	}, [searchParams, setSearchParams]);
 
+	// Auto-verify the email OTP as soon as the user types the 6th digit — no
+	// need to click "Continue". Skips while loading or after a prior error.
+	useEffect(() => {
+		if (otpCode.length !== 6 || !codeSentTo || loading) return;
+		void onCodeSubmit({ preventDefault() {} } as FormEvent);
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [otpCode]);
+
+	// Resend cooldown ticker — counts down 30s to 0 so the button re-enables.
+	useEffect(() => {
+		if (resendCooldown <= 0) return;
+		const t = window.setTimeout(() => setResendCooldown((s) => s - 1), 1_000);
+		return () => window.clearTimeout(t);
+	}, [resendCooldown]);
+
 	if (sessionStatus === "checking" || settingsLoading) {
 		return (
 			<div className="route-loading" role="status" aria-live="polite">
@@ -189,12 +207,15 @@ export function StartJourney() {
 					? await signInWithEmail({ email: mail, password })
 					: await signUpWithEmail({ email: mail, password, name: displayName });
 
-			// Check if MFA is required via the Better Auth twoFactorRedirect
+			// Check if MFA is required via the Better Auth twoFactorRedirect.
+			// Better Auth issues no session here — the user must provide a TOTP /
+			// email-OTP code before they can continue. Transition to the mfa_otp
+			// step so they can enter it, rather than dead-ending on an error.
 			if ((data as Record<string, unknown>)?.twoFactorRedirect) {
-				// For now, we show the TOTP code input (Better Auth handles this)
-				// In the future this can branch based on the user's mfa_method
 				setLoading(false);
-				setError("MFA verification required. Please use the ops console to set up your MFA method.");
+				setMfaCode("");
+				setError("");
+				setStep("mfa_otp");
 				return;
 			}
 
@@ -261,6 +282,39 @@ export function StartJourney() {
 		setCodeSentTo(null);
 		setOtpCode("");
 		setError("");
+	}
+
+	/** Resend the email OTP code to the same address, with a cooldown. */
+	async function resendCode() {
+		if (!codeSentTo || resendCooldown > 0) return;
+		setError("");
+		setLoading(true);
+		try {
+			await sendEmailCode(codeSentTo);
+			setResendCooldown(30);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not resend the code");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	/** Verify the MFA TOTP / email-OTP code entered by the user. */
+	async function onMfaSubmit(e: FormEvent) {
+		e.preventDefault();
+		if (mfaCode.length !== 6) return;
+		setError("");
+		setLoading(true);
+		try {
+			await verifyTotp(mfaCode);
+			// After MFA verification the session is established — reload so
+			// probeSession() picks up the cookie and RequireAuth admits us.
+			window.location.href = "/portal";
+		} catch (err) {
+			setLoading(false);
+			setError(err instanceof Error ? err.message : "That code was not accepted");
+			setMfaCode("");
+		}
 	}
 
 	async function onForgotSubmit(e: FormEvent) {
@@ -330,12 +384,15 @@ export function StartJourney() {
 	}
 
 	if (loading) {
+		const loadingText =
+			step === "forgot" ? "Sending reset code..."
+				: step === "mfa_otp" ? "Verifying code..."
+				: authMode === "signup" ? "Creating your account..."
+				: "Opening your dashboard...";
 		return (
 			<div className="loading-overlay">
 				<div className="spinner" aria-hidden />
-				<p className="mono">
-					{step === "forgot" ? "Sending reset code..." : "Opening your dashboard..."}
-				</p>
+				<p className="mono">{loadingText}</p>
 			</div>
 		);
 	}
@@ -351,10 +408,15 @@ export function StartJourney() {
 						? "Password updated"
 						: step === "verify_email"
 							? "Check your email"
-							: "Start your journey";
+							: step === "mfa_otp"
+								? "Enter your security code"
+								: "Start your journey";
 
 	const stepEyebrow =
-		step === "signin" ? (authMode === "signin" ? "Welcome back" : "Create an account") : step === "verify_email" ? "Account created" : "Password reset";
+		step === "signin" ? (authMode === "signin" ? "Welcome back" : "Create an account")
+			: step === "verify_email" ? "Account created"
+			: step === "mfa_otp" ? "Two-factor verification"
+			: "Password reset";
 
 	return (
 		<div className="start-journey">
@@ -587,10 +649,21 @@ export function StartJourney() {
 										<Button type="submit" block arrow disabled={loading || otpCode.length !== 6}>
 											{loading ? "Checking..." : "Continue"}
 										</Button>
+										<div className="auth-form__row" style={{ flexDirection: "column", gap: "0.75rem" }}>
+										<button
+											type="button"
+											className="start-journey__guest"
+											onClick={resendCode}
+											disabled={resendCooldown > 0 || loading}
+											style={{ opacity: resendCooldown > 0 ? 0.6 : 1 }}
+										>
+											{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+										</button>
 										<button type="button" className="start-journey__guest" onClick={restartCode}>
 											Use a different address
 										</button>
-									</form>
+									</div>
+								</form>
 								) : (
 									<form className="auth-form" onSubmit={onOtp} noValidate>
 										<Field
@@ -724,6 +797,34 @@ export function StartJourney() {
 								Return to sign in
 							</Button>
 						</div>
+					) : null}
+
+					{step === "mfa_otp" ? (
+						<form className="auth-form" onSubmit={onMfaSubmit} noValidate>
+							<Field
+								label="6-digit security code"
+								htmlFor="sj-mfa"
+								hint="Enter the code from your authenticator app or email."
+							>
+								<Input
+									id="sj-mfa"
+									type="text"
+									inputMode="numeric"
+									autoComplete="one-time-code"
+									maxLength={6}
+									value={mfaCode}
+									onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+									placeholder="000000"
+									fullBorder
+								/>
+							</Field>
+							<Button type="submit" block arrow disabled={loading || mfaCode.length !== 6}>
+								{loading ? "Verifying..." : "Verify"}
+							</Button>
+							<button type="button" className="auth-back" onClick={backToSignIn}>
+								← Back to sign in
+							</button>
+						</form>
 					) : null}
 
 					{step === "signin" ? (

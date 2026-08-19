@@ -23,7 +23,7 @@ const postArrivalScheduleSchema = z.object({
 
 export const portalStateSchema = z.object({
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
-	postArrivalScheduleId: z.string().optional(),
+	postArrivalScheduleId: z.string().nullable().optional(),
 	enabledPostArrivalSchedules: z.array(z.string()).nullable().optional(),
 	customPostArrivalSchedules: z.array(postArrivalScheduleSchema).optional(),
 });
@@ -31,7 +31,7 @@ export type PortalState = z.infer<typeof portalStateSchema>;
 
 export const updatePortalStateSchema = z.object({
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
-	postArrivalScheduleId: z.string().optional(),
+	postArrivalScheduleId: z.string().nullable().optional(),
 	enabledPostArrivalSchedules: z.array(z.string()).nullable().optional(),
 	customPostArrivalSchedules: z.array(postArrivalScheduleSchema).optional(),
 });

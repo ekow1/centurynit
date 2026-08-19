@@ -20,7 +20,7 @@ import { roleCanAccess } from "century-nit-shared";
  *
  * Rules:
  *   - Strict 0px border-radius (no rounded corners).
- *   - Pure monochrome palette (#000000, #09090b, #18181b, #27272a, #ffffff).
+ *   - Pure monochrome palette (#000000, #ffffff, #000000, #e4e4e7, #ffffff).
  *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
  *   - 2 Modes: INTERNAL (Staff DMs with 1-on-1 isolation), EXTERNAL (Client threads).
  *   - Expandable Workstation: Standard 420px floating window <-> 880px widescreen workspace.
@@ -189,7 +189,7 @@ export function CommunicationHub() {
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={indicatorDotStyle} />
+							<span style={{ ...indicatorDotStyle, background: presenceStatus === "available" ? "#10b981" : presenceStatus === "busy" ? "#ef4444" : presenceStatus === "on_leave" ? "#f59e0b" : "#71717a" }} />
 							<span style={headerTitleStyle}>OPS CHAT</span>
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -271,7 +271,7 @@ export function CommunicationHub() {
 						{mode === "internal" && !activeConvId && (
 							<div style={directoryContainerStyle}>
 								{/* Search */}
-								<div style={{ padding: "8px 10px", borderBottom: "1px solid #27272a" }}>
+								<div style={{ padding: "8px 10px", borderBottom: "1px solid #e4e4e7" }}>
 									<input
 										type="text"
 										value={searchQuery}
@@ -283,7 +283,7 @@ export function CommunicationHub() {
 
 								{/* Active Direct Chats */}
 								{internalConversations.length > 0 && !searchQuery && (
-									<div style={{ borderBottom: "1px solid #27272a" }}>
+									<div style={{ borderBottom: "1px solid #e4e4e7" }}>
 										<div style={sectionHeaderStyle}>ACTIVE 1-ON-1 SESSIONS</div>
 										<div style={{ maxHeight: "150px", overflowY: "auto" }}>
 											{internalConversations.map((c) => (
@@ -298,10 +298,10 @@ export function CommunicationHub() {
 															{c.title.slice(0, 2).toUpperCase()}
 														</span>
 														<div style={{ textAlign: "left" }}>
-															<div style={{ fontSize: "11px", fontWeight: 700, color: "#f4f4f5", letterSpacing: "0.02em" }}>
+															<div style={{ fontSize: "11px", fontWeight: 700, color: "#000000", letterSpacing: "0.02em" }}>
 																{c.title.toUpperCase()}
 															</div>
-															<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+															<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 																{c.lastMessage?.content.slice(0, 32) || "No messages yet"}
 															</div>
 														</div>
@@ -317,11 +317,11 @@ export function CommunicationHub() {
 								<div style={sectionHeaderStyle}>STAFF DIRECTORY (CLICK TO CHAT)</div>
 								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
 									{dirLoading ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
 											LOADING DIRECTORY...
 										</div>
 									) : filteredDirectory.length === 0 ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
 											NO STAFF FOUND.
 										</div>
 									) : (
@@ -337,15 +337,15 @@ export function CommunicationHub() {
 														{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
 													</span>
 													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 700, fontSize: "11px", color: "#f4f4f5", letterSpacing: "0.02em" }}>
+														<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
 															{staff.name.toUpperCase()}
 														</div>
-														<div style={{ fontSize: "10px", color: "#a1a1aa", fontFamily: "monospace" }}>
+														<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 															{staff.role.toUpperCase()} · {(staff.branch || "").toUpperCase()}
 														</div>
 													</div>
 												</div>
-												<span style={presenceBadgeStyle}>{staff.presence.toUpperCase()}</span>
+												<span style={{ ...presenceBadgeStyle, color: "#ffffff", border: "none", background: staff.presence === "available" ? "#10b981" : staff.presence === "busy" ? "#ef4444" : staff.presence === "on_leave" ? "#f59e0b" : "#71717a" }}>{staff.presence.toUpperCase()}</span>
 											</button>
 										))
 									)}
@@ -359,13 +359,13 @@ export function CommunicationHub() {
 								<div style={sectionHeaderStyle}>ASSIGNED CLIENT CHATS</div>
 								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
 									{convsLoading ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
 											LOADING CLIENT CHATS...
 										</div>
 									) : externalConversations.length === 0 ? (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "40px 20px" }}>
-											<p style={{ fontWeight: 700, color: "#f4f4f5", fontSize: "12px", letterSpacing: "0.04em" }}>NO ACTIVE CLIENT CHATS</p>
-											<p style={{ fontSize: "11px", color: "#a1a1aa", marginTop: "4px" }}>
+										<div style={{ textAlign: "center", color: "#52525b", padding: "40px 20px" }}>
+											<p style={{ fontWeight: 700, color: "#000000", fontSize: "12px", letterSpacing: "0.04em" }}>NO ACTIVE CLIENT CHATS</p>
+											<p style={{ fontSize: "11px", color: "#52525b", marginTop: "4px" }}>
 												Client case messages will appear here.
 											</p>
 										</div>
@@ -382,10 +382,10 @@ export function CommunicationHub() {
 														{c.title.slice(0, 2).toUpperCase()}
 													</span>
 													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 700, fontSize: "11px", color: "#f4f4f5", letterSpacing: "0.02em" }}>
+														<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
 															{c.title.toUpperCase()}
 														</div>
-														<div style={{ fontSize: "10px", color: "#a1a1aa", fontFamily: "monospace" }}>
+														<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 															{c.lastMessage?.content.slice(0, 36) || "No messages yet"}
 														</div>
 													</div>
@@ -417,7 +417,7 @@ export function CommunicationHub() {
 										<div style={{ fontWeight: 700, fontSize: "12px", color: "#ffffff", letterSpacing: "0.04em" }}>
 											{activeConv?.title.toUpperCase() || "CONVERSATION"}
 										</div>
-										<div style={{ fontSize: "9px", color: "#71717a", fontFamily: "monospace" }}>
+										<div style={{ fontSize: "9px", color: "#52525b", fontFamily: "monospace" }}>
 											{mode === "internal" ? "ISOLATED STAFF THREAD" : "CLIENT CASE THREAD"}
 										</div>
 									</div>
@@ -429,9 +429,9 @@ export function CommunicationHub() {
 								{/* Messages Stream */}
 								<div style={messageListStyle}>
 									{messages.length === 0 && !msgsLoading && (
-										<div style={{ textAlign: "center", color: "#71717a", padding: "40px 20px" }}>
-											<p style={{ fontSize: "12px", color: "#f4f4f5", fontWeight: 700 }}>SESSION STARTED</p>
-											<p style={{ fontSize: "10px", color: "#a1a1aa", marginTop: "4px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", padding: "40px 20px" }}>
+											<p style={{ fontSize: "12px", color: "#000000", fontWeight: 700 }}>SESSION STARTED</p>
+											<p style={{ fontSize: "10px", color: "#52525b", marginTop: "4px", fontFamily: "monospace" }}>
 												Messages sent here are isolated to participants.
 											</p>
 										</div>
@@ -462,7 +462,7 @@ export function CommunicationHub() {
 										);
 									})}
 									{msgsLoading && (
-										<div style={{ textAlign: "center", color: "#71717a", fontSize: "10px", padding: "10px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", fontSize: "10px", padding: "10px", fontFamily: "monospace" }}>
 											LOADING MESSAGES...
 										</div>
 									)}
@@ -505,7 +505,7 @@ const launcherSquareBtnStyle: CSSProperties = {
 	justifyContent: "center",
 	background: "#000000",
 	color: "#ffffff",
-	border: "1px solid #27272a",
+	border: "1px solid #000000",
 	borderRadius: "0px",
 	boxShadow: "0 10px 30px rgba(0,0,0,0.8)",
 	cursor: "pointer",
@@ -515,8 +515,8 @@ const unreadSquareBadgeStyle: CSSProperties = {
 	position: "absolute",
 	top: "-6px",
 	right: "-6px",
-	background: "#ffffff",
-	color: "#000000",
+	background: "#dc2626",
+	color: "#ffffff",
 	fontSize: "10px",
 	fontWeight: 800,
 	fontFamily: "monospace",
@@ -533,14 +533,14 @@ const windowContainerStyle: CSSProperties = {
 	width: "420px",
 	height: "600px",
 	maxHeight: "calc(100vh - 100px)",
-	background: "#09090b",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
 	boxShadow: "0 25px 50px rgba(0,0,0,0.9)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
-	color: "#fafafa",
+	color: "#000000",
 	transition: "width 0.2s ease, height 0.2s ease",
 };
 
@@ -555,14 +555,14 @@ const headerStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	padding: "10px 14px",
-	background: "#000000",
-	borderBottom: "1px solid #27272a",
+	background: "#ffffff",
+	borderBottom: "1px solid #e4e4e7",
 };
 
 const indicatorDotStyle: CSSProperties = {
 	width: "6px",
 	height: "6px",
-	background: "#ffffff",
+	background: "#10b981",
 	borderRadius: "0px",
 };
 
@@ -575,9 +575,9 @@ const headerTitleStyle: CSSProperties = {
 };
 
 const presenceSelectStyle: CSSProperties = {
-	background: "#121215",
-	color: "#fafafa",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	color: "#000000",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
 	fontSize: "10px",
 	fontFamily: "monospace",
@@ -587,8 +587,8 @@ const presenceSelectStyle: CSSProperties = {
 
 const controlBtnStyle: CSSProperties = {
 	background: "transparent",
-	border: "1px solid #27272a",
-	color: "#a1a1aa",
+	border: "1px solid #e4e4e7",
+	color: "#52525b",
 	width: "24px",
 	height: "24px",
 	borderRadius: "0px",
@@ -602,8 +602,8 @@ const controlBtnStyle: CSSProperties = {
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr",
-	borderBottom: "1px solid #27272a",
-	background: "#000000",
+	borderBottom: "1px solid #e4e4e7",
+	background: "#ffffff",
 };
 
 const channelBtnStyle: CSSProperties = {
@@ -611,7 +611,7 @@ const channelBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
 	borderBottom: "2px solid transparent",
-	color: "#71717a",
+	color: "#52525b",
 	fontSize: "11px",
 	fontWeight: 700,
 	letterSpacing: "0.06em",
@@ -627,7 +627,7 @@ const channelBtnStyle: CSSProperties = {
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#ffffff",
 	borderBottomColor: "#ffffff",
-	background: "#121215",
+	background: "#ffffff",
 };
 
 const tabDotBadgeStyle: CSSProperties = {
@@ -660,10 +660,10 @@ const directoryContainerStyle: CSSProperties = {
 
 const searchInputStyle: CSSProperties = {
 	width: "100%",
-	background: "#121215",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
-	color: "#fafafa",
+	color: "#000000",
 	padding: "6px 10px",
 	fontSize: "11px",
 	fontFamily: "monospace",
@@ -673,8 +673,8 @@ const searchInputStyle: CSSProperties = {
 
 const sectionHeaderStyle: CSSProperties = {
 	padding: "6px 10px",
-	background: "#000000",
-	color: "#71717a",
+	background: "#ffffff",
+	color: "#52525b",
 	fontSize: "9px",
 	fontWeight: 700,
 	letterSpacing: "0.08em",
@@ -740,7 +740,7 @@ const avatarMiniStyle: CSSProperties = {
 	width: "24px",
 	height: "24px",
 	borderRadius: "0px",
-	background: "#27272a",
+	background: "#e4e4e7",
 	color: "#ffffff",
 	fontWeight: 700,
 	fontSize: "10px",
@@ -753,9 +753,9 @@ const avatarMiniStyle: CSSProperties = {
 const presenceBadgeStyle: CSSProperties = {
 	fontSize: "9px",
 	fontFamily: "monospace",
-	color: "#a1a1aa",
-	background: "#121215",
-	border: "1px solid #27272a",
+	color: "#52525b",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	padding: "2px 5px",
 	borderRadius: "0px",
 };
@@ -764,16 +764,16 @@ const stagePillMiniStyle: CSSProperties = {
 	fontSize: "9px",
 	fontFamily: "monospace",
 	fontWeight: 700,
-	color: "#a1a1aa",
-	background: "#000000",
-	border: "1px solid #27272a",
+	color: "#52525b",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	padding: "2px 5px",
 	borderRadius: "0px",
 };
 
 const unreadSquareBadgeInlineStyle: CSSProperties = {
-	background: "#ffffff",
-	color: "#000000",
+	background: "#dc2626",
+	color: "#ffffff",
 	fontSize: "9px",
 	fontWeight: 800,
 	fontFamily: "monospace",
@@ -794,14 +794,14 @@ const threadHeaderStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	padding: "8px 12px",
-	background: "#121215",
-	borderBottom: "1px solid #27272a",
+	background: "#ffffff",
+	borderBottom: "1px solid #e4e4e7",
 };
 
 const backBtnStyle: CSSProperties = {
 	background: "transparent",
-	border: "1px solid #27272a",
-	color: "#fafafa",
+	border: "1px solid #e4e4e7",
+	color: "#000000",
 	padding: "3px 6px",
 	borderRadius: "0px",
 	fontSize: "10px",
@@ -837,9 +837,9 @@ const myBubbleStyle: CSSProperties = {
 };
 
 const theirBubbleStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#f4f4f5",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	color: "#000000",
+	border: "1px solid #e4e4e7",
 };
 
 const bubbleAuthorStyle: CSSProperties = {
@@ -862,17 +862,17 @@ const bubbleTimeStyle: CSSProperties = {
 const formStyle: CSSProperties = {
 	display: "flex",
 	padding: "8px 10px",
-	background: "#000000",
-	borderTop: "1px solid #27272a",
+	background: "#ffffff",
+	borderTop: "1px solid #e4e4e7",
 	gap: "6px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
-	background: "#121215",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
-	color: "#fafafa",
+	color: "#000000",
 	padding: "8px 10px",
 	fontSize: "12px",
 	outline: "none",
@@ -895,7 +895,7 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#27272a",
+	background: "#e4e4e7",
 	color: "#ffffff",
 	padding: "6px 10px",
 	fontSize: "10px",

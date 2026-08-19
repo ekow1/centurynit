@@ -7,7 +7,7 @@ import type { CommunicationContext, ChatMessage } from "century-nit-shared";
  *
  * Rules:
  *   - Strict 0px border-radius (no rounded corners).
- *   - Pure monochrome palette (#000000, #09090b, #18181b, #27272a, #ffffff).
+ *   - Pure monochrome palette (#000000, #ffffff, #000000, #e4e4e7, #ffffff).
  *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
  *   - 3 Clean Channels: SUPPORT (Default), ASSIGNED OFFICER, AI ADVISOR.
  *   - Expandable Workstation: Standard 390px floating card <-> 820px widescreen workspace.
@@ -253,7 +253,7 @@ export function CommunicationCenter() {
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={indicatorDotStyle} />
+							<span style={{ ...indicatorDotStyle, background: "#10b981" }} />
 							<span style={headerTitleStyle}>CHAT</span>
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -328,10 +328,10 @@ export function CommunicationCenter() {
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
 									<div>
-										<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+										<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
 											CENTURY SUPPORT DESK
 										</div>
-										<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+										<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 											24/7 HELPDESK & TRIAGE
 										</div>
 									</div>
@@ -342,10 +342,10 @@ export function CommunicationCenter() {
 								<div style={messageListStyle}>
 									{messages.length === 0 && !loadingMsgs && (
 										<div style={emptySupportPromptStyle}>
-											<p style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", marginBottom: "6px", letterSpacing: "0.04em" }}>
+											<p style={{ fontWeight: 700, fontSize: "12px", color: "#000000", marginBottom: "6px", letterSpacing: "0.04em" }}>
 												DIRECT SUPPORT QUEUE
 											</p>
-											<p style={{ fontSize: "11px", color: "#a1a1aa", marginBottom: "12px", lineHeight: 1.4 }}>
+											<p style={{ fontSize: "11px", color: "#52525b", marginBottom: "12px", lineHeight: 1.4 }}>
 												Send a message directly to central support. Responses appear here in real-time.
 											</p>
 											<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
@@ -391,7 +391,7 @@ export function CommunicationCenter() {
 										);
 									})}
 									{loadingMsgs && (
-										<div style={{ textAlign: "center", color: "#71717a", fontSize: "11px", padding: "10px", fontFamily: "monospace" }}>
+										<div style={{ textAlign: "center", color: "#52525b", fontSize: "11px", padding: "10px", fontFamily: "monospace" }}>
 											LOADING CONVERSATION...
 										</div>
 									)}
@@ -422,10 +422,10 @@ export function CommunicationCenter() {
 									<>
 										<div style={officerHeaderCardStyle}>
 											<div>
-												<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+												<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
 													{currentContact.contact.name.toUpperCase()}
 												</div>
-												<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+												<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 													{(currentContact.contact.role || "").toUpperCase()} · {(currentContact.contact.branch || "").toUpperCase()}
 												</div>
 											</div>
@@ -434,8 +434,8 @@ export function CommunicationCenter() {
 
 										<div style={messageListStyle}>
 											{messages.length === 0 && !loadingMsgs && (
-												<div style={{ textAlign: "center", color: "#71717a", padding: "30px 20px" }}>
-													<p style={{ fontSize: "12px", color: "#f4f4f5", fontWeight: 700, letterSpacing: "0.04em" }}>
+												<div style={{ textAlign: "center", color: "#52525b", padding: "30px 20px" }}>
+													<p style={{ fontSize: "12px", color: "#000000", fontWeight: 700, letterSpacing: "0.04em" }}>
 														DIRECT OFFICER THREAD
 													</p>
 													<p style={{ fontSize: "11px", marginTop: "4px" }}>
@@ -487,10 +487,10 @@ export function CommunicationCenter() {
 									</>
 								) : (
 									<div style={unassignedStateStyle}>
-										<div style={{ fontSize: "12px", fontWeight: 700, color: "#f4f4f5", marginBottom: "8px", letterSpacing: "0.04em" }}>
+										<div style={{ fontSize: "12px", fontWeight: 700, color: "#000000", marginBottom: "8px", letterSpacing: "0.04em" }}>
 											CONSULTANT BEING ASSIGNED
 										</div>
-										<p style={{ fontSize: "11px", color: "#a1a1aa", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
+										<p style={{ fontSize: "11px", color: "#52525b", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
 											Your dedicated specialist will appear here once your application milestone or consultation is active.
 										</p>
 										<button
@@ -510,10 +510,10 @@ export function CommunicationCenter() {
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
 									<div>
-										<div style={{ fontWeight: 700, fontSize: "12px", color: "#f4f4f5", letterSpacing: "0.04em" }}>
+										<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
 											CENTURY AI
 										</div>
-										<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+										<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
 											KNOWLEDGE ASSISTANT
 										</div>
 									</div>
@@ -547,7 +547,7 @@ export function CommunicationCenter() {
 										);
 									})}
 									{aiTyping && (
-										<div style={{ padding: "8px 12px", color: "#71717a", fontSize: "11px", fontFamily: "monospace" }}>
+										<div style={{ padding: "8px 12px", color: "#52525b", fontSize: "11px", fontFamily: "monospace" }}>
 											GENERATING RESPONSE...
 										</div>
 									)}
@@ -608,7 +608,7 @@ const launcherSquareBtnStyle: CSSProperties = {
 	justifyContent: "center",
 	background: "#000000",
 	color: "#ffffff",
-	border: "1px solid #27272a",
+	border: "1px solid #000000",
 	borderRadius: "0px",
 	boxShadow: "0 10px 30px rgba(0,0,0,0.8)",
 	cursor: "pointer",
@@ -618,8 +618,8 @@ const unreadSquareBadgeStyle: CSSProperties = {
 	position: "absolute",
 	top: "-6px",
 	right: "-6px",
-	background: "#ffffff",
-	color: "#000000",
+	background: "#dc2626",
+	color: "#ffffff",
 	fontSize: "10px",
 	fontWeight: 800,
 	fontFamily: "monospace",
@@ -636,14 +636,14 @@ const windowContainerStyle: CSSProperties = {
 	width: "390px",
 	height: "580px",
 	maxHeight: "calc(100vh - 100px)",
-	background: "#09090b",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
 	boxShadow: "0 25px 50px rgba(0,0,0,0.9)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
-	color: "#fafafa",
+	color: "#000000",
 	transition: "width 0.2s ease, height 0.2s ease",
 };
 
@@ -658,14 +658,14 @@ const headerStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	padding: "10px 14px",
-	background: "#000000",
-	borderBottom: "1px solid #27272a",
+	background: "#ffffff",
+	borderBottom: "1px solid #e4e4e7",
 };
 
 const indicatorDotStyle: CSSProperties = {
 	width: "6px",
 	height: "6px",
-	background: "#ffffff",
+	background: "#10b981",
 	borderRadius: "0px",
 };
 
@@ -679,8 +679,8 @@ const headerTitleStyle: CSSProperties = {
 
 const controlBtnStyle: CSSProperties = {
 	background: "transparent",
-	border: "1px solid #27272a",
-	color: "#a1a1aa",
+	border: "1px solid #e4e4e7",
+	color: "#52525b",
 	width: "24px",
 	height: "24px",
 	borderRadius: "0px",
@@ -694,8 +694,8 @@ const controlBtnStyle: CSSProperties = {
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr 1fr",
-	borderBottom: "1px solid #27272a",
-	background: "#000000",
+	borderBottom: "1px solid #e4e4e7",
+	background: "#ffffff",
 };
 
 const channelBtnStyle: CSSProperties = {
@@ -703,7 +703,7 @@ const channelBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
 	borderBottom: "2px solid transparent",
-	color: "#71717a",
+	color: "#52525b",
 	fontSize: "11px",
 	fontWeight: 700,
 	letterSpacing: "0.06em",
@@ -719,7 +719,7 @@ const channelBtnStyle: CSSProperties = {
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#ffffff",
 	borderBottomColor: "#ffffff",
-	background: "#121215",
+	background: "#ffffff",
 };
 
 const assignedDotStyle: CSSProperties = {
@@ -755,17 +755,17 @@ const officerHeaderCardStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	padding: "10px 14px",
-	background: "#121215",
-	borderBottom: "1px solid #27272a",
+	background: "#ffffff",
+	borderBottom: "1px solid #e4e4e7",
 };
 
 const stagePillStyle: CSSProperties = {
 	fontSize: "9px",
 	fontFamily: "monospace",
 	fontWeight: 700,
-	color: "#a1a1aa",
-	background: "#000000",
-	border: "1px solid #27272a",
+	color: "#52525b",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	padding: "2px 6px",
 	borderRadius: "0px",
 };
@@ -798,9 +798,9 @@ const myBubbleStyle: CSSProperties = {
 };
 
 const theirBubbleStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#f4f4f5",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	color: "#000000",
+	border: "1px solid #e4e4e7",
 };
 
 const bubbleAuthorStyle: CSSProperties = {
@@ -823,17 +823,17 @@ const bubbleTimeStyle: CSSProperties = {
 const formStyle: CSSProperties = {
 	display: "flex",
 	padding: "8px 10px",
-	background: "#000000",
-	borderTop: "1px solid #27272a",
+	background: "#ffffff",
+	borderTop: "1px solid #e4e4e7",
 	gap: "6px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
-	background: "#121215",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
-	color: "#fafafa",
+	color: "#000000",
 	padding: "8px 10px",
 	fontSize: "12px",
 	outline: "none",
@@ -853,16 +853,16 @@ const sendBtnStyle: CSSProperties = {
 };
 
 const emptySupportPromptStyle: CSSProperties = {
-	background: "#121215",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	borderRadius: "0px",
 	padding: "14px",
 	margin: "auto 0",
 };
 
 const quickChipStyle: CSSProperties = {
-	background: "#000000",
-	border: "1px solid #27272a",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
 	color: "#d4d4d8",
 	fontSize: "10px",
 	fontFamily: "monospace",
@@ -876,15 +876,15 @@ const aiPromptsRowStyle: CSSProperties = {
 	gap: "6px",
 	overflowX: "auto",
 	padding: "6px 10px",
-	background: "#000000",
-	borderTop: "1px solid #27272a",
+	background: "#ffffff",
+	borderTop: "1px solid #e4e4e7",
 };
 
 const aiQuickChipStyle: CSSProperties = {
 	whiteSpace: "nowrap",
-	background: "#121215",
-	border: "1px solid #27272a",
-	color: "#a1a1aa",
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
+	color: "#52525b",
 	fontSize: "10px",
 	fontFamily: "monospace",
 	padding: "3px 6px",
@@ -919,7 +919,7 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#27272a",
+	background: "#e4e4e7",
 	color: "#ffffff",
 	padding: "6px 10px",
 	fontSize: "10px",

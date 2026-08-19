@@ -169,6 +169,22 @@ export async function getManagerAndCoordinatorUserIds(): Promise<
 }
 
 /**
+ * Same as getManagerAndCoordinatorUserIds but also returns each staff member's
+ * email and name — used when we want to fan out an email alongside the in-app
+ * / push / SSE notification (e.g. new lead).
+ */
+export async function getManagerAndCoordinatorContacts(): Promise<
+	{ userId: string; email: string; name: string }[]
+> {
+	const rows = await db
+		.select({ userId: opsUsers.userId, email: opsUsers.email, name: opsUsers.name })
+		.from(opsUsers)
+		.where(eq(opsUsers.active, true));
+	return rows
+		.filter((r): r is { userId: string; email: string; name: string } => r.userId !== null);
+}
+
+/**
  * Get the user.id for an ops_user by their email.
  * Used to notify a specific staff member when a booking is assigned to them.
  */

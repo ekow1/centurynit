@@ -275,3 +275,26 @@ export function assessmentCompleteForClient(ctx: {
 		reference: ctx.reference,
 	};
 }
+
+/** New lead captured — sent to every manager/coordinator/super_admin. */
+export function leadCreatedForManager(
+	ctx: { name: string; source: string; leadId: string },
+	managerEmail: string,
+): QueuedEmail {
+	const lines = [
+		`A new lead has been captured.`,
+		`<strong>Name:</strong> ${ctx.name}`,
+		`<strong>Source:</strong> ${ctx.source}`,
+		`Log in to the Operations Center to review and assign this lead.`,
+	];
+	const { html, text } = formatEmail("New lead received", lines, null, ctx.leadId);
+	return {
+		to: managerEmail,
+		subject: `New lead · ${ctx.name}`,
+		html,
+		text,
+		idempotencyKey: `notify:lead:new:${ctx.leadId}:${managerEmail}`,
+		template: "New lead received",
+		reference: ctx.leadId,
+	};
+}

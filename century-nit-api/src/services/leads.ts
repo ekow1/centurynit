@@ -1,7 +1,9 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
-import { notifyMany, getManagerAndCoordinatorUserIds } from "./notify.js";
+import { notifyMany, getManagerAndCoordinatorContacts } from "./notify.js";
+import { queueEmails } from "../worker/queues.js";
+import { leadCreatedForManager } from "./notifications.js";
 
 export interface LeadView {
 	id: string;
@@ -151,19 +153,22 @@ export async function captureLeadFromUser(
 			normalizedEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
 			"New Client";
 
-		await db.insert(leads).values({
-			name: displayName,
-			email: normalizedEmail,
-			phone: user.phoneNumber || null,
-			source,
-			stage: "New Lead",
-			notes: `Captured automatically on ${source.toLowerCase()} (${new Date().toLocaleDateString()}).`,
-		});
+		const [created] = await db
+			.insert(leads)
+			.values({
+				name: displayName,
+				email: normalizedEmail,
+				phone: user.phoneNumber || null,
+				source,
+				stage: "New Lead",
+				notes: `Captured automatically on ${source.toLowerCase()} (${new Date().toLocaleDateString()}).`,
+			})
+			.returning({ id: leads.id });
 
 		console.log(`[CRM] Auto-captured new lead for user: ${normalizedEmail} (source: ${source})`);
 
-		// In-app: surface the new lead to managers/coordinators/super_admins.
-		notifyManagersOfNewLead(displayName, source).catch(() => {});
+		// In-app + email: surface the new lead to managers/coordinators/super_admins.
+		notifyManagersOfNewLead(displayName, source, created.id).catch(() => {});
 	} catch (err) {
 		console.error("[CRM] Failed to capture lead from user auth:", err);
 	}
@@ -191,19 +196,36 @@ export async function recordLeadEvent(
 /**
  * Surface a freshly-captured lead to every manager/coordinator/super_admin so
  * it is not left sitting unread. Fire-and-forget at the call site.
+ *
+ * Fans out to all four notification channels: in-app bell, SSE, Web Push
+ * (via notifyMany) and email (via queueEmails) — so a manager who has the
+ * console closed still sees the lead in their inbox.
  */
-async function notifyManagersOfNewLead(name: string, source: string): Promise<void> {
-	const recipients = await getManagerAndCoordinatorUserIds();
-	if (recipients.length === 0) return;
+async function notifyManagersOfNewLead(
+	name: string,
+	source: string,
+	leadId: string,
+): Promise<void> {
+	const contacts = await getManagerAndCoordinatorContacts();
+	if (contacts.length === 0) return;
+
+	// In-app + SSE + Web Push
 	await notifyMany(
-		recipients.map((r) => ({
-			recipientUserId: r.userId,
+		contacts.map((c) => ({
+			recipientUserId: c.userId,
 			type: "lead.new",
 			title: "New lead received",
 			body: `${name} — ${source}`,
 			link: "/ops/leads",
 		})),
 	);
+
+	// Email — one per manager, each with its own idempotency key
+	await queueEmails(
+		contacts.map((c) => leadCreatedForManager({ name, source, leadId }, c.email)),
+	).catch(() => {
+		// email failure must not block the lead capture
+	});
 }
 
 /** Get the activity timeline for a lead. */
@@ -309,8 +331,8 @@ export async function createManualLead(input: {
 		})
 		.returning();
 
-	// In-app: surface the manually-created lead to managers/coordinators.
-	notifyManagersOfNewLead(created.name, created.source).catch(() => {});
+	// In-app + email: surface the manually-created lead to managers/coordinators.
+	notifyManagersOfNewLead(created.name, created.source, created.id).catch(() => {});
 
 	return {
 		id: created.id,

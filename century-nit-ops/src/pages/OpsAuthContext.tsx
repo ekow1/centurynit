@@ -58,6 +58,7 @@ export const ROLE_HOME: Record<OpsRole, string> = {
 };
 
 export interface OpsUser {
+	opsUserId: string;
 	name: string;
 	email: string;
 	role: OpsRole;
@@ -179,6 +180,7 @@ const OpsAuthContext = createContext<OpsAuthContextValue | null>(null);
 
 function staffToOpsUser(s: NonNullable<SessionResponse["staff"]>): OpsUser {
 	return {
+		opsUserId: s.opsUserId,
 		name: s.name,
 		email: s.email,
 		role: s.role as OpsRole,

@@ -43,10 +43,7 @@ export function EnterpriseChat() {
 	const staffDirectory = useStaffDirectory();
 	const { create: createConversation, creating } = useCreateConversation();
 
-	const currentOpsUserId = useMemo(
-		() => staffDirectory.find((s) => s.email === opsUser?.email)?.opsUserId ?? "",
-		[staffDirectory, opsUser?.email],
-	);
+	const currentOpsUserId = opsUser?.opsUserId ?? "";
 
 	const [activeId, setActiveId] = useState<string | null>(null);
 	const [showNewChat, setShowNewChat] = useState(false);

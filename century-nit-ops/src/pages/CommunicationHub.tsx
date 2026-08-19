@@ -463,7 +463,7 @@ export function CommunicationHub() {
 										</div>
 									)}
 									{messages.map((m) => {
-										const isMe = m.senderName === opsUser?.name || m.senderName === "You";
+										const isMe = m.senderOpsUserId != null && m.senderOpsUserId === opsUser?.opsUserId;
 										// Read receipt: my message is "read" when every OTHER participant's
 										// lastReadAt is at or after the message's createdAt.
 										const isRead = isMe && activeConv ? (() => {

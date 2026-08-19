@@ -48,7 +48,7 @@ eventsRouter.get("/stream", requireAuth, async (c) => {
 
 		subscriber.on("message", (ch, message) => {
 			if (!aborted && ch === channel) {
-				stream.writeSSE({ data: message }).catch(() => {
+				stream.writeSSE({ event: "notification", data: message }).catch(() => {
 					aborted = true;
 				});
 			}

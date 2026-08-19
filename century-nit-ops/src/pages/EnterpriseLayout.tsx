@@ -3,12 +3,13 @@ import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
 import { roleCanAccess } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
-import { useOpsNotifications } from "../hooks/useOpsNotifications";
+
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
+import { OpsNotificationBell } from "./OpsNotificationBell";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
 import { publicSiteUrl } from "../lib/publicSite";
 
@@ -208,12 +209,12 @@ export function EnterpriseLayout() {
 	// The bell badge reflects the real, server-side notification count — not a
 	// heuristic derived from polled leads/consultations. Those still get polled
 	// by their own pages (inbox, consultations, leads) for their own lists.
-	const { unreadCount } = useOpsNotifications();
+
 
 	// Silent Web Push subscription — active while a staff member is signed in.
 	// The permission prompt is never shown automatically; this only resubscribes
 	// returning staff who previously granted permission.
-	usePushNotifications({ isAuthenticated: Boolean(opsUser) });
+	const pushState = usePushNotifications({ isAuthenticated: Boolean(opsUser) });
 
 	return (
 		<div className="portal">
@@ -308,7 +309,6 @@ export function EnterpriseLayout() {
 					title={roleName}
 					operationsNav={flattenNav(operationsNav)}
 					platformNav={flattenNav(platformNav)}
-					unreadCount={unreadCount}
 				/>
 
 				<header className="portal__topbar">
@@ -330,10 +330,25 @@ export function EnterpriseLayout() {
 						</button>
 
 						{/* Notification bell */}
-						<Link to="/inbox" className="ops-bell-btn" aria-label="Notifications">
-							<span dangerouslySetInnerHTML={{ __html: ICONS.notifications }} />
-							{unreadCount > 0 && <span className="ops-bell-badge">{unreadCount}</span>}
-						</Link>
+						<OpsNotificationBell />
+
+						<button
+							type="button"
+							onClick={pushState.permission === "granted" ? pushState.unsubscribe : pushState.subscribe}
+							style={{
+								fontSize: "0.65rem",
+								fontWeight: 600,
+								color: pushState.permission === "granted" ? "#18181b" : "#71717a",
+								cursor: "pointer",
+								background: pushState.permission === "granted" ? "#18181b" : "transparent",
+								border: pushState.permission === "granted" ? "1px solid #18181b" : "1px solid #e4e4e7",
+								padding: pushState.permission === "granted" ? "0.2rem 0.5rem" : "0.2rem 0.5rem",
+								transition: "all 0.2s ease",
+								whiteSpace: "nowrap",
+							}}
+						>
+							{pushState.permission === "granted" ? "Alerts on" : "Enable alerts"}
+						</button>
 
 						{isDev ? (
 						<button

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAppState } from "../../context/AppState";
+import { useOpsNotifications } from "../hooks/useOpsNotifications";
 
 function NotifIcon({ type, read }: { type: string; read: boolean }) {
 	const opacity = read ? 0.4 : 1;
@@ -17,7 +17,16 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 	};
 
 	switch (type) {
-		case "stage":
+		case "assignment":
+		case "lead":
+			return (
+				<svg {...common}>
+					<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+					<circle cx="8.5" cy="7" r="4" />
+					<polyline points="17 11 19 13 23 9" />
+				</svg>
+			);
+		case "consultation":
 			return (
 				<svg {...common}>
 					<path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -25,8 +34,7 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 					<path d="M2 12l10 5 10-5" />
 				</svg>
 			);
-		case "invoice":
-		case "payment":
+		case "finance":
 			return (
 				<svg {...common}>
 					<rect x="2" y="5" width="20" height="14" rx="2" />
@@ -40,11 +48,11 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 					<polyline points="14 2 14 8 20 8" />
 				</svg>
 			);
-		case "visa":
+		case "application":
 			return (
 				<svg {...common}>
-					<circle cx="12" cy="12" r="10" />
-					<path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+					<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+					<polyline points="14 2 14 8 20 8" />
 				</svg>
 			);
 		case "message":
@@ -53,6 +61,7 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 					<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 				</svg>
 			);
+		case "system":
 		default:
 			return (
 				<svg {...common}>
@@ -64,11 +73,9 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 	}
 }
 
-export function NotificationBell() {
-	const { notifications, unreadCount, markNotificationRead, markAllNotificationsRead, pushPermission, pushSubscribe, pushUnsubscribe } =
-		useAppState();
+export function OpsNotificationBell() {
+	const { notifications, unreadCount, markRead, markAllRead } = useOpsNotifications();
 	const [open, setOpen] = useState(false);
-	const [filter, setFilter] = useState<"all" | "unread">("all");
 	const ref = useRef<HTMLDivElement>(null);
 	const nav = useNavigate();
 
@@ -84,8 +91,8 @@ export function NotificationBell() {
 		}
 	}, [open]);
 
-	function handleNotifClick(id: string, link?: string) {
-		markNotificationRead(id);
+	function handleNotifClick(id: string, link?: string | null) {
+		void markRead(id);
 		setOpen(false);
 		if (link) nav(link);
 	}
@@ -104,7 +111,7 @@ export function NotificationBell() {
 					height: "40px",
 					background: open ? "#f4f4f5" : "transparent",
 					border: "none",
-					borderRadius: 0,
+					borderRadius: "50%",
 					color: "#18181b",
 					transition: "background 0.2s ease, transform 0.2s ease",
 					position: "relative",
@@ -141,8 +148,8 @@ export function NotificationBell() {
 							fontSize: "0.6rem",
 							fontWeight: 700,
 							padding: "0.15rem 0.35rem",
-						borderRadius: 0,
-						minWidth: "16px",
+							borderRadius: "999px",
+							minWidth: "16px",
 							textAlign: "center",
 							lineHeight: 1,
 							fontFamily: "system-ui, -apple-system, sans-serif",
@@ -168,8 +175,8 @@ export function NotificationBell() {
 						border: "1px solid #e4e4e7",
 						boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15)",
 						zIndex: 100,
-					borderRadius: 0,
-					fontFamily: "system-ui, -apple-system, sans-serif",
+						borderRadius: "16px",
+						fontFamily: "system-ui, -apple-system, sans-serif",
 					}}
 				>
 					<div
@@ -185,33 +192,11 @@ export function NotificationBell() {
 							<p style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#18181b" }}>
 								Notifications
 							</p>
-							<div style={{ display: "flex", gap: 0, marginLeft: "0.5rem" }}>
-								{(["all", "unread"] as const).map((f) => (
-									<button
-										key={f}
-										type="button"
-										onClick={() => setFilter(f)}
-										style={{
-											fontSize: "0.65rem",
-											fontWeight: 600,
-											padding: "0.1rem 0.4rem",
-											cursor: "pointer",
-											background: filter === f ? "#18181b" : "transparent",
-											color: filter === f ? "#ffffff" : "#71717a",
-											border: "none",
-											borderRight: f === "all" ? "1px solid #e4e4e7" : "none",
-											transition: "all 0.15s ease",
-										}}
-									>
-										{f === "all" ? "All" : "Unread"}
-									</button>
-								))}
-							</div>
 						</div>
 						{unreadCount > 0 ? (
 							<button
 								type="button"
-								onClick={markAllNotificationsRead}
+								onClick={() => void markAllRead()}
 								style={{
 									fontSize: "0.75rem",
 									fontWeight: 600,
@@ -225,61 +210,43 @@ export function NotificationBell() {
 								onMouseEnter={(e) => (e.currentTarget.style.color = "#18181b")}
 								onMouseLeave={(e) => (e.currentTarget.style.color = "#71717a")}
 							>
-							Mark all read
-						</button>
-					) : null}
-					<button
-						type="button"
-						onClick={pushPermission === "granted" ? pushUnsubscribe : pushSubscribe}
-						style={{
-							fontSize: "0.7rem",
-							fontWeight: 600,
-							color: pushPermission === "granted" ? "#18181b" : "#71717a",
-							cursor: "pointer",
-							background: pushPermission === "granted" ? "#18181b" : "none",
-							border: pushPermission === "granted" ? "1px solid #18181b" : "none",
-							padding: pushPermission === "granted" ? "0.15rem 0.5rem" : 0,
-							transition: "all 0.2s ease",
-						}}
-					>
-						{pushPermission === "granted" ? "Notifications on" : "Enable alerts"}
-					</button>
-				</div>
+								Mark all read
+							</button>
+						) : null}
+					</div>
 
-					{(() => {
-						const filtered = filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
-						return filtered.length === 0 ? (
-							<div
-								style={{
-									padding: "3rem 1rem",
-									textAlign: "center",
-									display: "flex",
-									flexDirection: "column",
-									alignItems: "center",
-									gap: "0.75rem",
-								}}
+					{notifications.length === 0 ? (
+						<div
+							style={{
+								padding: "3rem 1rem",
+								textAlign: "center",
+								display: "flex",
+								flexDirection: "column",
+								alignItems: "center",
+								gap: "0.75rem",
+							}}
+						>
+							<svg
+								width="32"
+								height="32"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								strokeWidth={1.5}
+								strokeLinecap="round"
+								strokeLinejoin="round"
+								style={{ opacity: 0.3, color: "#71717a" }}
 							>
-								<svg
-									width="32"
-									height="32"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth={1.5}
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									style={{ opacity: 0.3, color: "#71717a" }}
-								>
-									<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-									<path d="M13.73 21a2 2 0 0 1-3.46 0" />
-								</svg>
-								<p style={{ fontSize: "0.85rem", color: "#a1a1aa", margin: 0 }}>
-									{filter === "unread" ? "No unread notifications" : "No notifications yet"}
-								</p>
-							</div>
-						) : (
-							<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-								{filtered.slice(0, 20).map((n) => (
+								<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+								<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+							</svg>
+							<p style={{ fontSize: "0.85rem", color: "#a1a1aa", margin: 0 }}>
+								No notifications yet
+							</p>
+						</div>
+					) : (
+						<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+							{notifications.slice(0, 20).map((n) => (
 								<li
 									key={n.id}
 									style={{
@@ -343,7 +310,7 @@ export function NotificationBell() {
 													margin: 0,
 												}}
 											>
-												{new Date(n.at).toLocaleString([], {
+												{new Date(n.createdAt).toLocaleString([], {
 													hour: "2-digit",
 													minute: "2-digit",
 													day: "numeric",
@@ -367,8 +334,34 @@ export function NotificationBell() {
 								</li>
 							))}
 						</ul>
-					);
-					})()}
+					)}
+					<div
+						style={{
+							padding: "0.75rem",
+							background: "#fafafa",
+							borderTop: "1px solid #f4f4f5",
+							textAlign: "center",
+						}}
+					>
+						<button
+							type="button"
+							onClick={() => {
+								setOpen(false);
+								nav("/inbox");
+							}}
+							style={{
+								background: "none",
+								border: "none",
+								color: "#18181b",
+								fontSize: "0.8rem",
+								fontWeight: 600,
+								cursor: "pointer",
+								padding: "0.25rem 0.5rem",
+							}}
+						>
+							View full inbox →
+						</button>
+					</div>
 				</div>
 			) : null}
 		</div>

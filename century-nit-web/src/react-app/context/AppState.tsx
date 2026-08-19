@@ -13,6 +13,7 @@ import {
 	signOut as authSignOut,
 } from "./authStore";
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
+import { useNotifier } from "../components/notifier/Notifier";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { invoicesApi } from "century-nit-core/api";
 import {
@@ -885,7 +886,9 @@ type AppStateContextValue = {
 	unreadCount: number;
 	markNotificationRead: (id: string) => void;
 	markAllNotificationsRead: () => void;
-	pushNotification: (n: Omit<AppNotification, "id" | "at" | "read">) => void;
+	pushPermission: NotificationPermission;
+	pushSubscribe: () => Promise<void>;
+	pushUnsubscribe: () => Promise<void>;
 	/** Pre-departure */
 	/** Force an immediate re-sync of server consultation / invoice state */
 	syncFromServer: () => Promise<void>;
@@ -983,7 +986,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * returning users who previously granted permission. `subscribe()` is
 	 * exposed (via the hook return) for an explicit "enable notifications" UI.
 	 */
-	usePushNotifications({ isAuthenticated: !!authUser });
+	const pushState = usePushNotifications({ isAuthenticated: !!authUser });
 
 	const [enabledPostArrivalSchedules, setEnabledPostArrivalSchedules] =
 		useState<string[] | null>(() => {
@@ -1813,19 +1816,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		setMessages((prev) => [...prev, msg]);
 	}, []);
 
-	const pushNotification = useCallback(
-		(n: Omit<AppNotification, "id" | "at" | "read">) => {
-			const notif: AppNotification = {
-				...n,
-				id: `ntf-${Date.now().toString(36)}`,
-				at: new Date().toISOString(),
-				read: false,
-			};
-			setNotifications((prev) => [notif, ...prev]);
-		},
-		[],
-	);
-
 	const markNotificationRead = useCallback((id: string) => {
 		setNotifications((prev) =>
 			prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
@@ -2081,10 +2071,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * `EventSource` is same-origin against the portal's `/api/v1` proxy, so
 	 * it rides the existing auth cookie — no headers needed.
 	 */
+	const { toast } = useNotifier();
+	const toastRef = useRef(toast);
+	toastRef.current = toast;
+
 	useEffect(() => {
 		if (!authUser) return;
 		const url = `${API_PREFIX}/events/stream`;
-		const es = new EventSource(url);
+		const es = new EventSource(url, { withCredentials: true });
 
 		es.addEventListener("connected", () => {
 			console.log("[SSE] notifications stream connected");
@@ -2109,9 +2103,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					read: false,
 					link: data.link ?? undefined,
 				};
-				setNotifications((prev) =>
-					prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
-				);
+			setNotifications((prev) =>
+				prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
+			);
+			if (document.visibilityState === "visible") {
+				toastRef.current.info(notif.title, notif.body);
+			}
 			} catch {
 				/* ignore malformed payloads */
 			}
@@ -2294,7 +2291,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			unreadCount,
 			markNotificationRead,
 			markAllNotificationsRead,
-			pushNotification,
+			pushPermission: pushState.permission,
+			pushSubscribe: pushState.subscribe,
+			pushUnsubscribe: pushState.unsubscribe,
 			preDepartureTasks,
 			togglePreDepartureTask,
 			preDepartureProgress,
@@ -2356,7 +2355,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			unreadCount,
 			markNotificationRead,
 			markAllNotificationsRead,
-			pushNotification,
+			pushPermission: pushState.permission,
+			pushSubscribe: pushState.subscribe,
+			pushUnsubscribe: pushState.unsubscribe,
 			preDepartureTasks,
 			togglePreDepartureTask,
 			preDepartureProgress,

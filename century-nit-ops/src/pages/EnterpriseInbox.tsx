@@ -267,11 +267,20 @@ export function EnterpriseInbox() {
 			</div>
 
 			{/* Real, server-pushed notifications */}
-			{realNotifications.length > 0 && (
-				<div className="card" style={{ marginBottom: "1.5rem" }}>
-					<p className="eyebrow" style={{ padding: "0.85rem 1rem 0.5rem", fontSize: "0.6rem" }}>
-						Inbox
+			<div className="card" style={{ marginBottom: "1.5rem" }}>
+				<p className="eyebrow" style={{ padding: "0.85rem 1rem 0.5rem", fontSize: "0.6rem" }}>
+					Inbox
+					{realUnreadCount > 0 && (
+						<span style={{ marginLeft: "0.5rem", fontWeight: 700, color: "var(--foreground)" }}>
+							{realUnreadCount} unread
+						</span>
+					)}
+				</p>
+				{realNotifications.length === 0 ? (
+					<p style={{ padding: "1.5rem 1rem", textAlign: "center", fontSize: "0.75rem", color: "var(--muted-foreground)", margin: 0 }}>
+						No notifications yet
 					</p>
+				) : (
 					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
 						{realNotifications.map((n) => (
 							<li
@@ -337,8 +346,8 @@ export function EnterpriseInbox() {
 							</li>
 						))}
 					</ul>
-				</div>
-			)}
+				)}
+			</div>
 
 			<p className="eyebrow" style={{ marginBottom: "0.5rem", fontSize: "0.6rem" }}>Case activity</p>
 			<div className="card">

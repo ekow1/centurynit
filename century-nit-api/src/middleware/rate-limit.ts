@@ -45,9 +45,18 @@ export async function rateLimit(c: Context, next: Next) {
 	const key = `ratelimit:${routePath}:${ip}`;
 
 	try {
-		const current = await connection.incr(key);
+		// Race the Redis op against a short timeout. If Redis is unreachable,
+		// ioredis with maxRetriesPerRequest: null retries forever and the promise
+		// never settles — the try/catch below only catches thrown errors, not a
+		// hang, so without this the entire auth flow deadlocks on every request.
+		const current = await Promise.race([
+			connection.incr(key),
+			new Promise<never>((_, reject) =>
+				setTimeout(() => reject(new Error("RATE_LIMIT_REDIS_TIMEOUT")), 2_000),
+			),
+		]);
 		if (current === 1) {
-			await connection.expire(key, windowSeconds);
+			await connection.expire(key, windowSeconds).catch(() => {});
 		}
 
 		if (current > limit) {
@@ -61,7 +70,8 @@ export async function rateLimit(c: Context, next: Next) {
 		if (e instanceof HttpError) {
 			throw e;
 		}
-		console.error("[RateLimit] Error:", e);
+		// Redis error or timeout — fail open so auth still works.
+		console.error("[RateLimit] Redis unavailable, failing open:", e);
 	}
 
 	await next();

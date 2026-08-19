@@ -19,6 +19,16 @@ self.addEventListener("activate", (event) => {
 	event.waitUntil(self.clients.claim());
 });
 
+/* ── Fetch (network-only passthrough) ────────────────────────────────────────
+ * The ops console does NO caching — staff must always see the latest admin
+ * bundle. But Chrome requires a fetch handler to consider the SW a real PWA
+ * worker (installability). A passthrough that just calls the network satisfies
+ * that without ever serving stale content. */
+self.addEventListener("fetch", (event) => {
+	if (event.request.method !== "GET") return;
+	event.respondWith(fetch(event.request));
+});
+
 /* ── Web Push ─────────────────────────────────────────────────────────────── */
 
 self.addEventListener("push", (event) => {

@@ -89,8 +89,8 @@ export function usePushNotifications(
 
 	/** POST a subscription to the server so it can send pushes to this device. */
 	const sendSubscriptionToServer = useCallback(
-		async (sub: PushSubscriptionLike) => {
-			if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return;
+		async (sub: PushSubscriptionLike): Promise<boolean> => {
+			if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) return false;
 			const body: SubscribeBody = {
 				endpoint: sub.endpoint,
 				keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
@@ -101,10 +101,14 @@ export function usePushNotifications(
 					method: "POST",
 					body: JSON.stringify(body),
 				});
-			} catch {
+				return true;
+			} catch (err) {
 				// The subscription still exists in the browser; the server will
-				// reconcile on the next subscribe / heartbeat. Don't throw — a
-				// failed POST must not abort the local subscription.
+				// reconcile on the next subscribe / heartbeat. Log loudly so a
+				// silent server-side failure doesn't look like "alerts on" with
+				// no deliveries.
+				console.error("[push] failed to save subscription on server:", err);
+				return false;
 			}
 		},
 		[],

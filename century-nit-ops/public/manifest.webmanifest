@@ -1,0 +1,19 @@
+{
+	"name": "Century NIT Operations",
+	"short_name": "Ops Console",
+	"description": "Century NIT staff operations console.",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#FFFFFF",
+	"theme_color": "#000000",
+	"orientation": "any",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any maskable"
+		}
+	]
+}

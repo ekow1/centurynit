@@ -12,6 +12,7 @@ import {
 	type StaffDirectoryEntryDetailed,
 	type StaffPresence,
 } from "../lib/api";
+import { ApiError } from "../lib/api";
 import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import { roleCanAccess } from "century-nit-shared";
 
@@ -42,19 +43,30 @@ export function CommunicationHub() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
-	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations();
+	const canChat = roleCanAccess(opsRole as OpsRole, "chat");
+	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
 	const { messages, loading: msgsLoading, sending, load, send, markRead } =
-		useChatMessages(activeConvId);
+		useChatMessages(canChat ? activeConvId : null);
 
 	/* ── Presence heartbeat ── */
 	useEffect(() => {
-		if (!roleCanAccess(opsRole as OpsRole, "chat")) return;
-		void communicationHeartbeat().catch(() => {});
-		const id = setInterval(() => {
-			void communicationHeartbeat().catch(() => {});
-		}, HEARTBEAT_MS);
-		return () => clearInterval(id);
-	}, [opsRole]);
+		if (!canChat) return;
+		let id: ReturnType<typeof setInterval> | undefined;
+		const beat = async () => {
+			try {
+				await communicationHeartbeat();
+			} catch (e) {
+				// 403 = role/MFA won't change mid-session; stop pinging.
+				if (e instanceof ApiError && e.status === 403) {
+					if (id) clearInterval(id);
+					id = undefined;
+				}
+			}
+		};
+		void beat();
+		id = setInterval(beat, HEARTBEAT_MS);
+		return () => { if (id) clearInterval(id); };
+	}, [canChat]);
 
 	/* ── Staff directory (with presence + load) ── */
 	const loadDirectory = useCallback(async () => {

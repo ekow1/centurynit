@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useOpsAuth } from "./OpsAuthContext";
+import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
+import { roleCanAccess } from "century-nit-shared";
 import {
 	useChatConversations,
 	useChatMessages,
@@ -34,10 +35,11 @@ const PANEL_WIDTH = 380;
 const PANEL_HEIGHT = 520;
 
 export function EnterpriseChat() {
-	const { opsUser } = useOpsAuth();
+	const { opsUser, opsRole } = useOpsAuth();
+	const canChat = opsRole ? roleCanAccess(opsRole as OpsRole, "chat") : false;
 	const [open, setOpen] = useState(false);
-	const { conversations, loading: convosLoading, refresh: refreshConversations } = useChatConversations();
-	const { unread, refresh: refreshUnread } = useChatUnread();
+	const { conversations, loading: convosLoading, refresh: refreshConversations } = useChatConversations(canChat);
+	const { unread, refresh: refreshUnread } = useChatUnread(canChat);
 	const staffDirectory = useStaffDirectory();
 	const { create: createConversation, creating } = useCreateConversation();
 

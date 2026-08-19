@@ -11,12 +11,18 @@ import {
 	type ChatMessage,
 	type StaffDirectoryEntry,
 } from "../lib/api";
+import { ApiError } from "../lib/api";
 
 const POLL_INTERVAL = 30_000;
 
+/** A 403 means the role can't access chat or MFA isn't enrolled — polling won't fix it. */
+function isForbidden(e: unknown): boolean {
+	return e instanceof ApiError && e.status === 403;
+}
+
 /* ── Conversation list hook ─────────────────────────────────────────────── */
 
-export function useChatConversations() {
+export function useChatConversations(enabled = true) {
 	const [conversations, setConversations] = useState<ChatConversation[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -28,38 +34,63 @@ export function useChatConversations() {
 			setError(null);
 		} catch (e: any) {
 			setError(e.message ?? "Failed to load conversations");
+			// Stop polling on 403 — role/MFA won't change mid-session.
+			if (isForbidden(e)) return false as const;
 		} finally {
 			setLoading(false);
 		}
+		return true as const;
 	}, []);
 
 	useEffect(() => {
-		refresh();
-		const timer = setInterval(refresh, POLL_INTERVAL);
-		return () => clearInterval(timer);
-	}, [refresh]);
+		if (!enabled) return;
+		let active = true;
+		let timer: ReturnType<typeof setInterval> | undefined;
+		const tick = async () => {
+			const keepGoing = await refresh();
+			if (!keepGoing || !active) {
+				if (timer) clearInterval(timer);
+				return;
+			}
+		};
+		void tick();
+		timer = setInterval(tick, POLL_INTERVAL);
+		return () => { active = false; if (timer) clearInterval(timer); };
+	}, [enabled, refresh]);
 
 	return { conversations, loading, error, refresh };
 }
 
 /* ── Unread counts hook ─────────────────────────────────────────────────── */
 
-export function useChatUnread() {
+export function useChatUnread(enabled = true) {
 	const [unread, setUnread] = useState({ totalUnread: 0, conversations: [] as { conversationId: string; unreadCount: number }[] });
 
 	const refresh = useCallback(async () => {
 		try {
 			setUnread(await getChatUnread());
-		} catch {
-			// silent — non-critical
+		} catch (e) {
+			// Stop polling on 403 — silent for other errors.
+			if (isForbidden(e)) return false as const;
 		}
+		return true as const;
 	}, []);
 
 	useEffect(() => {
-		refresh();
-		const timer = setInterval(refresh, POLL_INTERVAL);
-		return () => clearInterval(timer);
-	}, [refresh]);
+		if (!enabled) return;
+		let active = true;
+		let timer: ReturnType<typeof setInterval> | undefined;
+		const tick = async () => {
+			const keepGoing = await refresh();
+			if (!keepGoing || !active) {
+				if (timer) clearInterval(timer);
+				return;
+			}
+		};
+		void tick();
+		timer = setInterval(tick, POLL_INTERVAL);
+		return () => { active = false; if (timer) clearInterval(timer); };
+	}, [enabled, refresh]);
 
 	return { unread, refresh };
 }

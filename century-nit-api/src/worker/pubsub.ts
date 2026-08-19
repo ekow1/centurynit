@@ -13,7 +13,18 @@ import { env } from "../env.js";
  * reconnect automatically (EventSource is built for this).
  */
 
-const publisher = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+const publisher = new Redis(env.REDIS_URL, {
+	maxRetriesPerRequest: null,
+	// Cap reconnect backoff at 30s so a Redis outage doesn't hammer the
+	// network — ioredis defaults to retrying every ~2s forever.
+	retryStrategy: (times) => Math.min(times * 2_000, 30_000),
+});
+
+// Without an error listener every failed reconnect prints
+// "[ioredis] Unhandled error event" with a full stack trace.
+publisher.on("error", (err) => {
+	console.error(`[pubsub] redis error: ${err.message}`);
+});
 
 export function publishToUser(userId: string, payload: unknown): void {
 	const channel = `user:${userId}:events`;

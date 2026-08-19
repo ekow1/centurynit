@@ -30,12 +30,13 @@ function ensureOpen() {
 	if (es || refCount === 0) return;
 	try {
 		es = new EventSource(`${API_PREFIX}/events/stream`, { withCredentials: true });
-		es.onmessage = (ev) => {
-			// The backend publishes chat events as raw JSON on the default
-			// message channel (no `event:` field), so they arrive here.
+		// The backend relays every Redis pub/sub message under the
+		// `notification` SSE event name (see events.ts writeSSE), so chat
+		// events arrive here too — we filter by the payload's `type` field.
+		es.addEventListener("notification", (ev) => {
 			try {
-				const parsed = JSON.parse(ev.data) as ChatSSEEvent;
-				if (!parsed?.type) return;
+				const parsed = JSON.parse((ev as MessageEvent).data) as ChatSSEEvent;
+				if (!parsed?.type?.startsWith?.("chat.")) return;
 				for (const fn of listeners) {
 					try {
 						fn(parsed);
@@ -46,7 +47,7 @@ function ensureOpen() {
 			} catch {
 				// malformed payload — ignore
 			}
-		};
+		});
 		es.onerror = () => {
 			// EventSource auto-reconnects; nothing to do.
 		};

@@ -14,7 +14,18 @@ import type { QueuedEmail } from "../services/notifications.js";
  * Redis is shared with the existing worker connection settings.
  */
 
-export const connection = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+export const connection = new Redis(env.REDIS_URL, {
+	maxRetriesPerRequest: null,
+	// Cap reconnect backoff at 30s — the ioredis default retries every ~2s
+	// forever, which floods the logs during a Redis outage.
+	retryStrategy: (times) => Math.min(times * 2_000, 30_000),
+});
+
+// Without an error listener every failed reconnect prints
+// "[ioredis] Unhandled error event" with a full stack trace.
+connection.on("error", (err) => {
+	console.error(`[queues] redis error: ${err.message}`);
+});
 
 /** BullMQ job ids may not contain `:`, which our idempotency keys use as a separator. */
 function toJobId(id: string): string {

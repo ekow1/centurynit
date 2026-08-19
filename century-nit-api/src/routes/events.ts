@@ -43,8 +43,27 @@ eventsRouter.get("/stream", requireAuth, async (c) => {
 		});
 
 		// Dedicated subscriber connection for this stream.
-		const subscriber = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
-		await subscriber.subscribe(channel);
+		//
+		// Hardened against a Redis outage: a capped retry backoff (the ioredis
+		// default retries every ~2s forever), an error listener (without one
+		// every failed reconnect logs "[ioredis] Unhandled error event" with a
+		// stack trace — multiplied by one connection per open SSE stream), and
+		// a connect timeout so `subscribe` can't hang the request. If Redis is
+		// unreachable the stream degrades to heartbeat-only: the client stays
+		// connected and the 30s notification poll covers delivery.
+		const subscriber = new Redis(env.REDIS_URL, {
+			maxRetriesPerRequest: null,
+			connectTimeout: 5_000,
+			retryStrategy: (times) => Math.min(times * 2_000, 30_000),
+		});
+		subscriber.on("error", (err) => {
+			console.error(`[sse] redis subscriber error (user ${user.id}): ${err.message}`);
+		});
+		try {
+			await subscriber.subscribe(channel);
+		} catch (err) {
+			console.error(`[sse] subscribe failed (user ${user.id}):`, err);
+		}
 
 		subscriber.on("message", (ch, message) => {
 			if (!aborted && ch === channel) {

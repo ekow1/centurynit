@@ -500,15 +500,16 @@ const launcherSquareBtnStyle: CSSProperties = {
 	zIndex: 9999,
 	width: "48px",
 	height: "48px",
+	background: "#000000",
+	color: "#ffffff",
+	border: "2px solid #000000",
+	borderRadius: "0px",
+	boxShadow: "4px 4px 0px rgba(0,0,0,0.5)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	background: "#000000",
-	color: "#ffffff",
-	border: "1px solid #000000",
-	borderRadius: "0px",
-	boxShadow: "0 10px 30px rgba(0,0,0,0.8)",
 	cursor: "pointer",
+	transition: "transform 0.1s ease",
 };
 
 const unreadSquareBadgeStyle: CSSProperties = {
@@ -527,16 +528,16 @@ const unreadSquareBadgeStyle: CSSProperties = {
 
 const windowContainerStyle: CSSProperties = {
 	position: "fixed",
-	bottom: "84px",
+	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "420px",
+	width: "360px",
 	height: "600px",
-	maxHeight: "calc(100vh - 100px)",
+	maxHeight: "calc(100vh - 48px)",
 	background: "#ffffff",
-	border: "1px solid #e4e4e7",
+	border: "2px solid #000000",
 	borderRadius: "0px",
-	boxShadow: "0 25px 50px rgba(0,0,0,0.9)",
+	boxShadow: "6px 6px 0px rgba(0,0,0,1)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
@@ -545,8 +546,8 @@ const windowContainerStyle: CSSProperties = {
 };
 
 const windowExpandedStyle: CSSProperties = {
-	width: "880px",
-	height: "660px",
+	width: "800px",
+	maxHeight: "calc(100vh - 48px)",
 	maxWidth: "calc(100vw - 48px)",
 };
 
@@ -556,7 +557,7 @@ const headerStyle: CSSProperties = {
 	justifyContent: "space-between",
 	padding: "10px 14px",
 	background: "#ffffff",
-	borderBottom: "1px solid #e4e4e7",
+	borderBottom: "2px solid #000000",
 };
 
 const indicatorDotStyle: CSSProperties = {
@@ -567,28 +568,30 @@ const indicatorDotStyle: CSSProperties = {
 };
 
 const headerTitleStyle: CSSProperties = {
-	fontSize: "11px",
-	fontWeight: 700,
+	fontSize: "12px",
+	fontWeight: 800,
 	letterSpacing: "0.08em",
 	fontFamily: "monospace",
-	color: "#ffffff",
+	color: "#000000",
+	textTransform: "uppercase",
 };
 
 const presenceSelectStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#000000",
-	border: "1px solid #e4e4e7",
+	border: "2px solid #000000",
 	borderRadius: "0px",
-	fontSize: "10px",
+	fontSize: "11px",
+	fontWeight: 800,
 	fontFamily: "monospace",
-	padding: "3px 6px",
+	padding: "4px 8px",
 	outline: "none",
 };
 
 const controlBtnStyle: CSSProperties = {
-	background: "transparent",
-	border: "1px solid #e4e4e7",
-	color: "#52525b",
+	background: "#ffffff",
+	border: "2px solid #000000",
+	color: "#000000",
 	width: "24px",
 	height: "24px",
 	borderRadius: "0px",
@@ -596,38 +599,40 @@ const controlBtnStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	fontSize: "11px",
+	fontSize: "12px",
+	fontWeight: 800,
 };
 
 const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr",
-	borderBottom: "1px solid #e4e4e7",
+	borderBottom: "2px solid #000000",
 	background: "#ffffff",
 };
 
 const channelBtnStyle: CSSProperties = {
 	padding: "10px 8px",
-	background: "transparent",
+	background: "#ffffff",
 	border: "none",
-	borderBottom: "2px solid transparent",
-	color: "#52525b",
+	borderRight: "2px solid #000000",
+	borderBottom: "2px solid #000000",
+	color: "#000000",
 	fontSize: "11px",
-	fontWeight: 700,
+	fontWeight: 800,
 	letterSpacing: "0.06em",
 	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
-	gap: "4px",
+	gap: "6px",
 	cursor: "pointer",
 	borderRadius: "0px",
+	textTransform: "uppercase",
 };
 
 const activeChannelBtnStyle: CSSProperties = {
 	color: "#ffffff",
-	borderBottomColor: "#ffffff",
-	background: "#ffffff",
+	background: "#000000",
 };
 
 const tabDotBadgeStyle: CSSProperties = {
@@ -661,25 +666,27 @@ const directoryContainerStyle: CSSProperties = {
 const searchInputStyle: CSSProperties = {
 	width: "100%",
 	background: "#ffffff",
-	border: "1px solid #e4e4e7",
+	border: "2px solid #000000",
 	borderRadius: "0px",
 	color: "#000000",
-	padding: "6px 10px",
-	fontSize: "11px",
+	padding: "8px 12px",
+	fontSize: "12px",
 	fontFamily: "monospace",
 	outline: "none",
 	boxSizing: "border-box",
+	fontWeight: 700,
 };
 
 const sectionHeaderStyle: CSSProperties = {
-	padding: "6px 10px",
-	background: "#ffffff",
-	color: "#52525b",
-	fontSize: "9px",
-	fontWeight: 700,
-	letterSpacing: "0.08em",
+	padding: "8px 12px",
+	background: "#e4e4e7",
+	color: "#000000",
+	fontSize: "10px",
+	fontWeight: 800,
+	letterSpacing: "0.1em",
 	fontFamily: "monospace",
-	borderBottom: "1px solid #1c1c1f",
+	borderBottom: "2px solid #000000",
+	borderTop: "2px solid #000000",
 };
 
 const activeChatRowStyle: CSSProperties = {
@@ -687,10 +694,10 @@ const activeChatRowStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "8px 10px",
+	padding: "10px 12px",
 	background: "transparent",
 	border: "none",
-	borderBottom: "1px solid #1c1c1f",
+	borderBottom: "1px solid #d4d4d8",
 	borderRadius: "0px",
 	cursor: "pointer",
 	textAlign: "left",
@@ -701,10 +708,10 @@ const staffCardBtnStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "8px 10px",
+	padding: "10px 12px",
 	background: "transparent",
 	border: "none",
-	borderBottom: "1px solid #1c1c1f",
+	borderBottom: "1px solid #d4d4d8",
 	borderRadius: "0px",
 	cursor: "pointer",
 };
@@ -717,30 +724,31 @@ const clientChatCardBtnStyle: CSSProperties = {
 	padding: "10px 12px",
 	background: "transparent",
 	border: "none",
-	borderBottom: "1px solid #1c1c1f",
+	borderBottom: "1px solid #d4d4d8",
 	borderRadius: "0px",
 	cursor: "pointer",
 };
 
 const avatarPillStyle: CSSProperties = {
-	width: "28px",
-	height: "28px",
+	width: "32px",
+	height: "32px",
 	borderRadius: "0px",
-	background: "#ffffff",
-	color: "#000000",
+	background: "#000000",
+	color: "#ffffff",
 	fontWeight: 800,
-	fontSize: "11px",
+	fontSize: "12px",
 	fontFamily: "monospace",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
+	border: "2px solid #000000",
 };
 
 const avatarMiniStyle: CSSProperties = {
 	width: "24px",
 	height: "24px",
 	borderRadius: "0px",
-	background: "#e4e4e7",
+	background: "#000000",
 	color: "#ffffff",
 	fontWeight: 700,
 	fontSize: "10px",
@@ -751,12 +759,13 @@ const avatarMiniStyle: CSSProperties = {
 };
 
 const presenceBadgeStyle: CSSProperties = {
-	fontSize: "9px",
+	fontSize: "10px",
 	fontFamily: "monospace",
-	color: "#52525b",
-	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	padding: "2px 5px",
+	fontWeight: 800,
+	color: "#ffffff",
+	background: "#000000",
+	border: "2px solid #000000",
+	padding: "2px 6px",
 	borderRadius: "0px",
 };
 
@@ -793,19 +802,19 @@ const threadHeaderStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	padding: "8px 12px",
+	padding: "10px 14px",
 	background: "#ffffff",
-	borderBottom: "1px solid #e4e4e7",
+	borderBottom: "2px solid #000000",
 };
 
 const backBtnStyle: CSSProperties = {
-	background: "transparent",
-	border: "1px solid #e4e4e7",
+	background: "#ffffff",
+	border: "2px solid #000000",
 	color: "#000000",
-	padding: "3px 6px",
+	padding: "4px 8px",
 	borderRadius: "0px",
-	fontSize: "10px",
-	fontFamily: "monospace",
+	fontSize: "11px",
+	fontWeight: 800,
 	cursor: "pointer",
 };
 
@@ -825,21 +834,23 @@ const messageRowStyle: CSSProperties = {
 
 const messageBubbleStyle: CSSProperties = {
 	maxWidth: "80%",
-	padding: "8px 12px",
+	padding: "10px 14px",
 	borderRadius: "0px",
-	fontSize: "12px",
+	fontSize: "13px",
+	fontWeight: 500,
 };
 
 const myBubbleStyle: CSSProperties = {
 	background: "#ffffff",
 	color: "#000000",
-	border: "1px solid #ffffff",
+	border: "2px solid #000000",
+	boxShadow: "2px 2px 0px #000000",
 };
 
 const theirBubbleStyle: CSSProperties = {
-	background: "#ffffff",
+	background: "#f4f4f5",
 	color: "#000000",
-	border: "1px solid #e4e4e7",
+	border: "2px solid #000000",
 };
 
 const bubbleAuthorStyle: CSSProperties = {
@@ -861,31 +872,32 @@ const bubbleTimeStyle: CSSProperties = {
 
 const formStyle: CSSProperties = {
 	display: "flex",
-	padding: "8px 10px",
+	padding: "10px",
 	background: "#ffffff",
-	borderTop: "1px solid #e4e4e7",
-	gap: "6px",
+	borderTop: "2px solid #000000",
+	gap: "8px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
 	background: "#ffffff",
-	border: "1px solid #e4e4e7",
+	border: "2px solid #000000",
 	borderRadius: "0px",
 	color: "#000000",
-	padding: "8px 10px",
-	fontSize: "12px",
+	padding: "8px 12px",
+	fontSize: "13px",
+	fontWeight: 600,
 	outline: "none",
 };
 
 const sendBtnStyle: CSSProperties = {
-	background: "#ffffff",
-	color: "#000000",
+	background: "#000000",
+	color: "#ffffff",
 	border: "none",
 	borderRadius: "0px",
-	padding: "8px 14px",
-	fontWeight: 700,
-	fontSize: "11px",
+	padding: "8px 16px",
+	fontWeight: 800,
+	fontSize: "12px",
 	fontFamily: "monospace",
 	letterSpacing: "0.05em",
 	cursor: "pointer",

@@ -11,40 +11,58 @@ import { HttpError } from "./error.js";
  * @param limit Maximum number of requests allowed in the window.
  * @param windowSeconds Time window in seconds.
  */
-export function rateLimit(limit: number, windowSeconds: number): MiddlewareHandler {
-	return async (c, next) => {
-		const ip = c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || "unknown-ip";
-		
-		// Better Auth routes might be deeply nested in the catch-all
-		// To properly isolate them, we'll parse the raw path if it's inside /api/auth
-		let routePath = c.req.routePath;
-		if (routePath === "/*" || routePath === "/api/auth/*") {
-			routePath = c.req.path;
+import type { Context, Next } from "hono";
+
+export async function rateLimit(c: Context, next: Next) {
+	const ip = c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || "unknown-ip";
+	
+	let routePath = c.req.routePath;
+	if (routePath === "/*" || routePath === "/api/auth/*" || routePath === "*") {
+		routePath = c.req.path;
+	}
+	
+	let limit = 0;
+	let windowSeconds = 60;
+
+	// Assign limits based on the actual path
+	if (routePath.includes("/sign-in/")) {
+		limit = 10;
+	} else if (routePath.includes("/sign-up/")) {
+		limit = 5;
+	} else if (routePath.includes("/phone-number/send-otp") || routePath.includes("/email-otp/send-verification-otp")) {
+		limit = 3;
+	} else if (routePath.includes("/forget-password")) {
+		limit = 3;
+	} else if (routePath.includes("/reset-password")) {
+		limit = 5;
+	}
+
+	// If no limit is defined for this route, allow it without rate limiting
+	if (limit === 0) {
+		return next();
+	}
+
+	const key = `ratelimit:${routePath}:${ip}`;
+
+	try {
+		const current = await connection.incr(key);
+		if (current === 1) {
+			await connection.expire(key, windowSeconds);
 		}
-		
-		const key = `ratelimit:${routePath}:${ip}`;
 
-		try {
-			const current = await connection.incr(key);
-			if (current === 1) {
-				await connection.expire(key, windowSeconds);
-			}
-
-			if (current > limit) {
-				throw new HttpError(
-					429,
-					"TOO_MANY_REQUESTS",
-					"Too many requests. Please try again later."
-				);
-			}
-		} catch (e) {
-			if (e instanceof HttpError) {
-				throw e;
-			}
-			// Redis failure: log it and fail open
-			console.error("[RateLimit] Error:", e);
+		if (current > limit) {
+			throw new HttpError(
+				429,
+				"TOO_MANY_REQUESTS",
+				"Too many requests. Please try again later."
+			);
 		}
+	} catch (e) {
+		if (e instanceof HttpError) {
+			throw e;
+		}
+		console.error("[RateLimit] Error:", e);
+	}
 
-		await next();
-	};
+	await next();
 }

@@ -362,12 +362,7 @@ auth.post("/check-email", async (c) => {
 	return c.json({ exists: !!user });
 });
 
-auth.use("/sign-in/*", rateLimit(10, 60));
-auth.use("/sign-up/*", rateLimit(5, 60));
-auth.use("/phone-number/send-otp", rateLimit(3, 60));
-auth.use("/email-otp/send-verification-otp", rateLimit(3, 60));
-auth.use("/forget-password", rateLimit(3, 60));
-auth.use("/reset-password", rateLimit(5, 60));
+auth.use("*", rateLimit);
 
 auth.all("/*", async (c) => {
 	return (await getAuthInstance()).handler(c.req.raw);

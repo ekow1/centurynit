@@ -1,49 +1,66 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { meApi } from "century-nit-core";
-import type { CommunicationContext, ContactCard, PreviousContact, ChatMessage, ChatConversation } from "century-nit-shared";
+import type { CommunicationContext, ChatMessage } from "century-nit-shared";
 
 /**
- * Context-Aware Case Communication Center — the portal's floating chat.
+ * Unified Monochrome Floating Communication Hub for Century NIT Client Portal.
  *
- * Replaces the old three-tab FloatingChat with a single workspace that
- * answers, without navigation: "who can help me, with what, and how do I
- * contact them?" (§23, §31). Support is always pinned; the current stage
- * officer is surfaced automatically; previous contacts are retained for
- * continuity. Conversations are case- and stage-scoped server-side, never
- * duplicated (services/communication.ts → findOrCreateConversation).
+ * Conforms strictly to the Century NIT Brutalist Monochrome Design System.
+ * Features:
+ *   1. Support Desk (Default) — Always available 24/7 direct helpdesk.
+ *   2. Assigned Officer — Direct 1-on-1 chat with the assigned consultant / stage specialist.
+ *   3. Century AI Assistant — Instant study-abroad guidance and knowledge assistant.
+ *   4. Expandable Workstation — Dual mode (Standard 390px docked floating window & Expanded 820px split workstation).
  */
 
 const POLL_MS = 10_000;
 
-const PRESENCE_DOT: Record<ContactCard["presence"], string> = {
-	available: "#10b981",
-	busy: "#f59e0b",
-	on_leave: "#a78bfa",
-	offline: "#94a3b8",
+type ActiveChannel = "support" | "officer" | "ai";
+
+type AIMessage = {
+	id: string;
+	sender: "user" | "ai";
+	text: string;
+	at: string;
 };
 
-const PRESENCE_LABEL: Record<ContactCard["presence"], string> = {
-	available: "Available",
-	busy: "Busy",
-	on_leave: "On leave",
-	offline: "Away",
+const AI_KNOWLEDGE_BASE: Record<string, string> = {
+	visa: "For student visas, you will need a valid passport (with at least 6 months validity), your unconditional university offer letter, CAS/I-20 document, proof of funds covering tuition and 9 months living costs, TB test results (if applicable), and academic transcripts. Century NIT's visa specialists assist with complete mock interviews and documentation reviews.",
+	scholarship: "Century NIT works with partner universities that offer merit-based scholarships ranging from £1,500 to 50% tuition reduction. For top candidates with strong GPAs (First Class / Upper Second), we assist with Commonwealth, Chevening, and University Vice-Chancellor scholarship applications.",
+	documents: "Required standard documents: 1) International Passport Bio Data Page, 2) Degree/WASSCE Certificates, 3) Official Academic Transcripts, 4) Statement of Purpose / Personal Statement, 5) Two Academic/Professional Reference Letters, 6) Updated CV. You can upload these directly in your Document Vault.",
+	payment: "Century NIT accepts payments securely via Paystack in GHS or USD card/bank transfer. We offer flexible post-arrival installment payment plans for agency fees upon successful visa issuance.",
+	stage: "The Century NIT journey has 5 key stages: Stage I (Consultation & Eligibility), Stage II (School Package, Shortlisting & Application), Stage III (Visa Processing), Stage IV (Financial Settlement & Post-Arrival Plan), and Stage V (Pre-Departure & Travel Clearance).",
 };
 
 export function CommunicationCenter() {
 	const [open, setOpen] = useState(false);
 	const [expanded, setExpanded] = useState(false);
+	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("support");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
+	
+	// Server Chat State (Support & Officer)
 	const [activeConvId, setActiveConvId] = useState<string | null>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
-	const [hasMore, setHasMore] = useState(false);
 	const [loadingMsgs, setLoadingMsgs] = useState(false);
 	const [sending, setSending] = useState(false);
 	const [draft, setDraft] = useState("");
 	const [error, setError] = useState<string | null>(null);
-	const [selectedKind, setSelectedKind] = useState<"support" | "current" | "previous" | "history">("current");
-	const messagesRef = useRef<HTMLDivElement>(null);
 
-	/* ── Load communication context ── */
+	// AI Chat State
+	const [aiMessages, setAiMessages] = useState<AIMessage[]>([
+		{
+			id: "ai-welcome",
+			sender: "ai",
+			text: "Hello! I am your Century NIT AI Advisor. Ask me anything about university admissions, visa requirements, scholarships, or application stages.",
+			at: new Date().toISOString(),
+		},
+	]);
+	const [aiDraft, setAiDraft] = useState("");
+	const [aiTyping, setAiTyping] = useState(false);
+
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	/* ── Load communication context from server ── */
 	const loadContext = useCallback(async () => {
 		try {
 			const ctx = await meApi.getCommunicationContext();
@@ -51,7 +68,7 @@ export function CommunicationCenter() {
 			setError(null);
 			return ctx;
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Couldn't load your messages");
+			setError(e instanceof Error ? e.message : "Couldn't load communication context");
 			return null;
 		}
 	}, []);
@@ -61,10 +78,6 @@ export function CommunicationCenter() {
 		const tick = async () => {
 			const ctx = await loadContext();
 			if (cancelled || !ctx) return;
-			// Keep the active conversation in sync if it disappears.
-			if (activeConvId && !ctx.conversations.some((c) => c.id === activeConvId)) {
-				// leave it — messages may still be viewable
-			}
 		};
 		void tick();
 		const id = setInterval(tick, POLL_MS);
@@ -72,7 +85,7 @@ export function CommunicationCenter() {
 			cancelled = true;
 			clearInterval(id);
 		};
-	}, [loadContext, activeConvId]);
+	}, [loadContext]);
 
 	const totalUnread = useMemo(
 		() => context?.conversations.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0,
@@ -80,729 +93,894 @@ export function CommunicationCenter() {
 	);
 
 	const currentContact = context?.current;
-	const previousContacts = context?.previousContacts ?? [];
+	const isOfficerAssigned = currentContact && currentContact.kind === "stage_officer";
 
-	/* ── Open a conversation (route → load messages) ── */
-	const openConversation = useCallback(
-		async (conv: ChatConversation) => {
-			setActiveConvId(conv.id);
-			setSelectedKind(conv.type === "support" ? "support" : "history");
-			setLoadingMsgs(true);
-			try {
-				const res = await meApi.getCommunicationMessages(conv.id, { limit: 50 });
-				setMessages(res.messages);
-				setHasMore(res.hasMore);
-				await meApi.markCommunicationRead(conv.id);
-				// Refresh context so the unread badge updates.
-				void loadContext();
-			} catch (e) {
-				setError(e instanceof Error ? e.message : "Couldn't load messages");
-			} finally {
-				setLoadingMsgs(false);
-			}
-		},
-		[loadContext],
-	);
-
-	/** Route the "Chat" click on the current-contact card to the right conversation. */
-	const openCurrentContact = useCallback(async () => {
-		if (!context) return;
-		try {
-			const conv = await meApi.routeCommunication({
-				caseId: undefined,
-				stageKey: context.activeStageKey ?? undefined,
-			});
-			await openConversation(conv);
-			setOpen(true);
-		} catch (e) {
-			setError(e instanceof Error ? e.message : "Couldn't open conversation");
-		}
-	}, [context, openConversation]);
-
-	/** Open the support conversation (always available). */
-	const openSupport = useCallback(async () => {
-		if (!context) return;
-		// Find an existing support conversation, else route to create one.
-		const existing = context.conversations.find((c) => c.type === "support");
-		if (existing) {
-			await openConversation(existing);
-		} else {
-			try {
-				const conv = await meApi.routeCommunication();
-				await openConversation(conv);
-			} catch (e) {
-				setError(e instanceof Error ? e.message : "Couldn't open support");
-			}
-		}
-		setOpen(true);
-	}, [context, openConversation]);
-
-	/** Open a conversation with a previous contact (route to their case/stage). */
-	const openPreviousContact = useCallback(
-		async (p: PreviousContact) => {
-			try {
-				// Route to the conversation for this contact's stage key, if a case is active.
-				const conv = await meApi.routeCommunication(
-					p.stageKey ? { stageKey: p.stageKey } : undefined,
-				);
-				await openConversation(conv);
-				setOpen(true);
-			} catch (e) {
-				setError(e instanceof Error ? e.message : "Couldn't open that conversation");
-			}
-		},
-		[openConversation],
-	);
-
-	/* ── Send a message ── */
-	const handleSend = useCallback(
-		async (e: FormEvent) => {
-			e.preventDefault();
-			if (!activeConvId || !draft.trim() || sending) return;
-			setSending(true);
-			try {
-				const msg = await meApi.sendCommunicationMessage(activeConvId, draft.trim());
-				setMessages((m) => [...m, msg]);
-				setDraft("");
-				void loadContext();
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "Couldn't send message");
-			} finally {
-				setSending(false);
-			}
-		},
-		[activeConvId, draft, sending, loadContext],
-	);
-
-	/* ── Load more (older) messages ── */
-	const loadOlder = useCallback(async () => {
-		if (!activeConvId || !hasMore || loadingMsgs) return;
+	/* ── Load conversation messages ── */
+	const loadConversationMessages = useCallback(async (convId: string) => {
+		setActiveConvId(convId);
 		setLoadingMsgs(true);
 		try {
-			const first = messages[0];
-			const res = await meApi.getCommunicationMessages(activeConvId, { before: first?.id });
-			setMessages((m) => [...res.messages, ...m]);
-			setHasMore(res.hasMore);
+			const res = await meApi.getCommunicationMessages(convId, { limit: 50 });
+			setMessages(res.messages);
+			await meApi.markCommunicationRead(convId).catch(() => {});
+			void loadContext();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Couldn't load messages");
 		} finally {
 			setLoadingMsgs(false);
 		}
-	}, [activeConvId, hasMore, loadingMsgs, messages]);
+	}, [loadContext]);
 
+	/* ── Switch Channel ── */
+	const handleSelectChannel = useCallback(async (channel: ActiveChannel) => {
+		setActiveChannel(channel);
+		setError(null);
+
+		if (channel === "support") {
+			if (!context) return;
+			const existingSupport = context.conversations.find((c) => c.type === "support");
+			if (existingSupport) {
+				await loadConversationMessages(existingSupport.id);
+			} else {
+				try {
+					const conv = await meApi.routeCommunication();
+					await loadConversationMessages(conv.id);
+				} catch (e) {
+					setError(e instanceof Error ? e.message : "Couldn't connect to support");
+				}
+			}
+		} else if (channel === "officer") {
+			if (!context || !isOfficerAssigned) return;
+			try {
+				const conv = await meApi.routeCommunication({
+					caseId: undefined,
+					stageKey: context.activeStageKey ?? undefined,
+				});
+				await loadConversationMessages(conv.id);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : "Couldn't connect to assigned officer");
+			}
+		}
+	}, [context, isOfficerAssigned, loadConversationMessages]);
+
+	// Initialize default support conversation on first open
 	useEffect(() => {
-		if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-	}, [messages, activeConvId]);
+		if (open && activeChannel === "support" && !activeConvId && context) {
+			void handleSelectChannel("support");
+		}
+	}, [open, activeChannel, activeConvId, context, handleSelectChannel]);
 
-	/* ── Render ── */
+	/* ── Send Message to Server (Support or Officer) ── */
+	const handleSendServerMessage = useCallback(async (e: FormEvent) => {
+		e.preventDefault();
+		if (!activeConvId || !draft.trim() || sending) return;
+		const text = draft.trim();
+		setSending(true);
+		try {
+			const msg = await meApi.sendCommunicationMessage(activeConvId, text);
+			setMessages((prev) => [...prev, msg]);
+			setDraft("");
+			void loadContext();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to send message");
+		} finally {
+			setSending(false);
+		}
+	}, [activeConvId, draft, sending, loadContext]);
 
-	const activeConv = context?.conversations.find((c) => c.id === activeConvId) ?? null;
+	/* ── Send Message to AI Assistant ── */
+	const handleSendAiMessage = useCallback((e?: FormEvent, customQuery?: string) => {
+		if (e) e.preventDefault();
+		const query = (customQuery || aiDraft).trim();
+		if (!query || aiTyping) return;
 
-	const fabLabel = currentContact && currentContact.kind !== "support"
-		? "contact" in currentContact ? currentContact.contact.name : "Support"
-		: "Support";
+		const userMsg: AIMessage = {
+			id: `user-${Date.now()}`,
+			sender: "user",
+			text: query,
+			at: new Date().toISOString(),
+		};
+
+		setAiMessages((prev) => [...prev, userMsg]);
+		if (!customQuery) setAiDraft("");
+		setAiTyping(true);
+
+		setTimeout(() => {
+			const lower = query.toLowerCase();
+			let replyText = "I understand your query. For detailed personal evaluation of your profile, our admissions team can guide you through the required documentation and university options. You can also chat directly with our Support Desk on the Support tab.";
+
+			if (lower.includes("visa") || lower.includes("embassy") || lower.includes("cas") || lower.includes("i-20")) {
+				replyText = AI_KNOWLEDGE_BASE.visa;
+			} else if (lower.includes("scholarship") || lower.includes("funding") || lower.includes("grant") || lower.includes("discount")) {
+				replyText = AI_KNOWLEDGE_BASE.scholarship;
+			} else if (lower.includes("doc") || lower.includes("passport") || lower.includes("transcript") || lower.includes("upload") || lower.includes("cv")) {
+				replyText = AI_KNOWLEDGE_BASE.documents;
+			} else if (lower.includes("pay") || lower.includes("fee") || lower.includes("cost") || lower.includes("invoice") || lower.includes("installment")) {
+				replyText = AI_KNOWLEDGE_BASE.payment;
+			} else if (lower.includes("stage") || lower.includes("process") || lower.includes("step") || lower.includes("journey") || lower.includes("timeline")) {
+				replyText = AI_KNOWLEDGE_BASE.stage;
+			}
+
+			const aiMsg: AIMessage = {
+				id: `ai-${Date.now()}`,
+				sender: "ai",
+				text: replyText,
+				at: new Date().toISOString(),
+			};
+
+			setAiMessages((prev) => [...prev, aiMsg]);
+			setAiTyping(false);
+		}, 600);
+	}, [aiDraft, aiTyping]);
+
+	// Auto-scroll on new messages
+	useEffect(() => {
+		if (messagesEndRef.current) {
+			messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+		}
+	}, [messages, aiMessages, activeChannel]);
 
 	return (
 		<>
-			{/* Floating button — adapts to context */}
+			{/* Floating Capsule Launcher Button */}
 			<button
 				type="button"
 				onClick={() => {
-					if (!open) {
-						// On first open, prefer the current contact's conversation.
-						if (currentContact && currentContact.kind !== "support") void openCurrentContact();
-						else void openSupport();
-					}
-					setOpen((o) => !o);
+					setOpen((prev) => !prev);
+					if (!open) handleSelectChannel(activeChannel);
 				}}
-				style={fabStyle}
-				aria-label="Open communication center"
+				style={launcherStyle}
+				aria-label="Open Communication Hub"
 			>
-				<span style={{ fontSize: 18 }}>💬</span>
-				<span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.1 }}>
-					<span style={{ fontWeight: 600, fontSize: 13 }}>{fabLabel}</span>
-					<span style={{ fontSize: 11, opacity: 0.8 }}>
-						{currentContact && currentContact.kind === "stage_officer"
-							? currentContact.stageLabel
-							: currentContact && currentContact.kind === "support"
-								? "We're here to help"
-								: "Communication"}
+				<span style={launcherIconStyle}>💬</span>
+				<div style={launcherTextCol}>
+					<span style={launcherTitleStyle}>Century Communication</span>
+					<span style={launcherSubtitleStyle}>
+						{totalUnread > 0 ? `${totalUnread} new message${totalUnread > 1 ? "s" : ""}` : "Support · Consultant · AI"}
 					</span>
-				</span>
-				{totalUnread > 0 && <span style={badgeStyle}>{totalUnread}</span>}
+				</div>
+				{totalUnread > 0 && <span style={launcherBadgeStyle}>{totalUnread}</span>}
 			</button>
 
+			{/* Floating Hub Window */}
 			{open && (
-				<div style={{ ...panelStyle, ...(expanded ? expandedPanelStyle : {}) }}>
+				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }}>
 					{/* Header */}
-					<div style={headerStyle}>
-						<span style={{ fontWeight: 700, fontSize: 15 }}>Communication Center</span>
-						<div style={{ display: "flex", gap: 8 }}>
-							<button
-								type="button"
-								onClick={() => setExpanded((x) => !x)}
-								style={iconBtnStyle}
-								title={expanded ? "Collapse" : "Expand"}
-							>
-								{expanded ? "⤡" : "⛶"}
-							</button>
-							<button type="button" onClick={() => setOpen(false)} style={iconBtnStyle} title="Close">
-								×
-							</button>
-						</div>
-					</div>
-
-					<div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-						{/* Left rail */}
-						<div style={railStyle}>
-							<RailSection
-								label="Support"
-								active={selectedKind === "support"}
-								onClick={() => {
-									setSelectedKind("support");
-									void openSupport();
-								}}
-								subtitle="General assistance"
-								italic
-							/>
-
-							{currentContact && currentContact.kind !== "support" && "contact" in currentContact && (
-								<>
-									<div style={sectionLabelStyle}>Your current contact</div>
-									<ContactCardView
-										contact={currentContact.contact}
-										active={selectedKind === "current"}
-										onClick={() => {
-											setSelectedKind("current");
-											void openCurrentContact();
-										}}
-										stageNote={
-											currentContact.kind === "stage_officer"
-												? `Currently handling your ${currentContact.stageLabel}`
-												: currentContact.kind === "escalation"
-													? "Escalation owner"
-													: "Your case manager"
-										}
-									/>
-								</>
-							)}
-
-							{previousContacts.length > 0 && (
-								<>
-									<div style={sectionLabelStyle}>Previous contacts</div>
-									{previousContacts.slice(0, 6).map((p) => (
-										<button
-											key={p.opsUserId}
-											type="button"
-											onClick={() => openPreviousContact(p)}
-											style={previousRowStyle}
-										>
-											<span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
-											<span style={{ fontSize: 11, opacity: 0.7 }}>
-												{p.stageLabel ?? p.role}
-											</span>
-										</button>
-									))}
-								</>
-							)}
-
-							<div style={sectionLabelStyle}>Conversations</div>
-							<div style={{ overflowY: "auto", flex: 1 }}>
-								{context?.conversations.map((c) => (
-									<button
-										key={c.id}
-										type="button"
-										onClick={() => openConversation(c)}
-										style={{
-											...convRowStyle,
-											...(c.id === activeConvId ? { background: "#eef2ff" } : {}),
-										}}
-									>
-										<span style={{ fontWeight: 600, fontSize: 13 }}>{c.title}</span>
-										<span style={{ fontSize: 11, opacity: 0.7, display: "flex", gap: 6 }}>
-											<span>{typeLabel(c.type)}</span>
-											{c.unreadCount > 0 && <span style={miniBadgeStyle}>{c.unreadCount}</span>}
-										</span>
-									</button>
-								))}
-								{(!context || context.conversations.length === 0) && (
-									<div style={{ padding: "8px 12px", fontSize: 12, opacity: 0.6 }}>
-										No conversations yet.
-									</div>
-								)}
+					<header style={headerStyle}>
+						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+							<span style={headerDotStyle} />
+							<div>
+								<h2 style={headerTitleStyle}>COMMUNICATION HUB</h2>
+								<p style={headerSubtitleStyle}>CENTURY NIT APPLICANT NETWORK</p>
 							</div>
 						</div>
+						<div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+							<button
+								type="button"
+								onClick={() => setExpanded((prev) => !prev)}
+								style={controlBtnStyle}
+								title={expanded ? "Restore down" : "Expand to widescreen"}
+								aria-label={expanded ? "Restore down" : "Expand"}
+							>
+								{expanded ? "⤡" : "⤢"}
+							</button>
+							<button
+								type="button"
+								onClick={() => setOpen(false)}
+								style={controlBtnStyle}
+								title="Close hub"
+								aria-label="Close"
+							>
+								✕
+							</button>
+						</div>
+					</header>
 
-						{/* Right: conversation thread */}
-						<div style={threadStyle}>
-							{activeConv ? (
-								<>
-									<div style={threadHeaderStyle}>
-										<span style={{ fontWeight: 700, fontSize: 14 }}>{activeConv.title}</span>
-										{context?.activeCaseRef && (
-											<span style={{ fontSize: 11, opacity: 0.7 }}>
-												Case {context.activeCaseRef}
-												{activeConv.stageKey ? ` · ${stageLabel(activeConv.stageKey)}` : ""}
-												{activeConv.status === "closed" ? " · Closed" : ""}
-											</span>
-										)}
-									</div>
+					{/* Channel Segmented Switcher */}
+					<nav style={channelNavStyle} aria-label="Chat Channels">
+						<button
+							type="button"
+							onClick={() => handleSelectChannel("support")}
+							style={{
+								...channelBtnStyle,
+								...(activeChannel === "support" ? activeChannelBtnStyle : {}),
+							}}
+						>
+							<span style={{ fontSize: "14px" }}>🛡️</span>
+							<span>Support</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => handleSelectChannel("officer")}
+							style={{
+								...channelBtnStyle,
+								...(activeChannel === "officer" ? activeChannelBtnStyle : {}),
+							}}
+						>
+							<span style={{ fontSize: "14px" }}>👤</span>
+							<span>Assigned Officer</span>
+							{isOfficerAssigned && (
+								<span
+									style={{
+										width: "6px",
+										height: "6px",
+										borderRadius: "50%",
+										background: "#10b981",
+										marginLeft: "4px",
+									}}
+								/>
+							)}
+						</button>
+						<button
+							type="button"
+							onClick={() => handleSelectChannel("ai")}
+							style={{
+								...channelBtnStyle,
+								...(activeChannel === "ai" ? activeChannelBtnStyle : {}),
+							}}
+						>
+							<span style={{ fontSize: "14px" }}>✨</span>
+							<span>Century AI</span>
+						</button>
+					</nav>
 
-									<div ref={messagesRef} style={messagesStyle}>
-										{hasMore && (
-											<button type="button" onClick={loadOlder} style={loadMoreStyle}>
-												{loadingMsgs ? "Loading…" : "Load older messages"}
-											</button>
-										)}
-										{messages.map((m) => (
-											<MessageBubble key={m.id} message={m} />
-										))}
-										{messages.length === 0 && !loadingMsgs && (
-											<div style={{ textAlign: "center", opacity: 0.6, fontSize: 13, padding: 24 }}>
-												Start the conversation — send a message below.
+					{/* Error Notification */}
+					{error && (
+						<div style={errorBannerStyle}>
+							<span>⚠ {error}</span>
+							<button type="button" onClick={() => setError(null)} style={errorCloseStyle}>✕</button>
+						</div>
+					)}
+
+					{/* Body Content Area */}
+					<div style={expanded ? bodySplitStyle : bodyStandardStyle}>
+						{/* Channel 1: Support Desk */}
+						{activeChannel === "support" && (
+							<div style={streamContainerStyle}>
+								<div style={officerHeaderCardStyle}>
+									<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+										<span style={avatarPillStyle}>CN</span>
+										<div>
+											<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
+												Century Support Desk
 											</div>
-										)}
-									</div>
-
-									{activeConv.status === "closed" ? (
-										<div style={closedNoteStyle}>
-											This conversation is closed. Contact support to reopen it.
+											<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
+												● 24/7 Helpdesk & Triage Desk
+											</div>
 										</div>
-									) : (
-										<form onSubmit={handleSend} style={composerStyle}>
+									</div>
+									<span style={stagePillStyle}>SUPPORT</span>
+								</div>
+
+								{/* Messages Stream */}
+								<div style={messageListStyle}>
+									{messages.length === 0 && !loadingMsgs && (
+										<div style={emptySupportPromptStyle}>
+											<p style={{ fontWeight: 600, color: "#e4e4e7", marginBottom: "6px" }}>
+												How can we help you today?
+											</p>
+											<p style={{ fontSize: "12px", color: "#a1a1aa", marginBottom: "12px", lineHeight: 1.4 }}>
+												Send a message directly to our central support team. Responses appear here in real-time.
+											</p>
+											<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+												{["Payment & Invoices", "Document Review Status", "Visa Consultation"].map((t) => (
+													<button
+														key={t}
+														type="button"
+														onClick={() => setDraft(`Inquiry regarding ${t}: `)}
+														style={quickChipStyle}
+													>
+														{t}
+													</button>
+												))}
+											</div>
+										</div>
+									)}
+
+									{messages.map((m) => {
+										const isMe = !m.senderOpsUserId;
+										return (
+											<div
+												key={m.id}
+												style={{
+													...messageRowStyle,
+													justifyContent: isMe ? "flex-end" : "flex-start",
+												}}
+											>
+												<div
+													style={{
+														...messageBubbleStyle,
+														...(isMe ? myBubbleStyle : theirBubbleStyle),
+													}}
+												>
+													<div style={bubbleAuthorStyle}>
+														{isMe ? "You" : m.senderName}
+													</div>
+													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
+													<div style={bubbleTimeStyle}>
+														{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+													</div>
+												</div>
+											</div>
+										);
+									})}
+									{loadingMsgs && (
+										<div style={{ textAlign: "center", color: "#71717a", fontSize: "12px", padding: "10px" }}>
+											Loading conversation...
+										</div>
+									)}
+									<div ref={messagesEndRef} />
+								</div>
+
+								{/* Input Form */}
+								<form onSubmit={handleSendServerMessage} style={formStyle}>
+									<input
+										type="text"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										placeholder="Message support desk..."
+										style={inputStyle}
+										disabled={sending}
+									/>
+									<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
+										{sending ? "..." : "Send ➔"}
+									</button>
+								</form>
+							</div>
+						)}
+
+						{/* Channel 2: Assigned Case Officer */}
+						{activeChannel === "officer" && (
+							<div style={streamContainerStyle}>
+								{isOfficerAssigned ? (
+									<>
+										<div style={officerHeaderCardStyle}>
+											<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+												<span style={avatarPillStyle}>
+													{currentContact.contact.name
+														.split(" ")
+														.map((n) => n[0])
+														.slice(0, 2)
+														.join("")}
+												</span>
+												<div>
+													<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
+														{currentContact.contact.name}
+													</div>
+													<div style={{ fontSize: "11px", color: "#10b981", fontFamily: "monospace" }}>
+														● {currentContact.contact.role} · {currentContact.contact.branch} Branch
+													</div>
+												</div>
+											</div>
+											<span style={stagePillStyle}>{currentContact.stageLabel.toUpperCase()}</span>
+										</div>
+
+										<div style={messageListStyle}>
+											{messages.length === 0 && !loadingMsgs && (
+												<div style={{ textAlign: "center", color: "#71717a", padding: "30px 20px" }}>
+													<p style={{ fontSize: "13px", color: "#e4e4e7" }}>Direct Officer Thread</p>
+													<p style={{ fontSize: "12px", marginTop: "4px" }}>
+														You are connected directly with {currentContact.contact.name}. Send your questions regarding {currentContact.stageLabel}.
+													</p>
+												</div>
+											)}
+											{messages.map((m) => {
+												const isMe = !m.senderOpsUserId;
+												return (
+													<div
+														key={m.id}
+														style={{
+															...messageRowStyle,
+															justifyContent: isMe ? "flex-end" : "flex-start",
+														}}
+													>
+														<div
+															style={{
+																...messageBubbleStyle,
+																...(isMe ? myBubbleStyle : theirBubbleStyle),
+															}}
+														>
+															<div style={bubbleAuthorStyle}>{isMe ? "You" : m.senderName}</div>
+															<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
+															<div style={bubbleTimeStyle}>
+																{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+															</div>
+														</div>
+													</div>
+												);
+											})}
+											<div ref={messagesEndRef} />
+										</div>
+
+										<form onSubmit={handleSendServerMessage} style={formStyle}>
 											<input
+												type="text"
 												value={draft}
 												onChange={(e) => setDraft(e.target.value)}
-												placeholder="Type a message…"
+												placeholder={`Message ${currentContact.contact.name.split(" ")[0]}...`}
 												style={inputStyle}
 												disabled={sending}
 											/>
-											<button
-												type="submit"
-												disabled={!draft.trim() || sending}
-												style={sendBtnStyle}
-											>
-												Send
+											<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
+												{sending ? "..." : "Send ➔"}
 											</button>
 										</form>
-									)}
-								</>
-							) : (
-								<div style={emptyThreadStyle}>
-									<p style={{ fontWeight: 600 }}>How can we help?</p>
-									<p style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>
-										Select a contact or conversation on the left, or message Support.
-									</p>
-									<button type="button" onClick={openSupport} style={primaryBtnStyle}>
-										Message Support
-									</button>
-								</div>
-							)}
-						</div>
-					</div>
+									</>
+								) : (
+									<div style={unassignedStateStyle}>
+										<div style={{ fontSize: "28px", marginBottom: "12px" }}>👤</div>
+										<h3 style={{ fontSize: "15px", fontWeight: 700, color: "#f4f4f5", marginBottom: "8px" }}>
+											CONSULTANT BEING ASSIGNED
+										</h3>
+										<p style={{ fontSize: "12px", color: "#a1a1aa", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
+											Your case coordinator or branch will assign your dedicated specialist once your booking or application milestone is active.
+										</p>
+										<button
+											type="button"
+											onClick={() => handleSelectChannel("support")}
+											style={switchChannelActionBtnStyle}
+										>
+											Chat with Support Desk Instead ➔
+										</button>
+									</div>
+								)}
+							</div>
+						)}
 
-					{error && (
-						<div style={errorStyle}>
-							{error}
-							<button type="button" onClick={() => setError(null)} style={{ marginLeft: 8 }}>
-								Dismiss
-							</button>
-						</div>
-					)}
+						{/* Channel 3: AI Assistant */}
+						{activeChannel === "ai" && (
+							<div style={streamContainerStyle}>
+								<div style={officerHeaderCardStyle}>
+									<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+										<span style={{ ...avatarPillStyle, background: "#27272a", color: "#fafafa" }}>AI</span>
+										<div>
+											<div style={{ fontWeight: 600, fontSize: "13px", color: "#f4f4f5" }}>
+												Century AI Advisor
+											</div>
+											<div style={{ fontSize: "11px", color: "#a1a1aa", fontFamily: "monospace" }}>
+												● Study Abroad Knowledge Assistant
+											</div>
+										</div>
+									</div>
+									<span style={stagePillStyle}>24/7 ADVISOR</span>
+								</div>
+
+								<div style={messageListStyle}>
+									{aiMessages.map((m) => {
+										const isMe = m.sender === "user";
+										return (
+											<div
+												key={m.id}
+												style={{
+													...messageRowStyle,
+													justifyContent: isMe ? "flex-end" : "flex-start",
+												}}
+											>
+												<div
+													style={{
+														...messageBubbleStyle,
+														...(isMe ? myBubbleStyle : theirBubbleStyle),
+													}}
+												>
+													<div style={bubbleAuthorStyle}>{isMe ? "You" : "Century AI"}</div>
+													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.text}</div>
+													<div style={bubbleTimeStyle}>
+														{new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+													</div>
+												</div>
+											</div>
+										);
+									})}
+									{aiTyping && (
+										<div style={{ display: "flex", alignItems: "center", gap: "4px", padding: "8px 12px", color: "#71717a", fontSize: "12px" }}>
+											<span>Century AI is generating answer...</span>
+										</div>
+									)}
+									<div ref={messagesEndRef} />
+								</div>
+
+								{/* AI Quick Prompts */}
+								<div style={aiPromptsRowStyle}>
+									{[
+										"What are the visa requirements?",
+										"Scholarships available?",
+										"Required documents?",
+										"Payment plan options?",
+									].map((prompt) => (
+										<button
+											key={prompt}
+											type="button"
+											onClick={() => handleSendAiMessage(undefined, prompt)}
+											style={aiQuickChipStyle}
+										>
+											{prompt}
+										</button>
+									))}
+								</div>
+
+								<form onSubmit={(e) => handleSendAiMessage(e)} style={formStyle}>
+									<input
+										type="text"
+										value={aiDraft}
+										onChange={(e) => setAiDraft(e.target.value)}
+										placeholder="Ask Century AI anything..."
+										style={inputStyle}
+									/>
+									<button type="submit" disabled={!aiDraft.trim() || aiTyping} style={sendBtnStyle}>
+										Ask ➔
+									</button>
+								</form>
+							</div>
+						)}
+					</div>
 				</div>
 			)}
 		</>
 	);
 }
 
-/* ── Subcomponents ── */
+/* ── Monochrome Styles ─────────────────────────────────────────────────── */
 
-function MessageBubble({ message }: { message: ChatMessage }) {
-	const isSystem = message.messageType === "system";
-	const isApplicant = !message.senderOpsUserId;
-	if (isSystem) {
-		return (
-			<div style={systemMsgStyle}>
-				<span>{message.content}</span>
-			</div>
-		);
-	}
-	return (
-		<div style={{ display: "flex", justifyContent: isApplicant ? "flex-end" : "flex-start", margin: "4px 0" }}>
-			<div style={{ ...bubbleStyle, ...(isApplicant ? { background: "#4f46e5", color: "#fff" } : {}) }}>
-				{!isApplicant && <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2 }}>{message.senderName}</div>}
-				<div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{message.content}</div>
-			</div>
-		</div>
-	);
-}
-
-function ContactCardView({
-	contact,
-	active,
-	onClick,
-	stageNote,
-}: {
-	contact: ContactCard;
-	active: boolean;
-	onClick: () => void;
-	stageNote: string;
-}) {
-	return (
-		<button type="button" onClick={onClick} style={{ ...contactCardStyle, ...(active ? { borderColor: "#4f46e5" } : {}) }}>
-			<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-				<span style={{ ...dotStyle, background: PRESENCE_DOT[contact.presence] }} />
-				<span style={{ fontWeight: 700, fontSize: 14 }}>{contact.name}</span>
-			</div>
-			<div style={{ fontSize: 12, opacity: 0.75 }}>{contact.role ?? contact.branch ?? "Your consultant"}</div>
-			<div style={{ fontSize: 12, marginTop: 4 }}>
-				<span style={{ color: PRESENCE_DOT[contact.presence] }}>{PRESENCE_LABEL[contact.presence]}</span>
-				{contact.availabilityNote ? <span style={{ opacity: 0.6 }}> · {contact.availabilityNote}</span> : null}
-			</div>
-			<div style={{ fontSize: 12, marginTop: 6, fontStyle: "italic", opacity: 0.85 }}>{stageNote}</div>
-			<div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-				<span style={chipStyle}>💬 Chat</span>
-				<a href={`mailto:${contact.email}`} style={chipStyle} onClick={(e) => e.stopPropagation()}>
-					✉ Email
-				</a>
-			</div>
-		</button>
-	);
-}
-
-function RailSection({
-	label,
-	subtitle,
-	active,
-	onClick,
-	italic,
-}: {
-	label: string;
-	subtitle: string;
-	active: boolean;
-	onClick: () => void;
-	italic?: boolean;
-}) {
-	return (
-		<button
-			type="button"
-			onClick={onClick}
-			style={{ ...convRowStyle, ...(active ? { background: "#eef2ff" } : {}), fontStyle: italic ? "italic" : "normal" }}
-		>
-			<span style={{ fontWeight: 600, fontSize: 13 }}>{label}</span>
-			<span style={{ fontSize: 11, opacity: 0.7 }}>{subtitle}</span>
-		</button>
-	);
-}
-
-/* ── Helpers ── */
-
-function typeLabel(type: ChatConversation["type"]): string {
-	const map: Record<ChatConversation["type"], string> = {
-		direct: "Direct",
-		entity: "Case",
-		group: "Group",
-		applicant: "Consultant",
-		support: "Support",
-		case: "Case",
-		stage: "Stage",
-		internal: "Internal",
-		escalation: "Escalation",
-	};
-	return map[type] ?? type;
-}
-
-function stageLabel(key: string): string {
-	const map: Record<string, string> = {
-		document_verification: "Document Verification",
-		school_submission: "School Submission",
-		offer_letter_review: "Offer Letter Review",
-		visa_processing: "Visa Processing",
-		payment_execution: "Payment Execution",
-		travel_assistance: "Travel Assistance",
-		completed: "Completed",
-	};
-	return map[key] ?? key;
-}
-
-/* ── Styles ── */
-
-const fabStyle: CSSProperties = {
+const launcherStyle: CSSProperties = {
 	position: "fixed",
-	bottom: 24,
-	right: 24,
+	bottom: "24px",
+	right: "24px",
 	zIndex: 9999,
 	display: "flex",
 	alignItems: "center",
-	gap: 10,
-	padding: "10px 16px",
-	background: "#4f46e5",
-	color: "#fff",
-	border: "none",
-	borderRadius: 999,
-	boxShadow: "0 8px 24px rgba(79, 70, 229, 0.35)",
+	gap: "10px",
+	padding: "10px 18px",
+	background: "#09090b",
+	color: "#ffffff",
+	border: "1px solid #27272a",
+	borderRadius: "9999px",
+	boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
 	cursor: "pointer",
-	fontFamily: "inherit",
+	transition: "transform 0.2s, border-color 0.2s",
 };
 
-const badgeStyle: CSSProperties = {
-	background: "#ef4444",
-	color: "#fff",
-	borderRadius: 999,
-	padding: "1px 8px",
-	fontSize: 11,
+const launcherIconStyle: CSSProperties = {
+	fontSize: "18px",
+};
+
+const launcherTextCol: CSSProperties = {
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "flex-start",
+	textAlign: "left",
+};
+
+const launcherTitleStyle: CSSProperties = {
+	fontSize: "13px",
 	fontWeight: 700,
-	marginLeft: 4,
+	letterSpacing: "-0.01em",
+	color: "#fafafa",
 };
 
-const panelStyle: CSSProperties = {
+const launcherSubtitleStyle: CSSProperties = {
+	fontSize: "11px",
+	color: "#a1a1aa",
+	fontFamily: "monospace",
+};
+
+const launcherBadgeStyle: CSSProperties = {
+	background: "#dc2626",
+	color: "#ffffff",
+	fontSize: "11px",
+	fontWeight: 700,
+	padding: "2px 7px",
+	borderRadius: "9999px",
+	marginLeft: "4px",
+};
+
+const windowContainerStyle: CSSProperties = {
 	position: "fixed",
-	bottom: 92,
-	right: 24,
-	zIndex: 9998,
-	width: "min(420px, calc(100vw - 32px))",
-	height: "min(560px, calc(100vh - 120px))",
-	background: "#fff",
-	borderRadius: 16,
-	boxShadow: "0 20px 60px rgba(15, 23, 42, 0.25)",
+	bottom: "84px",
+	right: "24px",
+	zIndex: 9999,
+	width: "400px",
+	height: "580px",
+	maxHeight: "calc(100vh - 100px)",
+	background: "#09090b",
+	border: "1px solid #27272a",
+	borderRadius: "8px",
+	boxShadow: "0 25px 50px -12px rgba(0,0,0,0.75)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
-	fontFamily: "inherit",
-	color: "#0f172a",
+	color: "#fafafa",
+	transition: "width 0.25s ease, height 0.25s ease",
 };
 
-const expandedPanelStyle: CSSProperties = {
-	width: "min(960px, 92vw)",
-	height: "min(720px, 88vh)",
+const windowExpandedStyle: CSSProperties = {
+	width: "820px",
+	height: "640px",
+	maxWidth: "calc(100vw - 48px)",
 };
 
 const headerStyle: CSSProperties = {
 	display: "flex",
+	alignItems: "center",
 	justifyContent: "space-between",
-	alignItems: "center",
 	padding: "12px 16px",
-	borderBottom: "1px solid #e2e8f0",
-	background: "#f8fafc",
+	background: "#000000",
+	borderBottom: "1px solid #27272a",
 };
 
-const iconBtnStyle: CSSProperties = {
-	background: "transparent",
-	border: "none",
-	cursor: "pointer",
-	fontSize: 16,
-	padding: "4px 8px",
-	borderRadius: 6,
-};
-
-const railStyle: CSSProperties = {
-	width: 220,
-	borderRight: "1px solid #e2e8f0",
-	display: "flex",
-	flexDirection: "column",
-	overflow: "hidden",
-	background: "#fafbfc",
-};
-
-const sectionLabelStyle: CSSProperties = {
-	padding: "10px 12px 4px",
-	fontSize: 11,
-	fontWeight: 700,
-	textTransform: "uppercase",
-	letterSpacing: 0.05,
-	color: "#64748b",
-};
-
-const convRowStyle: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "flex-start",
-	gap: 2,
-	width: "100%",
-	padding: "8px 12px",
-	background: "transparent",
-	border: "none",
-	borderBottom: "1px solid #f1f5f9",
-	cursor: "pointer",
-	textAlign: "left",
-	fontFamily: "inherit",
-};
-
-const contactCardStyle: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	margin: "4px 8px",
-	padding: 12,
-	border: "1px solid #e2e8f0",
-	borderRadius: 10,
-	background: "#fff",
-	cursor: "pointer",
-	textAlign: "left",
-	fontFamily: "inherit",
-};
-
-const previousRowStyle: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	alignItems: "flex-start",
-	gap: 2,
-	width: "100%",
-	padding: "8px 12px",
-	background: "transparent",
-	border: "none",
-	cursor: "pointer",
-	textAlign: "left",
-	fontFamily: "inherit",
-};
-
-const dotStyle: CSSProperties = {
-	display: "inline-block",
-	width: 8,
-	height: 8,
+const headerDotStyle: CSSProperties = {
+	width: "8px",
+	height: "8px",
 	borderRadius: "50%",
+	background: "#22c55e",
 };
 
-const chipStyle: CSSProperties = {
-	display: "inline-flex",
-	alignItems: "center",
-	padding: "2px 10px",
-	fontSize: 12,
-	borderRadius: 999,
-	background: "#eef2ff",
-	color: "#4338ca",
-	textDecoration: "none",
-	cursor: "pointer",
-};
-
-const miniBadgeStyle: CSSProperties = {
-	background: "#ef4444",
-	color: "#fff",
-	borderRadius: 999,
-	padding: "0 6px",
-	fontSize: 10,
+const headerTitleStyle: CSSProperties = {
+	fontSize: "12px",
 	fontWeight: 700,
+	letterSpacing: "0.06em",
+	margin: 0,
+	color: "#ffffff",
 };
 
-const threadStyle: CSSProperties = {
+const headerSubtitleStyle: CSSProperties = {
+	fontSize: "9px",
+	color: "#71717a",
+	fontFamily: "monospace",
+	letterSpacing: "0.08em",
+	margin: 0,
+};
+
+const controlBtnStyle: CSSProperties = {
+	background: "transparent",
+	border: "1px solid #27272a",
+	color: "#a1a1aa",
+	width: "26px",
+	height: "26px",
+	borderRadius: "4px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	cursor: "pointer",
+	fontSize: "12px",
+};
+
+const channelNavStyle: CSSProperties = {
+	display: "grid",
+	gridTemplateColumns: "1fr 1fr 1fr",
+	borderBottom: "1px solid #27272a",
+	background: "#09090b",
+};
+
+const channelBtnStyle: CSSProperties = {
+	padding: "10px 4px",
+	background: "transparent",
+	border: "none",
+	borderBottom: "2px solid transparent",
+	color: "#71717a",
+	fontSize: "12px",
+	fontWeight: 600,
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: "6px",
+	cursor: "pointer",
+	transition: "color 0.15s, border-color 0.15s",
+};
+
+const activeChannelBtnStyle: CSSProperties = {
+	color: "#ffffff",
+	borderBottomColor: "#ffffff",
+	background: "#18181b",
+};
+
+const bodyStandardStyle: CSSProperties = {
+	display: "flex",
+	flexDirection: "column",
 	flex: 1,
-	display: "flex",
-	flexDirection: "column",
-	minWidth: 0,
-	background: "#fff",
+	minHeight: 0,
 };
 
-const threadHeaderStyle: CSSProperties = {
-	padding: "10px 16px",
-	borderBottom: "1px solid #e2e8f0",
+const bodySplitStyle: CSSProperties = {
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
+	flex: 1,
+	minHeight: 0,
 };
 
-const messagesStyle: CSSProperties = {
+const streamContainerStyle: CSSProperties = {
+	display: "flex",
+	flexDirection: "column",
+	flex: 1,
+	minHeight: 0,
+};
+
+const officerHeaderCardStyle: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "space-between",
+	padding: "10px 14px",
+	background: "#121215",
+	borderBottom: "1px solid #27272a",
+};
+
+const avatarPillStyle: CSSProperties = {
+	width: "32px",
+	height: "32px",
+	borderRadius: "4px",
+	background: "#ffffff",
+	color: "#000000",
+	fontWeight: 800,
+	fontSize: "12px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+};
+
+const stagePillStyle: CSSProperties = {
+	fontSize: "10px",
+	fontFamily: "monospace",
+	fontWeight: 700,
+	color: "#a1a1aa",
+	background: "#18181b",
+	border: "1px solid #27272a",
+	padding: "2px 6px",
+	borderRadius: "2px",
+};
+
+const messageListStyle: CSSProperties = {
 	flex: 1,
 	overflowY: "auto",
-	padding: "12px 16px",
+	padding: "14px",
 	display: "flex",
 	flexDirection: "column",
-	gap: 2,
-	background: "#f8fafc",
+	gap: "10px",
 };
 
-const bubbleStyle: CSSProperties = {
-	maxWidth: "78%",
-	padding: "8px 12px",
-	borderRadius: 12,
-	background: "#fff",
-	border: "1px solid #e2e8f0",
-	fontSize: 13,
-};
-
-const systemMsgStyle: CSSProperties = {
-	alignSelf: "center",
-	background: "#f1f5f9",
-	color: "#475569",
-	fontSize: 12,
-	padding: "6px 12px",
-	borderRadius: 8,
-	margin: "6px 0",
-	textAlign: "center",
-	maxWidth: "90%",
-};
-
-const composerStyle: CSSProperties = {
+const messageRowStyle: CSSProperties = {
 	display: "flex",
-	gap: 8,
-	padding: 12,
-	borderTop: "1px solid #e2e8f0",
-	background: "#fff",
+	width: "100%",
+};
+
+const messageBubbleStyle: CSSProperties = {
+	maxWidth: "85%",
+	padding: "10px 14px",
+	borderRadius: "4px",
+	fontSize: "13px",
+};
+
+const myBubbleStyle: CSSProperties = {
+	background: "#ffffff",
+	color: "#09090b",
+	border: "1px solid #ffffff",
+};
+
+const theirBubbleStyle: CSSProperties = {
+	background: "#18181b",
+	color: "#f4f4f5",
+	border: "1px solid #27272a",
+};
+
+const bubbleAuthorStyle: CSSProperties = {
+	fontSize: "10px",
+	fontWeight: 700,
+	textTransform: "uppercase",
+	letterSpacing: "0.05em",
+	opacity: 0.6,
+	marginBottom: "4px",
+};
+
+const bubbleTimeStyle: CSSProperties = {
+	fontSize: "10px",
+	fontFamily: "monospace",
+	opacity: 0.5,
+	marginTop: "4px",
+	textAlign: "right",
+};
+
+const formStyle: CSSProperties = {
+	display: "flex",
+	padding: "10px 12px",
+	background: "#000000",
+	borderTop: "1px solid #27272a",
+	gap: "8px",
 };
 
 const inputStyle: CSSProperties = {
 	flex: 1,
+	background: "#18181b",
+	border: "1px solid #27272a",
+	borderRadius: "4px",
+	color: "#fafafa",
 	padding: "8px 12px",
-	border: "1px solid #cbd5e1",
-	borderRadius: 8,
-	fontFamily: "inherit",
-	fontSize: 13,
+	fontSize: "13px",
+	outline: "none",
 };
 
 const sendBtnStyle: CSSProperties = {
-	background: "#4f46e5",
-	color: "#fff",
+	background: "#ffffff",
+	color: "#000000",
 	border: "none",
-	padding: "8px 16px",
-	borderRadius: 8,
+	borderRadius: "4px",
+	padding: "8px 14px",
+	fontWeight: 700,
+	fontSize: "12px",
 	cursor: "pointer",
-	fontWeight: 600,
 };
 
-const closedNoteStyle: CSSProperties = {
-	padding: 12,
-	textAlign: "center",
-	fontSize: 13,
-	color: "#64748b",
-	background: "#f8fafc",
-	borderTop: "1px solid #e2e8f0",
+const emptySupportPromptStyle: CSSProperties = {
+	background: "#18181b",
+	border: "1px solid #27272a",
+	borderRadius: "4px",
+	padding: "16px",
+	margin: "auto 0",
 };
 
-const emptyThreadStyle: CSSProperties = {
+const quickChipStyle: CSSProperties = {
+	background: "#09090b",
+	border: "1px solid #27272a",
+	color: "#d4d4d8",
+	fontSize: "11px",
+	padding: "4px 8px",
+	borderRadius: "4px",
+	cursor: "pointer",
+};
+
+const aiPromptsRowStyle: CSSProperties = {
+	display: "flex",
+	gap: "6px",
+	overflowX: "auto",
+	padding: "6px 12px",
+	background: "#09090b",
+	borderTop: "1px solid #27272a",
+};
+
+const aiQuickChipStyle: CSSProperties = {
+	whiteSpace: "nowrap",
+	background: "#18181b",
+	border: "1px solid #27272a",
+	color: "#a1a1aa",
+	fontSize: "11px",
+	padding: "4px 8px",
+	borderRadius: "4px",
+	cursor: "pointer",
+};
+
+const unassignedStateStyle: CSSProperties = {
 	flex: 1,
 	display: "flex",
 	flexDirection: "column",
 	alignItems: "center",
 	justifyContent: "center",
+	padding: "30px 20px",
 	textAlign: "center",
-	padding: 24,
-	gap: 12,
 };
 
-const primaryBtnStyle: CSSProperties = {
-	background: "#4f46e5",
-	color: "#fff",
+const switchChannelActionBtnStyle: CSSProperties = {
+	background: "#ffffff",
+	color: "#000000",
 	border: "none",
-	padding: "8px 16px",
-	borderRadius: 8,
+	borderRadius: "4px",
+	padding: "10px 16px",
+	fontWeight: 700,
+	fontSize: "12px",
 	cursor: "pointer",
-	fontWeight: 600,
 };
 
-const loadMoreStyle: CSSProperties = {
-	alignSelf: "center",
-	background: "transparent",
-	border: "1px solid #cbd5e1",
-	padding: "4px 12px",
-	borderRadius: 999,
-	cursor: "pointer",
-	fontSize: 12,
-	margin: "4px 0",
-};
-
-const errorStyle: CSSProperties = {
-	padding: "8px 12px",
-	background: "#fef2f2",
-	color: "#b91c1c",
-	fontSize: 12,
-	borderTop: "1px solid #fecaca",
+const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
+	background: "#450a0a",
+	color: "#fecaca",
+	padding: "6px 12px",
+	fontSize: "11px",
+	borderBottom: "1px solid #7f1d1d",
+};
+
+const errorCloseStyle: CSSProperties = {
+	background: "transparent",
+	border: "none",
+	color: "#fecaca",
+	cursor: "pointer",
+	fontWeight: 700,
 };

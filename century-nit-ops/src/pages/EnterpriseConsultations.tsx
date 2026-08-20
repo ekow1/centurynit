@@ -287,7 +287,7 @@ export function EnterpriseConsultations() {
 													{/* Drop unknowns rather than printing "Live · portal session · - · Online" */}
 													{[c.dateTime, c.targetCountry, c.type].filter(isKnown).join(" · ")}
 												</p>
-												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", opacity: 0.5, marginTop: "0.2rem" }}>
+												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
 													<span>{c.assignedOfficer ? `Assigned: ${c.assignedOfficer}` : "Unassigned"}</span>
 													{c.coordinatorName && (
 														<>
@@ -299,7 +299,7 @@ export function EnterpriseConsultations() {
 													<span>{d.verified}/{d.total} docs verified{d.pending > 0 ? ` · ${d.pending} pending` : ""}</span>
 												</div>
 											</div>
-											<span style={{ fontSize: "0.9rem", opacity: 0.4, flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
+											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
 										</div>
 									</div>
 								);

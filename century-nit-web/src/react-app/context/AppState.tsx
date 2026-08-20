@@ -886,7 +886,7 @@ type AppStateContextValue = {
 	unreadCount: number;
 	markNotificationRead: (id: string) => void;
 	markAllNotificationsRead: () => void;
-	pushPermission: NotificationPermission;
+	pushPermission: NotificationPermission | "unsupported";
 	pushSubscribe: () => Promise<void>;
 	pushUnsubscribe: () => Promise<void>;
 	/** Pre-departure */
@@ -2107,7 +2107,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
 			);
 			if (document.visibilityState === "visible") {
-				toastRef.current.info(notif.title, notif.body);
+				toastRef.current.info(notif.body, { title: notif.title });
 			}
 			} catch {
 				/* ignore malformed payloads */
@@ -2355,9 +2355,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			unreadCount,
 			markNotificationRead,
 			markAllNotificationsRead,
-			pushPermission: pushState.permission,
-			pushSubscribe: pushState.subscribe,
-			pushUnsubscribe: pushState.unsubscribe,
+			pushState.permission,
+			pushState.subscribe,
+			pushState.unsubscribe,
 			preDepartureTasks,
 			togglePreDepartureTask,
 			preDepartureProgress,

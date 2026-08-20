@@ -161,11 +161,11 @@ export function EnterpriseApplicants() {
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
 													{applicant.university} · {applicant.country}
 												</p>
-												<p style={{ fontSize: "var(--text-xs)", opacity: 0.5, marginTop: "0.15rem" }}>
+												<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
 													Stage {applicant.stageNumber}/{applicant.totalStages}: {applicant.currentStage}
 												</p>
 											</div>
-											<span style={{ fontSize: "0.9rem", opacity: 0.4, flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
+											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
 										</div>
 									</div>
 								);

@@ -341,7 +341,7 @@ export function EnterpriseLayout() {
 							style={{
 								fontSize: "0.65rem",
 								fontWeight: 600,
-								color: pushState.subscription ? "#18181b" : "#71717a",
+								color: pushState.subscription ? "#18181b" : "#52525b",
 								cursor: "pointer",
 								background: pushState.subscription ? "#18181b" : "transparent",
 								border: pushState.subscription ? "1px solid #18181b" : "1px solid #e4e4e7",

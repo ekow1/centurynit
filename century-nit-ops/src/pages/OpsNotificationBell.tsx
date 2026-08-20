@@ -200,7 +200,7 @@ export function OpsNotificationBell() {
 								style={{
 									fontSize: "0.75rem",
 									fontWeight: 600,
-									color: "#71717a",
+									color: "#52525b",
 									cursor: "pointer",
 									background: "none",
 									border: "none",
@@ -208,7 +208,7 @@ export function OpsNotificationBell() {
 									transition: "color 0.2s ease",
 								}}
 								onMouseEnter={(e) => (e.currentTarget.style.color = "#18181b")}
-								onMouseLeave={(e) => (e.currentTarget.style.color = "#71717a")}
+								onMouseLeave={(e) => (e.currentTarget.style.color = "#52525b")}
 							>
 								Mark all read
 							</button>
@@ -235,12 +235,12 @@ export function OpsNotificationBell() {
 								strokeWidth={1.5}
 								strokeLinecap="round"
 								strokeLinejoin="round"
-								style={{ opacity: 0.3, color: "#71717a" }}
+								style={{ opacity: 0.6, color: "#52525b" }}
 							>
 								<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 								<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 							</svg>
-							<p style={{ fontSize: "0.85rem", color: "#a1a1aa", margin: 0 }}>
+							<p style={{ fontSize: "0.85rem", color: "#52525b", margin: 0 }}>
 								No notifications yet
 							</p>
 						</div>
@@ -296,7 +296,7 @@ export function OpsNotificationBell() {
 													fontSize: "0.8rem",
 													lineHeight: 1.4,
 													marginTop: "0.25rem",
-													color: "#71717a",
+													color: "#52525b",
 													margin: 0,
 												}}
 											>
@@ -305,7 +305,7 @@ export function OpsNotificationBell() {
 											<p
 												style={{
 													fontSize: "0.7rem",
-													color: "#a1a1aa",
+													color: "#52525b",
 													marginTop: "0.4rem",
 													margin: 0,
 												}}
@@ -338,7 +338,7 @@ export function OpsNotificationBell() {
 					<div
 						style={{
 							padding: "0.75rem",
-							background: "#fafafa",
+							background: "#f5f5f5",
 							borderTop: "1px solid #f4f4f5",
 							textAlign: "center",
 						}}

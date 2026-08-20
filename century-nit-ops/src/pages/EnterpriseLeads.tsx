@@ -459,7 +459,7 @@ export function EnterpriseLeads() {
 											borderRadius: "4px",
 										}}
 									>
-										<p className="muted" style={{ fontSize: "0.72rem", opacity: 0.5 }}>
+										<p className="muted" style={{ fontSize: "0.72rem" }}>
 												No leads
 											</p>
 									</div>

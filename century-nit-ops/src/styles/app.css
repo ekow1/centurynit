@@ -352,7 +352,7 @@
 	align-items: center;
 	justify-content: center;
 	padding: 0 4px;
-	background: #ef4444;
+	background: #dc2626;
 	color: #fff;
 	font-family: var(--font-mono);
 	font-size: 0.625rem;
@@ -604,7 +604,7 @@
 	font-size: var(--text-xs);
 	text-transform: uppercase;
 	letter-spacing: 0.15em;
-	opacity: 0.55;
+	opacity: 0.7;
 }
 
 .ops-login__features {
@@ -648,7 +648,7 @@
 .ops-login__copy {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
-	opacity: 0.4;
+	opacity: 0.6;
 	letter-spacing: 0.05em;
 }
 
@@ -773,7 +773,7 @@
 	display: flex;
 	align-items: center;
 	flex-shrink: 0;
-	opacity: 0.3;
+	opacity: 0.5;
 	transition: opacity var(--t-instant), transform var(--t-instant);
 }
 
@@ -2251,7 +2251,7 @@
 	font-size: 0.55rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	color: #888;
+	color: #52525b;
 }
 
 .facsim__fields dd {
@@ -2303,7 +2303,7 @@
 .facsim__note {
 	font-size: 0.6rem;
 	line-height: 1.45;
-	color: #777;
+	color: #52525b;
 }
 
 /* Reviewer guidance below the document */
@@ -3043,7 +3043,7 @@
 	padding: 0.5rem 1.25rem;
 	font-size: 0.8rem;
 	color: #6b7280;
-	border-bottom: 1px solid #f3f4f6;
+	border-bottom: 1px solid #d1d5db;
 }
 
 .mkt-email-preview__subject-label {
@@ -3073,8 +3073,8 @@
 .mkt-email-preview__footer {
 	padding: 0.75rem 1.25rem;
 	font-size: 0.7rem;
-	color: #9ca3af;
-	border-top: 1px solid #f3f4f6;
+	color: #52525b;
+	border-top: 1px solid #d1d5db;
 	line-height: 1.5;
 }
 
@@ -3168,12 +3168,12 @@
 }
 
 .wf-badge--ok {
-	background: #22c55e;
+	background: #166534;
 	color: #fff;
 }
 
 .wf-badge--warn {
-	background: #f59e0b;
+	background: #b45309;
 	color: #fff;
 }
 

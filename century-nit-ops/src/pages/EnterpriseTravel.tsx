@@ -200,7 +200,7 @@ export function EnterpriseTravel() {
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
 													{app.university} {"\u00b7"} {paymentPlanLabel(app.paymentPlanId)}
 												</p>
-												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", opacity: 0.5, marginTop: "0.2rem", alignItems: "center" }}>
+												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem", alignItems: "center" }}>
 													<span>{app.agencySettled ? "Settled" : `${(app.agencyStageIndex ?? 0) + 1}/3 agency`}</span>
 													<span>{"\u00b7"}</span>
 													<span>{prog}% pre-departure</span>
@@ -208,7 +208,7 @@ export function EnterpriseTravel() {
 													<span>{app.travelClearance === "cleared" ? "Cleared" : "Pending"}</span>
 												</div>
 											</div>
-											<span style={{ fontSize: "0.9rem", opacity: 0.4, flexShrink: 0, marginLeft: "0.5rem" }}>{"\u2192"}</span>
+											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>{"\u2192"}</span>
 										</div>
 									</div>
 								);

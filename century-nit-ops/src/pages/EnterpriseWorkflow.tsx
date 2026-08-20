@@ -394,7 +394,7 @@ export function EnterpriseWorkflow() {
 												</div>
 
 												<p className="muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-													<span style={{ opacity: 0.5 }}>Officer:</span>
+													<span>Officer:</span>
 													<span style={{ fontWeight: 600 }}>{app.assignedStaff || "Unassigned"}</span>
 												</p>
 

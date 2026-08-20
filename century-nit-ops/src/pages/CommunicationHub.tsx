@@ -629,7 +629,7 @@ const presenceSelectStyle: CSSProperties = {
 const controlBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
-	color: "#71717a",
+	color: "#52525b",
 	width: "28px",
 	height: "28px",
 	borderRadius: "50%",
@@ -645,7 +645,7 @@ const channelNavStyle: CSSProperties = {
 	display: "grid",
 	gridTemplateColumns: "1fr 1fr",
 	borderBottom: "1px solid #f4f4f5",
-	background: "#fafafa",
+	background: "#f5f5f5",
 };
 
 const channelBtnStyle: CSSProperties = {
@@ -653,7 +653,7 @@ const channelBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
 	borderBottom: "2px solid transparent",
-	color: "#71717a",
+	color: "#52525b",
 	fontSize: "12px",
 	fontWeight: 600,
 	fontFamily: "system-ui, -apple-system, sans-serif",
@@ -716,7 +716,7 @@ const searchInputStyle: CSSProperties = {
 const sectionHeaderStyle: CSSProperties = {
 	padding: "8px 16px",
 	background: "#ffffff",
-	color: "#a1a1aa",
+	color: "#52525b",
 	fontSize: "11px",
 	fontWeight: 600,
 	textTransform: "uppercase",
@@ -731,7 +731,7 @@ const activeChatRowStyle: CSSProperties = {
 	alignItems: "center",
 	justifyContent: "space-between",
 	padding: "12px 16px",
-	background: "#fafafa",
+	background: "#f5f5f5",
 	border: "none",
 	borderBottom: "1px solid #f4f4f5",
 	cursor: "pointer",
@@ -849,7 +849,7 @@ const threadHeaderStyle: CSSProperties = {
 const backBtnStyle: CSSProperties = {
 	background: "transparent",
 	border: "none",
-	color: "#71717a",
+	color: "#52525b",
 	padding: "6px",
 	borderRadius: "50%",
 	fontSize: "14px",

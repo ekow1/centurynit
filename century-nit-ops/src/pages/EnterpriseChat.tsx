@@ -313,7 +313,6 @@ export function EnterpriseChat() {
 														fontFamily: "ui-monospace, monospace",
 														letterSpacing: "0.5px",
 														textTransform: "uppercase",
-														opacity: 0.5,
 													}}
 												>
 													{ENTITY_LABELS[c.linkedEntityType] ?? c.linkedEntityType}
@@ -335,7 +334,7 @@ export function EnterpriseChat() {
 													{c.lastMessage.content.length > 50 ? "..." : ""}
 												</div>
 											)}
-											<div style={{ marginTop: 2, fontSize: 9, opacity: 0.4 }}>
+											<div style={{ marginTop: 2, fontSize: 9 }}>
 												{c.updatedAt && relativeTime(c.updatedAt)}
 											</div>
 										</div>
@@ -439,7 +438,7 @@ function NewChatForm({
 							}}
 						>
 							<span>{s.name}</span>
-							<span style={{ opacity: 0.5, fontSize: 9 }}>{s.role.replace(/_/g, " ")}</span>
+							<span style={{ fontSize: 9 }}>{s.role.replace(/_/g, " ")}</span>
 						</div>
 					);
 				})}
@@ -679,7 +678,7 @@ function ConversationThread({
 								<span>
 									<strong>{s.name}</strong>
 								</span>
-								<span style={{ opacity: 0.5, fontSize: 9 }}>{s.role.replace(/_/g, " ")}</span>
+								<span style={{ fontSize: 9 }}>{s.role.replace(/_/g, " ")}</span>
 							</div>
 						))}
 					</div>
@@ -785,7 +784,6 @@ function ChatBubble({ message, isOwn }: { message: ChatMessage; isOwn: boolean }
 					style={{
 						fontSize: 9,
 						marginTop: 3,
-						opacity: 0.4,
 						textAlign: isOwn ? "right" : "left",
 					}}
 				>

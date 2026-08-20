@@ -37,7 +37,6 @@ import {
 	SCHOOL_FUNDING_TRACKS,
 	AGENCY_DEPOSIT_PORTION,
 	serviceFeeFor,
-	SEED_MESSAGES,
 	STORAGE_KEY,
 	VISA_INVOICE_AMOUNT,
 	VISA_STAGE_FEE,
@@ -1022,11 +1021,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const [messages, setMessages] = useState<ChatMessage[]>(() => {
 		try {
 			const raw = localStorage.getItem(MESSAGES_KEY);
-			if (!raw) return SEED_MESSAGES;
+			if (!raw) return [];
 			const parsed = JSON.parse(raw) as ChatMessage[];
-			return Array.isArray(parsed) && parsed.length > 0 ? parsed : SEED_MESSAGES;
+			return Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
 		} catch {
-			return SEED_MESSAGES;
+			return [];
 		}
 	});
 

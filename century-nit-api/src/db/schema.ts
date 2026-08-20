@@ -1228,10 +1228,97 @@ export const messages = pgTable(
 		content: text("content").notNull(),
 		messageType: messageTypeEnum("message_type").notNull().default("text"),
 		replyToId: uuid("reply_to_id"),
+		/**
+		 * Set when this message was produced by forwarding another one. Points at
+		 * the ORIGINAL message, not the immediately-forwarded one, so a chain of
+		 * forwards still attributes back to the true author. `set null` on delete
+		 * so removing the original degrades the forward to a plain message rather
+		 * than cascading it away.
+		 */
+		forwardedFromId: uuid("forwarded_from_id"),
+		/**
+		 * Non-null once the author has edited the body. Kept distinct from
+		 * `updatedAt` because reactions and receipts also touch a row's mtime —
+		 * only a real content change should surface an "edited" marker in the UI.
+		 */
+		editedAt: timestamp("edited_at", { withTimezone: true }),
+		/**
+		 * Soft delete. Deleted messages keep their row so that replies quoting
+		 * them, and forwards descending from them, don't dangle — the UI renders
+		 * a "message deleted" tombstone instead. Never hard-delete a message that
+		 * something else references.
+		 */
+		deletedAt: timestamp("deleted_at", { withTimezone: true }),
+		deletedByOpsUserId: uuid("deleted_by_ops_user_id"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
 		byConversation: index("messages_conversation_idx").on(t.conversationId, t.createdAt),
+	}),
+);
+
+/**
+ * One row per (message, reactor, emoji).
+ *
+ * Reactors are split across two nullable columns for the same reason
+ * participants are: staff are `ops_users`, clients are Better Auth `users`, and
+ * there is no single table spanning both.
+ *
+ * Uniqueness is a COALESCE'd unique index rather than a composite primary key
+ * over those two columns, because Postgres implicitly forces every PRIMARY KEY
+ * column NOT NULL — a composite PK here would make it impossible to store any
+ * reaction at all, since one of the two reactor columns is always null.
+ * COALESCE collapses the pair into a single non-null reactor identity, which
+ * also keeps the constraint meaningful (NULLs would otherwise compare distinct
+ * and let a user stack the same emoji repeatedly).
+ */
+export const messageReactions = pgTable(
+	"message_reactions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		messageId: uuid("message_id")
+			.notNull()
+			.references(() => messages.id, { onDelete: "cascade" }),
+		opsUserId: uuid("ops_user_id").references(() => opsUsers.id, { onDelete: "cascade" }),
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		/** Unicode emoji, stored as-is (e.g. "👍"). */
+		emoji: varchar("emoji", { length: 16 }).notNull(),
+		/** Denormalised so the "who reacted" popover needs no join. */
+		reactorName: text("reactor_name").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		oneReactionPerReactor: uniqueIndex("message_reactions_unique").on(
+			t.messageId,
+			sql`coalesce(${t.opsUserId}::text, ${t.userId})`,
+			t.emoji,
+		),
+		byMessage: index("message_reactions_message_idx").on(t.messageId),
+	}),
+);
+
+/**
+ * Attachments hang off a message rather than standing alone, so an upload is
+ * always part of the conversation transcript (spec §14) and inherits the
+ * message's delete/forward semantics for free.
+ */
+export const messageAttachments = pgTable(
+	"message_attachments",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		messageId: uuid("message_id")
+			.notNull()
+			.references(() => messages.id, { onDelete: "cascade" }),
+		/** Object key in R2 — not a public URL; links are presigned on read. */
+		storageKey: text("storage_key").notNull(),
+		fileName: text("file_name").notNull(),
+		contentType: varchar("content_type", { length: 128 }).notNull(),
+		sizeBytes: integer("size_bytes").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byMessage: index("message_attachments_message_idx").on(t.messageId),
 	}),
 );
 

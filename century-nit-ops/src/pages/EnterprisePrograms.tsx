@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, type CatalogProgram, type CatalogScholarship, type CatalogUniversity } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
@@ -34,9 +34,9 @@ export function EnterprisePrograms() {
 		setLoading(true);
 		try {
 			const [progRes, scholRes, uniRes] = await Promise.all([
-				apiFetch<{ programs: any[] }>(`${API_PREFIX}/catalog/programs`),
-				apiFetch<{ scholarships: any[] }>(`${API_PREFIX}/catalog/scholarships`),
-				apiFetch<{ universities: any[] }>(`${API_PREFIX}/catalog/universities`)
+				apiFetch<{ programs: CatalogProgram[] }>(`${API_PREFIX}/catalog/programs`),
+				apiFetch<{ scholarships: CatalogScholarship[] }>(`${API_PREFIX}/catalog/scholarships`),
+				apiFetch<{ universities: CatalogUniversity[] }>(`${API_PREFIX}/catalog/universities`)
 			]);
 			setPrograms(progRes.programs);
 			setScholarships(scholRes.scholarships);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, type CatalogUniversity, type CatalogDestination } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 import { EnterpriseLookups } from "./EnterpriseLookups";
@@ -34,8 +34,8 @@ export function EnterpriseUniversities() {
 		setLoading(true);
 		try {
 			const [uniRes, destRes] = await Promise.all([
-				apiFetch<{ universities: any[] }>(`${API_PREFIX}/catalog/universities`),
-				apiFetch<{ destinations: any[] }>(`${API_PREFIX}/catalog/destinations`)
+				apiFetch<{ universities: CatalogUniversity[] }>(`${API_PREFIX}/catalog/universities`),
+				apiFetch<{ destinations: CatalogDestination[] }>(`${API_PREFIX}/catalog/destinations`)
 			]);
 			setUniversities(uniRes.universities);
 			setDestinations(destRes.destinations);

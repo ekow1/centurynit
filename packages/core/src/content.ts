@@ -1046,24 +1046,6 @@ export const BRANCH_AVAILABILITY: Record<string, number[]> = {
  * them to keep every scheduling rule in one place.
  */
 
-/** @deprecated kept for any residual references */
-export const consultationServices = [
-	{
-		id: "online",
-		name: "Online Consultation",
-		duration: "45–60 min",
-		price: formatDualCurrency(CONSULTATION_FEE),
-		description: "Video consultation with a Century NIT advisor.",
-	},
-	{
-		id: "in_person",
-		name: "In-Person Consultation",
-		duration: "45–60 min",
-		price: formatDualCurrency(CONSULTATION_FEE),
-		description: "Face-to-face session at a Century NIT branch.",
-	},
-];
-
 /** Real company profile grounded in centurynit.org */
 export const company = {
 	legalName: "Century Nit Consult Limited",
@@ -2128,35 +2110,6 @@ export const SCHOOL_DEGREE_LEVELS: {
 	},
 ];
 
-/** @deprecated use SCHOOL_FUNDING_TRACKS + SCHOOL_DEGREE_LEVELS */
-export const APPLICATION_PACKAGES = [
-	{
-		id: "scholarship-bachelor",
-		name: "Scholarship · Bachelor's",
-		price: 0,
-		currency: "USD",
-		tagline: "Award-led undergraduate path",
-		features: ["Scholarship targeting", "Undergraduate tracking"],
-	},
-	{
-		id: "scholarship-masters",
-		name: "Scholarship · Master's",
-		price: 0,
-		currency: "USD",
-		tagline: "Award-led postgraduate path",
-		popular: true,
-		features: ["Scholarship targeting", "Master's tracking"],
-	},
-	{
-		id: "non_scholarship-masters",
-		name: "Non-scholarship · Master's",
-		price: 0,
-		currency: "USD",
-		tagline: "Self-funded postgraduate path",
-		features: ["Self-funded focus", "Master's tracking"],
-	},
-] as const;
-
 export type PaymentPlanId = "full" | "installment";
 
 export const PAYMENT_PLANS = [
@@ -2337,8 +2290,6 @@ export type ChatMessage = {
 	text: string;
 	at: string;
 };
-
-export const SEED_MESSAGES: ChatMessage[] = [];
 
 /* ========== Notifications ========== */
 

@@ -122,15 +122,42 @@ async function storageOrThrow() {
 /**
  * Storage path.
  *
- * Server-generated from the owner id, the document type and a fresh uuid. The
- * applicant's filename is never part of the path: it is attacker-controlled, and
- * a name like `../../other-user/passport.pdf` must not be able to reach another
- * applicant's folder. The original name is kept in the database for display.
+ * Server-generated from the owner id, document type, applicant name and a
+ * short random suffix.  The applicant's *original* filename is never used as
+ * the path — it is attacker-controlled, and a name like
+ * `../../other-user/passport.pdf` must not reach another applicant's folder.
+ *
+ * Structure: `{ownerUserId}/{safeDocType}/{name}-{docLabel}-{suffix}.{ext}`
+ *
+ * Example:   `usr_abc123/passport/john-smith-passport-a1b2c3d4.pdf`
  */
-function buildStorageKey(ownerUserId: string, documentType: string, fileName: string): string {
+function buildStorageKey(
+	ownerUserId: string,
+	documentType: string,
+	fileName: string,
+	ownerName: string | null,
+): string {
 	const extension = (fileName.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] ?? "bin").toLowerCase();
 	const safeType = documentType.replace(/[^a-z0-9_-]/gi, "").slice(0, 64) || "document";
-	return `${ownerUserId}/${safeType}/${randomUUID()}.${extension}`;
+
+	// Sanitize the applicant's name for use in the filename.
+	const nameSlug = sanitizeSlug(ownerName ?? "applicant");
+	const docLabel = sanitizeSlug(documentType) || "document";
+
+	// 8-char random hex suffix prevents collisions on repeated uploads.
+	const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
+
+	return `${ownerUserId}/${safeType}/${nameSlug}-${docLabel}-${suffix}.${extension}`;
+}
+
+/** Lowercase, keep only [a-z0-9-], collapse hyphens, trim. */
+function sanitizeSlug(input: string): string {
+	return input
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 64) || "applicant";
 }
 
 /* ── POST /api/v1/documents/upload-url ──────────────────────────────────────── */
@@ -163,7 +190,7 @@ documentsRouter.openapi(
 		const body = c.req.valid("json");
 		const storage = await storageOrThrow();
 
-		const storageKey = buildStorageKey(user.id, body.documentType, body.fileName);
+		const storageKey = buildStorageKey(user.id, body.documentType, body.fileName, user.name);
 
 		// Replacing a document of the same type: retire every live row first, or
 		// the partial unique index (`status <> 'REJECTED'`) rejects the new one.

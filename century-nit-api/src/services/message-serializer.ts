@@ -163,7 +163,7 @@ export async function hydrateMessages(
 					url = null;
 				}
 			}
-			const list = attachmentsByMessage.get(a.messageId) ?? [];
+			const list = attachmentsByMessage.get(a.messageId!) ?? [];
 			list.push({
 				id: a.id,
 				fileName: a.fileName,
@@ -171,7 +171,7 @@ export async function hydrateMessages(
 				sizeBytes: a.sizeBytes,
 				url,
 			});
-			attachmentsByMessage.set(a.messageId, list);
+			attachmentsByMessage.set(a.messageId!, list);
 		}),
 	);
 

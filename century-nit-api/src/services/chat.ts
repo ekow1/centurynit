@@ -1,4 +1,4 @@
-import { desc, eq, and, sql, gt, ne, inArray } from "drizzle-orm";
+import { desc, eq, and, sql, gt, ne, inArray, isNull } from "drizzle-orm";
 import type {
 	ChatConversation,
 	ChatConversationList,
@@ -8,6 +8,7 @@ import type {
 	CreateConversation,
 	SendMessage,
 	StaffDirectory,
+	MessageReaction,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
@@ -16,6 +17,8 @@ import {
 	conversationParticipants,
 	messages,
 	messageMentions,
+	messageReactions,
+	messageAttachments,
 	opsUsers,
 	users,
 } from "../db/schema.js";
@@ -26,7 +29,7 @@ import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
 import { publishToUser } from "../worker/pubsub.js";
-import { serializeMessageRow } from "./message-serializer.js";
+import { serializeMessageRow, hydrateMessages, getMessageReactions } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -471,7 +474,7 @@ export async function getMessages(
 	const sliced = hasMore ? rows.slice(0, limit) : rows;
 
 	return {
-		messages: sliced.reverse().map(serializeMessage),
+		messages: await hydrateMessages(sliced.reverse(), { opsUserId: opsUserId || null }),
 		total: sliced.length,
 		hasMore,
 	};
@@ -502,6 +505,23 @@ async function sendMessageInternal(
 		.set({ updatedAt: new Date() })
 		.where(eq(conversations.id, conversationId));
 
+	// Bind pre-staged uploads to the message now that it exists. Scoped to rows
+	// this sender staged and that aren't already bound, so a caller can't
+	// attach someone else's upload — or re-attach one already in another
+	// message — by guessing ids.
+	if (input.attachmentIds?.length) {
+		await db
+			.update(messageAttachments)
+			.set({ messageId: created.id })
+			.where(
+				and(
+					inArray(messageAttachments.id, input.attachmentIds),
+					isNull(messageAttachments.messageId),
+					eq(messageAttachments.uploadedByOpsUserId, sender.id),
+				),
+			);
+	}
+
 	// Handle @mentions
 	if (input.mentions?.length) {
 		await db.insert(messageMentions).values(
@@ -515,12 +535,17 @@ async function sendMessageInternal(
 	// Real-time: push the new message to all online participants via SSE so
 	// their chat UI appends it instantly without polling. The sender is
 	// excluded — their own send call already returned the message.
+	//
+	// Hydrated with NO viewer: delivery ticks are only meaningful on your own
+	// messages, and this payload is going to everyone else. Passing the sender
+	// here would render read receipts on a message the recipient received.
+	const [broadcastView] = await hydrateMessages([created], {});
 	publishChatEvent(
 		conversationId,
 		{
 			type: "chat.message",
 			conversationId,
-			message: serializeMessage(created),
+			message: broadcastView,
 		},
 		sender.id,
 	);
@@ -657,6 +682,284 @@ export async function markAsRead(conversationId: string, opsUserId: string): Pro
 			conversationId,
 		});
 	}
+}
+
+/* ── Message actions (spec §11, §12, §13, §16) ──────────────────────────── */
+
+/**
+ * Load a message and assert the caller participates in its conversation.
+ *
+ * Every action below needs the same two facts, and getting either wrong is a
+ * data leak — so they share one gate rather than each re-deriving it.
+ */
+async function loadMessageForActor(
+	messageId: string,
+	opsUserId: string,
+): Promise<typeof messages.$inferSelect> {
+	const [row] = await db.select().from(messages).where(eq(messages.id, messageId)).limit(1);
+	if (!row) throw new HttpError(404, "MESSAGE_NOT_FOUND", "Message not found");
+
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, row.conversationId),
+				eq(conversationParticipants.opsUserId, opsUserId),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	return row;
+}
+
+/**
+ * Edit a message in place (spec §11) — never creates a new row, so replies
+ * quoting it and forwards descending from it stay attached.
+ */
+export async function editMessage(
+	messageId: string,
+	opsUserId: string,
+	content: string,
+): Promise<ChatMessage> {
+	const row = await loadMessageForActor(messageId, opsUserId);
+
+	// Authorship, not conversation membership: being in a thread doesn't let you
+	// rewrite what someone else said.
+	if (row.senderOpsUserId !== opsUserId) {
+		throw new HttpError(403, "NOT_AUTHOR", "You can only edit your own messages");
+	}
+	if (row.deletedAt) {
+		throw new HttpError(409, "MESSAGE_DELETED", "A deleted message cannot be edited");
+	}
+	// System and action messages are authored by the platform, not a person —
+	// letting a user rewrite them would falsify the audit trail.
+	if (row.messageType !== "text") {
+		throw new HttpError(409, "NOT_EDITABLE", "Only text messages can be edited");
+	}
+
+	const [updated] = await db
+		.update(messages)
+		.set({ content, editedAt: sql`now()`, updatedAt: sql`now()` })
+		.where(eq(messages.id, messageId))
+		.returning();
+
+	const [broadcastView] = await hydrateMessages([updated], {});
+	publishChatEvent(row.conversationId, {
+		type: "chat.message.updated",
+		conversationId: row.conversationId,
+		message: broadcastView,
+	});
+
+	const [ownerView] = await hydrateMessages([updated], { opsUserId });
+	return ownerView;
+}
+
+/**
+ * Soft-delete a message (spec §27). The row survives so quotes and forwards
+ * don't dangle; the body is withheld by the serializer.
+ */
+export async function deleteMessage(
+	messageId: string,
+	opsUserId: string,
+	opts: { canModerate?: boolean } = {},
+): Promise<void> {
+	const row = await loadMessageForActor(messageId, opsUserId);
+
+	// Authors delete their own; moderators delete anyone's. The caller passes
+	// the moderation verdict because role→permission mapping lives in the
+	// route layer, not here.
+	const isAuthor = row.senderOpsUserId === opsUserId;
+	if (!isAuthor && !opts.canModerate) {
+		throw new HttpError(403, "NOT_PERMITTED", "You cannot delete this message");
+	}
+	// Idempotent: re-deleting is a no-op rather than an error, so a double-click
+	// or a retried request doesn't surface a failure.
+	if (row.deletedAt) return;
+
+	await db
+		.update(messages)
+		.set({ deletedAt: sql`now()`, deletedByOpsUserId: opsUserId, updatedAt: sql`now()` })
+		.where(eq(messages.id, messageId));
+
+	publishChatEvent(row.conversationId, {
+		type: "chat.message.deleted",
+		conversationId: row.conversationId,
+		messageId,
+	});
+}
+
+/**
+ * Toggle a reaction (spec §13). Applying an emoji you already used removes it,
+ * which is what every messaging client does on a second tap.
+ */
+export async function toggleReaction(
+	messageId: string,
+	actor: { opsUserId: string; name: string },
+	emoji: string,
+): Promise<MessageReaction[]> {
+	const row = await loadMessageForActor(messageId, actor.opsUserId);
+	if (row.deletedAt) {
+		throw new HttpError(409, "MESSAGE_DELETED", "A deleted message cannot be reacted to");
+	}
+
+	const existing = await db
+		.select({ id: messageReactions.id })
+		.from(messageReactions)
+		.where(
+			and(
+				eq(messageReactions.messageId, messageId),
+				eq(messageReactions.opsUserId, actor.opsUserId),
+				eq(messageReactions.emoji, emoji),
+			),
+		)
+		.limit(1);
+
+	if (existing.length) {
+		await db.delete(messageReactions).where(eq(messageReactions.id, existing[0].id));
+	} else {
+		await db
+			.insert(messageReactions)
+			.values({
+				messageId,
+				opsUserId: actor.opsUserId,
+				emoji,
+				reactorName: actor.name,
+			})
+			// Concurrent double-taps would otherwise trip the unique index and
+			// surface a 500 for what is a harmless no-op.
+			.onConflictDoNothing();
+	}
+
+	// Recomputed from storage rather than adjusted in memory, so the payload is
+	// correct even when several people react at once.
+	const reactions = await getMessageReactions(messageId, { opsUserId: actor.opsUserId });
+	publishChatEvent(row.conversationId, {
+		type: "chat.reaction",
+		conversationId: row.conversationId,
+		messageId,
+		reactions,
+	});
+	return reactions;
+}
+
+/**
+ * Forward a message into other conversations (spec §12).
+ *
+ * Each target gets its own new message whose `forwardedFromId` points at the
+ * ORIGINAL, so forwarding a forward still credits the true author rather than
+ * building a chain the UI would have to walk.
+ */
+export async function forwardMessage(
+	messageId: string,
+	sender: { id: string; name: string; email: string },
+	conversationIds: string[],
+): Promise<ChatMessage[]> {
+	const row = await loadMessageForActor(messageId, sender.id);
+	if (row.deletedAt) {
+		throw new HttpError(409, "MESSAGE_DELETED", "A deleted message cannot be forwarded");
+	}
+
+	// Membership of every target is checked up front, so a partially-authorized
+	// batch fails cleanly instead of leaking the message into some targets
+	// before erroring on a later one.
+	const memberships = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				inArray(conversationParticipants.conversationId, conversationIds),
+				eq(conversationParticipants.opsUserId, sender.id),
+			),
+		);
+	const allowed = new Set(memberships.map((m) => m.conversationId));
+	const denied = conversationIds.filter((id) => !allowed.has(id));
+	if (denied.length) {
+		throw new HttpError(
+			403,
+			"NOT_PARTICIPANT",
+			"You are not a participant in every destination conversation",
+		);
+	}
+
+	const origin = row.forwardedFromId ?? row.id;
+
+	const forwarded: ChatMessage[] = [];
+	for (const conversationId of conversationIds) {
+		const [created] = await db
+			.insert(messages)
+			.values({
+				conversationId,
+				senderOpsUserId: sender.id,
+				senderName: sender.name,
+				content: row.content,
+				messageType: "text",
+				forwardedFromId: origin,
+			})
+			.returning();
+
+		await db
+			.update(conversations)
+			.set({ updatedAt: new Date() })
+			.where(eq(conversations.id, conversationId));
+
+		const [broadcastView] = await hydrateMessages([created], {});
+		publishChatEvent(
+			conversationId,
+			{
+				type: "chat.message",
+				conversationId,
+				message: broadcastView,
+			},
+			sender.id,
+		);
+
+		const [ownerView] = await hydrateMessages([created], { opsUserId: sender.id });
+		forwarded.push(ownerView);
+	}
+
+	return forwarded;
+}
+
+/**
+ * Fan a typing signal out to the other participants (spec §16).
+ *
+ * Deliberately not persisted — typing state is worthless a second later, and
+ * writing it would mean a database round trip per keystroke. It exists only as
+ * an SSE event, and the sender is excluded so nobody sees themselves typing.
+ */
+export async function setTyping(
+	conversationId: string,
+	actor: { opsUserId: string; name: string },
+	typing: boolean,
+): Promise<void> {
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, actor.opsUserId),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	publishChatEvent(
+		conversationId,
+		{
+			type: "chat.typing",
+			conversationId,
+			actorName: actor.name,
+			typing,
+		},
+		actor.opsUserId,
+	);
 }
 
 /* ── Unread counts ──────────────────────────────────────────────────────── */

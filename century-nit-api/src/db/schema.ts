@@ -1302,14 +1302,24 @@ export const messageReactions = pgTable(
  * Attachments hang off a message rather than standing alone, so an upload is
  * always part of the conversation transcript (spec §14) and inherits the
  * message's delete/forward semantics for free.
+ *
+ * `messageId` is nullable because uploading is two-phase: the client presigns
+ * and uploads first, then sends the message referencing the resulting ids. A
+ * row therefore exists, owned but unbound, between those steps. Unbound rows
+ * older than a day are abandoned uploads and safe to sweep.
  */
 export const messageAttachments = pgTable(
 	"message_attachments",
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
-		messageId: uuid("message_id")
-			.notNull()
-			.references(() => messages.id, { onDelete: "cascade" }),
+		messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }),
+		/** Who staged the upload — gates who may later bind it to a message. */
+		uploadedByOpsUserId: uuid("uploaded_by_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		uploadedByUserId: text("uploaded_by_user_id").references(() => users.id, {
+			onDelete: "set null",
+		}),
 		/** Object key in R2 — not a public URL; links are presigned on read. */
 		storageKey: text("storage_key").notNull(),
 		fileName: text("file_name").notNull(),

@@ -436,9 +436,9 @@ function KPICard({ label, value, note, inverted, to }: { label: string; value: s
 				flexDirection: "column",
 			}}
 		>
-			<p className="eyebrow" style={inverted ? { color: "var(--muted-foreground)" } : undefined}>{label}</p>
+			<p className="eyebrow" style={inverted ? { color: "var(--background)", opacity: 0.7 } : undefined}>{label}</p>
 			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
-			<p className="muted mt-2" style={{ ...(inverted ? { color: "var(--muted-foreground)" } : undefined), marginTop: "auto" }}>{note}</p>
+			<p className="muted mt-2" style={{ ...(inverted ? { color: "var(--background)", opacity: 0.7 } : undefined), marginTop: "auto" }}>{note}</p>
 		</div>
 	);
 	if (!to) return card;

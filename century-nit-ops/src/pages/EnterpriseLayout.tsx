@@ -219,6 +219,7 @@ export function EnterpriseLayout() {
 	const pushState = usePushNotifications({ isAuthenticated: Boolean(opsUser) });
 
 	return (
+		<CasesProvider>
 		<div className="portal">
 			<OpsCommandPalette />
 
@@ -366,9 +367,7 @@ export function EnterpriseLayout() {
 					</div>
 				</header>
 				<div className="portal__content">
-					<CasesProvider>
-						<Outlet />
-					</CasesProvider>
+					<Outlet />
 				</div>
 			</div>
 
@@ -420,5 +419,6 @@ export function EnterpriseLayout() {
 			{/* Floating communication hub — context-aware case chat (§6) */}
 			{roleCanAccess(opsRole as OpsRole, "chat") && <CommunicationHub />}
 		</div>
+		</CasesProvider>
 	);
 }

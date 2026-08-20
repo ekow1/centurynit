@@ -17,11 +17,10 @@ import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import { roleCanAccess } from "century-nit-shared";
 
 /**
- * OPS Staff Communication Workstation — Strict Brutalist Monochrome Design.
+ * OPS Staff Communication Workstation — Premium Modern Monochrome Design.
  *
  * Rules:
- *   - Strict 0px border-radius (no rounded corners).
- *   - Pure monochrome palette (#000000, #ffffff, #000000, #e4e4e7, #ffffff).
+ *   - Premium monochrome palette (#000000, #ffffff, #18181b, #f4f4f5, #e4e4e7).
  *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
  *   - 2 Modes: INTERNAL (Staff DMs with 1-on-1 isolation), EXTERNAL (Client threads).
  *   - Expandable Workstation: Standard 420px floating window <-> 880px widescreen workspace.
@@ -617,12 +616,12 @@ const headerTitleStyle: CSSProperties = {
 
 const presenceSelectStyle: CSSProperties = {
 	background: "#ffffff",
-	color: "#000000",
-	border: "2px solid #000000",
-	borderRadius: "0px",
+	color: "#18181b",
+	border: "1px solid #e4e4e7",
+	borderRadius: "6px",
 	fontSize: "11px",
-	fontWeight: 800,
-	fontFamily: "monospace",
+	fontWeight: 600,
+	fontFamily: "system-ui, -apple-system, sans-serif",
 	padding: "4px 8px",
 	outline: "none",
 };
@@ -902,14 +901,14 @@ const bubbleAuthorStyle: CSSProperties = {
 	fontWeight: 700,
 	fontFamily: "monospace",
 	letterSpacing: "0.06em",
-	opacity: 0.6,
+	color: "#52525b",
 	marginBottom: "4px",
 };
 
 const bubbleTimeStyle: CSSProperties = {
 	fontSize: "9px",
 	fontFamily: "monospace",
-	opacity: 0.5,
+	color: "#52525b",
 	marginTop: "4px",
 	textAlign: "right",
 };
@@ -940,9 +939,12 @@ const sendBtnStyle: CSSProperties = {
 	background: "#18181b",
 	color: "#ffffff",
 	border: "none",
-	borderRadius: "50%",
-	width: "36px",
+	borderRadius: "8px",
 	height: "36px",
+	padding: "0 16px",
+	fontSize: "11px",
+	fontWeight: 600,
+	fontFamily: "system-ui, -apple-system, sans-serif",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
@@ -954,12 +956,13 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#e4e4e7",
+	background: "#ef4444",
 	color: "#ffffff",
 	padding: "6px 10px",
-	fontSize: "10px",
-	fontFamily: "monospace",
-	borderBottom: "1px solid #3f3f46",
+	fontSize: "11px",
+	fontWeight: 500,
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	borderBottom: "1px solid #b91c1c",
 };
 
 const errorCloseStyle: CSSProperties = {

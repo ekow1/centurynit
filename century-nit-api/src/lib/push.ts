@@ -1,9 +1,10 @@
 import webPush from "web-push";
+import { inArray } from "drizzle-orm";
 import { env } from "../env.js";
 import { db } from "../db/index.js";
 import { platformSettings } from "../db/schema.js";
 import { getSetting } from "../services/settings.js";
-import { encrypt } from "./crypto.js";
+import { encrypt, decrypt } from "./crypto.js";
 
 /**
  * Web Push (browser push notifications) via the VAPID protocol.
@@ -55,27 +56,54 @@ async function readVapidKeys(): Promise<{
 }
 
 /**
- * Persist a freshly generated VAPID key pair to platform_settings.
- *
- * Auto-generation has no human actor, so this writes directly rather than via
- * `writeSetting` (which records an audit entry attributed to a staff member).
- * `updatedBy` is left null; the audit trail starts the first time an admin
- * rotates the key from the UI.
+ * Read the VAPID key pair straight from the DB, bypassing the settings
+ * in-memory cache (which is per-process and can be stale for up to 30s —
+ * see services/settings.ts). Used right after a first-use generation so every
+ * process converges on the row that actually won, instead of trusting what it
+ * just generated itself.
  */
-async function storeVapidKeys(publicKey: string, privateKey: string): Promise<void> {
-	const now = new Date();
-	/*
-	 * Two upserts against the `key` PK. The public-key row is inserted first;
-	 * the private-key row is inserted-or-updated separately because each row
-	 * needs a different `encryptedValue`.
-	 */
+async function readVapidKeysFromDb(): Promise<{
+	publicKey: string;
+	privateKey: string;
+} | null> {
+	const rows = await db
+		.select({ key: platformSettings.key, encryptedValue: platformSettings.encryptedValue })
+		.from(platformSettings)
+		.where(inArray(platformSettings.key, ["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY"]));
+	const map = new Map(rows.map((r) => [r.key, r.encryptedValue]));
+	const publicEnc = map.get("VAPID_PUBLIC_KEY");
+	const privateEnc = map.get("VAPID_PRIVATE_KEY");
+	if (!publicEnc || !privateEnc) return null;
+	try {
+		return { publicKey: decrypt(publicEnc), privateKey: decrypt(privateEnc) };
+	} catch (err) {
+		console.error("[push] failed to decrypt stored VAPID keys:", err);
+		return null;
+	}
+}
+
+/**
+ * Persist a freshly generated VAPID key pair to platform_settings — but only
+ * if neither row exists yet.
+ *
+ * `onConflictDoNothing` (not `onConflictDoUpdate`) matters here: the API and
+ * the background worker are separate processes, each with its own 30s
+ * settings cache, and both call `ensureVapidKeys()`. If both see no key
+ * configured and race to generate one, `onConflictDoUpdate` would let
+ * whichever process's PUBLIC-key write lands last pair with whichever
+ * process's PRIVATE-key write lands last — not necessarily the same
+ * generation, producing a public/private mismatch. Web Push send then fails
+ * with a 401 the push service returns for every subscription made against the
+ * "losing" public key, forever, without ever being pruned (pruning is keyed
+ * off 404/410, not 401) — the exact "alerts enabled, nothing arrives" symptom.
+ * `onConflictDoNothing` means only the first writer's pair ever lands; callers
+ * must re-read via `readVapidKeysFromDb` to find out whether they won.
+ */
+async function storeVapidKeysIfAbsent(publicKey: string, privateKey: string): Promise<void> {
 	await db
 		.insert(platformSettings)
 		.values({ key: "VAPID_PUBLIC_KEY", encryptedValue: encrypt(publicKey) })
-		.onConflictDoUpdate({
-			target: platformSettings.key,
-			set: { encryptedValue: encrypt(publicKey), updatedAt: now },
-		})
+		.onConflictDoNothing({ target: platformSettings.key })
 		.catch((err) => {
 			console.error("[push] failed to persist VAPID public key:", err);
 		});
@@ -83,10 +111,7 @@ async function storeVapidKeys(publicKey: string, privateKey: string): Promise<vo
 	await db
 		.insert(platformSettings)
 		.values({ key: "VAPID_PRIVATE_KEY", encryptedValue: encrypt(privateKey) })
-		.onConflictDoUpdate({
-			target: platformSettings.key,
-			set: { encryptedValue: encrypt(privateKey), updatedAt: now },
-		})
+		.onConflictDoNothing({ target: platformSettings.key })
 		.catch((err) => {
 			console.error("[push] failed to persist VAPID private key:", err);
 		});
@@ -102,10 +127,14 @@ async function ensureVapidKeys(): Promise<{ publicKey: string; privateKey: strin
 	const existing = await readVapidKeys();
 	if (existing) return existing;
 
-	const { publicKey, privateKey } = webPush.generateVAPIDKeys();
+	const generated = webPush.generateVAPIDKeys();
 	console.log("[push] generated new VAPID key pair and persisting to platform_settings");
-	await storeVapidKeys(publicKey, privateKey);
-	return { publicKey, privateKey };
+	await storeVapidKeysIfAbsent(generated.publicKey, generated.privateKey);
+
+	// Read back the canonical row rather than trusting what we just generated —
+	// a concurrent caller (this or another process) may have won the race.
+	const canonical = await readVapidKeysFromDb();
+	return canonical ?? generated;
 }
 
 /**

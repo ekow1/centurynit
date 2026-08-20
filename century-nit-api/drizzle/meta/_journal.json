@@ -232,6 +232,13 @@
       "when": 1787119021884,
       "tag": "0032_messy_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787190897249,
+      "tag": "0033_heavy_blue_blade",
+      "breakpoints": true
     }
   ]
 }

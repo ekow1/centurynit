@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "notifications_event_user_unique" ON "notifications" USING btree ("event_id","user_id");

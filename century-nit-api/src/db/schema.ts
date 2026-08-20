@@ -1452,6 +1452,17 @@ export const notifications = pgTable(
 	(t) => ({
 		userIdIdx: index("notifications_user_idx").on(t.userId),
 		caseIdx: index("notifications_case_idx").on(t.caseId),
+		/**
+		 * `notify()` (services/notify.ts) upserts with
+		 * `onConflictDoNothing({ target: [eventId, userId] })` for idempotency.
+		 * Postgres requires an actual unique index matching that target or the
+		 * insert throws "no unique or exclusion constraint matching the ON
+		 * CONFLICT specification" — which was being caught and swallowed,
+		 * silently dropping every notification (in-app, SSE, push, and email)
+		 * ever sent. `eventId` is nullable; Postgres treats each NULL as
+		 * distinct, so events without one (the common case) never collide.
+		 */
+		eventUserUnique: uniqueIndex("notifications_event_user_unique").on(t.eventId, t.userId),
 	}),
 );
 

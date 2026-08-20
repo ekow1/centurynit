@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -16,7 +16,7 @@ const RANGES = [
 ] as const;
 
 export function EnterpriseFinance() {
-	const { applicants } = useCasesApi();
+	const { applicants } = useCases();
 	const { invoices } = useInvoiceApi();
 	const { opsRole } = useOpsAuth();
 	const [branchFilter, setBranchFilter] = useState("all");

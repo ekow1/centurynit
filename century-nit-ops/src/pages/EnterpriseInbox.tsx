@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useOpsNotifications } from "../hooks/useOpsNotifications";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
@@ -55,7 +55,7 @@ const TYPE_META: Record<NotificationItem["type"], { label: string; color: string
 
 export function EnterpriseInbox() {
 	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
-	const { consultations, applications, applicants } = useCasesApi();
+	const { consultations, applications, applicants } = useCases();
 	const { notifications: realNotifications, unreadCount: realUnreadCount, markRead, markAllRead } = useOpsNotifications();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 	const [reviewDocuments, setReviewDocuments] = useState<ApplicantDocument[]>([]);

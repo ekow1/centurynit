@@ -5,6 +5,7 @@ import { roleCanAccess } from "century-nit-shared";
 import { useOpsState } from "./OpsStateContext";
 
 import { usePushNotifications } from "../hooks/usePushNotifications";
+import { CasesProvider } from "../hooks/useCases";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
 import { staffBranchName } from "century-nit-core/ops";
@@ -365,7 +366,9 @@ export function EnterpriseLayout() {
 					</div>
 				</header>
 				<div className="portal__content">
-					<Outlet />
+					<CasesProvider>
+						<Outlet />
+					</CasesProvider>
 				</div>
 			</div>
 

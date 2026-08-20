@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { ReschedulePanel } from "./ReschedulePanel";
@@ -50,7 +50,7 @@ export function EnterpriseConsultations() {
 		delegateCoordinator,
 		getWorkload,
 		refresh,
-	} = useCasesApi();
+	} = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedConsultation, setSelectedConsultation] = useState<MockConsultation | null>(null);

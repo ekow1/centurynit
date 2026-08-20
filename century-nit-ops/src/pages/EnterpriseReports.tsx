@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER, type Lead } from "century-nit-core";
@@ -69,7 +69,7 @@ function KPICard({ label, value, note, inverted }: { label: string; value: strin
 
 export function EnterpriseReports() {
 	const { opsUser, scopeRecords, canSeeAllBranches, requiresAssignmentScope } = useOpsAuth();
-	const { consultations, applications, applicants } = useCasesApi();
+	const { consultations, applications, applicants } = useCases();
 	const { invoices } = useInvoiceApi();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
 

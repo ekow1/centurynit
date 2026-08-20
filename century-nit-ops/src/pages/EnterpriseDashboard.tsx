@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
@@ -15,7 +15,7 @@ import { UnassignedBookings } from "./UnassignedBookings";
  */
 export function EnterpriseDashboard() {
 	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants } = useCasesApi();
+	const { consultations, applications, applicants } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
 
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";

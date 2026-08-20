@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
@@ -9,7 +9,7 @@ import { fmtFin } from "./currency";
 
 export function EnterpriseApplicants() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applicants, error: casesError } = useCasesApi();
+	const { applicants, error: casesError } = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApplicant, setSelectedApplicant] = useState<MockApplicant | null>(null);

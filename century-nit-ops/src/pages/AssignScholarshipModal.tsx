@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../lib/api";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import type { CatalogScholarship, StudentScholarship } from "century-nit-shared";
 
 export function AssignScholarshipModal({
@@ -10,7 +10,7 @@ export function AssignScholarshipModal({
 	applicantId: string;
 	onClose: () => void;
 }) {
-	const { listScholarships, assignScholarship, removeScholarship } = useCasesApi();
+	const { listScholarships, assignScholarship, removeScholarship } = useCases();
 
 	const [catalog, setCatalog] = useState<CatalogScholarship[]>([]);
 	const [assigned, setAssigned] = useState<StudentScholarship[]>([]);

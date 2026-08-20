@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { fmtBoth, fmtGhs, fmtUsd } from "./currency";
@@ -19,7 +19,7 @@ const METHOD_FILTERS = ["all", ...PAYMENT_METHODS] as const;
  * clients. Gives finance officers a "who paid what, when, and how" view.
  */
 export function EnterprisePaymentsLog() {
-	const { applicants } = useCasesApi();
+	const { applicants } = useCases();
 	const { invoices } = useInvoiceApi();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [range, setRange] = useState<(typeof RANGES)[number]["id"]>("all");

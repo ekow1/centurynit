@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
@@ -18,7 +18,7 @@ import {
  * view and aging breakdown.
  */
 export function EnterpriseLedger() {
-	const { applicants } = useCasesApi();
+	const { applicants } = useCases();
 	const { invoices } = useInvoiceApi();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [search, setSearch] = useState("");

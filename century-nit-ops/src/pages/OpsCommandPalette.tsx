@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOpsState } from "./OpsStateContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useOpsAuth, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
 
 export function OpsCommandPalette() {
 	const { isCommandOpen, openCommandPalette, closeCommandPalette } = useOpsState();
-	const { consultations, applications, applicants } = useCasesApi();
+	const { consultations, applications, applicants } = useCases();
 	const { opsRole, hasPermission } = useOpsAuth();
 	const navigate = useNavigate();
 	const [query, setQuery] = useState("");

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "../lib/api";
 import type { CatalogDestination, CatalogUniversity, CatalogProgram } from "century-nit-shared";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 
 export function AddSchoolApplicationModal({
 	onClose,
@@ -10,7 +10,7 @@ export function AddSchoolApplicationModal({
 	onClose: () => void;
 	onAdd: (applicantId: string, destId: string, uniId: string, progId: string, intake: string) => Promise<void>;
 }) {
-	const { applicants } = useCasesApi();
+	const { applicants } = useCases();
 	const [applicantId, setApplicantId] = useState("");
 	
 	const [destinations, setDestinations] = useState<CatalogDestination[]>([]);

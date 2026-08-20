@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage, PreDepartureTask } from "century-nit-core/ops";
@@ -103,7 +103,7 @@ function initials(name: string) {
 
 export function EnterpriseWorkflow() {
 	const { opsUser, opsRole, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applications, setApplicationStage } = useCasesApi();
+	const { applications, setApplicationStage } = useCases();
 	const [dragging, setDragging] = useState<string | null>(null);
 	const [dragOver, setDragOver] = useState<JourneyStage | null>(null);
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");

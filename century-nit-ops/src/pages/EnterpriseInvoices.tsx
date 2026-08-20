@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { InvoiceBuilder } from "./InvoiceBuilder";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
@@ -28,7 +28,7 @@ const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "proforma", "issued", "pa
 
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
-	const { applicants } = useCasesApi();
+	const { applicants } = useCases();
 	const {
 		invoices,
 		loading,

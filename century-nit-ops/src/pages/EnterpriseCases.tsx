@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
@@ -22,7 +22,7 @@ export function EnterpriseCases() {
 		requestApplicationDocs,
 		addApplication,
 		setApplicationStage,
-	} = useCasesApi();
+	} = useCases();
 
 	/**
 	 * The pipeline a case advances through. Mirrors the Workflow Board columns

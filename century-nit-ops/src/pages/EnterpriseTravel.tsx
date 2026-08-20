@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
-import { useCasesApi } from "../hooks/useCasesApi";
+import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
@@ -40,7 +40,7 @@ export function EnterpriseTravel() {
 		setTravelClearance,
 		togglePreDepartureTask,
 		setApplicationStage,
-	} = useCasesApi();
+	} = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);

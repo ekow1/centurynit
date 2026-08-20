@@ -1,4 +1,4 @@
-import { desc, eq, and, sql, gt, ne } from "drizzle-orm";
+import { desc, eq, and, sql, gt, ne, inArray } from "drizzle-orm";
 import type {
 	ChatConversation,
 	ChatConversationList,
@@ -117,7 +117,11 @@ async function countUnread(conversationId: string, opsUserId: string): Promise<n
 		.where(
 			and(
 				eq(messages.conversationId, conversationId),
-				ne(messages.senderOpsUserId, opsUserId),
+				// IS DISTINCT FROM, not `<>`: `senderOpsUserId` is NULL for messages
+				// sent by applicants, and `NULL <> 'x'` evaluates to NULL (not true),
+				// so plain `ne` silently dropped every applicant message from the
+				// staff-side unread count.
+				sql`${messages.senderOpsUserId} IS DISTINCT FROM ${opsUserId}`,
 				participant.lastReadAt
 					? gt(messages.createdAt, participant.lastReadAt)
 					: sql`true`,
@@ -129,19 +133,15 @@ async function countUnread(conversationId: string, opsUserId: string): Promise<n
 
 /* ── Serialize ──────────────────────────────────────────────────────────── */
 
-async function serializeConversation(
+function serializeConversation(
 	row: typeof conversations.$inferSelect,
-	forOpsUserId: string,
-): Promise<ChatConversation> {
-	const participants = await getParticipants(row.id);
-	const unread = await countUnread(row.id, forOpsUserId);
-
-	const [lastMsg] = await db
-		.select()
-		.from(messages)
-		.where(eq(messages.conversationId, row.id))
-		.orderBy(desc(messages.createdAt))
-		.limit(1);
+	participantsMap: Map<string, Awaited<ReturnType<typeof getParticipants>>>,
+	unreadMap: Map<string, number>,
+	lastMsgMap: Map<string, typeof messages.$inferSelect | undefined>,
+): ChatConversation {
+	const participants = participantsMap.get(row.id) ?? [];
+	const unread = unreadMap.get(row.id) ?? 0;
+	const lastMsg = lastMsgMap.get(row.id);
 
 	return {
 		id: row.id,
@@ -207,8 +207,79 @@ export async function listConversations(opsUserId: string): Promise<ChatConversa
 		.innerJoin(membership, eq(conversations.id, membership.conversationId))
 		.orderBy(desc(conversations.updatedAt));
 
-	const list = await Promise.all(
-		rows.map((r) => serializeConversation(r.conversations, opsUserId)),
+	const conversationIds = rows.map((r) => r.conversations.id);
+	if (conversationIds.length === 0) {
+		return { conversations: [], total: 0 };
+	}
+
+	// Batch-fetch all participants, unread counts, and last messages in 3 queries
+	// instead of 3N individual queries.
+	const allParticipants = await db
+		.select({
+			conversationId: conversationParticipants.conversationId,
+			opsUserId: conversationParticipants.opsUserId,
+			name: opsUsers.name,
+			email: opsUsers.email,
+			role: conversationParticipants.role,
+			lastReadAt: conversationParticipants.lastReadAt,
+			joinedAt: conversationParticipants.joinedAt,
+		})
+		.from(conversationParticipants)
+		.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
+		.where(inArray(conversationParticipants.conversationId, conversationIds));
+
+	const participantsMap = new Map<string, typeof allParticipants>();
+	for (const p of allParticipants) {
+		const list = participantsMap.get(p.conversationId) ?? [];
+		list.push(p);
+		participantsMap.set(p.conversationId, list);
+	}
+
+	// Unread counts: for each conversation, find the user's lastReadAt from the
+	// participants data we already fetched, then count messages after it.
+	const unreadRows = await db
+		.select({
+			conversationId: messages.conversationId,
+			count: sql<number>`count(*)::int`,
+		})
+		.from(messages)
+		.where(
+			and(
+				inArray(messages.conversationId, conversationIds),
+				ne(messages.senderOpsUserId, opsUserId),
+				sql`${messages.createdAt} > (
+					SELECT COALESCE(cp.last_read_at, '1970-01-01T00:00:00Z')
+					FROM ${conversationParticipants} cp
+					WHERE cp.conversation_id = ${messages.conversationId}
+					AND cp.ops_user_id = ${opsUserId}
+					LIMIT 1
+				)`,
+			),
+		)
+		.groupBy(messages.conversationId);
+
+	const unreadMap = new Map<string, number>();
+	for (const row of unreadRows) {
+		unreadMap.set(row.conversationId, row.count);
+	}
+
+	// Last message per conversation
+	const lastMsgRows = await db
+		.select()
+		.from(messages)
+		.where(inArray(messages.conversationId, conversationIds))
+		.orderBy(desc(messages.createdAt));
+
+	const lastMsgMap = new Map<string, typeof messages.$inferSelect>();
+	for (const msg of lastMsgRows) {
+		// First row per conversationId is the latest (ORDER BY desc)
+		if (!lastMsgMap.has(msg.conversationId)) {
+			lastMsgMap.set(msg.conversationId, msg);
+		}
+	}
+
+	const list = rows.map((r) =>
+		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap),
 	);
 
 	return { conversations: list, total: list.length };
@@ -241,7 +312,22 @@ export async function getConversation(
 		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
 	}
 
-	return serializeConversation(row, opsUserId);
+	const participants = await getParticipants(conversationId);
+	const unread = await countUnread(conversationId, opsUserId);
+
+	const [lastMsg] = await db
+		.select()
+		.from(messages)
+		.where(eq(messages.conversationId, conversationId))
+		.orderBy(desc(messages.createdAt))
+		.limit(1);
+
+	const participantsMap = new Map([[conversationId, participants]]);
+	const unreadMap = new Map([[conversationId, unread]]);
+	const lastMsgMap = new Map<string, typeof messages.$inferSelect>();
+	if (lastMsg) lastMsgMap.set(conversationId, lastMsg);
+
+	return serializeConversation(row, participantsMap, unreadMap, lastMsgMap);
 }
 
 /* ── Create conversation ────────────────────────────────────────────────── */
@@ -563,7 +649,13 @@ export async function sendMessage(
 export async function markAsRead(conversationId: string, opsUserId: string): Promise<void> {
 	await db
 		.update(conversationParticipants)
-		.set({ lastReadAt: new Date() })
+		// `now()` (database clock) rather than `new Date()` (app-server clock).
+		// `messages.createdAt` defaults to the database's `now()`, and countUnread
+		// compares the two. If the API container's clock drifts even slightly
+		// behind Postgres, a JS-generated timestamp lands *before* messages that
+		// were already there, so they stay "unread" forever and the badge never
+		// clears. Sourcing both sides from the same clock makes that impossible.
+		.set({ lastReadAt: sql`now()` })
 		.where(
 			and(
 				eq(conversationParticipants.conversationId, conversationId),

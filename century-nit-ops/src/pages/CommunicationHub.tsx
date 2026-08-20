@@ -131,12 +131,27 @@ export function CommunicationHub() {
 	const openConversation = useCallback(
 		(conv: ChatConversation) => {
 			setActiveConvId(conv.id);
-			void load();
-			void markRead();
-			void refreshConvs();
 		},
-		[load, markRead, refreshConvs],
+		[],
 	);
+
+	useEffect(() => {
+		if (activeConvId) {
+			void load();
+			void markRead().then(() => refreshConvs());
+		}
+	}, [activeConvId, load, markRead, refreshConvs]);
+
+	// A message arriving over SSE while the thread is already open would
+	// otherwise re-raise the unread badge for something the user is actively
+	// looking at. Re-mark on every new message so the badge behaves like
+	// WhatsApp: open thread == read, no matter when the message lands.
+	const messageCount = messages.length;
+	useEffect(() => {
+		if (!activeConvId || !open || messageCount === 0) return;
+		if (typeof document !== "undefined" && document.hidden) return;
+		void markRead().then(() => refreshConvs());
+	}, [activeConvId, open, messageCount, markRead, refreshConvs]);
 
 	/* ── Start 1-on-1 Direct Message with Colleague ── */
 	const startDM = useCallback(
@@ -370,7 +385,40 @@ export function CommunicationHub() {
 														</div>
 													</div>
 												</div>
-												<span style={{ ...presenceBadgeStyle, color: "#ffffff", border: "none", background: staff.presence === "available" ? "#10b981" : staff.presence === "busy" ? "#ef4444" : staff.presence === "on_leave" ? "#f59e0b" : "#71717a" }}>{staff.presence.toUpperCase()}</span>
+												<span
+													style={{
+														...presenceBadgeStyle,
+														background:
+															staff.presence === "available" ? "#ecfdf5" :
+															staff.presence === "busy" ? "#fef2f2" :
+															staff.presence === "on_leave" ? "#fffbeb" : "#f4f4f5",
+														color:
+															staff.presence === "available" ? "#065f46" :
+															staff.presence === "busy" ? "#991b1b" :
+															staff.presence === "on_leave" ? "#92400e" : "#3f3f46",
+														border: `1px solid ${
+															staff.presence === "available" ? "#a7f3d0" :
+															staff.presence === "busy" ? "#fecaca" :
+															staff.presence === "on_leave" ? "#fde68a" : "#e4e4e7"
+														}`,
+														display: "inline-flex",
+														alignItems: "center",
+														gap: "4px",
+													}}
+												>
+													<span
+														style={{
+															width: "6px",
+															height: "6px",
+															borderRadius: "50%",
+															background:
+																staff.presence === "available" ? "#10b981" :
+																staff.presence === "busy" ? "#ef4444" :
+																staff.presence === "on_leave" ? "#f59e0b" : "#a1a1aa",
+														}}
+													/>
+													{staff.presence.replace("_", " ").toUpperCase()}
+												</span>
 											</button>
 										))
 									)}

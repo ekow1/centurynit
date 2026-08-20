@@ -466,7 +466,7 @@ async function sendMessageInternal(
 	(async () => {
 		try {
 			const [conv] = await db
-				.select({ type: conversations.type, userId: conversations.userId })
+				.select({ type: conversations.type, userId: conversations.userId, title: conversations.title })
 				.from(conversations)
 				.where(eq(conversations.id, conversationId))
 				.limit(1);
@@ -480,6 +480,50 @@ async function sendMessageInternal(
 					body: preview,
 					link: "/portal/chat",
 				});
+				return;
+			}
+
+			// Staff-to-staff: notify every other participant so they get the
+			// in-app bell + push. Without this, staff only saw SSE (if online
+			// with the chat hub open) or email (if offline for 5+ min) — no
+			// bell, no push, and no trace in the notifications table.
+			if (conv && conv.type !== "applicant") {
+				const participants = await getParticipants(conversationId);
+				const others = participants.filter(
+					(p): p is typeof p & { opsUserId: string } =>
+						p.opsUserId !== null && p.opsUserId !== sender.id,
+				);
+				if (others.length === 0) return;
+
+				const preview =
+					created.content.length > 160
+						? `${created.content.slice(0, 160)}…`
+						: created.content;
+				const title =
+					others.length === 1
+						? `${sender.name} sent you a message`
+						: `${sender.name} posted in ${conv.title ?? "a conversation"}`;
+
+				const resolved = await Promise.all(
+					others.map(async (p) => ({
+						userId: await getStaffUserId(p.opsUserId),
+						opsUserId: p.opsUserId,
+					})),
+				);
+
+				await notifyMany(
+					resolved
+						.filter((r): r is { userId: string; opsUserId: string } => r.userId !== null)
+						.map((r) => ({
+							recipientUserId: r.userId,
+							type: "chat.message",
+							title,
+							body: preview,
+							link: `/chat?conversation=${conversationId}`,
+							entityType: "chat",
+							entityId: conversationId,
+						})),
+				);
 			}
 		} catch {
 			// Notification failure must not block the message send.

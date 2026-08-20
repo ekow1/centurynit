@@ -26,6 +26,7 @@ import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
 import { publishToUser } from "../worker/pubsub.js";
+import { serializeMessageRow } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -161,18 +162,7 @@ function serializeConversation(
 			lastReadAt: p.lastReadAt?.toISOString() ?? null,
 			joinedAt: p.joinedAt.toISOString(),
 		})),
-		lastMessage: lastMsg
-			? {
-					id: lastMsg.id,
-					conversationId: lastMsg.conversationId,
-					senderOpsUserId: lastMsg.senderOpsUserId,
-					senderName: lastMsg.senderName,
-					content: lastMsg.content,
-					messageType: lastMsg.messageType as "text" | "system" | "action",
-					replyToId: lastMsg.replyToId,
-					createdAt: lastMsg.createdAt.toISOString(),
-				}
-			: null,
+		lastMessage: lastMsg ? serializeMessageRow(lastMsg) : null,
 		unreadCount: unread,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
@@ -180,16 +170,7 @@ function serializeConversation(
 }
 
 function serializeMessage(row: typeof messages.$inferSelect): ChatMessage {
-	return {
-		id: row.id,
-		conversationId: row.conversationId,
-		senderOpsUserId: row.senderOpsUserId,
-		senderName: row.senderName,
-		content: row.content,
-		messageType: row.messageType as "text" | "system" | "action",
-		replyToId: row.replyToId,
-		createdAt: row.createdAt.toISOString(),
-	};
+	return serializeMessageRow(row);
 }
 
 /* ── List conversations ─────────────────────────────────────────────────── */

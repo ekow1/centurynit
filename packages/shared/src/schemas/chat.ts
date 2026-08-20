@@ -35,17 +35,93 @@ export type StageAssignmentStatus = z.infer<typeof stageAssignmentStatusSchema>;
 export const messageTypeSchema = z.enum(["text", "system", "action"]);
 export type ChatMessageType = z.infer<typeof messageTypeSchema>;
 
+/**
+ * Per-message delivery state (spec §15).
+ *
+ * `sending` and `failed` are CLIENT-ONLY: they describe an optimistic bubble
+ * that has no server row yet. The server never emits them. Everything from
+ * `sent` onwards is derived server-side — see `deliveryStatus` on
+ * `chatMessageSchema`.
+ */
+export const messageDeliverySchema = z.enum(["sending", "sent", "delivered", "read", "failed"]);
+export type MessageDelivery = z.infer<typeof messageDeliverySchema>;
+
+/* ── Reactions ─────────────────────────────────────────────────────────── */
+
+/**
+ * Reactions arrive pre-aggregated by emoji rather than as a flat row list, so
+ * a bubble can render "👍 3" without the client grouping them on every paint.
+ * `mine` lets the UI highlight the viewer's own reaction without needing to
+ * know its own identity in reactor terms (staff vs client id spaces differ).
+ */
+export const messageReactionSchema = z.object({
+	emoji: z.string().min(1).max(16),
+	count: z.number().int().positive(),
+	/** Display names of reactors, for the "who reacted" popover. */
+	reactors: z.array(z.string()),
+	/** True when the requesting user is one of the reactors. */
+	mine: z.boolean(),
+});
+export type MessageReaction = z.infer<typeof messageReactionSchema>;
+
+/* ── Attachments ───────────────────────────────────────────────────────── */
+
+export const messageAttachmentSchema = z.object({
+	id: z.string().uuid(),
+	fileName: z.string(),
+	contentType: z.string(),
+	sizeBytes: z.number().int().nonnegative(),
+	/** Short-lived presigned download URL. Never a raw storage key. */
+	url: z.string().nullable(),
+});
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
+/* ── Quoted reply / forward provenance ─────────────────────────────────── */
+
+/**
+ * A denormalised snapshot of the message being quoted, hydrated server-side.
+ * Without this the client would have to already hold the parent in its local
+ * page of messages to render a quote — which breaks the moment the parent is
+ * older than the current scroll window.
+ */
+export const quotedMessageSchema = z.object({
+	id: z.string().uuid(),
+	senderName: z.string(),
+	/** Truncated preview. Empty string when the parent was deleted. */
+	content: z.string(),
+	deleted: z.boolean(),
+});
+export type QuotedMessage = z.infer<typeof quotedMessageSchema>;
+
 /* ── Message ───────────────────────────────────────────────────────────── */
 
 export const chatMessageSchema = z.object({
 	id: z.string().uuid(),
 	conversationId: z.string().uuid(),
 	senderOpsUserId: z.string().uuid().nullable(),
+	/** Set instead of `senderOpsUserId` when the author is a client/applicant. */
+	senderUserId: z.string().nullable().optional(),
 	senderName: z.string(),
 	content: z.string(),
 	messageType: messageTypeSchema,
 	replyToId: z.string().uuid().nullable().optional(),
+	/** Hydrated preview of `replyToId`, so quotes render without a second fetch. */
+	replyTo: quotedMessageSchema.nullable().optional(),
+	/** Present when this message was forwarded — identifies the original author. */
+	forwardedFrom: quotedMessageSchema.nullable().optional(),
+	/** Non-null once the body was edited; drives the "edited" marker. */
+	editedAt: z.string().datetime().nullable().optional(),
+	/** Non-null when soft-deleted; `content` is blanked and a tombstone shown. */
+	deletedAt: z.string().datetime().nullable().optional(),
+	reactions: z.array(messageReactionSchema).default([]),
+	attachments: z.array(messageAttachmentSchema).default([]),
+	/**
+	 * Derived from participants' `lastReadAt`, not stored per-message. Only
+	 * meaningful on messages the requesting user sent; `null` on received ones.
+	 */
+	deliveryStatus: messageDeliverySchema.nullable().optional(),
 	createdAt: z.string().datetime(),
+	updatedAt: z.string().datetime().optional(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
@@ -138,8 +214,81 @@ export const sendMessageSchema = z.object({
 	content: z.string().min(1).max(5000),
 	replyToId: z.string().uuid().optional(),
 	mentions: z.array(z.string().uuid()).optional(),
+	/** Ids returned by the attachment-upload endpoint, bound on send. */
+	attachmentIds: z.array(z.string().uuid()).max(10).optional(),
+	/**
+	 * Client-generated id echoed back on the created message so an optimistic
+	 * bubble can be reconciled with its server row instead of briefly
+	 * double-rendering when the SSE echo arrives before the HTTP response.
+	 */
+	clientNonce: z.string().max(64).optional(),
 });
 export type SendMessage = z.infer<typeof sendMessageSchema>;
+
+/* ── Message actions (spec §11, §12, §13) ──────────────────────────────── */
+
+export const editMessageSchema = z.object({
+	content: z.string().min(1).max(5000),
+});
+export type EditMessage = z.infer<typeof editMessageSchema>;
+
+/**
+ * Forwarding targets existing conversations by id. Deliberately NOT "forward to
+ * user" — resolving a user to a conversation is a separate, permission-checked
+ * step, and accepting user ids here would let a caller create conversations as
+ * a side effect of forwarding.
+ */
+export const forwardMessageSchema = z.object({
+	conversationIds: z.array(z.string().uuid()).min(1).max(10),
+});
+export type ForwardMessage = z.infer<typeof forwardMessageSchema>;
+
+export const reactToMessageSchema = z.object({
+	/** Unicode emoji. Applying an emoji already present removes it (toggle). */
+	emoji: z.string().min(1).max(16),
+});
+export type ReactToMessage = z.infer<typeof reactToMessageSchema>;
+
+export const typingSchema = z.object({
+	/** false when the user clears the composer or sends. */
+	typing: z.boolean(),
+});
+export type Typing = z.infer<typeof typingSchema>;
+
+/* ── Real-time event contract (spec §20) ───────────────────────────────── */
+
+/**
+ * Every event the server pushes over SSE for a conversation.
+ *
+ * This is the single source of truth for the realtime contract — the ops
+ * console, the client portal, and the API all import it, so adding an event
+ * without handling it somewhere becomes a type error rather than a silent
+ * no-op. Declared as a TypeScript union rather than a zod schema because these
+ * are server-authored and trusted; there is no untrusted boundary to validate.
+ *
+ * Transport is SSE (server→client). The one genuinely client→server signal,
+ * typing, is a plain POST that fans back out as `chat.typing`.
+ */
+export type ChatRealtimeEvent =
+	| { type: "chat.message"; conversationId: string; message: ChatMessage }
+	| { type: "chat.message.updated"; conversationId: string; message: ChatMessage }
+	| { type: "chat.message.deleted"; conversationId: string; messageId: string }
+	| {
+			type: "chat.reaction";
+			conversationId: string;
+			messageId: string;
+			reactions: MessageReaction[];
+	  }
+	| { type: "chat.conversation.created"; conversationId: string }
+	| { type: "chat.read"; conversationId: string }
+	| {
+			type: "chat.typing";
+			conversationId: string;
+			/** Who is typing — never the recipient's own id. */
+			actorName: string;
+			typing: boolean;
+	  }
+	| { type: "chat.presence"; opsUserId: string; presence: StaffPresence };
 
 export const addParticipantSchema = z.object({
 	opsUserId: z.string().uuid(),

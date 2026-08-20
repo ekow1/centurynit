@@ -46,6 +46,7 @@ import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
 import { publishChatEvent } from "./chat.js";
 import { notifyMany } from "./notify.js";
+import { serializeMessageRow } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -332,18 +333,7 @@ async function serializeConversation(
 				lastReadAt: p.lastReadAt?.toISOString() ?? null,
 				joinedAt: p.joinedAt.toISOString(),
 			})),
-		lastMessage: lastMsg
-			? {
-					id: lastMsg.id,
-					conversationId: lastMsg.conversationId,
-					senderOpsUserId: lastMsg.senderOpsUserId,
-					senderName: lastMsg.senderName,
-					content: lastMsg.content,
-					messageType: lastMsg.messageType as "text" | "system" | "action",
-					replyToId: lastMsg.replyToId,
-					createdAt: lastMsg.createdAt.toISOString(),
-				}
-			: null,
+		lastMessage: lastMsg ? serializeMessageRow(lastMsg) : null,
 		unreadCount: unread,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
@@ -351,16 +341,7 @@ async function serializeConversation(
 }
 
 function serializeMessage(row: typeof messages.$inferSelect): ChatMessage {
-	return {
-		id: row.id,
-		conversationId: row.conversationId,
-		senderOpsUserId: row.senderOpsUserId,
-		senderName: row.senderName,
-		content: row.content,
-		messageType: row.messageType as "text" | "system" | "action",
-		replyToId: row.replyToId,
-		createdAt: row.createdAt.toISOString(),
-	};
+	return serializeMessageRow(row);
 }
 
 /* ── Conversation routing — the no-duplicate gate (§22) ─────────────────── */

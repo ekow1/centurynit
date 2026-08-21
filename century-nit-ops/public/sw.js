@@ -26,7 +26,10 @@ self.addEventListener("activate", (event) => {
  * that without ever serving stale content. */
 self.addEventListener("fetch", (event) => {
 	if (event.request.method !== "GET") return;
-	event.respondWith(fetch(event.request));
+	// Passthrough — network only, no caching. If the fetch fails (network
+	// error, CORS, etc.) let the browser handle it rather than throwing an
+	// uncaught promise rejection in the worker.
+	event.respondWith(fetch(event.request).catch(() => new Response("", { status: 504 })));
 });
 
 /* ── Web Push ─────────────────────────────────────────────────────────────── */

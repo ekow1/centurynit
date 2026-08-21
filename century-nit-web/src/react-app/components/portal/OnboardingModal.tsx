@@ -29,15 +29,15 @@ export function OnboardingModal() {
 			return;
 		}
 		let cancelled = false;
-		meApi
-			.application()
-			.then((res) => {
+		Promise.all([meApi.application(), meApi.portalState()])
+			.then(([res, portalState]) => {
 				if (cancelled) return;
 				const app = res.applicant;
 				if (!app) {
 					setLoading(false);
 					return;
 				}
+				const onboardingDone = portalState?.onboardingCompleted === true;
 
 				// Pre-fill name from server or auth (social sign-in populates authUser.name)
 				const serverName = app.name?.trim() || "";
@@ -58,11 +58,11 @@ export function OnboardingModal() {
 					?.referralSource;
 				if (serverReferral) setReferralSource(serverReferral);
 
-				// Show modal if any of the three fields are missing
+				// Show modal only if onboarding wasn't completed and a field is missing.
 				const needsName = !displayName;
 				const needsPhone = isEmailAuth && !app.phone;
 				const needsReferral = !serverReferral;
-				setShow(needsName || needsPhone || needsReferral);
+				setShow(!onboardingDone && (needsName || needsPhone || needsReferral));
 			})
 			.catch(() => {
 				/* don't block portal on network error */
@@ -86,6 +86,7 @@ export function OnboardingModal() {
 				...(isEmailAuth ? { phone } : {}),
 				profile: { referralSource },
 			});
+			await meApi.updatePortalState({ onboardingCompleted: true });
 			// Sync local auth state so the name shows immediately everywhere
 			if (fullName.trim()) {
 				updateApplication({

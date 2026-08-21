@@ -325,7 +325,12 @@ export function PortalProfile() {
 							: startEdit(
 									"assessment",
 									Object.fromEntries(
-										ASSESSMENT_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
+										ASSESSMENT_FIELDS.map((f) => [
+											f.key,
+											(f.key === "phone"
+												? ass.phone || a.phone
+												: ass[f.key as keyof AssessmentData]) ?? "",
+										]),
 									),
 								)
 							}
@@ -351,7 +356,8 @@ export function PortalProfile() {
 								value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ")}
 							/>
 							<DataRow label="Email" value={ass.email} />
-							<DataRow label="Phone" value={ass.phone} />
+							<DataRow label="Phone" value={ass.phone || a.phone} />
+							<DataRow label="How did you hear about us?" value={a.referralSource} />
 							<DataRow label="Date of birth" value={ass.dateOfBirth} />
 							<DataRow label="Nationality" value={ass.nationality} />
 							<DataRow label="Address" value={ass.address} />

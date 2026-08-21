@@ -1942,25 +1942,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					phone: prev.phone || a.phone || "",
 					nationality: prev.nationality || a.profile?.nationality || "",
 					destinationId: prev.destinationId || a.targetCountry || "",
+					referralSource: prev.referralSource || a.profile?.referralSource || "",
 				}));
 			}
-		if (res.application) {
-			const a = res.application;
-			setApplication((prev) => ({
-				...prev,
-				applicationId: a.id || prev.applicationId,
-				destinationId: a.country || prev.destinationId,
-				universityId: a.university || prev.universityId,
-				programId: a.program || prev.programId,
-				schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
-				schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
-				visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
-				// Authoritative coarse journey stage from `applications.stage`.
-				// `getCurrentProcessStage` floors the fine-grained
-				// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
-				journeyStage: a.stage ?? prev.journeyStage,
-			}));
-		}
+			if (res.application) {
+				const a = res.application;
+				setApplication((prev) => ({
+					...prev,
+					applicationId: a.id || prev.applicationId,
+					destinationId: a.country || prev.destinationId,
+					universityId: a.university || prev.universityId,
+					programId: a.program || prev.programId,
+					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
+					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
+					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
+					// Authoritative coarse journey stage from `applications.stage`.
+					// `getCurrentProcessStage` floors the fine-grained
+					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
+					journeyStage: a.stage ?? prev.journeyStage,
+				}));
+			}
 		} catch {
 			/* server state fallback — keep local values */
 		}
@@ -1989,6 +1990,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				}
 				if (Array.isArray(ps.customPostArrivalSchedules) && ps.customPostArrivalSchedules.length > 0) {
 					setCustomPostArrivalSchedules(ps.customPostArrivalSchedules as any);
+				}
+				if (ps.onboardingCompleted === true) {
+					setApplication((prev) => ({
+						...prev,
+						onboardingCompleted: true,
+					}));
 				}
 			}
 		} catch {

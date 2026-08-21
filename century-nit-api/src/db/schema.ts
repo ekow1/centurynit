@@ -1032,7 +1032,7 @@ export const leads = pgTable(
 		stage: leadStageEnum("stage").notNull().default("New Lead"),
 		targetCountry: varchar("target_country", { length: 80 }),
 		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
-			onDelete: "set null",
+			onDelete: "cascade",
 		}),
 		consultationId: uuid("consultation_id").references(() => consultations.id, {
 			onDelete: "set null",

@@ -101,10 +101,6 @@ export interface MockConsultation {
 	type: string;
 	assignedOfficer: string;
 	assignedOfficerEmail: string;
-	/** opsUserId of the assigned consultant (null if unassigned). */
-	assignedOfficerId?: string | null;
-	/** opsUserId of the coordinator managing this case. */
-	coordinatorId?: string | null;
 	targetCountry: string;
 	status: ConsultationStatus;
 	personal: { nationality: string; residence: string; dob: string };
@@ -191,8 +187,6 @@ export interface MockApplication {
 	degreeLevel: string;
 	assignedStaff: string;
 	assignedStaffEmail: string;
-	/** opsUserId of the assigned staff member (null if unassigned). */
-	assignedStaffId?: string | null;
 	stage: string;
 	status: ApplicationStatus;
 	submittedDate: string;

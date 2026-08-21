@@ -1,16 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "../db/index.js";
 import { notifications, opsUsers } from "../db/schema.js";
 import { queueEmail, queuePush } from "../worker/queues.js";
 import { publishToUser } from "../worker/pubsub.js";
 import type { QueuedEmail } from "./notifications.js";
-
-/**
- * Roles that triage incoming work (new leads / consultations) and therefore
- * receive email + in-app notifications when one is captured.
- */
-const LEAD_NOTIFICATION_ROLES = ["super_admin", "admin", "manager", "coordinator"];
 
 /**
  * Unified notification service — the single entry point for all notifications.
@@ -168,7 +162,7 @@ export async function getManagerAndCoordinatorUserIds(): Promise<
 	const rows = await db
 		.select({ userId: opsUsers.userId })
 		.from(opsUsers)
-		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, LEAD_NOTIFICATION_ROLES)));
+		.where(eq(opsUsers.active, true));
 	return rows
 		.filter((r): r is { userId: string } => r.userId !== null)
 		.map((r) => ({ userId: r.userId }));
@@ -185,7 +179,7 @@ export async function getManagerAndCoordinatorContacts(): Promise<
 	const rows = await db
 		.select({ userId: opsUsers.userId, email: opsUsers.email, name: opsUsers.name })
 		.from(opsUsers)
-		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, LEAD_NOTIFICATION_ROLES)));
+		.where(eq(opsUsers.active, true));
 	return rows
 		.filter((r): r is { userId: string; email: string; name: string } => r.userId !== null);
 }

@@ -527,7 +527,7 @@ staffRouter.openapi(
 		path: "/",
 		tags: ["Staff"],
 		summary: "List staff members",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator")] as const,
 		responses: {
 			200: {
 				content: {

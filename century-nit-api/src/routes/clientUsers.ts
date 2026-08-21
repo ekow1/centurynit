@@ -56,7 +56,7 @@ clientUsersRouter.openapi(
 		method: "get",
 		path: "/",
 		tags: ["Client Directory & Access Control"],
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireRole("super_admin", "admin", "manager", "coordinator")] as const,
 		request: {
 			query: z.object({
 				status: z.enum(["all", "active", "inactive", "banned", "unverified"]).optional(),

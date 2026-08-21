@@ -34,7 +34,7 @@ const EnterprisePaymentConfig = lazyNamed(() => import("./pages/EnterprisePaymen
 const EnterpriseLedger = lazyNamed(() => import("./pages/EnterpriseLedger"), "EnterpriseLedger");
 const EnterprisePaymentsLog = lazyNamed(() => import("./pages/EnterprisePaymentsLog"), "EnterprisePaymentsLog");
 const EnterpriseHelpdesk = lazyNamed(() => import("./pages/EnterpriseHelpdesk"), "EnterpriseHelpdesk");
-const EnterpriseMarketing = lazyNamed(() => import("./pages/EnterpriseMarketing"), "EnterpriseMarketing");
+const EnterpriseCampaigns = lazyNamed(() => import("./pages/EnterpriseCampaigns"), "EnterpriseCampaigns");
 const EnterpriseAdministration = lazyNamed<{ section: string }>(() => import("./pages/EnterpriseAdministration"), "EnterpriseAdministration");
 const EnterpriseConsultations = lazyNamed(() => import("./pages/EnterpriseConsultations"), "EnterpriseConsultations");
 const EnterpriseApplicants = lazyNamed(() => import("./pages/EnterpriseApplicants"), "EnterpriseApplicants");
@@ -121,8 +121,8 @@ export default function App() {
 									<Route path="leads" element={<Ops module="leads"><EnterpriseLeads /></Ops>} />
 									<Route path="crm" element={<Ops module="crm"><EnterpriseLeads /></Ops>} />
 									<Route path="helpdesk" element={<Ops module="helpdesk"><EnterpriseHelpdesk /></Ops>} />
-									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseMarketing /></Ops>} />
-									<Route path="marketing/sms" element={<Ops module="marketing"><EnterpriseMarketing /></Ops>} />
+									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
+									<Route path="marketing/sms" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									<Route path="workflow" element={<Ops module="workflow"><EnterpriseWorkflow /></Ops>} />
 									<Route path="visa" element={<Ops module="visa"><EnterpriseVisa /></Ops>} />
 									<Route path="travel" element={<Ops module="travel"><EnterpriseTravel /></Ops>} />
@@ -138,7 +138,7 @@ export default function App() {
 									<Route path="programs" element={<Ops module="programs"><EnterprisePrograms /></Ops>} />
 									<Route path="packages" element={<Ops module="packages"><EnterprisePackages /></Ops>} />
 									<Route path="reports" element={<Ops module="reports"><EnterpriseReports /></Ops>} />
-									<Route path="marketing" element={<Ops module="marketing"><EnterpriseMarketing /></Ops>} />
+									<Route path="marketing" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									{/* Personal calendar connection. Gated on "dashboard" rather than
 									    "settings": consultants must reach this, admins never take bookings. */}
 									<Route path="my-calendar" element={<Ops module="dashboard"><CalendarSettings /></Ops>} />

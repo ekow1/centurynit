@@ -269,13 +269,6 @@ export async function acceptInvitation(input: {
 		userId = created.id;
 	}
 
-	// The invitation token was delivered to this email and only its holder
-	// could accept it — equivalent to an OTP. Mark the account verified so
-	// `requireEmailVerification` does not lock the new staff member out of
-	// their first sign-in (signUpEmail leaves emailVerified at its default
-	// false, and staff have no self-serve verification flow).
-	await db.update(users).set({ emailVerified: true }).where(eq(users.id, userId));
-
 	const [opsUser] = await db
 		.insert(opsUsers)
 		.values({

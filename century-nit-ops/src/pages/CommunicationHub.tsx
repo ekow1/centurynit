@@ -15,7 +15,6 @@ import {
 import { ApiError } from "../lib/api";
 import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import { roleCanAccess, type ChatMessage, type QuotedMessage } from "century-nit-shared";
-import { registerOpenDM } from "./ChatHubContext";
 import {
 	ensureChatUiStyles,
 	MessageList,
@@ -176,28 +175,12 @@ export function CommunicationHub() {
 			try {
 				const conv = await createChatConversation({ participantOpsUserId: entry.opsUserId });
 				openConversation(conv);
-				setMode("internal");
-				setOpen(true);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : "Couldn't start direct message session");
 			}
 		},
 		[openConversation],
 	);
-
-	/** Register a simplified openDM(opsUserId) for external callers. */
-	useEffect(() => {
-		registerOpenDM(async (opsUserId: string) => {
-			try {
-				const conv = await createChatConversation({ participantOpsUserId: opsUserId });
-				openConversation(conv);
-				setMode("internal");
-				setOpen(true);
-			} catch (e) {
-				setError(e instanceof Error ? e.message : "Couldn't start direct message session");
-			}
-		});
-	}, [openConversation]);
 
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 

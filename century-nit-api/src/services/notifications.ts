@@ -298,27 +298,3 @@ export function leadCreatedForManager(
 		reference: ctx.leadId,
 	};
 }
-
-/** New consultation booked — sent to every admin/super_admin/manager/coordinator. */
-export function consultationCreatedForManagers(
-	ctx: { reference: string; clientName: string; clientEmail: string; consultationId: string },
-	recipientEmail: string,
-): QueuedEmail {
-	const lines = [
-		`A new consultation has been booked.`,
-		`<strong>Reference:</strong> ${ctx.reference}`,
-		`<strong>Client:</strong> ${ctx.clientName}`,
-		`<strong>Email:</strong> ${ctx.clientEmail}`,
-		`Log in to the Operations Center to review and assign this consultation.`,
-	];
-	const { html, text } = formatEmail("New consultation booked", lines, null, ctx.consultationId);
-	return {
-		to: recipientEmail,
-		subject: `New consultation · ${ctx.reference}`,
-		html,
-		text,
-		idempotencyKey: `notify:consultation:new:${ctx.consultationId}:${recipientEmail}`,
-		template: "New consultation booked",
-		reference: ctx.consultationId,
-	};
-}

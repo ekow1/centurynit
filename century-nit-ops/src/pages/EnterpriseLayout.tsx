@@ -8,7 +8,6 @@ import { usePushNotifications } from "../hooks/usePushNotifications";
 import { CasesProvider } from "../hooks/useCases";
 import { OpsCommandPalette } from "./OpsCommandPalette";
 import { CommunicationHub } from "./CommunicationHub";
-import { ChatHubProvider } from "./ChatHubContext";
 import { staffBranchName } from "century-nit-core/ops";
 import { ICONS } from "./opsIcons";
 import { OpsNotificationBell } from "./OpsNotificationBell";
@@ -221,7 +220,6 @@ export function EnterpriseLayout() {
 	const pushState = usePushNotifications({ isAuthenticated: Boolean(opsUser) });
 
 	return (
-		<ChatHubProvider>
 		<CasesProvider>
 		<div className="portal">
 			<OpsCommandPalette />
@@ -423,6 +421,5 @@ export function EnterpriseLayout() {
 			{roleCanAccess(opsRole as OpsRole, "chat") && <CommunicationHub />}
 		</div>
 		</CasesProvider>
-		</ChatHubProvider>
 	);
 }

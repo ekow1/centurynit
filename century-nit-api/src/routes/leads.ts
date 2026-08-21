@@ -211,21 +211,6 @@ leadsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff");
-
-		// Only admin / super_admin / manager may reassign a lead to a staff member.
-		if (
-			body.assignedStaffId !== undefined &&
-			staff?.role !== "super_admin" &&
-			staff?.role !== "admin" &&
-			staff?.role !== "manager"
-		) {
-			throw new HttpError(
-				403,
-				"FORBIDDEN",
-				"Only admin, super admin or manager may assign leads to staff.",
-			);
-		}
-
 		const updated = await updateLead(id, body, staff?.name ?? null);
 		if (!updated) {
 			throw new HttpError(404, "NOT_FOUND", "Lead not found");

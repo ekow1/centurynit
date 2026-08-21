@@ -26,7 +26,7 @@ import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
-import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorContacts } from "./notify.js";
+import { notify, getStaffUserId } from "./notify.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -80,37 +80,10 @@ function toComment(row: CommentRow) {
 
 export function canSeeAllCases(staff: StaffContext | null): boolean {
 	return (
-		staff?.role === "super_admin" ||
-		staff?.role === "admin" ||
 		staff?.role === "manager" ||
-		staff?.role === "coordinator"
+		staff?.role === "coordinator" ||
+		staff?.role === "super_admin"
 	);
-}
-
-/**
- * Who may assign a case (consultation / application) to a consultant.
- *
- * Business rule: only admin, super_admin and manager may assign. A coordinator
- * may assign only when the case has been delegated to them — i.e. they are the
- * case's `coordinatorId`. This keeps the default coordinator role read-only for
- * triage while still allowing a manager to hand off ownership.
- */
-export function canAssignCase(
-	staff: StaffContext | null,
-	caseRow?: { coordinatorId?: string | null } | null,
-): boolean {
-	if (!staff) return false;
-	if (
-		staff.role === "super_admin" ||
-		staff.role === "admin" ||
-		staff.role === "manager"
-	) {
-		return true;
-	}
-	if (staff.role === "coordinator") {
-		return caseRow?.coordinatorId === staff.opsUserId;
-	}
-	return false;
 }
 
 export function canSeeConsultation(
@@ -224,10 +197,7 @@ export async function ensureCaseForBooking(booking: {
 		.onConflictDoNothing({ target: consultations.bookingId })
 		.returning();
 
-	if (created) {
-		notifyManagersOfNewConsultation(created, applicant).catch(() => {});
-		return created;
-	}
+	if (created) return created;
 
 	const [again] = await db
 		.select()
@@ -235,44 +205,6 @@ export async function ensureCaseForBooking(booking: {
 		.where(eq(consultations.bookingId, booking.id))
 		.limit(1);
 	return again!;
-}
-
-/**
- * Fan out a freshly-created consultation to all admin/super_admin/manager/
- * coordinator staff via in-app + SSE + push + email, so it is not left sitting
- * unread in the intake queue. Fire-and-forget at the call site.
- */
-async function notifyManagersOfNewConsultation(
-	consultation: ConsultationRow,
-	applicant: ApplicantRow,
-): Promise<void> {
-	const contacts = await getManagerAndCoordinatorContacts();
-	if (contacts.length === 0) return;
-
-	const ctx = {
-		reference: consultation.reference,
-		clientName: applicant.name,
-		clientEmail: applicant.email,
-		consultationId: consultation.id,
-	};
-
-	await notifyMany(
-		contacts.map((c) => ({
-			recipientUserId: c.userId,
-			type: "consultation.new",
-			title: "New consultation booked",
-			body: `${applicant.name} — Ref: ${consultation.reference}`,
-			link: "/applications",
-			entityType: "consultation",
-			entityId: consultation.id,
-		})),
-	);
-
-	await queueEmails(
-		contacts.map((c) => mail.consultationCreatedForManagers(ctx, c.email)),
-	).catch(() => {
-		// email failure must not block the consultation flow
-	});
 }
 
 /** Keep the consultation assignment in step when a booking is assigned. */
@@ -562,16 +494,6 @@ export async function listApplicants(staff: StaffContext): Promise<ApplicantRow[
 
 export async function getConsultation(id: string): Promise<ConsultationRow | null> {
 	const [row] = await db.select().from(consultations).where(eq(consultations.id, id)).limit(1);
-	return row ?? null;
-}
-
-/** Look up a consultation by its linked booking id — used for assignment auth. */
-export async function getConsultationByBookingId(bookingId: string): Promise<ConsultationRow | null> {
-	const [row] = await db
-		.select()
-		.from(consultations)
-		.where(eq(consultations.bookingId, bookingId))
-		.limit(1);
 	return row ?? null;
 }
 

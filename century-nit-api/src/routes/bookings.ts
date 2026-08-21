@@ -27,7 +27,7 @@ import {
 	rescheduleBooking,
 	type BookingRow,
 } from "../services/booking.js";
-import { ensureCaseForBooking, syncConsultationAssignment, canAssignCase, getConsultationByBookingId } from "../services/cases.js";
+import { ensureCaseForBooking, syncConsultationAssignment, canAssignCase, getConsultation } from "../services/cases.js";
 import { createConsultationInvoice } from "../services/invoice.js";
 import {
 	assignBookingSchema,
@@ -629,15 +629,12 @@ bookingsRouter.openapi(
 		const staff = c.get("staff");
 
 		if (!staff) throw new HttpError(403, "FORBIDDEN", "Staff access required");
-
-		// Coordinators may only assign if the linked consultation was delegated to them.
-		const linkedConsultation = await getConsultationByBookingId(id);
-		if (!canAssignCase(staff, linkedConsultation)) {
-			throw new HttpError(
-				403,
-				"FORBIDDEN",
-				"Only admin, super admin or manager may assign bookings. A coordinator may assign only a booking whose consultation was delegated to them.",
-			);
+		if (
+			staff.role !== "manager" &&
+			staff.role !== "coordinator" &&
+			staff.role !== "super_admin"
+		) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign bookings");
 		}
 
 		const updated = await assignBooking({

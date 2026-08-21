@@ -25,7 +25,7 @@ import { prepareDocumentForUpload } from "../../lib/upload";
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
 	missing: { label: "Required", pill: "portal-pill--needs_info" },
-	uploaded: { label: "In review", pill: "portal-pill--draft" },
+	uploaded: { label: "Uploaded", pill: "portal-pill--draft" },
 	verified: { label: "Verified ✓", pill: "portal-pill--approved" },
 	rejected: { label: "Resubmit", pill: "portal-pill--under_review" },
 };
@@ -208,7 +208,7 @@ export function PortalDocumentVault() {
 			});
 			setLiveDocs((current) => new Map(current ?? []).set(saved.documentType, saved));
 			setActiveUpload(null);
-			toast.success(`${file.name} uploaded. Your consultant will review it.`);
+			toast.success(`${file.name} uploaded.`);
 		} catch (err) {
 			const msg = readableError(err, `Could not upload ${file.name}. Please try again.`);
 			setError(msg);
@@ -284,7 +284,7 @@ export function PortalDocumentVault() {
 				<span
 					className={`vault-summary__item vault-summary__status${allVerified ? " vault-summary__status--done" : ""}`}
 				>
-					{allVerified ? "All verified" : "In review"}
+					{allVerified ? "All verified" : "Pending review"}
 				</span>
 			</div>
 

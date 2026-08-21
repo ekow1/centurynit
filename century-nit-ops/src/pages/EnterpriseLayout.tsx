@@ -83,6 +83,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
+	{ to: "/my-calendar", module: "dashboard", label: "My Calendar", blurb: "Google Calendar sync", icon: "appointments" },
 ];
 
 /** Running the platform - administrator only. No applicant data here. */

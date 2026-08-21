@@ -326,22 +326,7 @@ export type ChatParticipant = {
 };
 
 export type ChatMessage = import("century-nit-shared").ChatMessage;
-
-export type ChatConversation = {
-	id: string;
-	type: "direct" | "entity" | "group" | "applicant" | "support" | "case" | "stage" | "internal" | "escalation";
-	title: string;
-	linkedEntityType: string | null;
-	linkedEntityId: string | null;
-	createdBy: string | null;
-	stageKey?: string | null;
-	status?: "open" | "closed" | "archived";
-	participants: ChatParticipant[];
-	lastMessage: ChatMessage | null;
-	unreadCount: number;
-	createdAt: string;
-	updatedAt: string;
-};
+export type ChatConversation = import("century-nit-shared").ChatConversation;
 
 export type ChatConversationListResponse = {
 	conversations: ChatConversation[];
@@ -409,11 +394,63 @@ export function getChatMessages(
 
 export function sendChatMessage(
 	conversationId: string,
-	body: { content: string; replyToId?: string; mentions?: string[] },
+	body: {
+		content: string;
+		replyToId?: string;
+		mentions?: string[];
+		attachmentIds?: string[];
+		clientNonce?: string;
+	},
 ): Promise<ChatMessage> {
 	return apiFetch<ChatMessage>(`${CHAT}/conversations/${conversationId}/messages`, {
 		method: "POST",
 		body: JSON.stringify(body),
+	});
+}
+
+export function editChatMessage(
+	messageId: string,
+	body: { content: string },
+): Promise<ChatMessage> {
+	return apiFetch<ChatMessage>(`${CHAT}/messages/${messageId}`, {
+		method: "PATCH",
+		body: JSON.stringify(body),
+	});
+}
+
+export function deleteChatMessage(messageId: string): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/messages/${messageId}`, {
+		method: "DELETE",
+	});
+}
+
+export function toggleChatReaction(
+	messageId: string,
+	emoji: string,
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/messages/${messageId}/reactions`, {
+		method: "POST",
+		body: JSON.stringify({ emoji }),
+	});
+}
+
+export function forwardChatMessage(
+	messageId: string,
+	targetConversationIds: string[],
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/messages/${messageId}/forward`, {
+		method: "POST",
+		body: JSON.stringify({ targetConversationIds }),
+	});
+}
+
+export function setChatTyping(
+	conversationId: string,
+	isTyping: boolean,
+): Promise<{ ok: boolean }> {
+	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/typing`, {
+		method: "POST",
+		body: JSON.stringify({ isTyping }),
 	});
 }
 

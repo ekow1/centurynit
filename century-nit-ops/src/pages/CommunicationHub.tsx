@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
 	useChatConversations,
 	useChatMessages,
@@ -14,16 +14,24 @@ import {
 } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
-import { roleCanAccess } from "century-nit-shared";
+import { roleCanAccess, type ChatMessage, type QuotedMessage } from "century-nit-shared";
+import {
+	ensureChatUiStyles,
+	MessageList,
+	Composer,
+	ForwardDialog,
+	type MessageActionsConfig,
+} from "century-nit-chat-ui";
 
 /**
- * OPS Staff Communication Workstation — Premium Modern Monochrome Design.
+ * OPS Staff Communication Workstation — WhatsApp-style messaging on the
+ * shared chat-ui component package.
  *
- * Rules:
- *   - Premium monochrome palette (#000000, #ffffff, #18181b, #f4f4f5, #e4e4e7).
- *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
- *   - 2 Modes: INTERNAL (Staff DMs with 1-on-1 isolation), EXTERNAL (Client threads).
- *   - Expandable Workstation: Standard 420px floating window <-> 880px widescreen workspace.
+ * The shell (floating launcher, window, presence, mode switcher, directory,
+ * conversation list) is specific to the ops console. The message stream and
+ * composer use the shared `MessageList` and `Composer` from
+ * `century-nit-chat-ui`, so every chat surface across the platform renders
+ * the same interaction model.
  */
 
 const HEARTBEAT_MS = 60_000;
@@ -44,8 +52,20 @@ export function CommunicationHub() {
 
 	const canChat = roleCanAccess(opsRole as OpsRole, "chat");
 	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
-	const { messages, loading: msgsLoading, sending, load, send, markRead } =
-		useChatMessages(canChat ? activeConvId : null);
+	const {
+		messages, hasMore, loading: msgsLoading, sending, typing,
+		load, loadMore, send, edit, delete: deleteMessage, react, forward, signalTyping, markRead,
+	} = useChatMessages(canChat ? activeConvId : null);
+
+	// Composer state — owned here so it survives window close/reopen.
+	const [draft, setDraft] = useState("");
+	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [forwardTarget, setForwardTarget] = useState<ChatMessage | null>(null);
+
+	// Typing signal debounce — only send when the user pauses, not on every keystroke.
+	const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const isTypingRef = useRef(false);
 
 	/* ── Presence heartbeat ── */
 	useEffect(() => {
@@ -55,7 +75,6 @@ export function CommunicationHub() {
 			try {
 				await communicationHeartbeat();
 			} catch (e) {
-				// 403 = role/MFA won't change mid-session; stop pinging.
 				if (e instanceof ApiError && e.status === 403) {
 					if (id) clearInterval(id);
 					id = undefined;
@@ -73,8 +92,6 @@ export function CommunicationHub() {
 		try {
 			const res = await getCommunicationStaffDirectory();
 			setDirectory(res.staff);
-			// Sync our own presence from the server so the dropdown reflects
-			// the stored status, not just the local default.
 			const me = res.staff.find((s) => s.email === opsUser?.email);
 			if (me) setPresenceStatus(me.presence);
 		} catch (e) {
@@ -88,8 +105,6 @@ export function CommunicationHub() {
 		if (open && mode === "internal") void loadDirectory();
 	}, [open, mode, loadDirectory]);
 
-	// Refresh the directory every 30s while the hub is open in internal mode,
-	// so presence changes from other staff are reflected without a manual reopen.
 	useEffect(() => {
 		if (!open || mode !== "internal") return;
 		const id = setInterval(() => { void loadDirectory(); }, 30_000);
@@ -108,14 +123,12 @@ export function CommunicationHub() {
 	}, [loadDirectory]);
 
 	/* ── Filter Conversations ── */
-	// Internal: Direct 1-on-1 staff conversations
 	const internalConversations = useMemo(() => {
 		return conversations
 			.filter((c) => c.type === "direct" || c.type === "group" || c.type === "internal")
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 	}, [conversations]);
 
-	// External: Client applicant conversations
 	const externalConversations = useMemo(() => {
 		return conversations
 			.filter((c) => c.type === "applicant" || c.type === "support" || c.type === "case" || c.type === "stage" || c.type === "entity")
@@ -131,6 +144,9 @@ export function CommunicationHub() {
 	const openConversation = useCallback(
 		(conv: ChatConversation) => {
 			setActiveConvId(conv.id);
+			setReplyTo(null);
+			setEditingId(null);
+			setDraft("");
 		},
 		[],
 	);
@@ -166,28 +182,56 @@ export function CommunicationHub() {
 		[openConversation],
 	);
 
-	/* ── Send message ── */
-	const [draft, setDraft] = useState("");
-	const onSend = useCallback(
-		async (e: FormEvent) => {
-			e.preventDefault();
-			if (!draft.trim() || !activeConvId || sending) return;
-			const text = draft.trim();
+	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
+
+	/* ── Send / edit / typing ── */
+	const handleSend = useCallback(
+		async (text: string) => {
+			if (!activeConvId || !text.trim()) return;
 			try {
-				await send(text);
+				if (editingId) {
+					await edit(editingId, text);
+					setEditingId(null);
+				} else {
+					await send(text, { replyToId: replyTo?.id });
+					setReplyTo(null);
+				}
 				setDraft("");
 				void refreshConvs();
+				// Stop typing signal on send.
+				if (isTypingRef.current) {
+					isTypingRef.current = false;
+					void signalTyping(false);
+				}
 			} catch (err) {
 				setError(err instanceof Error ? err.message : "Failed to send message");
 			}
 		},
-		[draft, activeConvId, sending, send, refreshConvs],
+		[activeConvId, editingId, replyTo, send, edit, refreshConvs, signalTyping],
 	);
 
-	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
+	const handleTyping = useCallback(() => {
+		if (!activeConvId) return;
+		if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+		if (!isTypingRef.current) {
+			isTypingRef.current = true;
+			void signalTyping(true);
+		}
+		typingTimerRef.current = setTimeout(() => {
+			isTypingRef.current = false;
+			void signalTyping(false);
+		}, 2500);
+	}, [activeConvId, signalTyping]);
+
+	// Stop typing when leaving the conversation.
+	useEffect(() => {
+		if (!activeConvId && isTypingRef.current) {
+			isTypingRef.current = false;
+			void signalTyping(false);
+		}
+	}, [activeConvId, signalTyping]);
 
 	const filteredDirectory = useMemo(() => {
-		// Exclude yourself — you don't need to DM yourself.
 		const withoutSelf = directory.filter((s) => s.email !== opsUser?.email);
 		if (!searchQuery.trim()) return withoutSelf;
 		const q = searchQuery.toLowerCase();
@@ -199,9 +243,53 @@ export function CommunicationHub() {
 		);
 	}, [directory, searchQuery, opsUser?.email]);
 
+	const isOwn = useCallback(
+		(m: ChatMessage) => m.senderOpsUserId != null && m.senderOpsUserId === opsUser?.opsUserId,
+		[opsUser?.opsUserId],
+	);
+
+	// Authorize edit/delete: author only (ops console has no moderator UI here).
+	const actionsConfig = useMemo<MessageActionsConfig>(() => ({
+		reply: true,
+		react: true,
+		forward: true,
+		copy: true,
+		edit: true,
+		delete: true,
+		more: false,
+	}), []);
+
+	const bubbleCallbacks = useMemo(() => ({
+		actions: actionsConfig,
+		onReply: (m: ChatMessage) => {
+			if (m.deletedAt) return;
+			setReplyTo({
+				id: m.id,
+				senderName: m.senderName,
+				content: m.content,
+				deleted: m.deletedAt !== null && m.deletedAt !== undefined,
+			});
+			setEditingId(null);
+		},
+		onForward: (m: ChatMessage) => {
+			if (m.deletedAt) return;
+			setForwardTarget(m);
+		},
+		onEdit: (m: ChatMessage) => {
+			if (m.deletedAt || !isOwn(m)) return;
+			setEditingId(m.id);
+			setDraft(m.content);
+			setReplyTo(null);
+		},
+		onDelete: (m: ChatMessage) => {
+			if (m.deletedAt || !isOwn(m)) return;
+			void deleteMessage(m.id);
+		},
+	}), [actionsConfig, isOwn, deleteMessage]);
+
 	return (
 		<>
-			{/* Floating Square Launcher Button (Pure SVG icon, 0px border-radius) */}
+			{/* Floating Square Launcher Button */}
 			<button
 				type="button"
 				onClick={() => setOpen((prev) => !prev)}
@@ -225,7 +313,7 @@ export function CommunicationHub() {
 
 			{/* Floating Hub Window */}
 			{open && (
-				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }}>
+				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }} className="cn-chat">
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -233,7 +321,6 @@ export function CommunicationHub() {
 							<span style={headerTitleStyle}>OPS CHAT</span>
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-							{/* Presence Selector */}
 							<select
 								value={presenceStatus}
 								onChange={(e) => changePresence(e.target.value as StaffPresence)}
@@ -476,110 +563,207 @@ export function CommunicationHub() {
 
 						{/* Active Conversation Stream */}
 						{activeConvId && (
-							<div style={streamContainerStyle}>
-								{/* Header */}
-								<div style={threadHeaderStyle}>
-									<button
-										type="button"
-										onClick={() => setActiveConvId(null)}
-										style={backBtnStyle}
-									>
-										[ BACK ]
-									</button>
-									<div>
-										<div style={{ fontWeight: 700, fontSize: "12px", color: "#ffffff", letterSpacing: "0.04em" }}>
-											{activeConv?.title.toUpperCase() || "CONVERSATION"}
-										</div>
-										<div style={{ fontSize: "9px", color: "#52525b", fontFamily: "monospace" }}>
-											{mode === "internal" ? "ISOLATED STAFF THREAD" : "CLIENT CASE THREAD"}
-										</div>
-									</div>
-									<span style={stagePillMiniStyle}>
-										{mode === "internal" ? "DIRECT" : "CLIENT"}
-									</span>
-								</div>
-
-								{/* Messages Stream */}
-								<div style={messageListStyle}>
-									{messages.length === 0 && !msgsLoading && (
-										<div style={{ textAlign: "center", color: "#52525b", padding: "40px 20px" }}>
-											<p style={{ fontSize: "12px", color: "#000000", fontWeight: 700 }}>SESSION STARTED</p>
-											<p style={{ fontSize: "10px", color: "#52525b", marginTop: "4px", fontFamily: "monospace" }}>
-												Messages sent here are isolated to participants.
-											</p>
-										</div>
-									)}
-									{messages.map((m) => {
-										const isMe = m.senderOpsUserId != null && m.senderOpsUserId === opsUser?.opsUserId;
-										// Read receipt: my message is "read" when every OTHER participant's
-										// lastReadAt is at or after the message's createdAt.
-										const isRead = isMe && activeConv ? (() => {
-											const others = activeConv.participants.filter(
-												(p) => p.email !== opsUser?.email && p.role !== "former",
-											);
-											if (others.length === 0) return true; // solo conversation
-											const msgTime = new Date(m.createdAt).getTime();
-											return others.every((p) => p.lastReadAt && new Date(p.lastReadAt).getTime() >= msgTime);
-										})() : false;
-										return (
-											<div
-												key={m.id}
-												style={{
-													...messageRowStyle,
-													justifyContent: isMe ? "flex-end" : "flex-start",
-												}}
-											>
-												<div
-													style={{
-														...messageBubbleStyle,
-														...(isMe ? myBubbleStyle : theirBubbleStyle),
-													}}
-												>
-													<div style={bubbleAuthorStyle}>{isMe ? "YOU" : m.senderName.toUpperCase()}</div>
-													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
-													<div style={bubbleTimeStyle}>
-														{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-														{isMe && (
-															<span style={{ marginLeft: "4px", fontSize: "9px", opacity: isRead ? 1 : 0.5 }}>
-																{isRead ? "✓✓ Read" : "✓ Sent"}
-															</span>
-														)}
-													</div>
-												</div>
-											</div>
-										);
-									})}
-									{msgsLoading && (
-										<div style={{ textAlign: "center", color: "#52525b", fontSize: "10px", padding: "10px", fontFamily: "monospace" }}>
-											LOADING MESSAGES...
-										</div>
-									)}
-								</div>
-
-								{/* Send Form */}
-								<form onSubmit={onSend} style={formStyle}>
-									<input
-										type="text"
-										value={draft}
-										onChange={(e) => setDraft(e.target.value)}
-										placeholder={`Reply to ${activeConv?.title || "thread"}...`}
-										style={inputStyle}
-										disabled={sending}
-									/>
-									<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-										{sending ? "..." : "SEND"}
-									</button>
-								</form>
-							</div>
+							<ConversationThread
+								conversation={activeConv}
+								messages={messages}
+								hasMore={hasMore}
+								msgsLoading={msgsLoading}
+								sending={sending}
+								typing={typing}
+								draft={draft}
+								replyTo={replyTo}
+								editingId={editingId}
+								isOwn={isOwn}
+								bubbleCallbacks={bubbleCallbacks}
+								onDraftChange={setDraft}
+								onSend={handleSend}
+								onTyping={handleTyping}
+								onCancelReply={() => setReplyTo(null)}
+								onCancelEdit={() => { setEditingId(null); setDraft(""); }}
+								onLoadMore={loadMore}
+								onBack={() => setActiveConvId(null)}
+								onReact={(messageId, emoji) => void react(messageId, emoji)}
+								onQuoteClick={() => {/* scroll-to-original — TODO via ref map */}}
+							/>
 						)}
 					</div>
+
+					{/* Forward dialog */}
+					{forwardTarget && (
+						<ForwardDialog
+							conversations={conversations}
+							preview={forwardTarget.content}
+							onConfirm={(targetIds) => {
+								void forward(forwardTarget.id, targetIds);
+								setForwardTarget(null);
+							}}
+							onClose={() => setForwardTarget(null)}
+						/>
+					)}
 				</div>
 			)}
 		</>
 	);
 }
 
-/* ── Strict Brutalist Styles for OPS Hub ───────────────────────────────── */
+/* ── Conversation Thread (shared components) ────────────────────────────── */
+
+interface ConversationThreadProps {
+	conversation: ChatConversation | null;
+	messages: ChatMessage[];
+	hasMore: boolean;
+	msgsLoading: boolean;
+	sending: boolean;
+	typing: { name?: string } | null;
+	draft: string;
+	replyTo: QuotedMessage | null;
+	editingId: string | null;
+	isOwn: (m: ChatMessage) => boolean;
+	bubbleCallbacks: {
+		actions: MessageActionsConfig;
+		onReply: (m: ChatMessage) => void;
+		onForward: (m: ChatMessage) => void;
+		onEdit: (m: ChatMessage) => void;
+		onDelete: (m: ChatMessage) => void;
+	};
+	onDraftChange: (v: string) => void;
+	onSend: (text: string) => void;
+	onTyping: () => void;
+	onCancelReply: () => void;
+	onCancelEdit: () => void;
+	onLoadMore: () => void;
+	onBack: () => void;
+	onReact: (messageId: string, emoji: string) => void;
+	onQuoteClick: (messageId: string) => void;
+}
+
+function ConversationThread({
+	conversation,
+	messages,
+	hasMore,
+	msgsLoading,
+	sending,
+	typing,
+	draft,
+	replyTo,
+	editingId,
+	isOwn,
+	bubbleCallbacks,
+	onDraftChange,
+	onSend,
+	onTyping,
+	onCancelReply,
+	onCancelEdit,
+	onLoadMore,
+	onBack,
+	onReact,
+	onQuoteClick,
+}: ConversationThreadProps) {
+	ensureChatUiStyles();
+
+	// Group chats show author labels; 1:1 doesn't.
+	const showAuthor = useCallback(
+		(m: ChatMessage) => {
+			if (!conversation) return false;
+			const isGroup = conversation.type === "group" || conversation.type === "entity";
+			return isGroup && !isOwn(m);
+		},
+		[conversation, isOwn],
+	);
+
+	const bubbleProps = useMemo(() => ({
+		actions: bubbleCallbacks.actions,
+		onReply: bubbleCallbacks.onReply,
+		onForward: bubbleCallbacks.onForward,
+		onEdit: bubbleCallbacks.onEdit,
+		onDelete: bubbleCallbacks.onDelete,
+		onQuoteClick,
+		onReact: (message: ChatMessage, emoji: string) => onReact(message.id, emoji),
+	}), [bubbleCallbacks, onQuoteClick, onReact]);
+
+	return (
+		<div style={streamContainerStyle}>
+			{/* Header */}
+			<div style={threadHeaderStyle}>
+				<button
+					type="button"
+					onClick={onBack}
+					style={backBtnStyle}
+					aria-label="Back to conversations"
+				>
+					←
+				</button>
+				<div style={{ minWidth: 0, flex: 1 }}>
+					<div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+						{conversation?.title ?? "Conversation"}
+					</div>
+					<div style={{ fontSize: 10, color: "#52525b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
+						{conversation?.participants.map((p) => p.name).join(", ")}
+					</div>
+				</div>
+				{conversation?.linkedEntityType && (
+					<span style={stagePillMiniStyle}>
+						{conversation.linkedEntityType.toUpperCase()}
+					</span>
+				)}
+			</div>
+
+			{/* Messages — shared MessageList */}
+			<MessageList
+				messages={messages}
+				typing={typing}
+				isOwn={isOwn}
+				showAuthor={showAuthor}
+				bubbleProps={bubbleProps}
+				onQuoteClick={onQuoteClick}
+				header={
+					hasMore ? (
+						<button
+							type="button"
+							onClick={onLoadMore}
+							style={{
+								display: "block",
+								margin: "0 auto 12px",
+								padding: "4px 12px",
+								background: "transparent",
+								border: "1px solid var(--cn-chat-border)",
+								borderRadius: "var(--cn-chat-radius-pill)",
+								fontSize: 10,
+								cursor: "pointer",
+								fontFamily: "var(--cn-chat-font-mono)",
+								color: "var(--cn-chat-muted-fg)",
+							}}
+						>
+							LOAD EARLIER
+						</button>
+					) : msgsLoading && messages.length === 0 ? (
+						<div style={{ textAlign: "center", color: "var(--cn-chat-muted-fg)", fontSize: 12, padding: 16 }}>
+							Loading messages...
+						</div>
+					) : null
+				}
+			/>
+
+			{/* Composer — shared */}
+			<Composer
+				value={draft}
+				onChange={onDraftChange}
+				onSend={onSend}
+				sending={sending}
+				replyTo={replyTo}
+				onCancelReply={onCancelReply}
+				editing={!!editingId}
+				onCancelEdit={onCancelEdit}
+				onTyping={onTyping}
+				placeholder={editingId ? "Edit message…" : replyTo ? `Reply to ${replyTo.senderName}…` : "Type a message…"}
+			/>
+		</div>
+	);
+}
+
+/* ── Shell styles for OPS Hub ───────────────────────────────────────────── */
+/* Only the shell styles remain here; message bubbles + composer use the    */
+/* shared chat-ui components which style themselves via --cn-chat-* tokens. */
 
 const launcherSquareBtnStyle: CSSProperties = {
 	position: "fixed",
@@ -619,7 +803,7 @@ const windowContainerStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "360px",
+	width: "420px",
 	height: "600px",
 	maxHeight: "calc(100vh - 48px)",
 	background: "#ffffff",
@@ -634,7 +818,7 @@ const windowContainerStyle: CSSProperties = {
 };
 
 const windowExpandedStyle: CSSProperties = {
-	width: "800px",
+	width: "880px",
 	maxHeight: "calc(100vh - 48px)",
 	maxWidth: "calc(100vw - 48px)",
 };
@@ -721,7 +905,7 @@ const activeChannelBtnStyle: CSSProperties = {
 const tabDotBadgeStyle: CSSProperties = {
 	width: "4px",
 	height: "4px",
-	background: "#ffffff",
+	background: "#dc2626",
 	borderRadius: "0px",
 };
 
@@ -865,6 +1049,7 @@ const stagePillMiniStyle: CSSProperties = {
 	border: "1px solid #e4e4e7",
 	padding: "2px 5px",
 	borderRadius: "0px",
+	flexShrink: 0,
 };
 
 const unreadSquareBadgeInlineStyle: CSSProperties = {
@@ -876,6 +1061,7 @@ const unreadSquareBadgeInlineStyle: CSSProperties = {
 	padding: "1px 5px",
 	border: "1px solid #000000",
 	borderRadius: "0px",
+	marginLeft: 6,
 };
 
 const streamContainerStyle: CSSProperties = {
@@ -888,116 +1074,22 @@ const streamContainerStyle: CSSProperties = {
 const threadHeaderStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
-	justifyContent: "space-between",
-	padding: "12px 16px",
+	gap: 10,
+	padding: "10px 16px",
 	background: "#ffffff",
 	borderBottom: "1px solid #f4f4f5",
+	flexShrink: 0,
 };
 
 const backBtnStyle: CSSProperties = {
-	background: "transparent",
+	background: "none",
 	border: "none",
-	color: "#52525b",
-	padding: "6px",
-	borderRadius: "50%",
-	fontSize: "14px",
 	cursor: "pointer",
-	transition: "background 0.2s ease, color 0.2s ease",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-};
-
-const messageListStyle: CSSProperties = {
-	flex: 1,
-	overflowY: "auto",
-	padding: "12px",
-	display: "flex",
-	flexDirection: "column",
-	gap: "8px",
-};
-
-const messageRowStyle: CSSProperties = {
-	display: "flex",
-	width: "100%",
-};
-
-const messageBubbleStyle: CSSProperties = {
-	maxWidth: "75%",
-	padding: "10px 14px",
-	fontSize: "13px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	lineHeight: "1.4",
-};
-
-const myBubbleStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#ffffff",
-	border: "none",
-	borderRadius: "16px 16px 4px 16px",
-};
-
-const theirBubbleStyle: CSSProperties = {
-	background: "#f4f4f5",
+	padding: 0,
+	fontSize: 16,
 	color: "#18181b",
-	border: "none",
-	borderRadius: "16px 16px 16px 4px",
-};
-
-const bubbleAuthorStyle: CSSProperties = {
-	fontSize: "9px",
-	fontWeight: 700,
-	fontFamily: "monospace",
-	letterSpacing: "0.06em",
-	color: "#52525b",
-	marginBottom: "4px",
-};
-
-const bubbleTimeStyle: CSSProperties = {
-	fontSize: "9px",
-	fontFamily: "monospace",
-	color: "#52525b",
-	marginTop: "4px",
-	textAlign: "right",
-};
-
-const formStyle: CSSProperties = {
-	display: "flex",
-	padding: "12px 16px",
-	background: "#ffffff",
-	borderTop: "1px solid #f4f4f5",
-	gap: "10px",
-	alignItems: "center",
-};
-
-const inputStyle: CSSProperties = {
-	flex: 1,
-	background: "#f4f4f5",
-	border: "1px solid transparent",
-	borderRadius: "20px",
-	color: "#18181b",
-	padding: "10px 16px",
-	fontSize: "13px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	outline: "none",
-	transition: "background 0.2s ease",
-};
-
-const sendBtnStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#ffffff",
-	border: "none",
-	borderRadius: "8px",
-	height: "36px",
-	padding: "0 16px",
-	fontSize: "11px",
-	fontWeight: 600,
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	cursor: "pointer",
-	transition: "transform 0.1s ease, background 0.2s ease",
+	flexShrink: 0,
+	lineHeight: 1,
 };
 
 const errorBannerStyle: CSSProperties = {

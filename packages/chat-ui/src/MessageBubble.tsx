@@ -15,14 +15,14 @@ export interface MessageBubbleProps {
 	showAuthor?: boolean;
 	/** Actions config. Edit/delete default to false; parent enables them when authorized. */
 	actions?: MessageActionsConfig;
-	/** Callbacks — all optional; absent actions are hidden. */
-	onReply?: () => void;
-	onReact?: (emoji: string) => void;
-	onForward?: () => void;
-	onCopy?: () => void;
-	onEdit?: () => void;
-	onDelete?: () => void;
-	onMore?: () => void;
+	/** Callbacks — all optional; absent actions are hidden. Each receives the message. */
+	onReply?: (message: ChatMessage) => void;
+	onReact?: (message: ChatMessage, emoji: string) => void;
+	onForward?: (message: ChatMessage) => void;
+	onCopy?: (message: ChatMessage) => void;
+	onEdit?: (message: ChatMessage) => void;
+	onDelete?: (message: ChatMessage) => void;
+	onMore?: (message: ChatMessage) => void;
 	/** Click on a quoted reply preview — typically scroll-to-original. */
 	onQuoteClick?: (messageId: string) => void;
 	style?: CSSProperties;
@@ -100,7 +100,7 @@ export function MessageBubble({
 	const handleCopy = () => {
 		if (deleted) return;
 		void navigator.clipboard?.writeText(message.content).catch(() => {});
-		onCopy?.();
+		onCopy?.(message);
 	};
 
 	return (
@@ -134,19 +134,19 @@ export function MessageBubble({
 					>
 						{showReactionPicker ? (
 							<ReactionPicker
-								onSelect={(emoji) => onReact?.(emoji)}
+								onSelect={(emoji) => onReact?.(message, emoji)}
 								onClose={() => setShowReactionPicker(false)}
 							/>
 						) : (
 							<MessageActions
 								actions={actions}
-								onReply={onReply}
+								onReply={() => onReply?.(message)}
 								onReact={() => setShowReactionPicker(true)}
-								onForward={onForward}
+								onForward={() => onForward?.(message)}
 								onCopy={handleCopy}
-								onEdit={onEdit}
-								onDelete={onDelete}
-								onMore={onMore}
+								onEdit={() => onEdit?.(message)}
+								onDelete={() => onDelete?.(message)}
+								onMore={() => onMore?.(message)}
 							/>
 						)}
 					</div>
@@ -303,7 +303,7 @@ export function MessageBubble({
 								<button
 									key={r.emoji}
 									type="button"
-									onClick={() => onReact?.(r.emoji)}
+									onClick={() => onReact?.(message, r.emoji)}
 									title={r.reactors.join(", ")}
 									style={{
 										display: "inline-flex",

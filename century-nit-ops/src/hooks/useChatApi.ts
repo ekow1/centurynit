@@ -4,6 +4,11 @@ import {
 	createChatConversation,
 	getChatMessages,
 	sendChatMessage,
+	editChatMessage,
+	deleteChatMessage,
+	toggleChatReaction,
+	forwardChatMessage,
+	setChatTyping,
 	markChatConversationRead,
 	getChatUnread,
 	getStaffDirectory,
@@ -95,7 +100,9 @@ export function useChatMessages(conversationId: string | null) {
 	const [hasMore, setHasMore] = useState(false);
 	const [loading, setLoading] = useState(false);
 	const [sending, setSending] = useState(false);
+	const [typing, setTyping] = useState<{ name?: string } | null>(null);
 	const abortRef = useRef<AbortController | null>(null);
+	const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const load = useCallback(async () => {
 		if (!conversationId) return;
@@ -126,12 +133,23 @@ export function useChatMessages(conversationId: string | null) {
 	}, [conversationId, hasMore, messages]);
 
 	const send = useCallback(
-		async (content: string, replyToId?: string, mentions?: string[]) => {
+		async (
+			content: string,
+			opts?: { replyToId?: string; mentions?: string[]; attachmentIds?: string[] },
+		) => {
 			if (!conversationId || !content.trim()) return;
 			setSending(true);
 			try {
-				const msg = await sendChatMessage(conversationId, { content, replyToId, mentions });
-				setMessages((prev) => [...prev, msg]);
+				const msg = await sendChatMessage(conversationId, {
+					content,
+					replyToId: opts?.replyToId,
+					mentions: opts?.mentions,
+					attachmentIds: opts?.attachmentIds,
+				});
+				setMessages((prev) => {
+					if (prev.some((m) => m.id === msg.id)) return prev;
+					return [...prev, msg];
+				});
 				return msg;
 			} finally {
 				setSending(false);
@@ -139,6 +157,52 @@ export function useChatMessages(conversationId: string | null) {
 		},
 		[conversationId],
 	);
+
+	const edit = useCallback(async (messageId: string, content: string) => {
+		if (!content.trim()) return;
+		try {
+			const updated = await editChatMessage(messageId, { content });
+			setMessages((prev) => prev.map((m) => (m.id === messageId ? updated : m)));
+		} catch {
+			// silent — parent can surface errors
+		}
+	}, []);
+
+	const remove = useCallback(async (messageId: string) => {
+		try {
+			await deleteChatMessage(messageId);
+			// SSE will deliver the updated tombstone; no local mutation needed.
+		} catch {
+			// silent
+		}
+	}, []);
+
+	const react = useCallback(async (messageId: string, emoji: string) => {
+		try {
+			await toggleChatReaction(messageId, emoji);
+			// SSE delivers the updated reactions aggregate.
+		} catch {
+			// silent
+		}
+	}, []);
+
+	const forward = useCallback(async (messageId: string, targetIds: string[]) => {
+		if (targetIds.length === 0) return;
+		try {
+			await forwardChatMessage(messageId, targetIds);
+		} catch {
+			// silent
+		}
+	}, []);
+
+	const signalTyping = useCallback(async (isTyping: boolean) => {
+		if (!conversationId) return;
+		try {
+			await setChatTyping(conversationId, isTyping);
+		} catch {
+			// silent
+		}
+	}, [conversationId]);
 
 	const markRead = useCallback(async () => {
 		if (!conversationId) return;
@@ -158,17 +222,83 @@ export function useChatMessages(conversationId: string | null) {
 		};
 	}, [conversationId, load]);
 
-	// SSE: append incoming messages for this conversation in real time.
+	// SSE: handle all real-time events for this conversation.
 	useChatStream(useCallback((ev) => {
-		if (ev.type !== "chat.message") return;
-		if (ev.conversationId !== conversationId) return;
-		setMessages((prev) => {
-			if (prev.some((m) => m.id === ev.message.id)) return prev;
-			return [...prev, ev.message];
-		});
+		switch (ev.type) {
+			case "chat.message": {
+				if (ev.conversationId !== conversationId) return;
+				setMessages((prev) => {
+					if (prev.some((m) => m.id === ev.message.id)) return prev;
+					return [...prev, ev.message];
+				});
+				break;
+			}
+			case "chat.message.updated": {
+				if (ev.conversationId !== conversationId) return;
+				setMessages((prev) => prev.map((m) => (m.id === ev.message.id ? ev.message : m)));
+				break;
+			}
+			case "chat.message.deleted": {
+				if (ev.conversationId !== conversationId) return;
+				setMessages((prev) =>
+					prev.map((m) =>
+						m.id === ev.messageId
+							? {
+								...m,
+								content: "",
+								deletedAt: new Date().toISOString(),
+								reactions: [],
+								attachments: [],
+							}
+							: m,
+					),
+				);
+				break;
+			}
+			case "chat.reaction": {
+				if (ev.conversationId !== conversationId) return;
+				setMessages((prev) => prev.map((m) => (m.id === ev.messageId ? { ...m, reactions: ev.reactions } : m)));
+				break;
+			}
+			case "chat.typing": {
+				if (ev.conversationId !== conversationId) return;
+				if (ev.typing) {
+					setTyping({ name: ev.actorName });
+					// Auto-clear after 4s — the typing signal is ephemeral and
+					// a dropped "stopped" event would otherwise leave dots forever.
+					if (typingTimer.current) clearTimeout(typingTimer.current);
+					typingTimer.current = setTimeout(() => setTyping(null), 4000);
+				} else {
+					setTyping(null);
+				}
+				break;
+			}
+			default:
+				break;
+		}
 	}, [conversationId]));
 
-	return { messages, hasMore, loading, sending, load, loadMore, send, markRead };
+	// Clear typing indicator when switching conversations.
+	useEffect(() => {
+		setTyping(null);
+	}, [conversationId]);
+
+	return {
+		messages,
+		hasMore,
+		loading,
+		sending,
+		typing,
+		load,
+		loadMore,
+		send,
+		edit,
+		delete: remove,
+		react,
+		forward,
+		signalTyping,
+		markRead,
+	};
 }
 
 /* ── Staff directory hook (for @mentions) ───────────────────────────────── */

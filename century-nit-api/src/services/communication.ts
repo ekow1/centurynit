@@ -14,7 +14,7 @@
  * See the design doc for the full routing and permission model.
  */
 
-import { and, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
 	ChatConversation,
@@ -130,10 +130,16 @@ export async function recordEvent(input: {
 	stageKey?: string | null;
 	metadata?: Record<string, unknown>;
 }): Promise<void> {
+	const actorUserId = input.actorUserId && input.actorUserId.trim().length > 0
+		? input.actorUserId.trim()
+		: null;
+	const actorOpsUserId = input.actorOpsUserId && input.actorOpsUserId.trim().length > 0
+		? input.actorOpsUserId.trim()
+		: null;
 	await db.insert(communicationEvents).values({
 		action: input.action,
-		actorUserId: input.actorUserId ?? null,
-		actorOpsUserId: input.actorOpsUserId ?? null,
+		actorUserId,
+		actorOpsUserId,
 		conversationId: input.conversationId ?? null,
 		applicationId: input.applicationId ?? null,
 		stageKey: input.stageKey ?? null,
@@ -439,7 +445,7 @@ export async function findOrCreateConversation(
 
 	await recordEvent({
 		action: "conversation_created",
-		actorOpsUserId: input.createdByOpsUserId,
+		actorOpsUserId: validCreatorId,
 		conversationId: created.id,
 		applicationId: linkedEntityType === "application" ? linkedEntityId : null,
 		stageKey,
@@ -673,7 +679,7 @@ export async function listCustomerConversations(userId: string): Promise<ChatCon
 		.where(
 			and(
 				inArray(conversations.type, [...CUSTOMER_VISIBLE_TYPES]),
-				or(eq(conversations.userId, userId), isNotNull(conversations.userId)),
+				eq(conversations.userId, userId),
 				// status open or closed (archived hidden)
 				inArray(conversations.status, ["open", "closed"]),
 			),

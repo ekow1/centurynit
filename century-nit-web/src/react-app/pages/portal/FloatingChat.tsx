@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type FormEvent } from "react";
 import { useAppState } from "../../context/AppState";
 import { useApplicantTickets } from "../../data/opsTicketBridge";
-import { formatDualCurrency, CONSULTATION_FEE, meApi, type ChatMessage } from "century-nit-core";
+import { formatDualCurrency, CONSULTATION_FEE, type ChatMessage as LocalChatMessage } from "century-nit-core";
+import type { ChatMessage as SharedChatMessage, QuotedMessage } from "century-nit-shared";
+import {
+	ensureChatUiStyles,
+	MessageList,
+	Composer,
+	type MessageActionsConfig,
+} from "century-nit-chat-ui";
+import { useApplicantChat } from "../../hooks/useApplicantChat";
 
 type ChatTab = "ai" | "consultant" | "support";
 
@@ -12,24 +20,6 @@ const AI_REPLIES = [
 	"For IELTS, most universities require a minimum overall score of 6.5 with no band below 6.0. Some competitive programmes may ask for 7.0.",
 	`That's a common question! The consultation fee is ${formatDualCurrency(CONSULTATION_FEE)} and covers your initial assessment and eligibility review.`,
 	"I can help with general questions about study destinations, programme requirements, timelines, and document checklists.",
-];
-
-const CONSULTANT_REPLIES = [
-	"Got it - I'll check and get back to you within 24 hours.",
-	"That's a great question. Let me review your file and I'll update you shortly.",
-	"Understood. I'll coordinate with the processing team and let you know the next steps.",
-	"Thanks for the update! Everything looks good on our end.",
-	"I've noted this down. We'll include it in your application file.",
-	"Absolutely - we can arrange that. I'll send you the details after our next meeting.",
-];
-
-const SUPPORT_REPLIES = [
-	"Thank you for reaching out to support. I'm looking into this for you right now.",
-	"I've logged a ticket for this issue - you'll receive an update within 2 business hours.",
-	"That seems to be a technical issue on our end. I've notified the engineering team.",
-	"You can reset your portal password from the sign-in page. Let me know if you need help.",
-	"Your payment receipt has been re-sent to your registered email address.",
-	"Support hours are Mon–Fri, 9am–6pm GMT. For urgent matters outside hours, please email support@centurynit.com.",
 ];
 
 const AI_SUGGESTIONS = [
@@ -50,7 +40,6 @@ const TAB_META: Record<ChatTab, { label: string; subtitle: string; color: string
 	},
 	consultant: {
 		label: "Consultant",
-		// Overridden at render with the actually-assigned consultant
 		subtitle: "Responds within 24h",
 		color: "#10b981",
 	},
@@ -196,7 +185,7 @@ function TypingDots() {
 	);
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function ScriptedMessageBubble({ msg }: { msg: LocalChatMessage }) {
 	const isApplicant = msg.sender === "applicant";
 	return (
 		<div
@@ -242,38 +231,13 @@ export function FloatingChat() {
 	const [input, setInput] = useState("");
 	const [typing, setTyping] = useState(false);
 
-	// Consultant messages now come from the real API, not localStorage
-	const [consultantMessages, setConsultantMessages] = useState<ChatMessage[]>([]);
-	const [consultantName, setConsultantName] = useState<string | null>(null);
-	const [sendingMessage, setSendingMessage] = useState(false);
+	// Consultant tab — real chat via shared components + SSE.
+	const applicantChat = useApplicantChat(!!authUser);
+	const [consultantDraft, setConsultantDraft] = useState("");
+	const [consultantReplyTo, setConsultantReplyTo] = useState<QuotedMessage | null>(null);
 
-	const refreshConsultantMessages = useCallback(async () => {
-		if (!authUser) return;
-		try {
-			const conv = await meApi.getConversation();
-			setConsultantName(conv.consultantName);
-			const res = await meApi.getConversationMessages({ limit: 50 });
-			setConsultantMessages(
-				res.messages.map((m) => ({
-					id: m.id,
-					sender: m.senderOpsUserId ? "consultant" : "applicant",
-					authorName: m.senderName,
-					text: m.content,
-					at: m.createdAt,
-				})),
-			);
-		} catch {
-			// keep local values
-		}
-	}, [authUser]);
-
-	useEffect(() => {
-		if (!authUser) return;
-		void refreshConsultantMessages();
-		const id = window.setInterval(refreshConsultantMessages, 10_000);
-		return () => window.clearInterval(id);
-	}, [authUser, refreshConsultantMessages]);
-	const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
+	// AI tab — scripted, local state only.
+	const [aiMessages, setAiMessages] = useState<LocalChatMessage[]>([
 		{
 			id: "ai-1",
 			sender: "ai",
@@ -284,18 +248,12 @@ export function FloatingChat() {
 	]);
 	const scrollRef = useRef<HTMLDivElement>(null);
 
-	/**
-	 * Support is a real ticket, not a scripted chat. The applicant's most recent
-	 * unresolved external ticket *is* this thread — staff reply to it from the
-	 * ops helpdesk and it shows up here.
-	 */
 	const openTicket = useMemo(
-		// `myTickets` is already this applicant's own, newest first.
 		() => myTickets.find((t) => t.status !== "Resolved") ?? null,
 		[myTickets],
 	);
 
-	const supportMessages: ChatMessage[] = useMemo(() => {
+	const supportMessages: LocalChatMessage[] = useMemo(() => {
 		if (!openTicket) {
 			return [
 				{
@@ -316,60 +274,18 @@ export function FloatingChat() {
 		}));
 	}, [openTicket, authUser]);
 
-	const currentMessages =
-		tab === "ai" ? aiMessages : tab === "consultant" ? consultantMessages : supportMessages;
-
 	useEffect(() => {
-		if (scrollRef.current) {
+		if (scrollRef.current && tab !== "consultant") {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [currentMessages, typing, open]);
+	}, [aiMessages, supportMessages, typing, open, tab]);
 
-	function getReplies(): string[] {
-		if (tab === "ai") return AI_REPLIES;
-		if (tab === "consultant") return CONSULTANT_REPLIES;
-		return SUPPORT_REPLIES;
-	}
-
-	function getSenderName(): string {
-		if (tab === "ai") return "AI Assistant";
-		// Replies must come from the consultant this applicant was actually
-		// assigned, or the thread contradicts the appointment card
-		if (tab === "consultant") return consultantName ?? booking.consultantName ?? "Your consultant";
-		return openTicket?.assignedTo || "Century Support";
-	}
-
-	function getSetter():
-		| React.Dispatch<React.SetStateAction<ChatMessage[]>>
-		| null {
-		if (tab === "ai") return setAiMessages;
-		// Support is backed by a ticket, not local state
-		return null;
-	}
-
-	function pushReply(text: string) {
-		const reply: ChatMessage = {
-			id: `${tab}-reply-${Date.now().toString(36)}`,
-			sender: tab === "ai" ? "ai" : tab === "consultant" ? "consultant" : "support",
-			authorName: getSenderName(),
-			text,
-			at: new Date().toISOString(),
-		};
-		if (tab === "consultant") {
-			// Consultant replies come from the server via polling, not scripted
-			return;
-		} else {
-			const setter = getSetter();
-			if (setter) setter((prev) => [...prev, reply]);
-		}
-	}
-
-	function handleSubmit(e: FormEvent) {
+	function handleScriptedSubmit(e: FormEvent) {
 		e.preventDefault();
 		const trimmed = input.trim();
 		if (!trimmed) return;
 
-		const userMsg: ChatMessage = {
+		const userMsg: LocalChatMessage = {
 			id: `${tab}-user-${Date.now().toString(36)}`,
 			sender: "applicant",
 			authorName: authUser?.name ?? "You",
@@ -377,23 +293,11 @@ export function FloatingChat() {
 			at: new Date().toISOString(),
 		};
 
-		if (tab === "consultant") {
-			// Real API: send message to server, no scripted reply
-			setSendingMessage(true);
-			meApi.sendConversationMessage(trimmed)
-				.then(() => refreshConsultantMessages())
-				.catch(() => { /* keep local */ })
-				.finally(() => setSendingMessage(false));
-			setInput("");
-			return;
-		} else if (tab === "support") {
-			// Real ticketing: append to the open request, or raise a new one.
-			// No scripted reply here — a person answers from the ops helpdesk.
+		if (tab === "support") {
 			if (openTicket) {
 				replyToTicket(openTicket.id, trimmed);
 			} else {
 				createTicket({
-					// First sentence becomes the subject staff see in the queue
 					title: trimmed.split(/[.!?\n]/)[0].slice(0, 80) || "Support request",
 					description: trimmed,
 					category: "Other",
@@ -404,20 +308,27 @@ export function FloatingChat() {
 			}
 			setInput("");
 			return;
-		} else {
-			const setter = getSetter();
-			if (setter) setter((prev) => [...prev, userMsg]);
 		}
 
+		// AI tab — scripted reply
+		setAiMessages((prev) => [...prev, userMsg]);
 		setInput("");
 		setTyping(true);
 
-		const delay = tab === "ai" ? 800 + Math.random() * 600 : 2000 + Math.random() * 1500;
+		const delay = 800 + Math.random() * 600;
 		window.setTimeout(() => {
-			const replies = getReplies();
-			const reply = replies[Math.floor(Math.random() * replies.length)];
+			const reply = AI_REPLIES[Math.floor(Math.random() * AI_REPLIES.length)];
 			setTyping(false);
-			pushReply(reply);
+			setAiMessages((prev) => [
+				...prev,
+				{
+					id: `${tab}-reply-${Date.now().toString(36)}`,
+					sender: "ai",
+					authorName: "AI Assistant",
+					text: reply,
+					at: new Date().toISOString(),
+				},
+			]);
 		}, delay);
 	}
 
@@ -425,20 +336,59 @@ export function FloatingChat() {
 		setInput(text);
 	}
 
-	// Name the consultant the flow actually assigned, not a hardcoded one
 	const base = TAB_META[tab];
 	const meta =
-		tab === "consultant" && (consultantName ?? booking.consultantName)
-			? { ...base, subtitle: `${consultantName ?? booking.consultantName} · responds within 24h` }
+		tab === "consultant" && (applicantChat.consultantName ?? booking.consultantName)
+			? { ...base, subtitle: `${applicantChat.consultantName ?? booking.consultantName} · responds within 24h` }
 			: tab === "support" && openTicket
 				? {
 						...base,
-						// Give the applicant the reference so they can quote it
 						subtitle: `${openTicket.ref} · ${openTicket.status}${
 							openTicket.assignedTo ? ` · ${openTicket.assignedTo}` : " · awaiting triage"
 						}`,
 					}
 				: base;
+
+	// Consultant tab — shared component callbacks.
+	const isOwn = useCallback(
+		(m: SharedChatMessage) => m.senderOpsUserId == null,
+		[],
+	);
+
+	const consultantActions = useMemo<MessageActionsConfig>(() => ({
+		reply: true,
+		react: false,
+		forward: false,
+		copy: true,
+		edit: false,
+		delete: false,
+		more: false,
+	}), []);
+
+	const consultantBubbleProps = useMemo(() => ({
+		actions: consultantActions,
+		onReply: (m: SharedChatMessage) => {
+			if (m.deletedAt) return;
+			setConsultantReplyTo({
+				id: m.id,
+				senderName: m.senderName,
+				content: m.content,
+				deleted: m.deletedAt !== null && m.deletedAt !== undefined,
+			});
+		},
+		onQuoteClick: () => {},
+	}), [consultantActions]);
+
+	const handleConsultantSend = useCallback(
+		async (text: string) => {
+			if (!text.trim()) return;
+			await applicantChat.send(text);
+			setConsultantReplyTo(null);
+		},
+		[applicantChat],
+	);
+
+	ensureChatUiStyles();
 
 	return (
 		<>
@@ -454,7 +404,7 @@ export function FloatingChat() {
 			`}</style>
 
 			{open ? (
-				<div className="chat-panel">
+				<div className="chat-panel cn-chat">
 					{/* Header */}
 					<div
 						style={{
@@ -467,7 +417,7 @@ export function FloatingChat() {
 						}}
 					>
 						<div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-							<Avatar tab={tab} name={booking.consultantName} />
+							<Avatar tab={tab} name={applicantChat.consultantName ?? booking.consultantName} />
 							<div>
 								<p style={{ fontWeight: 600, fontSize: "0.85rem" }}>{meta.label}</p>
 								<p className="muted" style={{ fontSize: "0.7rem" }}>{meta.subtitle}</p>
@@ -534,115 +484,144 @@ export function FloatingChat() {
 					</div>
 
 					{/* Messages */}
-					<div
-						ref={scrollRef}
-						style={{
-							flex: 1,
-							overflowY: "auto",
-							padding: "1rem",
-							display: "flex",
-							flexDirection: "column",
-							gap: "0.75rem",
-						}}
-					>
-						{currentMessages.map((msg) => (
-							<MessageBubble key={msg.id} msg={msg} />
-						))}
-
-						{typing ? (
-							<div style={{ display: "flex", justifyContent: "flex-start" }}>
-								<TypingDots />
-							</div>
-						) : null}
-
-						{tab === "ai" && aiMessages.length <= 1 && !typing ? (
+					{tab === "consultant" ? (
+						<>
+							<MessageList
+								messages={applicantChat.messages}
+								typing={applicantChat.typing}
+								isOwn={isOwn}
+								bubbleProps={consultantBubbleProps}
+								header={
+									applicantChat.loading && applicantChat.messages.length === 0 ? (
+										<div style={{ textAlign: "center", color: "var(--cn-chat-muted-fg)", fontSize: 12, padding: 16 }}>
+											Loading messages...
+										</div>
+									) : null
+								}
+							/>
+							<Composer
+								value={consultantDraft}
+								onChange={setConsultantDraft}
+								onSend={handleConsultantSend}
+								sending={applicantChat.sending}
+								replyTo={consultantReplyTo}
+								onCancelReply={() => setConsultantReplyTo(null)}
+								placeholder={`Message ${applicantChat.consultantName ?? "your consultant"}…`}
+							/>
+						</>
+					) : (
+						<>
 							<div
+								ref={scrollRef}
 								style={{
+									flex: 1,
+									overflowY: "auto",
+									padding: "1rem",
 									display: "flex",
-									flexWrap: "wrap",
-									gap: "0.4rem",
-									paddingTop: "0.5rem",
+									flexDirection: "column",
+									gap: "0.75rem",
 								}}
 							>
-								{AI_SUGGESTIONS.map((s) => (
-									<button
-										key={s}
-										type="button"
-										onClick={() => handleSuggestion(s)}
+								{(tab === "ai" ? aiMessages : supportMessages).map((msg) => (
+									<ScriptedMessageBubble key={msg.id} msg={msg} />
+								))}
+
+								{typing ? (
+									<div style={{ display: "flex", justifyContent: "flex-start" }}>
+										<TypingDots />
+									</div>
+								) : null}
+
+								{tab === "ai" && aiMessages.length <= 1 && !typing ? (
+									<div
 										style={{
-										padding: "0.35rem 0.7rem",
-										fontSize: "0.72rem",
-										background: "var(--muted)",
-										border: "1px solid var(--border-light)",
-										borderRadius: "0",
-										cursor: "pointer",
-											color: "var(--foreground)",
-											transition: "border-color 150ms",
-										}}
-										onMouseEnter={(e) => {
-											e.currentTarget.style.borderColor = "var(--border)";
-										}}
-										onMouseLeave={(e) => {
-											e.currentTarget.style.borderColor = "var(--border-light)";
+											display: "flex",
+											flexWrap: "wrap",
+											gap: "0.4rem",
+											paddingTop: "0.5rem",
 										}}
 									>
-										{s}
-									</button>
-								))}
+										{AI_SUGGESTIONS.map((s) => (
+											<button
+												key={s}
+												type="button"
+												onClick={() => handleSuggestion(s)}
+												style={{
+												padding: "0.35rem 0.7rem",
+												fontSize: "0.72rem",
+												background: "var(--muted)",
+												border: "1px solid var(--border-light)",
+												borderRadius: "0",
+												cursor: "pointer",
+													color: "var(--foreground)",
+													transition: "border-color 150ms",
+												}}
+												onMouseEnter={(e) => {
+													e.currentTarget.style.borderColor = "var(--border)";
+												}}
+												onMouseLeave={(e) => {
+													e.currentTarget.style.borderColor = "var(--border-light)";
+												}}
+											>
+												{s}
+											</button>
+										))}
+									</div>
+								) : null}
 							</div>
-						) : null}
-					</div>
 
-					{/* Input */}
-					<form
-						onSubmit={handleSubmit}
-						style={{
-							padding: "0.6rem 0.75rem",
-							borderTop: "1px solid var(--border-light)",
-							display: "flex",
-							gap: "0.5rem",
-							background: "var(--card)",
-						}}
-					>
-						<input
-							type="text"
-							value={input}
-							onChange={(e) => setInput(e.target.value)}
-							placeholder={`Message ${meta.label}...`}
-							style={{
-								flex: 1,
-								border: "1px solid var(--border-light)",
-								borderRadius: "0",
-								padding: "0.5rem 0.75rem",
-								fontSize: "0.85rem",
-								background: "var(--background)",
-								color: "var(--foreground)",
-								outline: "none",
-							}}
-						/>
-						<button
-							type="submit"
-							disabled={!input.trim() || sendingMessage}
-							style={{
-								width: "36px",
-								height: "36px",
-								display: "flex",
-								alignItems: "center",
-								justifyContent: "center",
-								background: "var(--foreground)",
-								color: "var(--background)",
-								border: "none",
-								borderRadius: "0",
-								cursor: input.trim() ? "pointer" : "default",
-								opacity: input.trim() ? 1 : 0.4,
-								flexShrink: 0,
-								transition: "opacity 150ms",
-							}}
-							aria-label="Send message"
-						>
-							<SendIcon />
-						</button>
-					</form>
+							{/* Input — scripted tabs */}
+							<form
+								onSubmit={handleScriptedSubmit}
+								style={{
+									padding: "0.6rem 0.75rem",
+									borderTop: "1px solid var(--border-light)",
+									display: "flex",
+									gap: "0.5rem",
+									background: "var(--card)",
+								}}
+							>
+								<input
+									type="text"
+									value={input}
+									onChange={(e) => setInput(e.target.value)}
+									placeholder={`Message ${meta.label}...`}
+									style={{
+										flex: 1,
+										border: "1px solid var(--border-light)",
+										borderRadius: "0",
+										padding: "0.5rem 0.75rem",
+										fontSize: "0.85rem",
+										background: "var(--background)",
+										color: "var(--foreground)",
+										outline: "none",
+									}}
+								/>
+								<button
+									type="submit"
+									disabled={!input.trim()}
+									style={{
+										width: "36px",
+										height: "36px",
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "center",
+										background: "var(--foreground)",
+										color: "var(--background)",
+										border: "none",
+										borderRadius: "0",
+										cursor: input.trim() ? "pointer" : "default",
+										opacity: input.trim() ? 1 : 0.4,
+										flexShrink: 0,
+										transition: "opacity 150ms",
+									}}
+									aria-label="Send message"
+								>
+									<SendIcon />
+								</button>
+							</form>
+						</>
+					)}
 				</div>
 			) : null}
 

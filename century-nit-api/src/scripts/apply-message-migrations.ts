@@ -78,15 +78,6 @@ async function columnExists(client: pg.PoolClient, table: string, column: string
 	return res.rows.length > 0;
 }
 
-async function tableExists(client: pg.PoolClient, table: string): Promise<boolean> {
-	const res = await client.query(
-		`SELECT 1 FROM information_schema.tables
-		 WHERE table_schema = 'public' AND table_name = $1`,
-		[table],
-	);
-	return res.rows.length > 0;
-}
-
 async function recordMigration(client: pg.PoolClient, tag: string, when: number) {
 	await client.query(
 		`INSERT INTO drizzle.__drizzle_migrations (hash, created_at)

@@ -553,6 +553,7 @@ staffRouter.openapi(
 		},
 	}),
 	async (c) => {
+		const staff = c.get("staff");
 		const rows = await db
 			.select({
 				id: opsUsers.id,
@@ -567,8 +568,15 @@ staffRouter.openapi(
 			.from(opsUsers)
 			.leftJoin(users, eq(users.id, opsUsers.userId));
 
+		// Hide super_admin accounts from non-super_admin users so they
+		// never appear in the directory, the role filter, or the count
+		// badges. A super_admin sees everyone.
+		const visible = staff?.role === "super_admin"
+			? rows
+			: rows.filter((r) => r.role !== "super_admin");
+
 		return c.json({
-			staff: rows.map((r) => ({
+			staff: visible.map((r) => ({
 				id: r.id,
 				email: r.email,
 				name: r.name,
@@ -635,6 +643,60 @@ staffRouter.openapi(
 			branch: updated.branch,
 			active: updated.active,
 		});
+	},
+);
+
+/* ── DELETE /api/v1/staff/:id ────────────────────────────────────────────────── */
+
+staffRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{id}",
+		tags: ["Staff"],
+		summary: "Permanently delete a staff member and their login",
+		middleware: [requireAuth, requireMfa, requireRole("super_admin")] as const,
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ success: z.boolean() }),
+					},
+				},
+				description: "Staff member permanently deleted",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+
+		// Cannot delete yourself.
+		if (id === staff.opsUserId) {
+			throw new HttpError(400, "BAD_REQUEST", "You cannot delete your own account");
+		}
+
+		const [target] = await db.select().from(opsUsers).where(eq(opsUsers.id, id)).limit(1);
+		if (!target) {
+			throw new HttpError(404, "NOT_FOUND", "Staff member not found");
+		}
+
+		// Only a super_admin may delete another super_admin.
+		if (target.role === "super_admin" && staff.role !== "super_admin") {
+			throw new HttpError(403, "FORBIDDEN", "Only a super admin can delete another super admin");
+		}
+
+		// Delete the ops_users row and the linked auth account (users row).
+		// sessions / accounts / verifications cascade off the users row.
+		if (target.userId) {
+			await db.delete(users).where(eq(users.id, target.userId));
+		}
+		await db.delete(opsUsers).where(eq(opsUsers.id, id));
+
+		console.log(`[Auth/Security] Staff ${id} (${target.email}) permanently deleted by ${staff.name}`);
+		return c.json({ success: true });
 	},
 );
 

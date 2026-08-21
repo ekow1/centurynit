@@ -410,6 +410,10 @@ export const staffApi = {
 		return request(`${API_PREFIX}/staff/${id}`, { method: "PATCH", ...json(patch) });
 	},
 
+	deleteStaff(id: string): Promise<{ success: boolean }> {
+		return request(`${API_PREFIX}/staff/${id}`, { method: "DELETE" });
+	},
+
 	authStats(): Promise<{
 		totalStaff: number;
 		mfaEnrolled: number;

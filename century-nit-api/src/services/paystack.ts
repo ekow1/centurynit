@@ -80,14 +80,18 @@ export async function createPaystackCheckout(input: {
 					Authorization: `Bearer ${secretKey}`,
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({
-					email: input.email,
-					amount: amountInPesewas,
-					currency: "GHS",
-					reference,
-					callback_url: input.callbackUrl,
-					metadata: { invoiceId: input.invoiceId, amountCents: input.amountCents },
-				}),
+			body: JSON.stringify({
+				email: input.email,
+				amount: amountInPesewas,
+				currency: "GHS",
+				reference,
+				callback_url: input.callbackUrl,
+				metadata: {
+					...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+					amountCents: input.amountCents,
+					...input.customMetadata,
+				},
+			}),
 			});
 			body = (await retryRes.json()) as typeof body;
 		}

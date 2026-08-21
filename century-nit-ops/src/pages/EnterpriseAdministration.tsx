@@ -476,6 +476,25 @@ function UsersAndRoles() {
 		setConfirmOpen(true);
 	}
 
+	const canDeleteStaff = opsRole === "super_admin";
+
+	const handleDeleteStaff = (u: typeof staff[number]) => {
+		confirm(
+			"Delete Staff Permanently",
+			`This will permanently delete ${u.name} (${u.email}) and their login. This action cannot be undone.`,
+			async () => {
+				try {
+					await staffApi.deleteStaff(u.id);
+					say(`${u.name} has been permanently deleted.`);
+					await refresh();
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "Failed to delete staff member");
+				}
+			},
+			true,
+		);
+	};
+
 	async function submitInvite(e: React.FormEvent) {
 		e.preventDefault();
 		if (!draft.email.trim() || !draft.name.trim()) return;
@@ -1076,7 +1095,7 @@ function UsersAndRoles() {
 												<td style={{ fontWeight: 500 }}>
 													{u.name}
 													{u.email === opsUser?.email && (
-														<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>
+														<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", color: "var(--muted-foreground)" }}>YOU</span>
 													)}
 												</td>
 												<td className="muted">{u.email}</td>
@@ -1095,9 +1114,18 @@ function UsersAndRoles() {
 													</span>
 												</td>
 												<td className="muted">{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}</td>
-												<td style={{ textAlign: "right" }}>
-													<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
-												</td>
+											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+												<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
+												{canDeleteStaff && u.email !== opsUser?.email && (
+													<button
+														className="btn btn--danger btn--sm"
+														onClick={() => handleDeleteStaff(u)}
+														style={{ marginLeft: "0.4rem", background: "#7f1d1d", borderColor: "#7f1d1d", color: "#ffffff" }}
+													>
+														Delete
+													</button>
+												)}
+											</td>
 											</tr>
 										))
 									)}

@@ -62,6 +62,7 @@ export function ClientDirectory() {
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
 
 	const canManageAccess = opsRole === "super_admin" || opsRole === "admin" || opsRole === "manager";
+	const canDelete = opsRole === "super_admin";
 
 	const _showToast = (type: "error" | "success" | "info", message: string) => {
 		setToast({ type, message });
@@ -177,6 +178,23 @@ export function ClientDirectory() {
 					setError(err instanceof Error ? err.message : "Failed to restore account");
 				}
 			},
+		);
+	};
+
+	const handleDeleteClient = (c: ClientUser) => {
+		confirm(
+			"Delete Client Permanently",
+			`This will permanently delete ${c.name} (${c.email}) and all their data. This action cannot be undone.`,
+			async () => {
+				try {
+					await apiFetch(`${API_PREFIX}/client-users/${c.id}`, { method: "DELETE" });
+					say(`${c.name} has been permanently deleted.`);
+					await fetchClients();
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "Failed to delete client");
+				}
+			},
+			true,
 		);
 	};
 
@@ -365,46 +383,58 @@ export function ClientDirectory() {
 													{c.leadStage || c.applicantStatus || "Lead"}
 												</span>
 											</td>
-											{canManageAccess && (
-												<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-													<div style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
-														{c.activeSessionsCount > 0 && (
-															<button
-																type="button"
-																className="btn btn--xs btn--ghost"
-																onClick={() => setRevokeTarget(c)}
-																title="Force logout active devices"
-																style={{ color: "#f59e0b" }}
-															>
-																Revoke Sessions
-															</button>
-														)}
+										{canManageAccess && (
+											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+												<div style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
+													{c.activeSessionsCount > 0 && (
+														<button
+															type="button"
+															className="btn btn--xs btn--ghost"
+															onClick={() => setRevokeTarget(c)}
+															title="Force logout active devices"
+															style={{ color: "#b45309" }}
+														>
+															Revoke Sessions
+														</button>
+													)}
 
-														{isBanned ? (
-															<button
-																type="button"
-																className="btn btn--xs btn--primary"
-																onClick={() => handleUnbanClient(c)}
-																style={{ background: "#10b981", borderColor: "#10b981" }}
-															>
-																Unban
-															</button>
-														) : (
-															<button
-																type="button"
-																className="btn btn--xs btn--danger"
-																onClick={() => {
-																	setBanTarget(c);
-																	setBanReason("");
-																}}
-																style={{ color: "#ef4444", borderColor: "#ef4444" }}
-															>
-																Ban
-															</button>
-														)}
-													</div>
-												</td>
-											)}
+													{isBanned ? (
+														<button
+															type="button"
+															className="btn btn--xs btn--primary"
+															onClick={() => handleUnbanClient(c)}
+															style={{ background: "#166534", borderColor: "#166534" }}
+														>
+															Unban
+														</button>
+													) : (
+														<button
+															type="button"
+															className="btn btn--xs btn--danger"
+															onClick={() => {
+																setBanTarget(c);
+																setBanReason("");
+															}}
+															style={{ color: "#b91c1c", borderColor: "#b91c1c" }}
+														>
+															Ban
+														</button>
+													)}
+
+													{canDelete && (
+														<button
+															type="button"
+															className="btn btn--xs btn--danger"
+															onClick={() => handleDeleteClient(c)}
+															title="Permanently delete this client and all their data"
+															style={{ background: "#7f1d1d", borderColor: "#7f1d1d", color: "#ffffff" }}
+														>
+															Delete
+														</button>
+													)}
+												</div>
+											</td>
+										)}
 										</tr>
 									);
 								})

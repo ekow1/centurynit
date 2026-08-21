@@ -4,6 +4,7 @@ import { requireAuth, requireRole, type AuthVariables } from "../middleware/auth
 import { HttpError } from "../middleware/error.js";
 import {
 	banClientUser,
+	deleteClientUser,
 	listClientUsers,
 	revokeClientSessions,
 	unbanClientUser,
@@ -186,5 +187,40 @@ clientUsersRouter.openapi(
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}
 		return c.json(result);
+	},
+);
+
+/* ── DELETE /api/v1/client-users/:id ────────────────────────────────────────── */
+
+clientUsersRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{id}",
+		tags: ["Client Directory & Access Control"],
+		summary: "Permanently delete a client user",
+		middleware: [requireAuth, requireRole("super_admin")] as const,
+		request: {
+			params: idParamSchema,
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+						}),
+					},
+				},
+				description: "Client user permanently deleted",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const result = await deleteClientUser(id);
+		if (!result.success) {
+			throw new HttpError(404, "NOT_FOUND", "Client user not found");
+		}
+		return c.json({ success: true });
 	},
 );

@@ -274,3 +274,22 @@ export async function unbanClientUser(
 		},
 	};
 }
+
+/**
+ * Permanently delete a client user and all their auth-related data.
+ *
+ * The `users` table has `ON DELETE CASCADE` on sessions, accounts,
+ * verifications, documents, and two-factor rows, so removing the user row
+ * cleans those up automatically. Rows that should survive (bookings,
+ * applicants, conversations) have `ON DELETE SET NULL` on their
+ * `user_id` / `client_user_id` FKs and persist with a null reference.
+ */
+export async function deleteClientUser(userId: string): Promise<{ success: boolean }> {
+	const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+	if (!existing) return { success: false };
+
+	await db.delete(users).where(eq(users.id, userId));
+
+	console.log(`[Auth/Security] Client user ${userId} permanently deleted`);
+	return { success: true };
+}

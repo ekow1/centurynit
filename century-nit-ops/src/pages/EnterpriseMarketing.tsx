@@ -111,9 +111,35 @@ export function EnterpriseMarketing() {
 		setConfirmOpen(true);
 	};
 
-	const fetchCampaigns = useCallback(() => apiFetch<Campaign[]>(`${MKT}/campaigns`).then(setCampaigns).catch(console.error), []);
-	const fetchMailingLists = useCallback(() => apiFetch<MailingList[]>(`${MKT}/mailing-lists`).then(setMailingLists).catch(console.error), []);
-	const fetchTemplates = useCallback(() => apiFetch<EmailTemplate[]>(`${MKT}/templates`).then(setTemplates).catch(console.error), []);
+	const fetchCampaigns = useCallback(
+		() =>
+			apiFetch<{ campaigns: Campaign[] }>(`${MKT}/campaigns`)
+				.then((res) => setCampaigns(res?.campaigns ?? []))
+				.catch(console.error),
+		[],
+	);
+	const fetchMailingLists = useCallback(
+		() =>
+			apiFetch<{ mailingLists: MailingList[] }>(`${MKT}/mailing-lists`)
+				.then((res) =>
+					setMailingLists(
+						(res?.mailingLists ?? []).map((ml) => ({
+							...ml,
+							recipientCount: ml.recipientCount ?? (ml as unknown as { contactCount?: number }).contactCount ?? 0,
+							contacts: ml.contacts ?? [],
+						})),
+					),
+				)
+				.catch(console.error),
+		[],
+	);
+	const fetchTemplates = useCallback(
+		() =>
+			apiFetch<{ templates: EmailTemplate[] }>(`${MKT}/templates`)
+				.then((res) => setTemplates(res?.templates ?? []))
+				.catch(console.error),
+		[],
+	);
 
 	useEffect(() => {
 		Promise.all([fetchCampaigns(), fetchMailingLists(), fetchTemplates()]).finally(() => setLoading(false));
@@ -165,7 +191,7 @@ export function EnterpriseMarketing() {
 		const count = list?.recipientCount ?? 0;
 		confirm("Send Campaign", `Send this campaign to ${count} contacts?`, async () => {
 			try {
-				const res = await apiFetch<{ id: string }>(`${MKT}/campaigns`, {
+				const res = await apiFetch<{ campaign: { id: string } }>(`${MKT}/campaigns`, {
 					method: "POST",
 					body: JSON.stringify({
 						name: campaignName.trim(),
@@ -178,7 +204,7 @@ export function EnterpriseMarketing() {
 						audience: list?.name || "Unknown",
 					}),
 				});
-				await apiFetch(`${MKT}/campaigns/${res.id}/send`, { method: "POST" });
+				await apiFetch(`${MKT}/campaigns/${res.campaign.id}/send`, { method: "POST" });
 				resetForm();
 				fetchCampaigns();
 				showToast("success", "Campaign sent successfully");

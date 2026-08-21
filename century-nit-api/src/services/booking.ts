@@ -388,8 +388,9 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 	if (!booking.employeeId || booking.type !== "online") {
 		return booking;
 	}
+	// If a real Google Calendar event already exists with a Meet link, keep it.
 	if (booking.calendarEventId && booking.meetingUrl) {
-		return booking; // already synced
+		return booking;
 	}
 
 	const employee = await loadEmployee(booking.employeeId);
@@ -397,12 +398,15 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 
 	const account = await loadCredentials(booking.employeeId);
 	if (!account) {
-		return markSyncFailed(
-			booking.id,
-			"Employee has not connected Google Calendar, or the connection needs renewing",
-		);
+		// No Google Calendar connected — generate a fallback Jitsi Meet link
+		// so the booking has a working video URL immediately. Status stays
+		// PENDING so the calendar worker retries when the employee connects
+		// and queuePendingCalendarSyncs re-queues this booking.
+		return applyFallbackMeetingUrl(booking.id);
 	}
 
+	// If we already have a fallback URL but no calendar event, proceed to
+	// create the real Google Calendar event (the fallback gets replaced).
 	const client = await getCalendarClient();
 	try {
 		const event = await client.createEvent(account.credentials, {
@@ -470,6 +474,53 @@ async function markSyncFailed(bookingId: string, message: string): Promise<Booki
 		.where(eq(bookings.id, bookingId))
 		.returning();
 	await audit(bookingId, "calendar.failed", "system", { message });
+	return row;
+}
+
+/**
+ * Generate a deterministic fallback meeting URL from a booking reference.
+ *
+ * Uses Jitsi Meet (free, no auth required) so the booking has a working video
+ * link immediately. When the employee later connects Google Calendar, the
+ * calendar worker creates a real Google Meet link and replaces this fallback.
+ *
+ * The room name is derived from the booking reference so the same booking
+ * always maps to the same room — a re-assign or retry produces the same URL,
+ * not a new one.
+ */
+function generateFallbackMeetingUrl(reference: string): string {
+	const slug = reference
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 40) || "century-nit";
+	return `https://meet.jit.si/cnit-${slug}`;
+}
+
+/**
+ * Set a fallback Jitsi Meet link on a booking that has no Google Calendar
+ * connection. Status stays PENDING (not FAILED) so the calendar worker
+ * retries when the employee eventually connects — at which point
+ * queuePendingCalendarSyncs re-queues the booking and syncCalendarForBooking
+ * replaces the fallback with a real Google Meet link.
+ */
+async function applyFallbackMeetingUrl(bookingId: string): Promise<BookingRow> {
+	const booking = await getBooking(bookingId);
+	if (!booking) throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+
+	const fallbackUrl = generateFallbackMeetingUrl(booking.reference);
+	const [row] = await db
+		.update(bookings)
+		.set({
+			meetingUrl: fallbackUrl,
+			calendarSyncStatus: "PENDING",
+			calendarSyncError: "Using fallback meeting link — employee has not connected Google Calendar",
+			updatedAt: new Date(),
+		})
+		.where(eq(bookings.id, bookingId))
+		.returning();
+
+	await audit(bookingId, "calendar.fallback", "system", { meetingUrl: fallbackUrl });
 	return row;
 }
 

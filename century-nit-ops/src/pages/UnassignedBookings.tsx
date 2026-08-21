@@ -149,7 +149,9 @@ function AssignDialog({
 
 				<p className="ops-modal__foot">
 					Assigning creates the calendar event and generates the meeting link, then
-					notifies the client and the employee.
+					notifies the client and the employee. Staff who haven't connected Google
+					Calendar get a temporary fallback meeting link — it's replaced with a Google
+					Meet link automatically once they connect.
 				</p>
 			</div>
 		</div>
@@ -205,11 +207,13 @@ export function UnassignedBookings() {
 			{justAssigned && (
 				<p className="ops-panel__ok">
 					{justAssigned.clientName} assigned to {justAssigned.employeeName}.
-					{justAssigned.meetingUrl
+					{justAssigned.meetingUrl && justAssigned.calendarSyncStatus === "SYNCED"
 						? " Meeting link created and sent."
-						: justAssigned.calendarSyncStatus === "FAILED"
-							? " The calendar could not be reached — the booking is saved and the link will be created automatically on retry."
-							: ""}
+						: justAssigned.meetingUrl && justAssigned.calendarSyncStatus === "PENDING"
+							? " A temporary meeting link was created. It will be replaced with a Google Meet link once the employee connects their calendar."
+							: justAssigned.calendarSyncStatus === "FAILED"
+								? " The calendar could not be reached — the booking is saved and the link will be created automatically on retry."
+								: ""}
 				</p>
 			)}
 

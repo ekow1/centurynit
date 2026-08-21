@@ -16,6 +16,7 @@
 	"dependencies": {
 		"century-nit-core": "*",
 		"century-nit-shared": "*",
+		"century-nit-chat-ui": "*",
 		"hono": "4.11.1",
 		"qrcode": "^1.5.4",
 		"react": "19.2.1",

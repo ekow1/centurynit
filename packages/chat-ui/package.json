@@ -1,0 +1,32 @@
+{
+	"name": "century-nit-chat-ui",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Shared WhatsApp-style chat UI components for Century NIT ops and portal",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		}
+	},
+	"scripts": {
+		"build": "tsc",
+		"lint": "tsc --noEmit",
+		"dev": "tsc --watch"
+	},
+	"dependencies": {
+		"century-nit-shared": "1.0.0"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0"
+	},
+	"devDependencies": {
+		"@types/react": "^19.0.0",
+		"@types/react-dom": "^19.0.0",
+		"typescript": "^5.9.0"
+	}
+}

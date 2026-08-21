@@ -8,14 +8,15 @@
 		"century-nit-web",
 		"century-nit-ops",
 		"packages/core",
-		"packages/shared"
+		"packages/shared",
+		"packages/chat-ui"
 	],
 	"scripts": {
 		"dev": "docker compose up -d db redis && npm run dev:api",
 		"dev:api": "npm run dev --workspace=century-nit-api",
 		"dev:web": "npm run dev --workspace=century-nit-web",
 		"dev:ops": "npm run dev --workspace=century-nit-ops",
-		"build:packages": "npm run build --workspace=packages/shared --workspace=packages/core",
+		"build:packages": "npm run build --workspace=packages/shared --workspace=packages/core --workspace=packages/chat-ui",
 		"build:shared": "npm run build:packages",
 		"build": "npm run build:packages && npm run build --workspace=century-nit-api",
 		"//build:frontend": "century-nit-ops emits into century-nit-web/dist/client/ops, so web MUST build first — its build empties that directory.",

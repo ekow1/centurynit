@@ -9,6 +9,8 @@ import {
 	signInWithGoogle,
 	sendEmailCode,
 	verifyEmailCode,
+	sendEmailVerificationOtp,
+	verifyEmailOtp,
 	verifyTotp,
 	requestPasswordReset,
 	resetPassword,
@@ -65,6 +67,10 @@ export function StartJourney() {
 	const [loading, setLoading] = useState(false);
 	const [resendCooldown, setResendCooldown] = useState(0);
 	const [mfaCode, setMfaCode] = useState("");
+
+	// Sign-up email verification OTP
+	const [signupOtp, setSignupOtp] = useState("");
+	const [signupEmail, setSignupEmail] = useState("");
 
 	// Password-reset flow
 	const [step, setStep] = useState<AuthStep>("signin");
@@ -138,6 +144,14 @@ export function StartJourney() {
 		void onCodeSubmit({ preventDefault() {} } as FormEvent);
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [otpCode]);
+
+	// Auto-verify the sign-up email-verification OTP at 6 digits, same as the
+	// passwordless flow above.
+	useEffect(() => {
+		if (signupOtp.length !== 6 || !signupEmail || loading || step !== "verify_email") return;
+		void onSignupOtpSubmit();
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [signupOtp]);
 
 	// Resend cooldown ticker — counts down 30s to 0 so the button re-enables.
 	useEffect(() => {
@@ -223,14 +237,21 @@ export function StartJourney() {
 			if (!user) throw new Error("No user returned");
 
 			// Sign-up with requireEmailVerification: true returns a user but no
-			// session. Navigating to /portal would immediately bounce back to
-			// /start because probeSession() finds no cookie. Show the "check
-			// your email" state instead — the user clicks the verification link
-			// in the email, lands back here with ?verified=true, then signs in.
+			// session. Instead of emailing a verification link, send a 6-digit
+			// OTP via the emailOTP plugin and show the OTP entry form. After
+			// the user enters the code, verify the email and sign them in.
 			if (authMode === "signup" && !(data as Record<string, unknown>)?.session) {
-				setResetEmail(mail);
-				setLoading(false);
+				setSignupEmail(mail);
+				setSignupOtp("");
+				setError("");
 				setStep("verify_email");
+				setLoading(false);
+				try {
+					await sendEmailVerificationOtp(mail);
+					setResendCooldown(30);
+				} catch (err) {
+					setError(err instanceof Error ? err.message : "Could not send verification code");
+				}
 				return;
 			}
 
@@ -291,6 +312,45 @@ export function StartJourney() {
 		setLoading(true);
 		try {
 			await sendEmailCode(codeSentTo);
+			setResendCooldown(30);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not resend the code");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	/**
+	 * Verify the sign-up email-verification OTP, then sign in with the
+	 * credentials the user just signed up with so they land in the portal
+	 * without re-entering their password.
+	 */
+	async function onSignupOtpSubmit(e?: FormEvent) {
+		e?.preventDefault();
+		if (signupOtp.length !== 6 || !signupEmail) return;
+		setError("");
+		setLoading(true);
+		try {
+			await verifyEmailOtp(signupEmail, signupOtp);
+			// Email is now verified — sign in with the stored credentials.
+			const data = await signInWithEmail({ email: signupEmail, password });
+			const user = data?.user;
+			if (!user) throw new Error("No user returned");
+			finish("email", user.name || signupEmail, user.email || signupEmail, user.id);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "That code was not accepted");
+			setLoading(false);
+			setSignupOtp("");
+		}
+	}
+
+	/** Resend the sign-up verification OTP, with a cooldown. */
+	async function resendSignupOtp() {
+		if (!signupEmail || resendCooldown > 0) return;
+		setError("");
+		setLoading(true);
+		try {
+			await sendEmailVerificationOtp(signupEmail);
 			setResendCooldown(30);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not resend the code");
@@ -785,19 +845,44 @@ export function StartJourney() {
 						</div>
 					) : null}
 
-					{step === "verify_email" ? (
-						<div className="auth-done">
-							<p className="auth-done__mark" aria-hidden>
-								✉
-							</p>
-							<p className="auth-done__text">
-								Check <strong>{resetEmail}</strong> for a verification link from Century NIT. Click it to activate your account, then return here to sign in.
-							</p>
-							<Button block arrow onClick={backToSignIn}>
-								Return to sign in
-							</Button>
+				{step === "verify_email" ? (
+					<form className="auth-form" onSubmit={onSignupOtpSubmit} noValidate>
+						<Field
+							label="Enter the 6-digit verification code"
+							htmlFor="sj-verify-otp"
+							hint={`Sent to ${signupEmail}. It expires shortly.`}
+						>
+							<Input
+								id="sj-verify-otp"
+								type="text"
+								inputMode="numeric"
+								autoComplete="one-time-code"
+								maxLength={6}
+								value={signupOtp}
+								onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, ""))}
+								placeholder="000000"
+								fullBorder
+							/>
+						</Field>
+						<Button type="submit" block arrow disabled={loading || signupOtp.length !== 6}>
+							{loading ? "Verifying..." : "Verify email"}
+						</Button>
+						<div className="auth-form__row" style={{ flexDirection: "column", gap: "0.75rem" }}>
+							<button
+								type="button"
+								className="start-journey__guest"
+								onClick={resendSignupOtp}
+								disabled={resendCooldown > 0 || loading}
+								style={{ opacity: resendCooldown > 0 ? 0.6 : 1 }}
+							>
+								{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
+							</button>
+							<button type="button" className="start-journey__guest" onClick={backToSignIn}>
+								Back to sign in
+							</button>
 						</div>
-					) : null}
+					</form>
+				) : null}
 
 					{step === "mfa_otp" ? (
 						<form className="auth-form" onSubmit={onMfaSubmit} noValidate>

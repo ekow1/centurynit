@@ -12,7 +12,7 @@ import * as schema from "../db/schema.js";
 import { env } from "../env.js";
 import { allowedOrigins } from "../lib/origins.js";
 import { sendEmail } from "../lib/resend.js";
-import { renderPasswordResetEmail, renderVerificationEmail, renderOtpEmail } from "../lib/email-templates.js";
+import { renderPasswordResetEmail, renderOtpEmail } from "../lib/email-templates.js";
 import { getSmsSender } from "../lib/sms.js";
 import { getSetting } from "../services/settings.js";
 import { captureLeadFromUser } from "../services/leads.js";
@@ -152,18 +152,14 @@ function createAuth(config: GoogleSocialConfig) {
 				html,
 			});
 		},
-		sendVerificationEmail: async ({ user, url }: { user: { name?: string; email: string }; url: string }) => {
-			const { html, text } = renderVerificationEmail({
-				name: user.name ?? undefined,
-				verificationUrl: url,
-			});
-			await sendEmail({
-				to: user.email,
-				subject: "Verify your Century NIT email",
-				text,
-				html,
-			});
-		},
+		/*
+		 * Email verification is handled by the emailOTP plugin (see below),
+		 * which sends a 6-digit code the user enters in the portal — not a
+		 * magic link. Keeping this callback as a no-op avoids a duplicate
+		 * email; the portal requests the OTP via `emailOtp.sendVerificationOtp`
+		 * immediately after sign-up returns without a session.
+		 */
+		sendVerificationEmail: async () => {},
 	},
 
 	/*

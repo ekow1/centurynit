@@ -154,6 +154,38 @@ export async function verifyEmailCode(email: string, otp: string) {
 	return data;
 }
 
+/**
+ * Request a 6-digit OTP to verify the email after an email/password sign-up.
+ * The emailOTP plugin stores the code and `sendVerificationOTP` (server-side)
+ * delivers it.  Distinct from `sendEmailCode` which uses type "sign-in" for
+ * passwordless login.
+ */
+export async function sendEmailVerificationOtp(email: string) {
+	const mail = email.trim().toLowerCase();
+	if (!mail.includes("@")) throw new Error("Enter a valid email address");
+
+	const { error } = await authClient.emailOtp.sendVerificationOtp({
+		email: mail,
+		type: "email-verification",
+	});
+	if (error) throw new Error(formatError(error, "Could not send the verification code"));
+	return mail;
+}
+
+/**
+ * Verify the email-verification OTP and return a session if successful.
+ * After this, the user's `emailVerified` flag is `true` and they can sign in
+ * with their email + password.
+ */
+export async function verifyEmailOtp(email: string, otp: string) {
+	const { data, error } = await authClient.emailOtp.verifyEmail({
+		email: email.trim().toLowerCase(),
+		otp,
+	});
+	if (error) throw new Error(formatError(error, "That code was not accepted"));
+	return data;
+}
+
 /* ── Two-factor (optional for clients) ───────────────────────────────────── */
 
 /**

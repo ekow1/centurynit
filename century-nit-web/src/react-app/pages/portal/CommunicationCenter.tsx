@@ -1,19 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import { meApi } from "century-nit-core";
-import type { CommunicationContext, ChatMessage } from "century-nit-shared";
+import type { CommunicationContext, ChatMessage, QuotedMessage } from "century-nit-shared";
+import {
+	ensureChatUiStyles,
+	MessageList,
+	Composer,
+	type MessageActionsConfig,
+} from "century-nit-chat-ui";
+import { useCommunicationChat } from "../../hooks/useCommunicationChat";
 
 /**
- * Strict Monochrome Brutalist Floating Communication Hub for Century NIT Client Portal.
+ * Context-Aware Communication Hub for the Century NIT Client Portal.
  *
- * Rules:
- *   - Strict 0px border-radius (no rounded corners).
- *   - Pure monochrome palette (#000000, #ffffff, #000000, #e4e4e7, #ffffff).
- *   - Floating trigger: Square icon button with pure SVG chat icon (no text labels, no emojis).
- *   - 3 Clean Channels: SUPPORT (Default), ASSIGNED OFFICER, AI ADVISOR.
- *   - Expandable Workstation: Standard 390px floating card <-> 820px widescreen workspace.
+ * Three channels:
+ *   - SUPPORT: 24/7 helpdesk, routed via `meApi.routeCommunication()`.
+ *   - OFFICER: the applicant's assigned stage officer, routed with
+ *     `{ stageKey }` so the backend picks the conversation tied to the
+ *     applicant's current journey stage.
+ *   - AI: a scripted knowledge assistant (no backend — keyword matching
+ *     against a small knowledge base).
+ *
+ * Support + Officer use the shared `MessageList` + `Composer` from
+ * `century-nit-chat-ui` and subscribe to real-time SSE via
+ * `useCommunicationChat`. AI stays local-only.
  */
-
-const POLL_MS = 10_000;
 
 type ActiveChannel = "support" | "officer" | "ai";
 
@@ -24,6 +34,14 @@ type AIMessage = {
 	at: string;
 };
 
+/** Officer card extracted from the `stage_officer` variant of CurrentContact. */
+interface OfficerCard {
+	name: string;
+	role: string;
+	branch: string;
+	stageLabel: string;
+}
+
 const AI_KNOWLEDGE_BASE: Record<string, string> = {
 	visa: "For student visas, you will need a valid passport (with at least 6 months validity), your unconditional university offer letter, CAS/I-20 document, proof of funds covering tuition and 9 months living costs, TB test results (if applicable), and academic transcripts. Century NIT's visa specialists assist with complete mock interviews and documentation reviews.",
 	scholarship: "Century NIT works with partner universities that offer merit-based scholarships ranging from £1,500 to 50% tuition reduction. For top candidates with strong GPAs (First Class / Upper Second), we assist with Commonwealth, Chevening, and University Vice-Chancellor scholarship applications.",
@@ -32,21 +50,31 @@ const AI_KNOWLEDGE_BASE: Record<string, string> = {
 	stage: "The Century NIT journey has 5 key stages: Stage I (Consultation & Eligibility), Stage II (School Package, Shortlisting & Application), Stage III (Visa Processing), Stage IV (Financial Settlement & Post-Arrival Plan), and Stage V (Pre-Departure & Travel Clearance).",
 };
 
+/** Narrow the CurrentContact union to an officer card, or null. */
+function officerCard(ctx: CommunicationContext | null): OfficerCard | null {
+	const c = ctx?.current;
+	if (!c || c.kind !== "stage_officer") return null;
+	return {
+		name: c.contact.name,
+		role: c.contact.role ?? "",
+		branch: c.contact.branch ?? "",
+		stageLabel: c.stageLabel,
+	};
+}
+
 export function CommunicationCenter() {
 	const [open, setOpen] = useState(false);
 	const [expanded, setExpanded] = useState(false);
 	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("support");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
-
-	// Server Chat State (Support & Officer)
-	const [activeConvId, setActiveConvId] = useState<string | null>(null);
-	const [messages, setMessages] = useState<ChatMessage[]>([]);
-	const [loadingMsgs, setLoadingMsgs] = useState(false);
-	const [sending, setSending] = useState(false);
-	const [draft, setDraft] = useState("");
 	const [error, setError] = useState<string | null>(null);
 
-	// AI Chat State
+	// Communication chat (support + officer share one routed conversation).
+	const chat = useCommunicationChat(open);
+	const [draft, setDraft] = useState("");
+	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
+
+	// AI chat — local-only, scripted.
 	const [aiMessages, setAiMessages] = useState<AIMessage[]>([
 		{
 			id: "ai-welcome",
@@ -58,9 +86,7 @@ export function CommunicationCenter() {
 	const [aiDraft, setAiDraft] = useState("");
 	const [aiTyping, setAiTyping] = useState(false);
 
-	const messagesEndRef = useRef<HTMLDivElement>(null);
-
-	/* ── Load communication context from server ── */
+	/* ── Load communication context (conversations + assigned officer) ── */
 	const loadContext = useCallback(async () => {
 		try {
 			const ctx = await meApi.getCommunicationContext();
@@ -74,121 +100,69 @@ export function CommunicationCenter() {
 	}, []);
 
 	useEffect(() => {
-		let cancelled = false;
-		const tick = async () => {
-			const ctx = await loadContext();
-			if (cancelled || !ctx) return;
-		};
-		void tick();
-		const id = setInterval(tick, POLL_MS);
-		return () => {
-			cancelled = true;
-			clearInterval(id);
-		};
-	}, [loadContext]);
+		if (!open) return;
+		void loadContext();
+		const id = setInterval(loadContext, 30_000);
+		return () => clearInterval(id);
+	}, [open, loadContext]);
 
 	const totalUnread = useMemo(
 		() => context?.conversations.reduce((sum, c) => sum + c.unreadCount, 0) ?? 0,
 		[context],
 	);
 
-	const currentContact = context?.current;
-	const isOfficerAssigned = currentContact && currentContact.kind === "stage_officer";
+	const officer = useMemo(() => officerCard(context), [context]);
+	const isOfficerAssigned = officer !== null;
 
-	/* ── Load conversation messages ── */
-	const loadConversationMessages = useCallback(async (convId: string) => {
-		setActiveConvId(convId);
-		setLoadingMsgs(true);
-		try {
-			const res = await meApi.getCommunicationMessages(convId, { limit: 50 });
-			setMessages(res.messages);
-			await meApi.markCommunicationRead(convId).catch(() => {});
-			void loadContext();
-		} catch (e) {
-			setError(e instanceof Error ? e.message : "Couldn't load messages");
-		} finally {
-			setLoadingMsgs(false);
-		}
-	}, [loadContext]);
-
-	/* ── Switch Channel ── */
+	/* ── Switch channel ── */
 	const handleSelectChannel = useCallback(async (channel: ActiveChannel) => {
 		setActiveChannel(channel);
 		setError(null);
+		setReplyTo(null);
+		setDraft("");
 
 		if (channel === "support") {
-			if (!context) return;
-			const existingSupport = context.conversations.find((c) => c.type === "support");
-			if (existingSupport) {
-				await loadConversationMessages(existingSupport.id);
-			} else {
-				try {
-					const conv = await meApi.routeCommunication();
-					await loadConversationMessages(conv.id);
-				} catch (e) {
-					setError(e instanceof Error ? e.message : "Couldn't connect to support");
-				}
-			}
+			await chat.route();
 		} else if (channel === "officer") {
 			if (!context || !isOfficerAssigned) return;
-			try {
-				const conv = await meApi.routeCommunication({
-					caseId: undefined,
-					stageKey: context.activeStageKey ?? undefined,
-				});
-				await loadConversationMessages(conv.id);
-			} catch (e) {
-				setError(e instanceof Error ? e.message : "Couldn't connect to assigned officer");
-			}
+			await chat.route({ stageKey: context.activeStageKey ?? undefined });
 		}
-	}, [context, isOfficerAssigned, loadConversationMessages]);
+	}, [chat, context, isOfficerAssigned]);
 
 	// Initialize default support conversation on first open
 	useEffect(() => {
-		if (open && activeChannel === "support" && !activeConvId && context) {
+		if (open && activeChannel === "support" && !chat.conversationId) {
 			void handleSelectChannel("support");
 		}
-	}, [open, activeChannel, activeConvId, context, handleSelectChannel]);
+	}, [open, activeChannel, chat.conversationId, handleSelectChannel]);
 
-	/* ── Send Message to Server (Support or Officer) ── */
-	const handleSendServerMessage = useCallback(async (e: FormEvent) => {
-		e.preventDefault();
-		if (!activeConvId || !draft.trim() || sending) return;
-		const text = draft.trim();
-		setSending(true);
-		try {
-			const msg = await meApi.sendCommunicationMessage(activeConvId, text);
-			setMessages((prev) => [...prev, msg]);
-			setDraft("");
-			void loadContext();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to send message");
-		} finally {
-			setSending(false);
-		}
-	}, [activeConvId, draft, sending, loadContext]);
+	/* ── Send message (support + officer) ── */
+	const handleSend = useCallback(async (text: string) => {
+		if (!text.trim()) return;
+		await chat.send(text);
+		setDraft("");
+		setReplyTo(null);
+		void loadContext();
+	}, [chat, loadContext]);
 
-	/* ── Send Message to AI Assistant ── */
-	const handleSendAiMessage = useCallback((e?: FormEvent, customQuery?: string) => {
+	/* ── AI assistant (scripted, local) ── */
+	const handleSendAi = useCallback((e?: FormEvent, customQuery?: string) => {
 		if (e) e.preventDefault();
 		const query = (customQuery || aiDraft).trim();
 		if (!query || aiTyping) return;
 
-		const userMsg: AIMessage = {
+		setAiMessages((prev) => [...prev, {
 			id: `user-${Date.now()}`,
 			sender: "user",
 			text: query,
 			at: new Date().toISOString(),
-		};
-
-		setAiMessages((prev) => [...prev, userMsg]);
+		}]);
 		if (!customQuery) setAiDraft("");
 		setAiTyping(true);
 
 		setTimeout(() => {
 			const lower = query.toLowerCase();
 			let replyText = "Query received. For specific profile evaluations, our admissions and visa officers are available on the Support desk.";
-
 			if (lower.includes("visa") || lower.includes("embassy") || lower.includes("cas") || lower.includes("i-20")) {
 				replyText = AI_KNOWLEDGE_BASE.visa;
 			} else if (lower.includes("scholarship") || lower.includes("funding") || lower.includes("grant") || lower.includes("discount")) {
@@ -200,34 +174,58 @@ export function CommunicationCenter() {
 			} else if (lower.includes("stage") || lower.includes("process") || lower.includes("step") || lower.includes("journey") || lower.includes("timeline")) {
 				replyText = AI_KNOWLEDGE_BASE.stage;
 			}
-
-			const aiMsg: AIMessage = {
+			setAiMessages((prev) => [...prev, {
 				id: `ai-${Date.now()}`,
 				sender: "ai",
 				text: replyText,
 				at: new Date().toISOString(),
-			};
-
-			setAiMessages((prev) => [...prev, aiMsg]);
+			}]);
 			setAiTyping(false);
 		}, 400);
 	}, [aiDraft, aiTyping]);
 
-	// Auto-scroll on new messages
-	useEffect(() => {
-		if (messagesEndRef.current) {
-			messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-		}
-	}, [messages, aiMessages, activeChannel]);
+	/* ── Shared component callbacks (support + officer) ── */
+	const isOwn = useCallback(
+		(m: ChatMessage) => m.senderOpsUserId == null,
+		[],
+	);
+
+	const actionsConfig = useMemo<MessageActionsConfig>(() => ({
+		reply: true,
+		react: false,
+		forward: false,
+		copy: true,
+		edit: false,
+		delete: false,
+		more: false,
+	}), []);
+
+	const bubbleProps = useMemo(() => ({
+		actions: actionsConfig,
+		onReply: (m: ChatMessage) => {
+			if (m.deletedAt) return;
+			setReplyTo({
+				id: m.id,
+				senderName: m.senderName,
+				content: m.content,
+				deleted: m.deletedAt !== null && m.deletedAt !== undefined,
+			});
+		},
+		onQuoteClick: (_id: string) => {},
+	}), [actionsConfig]);
+
+	ensureChatUiStyles();
+
+	const officerFirstName = officer?.name.split(" ")[0] ?? "your officer";
 
 	return (
 		<>
-			{/* Floating Square Launcher Button (Pure SVG icon, no text, 0px border-radius) */}
+			{/* Floating Square Launcher Button */}
 			<button
 				type="button"
 				onClick={() => {
 					setOpen((prev) => !prev);
-					if (!open) handleSelectChannel(activeChannel);
+					if (!open) void handleSelectChannel("support");
 				}}
 				style={launcherSquareBtnStyle}
 				aria-label="Open Chat"
@@ -249,7 +247,7 @@ export function CommunicationCenter() {
 
 			{/* Floating Hub Window */}
 			{open && (
-				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }}>
+				<div style={{ ...windowContainerStyle, ...(expanded ? windowExpandedStyle : {}) }} className="cn-chat">
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -283,20 +281,14 @@ export function CommunicationCenter() {
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("support")}
-							style={{
-								...channelBtnStyle,
-								...(activeChannel === "support" ? activeChannelBtnStyle : {}),
-							}}
+							style={{ ...channelBtnStyle, ...(activeChannel === "support" ? activeChannelBtnStyle : {}) }}
 						>
 							SUPPORT
 						</button>
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("officer")}
-							style={{
-								...channelBtnStyle,
-								...(activeChannel === "officer" ? activeChannelBtnStyle : {}),
-							}}
+							style={{ ...channelBtnStyle, ...(activeChannel === "officer" ? activeChannelBtnStyle : {}) }}
 						>
 							OFFICER
 							{isOfficerAssigned && <span style={assignedDotStyle} />}
@@ -304,10 +296,7 @@ export function CommunicationCenter() {
 						<button
 							type="button"
 							onClick={() => handleSelectChannel("ai")}
-							style={{
-								...channelBtnStyle,
-								...(activeChannel === "ai" ? activeChannelBtnStyle : {}),
-							}}
+							style={{ ...channelBtnStyle, ...(activeChannel === "ai" ? activeChannelBtnStyle : {}) }}
 						>
 							AI
 						</button>
@@ -321,191 +310,100 @@ export function CommunicationCenter() {
 						</div>
 					)}
 
-					{/* Body Content Area */}
-					<div style={expanded ? bodySplitStyle : bodyStandardStyle}>
-						{/* Channel 1: Support Desk */}
-						{activeChannel === "support" && (
-							<div style={streamContainerStyle}>
-								<div style={officerHeaderCardStyle}>
-									<div>
-										<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
-											CENTURY SUPPORT DESK
-										</div>
-										<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-											24/7 HELPDESK & TRIAGE
-										</div>
+					{/* Body */}
+					<div style={bodyStyle}>
+						{/* Support + Officer channels — shared components */}
+						{(activeChannel === "support" || activeChannel === "officer") && (
+							activeChannel === "officer" && !isOfficerAssigned ? (
+								<div style={unassignedStateStyle}>
+									<div style={{ fontSize: "12px", fontWeight: 700, color: "#000000", marginBottom: "8px", letterSpacing: "0.04em" }}>
+										CONSULTANT BEING ASSIGNED
 									</div>
-									<span style={stagePillStyle}>SUPPORT</span>
-								</div>
-
-								{/* Messages Stream */}
-								<div style={messageListStyle}>
-									{messages.length === 0 && !loadingMsgs && (
-										<div style={emptySupportPromptStyle}>
-											<p style={{ fontWeight: 700, fontSize: "12px", color: "#000000", marginBottom: "6px", letterSpacing: "0.04em" }}>
-												DIRECT SUPPORT QUEUE
-											</p>
-											<p style={{ fontSize: "11px", color: "#52525b", marginBottom: "12px", lineHeight: 1.4 }}>
-												Send a message directly to central support. Responses appear here in real-time.
-											</p>
-											<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-												{["Payment & Invoices", "Document Review Status", "Visa Consultation"].map((t) => (
-													<button
-														key={t}
-														type="button"
-														onClick={() => setDraft(`Inquiry: ${t} - `)}
-														style={quickChipStyle}
-													>
-														{t}
-													</button>
-												))}
-											</div>
-										</div>
-									)}
-
-									{messages.map((m) => {
-										const isMe = !m.senderOpsUserId;
-										return (
-											<div
-												key={m.id}
-												style={{
-													...messageRowStyle,
-													justifyContent: isMe ? "flex-end" : "flex-start",
-												}}
-											>
-												<div
-													style={{
-														...messageBubbleStyle,
-														...(isMe ? myBubbleStyle : theirBubbleStyle),
-													}}
-												>
-													<div style={bubbleAuthorStyle}>
-														{isMe ? "YOU" : m.senderName.toUpperCase()}
-													</div>
-													<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
-													<div style={bubbleTimeStyle}>
-														{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-													</div>
-												</div>
-											</div>
-										);
-									})}
-									{loadingMsgs && (
-										<div style={{ textAlign: "center", color: "#52525b", fontSize: "11px", padding: "10px", fontFamily: "monospace" }}>
-											LOADING CONVERSATION...
-										</div>
-									)}
-									<div ref={messagesEndRef} />
-								</div>
-
-								{/* Input Form */}
-								<form onSubmit={handleSendServerMessage} style={formStyle}>
-									<input
-										type="text"
-										value={draft}
-										onChange={(e) => setDraft(e.target.value)}
-										placeholder="Type a message..."
-										style={inputStyle}
-										disabled={sending}
-									/>
-									<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-										{sending ? "..." : "SEND"}
+									<p style={{ fontSize: "11px", color: "#52525b", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
+										Your dedicated specialist will appear here once your application milestone or consultation is active.
+									</p>
+									<button
+										type="button"
+										onClick={() => handleSelectChannel("support")}
+										style={switchChannelActionBtnStyle}
+									>
+										SWITCH TO SUPPORT
 									</button>
-								</form>
-							</div>
-						)}
-
-						{/* Channel 2: Assigned Case Officer */}
-						{activeChannel === "officer" && (
-							<div style={streamContainerStyle}>
-								{isOfficerAssigned ? (
-									<>
-										<div style={officerHeaderCardStyle}>
-											<div>
-												<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
-													{currentContact.contact.name.toUpperCase()}
-												</div>
-												<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-													{(currentContact.contact.role || "").toUpperCase()} · {(currentContact.contact.branch || "").toUpperCase()}
-												</div>
+								</div>
+							) : (
+								<div style={streamContainerStyle}>
+									{/* Channel header card */}
+									<div style={officerHeaderCardStyle}>
+										<div>
+											<div style={{ fontWeight: 700, fontSize: "12px", color: "#000000", letterSpacing: "0.04em" }}>
+												{activeChannel === "support" ? "CENTURY SUPPORT DESK" : officer?.name.toUpperCase() ?? "ASSIGNED OFFICER"}
 											</div>
-											<span style={stagePillStyle}>{currentContact.stageLabel.toUpperCase()}</span>
+											<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
+												{activeChannel === "support"
+													? "24/7 HELPDESK & TRIAGE"
+													: `${officer?.role.toUpperCase() ?? ""} · ${officer?.branch.toUpperCase() ?? ""}`}
+											</div>
 										</div>
-
-										<div style={messageListStyle}>
-											{messages.length === 0 && !loadingMsgs && (
-												<div style={{ textAlign: "center", color: "#52525b", padding: "30px 20px" }}>
-													<p style={{ fontSize: "12px", color: "#000000", fontWeight: 700, letterSpacing: "0.04em" }}>
-														DIRECT OFFICER THREAD
-													</p>
-													<p style={{ fontSize: "11px", marginTop: "4px" }}>
-														Connected directly with {currentContact.contact.name}.
-													</p>
-												</div>
-											)}
-											{messages.map((m) => {
-												const isMe = !m.senderOpsUserId;
-												return (
-													<div
-														key={m.id}
-														style={{
-															...messageRowStyle,
-															justifyContent: isMe ? "flex-end" : "flex-start",
-														}}
-													>
-														<div
-															style={{
-																...messageBubbleStyle,
-																...(isMe ? myBubbleStyle : theirBubbleStyle),
-															}}
-														>
-															<div style={bubbleAuthorStyle}>{isMe ? "YOU" : m.senderName.toUpperCase()}</div>
-															<div style={{ whiteSpace: "pre-wrap", lineHeight: 1.45 }}>{m.content}</div>
-															<div style={bubbleTimeStyle}>
-																{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-															</div>
-														</div>
-													</div>
-												);
-											})}
-											<div ref={messagesEndRef} />
-										</div>
-
-										<form onSubmit={handleSendServerMessage} style={formStyle}>
-											<input
-												type="text"
-												value={draft}
-												onChange={(e) => setDraft(e.target.value)}
-												placeholder={`Message ${currentContact.contact.name.split(" ")[0]}...`}
-												style={inputStyle}
-												disabled={sending}
-											/>
-											<button type="submit" disabled={!draft.trim() || sending} style={sendBtnStyle}>
-												{sending ? "..." : "SEND"}
-											</button>
-										</form>
-									</>
-								) : (
-									<div style={unassignedStateStyle}>
-										<div style={{ fontSize: "12px", fontWeight: 700, color: "#000000", marginBottom: "8px", letterSpacing: "0.04em" }}>
-											CONSULTANT BEING ASSIGNED
-										</div>
-										<p style={{ fontSize: "11px", color: "#52525b", lineHeight: 1.5, maxWidth: "280px", margin: "0 auto 16px" }}>
-											Your dedicated specialist will appear here once your application milestone or consultation is active.
-										</p>
-										<button
-											type="button"
-											onClick={() => handleSelectChannel("support")}
-											style={switchChannelActionBtnStyle}
-										>
-											SWITCH TO SUPPORT
-										</button>
+										<span style={stagePillStyle}>
+											{activeChannel === "support" ? "SUPPORT" : (officer?.stageLabel ?? "OFFICER").toUpperCase()}
+										</span>
 									</div>
-								)}
-							</div>
+
+									{/* Messages — shared MessageList */}
+									<MessageList
+										messages={chat.messages}
+										typing={chat.typing}
+										isOwn={isOwn}
+										bubbleProps={bubbleProps}
+										header={
+											chat.loading && chat.messages.length === 0 ? (
+												<div style={{ textAlign: "center", color: "var(--cn-chat-muted-fg)", fontSize: 12, padding: 16 }}>
+													Loading conversation...
+												</div>
+											) : chat.messages.length === 0 ? (
+												<div style={emptySupportPromptStyle}>
+													<p style={{ fontWeight: 700, fontSize: "12px", color: "#000000", marginBottom: "6px", letterSpacing: "0.04em" }}>
+														{activeChannel === "support" ? "DIRECT SUPPORT QUEUE" : "DIRECT OFFICER THREAD"}
+													</p>
+													<p style={{ fontSize: "11px", color: "#52525b", marginBottom: "12px", lineHeight: 1.4 }}>
+														{activeChannel === "support"
+															? "Send a message directly to central support. Responses appear here in real-time."
+															: `Connected directly with ${officer?.name ?? "your officer"}.`}
+													</p>
+													{activeChannel === "support" && (
+														<div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+															{["Payment & Invoices", "Document Review Status", "Visa Consultation"].map((t) => (
+																<button
+																	key={t}
+																	type="button"
+																	onClick={() => setDraft(`Inquiry: ${t} - `)}
+																	style={quickChipStyle}
+																>
+																	{t}
+																</button>
+															))}
+														</div>
+													)}
+												</div>
+											) : null
+										}
+									/>
+
+									{/* Composer — shared */}
+									<Composer
+										value={draft}
+										onChange={setDraft}
+										onSend={handleSend}
+										sending={chat.sending}
+										replyTo={replyTo}
+										onCancelReply={() => setReplyTo(null)}
+										placeholder={activeChannel === "support" ? "Type a message…" : `Message ${officerFirstName}…`}
+									/>
+								</div>
+							)
 						)}
 
-						{/* Channel 3: AI Assistant */}
+						{/* AI channel — scripted, local-only */}
 						{activeChannel === "ai" && (
 							<div style={streamContainerStyle}>
 								<div style={officerHeaderCardStyle}>
@@ -551,21 +449,15 @@ export function CommunicationCenter() {
 											GENERATING RESPONSE...
 										</div>
 									)}
-									<div ref={messagesEndRef} />
 								</div>
 
 								{/* AI Quick Prompts */}
 								<div style={aiPromptsRowStyle}>
-									{[
-										"Visa requirements",
-										"Scholarships",
-										"Required documents",
-										"Payment plan",
-									].map((prompt) => (
+									{["Visa requirements", "Scholarships", "Required documents", "Payment plan"].map((prompt) => (
 										<button
 											key={prompt}
 											type="button"
-											onClick={() => handleSendAiMessage(undefined, prompt)}
+											onClick={() => handleSendAi(undefined, prompt)}
 											style={aiQuickChipStyle}
 										>
 											{prompt}
@@ -573,15 +465,15 @@ export function CommunicationCenter() {
 									))}
 								</div>
 
-								<form onSubmit={(e) => handleSendAiMessage(e)} style={formStyle}>
+								<form onSubmit={(e) => handleSendAi(e)} style={aiFormStyle}>
 									<input
 										type="text"
 										value={aiDraft}
 										onChange={(e) => setAiDraft(e.target.value)}
 										placeholder="Ask Century AI..."
-										style={inputStyle}
+										style={aiInputStyle}
 									/>
-									<button type="submit" disabled={!aiDraft.trim() || aiTyping} style={sendBtnStyle}>
+									<button type="submit" disabled={!aiDraft.trim() || aiTyping} style={aiSendBtnStyle}>
 										ASK
 									</button>
 								</form>
@@ -594,7 +486,10 @@ export function CommunicationCenter() {
 	);
 }
 
-/* ── Strict Monochrome Brutalist Styles ───────────────────────────────── */
+/* ── Shell styles (header, tabs, AI channel) ────────────────────────────── */
+/* Support + Officer channels use the shared chat-ui components which style  */
+/* themselves via --cn-chat-* tokens. AI keeps its inline bubbles since it's  */
+/* a scripted local-only surface with no server backing.                      */
 
 const launcherSquareBtnStyle: CSSProperties = {
 	position: "fixed",
@@ -728,14 +623,7 @@ const assignedDotStyle: CSSProperties = {
 	borderRadius: "0px",
 };
 
-const bodyStandardStyle: CSSProperties = {
-	display: "flex",
-	flexDirection: "column",
-	flex: 1,
-	minHeight: 0,
-};
-
-const bodySplitStyle: CSSProperties = {
+const bodyStyle: CSSProperties = {
 	display: "flex",
 	flexDirection: "column",
 	flex: 1,
@@ -768,6 +656,50 @@ const stagePillStyle: CSSProperties = {
 	padding: "2px 8px",
 	borderRadius: "12px",
 };
+
+const emptySupportPromptStyle: CSSProperties = {
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
+	borderRadius: "0px",
+	padding: "14px",
+	margin: "auto 0",
+};
+
+const quickChipStyle: CSSProperties = {
+	background: "#ffffff",
+	border: "1px solid #e4e4e7",
+	color: "#d4d4d8",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	padding: "4px 8px",
+	borderRadius: "0px",
+	cursor: "pointer",
+};
+
+const unassignedStateStyle: CSSProperties = {
+	flex: 1,
+	display: "flex",
+	flexDirection: "column",
+	alignItems: "center",
+	justifyContent: "center",
+	padding: "30px 20px",
+	textAlign: "center",
+};
+
+const switchChannelActionBtnStyle: CSSProperties = {
+	background: "#ffffff",
+	color: "#000000",
+	border: "none",
+	borderRadius: "0px",
+	padding: "8px 14px",
+	fontWeight: 700,
+	fontSize: "11px",
+	fontFamily: "monospace",
+	letterSpacing: "0.04em",
+	cursor: "pointer",
+};
+
+/* ── AI channel inline styles (scripted, no shared components) ── */
 
 const messageListStyle: CSSProperties = {
 	flex: 1,
@@ -822,61 +754,6 @@ const bubbleTimeStyle: CSSProperties = {
 	textAlign: "right",
 };
 
-const formStyle: CSSProperties = {
-	display: "flex",
-	padding: "12px 16px",
-	background: "#ffffff",
-	borderTop: "1px solid #f4f4f5",
-	gap: "10px",
-	alignItems: "center",
-};
-
-const inputStyle: CSSProperties = {
-	flex: 1,
-	background: "#f4f4f5",
-	border: "1px solid transparent",
-	borderRadius: "20px",
-	color: "#18181b",
-	padding: "10px 16px",
-	fontSize: "13px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	outline: "none",
-	transition: "background 0.2s ease",
-};
-
-const sendBtnStyle: CSSProperties = {
-	background: "#18181b",
-	color: "#ffffff",
-	border: "none",
-	borderRadius: "50%",
-	width: "36px",
-	height: "36px",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	cursor: "pointer",
-	transition: "transform 0.1s ease, background 0.2s ease",
-};
-
-const emptySupportPromptStyle: CSSProperties = {
-	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	borderRadius: "0px",
-	padding: "14px",
-	margin: "auto 0",
-};
-
-const quickChipStyle: CSSProperties = {
-	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	color: "#d4d4d8",
-	fontSize: "10px",
-	fontFamily: "monospace",
-	padding: "4px 8px",
-	borderRadius: "0px",
-	cursor: "pointer",
-};
-
 const aiPromptsRowStyle: CSSProperties = {
 	display: "flex",
 	gap: "6px",
@@ -898,27 +775,40 @@ const aiQuickChipStyle: CSSProperties = {
 	cursor: "pointer",
 };
 
-const unassignedStateStyle: CSSProperties = {
-	flex: 1,
+const aiFormStyle: CSSProperties = {
 	display: "flex",
-	flexDirection: "column",
+	padding: "12px 16px",
+	background: "#ffffff",
+	borderTop: "1px solid #f4f4f5",
+	gap: "10px",
 	alignItems: "center",
-	justifyContent: "center",
-	padding: "30px 20px",
-	textAlign: "center",
 };
 
-const switchChannelActionBtnStyle: CSSProperties = {
-	background: "#ffffff",
-	color: "#000000",
+const aiInputStyle: CSSProperties = {
+	flex: 1,
+	background: "#f4f4f5",
+	border: "1px solid transparent",
+	borderRadius: "20px",
+	color: "#18181b",
+	padding: "10px 16px",
+	fontSize: "13px",
+	fontFamily: "system-ui, -apple-system, sans-serif",
+	outline: "none",
+	transition: "background 0.2s ease",
+};
+
+const aiSendBtnStyle: CSSProperties = {
+	background: "#18181b",
+	color: "#ffffff",
 	border: "none",
-	borderRadius: "0px",
-	padding: "8px 14px",
-	fontWeight: 700,
-	fontSize: "11px",
-	fontFamily: "monospace",
-	letterSpacing: "0.04em",
+	borderRadius: "50%",
+	width: "36px",
+	height: "36px",
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
 	cursor: "pointer",
+	transition: "transform 0.1s ease, background 0.2s ease",
 };
 
 const errorBannerStyle: CSSProperties = {

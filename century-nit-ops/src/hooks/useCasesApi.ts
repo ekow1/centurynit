@@ -49,6 +49,8 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		type: row.type === "in_person" ? "In-Person" : "Online",
 		assignedOfficer: row.assignedOfficerName ?? "",
 		assignedOfficerEmail: row.assignedOfficerEmail ?? "",
+		assignedOfficerId: row.assignedOfficerId ?? null,
+		coordinatorId: row.coordinatorId ?? null,
 		targetCountry: row.targetCountry ?? "",
 		status: CONSULTATION_STATUS_TO_OPS[row.status] as MockConsultation["status"],
 		personal: {
@@ -124,6 +126,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		degreeLevel: row.degreeLevel,
 		assignedStaff: row.assignedStaffName ?? "",
 		assignedStaffEmail: row.assignedStaffEmail ?? "",
+		assignedStaffId: row.assignedStaffId ?? null,
 		stage: row.stage,
 		status: APPLICATION_STATUS_TO_OPS[row.status] as MockApplication["status"],
 		submittedDate: (row.submittedAt ?? row.createdAt).slice(0, 10),

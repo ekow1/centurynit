@@ -11,6 +11,7 @@ import {
 	assignApplication,
 	assignConsultation,
 	cancelConsultation,
+	canAssignCase,
 	canSeeAllCases,
 	canSeeApplication,
 	canSeeConsultation,
@@ -182,11 +183,19 @@ consultationsRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign consultations");
-		}
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
+		const row = await getConsultation(id);
+		if (!row) {
+			throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+		}
+		if (!canAssignCase(staff, row)) {
+			throw new HttpError(
+				403,
+				"FORBIDDEN",
+				"Only admin, super admin or manager may assign consultations. A coordinator may assign only a consultation delegated to them.",
+			);
+		}
 		const updated = await assignConsultation({
 			id,
 			employeeId: body.employeeId,
@@ -442,8 +451,12 @@ applicationsRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign applications");
+		if (!canAssignCase(staff)) {
+			throw new HttpError(
+				403,
+				"FORBIDDEN",
+				"Only admin, super admin or manager may assign applications.",
+			);
 		}
 		const updated = await assignApplication({
 			id: c.req.valid("param").id,

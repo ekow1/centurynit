@@ -3928,3 +3928,41 @@
 		grid-column: 1 / -1;
 	}
 }
+
+/* ── Staff chat badge (assigned staff + direct-message icon) ── */
+.staff-chat-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	font-size: 0.8rem;
+}
+
+.staff-chat-badge__name {
+	color: var(--muted-foreground);
+}
+
+.staff-chat-badge__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	border-radius: 0;
+	padding: 0;
+	transition: background 0.15s, color 0.15s;
+}
+
+.staff-chat-badge__btn:hover {
+	background: #000;
+	color: #fff;
+	border-color: #000;
+}
+
+.staff-chat-badge--none {
+	color: var(--muted-foreground);
+	font-style: italic;
+}

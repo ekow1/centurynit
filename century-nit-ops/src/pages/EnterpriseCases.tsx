@@ -8,6 +8,7 @@ import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { StaffChatBadge } from "./StaffChatBadge";
 
 export function EnterpriseCases() {
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
@@ -254,9 +255,14 @@ export function EnterpriseCases() {
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
 													{app.university} · {app.program}
 												</p>
-												<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-													{app.assignedStaff ? `Assigned: ${app.assignedStaff}` : "- unassigned"} · {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}
-												</p>
+											<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+												<StaffChatBadge
+													opsUserId={app.assignedStaffId}
+													name={app.assignedStaff || ""}
+													email={app.assignedStaffEmail}
+												/>
+												<span>· {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
+											</p>
 											</div>
 											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
 										</div>
@@ -423,7 +429,7 @@ export function EnterpriseCases() {
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{selectedApp.university}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{selectedApp.program}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p><p>{selectedApp.assignedStaff}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p><p><StaffChatBadge opsUserId={selectedApp.assignedStaffId} name={selectedApp.assignedStaff} email={selectedApp.assignedStaffEmail} /></p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(selectedApp.branch)}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{selectedApp.fundingTrack}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{selectedApp.submittedDate}</p></div>

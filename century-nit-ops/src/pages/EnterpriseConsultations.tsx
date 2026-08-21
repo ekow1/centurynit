@@ -8,6 +8,7 @@ import { Toast } from "./OpsDialogs";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
+import { StaffChatBadge } from "./StaffChatBadge";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 

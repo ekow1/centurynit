@@ -570,7 +570,7 @@ async function sendMessageInternal(
 					type: "chat.reply",
 					title: `${sender.name} replied`,
 					body: preview,
-					link: "/portal/chat",
+					link: "/portal/support",
 				});
 				return;
 			}

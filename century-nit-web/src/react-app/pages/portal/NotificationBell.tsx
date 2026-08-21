@@ -84,10 +84,15 @@ export function NotificationBell() {
 		}
 	}, [open]);
 
+	function normalizeLink(link: string): string {
+		if (link === "/portal/chat") return "/portal/support";
+		return link;
+	}
+
 	function handleNotifClick(id: string, link?: string) {
 		markNotificationRead(id);
 		setOpen(false);
-		if (link) nav(link);
+		if (link) nav(normalizeLink(link));
 	}
 
 	return (

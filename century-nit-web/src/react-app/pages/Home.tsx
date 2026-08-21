@@ -129,6 +129,23 @@ export function Home() {
 	const [statsActive, setStatsActive] = useState(false);
 	const [playing, setPlaying] = useState<string | null>(null);
 	const { isAuthenticated, journeyPhase } = useAppState();
+	const [searchParams, setSearchParams] = useSearchParams();
+	const nav = useNavigate();
+
+	// Social login redirect failure — Better Auth sends back to the root URL
+	// with ?error=account_not_linked when the Google email matches an existing
+	// account that hasn't linked Google yet. Show a modal explaining what to do
+	// instead of silently landing on the homepage with no feedback.
+	const [socialError, setSocialError] = useState<string | null>(null);
+	useEffect(() => {
+		const err = searchParams.get("error");
+		if (err === "account_not_linked") {
+			setSocialError("account_not_linked");
+		} else if (err) {
+			setSocialError(err);
+		}
+		if (err) setSearchParams({}, { replace: true });
+	}, [searchParams, setSearchParams]);
 
 	// Short stage name - the full phase label ("Choose school application
 	// package") overflows a hero button on any phone.
@@ -629,7 +646,114 @@ export function Home() {
 					</div>
 				</div>
 			</section>
+
+			{socialError && (
+				<SocialAuthErrorModal
+					error={socialError}
+					onClose={() => setSocialError(null)}
+					onSignIn={() => {
+						setSocialError(null);
+						nav("/start");
+					}}
+				/>
+			)}
 		</>
+	);
+}
+
+/** Modal shown when a social login redirect fails on the root URL. */
+function SocialAuthErrorModal({
+	error,
+	onClose,
+	onSignIn,
+}: {
+	error: string;
+	onClose: () => void;
+	onSignIn: () => void;
+}) {
+	useEffect(() => {
+		function onKey(e: KeyboardEvent) {
+			if (e.key === "Escape") onClose();
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
+
+	const isAccountNotLinked = error === "account_not_linked";
+	const title = isAccountNotLinked ? "Account already exists" : "Sign-in failed";
+	const message = isAccountNotLinked
+		? "An account with this email already exists. Sign in with your password to continue. You can link your Google account from your profile settings after signing in."
+		: "We couldn't complete social sign-in. Please try again or sign in with your email and password.";
+
+	return createPortal(
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="social-auth-error-title"
+			onClick={onClose}
+			style={{
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				position: "fixed",
+				inset: 0,
+				backgroundColor: "rgba(0,0,0,0.6)",
+				zIndex: 9999,
+				padding: "1rem",
+			}}
+		>
+			<div
+				className="card fade-in"
+				onClick={(e) => e.stopPropagation()}
+				style={{
+					width: "100%",
+					maxWidth: "440px",
+					padding: "2rem",
+					boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)",
+				}}
+			>
+				<h2 id="social-auth-error-title" style={{ marginBottom: "0.75rem", fontSize: "1.4rem" }}>
+					{title}
+				</h2>
+				<p style={{ color: "var(--muted-foreground)", marginBottom: "1.5rem", fontSize: "0.9rem", lineHeight: 1.5 }}>
+					{message}
+				</p>
+				<div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+					<button
+						type="button"
+						onClick={onClose}
+						style={{
+							padding: "0.5rem 1rem",
+							background: "transparent",
+							border: "1px solid var(--border)",
+							borderRadius: "var(--radius)",
+							cursor: "pointer",
+							fontSize: "0.9rem",
+							color: "var(--foreground)",
+						}}
+					>
+						Dismiss
+					</button>
+					<button
+						type="button"
+						onClick={onSignIn}
+						style={{
+							padding: "0.5rem 1rem",
+							background: "var(--foreground)",
+							color: "var(--background)",
+							border: "none",
+							borderRadius: "var(--radius)",
+							cursor: "pointer",
+							fontSize: "0.9rem",
+							fontWeight: 600,
+						}}
+					>
+						Go to Sign In
+					</button>
+				</div>
+			</div>
+		</div>,
+		document.body,
 	);
 }
 

@@ -5,16 +5,14 @@ import { Field, Input } from "../components/ui/Field";
 import { useAppState, type AuthMethod } from "../context/AppState";
 import {
 	signInWithEmail,
-	signUpWithEmail,
 	signInWithGoogle,
 	sendEmailCode,
 	verifyEmailCode,
-	sendEmailVerificationOtp,
-	verifyEmailOtp,
 	verifyTotp,
 	requestPasswordReset,
 	resetPassword,
 	checkEmailExists,
+	completeEmailSignup,
 } from "../context/authStore";
 import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
 
@@ -71,6 +69,7 @@ export function StartJourney() {
 	// Sign-up email verification OTP
 	const [signupOtp, setSignupOtp] = useState("");
 	const [signupEmail, setSignupEmail] = useState("");
+	const [signupName, setSignupName] = useState("");
 
 	// Password-reset flow
 	const [step, setStep] = useState<AuthStep>("signin");
@@ -216,47 +215,48 @@ export function StartJourney() {
 
 		try {
 			setLoading(true);
-			const data =
-				authMode === "signin"
-					? await signInWithEmail({ email: mail, password })
-					: await signUpWithEmail({ email: mail, password, name: displayName });
 
-			// Check if MFA is required via the Better Auth twoFactorRedirect.
-			// Better Auth issues no session here — the user must provide a TOTP /
-			// email-OTP code before they can continue. Transition to the mfa_otp
-			// step so they can enter it, rather than dead-ending on an error.
-			if ((data as Record<string, unknown>)?.twoFactorRedirect) {
-				setLoading(false);
-				setMfaCode("");
-				setError("");
-				setStep("mfa_otp");
-				return;
-			}
+			if (authMode === "signin") {
+				const data = await signInWithEmail({ email: mail, password });
 
-			const user = data?.user;
-			if (!user) throw new Error("No user returned");
-
-			// Sign-up with requireEmailVerification: true returns a user but no
-			// session. Instead of emailing a verification link, send a 6-digit
-			// OTP via the emailOTP plugin and show the OTP entry form. After
-			// the user enters the code, verify the email and sign them in.
-			if (authMode === "signup" && !(data as Record<string, unknown>)?.session) {
-				setSignupEmail(mail);
-				setSignupOtp("");
-				setError("");
-				setStep("verify_email");
-				setLoading(false);
-				try {
-					await sendEmailVerificationOtp(mail);
-					setResendCooldown(30);
-				} catch (err) {
-					setError(err instanceof Error ? err.message : "Could not send verification code");
+				// Check if MFA is required via the Better Auth twoFactorRedirect.
+				// Better Auth issues no session here — the user must provide a TOTP /
+				// email-OTP code before they can continue. Transition to the mfa_otp
+				// step so they can enter it, rather than dead-ending on an error.
+				if ((data as Record<string, unknown>)?.twoFactorRedirect) {
+					setLoading(false);
+					setMfaCode("");
+					setError("");
+					setStep("mfa_otp");
+					return;
 				}
+
+				const user = data?.user;
+				if (!user) throw new Error("No user returned");
+				const finalName = user.name || displayName;
+				finish("email", finalName, user.email, user.id);
 				return;
 			}
 
-			const finalName = user.name || displayName;
-			finish("email", finalName, user.email, user.id);
+			// Sign-up: do NOT call signUpEmail yet. That would create a zombie
+			// user row with emailVerified=false the moment the user submits the
+			// form, before they've proven they own the inbox. Instead, send a
+			// sign-in type OTP to the email — the emailOTP plugin delivers it
+			// even when no account exists — and move to the OTP entry step. The
+			// account is only created in onSignupOtpSubmit after the OTP is
+			// verified, via /api/auth/complete-email-signup.
+			setSignupEmail(mail);
+			setSignupName(displayName);
+			setSignupOtp("");
+			setError("");
+			setStep("verify_email");
+			setLoading(false);
+			try {
+				await sendEmailCode(mail);
+				setResendCooldown(30);
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Could not send verification code");
+			}
 		} catch (err) {
 			setLoading(false);
 			setError(err instanceof Error ? err.message : "Authentication failed");
@@ -331,8 +331,17 @@ export function StartJourney() {
 		setError("");
 		setLoading(true);
 		try {
-			await verifyEmailOtp(signupEmail, signupOtp);
-			// Email is now verified — sign in with the stored credentials.
+			// Verify the OTP and create the account in one server-side step.
+			// The endpoint only creates the user after the OTP is verified, so
+			// no zombie account is left behind if the user abandons the flow.
+			const created = await completeEmailSignup({
+				email: signupEmail,
+				password,
+				name: signupName || signupEmail.split("@")[0] || "Applicant",
+				otp: signupOtp,
+			});
+			if (!created) throw new Error("Could not create account");
+			// Account is created and emailVerified — sign in with the credentials.
 			const data = await signInWithEmail({ email: signupEmail, password });
 			const user = data?.user;
 			if (!user) throw new Error("No user returned");
@@ -350,7 +359,8 @@ export function StartJourney() {
 		setError("");
 		setLoading(true);
 		try {
-			await sendEmailVerificationOtp(signupEmail);
+			// Resend the sign-in type OTP — no account exists yet to verify.
+			await sendEmailCode(signupEmail);
 			setResendCooldown(30);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not resend the code");

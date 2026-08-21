@@ -594,7 +594,7 @@ export async function assignConsultation(input: {
 					type: "consultation.assigned",
 					title: "New consultation assigned",
 					body: `${applicant?.name ?? "A client"}'s consultation has been assigned to you. Ref: ${updated.reference}`,
-					link: "/ops/cases",
+					link: "/applications",
 				}).catch(() => {});
 			}
 		} catch {
@@ -805,7 +805,7 @@ export async function respondToOutcome(input: {
 						? `${applicant.name} accepted the outcome`
 						: `${applicant.name} requested more info`,
 					body: text,
-					link: "/ops/cases",
+					link: "/applications",
 					entityType: "case",
 					entityId: row.id,
 				}).catch(() => {});

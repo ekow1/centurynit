@@ -215,3 +215,38 @@ export async function checkEmailExists(email: string): Promise<boolean> {
 	const data = await res.json().catch(() => ({ exists: false }));
 	return data.exists;
 }
+
+/**
+ * Complete an email/password sign-up after the OTP is entered.
+ *
+ * The portal sends the OTP *before* any account exists, so the standard
+ * `signUp.email` + `verifyEmailOtp` flow would create a zombie user row
+ * the moment sign-up is called. This helper instead posts to the custom
+ * `/complete-email-signup` endpoint, which verifies the OTP first and
+ * only then creates the user with `emailVerified: true`. Returns the
+ * created user so the caller can sign them in immediately.
+ */
+export async function completeEmailSignup(input: {
+	email: string;
+	password: string;
+	name: string;
+	otp: string;
+}): Promise<{ id?: string; email?: string; name?: string | null } | null> {
+	const baseURL = typeof window === "undefined" ? "" : window.location.origin;
+	const res = await fetch(`${baseURL}/api/auth/complete-email-signup`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			email: input.email.trim().toLowerCase(),
+			password: input.password,
+			name: input.name,
+			otp: input.otp.trim(),
+		}),
+	});
+	const data = await res.json().catch(() => null);
+	if (!res.ok) {
+		const message = (data as { error?: string } | null)?.error;
+		throw new Error(message || "Could not complete sign-up");
+	}
+	return (data as { user?: { id?: string; email?: string; name?: string | null } } | null)?.user ?? null;
+}

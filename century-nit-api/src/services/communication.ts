@@ -935,7 +935,7 @@ export async function sendCustomerMessage(
 					type: "chat.message",
 					title: `${user.name ?? "A client"} sent a message`,
 					body: preview,
-					link: "/ops/chat",
+					link: "/inbox",
 				})),
 			);
 		} catch {

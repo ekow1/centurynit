@@ -216,7 +216,7 @@ async function notifyManagersOfNewLead(
 			type: "lead.new",
 			title: "New lead received",
 			body: `${name} — ${source}`,
-			link: "/ops/leads",
+			link: "/leads",
 		})),
 	);
 

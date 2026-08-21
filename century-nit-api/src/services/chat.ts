@@ -1287,7 +1287,7 @@ export async function sendApplicantMessage(
 						type: "chat.message",
 						title,
 						body: preview,
-						link: "/ops/chat",
+						link: "/inbox",
 					});
 					return;
 				}
@@ -1301,7 +1301,7 @@ export async function sendApplicantMessage(
 					type: "chat.message",
 					title,
 					body: preview,
-					link: "/ops/chat",
+					link: "/inbox",
 				})),
 			);
 		} catch {

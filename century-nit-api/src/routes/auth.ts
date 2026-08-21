@@ -372,6 +372,111 @@ auth.post("/check-email", async (c) => {
 
 auth.use("*", rateLimit);
 
+/**
+ * Complete an email/password sign-up after the user has entered the OTP.
+ *
+ * The portal sends a "sign-in" type OTP to the email *before* any account
+ * exists (the emailOTP plugin sends that type even for unknown addresses).
+ * This endpoint verifies that OTP manually — `auth.api.verifyEmailOTP`
+ * can't be used because it requires the user row to already exist — and
+ * only then creates the user with a hashed password and `emailVerified`
+ * already set to true. The account is never persisted for an unverified
+ * email, which is what the sign-up flow requires.
+ *
+ * NB: the emailOTP plugin is configured with the default `storeOTP`
+ * ("plain"), so the stored verification value is the raw OTP. If that
+ * ever changes to "hashed" or "encrypted", this manual comparison must
+ * be replaced with the plugin's own verification.
+ */
+auth.post("/complete-email-signup", async (c) => {
+	const body = await c.req.json().catch(() => null);
+	const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+	const password = typeof body?.password === "string" ? body.password : "";
+	const name = typeof body?.name === "string" ? body.name.trim() : "";
+	const otp = typeof body?.otp === "string" ? body.otp.trim() : "";
+
+	if (!email || !password || !name || !otp) {
+		return c.json({ error: "Missing required fields" }, 400);
+	}
+	if (password.length < 12) {
+		return c.json({ error: "Password must be at least 12 characters" }, 400);
+	}
+
+	// 1. Verify the sign-in OTP. The identifier matches toOTPIdentifier("sign-in", email).
+	const identifier = `sign-in-otp-${email}`;
+	const [record] = await db
+		.select()
+		.from(schema.verifications)
+		.where(eq(schema.verifications.identifier, identifier))
+		.limit(1);
+
+	if (!record || record.expiresAt < new Date()) {
+		if (record) await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+		return c.json({ error: "That code was not accepted. Request a new code." }, 400);
+	}
+
+	const colonIdx = record.value.lastIndexOf(":");
+	const storedOtp = colonIdx === -1 ? record.value : record.value.slice(0, colonIdx);
+	const attempts = colonIdx === -1 ? 0 : Number.parseInt(record.value.slice(colonIdx + 1) || "0", 10);
+	const allowedAttempts = 3;
+
+	if (Number.isNaN(attempts) || attempts >= allowedAttempts) {
+		await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+		return c.json({ error: "Too many attempts. Request a new code." }, 400);
+	}
+
+	if (storedOtp !== otp) {
+		await db
+			.update(schema.verifications)
+			.set({ value: `${storedOtp}:${attempts + 1}` })
+			.where(eq(schema.verifications.id, record.id));
+		return c.json({ error: "That code was not accepted." }, 400);
+	}
+
+	// OTP is valid — consume it so it can't be reused.
+	await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+
+	// 2. Reject if an account already exists for this email.
+	const existing = await db.query.users.findFirst({
+		where: eq(schema.users.email, email),
+	});
+	if (existing) {
+		return c.json({ error: "An account with this email already exists. Sign in instead." }, 409);
+	}
+
+	// 3. Create the user with a hashed password. requireEmailVerification
+	//    means signUpEmail returns a user without a session; we flip
+	//    emailVerified to true immediately below because the OTP already
+	//    proved ownership of the inbox.
+	const authInstance = await getAuthInstance();
+	try {
+		await authInstance.api.signUpEmail({
+			body: { email, password, name },
+		});
+	} catch {
+		return c.json({ error: "Could not create account. Please try again." }, 400);
+	}
+
+	// 4. Mark the email verified.
+	const [created] = await db
+		.select()
+		.from(schema.users)
+		.where(eq(schema.users.email, email))
+		.limit(1);
+	if (created) {
+		await db
+			.update(schema.users)
+			.set({ emailVerified: true })
+			.where(eq(schema.users.id, created.id));
+	}
+
+	return c.json({
+		user: created
+			? { id: created.id, email: created.email, name: created.name }
+			: null,
+	});
+});
+
 auth.all("/*", async (c) => {
 	return (await getAuthInstance()).handler(c.req.raw);
 });

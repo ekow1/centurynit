@@ -239,7 +239,7 @@ export async function createBooking(input: {
 					type: "booking.new",
 					title: "New booking awaiting assignment",
 					body: `${booking.clientName} booked a consultation. Ref: ${booking.reference}`,
-					link: "/ops/cases",
+					link: "/applications",
 				})),
 			),
 		)
@@ -357,7 +357,7 @@ export async function assignBooking(input: {
 							type: "booking.assigned",
 							title: "New consultation assigned",
 							body: `${updated.clientName}'s consultation has been assigned to you. Ref: ${updated.reference}`,
-							link: "/ops/cases",
+							link: "/applications",
 						}).catch(() => {})
 					: undefined,
 			)
@@ -663,7 +663,7 @@ export async function rescheduleBooking(input: {
 							type: "booking.rescheduled",
 							title: "Consultation rescheduled",
 							body: `${updated.clientName}'s consultation has been rescheduled. Ref: ${updated.reference}`,
-							link: "/ops/cases",
+							link: "/applications",
 						}).catch(() => {})
 					: undefined,
 			)
@@ -789,7 +789,7 @@ export async function decideRescheduleBooking(
 								type: "booking.rescheduled",
 								title: "Consultation rescheduled",
 								body: `${updated.clientName}'s consultation has been rescheduled. Ref: ${updated.reference}`,
-								link: "/ops/cases",
+								link: "/applications",
 							}).catch(() => {})
 						: undefined,
 				)
@@ -923,7 +923,7 @@ export async function cancelBooking(input: {
 							type: "booking.cancelled",
 							title: "Consultation cancelled",
 							body: `${updated.clientName}'s consultation has been cancelled. Ref: ${updated.reference}`,
-							link: "/ops/cases",
+							link: "/applications",
 						}).catch(() => {})
 					: undefined,
 			)

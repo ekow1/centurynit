@@ -334,7 +334,7 @@ documentsRouter.openapi(
 							type: "document.uploaded",
 							title: "New document uploaded",
 							body,
-							link: "/ops/documents",
+							link: "/documents",
 						});
 						return;
 					}
@@ -349,7 +349,7 @@ documentsRouter.openapi(
 						type: "document.uploaded",
 						title: "New document uploaded",
 						body,
-						link: "/ops/documents",
+						link: "/documents",
 					})),
 				);
 			} catch {

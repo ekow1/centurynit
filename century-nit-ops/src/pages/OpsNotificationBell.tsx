@@ -91,10 +91,23 @@ export function OpsNotificationBell() {
 		}
 	}, [open]);
 
+	/**
+	 * Normalise a notification link so old rows still in the DB (which used
+	 * `/ops/...` prefixes) resolve to the correct route. New rows from the
+	 * API already use bare paths like `/applications`, `/documents`, etc.
+	 */
+	function normalizeLink(link: string): string {
+		if (!link.startsWith("/ops/")) return link;
+		const segment = link.slice(5); // strip "/ops/"
+		if (segment === "cases") return "/applications";
+		if (segment === "chat") return "/inbox";
+		return `/${segment}`;
+	}
+
 	function handleNotifClick(id: string, link?: string | null) {
 		void markRead(id);
 		setOpen(false);
-		if (link) nav(link);
+		if (link) nav(normalizeLink(link));
 	}
 
 	return (

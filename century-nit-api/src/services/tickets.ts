@@ -202,7 +202,7 @@ export async function createTicket(
 						type: "ticket.new",
 						title,
 						body,
-						link: "/ops/helpdesk",
+						link: "/helpdesk",
 					});
 					return;
 				}
@@ -215,7 +215,7 @@ export async function createTicket(
 					type: "ticket.new",
 					title,
 					body,
-					link: "/ops/helpdesk",
+					link: "/helpdesk",
 				})),
 			);
 		} catch {

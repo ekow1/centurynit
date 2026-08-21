@@ -288,14 +288,16 @@ export function EnterpriseConsultations() {
 													{/* Drop unknowns rather than printing "Live · portal session · - · Online" */}
 													{[c.dateTime, c.targetCountry, c.type].filter(isKnown).join(" · ")}
 												</p>
-												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-													<span>{c.assignedOfficer ? `Assigned: ${c.assignedOfficer}` : "Unassigned"}</span>
-													{c.coordinatorName && (
-														<>
-															<span>·</span>
-															<span style={{ color: "#0c4a6e", fontWeight: 500 }}>Coord: {c.coordinatorName}</span>
-														</>
-													)}
+											<div style={{ display: "flex", gap: "0.5rem", fontSize: "var(--text-xs)", marginTop: "0.2rem", alignItems: "center", flexWrap: "wrap" }}>
+												<StaffChatBadge opsUserId={c.assignedOfficerId} name={c.assignedOfficer || ""} email={c.assignedOfficerEmail} />
+												{c.coordinatorName && (
+													<>
+														<span>·</span>
+														<span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+															Coord: <StaffChatBadge opsUserId={c.coordinatorId} name={c.coordinatorName} email={c.coordinatorEmail} />
+														</span>
+													</>
+												)}
 													<span>·</span>
 													<span>{d.verified}/{d.total} docs verified{d.pending > 0 ? ` · ${d.pending} pending` : ""}</span>
 												</div>
@@ -728,8 +730,8 @@ export function EnterpriseConsultations() {
 						)}
 						{active.coordinatorName && (
 							<div style={{ padding: "0.5rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e" }}>
-									<strong>Coordinator:</strong> {active.coordinatorName}
+								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+									<strong>Coordinator:</strong> <StaffChatBadge opsUserId={active.coordinatorId} name={active.coordinatorName} email={active.coordinatorEmail} />
 									{active.coordinatorAssignedByName && <span style={{ opacity: 0.7 }}> (assigned by {active.coordinatorAssignedByName})</span>}
 									{active.delegationNote && <span style={{ opacity: 0.7 }}> — {active.delegationNote}</span>}
 								</p>

@@ -945,9 +945,22 @@ meRouter.openapi(
 	}),
 	async (c) => {
 		const user = c.get("user");
-		const applicant = await getApplicantByUserId(user.id);
+		let applicant = await getApplicantByUserId(user.id);
 		if (!applicant) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+			// Create the applicant record on first profile update — this runs
+			// before the first booking/payment, so `branch` is unknown. Use an
+			// empty string; `ensureCaseForBooking` sets the real branch later.
+			const [created] = await db
+				.insert(schema.applicants)
+				.values({
+					userId: user.id,
+					email: user.email,
+					name: user.name ?? user.email,
+					branch: "",
+					profile: {},
+				})
+				.returning();
+			applicant = created;
 		}
 		const body = c.req.valid("json");
 		const updated = await patchApplicant(applicant.id, body);

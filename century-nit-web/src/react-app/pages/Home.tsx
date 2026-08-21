@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { JourneyButton } from "../components/ui/JourneyButton";
 import { EnquiryButton } from "../components/EnquiryContext";
 import { HeroCarousel, type HeroSlide } from "../components/HeroCarousel";

@@ -1492,7 +1492,7 @@ export function PortalConsultationBookingFlow() {
 			window.location.href = res.authorizationUrl;
 		} catch (err) {
 			setPayState("method");
-			alert("Error creating booking: " + String(err));
+			toast.error("Error creating booking: " + String(err));
 		}
 	}
 

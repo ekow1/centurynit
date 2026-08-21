@@ -325,16 +325,7 @@ export type ChatParticipant = {
 	joinedAt: string;
 };
 
-export type ChatMessage = {
-	id: string;
-	conversationId: string;
-	senderOpsUserId: string | null;
-	senderName: string;
-	content: string;
-	messageType: "text" | "system" | "action";
-	replyToId: string | null;
-	createdAt: string;
-};
+export type ChatMessage = import("century-nit-shared").ChatMessage;
 
 export type ChatConversation = {
 	id: string;

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, type ChatRealtimeEvent } from "century-nit-shared";
 
 /**
  * Shared SSE subscription for chat events.
@@ -15,10 +15,7 @@ import { API_PREFIX } from "century-nit-shared";
  * other request — no token in the URL.
  */
 
-type ChatSSEEvent =
-	| { type: "chat.message"; conversationId: string; message: import("../lib/api").ChatMessage }
-	| { type: "chat.conversation.created"; conversationId: string }
-	| { type: "chat.read"; conversationId: string };
+type ChatSSEEvent = ChatRealtimeEvent;
 
 type Listener = (event: ChatSSEEvent) => void;
 

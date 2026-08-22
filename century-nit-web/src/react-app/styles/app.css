@@ -3539,7 +3539,7 @@ img.tabbar__avatar {
 	margin-top: 0.5rem;
 	font-family: var(--font-mono);
 	font-size: 0.85rem;
-	color: var(--muted-foreground);
+	color: #3f3f46;
 }
 
 /* In-dashboard tab strip (consultation mock) */

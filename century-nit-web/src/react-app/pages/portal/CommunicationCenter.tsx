@@ -587,7 +587,7 @@ const activeChannelBtnStyle: CSSProperties = {
 const assignedDotStyle: CSSProperties = {
 	width: "4px",
 	height: "4px",
-	background: "#ffffff",
+	background: "#10b981",
 	borderRadius: "0px",
 };
 
@@ -636,7 +636,7 @@ const emptySupportPromptStyle: CSSProperties = {
 const quickChipStyle: CSSProperties = {
 	background: "#ffffff",
 	border: "1px solid #e4e4e7",
-	color: "#d4d4d8",
+	color: "#71717a",
 	fontSize: "10px",
 	fontFamily: "monospace",
 	padding: "4px 8px",
@@ -783,7 +783,7 @@ const errorBannerStyle: CSSProperties = {
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "space-between",
-	background: "#e4e4e7",
+	background: "#18181b",
 	color: "#ffffff",
 	padding: "6px 10px",
 	fontSize: "10px",

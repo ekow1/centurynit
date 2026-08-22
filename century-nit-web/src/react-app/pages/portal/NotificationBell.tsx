@@ -239,7 +239,7 @@ export function NotificationBell() {
 						style={{
 							fontSize: "0.7rem",
 							fontWeight: 600,
-							color: pushPermission === "granted" ? "#18181b" : "#71717a",
+							color: pushPermission === "granted" ? "#ffffff" : "#71717a",
 							cursor: "pointer",
 							background: pushPermission === "granted" ? "#18181b" : "none",
 							border: pushPermission === "granted" ? "1px solid #18181b" : "none",
@@ -278,7 +278,7 @@ export function NotificationBell() {
 									<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
 									<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 								</svg>
-								<p style={{ fontSize: "0.85rem", color: "#a1a1aa", margin: 0 }}>
+								<p style={{ fontSize: "0.85rem", color: "#71717a", margin: 0 }}>
 									{filter === "unread" ? "No unread notifications" : "No notifications yet"}
 								</p>
 							</div>
@@ -343,7 +343,7 @@ export function NotificationBell() {
 											<p
 												style={{
 													fontSize: "0.7rem",
-													color: "#a1a1aa",
+													color: "#71717a",
 													marginTop: "0.4rem",
 													margin: 0,
 												}}

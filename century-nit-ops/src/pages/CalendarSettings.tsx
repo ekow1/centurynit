@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, calendarApi, type CalendarStatus } from "century-nit-core/api";
+import { ApiError, calendarApi, type CalendarStatus, type CalendarSubscription } from "century-nit-core/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 /**
@@ -169,15 +169,35 @@ function formatSynced(iso: string | null): string {
 }
 
 /**
- * The outbound half of the mirror — a read-only ICS URL that publishes this
- * consultant's own Century NIT consultations, so their personal calendar shows
- * their bookings and they don't get double-booked on their side. The token in
- * the URL is the only credential, so keep it private.
+ * Sync to your personal calendar — the company calendar as a one-way,
+ * read-only iCal feed. The URL is a private credential: anyone who has it can
+ * read your appointment times, so keep it to yourself. Regenerate it to
+ * invalidate a leaked URL; revoke to turn it off entirely.
  */
-function OutboundFeed({ url }: { url: string }) {
+function SyncToPersonalCalendar({
+	subscription,
+	onChanged,
+}: {
+	subscription: CalendarSubscription | null;
+	onChanged: () => void;
+}) {
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
+	const [confirm, setConfirm] = useState<null | "regenerate" | "revoke">(null);
+
+	const url = subscription?.url ?? null;
+
+	function err(e: unknown) {
+		return e instanceof ApiError && e.isForbidden
+			? "Only staff can use a calendar subscription."
+			: e instanceof Error
+				? e.message
+				: "Something went wrong.";
+	}
 
 	async function copy() {
+		if (!url) return;
 		try {
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
@@ -187,29 +207,126 @@ function OutboundFeed({ url }: { url: string }) {
 		}
 	}
 
+	async function create() {
+		setBusy(true);
+		setError(null);
+		try {
+			await calendarApi.createSubscription();
+			onChanged();
+		} catch (e) {
+			setError(err(e));
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function runConfirm() {
+		setBusy(true);
+		setError(null);
+		try {
+			if (confirm === "regenerate") await calendarApi.regenerateSubscription();
+			else if (confirm === "revoke") await calendarApi.revokeSubscription();
+			setConfirm(null);
+			onChanged();
+		} catch (e) {
+			setError(err(e));
+		} finally {
+			setBusy(false);
+		}
+	}
+
 	return (
-		<div className="cal-feed__outbound">
-			<h3 className="cal-hours__title">Your bookings on your calendar</h3>
+		<div className="cal-feed cal-subscription">
+			<h3 className="cal-hours__title">Sync to your personal calendar</h3>
 			<p className="ops-panel__muted">
-				Subscribe your personal calendar to this secret address to see your Century NIT
-				consultations there — Google/Outlook/Apple all support “add calendar by URL”.
+				Subscribe Google Calendar, Apple Calendar or Outlook to this secret address and your
+				Century NIT consultations appear there automatically — and stay in sync when bookings
+				change or are cancelled. It is a one-way, read-only mirror: editing it in your
+				personal calendar never changes the company calendar.
 			</p>
-			<div className="cal-feed__copy">
-				<input
-					type="url"
-					className="input input--full-border"
-					value={url}
-					readOnly
-					aria-label="Outbound ICS subscription URL"
-					onFocus={(e) => e.currentTarget.select()}
-				/>
-				<button type="button" className="btn btn--ghost btn--sm" onClick={copy}>
-					{copied ? "Copied" : "Copy"}
-				</button>
-			</div>
-			<p className="ops-panel__muted cal-feed__warn">
-				Anyone with this link can read your appointment times. Keep it private.
-			</p>
+
+			{url ? (
+				<>
+					<div className="cal-feed__copy">
+						<input
+							type="url"
+							className="input input--full-border"
+							value={url}
+							readOnly
+							aria-label="Calendar subscription URL"
+							onFocus={(e) => e.currentTarget.select()}
+						/>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={copy}>
+							{copied ? "Copied" : "Copy"}
+						</button>
+					</div>
+					<p className="ops-panel__muted cal-feed__warn">
+						Anyone with this link can read your appointment times. Keep it private.
+					</p>
+
+					<details className="cal-subscription__help">
+						<summary>How to subscribe</summary>
+						<ul className="cal-feed__steps">
+							<li>
+								<strong>Google Calendar:</strong> Settings → Add calendar → From URL → paste the
+								link → Add calendar.
+							</li>
+							<li>
+								<strong>Apple Calendar:</strong> File → New Calendar Subscription… → paste the
+								link → Subscribe.
+							</li>
+							<li>
+								<strong>Outlook:</strong> Add calendar → Subscribe from web → paste the link →
+								Import.
+							</li>
+						</ul>
+					</details>
+
+					<div className="cal-actions">
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							disabled={busy}
+							onClick={() => setConfirm("regenerate")}
+						>
+							Regenerate URL
+						</button>
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							disabled={busy}
+							onClick={() => setConfirm("revoke")}
+						>
+							Revoke
+						</button>
+					</div>
+				</>
+			) : (
+				<div className="cal-actions">
+					<button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={create}>
+						{busy ? "Creating…" : "Create subscription URL"}
+					</button>
+				</div>
+			)}
+
+			{error && <p className="ops-modal__error">{error}</p>}
+
+			<ConfirmDialog
+				open={confirm === "regenerate"}
+				title="Regenerate subscription URL?"
+				message="Your current link stops working immediately, including any calendar already subscribed to it. You'll get a new link to subscribe with."
+				danger
+				onConfirm={() => runConfirm()}
+				onCancel={() => setConfirm(null)}
+			/>
+			<ConfirmDialog
+				open={confirm === "revoke"}
+				title="Revoke subscription?"
+				message="Your personal calendar stops receiving updates. You can create a new URL later."
+				danger
+				onConfirm={() => runConfirm()}
+				onCancel={() => setConfirm(null)}
+			/>
 		</div>
 	);
 }
@@ -333,18 +450,14 @@ function FeedSection({
 						{busy ? "Saving…" : "Replace feed"}
 					</button>
 				</form>
-
-				{status.outboundUrl && (
-					<OutboundFeed url={status.outboundUrl} />
-				)}
-				</>
-			) : (
-				<form className="cal-feed__add" onSubmit={save}>
-					<p className="ops-panel__muted">
-						Paste your calendar's read-only secret iCal address so your external meetings
-						block the slots applicants can book. Works with Google, Outlook and Apple — no
-						account connection needed.
-					</p>
+			</>
+		) : (
+			<form className="cal-feed__add" onSubmit={save}>
+				<p className="ops-panel__muted">
+					Paste your calendar's read-only secret iCal address so your external meetings
+					block the slots applicants can book. Works with Google, Outlook and Apple — no
+					account connection needed.
+				</p>
 					<ul className="cal-feed__steps">
 						<li><strong>Google:</strong> Calendar settings → Integrate calendar → “Secret address in iCal format”</li>
 						<li><strong>Outlook/Office 365:</strong> Share → Publish calendar → .ics link</li>
@@ -392,6 +505,7 @@ function FeedSection({
 
 export function CalendarSettings() {
 	const [status, setStatus] = useState<CalendarStatus | null>(null);
+	const [subscription, setSubscription] = useState<CalendarSubscription | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
@@ -417,6 +531,7 @@ export function CalendarSettings() {
 							: "Could not load calendar status.",
 				);
 			});
+		calendarApi.getSubscription().then(setSubscription).catch(() => {});
 	}, []);
 
 	useEffect(load, [load]);
@@ -433,6 +548,7 @@ export function CalendarSettings() {
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
 
 			{status && <FeedSection status={status} onSaved={load} />}
+			{status && <SyncToPersonalCalendar subscription={subscription} onChanged={load} />}
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
 
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}

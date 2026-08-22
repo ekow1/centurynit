@@ -1,0 +1,1 @@
+ALTER TABLE "staff_calendar_feeds" ALTER COLUMN "ics_url_encrypted" DROP NOT NULL;

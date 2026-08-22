@@ -500,18 +500,25 @@ export const calendarBusyBlocks = pgTable(
 );
 
 /**
- * A read-only iCal/ICS subscription URL for one staff member.
+ * One staff member's calendar configuration — two independent features sharing
+ * a single per-staff row:
  *
- * Replaces the removed Google Calendar OAuth integration. Each consultant pastes
- * their calendar's secret iCal address (Google "Secret address in iCal format",
- * Outlook/Apple "publish calendar" .ics link). A worker fetches it on a
- * schedule and writes the busy windows into `calendar_busy_blocks`, which the
- * availability check already subtracts — so an external meeting instantly
- * blocks the slot on the portal, with zero OAuth and zero verification.
+ *   1. Inbound mirror (optional): paste a calendar's read-only secret iCal
+ *      address. A worker fetches it on a schedule and writes the busy windows
+ *      into `calendar_busy_blocks`, which the availability check subtracts, so
+ *      an external meeting blocks the portal slot — zero OAuth, zero
+ *      verification. The URL is encrypted at rest (AES-256-GCM, `lib/crypto.ts`)
+ *      and never returned to any client.
  *
- * The URL is a secret address (read access to the calendar's busy times), so it
- * is encrypted at rest with the same AES-256-GCM scheme as OAuth tokens were
- * (`lib/crypto.ts`), and never returned to any client.
+ *   2. Outbound subscription (optional): an unguessable token that publishes this
+ *      consultant's own Century NIT bookings as a subscribable ICS feed, so their
+ *      personal calendar mirrors the company calendar one-way. The token is the
+ *      sole credential for the public feed route and may be regenerated/revoked
+ *      independently of the inbound mirror.
+ *
+ * Either half is optional: a row may exist solely to hold an outbound token
+ * (icsUrlEncrypted is null), or solely to mirror an inbound feed
+ * (outboundToken is null), or both.
  */
 export const staffCalendarFeeds = pgTable(
 	"staff_calendar_feeds",
@@ -521,7 +528,7 @@ export const staffCalendarFeeds = pgTable(
 			.notNull()
 			.unique()
 			.references(() => opsUsers.id, { onDelete: "cascade" }),
-		icsUrlEncrypted: text("ics_url_encrypted").notNull(),
+		icsUrlEncrypted: text("ics_url_encrypted"),
 		label: varchar("label", { length: 120 }),
 		lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
 		lastError: text("last_error"),

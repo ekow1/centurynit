@@ -588,6 +588,13 @@ export type CalendarStatus = {
 	workingHours: { dayOfWeek: number; start: string; end: string; timezone: string }[];
 };
 
+/** The staff member's personalized, revocable read-only iCal subscription URL. */
+export type CalendarSubscription = {
+	/** Subscribable ICS URL, or null if the staff member has no subscription yet. */
+	url: string | null;
+	createdAt: string | null;
+};
+
 export const calendarApi = {
 	/**
 	 * Feed status plus working hours, merged for the Calendar page. The secret
@@ -635,6 +642,25 @@ export const calendarApi = {
 			method: "PUT",
 			...json(input),
 		});
+	},
+
+	/* Outbound subscription — the company calendar as a one-way, read-only iCal
+	 * feed into a staff member's personal calendar. Independent of the inbound
+	 * mirror above; revocable and regenerable. */
+	getSubscription(): Promise<CalendarSubscription> {
+		return request(`${API_PREFIX}/calendar/subscription`);
+	},
+	/** Provision the subscription if none exists; returns the existing URL otherwise. */
+	createSubscription(): Promise<CalendarSubscription> {
+		return request(`${API_PREFIX}/calendar/subscription`, { method: "POST" });
+	},
+	/** Mint a fresh token, invalidating the previous URL immediately. */
+	regenerateSubscription(): Promise<CalendarSubscription> {
+		return request(`${API_PREFIX}/calendar/subscription/regenerate`, { method: "POST" });
+	},
+	/** Revoke the subscription URL (keeps the inbound mirror, if any). */
+	revokeSubscription(): Promise<void> {
+		return request(`${API_PREFIX}/calendar/subscription`, { method: "DELETE" });
 	},
 };
 

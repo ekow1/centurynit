@@ -1,4 +1,4 @@
-import { and, eq, like, lte, gte, sql } from "drizzle-orm";
+import { and, eq, isNotNull, like, lte, gte, sql } from "drizzle-orm";
 import ICAL from "ical.js";
 import { db } from "../../db/index.js";
 import { calendarBusyBlocks, staffCalendarFeeds } from "../../db/schema.js";
@@ -82,7 +82,10 @@ export function parseIcsBusyBlocks(ics: string, from: Date, to: Date): BusyBlock
  * consultant's calendar is not syncing.
  */
 export async function syncCalendarFeeds(): Promise<void> {
-	const feeds = await db.select().from(staffCalendarFeeds);
+	const feeds = await db
+		.select()
+		.from(staffCalendarFeeds)
+		.where(isNotNull(staffCalendarFeeds.icsUrlEncrypted));
 	for (const feed of feeds) {
 		try {
 			await syncFeed(feed.id);
@@ -150,7 +153,7 @@ export async function syncFeed(feedId: string): Promise<void> {
 	});
 }
 
-/** Remove a feed and the busy blocks it was mirroring. */
+/** Remove a feed's inbound mirror and the busy blocks it was mirroring. */
 export async function removeCalendarFeed(opsUserId: string): Promise<void> {
 	await db.transaction(async (tx) => {
 		await tx.delete(calendarBusyBlocks).where(
@@ -159,7 +162,22 @@ export async function removeCalendarFeed(opsUserId: string): Promise<void> {
 				like(calendarBusyBlocks.externalEventId, "ics:%"),
 			),
 		);
-		await tx.delete(staffCalendarFeeds).where(eq(staffCalendarFeeds.opsUserId, opsUserId));
+		const [feed] = await tx
+			.select({ outboundToken: staffCalendarFeeds.outboundToken })
+			.from(staffCalendarFeeds)
+			.where(eq(staffCalendarFeeds.opsUserId, opsUserId))
+			.limit(1);
+		if (feed?.outboundToken) {
+			// The consultant still subscribes to their outbound feed — keep the row
+			// and just drop the inbound mirror so their external meetings stop
+			// blocking slots.
+			await tx
+				.update(staffCalendarFeeds)
+				.set({ icsUrlEncrypted: null, label: null, lastSyncedAt: null, lastError: null, updatedAt: new Date() })
+				.where(eq(staffCalendarFeeds.opsUserId, opsUserId));
+		} else {
+			await tx.delete(staffCalendarFeeds).where(eq(staffCalendarFeeds.opsUserId, opsUserId));
+		}
 	});
 }
 
@@ -192,7 +210,27 @@ export type OutboundBooking = {
 	endsAt: Date;
 };
 
-/** `YYYYMMDDTHHMMSSZ` — the UTC form iCal DTSTART/DTEND require. */
+/**
+ * A single calendar entry rendered into the outbound ICS feed.
+ *
+ * `uid` is stable across refreshes (external calendars key updates on it, so a
+ * changed start time updates the event instead of creating a duplicate).
+ * `status: "CANCELLED"` tells subscribers to drop a deleted event — without it,
+ * some clients (notably Google Calendar) never remove an event that has simply
+ * disappeared from the feed.
+ */
+export type IcsEvent = {
+	uid: string;
+	summary: string;
+	description: string | null;
+	location: string | null;
+	startsAt: Date;
+	endsAt: Date;
+	status: "CONFIRMED" | "CANCELLED";
+	lastModified: Date;
+};
+
+/** `YYYYMMDDTHHMMSSZ` — the UTC form iCal DTSTART/DTEND/LAST-MODIFIED require. */
 function icsUtc(d: Date): string {
 	return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
@@ -202,8 +240,17 @@ function escapeIcs(value: string): string {
 	return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
-/** Serialise upcoming bookings into a subscribable ICS document. */
-export function renderBookingsIcs(bookings: OutboundBooking[], calendarName = "Century NIT"): string {
+/**
+ * Serialise upcoming bookings into a subscribable RFC 5545 ICS document.
+ *
+ * Times are emitted as UTC (`...Z`). The booking's own timezone is preserved on
+ * the booking row in the database; the feed is a portable, provider-agnostic
+ * view, and every major calendar app converts UTC to the viewer's zone. Stable
+ * UIDs (`century-nit-<reference>@century-nit`) keep a subscription in sync across
+ * refreshes: an update re-emits the same UID with new times, and a cancellation
+ * re-emits it with `STATUS:CANCELLED`.
+ */
+export function renderIcs(events: IcsEvent[], calendarName = "Century NIT"): string {
 	const stamp = icsUtc(new Date());
 	const lines = [
 		"BEGIN:VCALENDAR",
@@ -213,17 +260,20 @@ export function renderBookingsIcs(bookings: OutboundBooking[], calendarName = "C
 		"CALSCALE:GREGORIAN",
 		"METHOD:PUBLISH",
 	];
-	for (const b of bookings) {
+	for (const e of events) {
 		lines.push(
 			"BEGIN:VEVENT",
-			`UID:century-nit-${escapeIcs(b.reference)}@century-nit`,
+			`UID:${escapeIcs(e.uid)}`,
 			`DTSTAMP:${stamp}`,
-			`DTSTART:${icsUtc(b.startsAt)}`,
-			`DTEND:${icsUtc(b.endsAt)}`,
-			`SUMMARY:${escapeIcs(`${b.serviceName} · ${b.clientName}`)}`,
-			`DESCRIPTION:${escapeIcs(`Century NIT consultation. Ref: ${b.reference}. Client: ${b.clientName}.`)}`,
-			"END:VEVENT",
+			`DTSTART:${icsUtc(e.startsAt)}`,
+			`DTEND:${icsUtc(e.endsAt)}`,
+			`SUMMARY:${escapeIcs(e.summary)}`,
+			`STATUS:${e.status}`,
+			`LAST-MODIFIED:${icsUtc(e.lastModified)}`,
 		);
+		if (e.description) lines.push(`DESCRIPTION:${escapeIcs(e.description)}`);
+		if (e.location) lines.push(`LOCATION:${escapeIcs(e.location)}`);
+		lines.push("END:VEVENT");
 	}
 	lines.push("END:VCALENDAR");
 	return lines.join("\r\n");

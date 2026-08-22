@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
-import { and, eq, gte, inArray, like, lt, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, eq, gte, inArray, like, lt, or, sql } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { bookings, calendarBusyBlocks, staffCalendarFeeds } from "../db/schema.js";
@@ -18,7 +18,7 @@ import {
 	setWorkingHours,
 } from "../services/availability.js";
 import { isValidTimeZone } from "../lib/time.js";
-import { removeCalendarFeed, renderBookingsIcs } from "../services/calendar/ics.js";
+import { removeCalendarFeed, renderIcs, type IcsEvent } from "../services/calendar/ics.js";
 import { queueFeedSync } from "../worker/queues.js";
 import {
 	API_PREFIX,
@@ -72,6 +72,91 @@ function toHttps(url: string): string {
 	return url.startsWith("webcal://") ? "https://" + url.slice("webcal://".length) : url;
 }
 
+/**
+ * 256-bit subscription token (64 hex chars). Unguessable and never derived from
+ * a user id or any predictable value — the feed URL is the sole credential for
+ * the public outbound route, so it has to be a secret in its own right.
+ */
+function newSubscriptionToken(): string {
+	return randomBytes(32).toString("hex");
+}
+
+const subscriptionResponseSchema = z.object({
+	/** Absolute, subscribable ICS URL, or null if the staff member has no subscription. */
+	url: z.string().url().nullable(),
+	createdAt: z.string().datetime().nullable(),
+});
+
+/** Return this staff member's outbound subscription, provisioning nothing. */
+async function readSubscription(
+	opsUserId: string,
+): Promise<{ token: string | null; createdAt: Date | null }> {
+	const [row] = await db
+		.select({ token: staffCalendarFeeds.outboundToken, createdAt: staffCalendarFeeds.createdAt })
+		.from(staffCalendarFeeds)
+		.where(eq(staffCalendarFeeds.opsUserId, opsUserId))
+		.limit(1);
+	return { token: row?.token ?? null, createdAt: row?.createdAt ?? null };
+}
+
+/**
+ * Return the existing token, or create one if none exists. Never rotates an
+ * existing token — that is `regenerateSubscription`. `onConflictDoNothing`
+ * handles the race where two requests provision the same staff member at once.
+ */
+async function getOrCreateSubscription(
+	opsUserId: string,
+): Promise<{ token: string; createdAt: Date }> {
+	const existing = await readSubscription(opsUserId);
+	if (existing.token) return { token: existing.token, createdAt: existing.createdAt! };
+
+	const token = newSubscriptionToken();
+	const [row] = await db
+		.insert(staffCalendarFeeds)
+		.values({ opsUserId, icsUrlEncrypted: null, outboundToken: token })
+		.onConflictDoNothing({ target: staffCalendarFeeds.opsUserId })
+		.returning({ token: staffCalendarFeeds.outboundToken, createdAt: staffCalendarFeeds.createdAt });
+	if (row?.token) return { token: row.token, createdAt: row.createdAt };
+
+	// Lost the race — another request created the row first. Read its token.
+	const reread = await readSubscription(opsUserId);
+	return { token: reread.token!, createdAt: reread.createdAt! };
+}
+
+/** Mint a fresh token, invalidating the previous URL immediately. */
+async function regenerateSubscription(
+	opsUserId: string,
+): Promise<{ token: string; createdAt: Date }> {
+	const token = newSubscriptionToken();
+	const [row] = await db
+		.insert(staffCalendarFeeds)
+		.values({ opsUserId, icsUrlEncrypted: null, outboundToken: token })
+		.onConflictDoUpdate({
+			target: staffCalendarFeeds.opsUserId,
+			set: { outboundToken: token, updatedAt: new Date() },
+		})
+		.returning({ token: staffCalendarFeeds.outboundToken, createdAt: staffCalendarFeeds.createdAt });
+	return { token: row.token!, createdAt: row.createdAt };
+}
+
+/** Revoke the outbound URL. Keeps the inbound mirror if one exists. */
+async function revokeSubscription(opsUserId: string): Promise<void> {
+	const [feed] = await db
+		.select({ icsUrlEncrypted: staffCalendarFeeds.icsUrlEncrypted })
+		.from(staffCalendarFeeds)
+		.where(eq(staffCalendarFeeds.opsUserId, opsUserId))
+		.limit(1);
+	if (!feed) return;
+	if (feed.icsUrlEncrypted) {
+		await db
+			.update(staffCalendarFeeds)
+			.set({ outboundToken: null, updatedAt: new Date() })
+			.where(eq(staffCalendarFeeds.opsUserId, opsUserId));
+	} else {
+		await db.delete(staffCalendarFeeds).where(eq(staffCalendarFeeds.opsUserId, opsUserId));
+	}
+}
+
 /* ── GET /api/v1/calendar/feeds/me ─────────────────────────────────────────── */
 
 calendarFeedsRouter.openapi(
@@ -105,7 +190,7 @@ calendarFeedsRouter.openapi(
 
 		return c.json(
 			{
-				hasFeed: !!feed,
+				hasFeed: Boolean(feed?.icsUrlEncrypted),
 				label: feed?.label ?? null,
 				lastSyncedAt: feed?.lastSyncedAt?.toISOString() ?? null,
 				lastError: feed?.lastError ?? null,
@@ -144,7 +229,7 @@ calendarFeedsRouter.openapi(
 		const url = toHttps(body.icsUrl);
 
 		const encrypted = encrypt(url);
-		const token = randomUUID();
+		const token = newSubscriptionToken();
 		await db
 			.insert(staffCalendarFeeds)
 			.values({
@@ -321,6 +406,10 @@ calendarFeedsRouter.openapi(
 
 		const from = new Date();
 		const to = new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+		// Include recently-cancelled bookings so subscribers see STATUS:CANCELLED and
+		// remove the event instead of keeping a stale copy — Google Calendar in
+		// particular never drops an event that merely vanishes from a feed.
+		const cancelCutoff = new Date(from.getTime() - 30 * 24 * 60 * 60 * 1000);
 		const rows = await db
 			.select({
 				reference: bookings.reference,
@@ -328,23 +417,157 @@ calendarFeedsRouter.openapi(
 				clientName: bookings.clientName,
 				startsAt: bookings.startsAt,
 				endsAt: bookings.endsAt,
+				status: bookings.status,
+				meetingUrl: bookings.meetingUrl,
+				notes: bookings.notes,
+				cancelledAt: bookings.cancelledAt,
+				updatedAt: bookings.updatedAt,
+				createdAt: bookings.createdAt,
 			})
 			.from(bookings)
 			.where(
 				and(
 					eq(bookings.employeeId, feed.opsUserId),
-					inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
-					gte(bookings.startsAt, from),
-					lt(bookings.startsAt, to),
+					or(
+						and(
+							inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
+							gte(bookings.startsAt, from),
+							lt(bookings.startsAt, to),
+						),
+						and(eq(bookings.status, "CANCELLED"), gte(bookings.cancelledAt, cancelCutoff)),
+					),
 				),
 			)
 			.orderBy(bookings.startsAt);
 
-		const ics = renderBookingsIcs(rows, feed.label ? `${feed.label} · Century NIT` : "Century NIT");
+		const events: IcsEvent[] = rows.map((r) => {
+			const cancelled = r.status === "CANCELLED";
+			return {
+				uid: `century-nit-${r.reference}@century-nit`,
+				summary: `${r.serviceName} · ${r.clientName}`,
+				description: `Century NIT consultation. Ref: ${r.reference}. Client: ${r.clientName}.`,
+				location: r.meetingUrl ?? null,
+				startsAt: r.startsAt,
+				endsAt: r.endsAt,
+				status: cancelled ? "CANCELLED" : "CONFIRMED",
+				lastModified: cancelled
+					? (r.cancelledAt ?? r.updatedAt ?? r.createdAt)
+					: (r.updatedAt ?? r.createdAt),
+			};
+		});
+
+		const ics = renderIcs(events, feed.label ? `${feed.label} · Century NIT` : "Century NIT");
 		return c.body(ics, 200, {
 			"content-type": "text/calendar; charset=utf-8",
 			"content-disposition": 'inline; filename="century-nit.ics"',
 			"cache-control": "public, max-age=300",
 		});
+	},
+);
+
+/* ── Outbound subscription management ──────────────────────────────────────────
+ * The company calendar is the source of truth; a staff member's personalized
+ * iCal URL is a one-way, read-only mirror of it into their own calendar app.
+ * Each staff member gets an independent, revocable token — independent of the
+ * inbound mirror — and may regenerate it at any time to invalidate a leaked URL.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+const SUBSCRIPTION_ROLES = ["super_admin", "admin", "manager", "coordinator", "consultant"] as const;
+
+/* ── GET /api/v1/calendar/subscription ─────────────────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/subscription",
+		tags: ["Calendar"],
+		summary: "My calendar subscription URL",
+		description:
+			"Returns the staff member's personalized read-only iCal subscription URL (their Century " +
+			"NIT bookings, subscribable by any calendar app). Does not provision a token — use " +
+			"POST /calendar/subscription to create one.",
+		middleware: [requireAuth, requireMfa, requireRole(...SUBSCRIPTION_ROLES)] as const,
+		responses: {
+			200: { content: { "application/json": { schema: subscriptionResponseSchema } }, description: "Subscription URL (null if none)" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const sub = await readSubscription(staff.opsUserId);
+		return c.json(
+			{ url: outboundUrl(c, sub.token), createdAt: sub.createdAt?.toISOString() ?? null },
+			200,
+		);
+	},
+);
+
+/* ── POST /api/v1/calendar/subscription ────────────────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/subscription",
+		tags: ["Calendar"],
+		summary: "Create my calendar subscription (idempotent)",
+		description:
+			"Provisions a personalized iCal URL if none exists and returns it. Calling again returns " +
+			"the same URL — it never rotates. Use POST /calendar/subscription/regenerate to invalidate " +
+			"and replace it.",
+		middleware: [requireAuth, requireMfa, requireRole(...SUBSCRIPTION_ROLES)] as const,
+		responses: {
+			200: { content: { "application/json": { schema: subscriptionResponseSchema } }, description: "Subscription URL" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const sub = await getOrCreateSubscription(staff.opsUserId);
+		return c.json({ url: outboundUrl(c, sub.token), createdAt: sub.createdAt.toISOString() }, 200);
+	},
+);
+
+/* ── POST /api/v1/calendar/subscription/regenerate ──────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/subscription/regenerate",
+		tags: ["Calendar"],
+		summary: "Regenerate my calendar subscription URL",
+		description:
+			"Mints a fresh token, immediately invalidating the previous URL. Use after a link may " +
+			"have been exposed. Existing subscriptions stop receiving updates until the owner " +
+			"re-subscribes with the new URL.",
+		middleware: [requireAuth, requireMfa, requireRole(...SUBSCRIPTION_ROLES)] as const,
+		responses: {
+			200: { content: { "application/json": { schema: subscriptionResponseSchema } }, description: "New subscription URL" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const sub = await regenerateSubscription(staff.opsUserId);
+		return c.json({ url: outboundUrl(c, sub.token), createdAt: sub.createdAt.toISOString() }, 200);
+	},
+);
+
+/* ── DELETE /api/v1/calendar/subscription ──────────────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/subscription",
+		tags: ["Calendar"],
+		summary: "Revoke my calendar subscription URL",
+		description:
+			"Invalidates the personalized iCal URL. The inbound mirror (external meetings blocking " +
+			"slots), if any, is untouched.",
+		middleware: [requireAuth, requireMfa, requireRole(...SUBSCRIPTION_ROLES)] as const,
+		responses: {
+			204: { description: "Subscription revoked" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		await revokeSubscription(staff.opsUserId);
+		return c.body(null, 204);
 	},
 );

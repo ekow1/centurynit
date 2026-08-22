@@ -247,7 +247,7 @@ export function useCasesApi() {
 			setAssignees(
 				staff.staff
 					.filter((s) => s.active && (s.role === "consultant" || s.role === "coordinator"))
-					.map((s) => ({ name: s.name, email: s.email, branch: s.branch ?? "" })),
+					.map((s) => ({ name: s.name, email: s.email, branch: s.branch ?? "", opsUserId: s.id })),
 			);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not load cases");

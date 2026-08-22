@@ -48,7 +48,7 @@ export function staffBranchName(id: string): string {
 }
 
 /** Staff member a case can be assigned to. */
-export type Assignee = { name: string; email: string; branch: string };
+export type Assignee = { name: string; email: string; branch: string; opsUserId?: string };
 
 export type CommentKind = "comment" | "recommendation" | "document_request" | "status" | "assignment";
 

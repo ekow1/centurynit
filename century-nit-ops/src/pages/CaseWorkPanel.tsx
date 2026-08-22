@@ -7,6 +7,7 @@ import {
 	type CommentKind,
 } from "century-nit-core/ops";
 import { ReschedulePanel } from "./ReschedulePanel";
+import { StaffChatBadge } from "./StaffChatBadge";
 
 /**
  * Shown above the detail tabs on a case drawer.
@@ -66,6 +67,7 @@ export function CaseWorkPanel({
 
 	const assigned = Boolean(assignedName);
 	const canWork = isMine || canAssign;
+	const assignedOpsUserId = assignees.find((c) => c.email === assignedEmail)?.opsUserId;
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -82,17 +84,22 @@ export function CaseWorkPanel({
 						<p className="eyebrow" style={{ color: assigned ? undefined : "var(--muted)" }}>
 							Assignment
 						</p>
-						<p style={{ fontWeight: 600, marginTop: "0.2rem" }}>
-							{assigned
-								? assignedName
-								: closedNote
+						{assigned ? (
+							<div style={{ marginTop: "0.2rem" }}>
+								<StaffChatBadge
+									opsUserId={assignedOpsUserId}
+									name={assignedName}
+									email={assignedEmail}
+								/>
+							</div>
+						) : (
+							<p style={{ fontWeight: 600, marginTop: "0.2rem" }}>
+								{closedNote
 									? "Not assigned"
 									: canAssign
 										? "Unassigned - pick a consultant to begin"
 										: "Unassigned - awaiting the manager"}
-						</p>
-						{assigned && (
-							<p style={{ fontSize: "var(--text-xs)", opacity: 0.7 }}>{assignedEmail}</p>
+							</p>
 						)}
 					</div>
 

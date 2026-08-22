@@ -1,7 +1,6 @@
-import { calendarWorker } from "./calendar.js";
 import { emailWorker } from "./email.js";
 import { pushWorker } from "./push.js";
-import { calendarQueue, connection, emailQueue, pushQueue } from "./queues.js";
+import { connection, emailQueue, calendarQueue, pushQueue } from "./queues.js";
 
 /**
  * Background worker process.
@@ -10,10 +9,12 @@ import { calendarQueue, connection, emailQueue, pushQueue } from "./queues.js";
  *
  *   email     notifications and reminders — queued, never sent inline, so a
  *             failed send can never roll back a successful booking (§13)
- *   calendar  create/update/cancel retries after a Google outage, and the
- *             busy-block reconciliation the webhook triggers (§12)
+ *   push      browser push fan-out for staff notifications
  *
- * Run alongside the API, not inside it. A retry storm or a slow Google call
+ * Google Calendar handling has been removed — meeting links are set manually
+ * by staff, so there is no calendar worker anymore.
+ *
+ * Run alongside the API, not inside it. A retry storm or a slow send
  * would otherwise compete with request handling, and the API should be able to
  * scale separately from a queue that is idle most of the time.
  *
@@ -25,7 +26,6 @@ import { calendarQueue, connection, emailQueue, pushQueue } from "./queues.js";
 
 const workers = [
 	{ name: "email", worker: emailWorker },
-	{ name: "calendar", worker: calendarWorker },
 	{ name: "push", worker: pushWorker },
 ];
 

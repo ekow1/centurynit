@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
+import { StaffChatBadge } from "./StaffChatBadge";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
@@ -44,6 +45,8 @@ export function EnterpriseCases() {
 	const liveSelected = selectedApp
 		? applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp
 		: null;
+
+	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 
 	const roleScopedApps = scopeRecords(
 		applications,
@@ -254,9 +257,18 @@ export function EnterpriseCases() {
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
 													{app.university} · {app.program}
 												</p>
-												<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-													{app.assignedStaff ? `Assigned: ${app.assignedStaff}` : "- unassigned"} · {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}
-												</p>
+												<div style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+													{app.assignedStaff ? (
+														<StaffChatBadge
+															opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
+															name={app.assignedStaff}
+															email={app.assignedStaffEmail}
+														/>
+													) : (
+														<span>Unassigned</span>
+													)}
+													<span style={{ marginLeft: "0.4rem" }}>· {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
+												</div>
 											</div>
 											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
 										</div>
@@ -423,7 +435,16 @@ export function EnterpriseCases() {
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{selectedApp.university}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{selectedApp.program}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p><p>{selectedApp.assignedStaff}</p></div>
+										<div>
+											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
+											<p>
+												<StaffChatBadge
+													opsUserId={opsUserIdByEmail(selectedApp.assignedStaffEmail)}
+													name={selectedApp.assignedStaff}
+													email={selectedApp.assignedStaffEmail}
+												/>
+											</p>
+										</div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(selectedApp.branch)}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{selectedApp.fundingTrack}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{selectedApp.submittedDate}</p></div>

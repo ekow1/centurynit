@@ -10,6 +10,7 @@ import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
+import { StaffChatBadge } from "./StaffChatBadge";
 
 /** Placeholder values shouldn't be joined into a meta line as bare em-dashes */
 function isKnown(v: string | undefined | null): v is string {
@@ -158,6 +159,7 @@ export function EnterpriseConsultations() {
 	const docs = active ? docSummary(active, realDocs) : { total: 0, verified: 0, pending: 0, uploaded: 0 };
 	const isMine = Boolean(active && active.assignedOfficerEmail === opsUser?.email);
 	const canAssess = isMine || opsRole === "manager" || opsRole === "coordinator";
+	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 
 	return (
 		<div className="page-content fade-in">
@@ -287,12 +289,22 @@ export function EnterpriseConsultations() {
 													{/* Drop unknowns rather than printing "Live · portal session · - · Online" */}
 													{[c.dateTime, c.targetCountry, c.type].filter(isKnown).join(" · ")}
 												</p>
-												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-													<span>{c.assignedOfficer ? `Assigned: ${c.assignedOfficer}` : "Unassigned"}</span>
+												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem", alignItems: "center" }}>
+													{c.assignedOfficer ? (
+														<StaffChatBadge
+															opsUserId={opsUserIdByEmail(c.assignedOfficerEmail)}
+															name={c.assignedOfficer}
+															email={c.assignedOfficerEmail}
+														/>
+													) : (
+														<span>Unassigned</span>
+													)}
 													{c.coordinatorName && (
 														<>
 															<span>·</span>
-															<span style={{ color: "#0c4a6e", fontWeight: 500 }}>Coord: {c.coordinatorName}</span>
+															<span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+																Coord: <StaffChatBadge opsUserId={c.coordinatorEmail} name={c.coordinatorName} email={c.coordinatorEmail} />
+															</span>
 														</>
 													)}
 													<span>·</span>
@@ -360,14 +372,20 @@ export function EnterpriseConsultations() {
 									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
 										{active.applicantName}
 									</h2>
-									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-										{[
-											isKnown(active.targetCountry) ? `Targeting ${active.targetCountry}` : "Target not set",
-											active.assignedOfficer || "Unassigned",
-											active.branch,
-										]
-											.filter(isKnown)
-											.join(" · ")}
+									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+										{isKnown(active.targetCountry) ? <span>Targeting {active.targetCountry}</span> : <span>Target not set</span>}
+										<span>·</span>
+										{active.assignedOfficer ? (
+											<StaffChatBadge
+												opsUserId={opsUserIdByEmail(active.assignedOfficerEmail)}
+												name={active.assignedOfficer}
+												email={active.assignedOfficerEmail}
+											/>
+										) : (
+											<span>Unassigned</span>
+										)}
+										<span>·</span>
+										<span>{active.branch}</span>
 									</p>
 									<p style={{ opacity: 0.6, fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
 										{active.dateTime} · {active.type} · {docs.verified}/{docs.total} documents verified
@@ -727,8 +745,8 @@ export function EnterpriseConsultations() {
 						)}
 						{active.coordinatorName && (
 							<div style={{ padding: "0.5rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e" }}>
-									<strong>Coordinator:</strong> {active.coordinatorName}
+								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+									<strong>Coordinator:</strong> <StaffChatBadge opsUserId={active.coordinatorEmail} name={active.coordinatorName} email={active.coordinatorEmail} />
 									{active.coordinatorAssignedByName && <span style={{ opacity: 0.7 }}> (assigned by {active.coordinatorAssignedByName})</span>}
 									{active.delegationNote && <span style={{ opacity: 0.7 }}> — {active.delegationNote}</span>}
 								</p>

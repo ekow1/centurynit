@@ -73,32 +73,22 @@ export type CalendarJob =
 /**
  * Queue calendar work.
  *
- * Job id is derived from the operation so a retry of the same logical action
- * collapses onto the existing job instead of creating a second calendar event.
+ * Google Calendar integration has been removed — meeting links are now set
+ * manually by staff. These producers are retained as no-ops so existing call
+ * sites keep compiling; nothing is ever enqueued, and the calendar worker no
+ * longer runs (see worker/main.ts).
  */
-export async function queueCalendar(job: CalendarJob): Promise<void> {
-	const id =
-		job.type === "refreshBusy"
-			? `calendar:refreshBusy:${job.opsUserId}`
-			: `calendar:${job.type}:${job.bookingId}`;
-	await calendarQueue.add(job.type, job, { ...RETRY, jobId: toJobId(id) });
+export async function queueCalendar(_job: CalendarJob): Promise<void> {
+	return;
 }
 
 /**
  * Remove a completed job id so the same logical operation can run again later.
  *
- * Needed because a reschedule may legitimately update the same booking's event
- * more than once, and the job id would otherwise be permanently claimed.
+ * No-op now that Google Calendar is removed — nothing is ever enqueued.
  */
-export async function releaseCalendarJob(job: CalendarJob): Promise<void> {
-	const id =
-		job.type === "refreshBusy"
-			? `calendar:refreshBusy:${job.opsUserId}`
-			: `calendar:${job.type}:${job.bookingId}`;
-	const existing = await calendarQueue.getJob(toJobId(id));
-	if (existing && (await existing.isCompleted())) {
-		await existing.remove();
-	}
+export async function releaseCalendarJob(_job: CalendarJob): Promise<void> {
+	return;
 }
 
 /** Reminder scheduled for a specific instant. */

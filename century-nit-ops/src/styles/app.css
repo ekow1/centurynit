@@ -3928,3 +3928,42 @@
 		grid-column: 1 / -1;
 	}
 }
+
+/* ── Staff chat badge — assigned staff member with a DM icon ── */
+.staff-chat-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: var(--text-xs);
+}
+
+.staff-chat-badge__name {
+	font-weight: 500;
+}
+
+.staff-chat-badge__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	color: var(--foreground);
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background 100ms, color 100ms, border-color 100ms;
+	flex-shrink: 0;
+}
+
+.staff-chat-badge__btn:hover {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+
+.staff-chat-badge--none {
+	opacity: 0.6;
+	font-style: italic;
+}

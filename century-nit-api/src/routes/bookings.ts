@@ -25,9 +25,10 @@ import {
 	listBookingsForClient,
 	markNoShow,
 	rescheduleBooking,
+	setBookingMeetingUrl,
 	type BookingRow,
 } from "../services/booking.js";
-import { ensureCaseForBooking, syncConsultationAssignment, canAssignCase, getConsultation } from "../services/cases.js";
+import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
 import { createConsultationInvoice } from "../services/invoice.js";
 import {
 	assignBookingSchema,
@@ -656,6 +657,75 @@ bookingsRouter.openapi(
 
 		const employee = await loadEmployee(updated.employeeId);
 		return c.json(toBookingResponse(updated, employee));
+	},
+);
+
+/* ── PATCH /api/v1/bookings/:id/meeting-url ──────────────────────────────────── */
+
+const meetingUrlSchema = z.object({
+	meetingUrl: z
+		.string()
+		.url()
+		.nullable()
+		.transform((v) => (v && v.trim() ? v.trim() : null)),
+});
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/meeting-url",
+		tags: ["Bookings"],
+		summary: "Set the meeting link on a booking",
+		description:
+			"Google Calendar integration has been removed. Staff paste any video link " +
+			"(Zoom, Google Meet, Microsoft Teams, 8x8, …) onto the consultation booking. " +
+			"Send an empty string or null to clear it. Only https:// URLs are accepted.",
+		middleware: [requireAuth, requireMfa] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: meetingUrlSchema } },
+				description: "Meeting URL to attach to the booking",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Updated booking",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+			400: { description: "Invalid URL" },
+			403: { description: "Not allowed to modify this booking" },
+			404: { description: "Booking not found" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to update this booking");
+		}
+
+		const url = body.meetingUrl;
+		if (url) {
+			let parsed: URL;
+			try {
+				parsed = new URL(url);
+			} catch {
+				throw new HttpError(400, "VALIDATION_ERROR", "Enter a valid https:// meeting link");
+			}
+			if (parsed.protocol !== "https:") {
+				throw new HttpError(400, "VALIDATION_ERROR", "Meeting link must start with https://");
+			}
+		}
+
+		const updated = await setBookingMeetingUrl(id, url);
+		return c.json(toBookingResponse(updated), 200);
 	},
 );
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
@@ -6,6 +6,7 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { UnassignedBookings } from "./UnassignedBookings";
+import { StaffChatBadge } from "./StaffChatBadge";
 
 /**
  * Every figure on this page is derived from the API, so drilling into a
@@ -15,7 +16,7 @@ import { UnassignedBookings } from "./UnassignedBookings";
  */
 export function EnterpriseDashboard() {
 	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants } = useCases();
+	const { consultations, applications, applicants, assignees } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
 
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
@@ -127,7 +128,7 @@ export function EnterpriseDashboard() {
 			{opsRole === "coordinator" ? (
 				<CoordinatorView stats={stats} funnel={funnel} funnelMax={funnelMax} />
 			) : opsRole === "consultant" ? (
-				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} />
+				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} assignees={assignees} />
 			) : opsRole === "finance" ? (
 				<FinanceView stats={stats} applicants={scoped.applicants} />
 			) : (
@@ -302,12 +303,15 @@ function ConsultantView({
 	stats,
 	consultations,
 	applications,
+	assignees,
 }: {
 	stats: Stats;
-	consultations: { id: string; applicantName: string; dateTime: string; targetCountry: string; status: string }[];
-	applications: { id: string; appId: string; applicantName: string; stage: string; university: string }[];
+	consultations: { id: string; applicantName: string; dateTime: string; targetCountry: string; status: string; assignedOfficer?: string; assignedOfficerEmail?: string }[];
+	applications: { id: string; appId: string; applicantName: string; stage: string; university: string; assignedStaff?: string; assignedStaffEmail?: string }[];
+	assignees: { name: string; email: string; opsUserId?: string }[];
 }) {
 	const toAssess = consultations.filter((c) => c.status !== "Completed");
+	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 
 	return (
 		<>
@@ -330,6 +334,15 @@ function ConsultantView({
 									title={`${c.applicantName} - ${c.dateTime}`}
 									time={`${c.targetCountry} · ${c.status}`}
 									to="/consultations"
+									chat={
+										c.assignedOfficer ? (
+											<StaffChatBadge
+												opsUserId={opsUserIdByEmail(c.assignedOfficerEmail ?? "")}
+												name={c.assignedOfficer}
+												email={c.assignedOfficerEmail}
+											/>
+										) : null
+									}
 								/>
 							))}
 						</ul>
@@ -347,6 +360,15 @@ function ConsultantView({
 									title={`${a.appId} - ${a.applicantName}`}
 									time={`${a.stage} · ${a.university}`}
 									to="/applications"
+									chat={
+										a.assignedStaff ? (
+											<StaffChatBadge
+												opsUserId={opsUserIdByEmail(a.assignedStaffEmail ?? "")}
+												name={a.assignedStaff}
+												email={a.assignedStaffEmail}
+											/>
+										) : null
+									}
 								/>
 							))}
 						</ul>
@@ -454,11 +476,16 @@ function KPICard({ label, value, note, inverted, to }: { label: string; value: s
 	);
 }
 
-function ActivityItem({ title, time, to }: { title: string; time: string; to?: string }) {
+function ActivityItem({ title, time, to, chat }: { title: string; time: string; to?: string; chat?: ReactNode }) {
 	const item = (
 		<li style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
-			<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{title}</p>
-			<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>{time}</p>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+				<div style={{ minWidth: 0 }}>
+					<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{title}</p>
+					<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>{time}</p>
+				</div>
+				{chat}
+			</div>
 		</li>
 	);
 	if (!to) return item;

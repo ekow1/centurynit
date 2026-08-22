@@ -227,7 +227,9 @@ describe("required end-to-end scenario", () => {
 			});
 			const enoch = options.find((o) => o.id === employeeA)!;
 			expect(enoch.available).toBe(true);
-			expect(enoch.calendarConnected).toBe(true);
+			// calendarConnected now reflects an iCal feed, not the legacy Google
+			// account this scenario still seeds to exercise the test calendar.
+			expect(enoch.calendarConnected).toBe(false);
 
 			/* 6–9. Assign → calendar event → Meet link saved on the booking. */
 			const assigned = await assignBooking({
@@ -265,15 +267,17 @@ describe("required end-to-end scenario", () => {
 				moved.startsAt.getTime(),
 			);
 
-			/* The 10:00 slot it left is bookable again. */
-			const afterMove = await branchAvailability({
-				branchId: BRANCH,
-				date,
-				durationMinutes: 45,
-				timezone: TZ,
-			});
-			expect(afterMove.find((s) => s.time === "10:00")?.available).toBe(true);
-			expect(afterMove.find((s) => s.time === "14:00")?.available).toBe(false);
+		/* The 10:00 slot it left is bookable again. */
+		const afterMove = await branchAvailability({
+			branchId: BRANCH,
+			date,
+			durationMinutes: 45,
+			timezone: TZ,
+		});
+		expect(afterMove.find((s) => s.time === "10:00")?.available).toBe(true);
+		// Parallel-consultant capacity: 14:00 still holds Enoch's booking, but Ama
+		// is free there, so the slot remains bookable for the branch (not greyed).
+		expect(afterMove.find((s) => s.time === "14:00")?.available).toBe(true);
 
 			/* 17–19. Cancel: status CANCELLED and the calendar event is dropped. */
 			const cancelled = await cancelBooking({
@@ -309,7 +313,7 @@ describe("required end-to-end scenario", () => {
 });
 
 describe("§11 double booking", () => {
-	maybe()("lets exactly one of two concurrent bookings win the same slot", async () => {
+	maybe()("two bookings can share a slot, but not the same consultant", async () => {
 		const date = futureWeekday(8);
 
 		const attempt = (clientId: string, name: string, email: string) =>
@@ -327,25 +331,46 @@ describe("§11 double booking", () => {
 				serviceName: "Website Consultation",
 			});
 
-		// Fired together: both pre-checks can see the slot free, so only the
-		// database constraint can decide this.
+		// Parallel-consultant capacity: two unassigned bookings at the same
+		// branch slot both succeed — the partial unique index is now keyed on
+		// (branch, employee, startsAt), and null employees are distinct.
 		const results = await Promise.allSettled([
 			attempt(CLIENT_ID, "John Doe", "e2e-client@example.com"),
 			attempt(CLIENT_2_ID, "Jane Roe", "e2e-client2@example.com"),
 		]);
+		const won = results.filter((r) => r.status === "fulfilled") as PromiseFulfilledResult<
+			{ id: string }
+		>[];
+		expect(won).toHaveLength(2);
 
-		const won = results.filter((r) => r.status === "fulfilled");
-		const lost = results.filter((r) => r.status === "rejected");
+		// The guard is per-consultant: assigning both to the same employee must
+		// fail the second — the employee-overlap EXCLUDE constraint rejects it.
+		await assignBooking({
+			bookingId: won[0].value.id,
+			employeeId: employeeA,
+			actor: { opsUserId: employeeA, name: "Manager", email: "m@century-nit.com" },
+		});
+		await expect(
+			assignBooking({
+				bookingId: won[1].value.id,
+				employeeId: employeeA,
+				actor: { opsUserId: employeeA, name: "Manager", email: "m@century-nit.com" },
+			}),
+		).rejects.toMatchObject({ code: "EMPLOYEE_UNAVAILABLE" });
 
-		expect(won).toHaveLength(1);
-		expect(lost).toHaveLength(1);
-		expect((lost[0] as PromiseRejectedResult).reason).toMatchObject({ code: "SLOT_TAKEN" });
+		// The second can still be routed to a different consultant.
+		const ok = await assignBooking({
+			bookingId: won[1].value.id,
+			employeeId: employeeB,
+			actor: { opsUserId: employeeB, name: "Manager", email: "m@century-nit.com" },
+		});
+		expect(ok.employeeId).toBe(employeeB);
 
 		const [{ count }] = await db
 			.select({ count: sql<number>`count(*)::int` })
 			.from(bookings)
 			.where(eq(bookings.branchId, BRANCH));
-		expect(count).toBe(1);
+		expect(count).toBe(2);
 	});
 
 	maybe()("refuses to assign an employee who already has that slot", async () => {
@@ -533,9 +558,10 @@ describe("deferred Google configuration", () => {
 				actor: { opsUserId: employeeB, name: "Manager", email: "m@century-nit.com" },
 			});
 
-			// Assignment still succeeds; only the link is missing.
+			// Assignment still succeeds; only the link is missing. With no calendar
+			// connection the sync is a no-op, so the booking stays PENDING.
 			expect(assigned.status).toBe("ASSIGNED");
-			expect(assigned.calendarSyncStatus).toBe("FAILED");
+			expect(assigned.calendarSyncStatus).toBe("PENDING");
 			expect(assigned.meetingUrl).toBeNull();
 
 			// The employee now connects. queuePendingCalendarSyncs is what the OAuth

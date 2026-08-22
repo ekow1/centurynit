@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type FormEvent } from "react";
 import { useAppState } from "../../context/AppState";
 import { useApplicantTickets } from "../../data/opsTicketBridge";
-import { formatDualCurrency, CONSULTATION_FEE, type ChatMessage as LocalChatMessage } from "century-nit-core";
+import { type ChatMessage as LocalChatMessage } from "century-nit-core";
 import type { ChatMessage as SharedChatMessage, QuotedMessage } from "century-nit-shared";
 import {
 	ensureChatUiStyles,
@@ -10,17 +10,9 @@ import {
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
 import { useApplicantChat } from "../../hooks/useApplicantChat";
+import { useAiChat } from "../../hooks/useAiChat";
 
 type ChatTab = "ai" | "consultant" | "support";
-
-const AI_REPLIES = [
-	"Based on your profile, I'd recommend looking at universities in the UK or Canada for Data Science programmes.",
-	"You can upload your documents in the Documents section of your portal. I'd suggest starting with your passport and academic transcripts.",
-	"Your application stage is currently in progress. The typical timeline is 4–6 weeks for university responses.",
-	"For IELTS, most universities require a minimum overall score of 6.5 with no band below 6.0. Some competitive programmes may ask for 7.0.",
-	`That's a common question! The consultation fee is ${formatDualCurrency(CONSULTATION_FEE)} and covers your initial assessment and eligibility review.`,
-	"I can help with general questions about study destinations, programme requirements, timelines, and document checklists.",
-];
 
 const AI_SUGGESTIONS = [
 	"What documents do I need?",
@@ -29,7 +21,6 @@ const AI_SUGGESTIONS = [
 	"What IELTS score do I need?",
 ];
 
-const AI_WELCOME_AT = new Date(Date.now() - 3600000).toISOString();
 const SUPPORT_WELCOME_AT = new Date().toISOString();
 
 const TAB_META: Record<ChatTab, { label: string; subtitle: string; color: string }> = {
@@ -229,23 +220,31 @@ export function FloatingChat() {
 	const [open, setOpen] = useState(false);
 	const [tab, setTab] = useState<ChatTab>("ai");
 	const [input, setInput] = useState("");
-	const [typing, setTyping] = useState(false);
 
 	// Consultant tab — real chat via shared components + SSE.
 	const applicantChat = useApplicantChat(!!authUser);
 	const [consultantDraft, setConsultantDraft] = useState("");
 	const [consultantReplyTo, setConsultantReplyTo] = useState<QuotedMessage | null>(null);
 
-	// AI tab — scripted, local state only.
-	const [aiMessages, setAiMessages] = useState<LocalChatMessage[]>([
-		{
-			id: "ai-1",
-			sender: "ai",
-			authorName: "AI Assistant",
-			text: "Hi! I'm your AI assistant. I can answer questions about study destinations, document requirements, timelines, and more. How can I help you today?",
-			at: AI_WELCOME_AT,
-		},
-	]);
+	// AI tab — real streaming chat via the Workers AI edge endpoint.
+	const aiChat = useAiChat("portal-floating", {
+		getContext: () => ({
+			applicantName: authUser?.name ?? booking.assessment?.firstName ?? "",
+			destination: application.destinationId ?? "",
+		}),
+	});
+	const aiMessages: LocalChatMessage[] = useMemo(
+		() =>
+			aiChat.messages.map((m) => ({
+				id: m.id,
+				sender: m.role === "user" ? "applicant" : "ai",
+				authorName: m.role === "user" ? (authUser?.name ?? "You") : "AI Assistant",
+				text: m.content,
+				at: m.at,
+			})),
+		[aiChat.messages, authUser?.name],
+	);
+	const aiTyping = aiChat.typing;
 	const scrollRef = useRef<HTMLDivElement>(null);
 
 	const openTicket = useMemo(
@@ -278,20 +277,12 @@ export function FloatingChat() {
 		if (scrollRef.current && tab !== "consultant") {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [aiMessages, supportMessages, typing, open, tab]);
+	}, [aiMessages, supportMessages, aiTyping, open, tab]);
 
 	function handleScriptedSubmit(e: FormEvent) {
 		e.preventDefault();
 		const trimmed = input.trim();
 		if (!trimmed) return;
-
-		const userMsg: LocalChatMessage = {
-			id: `${tab}-user-${Date.now().toString(36)}`,
-			sender: "applicant",
-			authorName: authUser?.name ?? "You",
-			text: trimmed,
-			at: new Date().toISOString(),
-		};
 
 		if (tab === "support") {
 			if (openTicket) {
@@ -310,26 +301,9 @@ export function FloatingChat() {
 			return;
 		}
 
-		// AI tab — scripted reply
-		setAiMessages((prev) => [...prev, userMsg]);
+		// AI tab — streamed from the Workers AI edge endpoint.
 		setInput("");
-		setTyping(true);
-
-		const delay = 800 + Math.random() * 600;
-		window.setTimeout(() => {
-			const reply = AI_REPLIES[Math.floor(Math.random() * AI_REPLIES.length)];
-			setTyping(false);
-			setAiMessages((prev) => [
-				...prev,
-				{
-					id: `${tab}-reply-${Date.now().toString(36)}`,
-					sender: "ai",
-					authorName: "AI Assistant",
-					text: reply,
-					at: new Date().toISOString(),
-				},
-			]);
-		}, delay);
+		void aiChat.send(trimmed);
 	}
 
 	function handleSuggestion(text: string) {
@@ -461,7 +435,6 @@ export function FloatingChat() {
 									type="button"
 									onClick={() => {
 										setTab(t);
-										setTyping(false);
 									}}
 									style={{
 										flex: 1,
@@ -526,13 +499,13 @@ export function FloatingChat() {
 									<ScriptedMessageBubble key={msg.id} msg={msg} />
 								))}
 
-								{typing ? (
+								{tab === "ai" && aiTyping ? (
 									<div style={{ display: "flex", justifyContent: "flex-start" }}>
 										<TypingDots />
 									</div>
 								) : null}
 
-								{tab === "ai" && aiMessages.length <= 1 && !typing ? (
+								{tab === "ai" && aiMessages.length <= 1 && !aiTyping ? (
 									<div
 										style={{
 											display: "flex",

@@ -81,28 +81,6 @@ const SECTION_META: Record<AdminSection, { title: string; blurb: string }> = {
 	},
 };
 
-const STAFF_ACCOUNTS: { name: string; email: string; role: OpsRole; branch: string; status: string }[] = [
-	{ name: "Adjoa Mensah-Bonsu", email: "a.mensah@century-nit.com", role: "manager", branch: "accra", status: "Active" },
-	{ name: "Kojo Asante", email: "k.asante@century-nit.com", role: "coordinator", branch: "accra", status: "Active" },
-	{ name: "Efua Owusu", email: "e.owusu@century-nit.com", role: "consultant", branch: "accra", status: "Active" },
-	{ name: "Kwame Agyeman", email: "k.agyeman@century-nit.com", role: "consultant", branch: "kumasi", status: "Active" },
-	{ name: "Abena Frimpong", email: "a.frimpong@century-nit.com", role: "consultant", branch: "takoradi", status: "Active" },
-	{ name: "Ama Serwaa Boateng", email: "a.serwaa@century-nit.com", role: "finance", branch: "accra", status: "Active" },
-	{ name: "Kwabena Osei", email: "k.osei@century-nit.com", role: "admin", branch: "platform", status: "Active" },
-	{ name: "Yaw Darko", email: "y.darko@century-nit.com", role: "consultant", branch: "takoradi", status: "Suspended" },
-];
-
-const AUDIT_LOG = [
-	{ id: "a1", at: "2026-08-06T09:12:00Z", actor: "Kwabena Osei", action: "Updated auth settings", detail: "Enabled MFA for all staff", ip: "192.168.1.10" },
-	{ id: "a2", at: "2026-08-06T08:45:00Z", actor: "Adjoa Mensah-Bonsu", action: "Assigned role", detail: "Set Kojo Asante to Coordinator", ip: "192.168.1.24" },
-	{ id: "a3", at: "2026-08-05T17:30:00Z", actor: "Kwabena Osei", action: "Published CMS entry", detail: "Homepage hero updated", ip: "192.168.1.10" },
-	{ id: "a4", at: "2026-08-05T14:15:00Z", actor: "Ama Serwaa Boateng", action: "Exported financial report", detail: "Q3 2026 revenue report (CSV)", ip: "192.168.1.31" },
-	{ id: "a5", at: "2026-08-05T11:20:00Z", actor: "Kwabena Osei", action: "Suspended user", detail: "Yaw Darko - disciplinary review", ip: "192.168.1.10" },
-	{ id: "a6", at: "2026-08-04T16:00:00Z", actor: "Adjoa Mensah-Bonsu", action: "Added branch", detail: "Kumasi Branch - new office", ip: "192.168.1.24" },
-	{ id: "a7", at: "2026-08-04T10:30:00Z", actor: "Kwabena Osei", action: "Rotated API key", detail: "Paystack production key rotated", ip: "192.168.1.10" },
-	{ id: "a8", at: "2026-08-03T15:45:00Z", actor: "System", action: "Auto-backup completed", detail: "Full database snapshot - 2.4 MB", ip: "localhost" },
-];
-
 const FAILED_LOGINS = [
 	{ id: "f1", at: "2026-08-06T08:55:00Z", email: "unknown@tempmail.com", ip: "41.215.44.10", attempts: 3, status: "Locked" },
 	{ id: "f2", at: "2026-08-06T07:20:00Z", email: "a.mensah@century-nit.com", ip: "192.168.1.24", attempts: 1, status: "Resolved" },

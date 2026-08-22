@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -442,7 +442,7 @@ async function serializeApplicant(row: ApplicantRow): Promise<ApiApplicant> {
 		: await db
 				.select({ status: consultations.status })
 				.from(consultations)
-				.where(eq(consultations.applicantId, row.id))
+				.where(and(eq(consultations.applicantId, row.id), ne(consultations.status, "CANCELLED")))
 				.orderBy(desc(consultations.createdAt))
 				.limit(1);
 

@@ -235,12 +235,10 @@ async function verifyTurnstile(c: Context, token: string): Promise<Response | nu
 		return c.json({ error: { code: "FORBIDDEN", message: "Verification failed." } }, { status: 403 });
 	}
 
-	if (
-		!result?.success ||
-		result.action !== WEB_ACTION ||
-		!result.hostname ||
-		!allowedHosts.has(result.hostname)
-	) {
+	const hostOk =
+		!!result.hostname &&
+		[...allowedHosts].some((h) => result.hostname === h || result.hostname!.endsWith(`.${h}`));
+	if (!result?.success || result.action !== WEB_ACTION || !hostOk) {
 		return c.json({ error: { code: "FORBIDDEN", message: "Verification failed." } }, { status: 403 });
 	}
 	return null;

@@ -5894,3 +5894,88 @@ img.tabbar__avatar {
 		animation: none;
 	}
 }
+
+/* ── MFA recommendation banner + setup page ────────────────────────────── */
+
+.mfa-prompt {
+	display: flex;
+	gap: 1rem;
+	align-items: flex-start;
+	padding: 1rem 1.25rem;
+	margin-bottom: 1.5rem;
+	border: 1px solid var(--border);
+	border-left: 3px solid var(--primary);
+	background: var(--surface);
+	border-radius: 0.5rem;
+}
+
+.mfa-prompt__icon {
+	flex-shrink: 0;
+	width: 2.25rem;
+	height: 2.25rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--primary);
+	background: color-mix(in srgb, var(--primary) 12%, transparent);
+	border-radius: 0.5rem;
+}
+
+.mfa-prompt__body {
+	flex: 1;
+	min-width: 0;
+}
+
+.mfa-prompt__title {
+	font-weight: 600;
+	margin: 0 0 0.25rem;
+}
+
+.mfa-prompt__sub {
+	margin: 0 0 0.75rem;
+	color: var(--muted-foreground);
+	font-size: var(--text-sm);
+}
+
+.mfa-prompt__actions {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.portal-mfa-option {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1rem;
+	border: 2px solid var(--border);
+	background: var(--surface);
+	cursor: pointer;
+	text-align: left;
+	border-radius: 0.5rem;
+	transition: border-color 0.15s ease;
+}
+
+.portal-mfa-option:hover {
+	border-color: var(--primary);
+}
+
+.portal-mfa-option__icon {
+	flex-shrink: 0;
+	color: var(--primary);
+}
+
+.portal-mfa-option__body {
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+}
+
+.portal-mfa-option__title {
+	font-weight: 600;
+}
+
+.portal-mfa-option__sub {
+	font-size: var(--text-sm);
+	color: var(--muted-foreground);
+}

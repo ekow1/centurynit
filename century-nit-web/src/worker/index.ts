@@ -1,4 +1,15 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+
+/**
+ * The Turnstile secret is a Worker secret (`wrangler secret put TURNSTILE_SECRET`),
+ * so it is not part of the generated `Env`. Declared here to merge with the
+ * generated binding types.
+ */
+declare global {
+	interface Env {
+		TURNSTILE_SECRET?: string;
+	}
+}
 
 /**
  * Edge AI chat for the Century NIT portal.
@@ -16,7 +27,7 @@ import { Hono } from "hono";
  * is needed at the edge.
  */
 
-const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+const AI_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 type ChatRole = "user" | "assistant";
 interface IncomingMessage {
@@ -24,7 +35,10 @@ interface IncomingMessage {
 	content: string;
 }
 
-type Surface = "portal-floating" | "portal-comm";
+type Surface = "portal-floating" | "portal-comm" | "web";
+
+/** Action string embedded in the public web widget and verified server-side. */
+const WEB_ACTION = "web_enquiry";
 
 /** Keep only the most recent turns so the prompt fits the model's context window. */
 const MAX_HISTORY = 8;
@@ -60,6 +74,13 @@ const SYSTEM_PROMPTS: Record<Surface, string> = {
 		"Stay on-brand and factual; never invent fees, deadlines or university-specific requirements you are not sure of.",
 		`Company facts: ${COMPANY_FACTS}`,
 	].join(" "),
+	web: [
+		"You are the Century NIT website assistant for prospective students.",
+		"Answer concisely (2–4 short sentences), warm and helpful, about study destinations, programmes, document requirements, IELTS, visa processing, scholarships, fees and timelines.",
+		"You cannot see any account. Encourage the visitor to start their journey (book a consultation / start the journey) or use the WhatsApp / Email tabs for anything specific.",
+		"Stay on-brand and factual; never invent fees, deadlines or university-specific requirements you are not sure of.",
+		`Company facts: ${COMPANY_FACTS}`,
+	].join(" "),
 };
 
 const encoder = new TextEncoder();
@@ -69,6 +90,69 @@ function badRequest(message: string) {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+/** Public config for the frontend (sitekey only — the secret stays server-side). */
+app.get("/ai/config", (c) => {
+	return Response.json({ turnstileSitekey: c.env.TURNSTILE_SITEKEY ?? "" });
+});
+
+/**
+ * Canonical server-side Turnstile siteverify for the public `web` surface.
+ * The portal surfaces are behind the SPA's `RequireAuth`, so they skip this.
+ *
+ * Fail closed: any network/parse error or field mismatch → 403.
+ */
+async function verifyTurnstile(c: Context, token: string): Promise<Response | null> {
+	const secret = c.env.TURNSTILE_SECRET;
+	if (!secret) {
+		return Response.json(
+			{ error: { code: "TURNSTILE_NOT_CONFIGURED", message: "Bot protection is not configured yet." } },
+			{ status: 503 },
+		);
+	}
+
+	const allowedHosts = new Set(
+		(c.env.TURNSTILE_HOSTNAMES ?? "")
+			.split(",")
+			.map((h: string) => h.trim())
+			.filter(Boolean),
+	);
+	if (allowedHosts.size === 0) {
+		return Response.json(
+			{ error: { code: "TURNSTILE_NOT_CONFIGURED", message: "Bot protection is not configured yet." } },
+			{ status: 503 },
+		);
+	}
+
+	const remoteIp = c.req.header("cf-connecting-ip") ?? undefined;
+
+	let result: { success?: boolean; action?: string; hostname?: string } | null = null;
+	try {
+		const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+			method: "POST",
+			headers: { "Content-Type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				secret,
+				response: token,
+				...(remoteIp ? { remoteip: remoteIp } : {}),
+			}).toString(),
+		});
+		if (!res.ok) return c.json({ error: { code: "FORBIDDEN", message: "Verification failed." } }, { status: 403 });
+		result = (await res.json()) as { success?: boolean; action?: string; hostname?: string };
+	} catch {
+		return c.json({ error: { code: "FORBIDDEN", message: "Verification failed." } }, { status: 403 });
+	}
+
+	if (
+		!result?.success ||
+		result.action !== WEB_ACTION ||
+		!result.hostname ||
+		!allowedHosts.has(result.hostname)
+	) {
+		return c.json({ error: { code: "FORBIDDEN", message: "Verification failed." } }, { status: 403 });
+	}
+	return null;
+}
 
 app.post("/ai/chat", async (c) => {
 	if (!c.env.AI) {
@@ -88,12 +172,23 @@ app.post("/ai/chat", async (c) => {
 	const surface = (body as { surface?: string } | null)?.surface;
 	const messages = (body as { messages?: IncomingMessage[] } | null)?.messages;
 	const context = (body as { context?: Record<string, string> } | null)?.context;
+	const turnstileToken = (body as { cfTurnstileResponse?: string } | null)?.cfTurnstileResponse;
 
-	if (surface !== "portal-floating" && surface !== "portal-comm") {
-		return badRequest("`surface` must be 'portal-floating' or 'portal-comm'.");
+	if (surface !== "portal-floating" && surface !== "portal-comm" && surface !== "web") {
+		return badRequest("`surface` must be 'portal-floating', 'portal-comm' or 'web'.");
 	}
 	if (!Array.isArray(messages) || messages.length === 0) {
 		return badRequest("`messages` must be a non-empty array.");
+	}
+
+	// The public web surface must pass a Turnstile token; the authed portal
+	// surfaces do not.
+	if (surface === "web") {
+		if (typeof turnstileToken !== "string" || turnstileToken.length === 0 || turnstileToken.length > 2048) {
+			return c.json({ error: { code: "FORBIDDEN", message: "Verification required." } }, { status: 403 });
+		}
+		const failure = await verifyTurnstile(c, turnstileToken);
+		if (failure) return failure;
 	}
 
 	const trimmed = messages
@@ -133,6 +228,7 @@ app.post("/ai/chat", async (c) => {
 		aiStream = (await c.env.AI.run(AI_MODEL, payload)) as unknown as ReadableStream;
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "AI inference failed.";
+		console.error("[AI_FAILED]", message, err instanceof Error ? err.stack : err);
 		return Response.json(
 			{ error: { code: "AI_FAILED", message } },
 			{ status: 502 },
@@ -152,12 +248,33 @@ app.post("/ai/chat", async (c) => {
 	// arrive.
 	(async () => {
 		try {
-			// Workers' ReadableStream is async-iterable; each chunk is an
-			// AiTextGenerationOutput `{ response?: string }`.
-			for await (const chunk of aiStream as unknown as AsyncIterable<{ response?: string }>) {
-				const delta = chunk?.response ?? "";
-				if (delta) {
-					await writer.write(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+			// The Workers AI stream for this model is a raw SSE byte stream in
+			// OpenAI chat-completion shape (`choices[0].delta.content`). Parse it
+			// and re-emit as our own compact `{ delta }` SSE so the frontend hook
+			// stays format-agnostic.
+			const decoder = new TextDecoder();
+			let buffer = "";
+			for await (const chunk of aiStream as unknown as AsyncIterable<Uint8Array | string>) {
+				buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+				let idx: number;
+				while ((idx = buffer.indexOf("\n\n")) !== -1) {
+					const raw = buffer.slice(0, idx).trim();
+					buffer = buffer.slice(idx + 2);
+					if (!raw.startsWith("data:")) continue;
+					const payload = raw.slice(5).trim();
+					if (payload === "[DONE]") continue;
+					try {
+						const obj = JSON.parse(payload) as {
+							choices?: { delta?: { content?: string } }[];
+							response?: string;
+						};
+						const delta = obj?.choices?.[0]?.delta?.content ?? obj?.response ?? "";
+						if (delta) {
+							await writer.write(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+						}
+					} catch {
+						// ignore a malformed event boundary
+					}
 				}
 			}
 			await writer.write(encoder.encode("data: [DONE]\n\n"));

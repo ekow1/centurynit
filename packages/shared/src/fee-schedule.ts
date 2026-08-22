@@ -9,14 +9,14 @@
  */
 
 export const DEFAULT_FEE_CENTS = {
-	appBase: 35_000,
-	appPerSchool: 10_000,
-	appDocVerify: 4_000,
-	appMatchReview: 3_000,
-	visaBase: 35_000,
-	visaBiometrics: 4_000,
-	visaTranslation: 3_000,
-	consultation: 7_500,
+	appBase: 13,
+	appPerSchool: 7,
+	appDocVerify: 7,
+	appMatchReview: 7,
+	visaBase: 13,
+	visaBiometrics: 7,
+	visaTranslation: 7,
+	consultation: 7,
 } as const;
 
 export function usdFromCents(cents: number): number {

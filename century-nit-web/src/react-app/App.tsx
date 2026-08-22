@@ -70,6 +70,7 @@ const PortalDocumentVault = lazyNamed(() => import("./pages/portal/PortalDocumen
 const PortalAppointments = lazyNamed(() => import("./pages/portal/PortalAppointments"), "PortalAppointments");
 const PortalSupport = lazyNamed(() => import("./pages/portal/PortalSupport"), "PortalSupport");
 const PortalPreDeparture = lazyNamed(() => import("./pages/portal/PortalPreDeparture"), "PortalPreDeparture");
+const PortalMfaSetup = lazyNamed(() => import("./pages/portal/PortalMfaSetup"), "PortalMfaSetup");
 
 
 /**
@@ -173,6 +174,7 @@ function AppShell() {
 						<Route path="appointments" element={<PortalAppointments />} />
 						<Route path="documents" element={<PortalDocumentVault />} />
 						<Route path="support" element={<PortalSupport />} />
+						<Route path="security" element={<PortalMfaSetup />} />
 						<Route path="messages" element={<Navigate to="/portal/home" replace />} />
 						{/* old nested paths */}
 						<Route path="*" element={<Navigate to="/portal/home" replace />} />

@@ -37,6 +37,7 @@ import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
 import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
+import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 
 /* ========== Profile ========== */
 
@@ -89,6 +90,21 @@ export function PortalProfile() {
 			})
 			.catch(() => {
 				/* leave null — the summary shows "-" until it can load */
+			});
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	const [mfaStatus, setMfaStatus] = useState<MfaEnrollmentStatus | null>(null);
+	useEffect(() => {
+		let active = true;
+		getMfaEnrollment()
+			.then((s) => {
+				if (active) setMfaStatus(s);
+			})
+			.catch(() => {
+				/* leave null — section shows "-" until it can load */
 			});
 		return () => {
 			active = false;
@@ -487,6 +503,47 @@ export function PortalProfile() {
 						/>
 						<DataRow label="Document review" value={a.docReviewStatus} />
 					</div>
+				</div>
+			</section>
+
+			<section className="mt-6">
+				<div className="profile-section__head profile-section__head--editable">
+					<span className="profile-section__num">06</span>
+					<h2 className="profile-section__title">Security</h2>
+					<Link
+						to="/portal/security"
+						className="profile-edit-btn"
+						aria-label="Manage two-factor authentication"
+					>
+						{mfaStatus?.enrolled ? "Manage" : "Set up"}
+					</Link>
+				</div>
+				<div className="profile-block">
+					<DataRow
+						label="Two-factor authentication"
+						value={
+							mfaStatus == null ? (
+								<span className="muted">-</span>
+							) : mfaStatus.enrolled ? (
+								<span>
+									Active
+									{mfaStatus.method
+										? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
+										: ""}
+								</span>
+							) : (
+								<span className="muted">Not set — recommended</span>
+							)
+						}
+					/>
+					<DataRow
+						label="Requirement"
+						value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
+					/>
+					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "40rem" }}>
+						Add a second step at sign-in to keep your application documents and payment history safe.
+						You can enable or manage it anytime from the Security page.
+					</p>
 				</div>
 			</section>
 

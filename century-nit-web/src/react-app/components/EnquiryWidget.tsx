@@ -1,23 +1,14 @@
-import { useState, useRef, useEffect, type FormEvent } from "react";
-import { company, formatDualCurrency, CONSULTATION_FEE } from "century-nit-core";
+import { useState, useRef, useEffect, useMemo, type FormEvent } from "react";
+import { company } from "century-nit-core";
 import { useEnquiry, type EnquiryTab } from "./EnquiryContext";
+import { useAiChat } from "../hooks/useAiChat";
+import { useTurnstile } from "../hooks/useTurnstile";
 
 type Msg = {
 	id: string;
 	sender: "ai" | "user";
 	text: string;
 };
-
-const AI_REPLIES = [
-	"Great question! We help students apply to universities in the UK, USA, Canada, Germany, Australia, and more. Which country interests you?",
-	`The consultation fee is ${formatDualCurrency(CONSULTATION_FEE)} and covers your initial assessment and eligibility review. You can start your journey from the Start Journey page.`,
-	"For most undergraduate programs you'll need your WASSCE/SSCE results, a passport, and proof of English proficiency (IELTS/TOEFL). For postgraduate, add your degree transcripts and two references.",
-	"Visa processing typically takes 4–8 weeks depending on the country. We prepare embassy-ready files and guide you through every step.",
-	"Yes! We have scholarship opportunities available - from merit-based to need-based awards. Check our Scholarships page or speak with a counselor for personalized options.",
-	"Our offices are in Accra (Mile 7 Aku Link, Pentecost Junction) and Kumasi (Santasi, adjacent the Post Office). You can also WhatsApp us directly from this chat!",
-	"We offer full journey support: education advice, admission documentation, study visa processing, and travel arrangements. We stay with you from start to finish.",
-	"IELTS requirements vary by university, but most ask for 6.5–7.0 overall. Some competitive programs may require 7.5. Would you like guidance on a specific university?",
-];
 
 const AI_SUGGESTIONS = [
 	"Which countries can I study in?",
@@ -123,14 +114,44 @@ function waLink(phone: string) {
 export function EnquiryWidget() {
 	const { open, setOpen, tab, setTab } = useEnquiry();
 	const [input, setInput] = useState("");
-	const [typing, setTyping] = useState(false);
-	const [aiMessages, setAiMessages] = useState<Msg[]>([
-		{
-			id: "ai-welcome",
-			sender: "ai",
-			text: "Hi! I'm your Century NIT assistant. Ask me about study destinations, programs, visas, scholarships, or anything about studying abroad. How can I help?",
-		},
-	]);
+
+	// AI chat — streamed from the Workers AI edge endpoint, gated by Turnstile
+	// for this public, unauthenticated surface.
+	const [sitekey, setSitekey] = useState<string>("");
+	useEffect(() => {
+		let cancelled = false;
+		fetch("/ai/config")
+			.then((r) => r.json())
+			.then((b: { turnstileSitekey?: string }) => {
+				if (!cancelled) setSitekey(b.turnstileSitekey ?? "");
+			})
+			.catch(() => {
+				// config endpoint unavailable — AI stays disabled
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	const aiChat = useAiChat("web");
+	const { containerRef: turnstileContainerRef, token: turnstileToken, reset: resetTurnstile } = useTurnstile(
+		sitekey,
+		"web_enquiry",
+		open && tab === "ai" && !!sitekey,
+	);
+	const aiMessages: Msg[] = useMemo(
+		() =>
+			aiChat.messages.map((m) => ({
+				id: m.id,
+				sender: m.role === "user" ? "user" : ("ai" as const),
+				text: m.content,
+			})),
+		[aiChat.messages],
+	);
+	const aiTyping = aiChat.typing;
+	const aiReady = !!sitekey;
+	const canSend = aiReady && !!turnstileToken && !aiTyping;
+
 	const [emailForm, setEmailForm] = useState({ name: "", email: "", message: "" });
 	const [emailSent, setEmailSent] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
@@ -139,30 +160,16 @@ export function EnquiryWidget() {
 		if (scrollRef.current) {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [aiMessages, typing, open]);
+	}, [aiMessages, aiTyping, open]);
 
 	function handleSubmit(e: FormEvent) {
 		e.preventDefault();
 		const trimmed = input.trim();
-		if (!trimmed) return;
-
-		const userMsg: Msg = {
-			id: `user-${Date.now().toString(36)}`,
-			sender: "user",
-			text: trimmed,
-		};
-		setAiMessages((prev) => [...prev, userMsg]);
+		if (!trimmed || !canSend) return;
 		setInput("");
-		setTyping(true);
-
-		window.setTimeout(() => {
-			const reply = AI_REPLIES[Math.floor(Math.random() * AI_REPLIES.length)];
-			setTyping(false);
-			setAiMessages((prev) => [
-				...prev,
-				{ id: `ai-${Date.now().toString(36)}`, sender: "ai", text: reply },
-			]);
-		}, 800 + Math.random() * 600);
+		void aiChat.send(trimmed, { cfTurnstileResponse: turnstileToken ?? "" });
+		// The token is single-use — mint a fresh one for the next message.
+		resetTurnstile();
 	}
 
 	function handleSuggestion(text: string) {
@@ -275,10 +282,9 @@ export function EnquiryWidget() {
 								<button
 									key={t}
 									type="button"
-									onClick={() => {
-										setTab(t);
-										setTyping(false);
-									}}
+								onClick={() => {
+									setTab(t);
+								}}
 									style={{
 										flex: 1,
 										padding: "0.4rem 0.5rem",
@@ -339,22 +345,22 @@ export function EnquiryWidget() {
 									</div>
 								))}
 
-								{typing ? (
-									<div style={{ display: "flex", justifyContent: "flex-start" }}>
-										<TypingDots />
-									</div>
-								) : null}
+							{aiTyping ? (
+								<div style={{ display: "flex", justifyContent: "flex-start" }}>
+									<TypingDots />
+								</div>
+							) : null}
 
-								{aiMessages.length <= 1 && !typing ? (
-									<div
-										style={{
-											display: "flex",
-											flexWrap: "wrap",
-											gap: "0.4rem",
-											paddingTop: "0.5rem",
-										}}
-									>
-										{AI_SUGGESTIONS.map((s) => (
+							{aiMessages.length <= 1 && !aiTyping ? (
+								<div
+									style={{
+										display: "flex",
+										flexWrap: "wrap",
+										gap: "0.4rem",
+										paddingTop: "0.5rem",
+									}}
+								>
+									{AI_SUGGESTIONS.map((s) => (
 											<button
 												key={s}
 												type="button"
@@ -383,56 +389,86 @@ export function EnquiryWidget() {
 								) : null}
 							</div>
 
-							<form
-								onSubmit={handleSubmit}
+						{!aiReady ? (
+							<div
 								style={{
 									padding: "0.6rem 0.75rem",
 									borderTop: "1px solid var(--border-light)",
-									display: "flex",
-									gap: "0.5rem",
 									background: "var(--card)",
+									textAlign: "center",
 								}}
 							>
-								<input
-									type="text"
-									value={input}
-									onChange={(e) => setInput(e.target.value)}
-									placeholder="Ask about studying abroad..."
+								<p className="muted" style={{ fontSize: "0.75rem" }}>
+									The AI assistant is being set up. Please try again shortly, or use the WhatsApp / Email tabs.
+								</p>
+							</div>
+						) : (
+							<>
+								<div
 									style={{
-										flex: 1,
-										border: "1px solid var(--border-light)",
-										borderRadius: "0",
-										padding: "0.5rem 0.75rem",
-										fontSize: "0.85rem",
-										background: "var(--background)",
-										color: "var(--foreground)",
-										outline: "none",
+										padding: "0.5rem 0.75rem 0",
+										borderTop: "1px solid var(--border-light)",
+										background: "var(--card)",
 									}}
-								/>
-								<button
-									type="submit"
-									disabled={!input.trim()}
-									style={{
-										width: "36px",
-										height: "36px",
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "center",
-										background: "var(--foreground)",
-										color: "var(--background)",
-										border: "none",
-										borderRadius: "0",
-										cursor: input.trim() ? "pointer" : "default",
-										opacity: input.trim() ? 1 : 0.4,
-										flexShrink: 0,
-										transition: "opacity 150ms",
-									}}
-									aria-label="Send message"
 								>
-									<SendIcon />
-								</button>
-							</form>
-						</>
+								<div ref={turnstileContainerRef} />
+								{!turnstileToken && (
+										<p className="muted" style={{ fontSize: "0.68rem", margin: "0.3rem 0 0" }}>
+											Complete the verification to send a message.
+										</p>
+									)}
+								</div>
+								<form
+									onSubmit={handleSubmit}
+									style={{
+										padding: "0.6rem 0.75rem",
+										display: "flex",
+										gap: "0.5rem",
+										background: "var(--card)",
+									}}
+								>
+									<input
+										type="text"
+										value={input}
+										onChange={(e) => setInput(e.target.value)}
+										placeholder="Ask about studying abroad..."
+										style={{
+											flex: 1,
+											border: "1px solid var(--border-light)",
+											borderRadius: "0",
+											padding: "0.5rem 0.75rem",
+											fontSize: "0.85rem",
+											background: "var(--background)",
+											color: "var(--foreground)",
+											outline: "none",
+										}}
+									/>
+									<button
+										type="submit"
+										disabled={!canSend}
+										style={{
+											width: "36px",
+											height: "36px",
+											display: "flex",
+											alignItems: "center",
+											justifyContent: "center",
+											background: "var(--foreground)",
+											color: "var(--background)",
+											border: "none",
+											borderRadius: "0",
+											cursor: canSend ? "pointer" : "default",
+											opacity: canSend ? 1 : 0.4,
+											flexShrink: 0,
+											transition: "opacity 150ms",
+										}}
+										aria-label="Send message"
+									>
+										<SendIcon />
+									</button>
+								</form>
+							</>
+						)}
+					</>
 					)}
 
 					{tab === "whatsapp" && (

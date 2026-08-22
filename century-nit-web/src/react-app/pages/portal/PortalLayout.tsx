@@ -19,6 +19,7 @@ import { NotificationBell } from "./NotificationBell";
 import { CommunicationCenter } from "./CommunicationCenter";
 import { PortalAppBar, PortalTabBar } from "./PortalMobileNav";
 import { OnboardingModal } from "../../components/portal/OnboardingModal";
+import { MfaPrompt } from "../../components/portal/MfaPrompt";
 
 /**
  * Sidebar groups — the four top-level dashboard pages.
@@ -164,6 +165,7 @@ export function PortalLayout() {
 					</div>
 				</header>
 				<div className="portal__content">
+					<MfaPrompt />
 					<Outlet />
 				</div>
 				<footer className="portal__bottombar">

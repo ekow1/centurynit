@@ -1,0 +1,53 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // Full Cloudflare API — 2,500+ endpoints via search() and execute()
+    "cloudflare": {
+      "type": "remote",
+      "url": "https://mcp.cloudflare.com/mcp",
+      "enabled": true
+    },
+    // Cloudflare documentation search
+    "cloudflare-docs": {
+      "type": "remote",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "enabled": true
+    },
+    // Workers Bindings (KV, R2, D1, Durable Objects, AI, etc.)
+    "cloudflare-bindings": {
+      "type": "remote",
+      "url": "https://bindings.mcp.cloudflare.com/mcp",
+      "enabled": true
+    },
+    // Workers Builds insights and management
+    "cloudflare-builds": {
+      "type": "remote",
+      "url": "https://builds.mcp.cloudflare.com/mcp",
+      "enabled": false
+    },
+    // Logs and analytics for debugging
+    "cloudflare-observability": {
+      "type": "remote",
+      "url": "https://observability.mcp.cloudflare.com/mcp",
+      "enabled": false
+    },
+    // Global internet traffic insights from Cloudflare Radar
+    "cloudflare-radar": {
+      "type": "remote",
+      "url": "https://radar.mcp.cloudflare.com/mcp",
+      "enabled": false
+    },
+    // Fetch web pages, convert to markdown, take screenshots
+    "cloudflare-browser": {
+      "type": "remote",
+      "url": "https://browser.mcp.cloudflare.com/mcp",
+      "enabled": false
+    },
+    // Agents SDK documentation search
+    "cloudflare-agents": {
+      "type": "remote",
+      "url": "https://agents.cloudflare.com/mcp",
+      "enabled": false
+    }
+  }
+}

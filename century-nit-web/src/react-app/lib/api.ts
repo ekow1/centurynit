@@ -58,3 +58,42 @@ export type AuthSettingsResponse = {
 export async function getAuthSettings(): Promise<AuthSettingsResponse> {
 	return apiFetch<AuthSettingsResponse>("/api/v1/auth-settings/portal");
 }
+
+/* ── MFA enrollment (optional for clients) ───────────────────────────────── */
+
+export type MfaEnrollmentStatus = {
+	enrolled: boolean;
+	method: string | null;
+	required: boolean;
+	availableMethods: string[];
+};
+
+export function getMfaEnrollment(): Promise<MfaEnrollmentStatus> {
+	return apiFetch<MfaEnrollmentStatus>("/api/v1/auth-settings/mfa");
+}
+
+export function enrollMfa(
+	method: "totp" | "email_otp",
+	password: string,
+): Promise<{
+	totpURI?: string;
+	backupCodes?: string[];
+	message?: string;
+	email?: string;
+}> {
+	return apiFetch("/api/v1/auth-settings/mfa/enroll", {
+		method: "POST",
+		body: JSON.stringify({ method, password }),
+	});
+}
+
+export function confirmMfaOtp(code: string): Promise<{ success: boolean }> {
+	return apiFetch("/api/v1/auth-settings/mfa/confirm", {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
+export function sendMfaOtp(): Promise<{ sent: boolean }> {
+	return apiFetch("/api/v1/auth-settings/mfa/send-otp", { method: "POST" });
+}

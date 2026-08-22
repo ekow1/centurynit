@@ -1,6 +1,6 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "century-nit-web",
+	"name": "century-nit",
 	"main": "./src/worker/index.ts",
 	"compatibility_date": "2025-10-08",
 	"compatibility_flags": ["nodejs_compat"],
@@ -12,7 +12,9 @@
 	},
 	"upload_source_maps": true,
 	"vars": {
-		"API_BASE_URL": "https://api.softclicksolutions.com"
+		"API_BASE_URL": "https://api.softclicksolutions.com",
+		"TURNSTILE_SITEKEY": "0x4AAAAAAEYOT8YNTyxQtopn",
+		"TURNSTILE_HOSTNAMES": "centurynit.softclicksolutions.com"
 	},
 	"ai": {
 		"binding": "AI"
@@ -21,6 +23,6 @@
 		"directory": "./dist/client",
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
-		"run_worker_first": ["/api/*"]
+		"run_worker_first": ["/api/*", "/ai/*"]
 	}
 }

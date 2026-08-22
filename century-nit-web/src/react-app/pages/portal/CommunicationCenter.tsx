@@ -8,6 +8,7 @@ import {
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
 import { useCommunicationChat } from "../../hooks/useCommunicationChat";
+import { useAiChat } from "../../hooks/useAiChat";
 
 /**
  * Context-Aware Communication Hub for the Century NIT Client Portal.
@@ -17,12 +18,12 @@ import { useCommunicationChat } from "../../hooks/useCommunicationChat";
  *   - OFFICER: the applicant's assigned stage officer, routed with
  *     `{ stageKey }` so the backend picks the conversation tied to the
  *     applicant's current journey stage.
- *   - AI: a scripted knowledge assistant (no backend — keyword matching
- *     against a small knowledge base).
+ *   - AI: a knowledge assistant streamed from the Workers AI edge endpoint
+ *     (`POST /ai/chat`) via `useAiChat`.
  *
  * Support + Officer use the shared `MessageList` + `Composer` from
  * `century-nit-chat-ui` and subscribe to real-time SSE via
- * `useCommunicationChat`. AI stays local-only.
+ * `useCommunicationChat`. AI is stateless (history replayed each turn).
  */
 
 type ActiveChannel = "support" | "officer" | "ai";
@@ -41,14 +42,6 @@ interface OfficerCard {
 	branch: string;
 	stageLabel: string;
 }
-
-const AI_KNOWLEDGE_BASE: Record<string, string> = {
-	visa: "For student visas, you will need a valid passport (with at least 6 months validity), your unconditional university offer letter, CAS/I-20 document, proof of funds covering tuition and 9 months living costs, TB test results (if applicable), and academic transcripts. Century NIT's visa specialists assist with complete mock interviews and documentation reviews.",
-	scholarship: "Century NIT works with partner universities that offer merit-based scholarships ranging from £1,500 to 50% tuition reduction. For top candidates with strong GPAs (First Class / Upper Second), we assist with Commonwealth, Chevening, and University Vice-Chancellor scholarship applications.",
-	documents: "Required standard documents: 1) International Passport Bio Data Page, 2) Degree/WASSCE Certificates, 3) Official Academic Transcripts, 4) Statement of Purpose / Personal Statement, 5) Two Academic/Professional Reference Letters, 6) Updated CV. You can upload these directly in your Document Vault.",
-	payment: "Century NIT accepts payments securely via Paystack in GHS or USD card/bank transfer. We offer flexible post-arrival installment payment plans for agency fees upon successful visa issuance.",
-	stage: "The Century NIT journey has 5 key stages: Stage I (Consultation & Eligibility), Stage II (School Package, Shortlisting & Application), Stage III (Visa Processing), Stage IV (Financial Settlement & Post-Arrival Plan), and Stage V (Pre-Departure & Travel Clearance).",
-};
 
 /** Narrow the CurrentContact union to an officer card, or null. */
 function officerCard(ctx: CommunicationContext | null): OfficerCard | null {
@@ -74,17 +67,22 @@ export function CommunicationCenter() {
 	const [draft, setDraft] = useState("");
 	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
 
-	// AI chat — local-only, scripted.
-	const [aiMessages, setAiMessages] = useState<AIMessage[]>([
-		{
-			id: "ai-welcome",
-			sender: "ai",
-			text: "Century NIT AI Advisor online. Inquire about university admissions, visa requirements, scholarships, or application stages.",
-			at: new Date().toISOString(),
-		},
-	]);
+	// AI chat — streamed from the Workers AI edge endpoint.
+	const aiChat = useAiChat("portal-comm", {
+		getContext: () => ({ stage: context?.activeStageKey ?? "" }),
+	});
+	const aiMessages: AIMessage[] = useMemo(
+		() =>
+			aiChat.messages.map((m) => ({
+				id: m.id,
+				sender: m.role === "user" ? "user" : "ai",
+				text: m.content,
+				at: m.at,
+			})),
+		[aiChat.messages],
+	);
+	const aiTyping = aiChat.typing;
 	const [aiDraft, setAiDraft] = useState("");
-	const [aiTyping, setAiTyping] = useState(false);
 
 	/* ── Load communication context (conversations + assigned officer) ── */
 	const loadContext = useCallback(async () => {
@@ -145,44 +143,14 @@ export function CommunicationCenter() {
 		void loadContext();
 	}, [chat, loadContext]);
 
-	/* ── AI assistant (scripted, local) ── */
+	/* ── AI assistant (streamed from Workers AI edge endpoint) ── */
 	const handleSendAi = useCallback((e?: FormEvent, customQuery?: string) => {
 		if (e) e.preventDefault();
 		const query = (customQuery || aiDraft).trim();
 		if (!query || aiTyping) return;
-
-		setAiMessages((prev) => [...prev, {
-			id: `user-${Date.now()}`,
-			sender: "user",
-			text: query,
-			at: new Date().toISOString(),
-		}]);
 		if (!customQuery) setAiDraft("");
-		setAiTyping(true);
-
-		setTimeout(() => {
-			const lower = query.toLowerCase();
-			let replyText = "Query received. For specific profile evaluations, our admissions and visa officers are available on the Support desk.";
-			if (lower.includes("visa") || lower.includes("embassy") || lower.includes("cas") || lower.includes("i-20")) {
-				replyText = AI_KNOWLEDGE_BASE.visa;
-			} else if (lower.includes("scholarship") || lower.includes("funding") || lower.includes("grant") || lower.includes("discount")) {
-				replyText = AI_KNOWLEDGE_BASE.scholarship;
-			} else if (lower.includes("doc") || lower.includes("passport") || lower.includes("transcript") || lower.includes("upload") || lower.includes("cv")) {
-				replyText = AI_KNOWLEDGE_BASE.documents;
-			} else if (lower.includes("pay") || lower.includes("fee") || lower.includes("cost") || lower.includes("invoice") || lower.includes("installment")) {
-				replyText = AI_KNOWLEDGE_BASE.payment;
-			} else if (lower.includes("stage") || lower.includes("process") || lower.includes("step") || lower.includes("journey") || lower.includes("timeline")) {
-				replyText = AI_KNOWLEDGE_BASE.stage;
-			}
-			setAiMessages((prev) => [...prev, {
-				id: `ai-${Date.now()}`,
-				sender: "ai",
-				text: replyText,
-				at: new Date().toISOString(),
-			}]);
-			setAiTyping(false);
-		}, 400);
-	}, [aiDraft, aiTyping]);
+		void aiChat.send(query);
+	}, [aiDraft, aiTyping, aiChat]);
 
 	/* ── Shared component callbacks (support + officer) ── */
 	const isOwn = useCallback(

@@ -45,93 +45,91 @@ const subscribeBody = z.object({
 export const newsletterRouter = new OpenAPIHono();
 
 /* ── POST /api/v1/newsletter/subscribe ──────────────────────────────────── */
-
+ 
 newsletterRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/subscribe",
-		tags: ["Newsletter"],
-		request: {
-			body: { content: { "application/json": { schema: subscribeBody } }, required: true },
-		},
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							ok: z.boolean(),
-							message: z.string(),
-						}),
-					},
-				},
-				description: "Confirmation email sent (or already subscribed)",
-			},
-		},
-	}),
-	async (c) => {
-		const { email, name } = c.req.valid("json");
-		const normalized = email.trim().toLowerCase();
-
-		const list = await ensureNewsletterList();
-		const [existing] = await db
-			.select()
-			.from(mailingListContacts)
-			.where(
-				and(
-					eq(mailingListContacts.mailingListId, list.id),
-					eq(mailingListContacts.email, normalized),
-				),
-			)
-			.limit(1);
-
-		// Already confirmed — idempotent, don't leak status to a stranger.
-		if (existing?.status === "confirmed") {
-			return c.json({
-				ok: true,
-				message: "You're already subscribed. Watch your inbox for our next issue.",
-			});
-		}
-
-		// Already unsubscribed — let them re-subscribe by sending a fresh confirm.
-		// (We don't auto-resubscribe; they must click the new link.)
-		const token = randomUUID();
-
-		if (existing) {
-			await db
-				.update(mailingListContacts)
-				.set({
-					status: "pending",
-					confirmToken: token,
-					confirmedAt: null,
-					unsubscribedAt: null,
-					name: name ?? existing.name,
-				})
-				.where(eq(mailingListContacts.id, existing.id));
-		} else {
-			await db.insert(mailingListContacts).values({
-				mailingListId: list.id,
-				email: normalized,
-				name: name ?? null,
-				status: "pending",
-				confirmToken: token,
-				confirmedAt: null,
-			});
-		}
-
-		// Fire-and-forget the confirmation email — a Resend hiccup must not
-		// turn a successful subscribe into a 500. The row exists; they can
-		// retry from the popup, and staff can see the pending contact.
-		const confirmUrl = `${env.FRONTEND_URL}/newsletter/confirm?token=${token}`;
-		void sendConfirmationEmail(normalized, confirmUrl).catch((err) => {
-			console.error(`[newsletter] confirmation email failed for ${normalized}:`, err);
-		});
-
-		return c.json({
-			ok: true,
-			message:
-				"Thanks! Check your inbox for a confirmation link to finish subscribing.",
-		});
-	},
+  createRoute({
+    method: "post",
+    path: "/subscribe",
+    tags: ["Newsletter"],
+    request: {
+      body: { content: { "application/json": { schema: subscribeBody } }, required: true },
+    },
+    responses: {
+      200: {
+        content: {
+          "application/json": {
+            schema: z.object({
+              ok: z.boolean(),
+              message: z.string(),
+            }),
+          },
+        },
+        description: "Subscribed and added as lead",
+      },
+    },
+  }),
+  async (c) => {
+    const { email, name } = c.req.valid("json");
+    const normalized = email.trim().toLowerCase();
+ 
+    const list = await ensureNewsletterList();
+    const [existing] = await db
+      .select()
+      .from(mailingListContacts)
+      .where(
+        and(
+          eq(mailingListContacts.mailingListId, list.id),
+          eq(mailingListContacts.email, normalized),
+        ),
+      )
+      .limit(1);
+ 
+    if (existing?.status === "confirmed") {
+      return c.json({
+        ok: true,
+        message: "You're already subscribed.",
+      });
+    }
+ 
+    // Confirm the subscription (set status to confirmed)
+    if (existing) {
+      await db
+        .update(mailingListContacts)
+        .set({
+          status: "confirmed",
+          confirmedAt: new Date(),
+          unsubscribedAt: null,
+          confirmToken: null,
+          name: name ?? existing.name,
+        })
+        .where(eq(mailingListContacts.id, existing.id));
+    } else {
+      await db.insert(mailingListContacts).values({
+        mailingListId: list.id,
+        email: normalized,
+        name: name ?? null,
+        status: "confirmed",
+        confirmedAt: new Date(),
+        unsubscribedAt: null,
+        confirmToken: null,
+      });
+    }
+ 
+    // Create a lead for this subscriber
+    await db.insert(leads).values({
+      email: normalized,
+      name: name ?? null,
+      source: "newsletter",
+      status: "new",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+ 
+    return c.json({
+      ok: true,
+      message: "You're subscribed!",
+    });
+  },
 );
 
 /* ── GET /api/v1/newsletter/confirm?token=... ───────────────────────────── */

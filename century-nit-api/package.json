@@ -17,6 +17,7 @@
 		"test": "vitest run",
 		"test:watch": "vitest",
 		"seed:staff": "tsx src/scripts/seed-staff.ts",
+		"seed:lookups": "tsx src/scripts/seed-lookups.ts",
 		"worker": "tsx src/worker/main.ts",
 		"worker:start": "node dist/worker/main.js"
 	},

@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { getCookie } from "hono/cookie";
 
 /**
  * The Turnstile secret is a Worker secret (`wrangler secret put TURNSTILE_SECRET`),
@@ -37,8 +38,8 @@ interface IncomingMessage {
 
 type Surface = "portal-floating" | "portal-comm" | "web";
 
-/** Action string embedded in the public web widget and verified server-side. */
-const WEB_ACTION = "web_enquiry";
+/** Action string embedded in the first-visit Turnstile widget and verified server-side. */
+const WEB_ACTION = "site_verify";
 
 /** Keep only the most recent turns so the prompt fits the model's context window. */
 const MAX_HISTORY = 8;
@@ -47,39 +48,25 @@ const MAX_MESSAGE_CHARS = 2000;
 /** Cap the assistant's response length. */
 const MAX_TOKENS = 512;
 
-const COMPANY_FACTS = [
-	"Century NIT Consult is a licensed Ghanaian immigration & education consultancy, founded in 2011, based in Accra and Kumasi.",
-	"Offices: Accra — Mile 7 Aku Link, Pentecost Junction; Kumasi — Santasi, adjacent the Post Office. Hours: Mon–Fri 8am–5pm, Sat 9am–12pm.",
-	"Study destinations include the UK, USA, Canada, Germany, Australia and others.",
-	"Standard documents: international passport, degree/WASSCE certificates, official transcripts, statement of purpose, two reference letters, and an updated CV.",
-	"IELTS: most universities ask for 6.5 overall (no band below 6.0); competitive programmes may require 7.0–7.5.",
-	"Visa processing typically takes 4–8 weeks depending on the country.",
-	"Payments are taken securely via Paystack in GHS or USD; flexible post-arrival installment plans are available for agency fees after successful visa issuance.",
-	"The applicant journey has 5 stages: I Consultation & Eligibility, II School Package/Shortlisting/Application, III Visa Processing, IV Financial Settlement & Post-Arrival, V Pre-Departure & Travel Clearance.",
-].join(" ");
-
 const SYSTEM_PROMPTS: Record<Surface, string> = {
 	"portal-floating": [
-		"You are the Century NIT AI Assistant inside an applicant's portal chat widget.",
+		"You are the AI Assistant for Century NIT Consult, a Ghanaian immigration & education consultancy.",
+		"Concentrate ONLY on Century NIT — its study destinations, programmes, document requirements, IELTS, visa processing and the applicant journey. Every answer must be specific to Century NIT; do not give generic study-abroad advice or mention other agencies.",
 		"Answer concisely (2–4 short sentences), in a friendly, professional tone.",
-		"You help with general questions about study destinations, programmes, document requirements, IELTS, timelines and the application journey.",
-		"You do NOT have access to this user's account, documents, invoices or booking details — for anything account-specific, tell them to use the Consultant or Support tabs in the same chat, or their portal pages.",
-		"Stick to facts about Century NIT and studying abroad. If unsure, say so and suggest speaking with a consultant.",
-		`Company facts: ${COMPANY_FACTS}`,
+		"You do NOT have access to this user's account, documents, invoices or booking details — for anything account-specific, tell them to use the Consultant or Support tabs in this chat, or their portal pages.",
+		"If you are not certain of a specific Century NIT detail (exact fees, deadlines, university-specific requirements), say so and suggest speaking with a consultant rather than guessing.",
 	].join(" "),
 	"portal-comm": [
-		"You are CENTURY AI, the knowledge assistant in the applicant Communication Hub.",
-		"Answer concisely and accurately about university admissions, visa requirements, scholarships, required documents, payments and the application stages.",
-		"You are a knowledge assistant only — you cannot see this user's case, route messages, or reach staff. For anything needing a person, tell the user to switch to the SUPPORT or OFFICER channel in the same hub.",
-		"Stay on-brand and factual; never invent fees, deadlines or university-specific requirements you are not sure of.",
-		`Company facts: ${COMPANY_FACTS}`,
+		"You are CENTURY AI, the knowledge assistant for Century NIT Consult in the applicant Communication Hub.",
+		"Concentrate ONLY on Century NIT — university admissions, visa requirements, scholarships, required documents, payments and the application stages as Century NIT handles them. Do not give generic advice or mention other providers.",
+		"Answer concisely and accurately. You are a knowledge assistant only — you cannot see this user's case, route messages, or reach staff. For anything needing a person, tell the user to switch to the SUPPORT or OFFICER channel in this hub.",
+		"Never invent fees, deadlines or university-specific requirements you are not sure of; if unsure, say so and point them to a consultant.",
 	].join(" "),
 	web: [
-		"You are the Century NIT website assistant for prospective students.",
-		"Answer concisely (2–4 short sentences), warm and helpful, about study destinations, programmes, document requirements, IELTS, visa processing, scholarships, fees and timelines.",
-		"You cannot see any account. Encourage the visitor to start their journey (book a consultation / start the journey) or use the WhatsApp / Email tabs for anything specific.",
-		"Stay on-brand and factual; never invent fees, deadlines or university-specific requirements you are not sure of.",
-		`Company facts: ${COMPANY_FACTS}`,
+		"You are the website assistant for Century NIT Consult, a Ghanaian immigration & education consultancy, helping prospective students.",
+		"Concentrate ONLY on Century NIT — its study destinations, programmes, document requirements, IELTS, visa processing, scholarships, fees and timelines. Do not give generic study-abroad advice or mention other agencies.",
+		"Answer concisely (2–4 short sentences), warm and helpful. You cannot see any account. Encourage the visitor to start their journey (book a consultation / start the journey) or use the WhatsApp / Email tabs for anything specific.",
+		"Never invent fees, deadlines or university-specific requirements you are not sure of; if unsure, say so and invite them to contact Century NIT.",
 	].join(" "),
 };
 
@@ -89,11 +76,114 @@ function badRequest(message: string) {
 	return Response.json({ error: { code: "BAD_REQUEST", message } }, { status: 400 });
 }
 
+/**
+ * Signed "visitor verified" cookie. Issued once after a real Turnstile token is
+ * validated at `POST /turnstile/verify`, then trusted by `POST /ai/chat` for the
+ * public `web` surface so the chat itself doesn't re-challenge on every message.
+ *
+ * The value is `base64url(payload).base64url(hmac-sha256(payload))`, signed with
+ * the Turnstile secret. Stateless, no KV/D1 needed.
+ */
+const VERIFY_COOKIE = "cnit_v";
+const VERIFY_MAX_AGE = 60 * 60 * 24 * 30; // 30 days, in seconds
+
+function b64urlEncode(bytes: ArrayBuffer | Uint8Array): string {
+	const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+	let binary = "";
+	for (const b of view) binary += String.fromCharCode(b);
+	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(value: string): Uint8Array {
+	const padded = value.length % 4 ? value + "=".repeat(4 - (value.length % 4)) : value;
+	const binary = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+	const out = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+	return out;
+}
+
+async function hmacKey(secret: string): Promise<CryptoKey> {
+	return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+		"sign",
+		"verify",
+	]);
+}
+
+async function issueVerified(secret: string): Promise<string> {
+	const payload = b64urlEncode(encoder.encode(JSON.stringify({ exp: Date.now() + VERIFY_MAX_AGE * 1000 })));
+	const key = await hmacKey(secret);
+	const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+	return `${payload}.${b64urlEncode(sig)}`;
+}
+
+async function isVerified(value: string | undefined, secret: string | undefined): Promise<boolean> {
+	if (!value || !secret) return false;
+	const dot = value.lastIndexOf(".");
+	if (dot < 1) return false;
+	const payload = value.slice(0, dot);
+	const sig = value.slice(dot + 1);
+	if (!payload || !sig) return false;
+	try {
+		const key = await hmacKey(secret);
+		const ok = await crypto.subtle.verify("HMAC", key, b64urlDecode(sig), encoder.encode(payload));
+		if (!ok) return false;
+		const parsed = JSON.parse(new TextDecoder().decode(b64urlDecode(payload))) as { exp?: number };
+		return typeof parsed.exp === "number" && parsed.exp > Date.now();
+	} catch {
+		return false;
+	}
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 /** Public config for the frontend (sitekey only — the secret stays server-side). */
 app.get("/ai/config", (c) => {
 	return Response.json({ turnstileSitekey: c.env.TURNSTILE_SITEKEY ?? "" });
+});
+
+/** Has this visitor already passed the first-visit Turnstile gate? */
+app.get("/turnstile/status", async (c) => {
+	const verified = await isVerified(getCookie(c, VERIFY_COOKIE), c.env.TURNSTILE_SECRET);
+	return Response.json({ verified });
+});
+
+/**
+ * First-visit verification: validate a fresh Turnstile token, then set a signed
+ * HttpOnly cookie so the rest of the public site (including `POST /ai/chat` for
+ * the `web` surface) trusts the visitor without re-challenging.
+ */
+app.post("/turnstile/verify", async (c) => {
+	const secret = c.env.TURNSTILE_SECRET;
+	if (!secret) {
+		return Response.json(
+			{ error: { code: "TURNSTILE_NOT_CONFIGURED", message: "Bot protection is not configured yet." } },
+			{ status: 503 },
+		);
+	}
+
+	let body: unknown;
+	try {
+		body = await c.req.json();
+	} catch {
+		return badRequest("Request body must be valid JSON.");
+	}
+	const token = (body as { cfTurnstileResponse?: string } | null)?.cfTurnstileResponse;
+	if (typeof token !== "string" || token.length === 0 || token.length > 2048) {
+		return c.json({ error: { code: "FORBIDDEN", message: "Verification required." } }, { status: 403 });
+	}
+
+	const failure = await verifyTurnstile(c, token);
+	if (failure) return failure;
+
+	const value = await issueVerified(secret);
+	return Response.json(
+		{ ok: true },
+		{
+			headers: {
+				"Set-Cookie": `${VERIFY_COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${VERIFY_MAX_AGE}`,
+			},
+		},
+	);
 });
 
 /**
@@ -172,7 +262,6 @@ app.post("/ai/chat", async (c) => {
 	const surface = (body as { surface?: string } | null)?.surface;
 	const messages = (body as { messages?: IncomingMessage[] } | null)?.messages;
 	const context = (body as { context?: Record<string, string> } | null)?.context;
-	const turnstileToken = (body as { cfTurnstileResponse?: string } | null)?.cfTurnstileResponse;
 
 	if (surface !== "portal-floating" && surface !== "portal-comm" && surface !== "web") {
 		return badRequest("`surface` must be 'portal-floating', 'portal-comm' or 'web'.");
@@ -181,14 +270,16 @@ app.post("/ai/chat", async (c) => {
 		return badRequest("`messages` must be a non-empty array.");
 	}
 
-	// The public web surface must pass a Turnstile token; the authed portal
-	// surfaces do not.
+	// The public web surface must have passed the first-visit Turnstile gate
+	// (signed `cnit_v` cookie). The authed portal surfaces do not.
 	if (surface === "web") {
-		if (typeof turnstileToken !== "string" || turnstileToken.length === 0 || turnstileToken.length > 2048) {
-			return c.json({ error: { code: "FORBIDDEN", message: "Verification required." } }, { status: 403 });
+		const verified = await isVerified(getCookie(c, VERIFY_COOKIE), c.env.TURNSTILE_SECRET);
+		if (!verified) {
+			return c.json(
+				{ error: { code: "VERIFICATION_REQUIRED", message: "Please complete the verification first." } },
+				{ status: 403 },
+			);
 		}
-		const failure = await verifyTurnstile(c, turnstileToken);
-		if (failure) return failure;
 	}
 
 	const trimmed = messages

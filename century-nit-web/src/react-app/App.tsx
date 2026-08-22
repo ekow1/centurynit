@@ -4,6 +4,7 @@ import { AppStateProvider } from "./context/AppState";
 import { NotifierProvider } from "./components/notifier/Notifier";
 import { EnquiryWidget } from "./components/EnquiryWidget";
 import { NewsletterPopup } from "./components/NewsletterPopup";
+import { TurnstileGate } from "./components/TurnstileGate";
 import { EnquiryProvider } from "./components/EnquiryContext";
 import { Nav } from "./components/layout/Nav";
 import { Footer } from "./components/layout/Footer";
@@ -190,6 +191,7 @@ function AppShell() {
 				</Suspense>
 			</main>
 			{!minimal && <Footer />}
+			{!minimal && <TurnstileGate />}
 			{!minimal && <EnquiryWidget />}
 			{!minimal && <NewsletterPopup />}
 			{!minimal && <MobileTabBar />}

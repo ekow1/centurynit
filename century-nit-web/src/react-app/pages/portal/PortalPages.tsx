@@ -1789,7 +1789,7 @@ export function PortalConsultation() {
 
 	const hasActiveCase = Boolean(liveConsultation || booking.confirmationId);
 	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
-	const activeOfficer = liveConsultation?.assignedOfficerName ?? booking.consultantName;
+	const activeOfficer = liveConsultation?.assignedOfficerName;
 	const activeOutcome = liveConsultation?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
 	const activeNotes = liveConsultation?.assessmentResult?.notes ?? booking.eligibilityNote;
 

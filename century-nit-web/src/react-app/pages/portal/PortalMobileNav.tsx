@@ -147,14 +147,10 @@ export function PortalTabBar() {
 						>
 							Profile settings
 						</Link>
-						{/* Support has no tab of its own — it has to be reachable here */}
-						<Link
-							to="/portal/support"
-							className="nav__dropdown-link"
-							onClick={() => setProfileOpen(false)}
-						>
-							Get help
-						</Link>
+						{/* Support is now the floating chat (bottom-right), not a page. */}
+						<span className="nav__dropdown-link muted" style={{ cursor: "default" }}>
+							Get help — use the chat button ↘
+						</span>
 						<Link to="/" className="nav__dropdown-link" onClick={() => setProfileOpen(false)}>
 							Public site
 						</Link>

@@ -69,7 +69,6 @@ const PortalJourney = lazyNamed(portalSections, "PortalJourney");
 const PortalProfile = lazyNamed(portalSections, "PortalProfile");
 const PortalDocumentVault = lazyNamed(() => import("./pages/portal/PortalDocumentVault"), "PortalDocumentVault");
 const PortalAppointments = lazyNamed(() => import("./pages/portal/PortalAppointments"), "PortalAppointments");
-const PortalSupport = lazyNamed(() => import("./pages/portal/PortalSupport"), "PortalSupport");
 const PortalPreDeparture = lazyNamed(() => import("./pages/portal/PortalPreDeparture"), "PortalPreDeparture");
 const PortalMfaSetup = lazyNamed(() => import("./pages/portal/PortalMfaSetup"), "PortalMfaSetup");
 
@@ -174,7 +173,8 @@ function AppShell() {
 						    the API, unlike the simulated journey around them. */}
 						<Route path="appointments" element={<PortalAppointments />} />
 						<Route path="documents" element={<PortalDocumentVault />} />
-						<Route path="support" element={<PortalSupport />} />
+						{/* Support page removed — the floating CommunicationCenter chat is the support channel now. */}
+						<Route path="support" element={<Navigate to="/portal/home" replace />} />
 						<Route path="security" element={<PortalMfaSetup />} />
 						<Route path="messages" element={<Navigate to="/portal/home" replace />} />
 						{/* old nested paths */}

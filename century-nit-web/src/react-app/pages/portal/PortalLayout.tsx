@@ -13,7 +13,6 @@ import {
 	IconRoute,
 	IconUser,
 	IconWallet,
-	IconLifebuoy,
 } from "../../components/ui/Icons";
 import { NotificationBell } from "./NotificationBell";
 import { CommunicationCenter } from "./CommunicationCenter";
@@ -32,7 +31,7 @@ const MAIN_NAV = [
 	{ to: "/portal/appointments", label: "Appointments", blurb: "Book, reschedule, join", Icon: IconRoute },
 	{ to: "/portal/documents", label: "Documents", blurb: "Upload & verification", Icon: IconDoc },
 	{ to: "/portal/financial", label: "Financial", blurb: "Payments & balances", Icon: IconWallet },
-	{ to: "/portal/support", label: "Support", blurb: "Get help from the team", Icon: IconLifebuoy },
+	// Support is now the floating CommunicationCenter chat (bottom-right), not a page.
 ] as const;
 
 /** Stage pages are sub-pages of the Journey hub */

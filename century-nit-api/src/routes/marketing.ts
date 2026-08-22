@@ -12,6 +12,7 @@ import {
 import { requireAuth, requireStaff, type AuthVariables } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
+import { env } from "../env.js";
 
 /* ── Schemas ─────────────────────────────────────────────────────────────── */
 
@@ -364,10 +365,15 @@ marketingRouter.openapi(
 			const contacts = await db
 				.select()
 				.from(mailingListContacts)
-				.where(eq(mailingListContacts.mailingListId, campaign.mailingListId));
+				.where(
+					and(
+						eq(mailingListContacts.mailingListId, campaign.mailingListId),
+						eq(mailingListContacts.status, "confirmed"),
+					),
+				);
 
 			if (contacts.length === 0) {
-				throw new HttpError(400, "EMPTY_LIST", "Mailing list has no contacts");
+				throw new HttpError(400, "EMPTY_LIST", "Mailing list has no confirmed subscribers");
 			}
 
 			let delivered = 0;
@@ -382,9 +388,17 @@ marketingRouter.openapi(
 					.replace(/\{\{name\}\}/g, contactName)
 					.replace(/\{\{Name\}\}/g, contactName);
 
+				const unsubscribeUrl = contact.confirmToken
+					? `${env.FRONTEND_URL}/newsletter/unsubscribe?token=${contact.confirmToken}`
+					: null;
+				const footerNote = unsubscribeUrl
+					? `You're receiving this because you subscribed to Century NIT updates. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`
+					: undefined;
+
 				const html = emailLayout({
 					title: personalizedSubject,
 					bodyHtml: personalizedBody,
+					footerNote,
 				});
 
 				try {

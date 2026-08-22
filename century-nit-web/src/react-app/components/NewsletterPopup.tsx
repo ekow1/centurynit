@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { API_PREFIX } from "century-nit-shared";
+import { apiFetch, ApiError } from "../lib/api";
 
 const STORAGE_KEY = "century-nit-newsletter";
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -37,7 +39,10 @@ function saveState(s: StoredState) {
 export function NewsletterPopup() {
 	const [visible, setVisible] = useState(false);
 	const [email, setEmail] = useState("");
+	const [name, setName] = useState("");
 	const [submitted, setSubmitted] = useState(false);
+	const [submitting, setSubmitting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const [state, setState] = useState<StoredState | null>(() => loadState());
 
 	useEffect(() => {
@@ -55,6 +60,7 @@ export function NewsletterPopup() {
 
 	const dismiss = useCallback(() => {
 		setVisible(false);
+		setError(null);
 		if (state) {
 			const updated = { ...state, lastDismissed: Date.now() };
 			setState(updated);
@@ -62,20 +68,47 @@ export function NewsletterPopup() {
 		}
 	}, [state]);
 
-	const handleSubmit = (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!email.trim()) return;
-		setSubmitted(true);
-		if (state) {
-			const updated = { ...state, subscribed: true };
-			setState(updated);
-			saveState(updated);
+		if (!email.trim() || submitting) return;
+		setSubmitting(true);
+		setError(null);
+		try {
+			const res = await apiFetch<{ ok: boolean; message: string }>(
+				`${API_PREFIX}/newsletter/subscribe`,
+				{
+					method: "POST",
+					body: JSON.stringify({ email: email.trim(), name: name.trim() || undefined }),
+				},
+			);
+			setSubmitted(true);
+			if (state) {
+				const updated = { ...state, subscribed: true };
+				setState(updated);
+				saveState(updated);
+			}
+			void res;
+			setTimeout(() => {
+				setVisible(false);
+				setSubmitted(false);
+				setEmail("");
+				setName("");
+			}, 4000);
+		} catch (err) {
+			if (err instanceof ApiError) {
+				// 400 with EMAIL_NOT_CONFIGURED, 429 rate limit, etc.
+				try {
+					const parsed = JSON.parse(err.message);
+					setError(parsed?.message ?? parsed?.error ?? "Something went wrong. Please try again.");
+				} catch {
+					setError("Something went wrong. Please try again.");
+				}
+			} else {
+				setError("Network error. Please check your connection and try again.");
+			}
+		} finally {
+			setSubmitting(false);
 		}
-		setTimeout(() => {
-			setVisible(false);
-			setSubmitted(false);
-			setEmail("");
-		}, 3500);
 	};
 
 	if (!visible) return null;
@@ -95,8 +128,11 @@ export function NewsletterPopup() {
 				{submitted ? (
 					<div className="newsletter-popup__success">
 						<div className="newsletter-popup__success-icon">&#10003;</div>
-						<h3>You're subscribed!</h3>
-						<p>Watch your inbox for intake updates, scholarship alerts, and study abroad tips.</p>
+						<h3>Check your inbox</h3>
+						<p>
+							We sent a confirmation link to <strong>{email}</strong>. Click it to finish
+							subscribing — and watch for intake updates, scholarship alerts, and study abroad tips.
+						</p>
 					</div>
 				) : (
 					<>
@@ -127,6 +163,14 @@ export function NewsletterPopup() {
 
 						<form className="newsletter-popup__form" onSubmit={handleSubmit}>
 							<input
+								type="text"
+								className="newsletter-popup__input"
+								placeholder="Your name (optional)"
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+								autoComplete="name"
+							/>
+							<input
 								type="email"
 								className="newsletter-popup__input"
 								placeholder="Enter your email address"
@@ -134,11 +178,18 @@ export function NewsletterPopup() {
 								onChange={(e) => setEmail(e.target.value)}
 								required
 								autoFocus
+								autoComplete="email"
 							/>
-							<button type="submit" className="newsletter-popup__btn">
-								Subscribe Now
+							<button type="submit" className="newsletter-popup__btn" disabled={submitting}>
+								{submitting ? "Subscribing…" : "Subscribe Now"}
 							</button>
 						</form>
+
+						{error && (
+							<p className="newsletter-popup__error" role="alert">
+								{error}
+							</p>
+						)}
 
 						<p className="newsletter-popup__fine-print">
 							No spam. Unsubscribe anytime. We respect your privacy.

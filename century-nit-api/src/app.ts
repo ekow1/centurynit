@@ -36,6 +36,7 @@ import { chatRouter } from "./routes/chat.js";
 import { meCommunicationRouter, communicationRouter } from "./routes/communication.js";
 import { authSettings } from "./routes/auth-settings.js";
 import { marketingRouter } from "./routes/marketing.js";
+import { newsletterRouter } from "./routes/newsletter.js";
 import { eventsRouter } from "./routes/events.js";
 import { pushRouter } from "./routes/push.js";
 
@@ -155,6 +156,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
 	app.route(`${API_PREFIX}/events`, eventsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
+	app.route(`${API_PREFIX}/newsletter`, newsletterRouter);
 	app.route(`${API_PREFIX}/push`, pushRouter);
 
 

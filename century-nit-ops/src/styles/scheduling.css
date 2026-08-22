@@ -217,6 +217,55 @@
 
 /* ── Calendar connection (employee settings) ── */
 
+/* Calendar feed (employee settings) */
+.cal-feed {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: var(--hairline);
+}
+
+.cal-feed__copy {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.cal-feed__copy .input {
+    flex: 1;
+}
+
+.cal-feed__warn {
+    margin-top: 0.25rem;
+}
+
+.cal-feed__steps {
+    list-style: disc inside;
+    margin: 0.5rem 0;
+    padding-left: 1rem;
+    font-size: var(--text-sm, 0.875rem);
+    color: var(--text-muted, #666);
+}
+
+.cal-feed__replace,
+.cal-feed__add {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.cal-feed__replace input,
+.cal-feed__add input {
+    width: 100%;
+}
+
+.cal-feed__replace button,
+.cal-feed__add button {
+    align-self: flex-start;
+}
+
+
 .cal-state {
 	display: flex;
 	align-items: center;

@@ -1743,10 +1743,19 @@ export const mailingListContacts = pgTable("mailing_list_contacts", {
 	mailingListId: uuid("mailing_list_id").notNull().references(() => mailingLists.id, { onDelete: "cascade" }),
 	name: varchar("name", { length: 255 }),
 	email: varchar("email", { length: 255 }).notNull(),
+	// Newsletter double opt-in: pending → confirmed (after clicking confirm link)
+	// → unsubscribed (after clicking unsubscribe in a campaign). Staff-imported
+	// contacts default to "confirmed" so they're sendable immediately.
+	status: varchar("status", { length: 16 }).notNull().default("confirmed"),
+	confirmToken: uuid("confirm_token"),
+	confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+	unsubscribedAt: timestamp("unsubscribed_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
 	byList: index("mlc_list_idx").on(t.mailingListId),
 	byEmail: index("mlc_email_idx").on(t.email),
+	byConfirmToken: index("mlc_confirm_token_idx").on(t.confirmToken),
+	uniqListEmail: uniqueIndex("mlc_list_email_uniq").on(t.mailingListId, t.email),
 }));
 
 export const emailTemplate = pgTable("email_templates", {

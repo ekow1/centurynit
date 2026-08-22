@@ -11,6 +11,7 @@ import { Footer } from "./components/layout/Footer";
 import { MobileTabBar } from "./components/layout/MobileTabBar";
 import { Home } from "./pages/Home";
 import { StartJourney } from "./pages/StartJourney";
+import { NewsletterConfirm, NewsletterUnsubscribe } from "./pages/NewsletterStatus";
 import { RequireAuth } from "./pages/apply/RequireAuth";
 
 /**
@@ -134,6 +135,10 @@ function AppShell() {
 					<Route path="/blog/:id" element={<BlogPost />} />
 					<Route path="/faqs" element={<FAQs />} />
 					<Route path="/contact" element={<Navigate to="/" replace />} />
+
+					{/* Newsletter double opt-in — token in the query string is the credential. */}
+					<Route path="/newsletter/confirm" element={<NewsletterConfirm />} />
+					<Route path="/newsletter/unsubscribe" element={<NewsletterUnsubscribe />} />
 
 					{/* Single entry into the journey */}
 					<Route path="/start" element={<StartJourney />} />

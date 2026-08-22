@@ -453,16 +453,7 @@ function FeedSection({
 			</>
 		) : (
 			<form className="cal-feed__add" onSubmit={save}>
-				<p className="ops-panel__muted">
-					Paste your calendar's read-only secret iCal address so your external meetings
-					block the slots applicants can book. Works with Google, Outlook and Apple — no
-					account connection needed.
-				</p>
-					<ul className="cal-feed__steps">
-						<li><strong>Google:</strong> Calendar settings → Integrate calendar → “Secret address in iCal format”</li>
-						<li><strong>Outlook/Office 365:</strong> Share → Publish calendar → .ics link</li>
-						<li><strong>Apple:</strong> Share → public calendar URL</li>
-					</ul>
+
 					<input
 						type="url"
 						className="input input--full-border"

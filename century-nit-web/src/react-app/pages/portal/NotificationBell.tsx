@@ -93,6 +93,10 @@ export function NotificationBell() {
 	function handleNotifClick(id: string, link?: string) {
 		markNotificationRead(id);
 		setOpen(false);
+		if (link === "/portal/chat" || link === "/portal/support") {
+			const channel = link === "/portal/support" ? "support" : "officer";
+			window.dispatchEvent(new CustomEvent("open-chat", { detail: { channel } }));
+		}
 		if (link) nav(normalizeLink(link));
 	}
 

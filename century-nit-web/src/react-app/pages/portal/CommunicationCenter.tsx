@@ -134,6 +134,17 @@ export function CommunicationCenter() {
 		}
 	}, [open, activeChannel, chat.conversationId, handleSelectChannel]);
 
+	useEffect(() => {
+		const handler = (e: CustomEvent<{ channel?: ActiveChannel }>) => {
+			setOpen(true);
+			if (e.detail?.channel) {
+				void handleSelectChannel(e.detail.channel);
+			}
+		};
+		window.addEventListener("open-chat", handler as EventListener);
+		return () => window.removeEventListener("open-chat", handler as EventListener);
+	}, [handleSelectChannel]);
+
 	/* ── Send message (support + officer) ── */
 	const handleSend = useCallback(async (text: string) => {
 		if (!text.trim()) return;

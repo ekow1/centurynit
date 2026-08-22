@@ -28,11 +28,16 @@ type Campaign = {
 	createdAt: string;
 };
 
+type ContactStatus = "pending" | "confirmed" | "unsubscribed";
+
 type Contact = {
 	id: string;
 	mailingListId: string;
 	name?: string;
 	email: string;
+	status: ContactStatus;
+	confirmedAt?: string | null;
+	unsubscribedAt?: string | null;
 	createdAt: string;
 };
 
@@ -41,6 +46,11 @@ type MailingList = {
 	name: string;
 	description?: string;
 	recipientCount?: number;
+	contactCount?: number;
+	pendingCount?: number;
+	confirmedCount?: number;
+	unsubscribedCount?: number;
+	isNewsletter?: boolean;
 	contacts?: Contact[];
 	createdAt: string;
 };
@@ -64,6 +74,13 @@ export function EnterpriseCampaigns() {
 	const [campaigns, setCampaigns] = useState<Campaign[]>([]);
 	const [mailingLists, setMailingLists] = useState<MailingList[]>([]);
 	const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+
+	const [contacts, setContacts] = useState<Contact[]>([]);
+	const [contactsTotal, setContactsTotal] = useState(0);
+	const [contactsLoading, setContactsLoading] = useState(false);
+	const [contactsFilter, setContactsFilter] = useState<ContactStatus | "all">("all");
+	const [contactSearch, setContactSearch] = useState("");
+	const [busyContactId, setBusyContactId] = useState<string | null>(null);
 
 	const [loading, setLoading] = useState(true);
 
@@ -125,13 +142,40 @@ export function EnterpriseCampaigns() {
 					setMailingLists(
 						(res?.mailingLists ?? []).map((ml) => ({
 							...ml,
-							recipientCount: ml.recipientCount ?? (ml as unknown as { contactCount?: number }).contactCount ?? 0,
-							contacts: ml.contacts ?? [],
+							recipientCount: ml.confirmedCount ?? ml.recipientCount ?? 0,
+							contacts: [],
 						})),
 					),
 				)
 				.catch(console.error),
 		[],
+	);
+
+	const fetchContacts = useCallback(
+		(listId: string, opts?: { status?: ContactStatus | "all"; q?: string }) => {
+			setContactsLoading(true);
+			const qs = new URLSearchParams();
+			const status = opts?.status ?? contactsFilter;
+			if (status !== "all") qs.set("status", status);
+			const q = (opts?.q ?? contactSearch).trim();
+			if (q) qs.set("q", q);
+			qs.set("limit", "500");
+			qs.set("offset", "0");
+			return apiFetch<{ contacts: Contact[]; total: number }>(
+				`${MKT}/mailing-lists/${listId}/contacts?${qs.toString()}`,
+			)
+				.then((res) => {
+					setContacts(res?.contacts ?? []);
+					setContactsTotal(res?.total ?? 0);
+				})
+				.catch((err) => {
+					console.error(err);
+					setContacts([]);
+					setContactsTotal(0);
+				})
+				.finally(() => setContactsLoading(false));
+		},
+		[contactsFilter, contactSearch],
 	);
 	const fetchTemplates = useCallback(
 		() =>
@@ -144,6 +188,25 @@ export function EnterpriseCampaigns() {
 	useEffect(() => {
 		Promise.all([fetchCampaigns(), fetchMailingLists(), fetchTemplates()]).finally(() => setLoading(false));
 	}, [fetchCampaigns, fetchMailingLists, fetchTemplates]);
+
+	const openEditList = (listId: string, name: string, description?: string) => {
+		setEditingListId(listId);
+		setListName(name);
+		setListDesc(description || "");
+		setContacts([]);
+		setContactsTotal(0);
+		setContactsFilter("all");
+		setContactSearch("");
+		void fetchContacts(listId, { status: "all", q: "" });
+	};
+
+	const closeEditList = () => {
+		setEditingListId(null);
+		setListName("");
+		setListDesc("");
+		setContacts([]);
+		setContactsTotal(0);
+	};
 
 	const editingList = editingListId ? mailingLists.find((l) => l.id === editingListId) : null;
 
@@ -240,10 +303,8 @@ export function EnterpriseCampaigns() {
 				method: "PUT",
 				body: JSON.stringify({ name: listName.trim(), description: listDesc.trim() || undefined }),
 			});
-			setEditingListId(null);
-			setListName("");
-			setListDesc("");
 			fetchMailingLists();
+			closeEditList();
 			showToast("success", "List saved");
 		} catch (err) {
 			showToast("error", `Failed to save list: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -262,6 +323,11 @@ export function EnterpriseCampaigns() {
 		}, true);
 	};
 
+	const refreshContactsAndList = () => {
+		if (editingListId) void fetchContacts(editingListId);
+		fetchMailingLists();
+	};
+
 	const handleAddContact = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!editingListId || !contactName.trim() || !contactEmail.trim()) return;
@@ -272,7 +338,7 @@ export function EnterpriseCampaigns() {
 			});
 			setContactName("");
 			setContactEmail("");
-			fetchMailingLists();
+			refreshContactsAndList();
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Unknown error";
 			if (msg.toLowerCase().includes("duplicate")) {
@@ -285,20 +351,66 @@ export function EnterpriseCampaigns() {
 
 	const handleRemoveContact = async (contactId: string) => {
 		if (!editingListId) return;
+		setBusyContactId(contactId);
 		try {
 			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}`, { method: "DELETE" });
-			fetchMailingLists();
+			refreshContactsAndList();
 		} catch (err) {
 			showToast("error", `Failed to remove contact: ${err instanceof Error ? err.message : "Unknown error"}`);
+		} finally {
+			setBusyContactId(null);
 		}
+	};
+
+	const handleConfirmContact = async (contactId: string) => {
+		if (!editingListId) return;
+		setBusyContactId(contactId);
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}/confirm`, { method: "POST" });
+			refreshContactsAndList();
+			showToast("success", "Contact confirmed");
+		} catch (err) {
+			showToast("error", `Failed to confirm: ${err instanceof Error ? err.message : "Unknown error"}`);
+		} finally {
+			setBusyContactId(null);
+		}
+	};
+
+	const handleResendConfirmation = async (contactId: string) => {
+		if (!editingListId) return;
+		setBusyContactId(contactId);
+		try {
+			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}/resend-confirmation`, { method: "POST" });
+			showToast("success", "Confirmation email sent");
+		} catch (err) {
+			showToast("error", `Failed to resend: ${err instanceof Error ? err.message : "Unknown error"}`);
+		} finally {
+			setBusyContactId(null);
+		}
+	};
+
+	const handleUnsubscribeContact = async (contactId: string) => {
+		if (!editingListId) return;
+		confirm("Unsubscribe Contact", "Mark this contact as unsubscribed? They will stop receiving campaigns.", async () => {
+			setBusyContactId(contactId);
+			try {
+				await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts/${contactId}/unsubscribe`, { method: "POST" });
+				refreshContactsAndList();
+				showToast("success", "Contact unsubscribed");
+			} catch (err) {
+				showToast("error", `Failed to unsubscribe: ${err instanceof Error ? err.message : "Unknown error"}`);
+			} finally {
+				setBusyContactId(null);
+			}
+		});
 	};
 
 	const handleImportLeads = async () => {
 		if (!editingListId) return;
 		try {
-			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-leads`, { method: "POST" });
-			fetchMailingLists();
-			showToast("success", "Leads imported");
+			const res = await apiFetch<{ imported: number; skipped: number }>(`${MKT}/mailing-lists/${editingListId}/import-leads`, { method: "POST" });
+			refreshContactsAndList();
+			showToast("success", `Imported ${res.imported} lead${res.imported === 1 ? "" : "s"} (${res.skipped} skipped)`);
 		} catch (err) {
 			showToast("error", `Failed to import leads: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
@@ -307,9 +419,9 @@ export function EnterpriseCampaigns() {
 	const handleImportApplicants = async () => {
 		if (!editingListId) return;
 		try {
-			await apiFetch(`${MKT}/mailing-lists/${editingListId}/import-applicants`, { method: "POST" });
-			fetchMailingLists();
-			showToast("success", "Applicants imported");
+			const res = await apiFetch<{ imported: number; skipped: number }>(`${MKT}/mailing-lists/${editingListId}/import-applicants`, { method: "POST" });
+			refreshContactsAndList();
+			showToast("success", `Imported ${res.imported} applicant${res.imported === 1 ? "" : "s"} (${res.skipped} skipped)`);
 		} catch (err) {
 			showToast("error", `Failed to import applicants: ${err instanceof Error ? err.message : "Unknown error"}`);
 		}
@@ -480,7 +592,7 @@ export function EnterpriseCampaigns() {
 										<select className="input" value={selectedList} onChange={(e) => setSelectedList(e.target.value)}>
 											<option value="">Select audience...</option>
 											{mailingLists.map((ml) => (
-												<option key={ml.id} value={ml.id}>{ml.name} ({ml.recipientCount ?? 0} contacts)</option>
+												<option key={ml.id} value={ml.id}>{ml.name} ({ml.recipientCount ?? 0} confirmed)</option>
 											))}
 										</select>
 									</div>
@@ -826,102 +938,236 @@ export function EnterpriseCampaigns() {
 						</div>
 					)}
 
-					{editingList && (
-						<div className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem", borderLeft: "4px solid var(--primary)" }}>
-							<h3 style={{ fontSize: "1.1rem", marginBottom: "1rem" }}>Edit Mailing List</h3>
-							<form onSubmit={handleSaveEdit}>
-								<div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
-									<div>
-										<label className="label">List Name</label>
-										<input type="text" className="input" value={listName} onChange={(e) => setListName(e.target.value)} autoFocus />
-									</div>
-									<div>
-										<label className="label">Description</label>
-										<input type="text" className="input" value={listDesc} onChange={(e) => setListDesc(e.target.value)} />
-									</div>
+				{editingList && (
+					<div className="card" style={{ marginBottom: "1.5rem", padding: "1.5rem", borderLeft: "4px solid var(--primary)" }}>
+						<h3 style={{ fontSize: "1.1rem", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+							Edit Mailing List
+							{editingList.isNewsletter && (
+								<span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em" }}>Newsletter</span>
+							)}
+						</h3>
+						<form onSubmit={handleSaveEdit}>
+							<div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "1rem", marginBottom: "1rem" }}>
+								<div>
+									<label className="label">List Name</label>
+									<input
+										type="text"
+										className="input"
+										value={listName}
+										onChange={(e) => setListName(e.target.value)}
+										autoFocus
+										disabled={editingList.isNewsletter}
+										title={editingList.isNewsletter ? "The Website Newsletter list cannot be renamed" : undefined}
+									/>
 								</div>
-								<div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
-									<button type="button" className="btn btn--ghost" onClick={() => { setEditingListId(null); setListName(""); setListDesc(""); }}>
-										Cancel
+								<div>
+									<label className="label">Description</label>
+									<input type="text" className="input" value={listDesc} onChange={(e) => setListDesc(e.target.value)} />
+								</div>
+							</div>
+							<div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost" onClick={closeEditList}>
+									Cancel
+								</button>
+								<button type="submit" className="btn btn--primary" disabled={!listName.trim()}>
+									Save Changes
+								</button>
+							</div>
+						</form>
+
+						<div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border-light)", paddingTop: "1.5rem" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+								<h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+									Contacts
+									<span style={{ marginLeft: "0.5rem", fontWeight: 400, fontSize: "0.8rem", color: "var(--muted-foreground)" }}>
+										{editingList.confirmedCount ?? 0} confirmed
+										{(editingList.pendingCount ?? 0) > 0 && <> · {editingList.pendingCount} pending</>}
+										{(editingList.unsubscribedCount ?? 0) > 0 && <> · {editingList.unsubscribedCount} unsubscribed</>}
+									</span>
+								</h4>
+								<div style={{ display: "flex", gap: "0.5rem" }}>
+									<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportLeads}>
+										Import All Leads
 									</button>
-									<button type="submit" className="btn btn--primary" disabled={!listName.trim()}>
-										Save Changes
+									<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportApplicants}>
+										Import Applicants
+									</button>
+								</div>
+							</div>
+
+							<form
+								onSubmit={handleAddContact}
+								style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.75rem", marginBottom: "1rem" }}
+							>
+								<div>
+									<label className="label">Name</label>
+									<input type="text" className="input" placeholder="Contact name" value={contactName} onChange={(e) => setContactName(e.target.value)} />
+								</div>
+								<div>
+									<label className="label">Email</label>
+									<input type="email" className="input" placeholder="email@example.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+								</div>
+								<div style={{ display: "flex", alignItems: "flex-end" }}>
+									<button type="submit" className="btn btn--primary btn--sm" disabled={!contactName.trim() || !contactEmail.trim()}>
+										Add Contact
 									</button>
 								</div>
 							</form>
 
-							<div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--border-light)", paddingTop: "1.5rem" }}>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-									<h4 style={{ fontSize: "0.95rem", fontWeight: 600 }}>Contacts ({editingList.recipientCount ?? editingList.contacts?.length ?? 0})</h4>
-									<div style={{ display: "flex", gap: "0.5rem" }}>
-										<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportLeads}>
-											Import All Leads
-										</button>
-										<button type="button" className="btn btn--ghost" style={{ fontSize: "0.8rem" }} onClick={handleImportApplicants}>
-											Import Applicants
-										</button>
-									</div>
-								</div>
+							<div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+								{(["all", "confirmed", "pending", "unsubscribed"] as const).map((f) => (
+									<button
+										key={f}
+										type="button"
+										className="btn btn--ghost"
+										style={{
+											fontSize: "0.72rem",
+											padding: "0.2rem 0.6rem",
+											fontWeight: contactsFilter === f ? 600 : 400,
+											borderColor: contactsFilter === f ? "var(--primary)" : undefined,
+										}}
+										onClick={() => {
+											setContactsFilter(f);
+											if (editingListId) void fetchContacts(editingListId, { status: f, q: contactSearch });
+										}}
+									>
+										{f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+									</button>
+								))}
+								<input
+									type="text"
+									className="input"
+									placeholder="Search name or email..."
+									value={contactSearch}
+									onChange={(e) => {
+										setContactSearch(e.target.value);
+										if (editingListId) void fetchContacts(editingListId, { q: e.target.value });
+									}}
+									style={{ flex: 1, minWidth: "180px", fontSize: "0.8rem", padding: "0.3rem 0.6rem" }}
+								/>
+							</div>
 
-								<form
-									onSubmit={handleAddContact}
-									style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.75rem", marginBottom: "1rem" }}
-								>
-									<div>
-										<label className="label">Name</label>
-										<input type="text" className="input" placeholder="Contact name" value={contactName} onChange={(e) => setContactName(e.target.value)} />
-									</div>
-									<div>
-										<label className="label">Email</label>
-										<input type="email" className="input" placeholder="email@example.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
-									</div>
-									<div style={{ display: "flex", alignItems: "flex-end" }}>
-										<button type="submit" className="btn btn--primary btn--sm" disabled={!contactName.trim() || !contactEmail.trim()}>
-											Add Contact
-										</button>
-									</div>
-								</form>
-
-								{(!editingList.contacts || editingList.contacts.length === 0) ? (
-									<p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", padding: "0.75rem 1rem", background: "var(--muted)" }}>
-										No contacts yet. Add recipients above or import from leads/applicants.
-									</p>
-								) : (
-									<div className="ops-table-wrap">
-										<table className="admin-table">
-											<thead>
-												<tr>
-													<th>Name</th>
-													<th>Email</th>
-													<th>Added</th>
-													<th></th>
-												</tr>
-											</thead>
-											<tbody>
-												{editingList.contacts.map((c) => (
-													<tr key={c.id}>
-														<td style={{ fontWeight: 600 }}>{c.name || "-"}</td>
-														<td style={{ color: "var(--muted-foreground)" }}>{c.email}</td>
-														<td style={{ color: "var(--muted-foreground)" }}>{new Date(c.createdAt).toLocaleDateString()}</td>
-														<td>
+							{contactsLoading ? (
+								<p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", padding: "0.75rem 1rem" }}>Loading contacts…</p>
+							) : contacts.length === 0 ? (
+								<p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", padding: "0.75rem 1rem", background: "var(--muted)" }}>
+									{contactsFilter === "all"
+										? "No contacts yet. Add recipients above or import from leads/applicants."
+										: `No ${contactsFilter} contacts.`}
+								</p>
+							) : (
+								<div className="ops-table-wrap">
+									<table className="admin-table">
+										<thead>
+											<tr>
+												<th>Name</th>
+												<th>Email</th>
+												<th>Status</th>
+												<th>Confirmed / Unsubscribed</th>
+												<th>Added</th>
+												<th></th>
+											</tr>
+										</thead>
+										<tbody>
+											{contacts.map((c) => (
+												<tr key={c.id}>
+													<td style={{ fontWeight: 600 }}>{c.name || "-"}</td>
+													<td style={{ color: "var(--muted-foreground)" }}>{c.email}</td>
+													<td>
+														<span style={{
+															padding: "0.15rem 0.5rem",
+															fontSize: "0.72rem",
+															fontWeight: 600,
+															textTransform: "capitalize",
+															background:
+																c.status === "confirmed" ? "rgba(16, 185, 129, 0.12)" :
+																c.status === "pending" ? "rgba(245, 158, 11, 0.12)" :
+																"rgba(239, 68, 68, 0.12)",
+															color:
+																c.status === "confirmed" ? "#10b981" :
+																c.status === "pending" ? "#d97706" :
+																"#ef4444",
+														}}>
+															{c.status}
+														</span>
+													</td>
+													<td style={{ color: "var(--muted-foreground)", fontSize: "0.8rem" }}>
+														{c.status === "confirmed" && c.confirmedAt ? `Confirmed ${new Date(c.confirmedAt).toLocaleDateString()}` :
+														 c.status === "unsubscribed" && c.unsubscribedAt ? `Unsubscribed ${new Date(c.unsubscribedAt).toLocaleDateString()}` :
+														 "-"}
+													</td>
+													<td style={{ color: "var(--muted-foreground)" }}>{new Date(c.createdAt).toLocaleDateString()}</td>
+													<td>
+														<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+															{c.status === "pending" && (
+																<>
+																	<button
+																		type="button"
+																		className="btn btn--ghost"
+																		style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+																		disabled={busyContactId === c.id}
+																		onClick={() => handleConfirmContact(c.id)}
+																	>
+																		Confirm
+																	</button>
+																	<button
+																		type="button"
+																		className="btn btn--ghost"
+																		style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+																		disabled={busyContactId === c.id}
+																		onClick={() => handleResendConfirmation(c.id)}
+																	>
+																		Resend
+																	</button>
+																</>
+															)}
+															{c.status === "unsubscribed" && (
+																<button
+																	type="button"
+																	className="btn btn--ghost"
+																	style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+																	disabled={busyContactId === c.id}
+																	onClick={() => handleConfirmContact(c.id)}
+																>
+																	Re-subscribe
+																</button>
+															)}
+															{c.status === "confirmed" && (
+																<button
+																	type="button"
+																	className="btn btn--ghost"
+																	style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+																	disabled={busyContactId === c.id}
+																	onClick={() => handleUnsubscribeContact(c.id)}
+																>
+																	Unsubscribe
+																</button>
+															)}
 															<button
 																type="button"
 																className="btn btn--ghost"
-																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
+																style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem", color: "#ef4444", borderColor: "rgba(239, 68, 68, 0.3)" }}
+																disabled={busyContactId === c.id}
 																onClick={() => handleRemoveContact(c.id)}
 															>
 																Remove
 															</button>
-														</td>
-													</tr>
-												))}
-											</tbody>
-										</table>
-									</div>
-								)}
-							</div>
+														</div>
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+									{contactsTotal > contacts.length && (
+										<div style={{ padding: "0.5rem 1rem", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+											Showing {contacts.length} of {contactsTotal}. Refine the search to narrow down.
+										</div>
+									)}
+								</div>
+							)}
 						</div>
-					)}
+					</div>
+				)}
 
 					{!isCreatingList && !editingListId && (
 						<div className="card" style={{ padding: 0 }}>
@@ -931,7 +1177,7 @@ export function EnterpriseCampaigns() {
 										<tr>
 											<th>List Name</th>
 											<th>Description</th>
-											<th>Recipients</th>
+											<th>Subscribers</th>
 											<th>Created</th>
 											<th></th>
 										</tr>
@@ -944,27 +1190,37 @@ export function EnterpriseCampaigns() {
 												</td>
 											</tr>
 										) : (
-											mailingLists.map((ml) => (
-												<tr key={ml.id}>
-													<td style={{ fontWeight: 600 }}>{ml.name}</td>
-													<td style={{ color: "var(--muted-foreground)" }}>{ml.description || "-"}</td>
-													<td>{ml.recipientCount ?? 0}</td>
-													<td style={{ color: "var(--muted-foreground)" }}>{new Date(ml.createdAt).toLocaleDateString()}</td>
-													<td>
-														<div style={{ display: "flex", gap: "0.5rem" }}>
-															<button
-																type="button"
-																className="btn btn--ghost"
-																style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}
-																onClick={() => {
-																	setEditingListId(ml.id);
-																	setListName(ml.name);
-																	setListDesc(ml.description || "");
-																	setTab("lists");
-																}}
-															>
-																Edit
-															</button>
+										mailingLists.map((ml) => (
+											<tr key={ml.id}>
+												<td style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+													{ml.name}
+													{ml.isNewsletter && (
+														<span style={{ fontSize: "0.6rem", fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em" }}>Newsletter</span>
+													)}
+												</td>
+												<td style={{ color: "var(--muted-foreground)" }}>{ml.description || "-"}</td>
+												<td>
+													<span style={{ fontWeight: 600 }}>{ml.confirmedCount ?? 0}</span>
+													<span style={{ fontSize: "0.72rem", color: "var(--muted-foreground)" }}> confirmed</span>
+													{(ml.pendingCount ?? 0) > 0 && (
+														<span style={{ fontSize: "0.72rem", color: "#d97706" }}> · {ml.pendingCount} pending</span>
+													)}
+													{(ml.unsubscribedCount ?? 0) > 0 && (
+														<span style={{ fontSize: "0.72rem", color: "#ef4444" }}> · {ml.unsubscribedCount} unsub</span>
+													)}
+												</td>
+												<td style={{ color: "var(--muted-foreground)" }}>{new Date(ml.createdAt).toLocaleDateString()}</td>
+												<td>
+													<div style={{ display: "flex", gap: "0.5rem" }}>
+														<button
+															type="button"
+															className="btn btn--ghost"
+															style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem" }}
+															onClick={() => { setTab("lists"); openEditList(ml.id, ml.name, ml.description); }}
+														>
+															Edit
+														</button>
+														{!ml.isNewsletter && (
 															<button
 																type="button"
 																className="btn btn--ghost"
@@ -973,10 +1229,11 @@ export function EnterpriseCampaigns() {
 															>
 																Delete
 															</button>
-														</div>
-													</td>
-												</tr>
-											))
+														)}
+													</div>
+												</td>
+											</tr>
+										))
 										)}
 									</tbody>
 								</table>

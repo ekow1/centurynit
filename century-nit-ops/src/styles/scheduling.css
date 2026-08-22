@@ -239,10 +239,45 @@
     margin-top: 0.25rem;
 }
 
+.cal-feed__help {
+    margin: 0.75rem 0 0.5rem;
+    border: var(--thin);
+    padding: 0.65rem 0.85rem;
+    background: var(--surface-subtle, #f6f6f6);
+    cursor: pointer;
+}
+
+.cal-feed__help summary {
+    font-size: var(--text-xs, 0.75rem);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.cal-feed__help summary::-webkit-details-marker {
+    display: none;
+}
+
+.cal-feed__help summary::after {
+    content: "+";
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.cal-feed__help[open] summary::after {
+    content: "−";
+}
+
 .cal-feed__steps {
     list-style: disc inside;
-    margin: 0.5rem 0;
-    padding-left: 1rem;
+    margin: 0.5rem 0 0;
+    padding-left: 0.75rem;
     font-size: var(--text-sm, 0.875rem);
     color: var(--text-muted, #666);
 }
@@ -253,6 +288,11 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+}
+
+.cal-feed__replace {
+    border-top: var(--hairline);
+    padding-top: 1rem;
 }
 
 .cal-feed__replace input,

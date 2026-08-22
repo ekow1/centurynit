@@ -148,11 +148,13 @@ export const availabilitySlotSchema = z.object({
 export type AvailabilitySlot = z.infer<typeof availabilitySlotSchema>;
 
 export const availabilityResponseSchema = z.object({
-	branchId: z.string(),
-	date: dateStringSchema,
-	timezone: timezoneSchema,
-	durationMinutes: z.number().int(),
-	slots: z.array(availabilitySlotSchema),
+    branchId: z.string(),
+    date: dateStringSchema,
+    timezone: timezoneSchema,
+    durationMinutes: z.number().int(),
+    slots: z.array(availabilitySlotSchema),
+    /** Calendar sync status for the employee whose availability is being queried. */
+    calendarSyncStatus: z.enum(['NOT_REQUIRED', 'PENDING', 'SYNCED', 'FAILED']).optional(),
 });
 export type AvailabilityResponse = z.infer<typeof availabilityResponseSchema>;
 

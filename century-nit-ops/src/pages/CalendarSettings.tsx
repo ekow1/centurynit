@@ -339,7 +339,6 @@ function FeedSection({
 	onSaved: () => void;
 }) {
 	const [url, setUrl] = useState("");
-	const [label, setLabel] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [ok, setOk] = useState<string | null>(null);
@@ -362,9 +361,8 @@ function FeedSection({
 		setError(null);
 		setOk(null);
 		try {
-			await calendarApi.saveFeed({ icsUrl: trimmed, label: label.trim() || undefined });
+			await calendarApi.saveFeed({ icsUrl: trimmed });
 			setUrl("");
-			setLabel("");
 			setOk("Saved — mirroring your calendar now.");
 			onSaved();
 		} catch (err) {
@@ -409,7 +407,7 @@ function FeedSection({
 				<>
 					<p className="cal-state">
 						<span className="cal-dot cal-dot--on" aria-hidden="true" />
-						{status.label ? `Mirroring “${status.label}”` : "Calendar feed connected"}
+						Calendar feed connected
 						{status.busyBlocksCount > 0
 							? ` · ${status.busyBlocksCount} busy time${status.busyBlocksCount === 1 ? "" : "s"} mirrored`
 							: ""}
@@ -437,43 +435,58 @@ function FeedSection({
 						</button>
 					</div>
 
-				<form className="cal-feed__replace" onSubmit={save}>
-					<label className="ops-panel__muted">Replace with a different calendar address</label>
-					<input
-						type="url"
-						className="input input--full-border"
-						placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-						value={url}
-						onChange={(e) => setUrl(e.target.value)}
-					/>
-					<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-						{busy ? "Saving…" : "Replace feed"}
-					</button>
-				</form>
-			</>
-		) : (
-			<form className="cal-feed__add" onSubmit={save}>
+					<form className="cal-feed__replace" onSubmit={save}>
+						<label className="ops-panel__muted">Replace with a different calendar address</label>
+						<input
+							type="url"
+							className="input input--full-border"
+							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+							value={url}
+							onChange={(e) => setUrl(e.target.value)}
+						/>
+						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+							{busy ? "Saving…" : "Replace feed"}
+						</button>
+					</form>
+				</>
+			) : (
+				<>
+					<p className="ops-panel__muted">
+						Paste your calendar's read-only secret iCal address so your external meetings block the
+						slots applicants can book. Works with Google, Outlook and Apple — no account connection
+						needed.
+					</p>
 
-					<input
-						type="url"
-						className="input input--full-border"
-						placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-						value={url}
-						onChange={(e) => setUrl(e.target.value)}
-						aria-label="Secret iCal address"
-					/>
-					<input
-						type="text"
-						className="input input--full-border"
-						placeholder="Label (optional, e.g. Work calendar)"
-						value={label}
-						onChange={(e) => setLabel(e.target.value)}
-						aria-label="Label"
-					/>
-					<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-						{busy ? "Saving…" : "Connect calendar"}
-					</button>
-				</form>
+					<details className="cal-feed__help">
+						<summary>How to find your secret iCal address</summary>
+						<ul className="cal-feed__steps">
+							<li>
+								<strong>Google:</strong> Calendar settings → Integrate calendar → “Secret address in
+								iCal format”
+							</li>
+							<li>
+								<strong>Outlook/Office 365:</strong> Share → Publish calendar → .ics link
+							</li>
+							<li>
+								<strong>Apple:</strong> Share → public calendar URL
+							</li>
+						</ul>
+					</details>
+
+					<form className="cal-feed__add" onSubmit={save}>
+						<input
+							type="url"
+							className="input input--full-border"
+							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+							value={url}
+							onChange={(e) => setUrl(e.target.value)}
+							aria-label="Secret iCal address"
+						/>
+						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+							{busy ? "Saving…" : "Connect calendar"}
+						</button>
+					</form>
+				</>
 			)}
 
 			{error && <p className="ops-modal__error">{error}</p>}

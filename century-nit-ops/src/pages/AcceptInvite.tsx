@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, staffApi } from "century-nit-core/api";
 import type { InvitationPreview } from "century-nit-shared";
+import { useOpsAuth } from "./OpsAuthContext";
 
 /**
  * Where an invitation link lands.
@@ -49,11 +50,11 @@ export function AcceptInvite() {
 	const [failure, setFailure] = useState<{ title: string; body: string } | null>(null);
 	const [loading, setLoading] = useState(true);
 
+	const { opsSignInWithCredentials } = useOpsAuth();
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [done, setDone] = useState<{ email: string; mfaRequired: boolean } | null>(null);
 
 	useEffect(() => {
 		if (!token) {
@@ -87,14 +88,21 @@ export function AcceptInvite() {
 		setError(null);
 		try {
 			const result = await staffApi.acceptInvitation({ token, password, confirmPassword });
-			setDone({ email: result.email, mfaRequired: result.mfaRequired });
+			// The staff profile and password are now live. Sign in right away
+			// so the invitee never has to type the password a second time.
+			const signIn = await opsSignInWithCredentials(result.email, password);
+			if (signIn.twoFactorRequired || result.mfaRequired) {
+				navigate("/mfa-setup");
+			} else {
+				navigate("/");
+			}
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : "";
 			if (FAILURE_COPY[code]) {
 				// The invitation died between preview and submit.
 				setFailure(FAILURE_COPY[code]);
 			} else {
-				setError(err instanceof Error ? err.message : "Could not create your account.");
+				setError(err instanceof Error ? err.message : "Could not create or sign in to your account.");
 			}
 		} finally {
 			setSubmitting(false);
@@ -118,32 +126,6 @@ export function AcceptInvite() {
 					<Link className="btn btn--ghost btn--sm" to="/login">
 						Go to sign in
 					</Link>
-				</div>
-			</div>
-		);
-	}
-
-	if (done) {
-		return (
-			<div className="invite-page">
-				<div className="invite-card">
-					<h1 className="invite-card__title">Your account is ready</h1>
-					<p className="invite-card__body">
-						Sign in as <strong>{done.email}</strong> with the password you just chose.
-					</p>
-					{done.mfaRequired && (
-						<p className="invite-card__body">
-							Staff accounts require two-factor authentication. You will be asked to set
-							it up with an authenticator app the first time you sign in.
-						</p>
-					)}
-					<button
-						type="button"
-						className="btn btn--primary"
-						onClick={() => navigate("/login")}
-					>
-						Sign in
-					</button>
 				</div>
 			</div>
 		);

@@ -241,14 +241,14 @@ export async function syncConsultationAssignment(
 /**
  * Sync the consultation status when a booking is cancelled.
  *
- * If an officer has been assigned, the consultation stays active so the
- * applicant can reschedule instead of starting over from scratch.  Only
- * unassigned consultations (no officer yet) are terminated.
+ * Marks the consultation as cancelled, releases the assigned officer, and
+ * clears the applicant's denormalized officer reference so the portal no
+ * longer shows a counselor for a cancelled appointment.
  */
 export async function syncConsultationCancelled(bookingId: string): Promise<void> {
 	// Look up the consultation linked to this booking.
 	const [row] = await db
-		.select({ id: consultations.id, assignedOfficerId: consultations.assignedOfficerId, status: consultations.status })
+		.select({ id: consultations.id, applicantId: consultations.applicantId, assignedOfficerId: consultations.assignedOfficerId, status: consultations.status })
 		.from(consultations)
 		.where(eq(consultations.bookingId, bookingId))
 		.limit(1);
@@ -258,8 +258,22 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 
 	await db
 		.update(consultations)
-		.set({ status: "CANCELLED", updatedAt: new Date() })
+		.set({
+			status: "CANCELLED",
+			assignedOfficerId: null,
+			assignedAt: null,
+			assignedBy: null,
+			updatedAt: new Date(),
+		})
 		.where(eq(consultations.id, row.id));
+
+	// Release the officer on the applicant record too; the assignment is tied
+	// to the live consultation/appointment, and once the appointment is gone
+	// the officer should no longer appear in the portal header.
+	await db
+		.update(applicants)
+		.set({ assignedOfficerId: null, updatedAt: new Date() })
+		.where(eq(applicants.id, row.applicantId));
 }
 
 /**
@@ -318,9 +332,8 @@ export async function cancelConsultation(
 /* ── Serialise ───────────────────────────────────────────────────────────── */
 
 async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultation> {
-	const [applicant, officer, coordinator, coordinatorAssigner, booking, comments] = await Promise.all([
+	const [applicant, coordinator, coordinatorAssigner, booking, comments] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
-		loadStaff(row.assignedOfficerId),
 		loadStaff(row.coordinatorId),
 		loadStaff(row.coordinatorAssignedBy),
 		row.bookingId
@@ -328,6 +341,14 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 			: Promise.resolve(null),
 		commentsFor("consultation", row.id),
 	]);
+
+	// If the linked appointment has been cancelled, the public view of the
+	// consultation should be cancelled too — even if the consultation row has
+	// not yet been synced. Hide the counselor and meeting link so the portal
+	// doesn't show an assigned staff member for a cancelled appointment.
+	const isBookingCancelled = booking?.status === "CANCELLED";
+	const effectiveStatus = isBookingCancelled ? "CANCELLED" : (row.status as ApiConsultation["status"]);
+	const officer = isBookingCancelled ? null : await loadStaff(row.assignedOfficerId);
 
 	return {
 		id: row.id,
@@ -340,10 +361,10 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		branch: row.branch,
 		type: row.type,
 		targetCountry: row.targetCountry ?? applicant?.targetCountry ?? null,
-		status: row.status,
-		assignedOfficerId: row.assignedOfficerId,
-		assignedOfficerName: officer?.name ?? null,
-		assignedOfficerEmail: officer?.email ?? null,
+		status: effectiveStatus,
+		assignedOfficerId: isBookingCancelled ? null : row.assignedOfficerId,
+		assignedOfficerName: isBookingCancelled ? null : (officer?.name ?? null),
+		assignedOfficerEmail: isBookingCancelled ? null : (officer?.email ?? null),
 		coordinatorId: row.coordinatorId,
 		coordinatorName: coordinator?.name ?? null,
 		coordinatorEmail: coordinator?.email ?? null,
@@ -353,7 +374,7 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		slotConfirmed: row.slotConfirmed,
 		startsAt: booking?.startsAt.toISOString() ?? null,
 		timezone: booking?.timezone ?? null,
-		meetingUrl: booking?.meetingUrl ?? null,
+		meetingUrl: isBookingCancelled ? null : (booking?.meetingUrl ?? null),
 		rescheduleRequestedAt: booking?.rescheduleRequestedAt?.toISOString() ?? null,
 		rescheduleRequestedStartsAt: booking?.rescheduleRequestedStartsAt?.toISOString() ?? null,
 		rescheduleRequestReason: booking?.rescheduleRequestReason ?? null,

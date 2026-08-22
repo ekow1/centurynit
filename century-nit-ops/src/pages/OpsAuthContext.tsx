@@ -247,8 +247,24 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 			}
 			return { twoFactorRequired: true, mfaMethod };
 		}
+
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
+
+		// Email OTP is a custom second factor not handled by Better Auth's
+		// twoFactor plugin (which only supports TOTP). If this staff member is
+		// enrolled for email OTP, return a two-factor challenge so the login
+		// screen sends the code and asks them to verify it.
+		let mfaEnrollment: Awaited<ReturnType<typeof getMfaEnrollment>> | null = null;
+		try {
+			mfaEnrollment = await getMfaEnrollment();
+		} catch {
+			// If we can't read MFA status, fall through to a normal sign-in.
+		}
+		if (mfaEnrollment?.required && mfaEnrollment?.enrolled && mfaEnrollment.method === "email_otp") {
+			return { twoFactorRequired: true, mfaMethod: "email_otp" };
+		}
+
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
 		saveSession(user);

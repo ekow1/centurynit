@@ -48,6 +48,7 @@ export function OpsLogin() {
 						setOtpSent(true);
 					} catch {
 						// Code sending failed — user can retry
+						setError("Could not send the verification code. Check your email address or try resending.");
 					}
 				}
 				return;

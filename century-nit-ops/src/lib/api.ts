@@ -103,6 +103,7 @@ export function verifyBackupCode(code: string): Promise<unknown> {
 export function signOut(): Promise<unknown> {
 	return apiFetch("/api/auth/sign-out", {
 		method: "POST",
+		body: JSON.stringify({}),
 	});
 }
 

@@ -113,20 +113,38 @@ newsletterRouter.openapi(
       });
     }
  
-    // Create a lead for this subscriber
-    await db.insert(leads).values({
-      email: normalized,
-      name: name ?? "Newsletter subscriber",
-      source: "newsletter",
-      stage: "New Lead",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
- 
-    return c.json({
-      ok: true,
-      message: "You're subscribed!",
-    });
+     // Create a lead for this subscriber
+     await db.insert(leads).values({
+       email: normalized,
+       name: name ?? "Newsletter subscriber",
+       source: "newsletter",
+       stage: "New Lead",
+       createdAt: new Date(),
+       updatedAt: new Date(),
+     });
+
+     // Send welcome email
+     try {
+       await sendEmail({
+         to: normalized,
+         subject: "Welcome to the Century NIT Newsletter!",
+         html: newsletterEmailLayout(
+           "Welcome to the Century NIT Newsletter!",
+           `<p>Hi ${name ? `<strong>${escapeHtml(name)}</strong>` : "there"},</p>
+            <p>Thanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.</p>
+            <p>If you ever want to stop receiving these emails, you can <a href="${process.env.FRONTEND_URL ?? ""}/newsletter/unsubscribe?token=${/* placeholder – we don’t have a token now */}">unsubscribe</a>.</p>`
+         ),
+         text: `Welcome to the Century NIT Newsletter!\n\nHi ${name || "there"},\n\nThanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.\n\nTo unsubscribe, visit ${process.env.FRONTEND_URL ?? ""}/newsletter/unsubscribe (you’ll need your email to manage preferences).`,
+       });
+     } catch (emailErr) {
+       // Don’t let a mail failure break the subscription request
+       console.error("[newsletter] welcome email failed:", emailErr);
+     }
+
+     return c.json({
+       ok: true,
+       message: "You're subscribed!",
+     });
   },
 );
 

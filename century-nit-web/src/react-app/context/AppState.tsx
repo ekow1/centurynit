@@ -19,6 +19,7 @@ import { invoicesApi } from "century-nit-core/api";
 import {
 	API_PREFIX,
 	JOURNEY_STAGE_TO_PORTAL,
+	isStaffOnlyNotification,
 	type JourneyStage,
 } from "century-nit-shared";
 import {
@@ -2109,6 +2110,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					read: false,
 					link: data.link ?? undefined,
 				};
+			// Staff-only notifications (lead.new, booking.new, etc.) are never
+			// shown in the client portal — drop them here too, not just on the
+			// REST read, so a dual-role account never sees a live staff push.
+			if (isStaffOnlyNotification(data.type)) return;
 			setNotifications((prev) =>
 				prev.some((n) => n.id === notif.id) ? prev : [notif, ...prev],
 			);

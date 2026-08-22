@@ -59,8 +59,9 @@ export function MfaPrompt() {
 
 	if (!loaded || !authUser) return null;
 	if (status?.enrolled) return null;
-	if (status?.required) return null; // required users are forced through MFA at sign-in
 	if (skipped) return null;
+
+	const isRequired = status?.required === true;
 
 	return (
 		<div className="mfa-prompt" role="status" aria-live="polite">
@@ -71,7 +72,11 @@ export function MfaPrompt() {
 				</svg>
 			</div>
 			<div className="mfa-prompt__body">
-				<p className="mfa-prompt__title">Protect your account with two-factor authentication</p>
+				<p className="mfa-prompt__title">
+					{isRequired
+						? "Two-factor authentication is required for your account"
+						: "Protect your account with two-factor authentication"}
+				</p>
 				<p className="mfa-prompt__sub">
 					Add a second step at sign-in to keep your application documents and payment history safe. It
 					only takes a minute.
@@ -80,16 +85,18 @@ export function MfaPrompt() {
 					<Link to="/portal/security" className="btn btn--primary btn--sm">
 						Set up MFA
 					</Link>
-					<button
-						type="button"
-						className="btn btn--ghost btn--sm"
-						onClick={() => {
-							writeSkipped();
-							setSkipped(true);
-						}}
-					>
-						Skip for now
-					</button>
+					{isRequired ? null : (
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							onClick={() => {
+								writeSkipped();
+								setSkipped(true);
+							}}
+						>
+							Skip for now
+						</button>
+					)}
 				</div>
 			</div>
 		</div>

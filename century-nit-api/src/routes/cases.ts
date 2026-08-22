@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
@@ -95,6 +95,7 @@ import {
 	portalStateSchema,
 	updatePortalStateSchema,
 	notificationSchema,
+	STAFF_ONLY_NOTIFICATION_TYPES,
 } from "century-nit-shared";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -1637,7 +1638,13 @@ meRouter.openapi(
 	async (c) => {
 		const user = c.get("user");
 		const rows = await db.query.notifications.findMany({
-			where: eq(schema.notifications.userId, user.id),
+			// Exclude staff-only notifications so dual-role accounts (a staff
+			// member who also has a client profile) do not see "New lead
+			// received", "consultation assigned", etc. in the client portal.
+			where: and(
+				eq(schema.notifications.userId, user.id),
+				not(inArray(schema.notifications.type, [...STAFF_ONLY_NOTIFICATION_TYPES])),
+			),
 			orderBy: [desc(schema.notifications.createdAt)],
 			limit: 50,
 		});

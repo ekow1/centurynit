@@ -24,16 +24,22 @@ export function TurnstileGate() {
 		Promise.all([
 			fetch("/turnstile/status")
 				.then((r) => r.json())
-				.then((b: { verified?: boolean }) => b.verified === true)
-				.catch(() => false),
+				.then((b: { verified?: boolean; configured?: boolean }) => ({
+					verified: b.verified === true,
+					configured: b.configured !== false,
+				}))
+				.catch(() => ({ verified: false, configured: false })),
 			fetch("/ai/config")
 				.then((r) => r.json())
 				.then((b: { turnstileSitekey?: string }) => b.turnstileSitekey ?? "")
 				.catch(() => ""),
-		]).then(([verified, key]) => {
+		]).then(([{ verified, configured }, key]) => {
 			if (cancelled) return;
 			setSitekey(key);
-			setStatus(verified ? "verified" : "unverified");
+			// Don't show a gate that can never resolve (Turnstile not configured yet)
+			// — the public AI chat will return 503 until the secret is set, but the
+			// rest of the site stays fully usable.
+			setStatus(!configured || verified ? "verified" : "unverified");
 		});
 		return () => {
 			cancelled = true;

@@ -22,7 +22,10 @@ export function OnboardingModal() {
 		authUser?.method === "apple" ||
 		authUser?.method === "linkedin";
 
-	// Fetch real applicant from server on mount to check if details are missing
+	// Fetch real applicant from server on mount to check if details are missing.
+	// A brand-new user has no applicant row yet — the modal should still show so
+	// they can provide their name/phone/referral, which creates the applicant via
+	// PATCH /me/application.
 	useEffect(() => {
 		if (!authUser) {
 			setLoading(false);
@@ -33,14 +36,10 @@ export function OnboardingModal() {
 			.then(([res, portalState]) => {
 				if (cancelled) return;
 				const app = res.applicant;
-				if (!app) {
-					setLoading(false);
-					return;
-				}
 				const onboardingDone = portalState?.onboardingCompleted === true;
 
 				// Pre-fill name from server or auth (social sign-in populates authUser.name)
-				const serverName = app.name?.trim() || "";
+				const serverName = app?.name?.trim() || "";
 				const authName = authUser.name?.trim() || "";
 				const displayName = serverName || authName;
 				setFullName(displayName);
@@ -50,17 +49,18 @@ export function OnboardingModal() {
 					setPhone(
 						authUser.email.replace("phone_", "").replace("@example.com", ""),
 					);
-				} else if (app.phone) {
+				} else if (app?.phone) {
 					setPhone(app.phone);
 				}
 
-				const serverReferral = (app.profile as Record<string, string>)
+				const serverReferral = (app?.profile as Record<string, string>)
 					?.referralSource;
 				if (serverReferral) setReferralSource(serverReferral);
 
 				// Show modal only if onboarding wasn't completed and a field is missing.
+				// For a new user with no applicant record, all fields are missing.
 				const needsName = !displayName;
-				const needsPhone = isEmailAuth && !app.phone;
+				const needsPhone = isEmailAuth && !app?.phone;
 				const needsReferral = !serverReferral;
 				setShow(!onboardingDone && (needsName || needsPhone || needsReferral));
 			})

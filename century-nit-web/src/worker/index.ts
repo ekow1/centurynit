@@ -143,8 +143,10 @@ app.get("/ai/config", (c) => {
 
 /** Has this visitor already passed the first-visit Turnstile gate? */
 app.get("/turnstile/status", async (c) => {
-	const verified = await isVerified(getCookie(c, VERIFY_COOKIE), c.env.TURNSTILE_SECRET);
-	return Response.json({ verified });
+	const secret = c.env.TURNSTILE_SECRET;
+	const verified = await isVerified(getCookie(c, VERIFY_COOKIE), secret);
+	// `configured` lets the frontend avoid showing a gate that can never resolve.
+	return Response.json({ configured: !!secret, verified });
 });
 
 /**
@@ -273,7 +275,14 @@ app.post("/ai/chat", async (c) => {
 	// The public web surface must have passed the first-visit Turnstile gate
 	// (signed `cnit_v` cookie). The authed portal surfaces do not.
 	if (surface === "web") {
-		const verified = await isVerified(getCookie(c, VERIFY_COOKIE), c.env.TURNSTILE_SECRET);
+		const secret = c.env.TURNSTILE_SECRET;
+		if (!secret) {
+			return c.json(
+				{ error: { code: "TURNSTILE_NOT_CONFIGURED", message: "Bot protection is not configured yet." } },
+				{ status: 503 },
+			);
+		}
+		const verified = await isVerified(getCookie(c, VERIFY_COOKIE), secret);
 		if (!verified) {
 			return c.json(
 				{ error: { code: "VERIFICATION_REQUIRED", message: "Please complete the verification first." } },

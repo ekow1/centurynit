@@ -62,6 +62,14 @@ export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
 	completed: "completed",
 };
 
+export const consultationWorkflowSchema = z.object({
+	status: z.enum(["AWAITING_ASSIGNMENT", "IN_PROGRESS", "COMPLETED", "CLOSED"]),
+	stage: z.string(),
+	closureReason: z.string().nullable(),
+	nextAction: z.string().nullable(),
+});
+export type ConsultationWorkflow = z.infer<typeof consultationWorkflowSchema>;
+
 export const consultationStatusSchema = z.enum([
 	"UNDER_REVIEW",
 	"ASSIGNED",
@@ -207,6 +215,7 @@ export const consultationSchema = z.object({
 	requestedDocuments: z.array(z.string()),
 	comments: z.array(caseCommentSchema),
 	profile: applicantProfileSchema,
+	workflow: consultationWorkflowSchema,
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 });

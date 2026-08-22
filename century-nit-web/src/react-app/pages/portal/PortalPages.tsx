@@ -1790,6 +1790,8 @@ export function PortalConsultation() {
 	const hasActiveCase = Boolean(liveConsultation || booking.confirmationId);
 	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
 	const activeOfficer = liveConsultation?.assignedOfficerName;
+	const workflow = liveConsultation?.workflow;
+	const workflowStatus = workflow?.status ?? "AWAITING_ASSIGNMENT";
 	const activeOutcome = liveConsultation?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
 	const activeNotes = liveConsultation?.assessmentResult?.notes ?? booking.eligibilityNote;
 
@@ -1837,33 +1839,31 @@ export function PortalConsultation() {
 									className="portal-pill"
 									style={{
 										background:
-											liveConsultation?.status === "CANCELLED"
+											workflowStatus === "CLOSED"
 												? "#fee2e2"
-												: liveConsultation?.status === "COMPLETED"
+												: workflowStatus === "COMPLETED"
 													? "#dcfce7"
-													: liveConsultation?.status === "IN_ASSESSMENT"
+													: workflowStatus === "IN_PROGRESS"
 														? "#e0e7ff"
 														: "#fef3c7",
 										color:
-											liveConsultation?.status === "CANCELLED"
+											workflowStatus === "CLOSED"
 												? "#991b1b"
-												: liveConsultation?.status === "COMPLETED"
+												: workflowStatus === "COMPLETED"
 													? "#166534"
-													: liveConsultation?.status === "IN_ASSESSMENT"
+													: workflowStatus === "IN_PROGRESS"
 														? "#3730a3"
 														: "#92400e",
 										fontWeight: 600,
 									}}
 								>
-									{liveConsultation?.status === "CANCELLED"
-										? "Appointment Cancelled"
-										: liveConsultation?.status === "COMPLETED"
+									{workflowStatus === "CLOSED"
+										? "Appointment Closed"
+										: workflowStatus === "COMPLETED"
 											? "✓ Assessment Completed"
-											: liveConsultation?.status === "IN_ASSESSMENT"
-												? "In Assessment"
-												: liveConsultation?.status === "ASSIGNED"
-													? "Consultant Assigned"
-													: "Awaiting Staff Assignment"}
+											: workflowStatus === "IN_PROGRESS"
+												? "In Progress"
+												: "Awaiting Staff Assignment"}
 								</span>
 							</div>
 
@@ -1905,14 +1905,14 @@ export function PortalConsultation() {
 						<h3 className="section-title mb-2" style={{ fontSize: "1.1rem" }}>
 							Assigned Academic Counselor
 						</h3>
-					{liveConsultation?.status === "CANCELLED" ? (
+					{workflowStatus === "CLOSED" ? (
 						<div>
+							<h4 style={{ margin: "0 0 0.5rem 0" }}>Appointment Closed</h4>
 							<p className="muted" style={{ fontSize: "0.9rem", margin: "0 0 0.75rem 0" }}>
-								This consultation appointment was cancelled. If you would like to book a new appointment,
-								you can do so from the Appointments tab.
+								This appointment was cancelled. You can rebook if you would like to continue.
 							</p>
 							<Button to="/portal/appointments" variant="secondary" arrow>
-								Book a new appointment →
+								Rebook Appointment →
 							</Button>
 						</div>
 					) : activeOfficer ? (

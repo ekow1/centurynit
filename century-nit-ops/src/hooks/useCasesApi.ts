@@ -106,6 +106,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		coordinatorAssignedAt: row.coordinatorAssignedAt ?? null,
 		coordinatorAssignedByName: row.coordinatorAssignedByName ?? null,
 		delegationNote: row.delegationNote ?? null,
+		workflow: row.workflow,
 	};
 }
 

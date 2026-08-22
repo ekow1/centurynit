@@ -666,7 +666,19 @@ export function EnterpriseConsultations() {
 								</p>
 							</div>
 						)}
-						{active.status === "Cancelled" && (
+						{active.workflow?.status === "CLOSED" && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "#fee2e2", borderBottom: "1px solid #fca5a5", flexShrink: 0 }}>
+								<p style={{ fontSize: "var(--text-sm)", color: "#991b1b" }}>
+									<strong>
+										{active.workflow.closureReason === "APPOINTMENT_CANCELLED"
+											? "Appointment Cancelled"
+											: "Consultation Cancelled"}
+									</strong>
+									{active.workflow.nextAction === "REBOOK_APPOINTMENT" && " — client can rebook a new appointment."}
+								</p>
+							</div>
+						)}
+						{false && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#fee2e2", borderBottom: "1px solid #fca5a5", flexShrink: 0 }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#991b1b" }}>
 									<strong>This consultation has been cancelled.</strong> The linked appointment was released and the applicant has been notified.

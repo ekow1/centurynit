@@ -6,52 +6,87 @@ import { EnquiryButton } from "../EnquiryContext";
 import { company } from "century-nit-core";
 
 export function Footer() {
-	const [email, setEmail] = useState("");
-	const [done, setDone] = useState(false);
+  const [email, setEmail] = useState("");
+  const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-	function onSubmit(e: FormEvent) {
-		e.preventDefault();
-		if (!email.includes("@")) return;
-		setDone(true);
-		setEmail("");
-	}
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed.includes("@")) {
+      setError("Please enter a valid email address");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/newsletter/subscribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: trimmed, name: "" }),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        // try to get error message from body
+        let errorMsg = "Failed to subscribe";
+        try {
+          const err = await response.json();
+          if (err?.message) errorMsg = err.message;
+        } catch (_) {/* ignore */}
+        setError(errorMsg);
+        return;
+      }
+      // Assuming the API returns {ok:true, message:...} on success
+      setDone(true);
+      setEmail("");
+    } catch (err) {
+      console.error(err);
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-	return (
-		<footer className="footer texture-lines-light">
-			<div className="container">
-				<div className="footer__grid">
-					<div>
-						<div className="footer__brand">Century NIT</div>
-						<p style={{ color: "rgba(255,255,255,0.7)", maxWidth: "28rem", marginBottom: "1rem" }}>
-							{company.summary}
-						</p>
-						<p className="mono" style={{ color: "rgba(255,255,255,0.55)", marginBottom: "1.5rem" }}>
-							Since {company.founded} · {company.base}
-						</p>
-						<form className="newsletter" onSubmit={onSubmit} aria-label="Newsletter signup">
-							{done ? (
-								<p className="mono" style={{ color: "rgba(255,255,255,0.85)" }}>
-									Subscribed - welcome to the list.
-								</p>
-							) : (
-								<>
-									<Input
-										type="email"
-										placeholder="Email for insights"
-										value={email}
-										onChange={(e) => setEmail(e.target.value)}
-										required
-										aria-label="Email address"
-										style={{ background: "#fff", color: "#000" }}
-										fullBorder
-									/>
-									<Button type="submit" variant="inverted">
-										Subscribe
-									</Button>
-								</>
-							)}
-						</form>
-					</div>
+  return (
+    <footer className="footer texture-lines-light">
+      <div className="container">
+        <div className="footer__grid">
+          <div>
+            <div className="footer__brand">Century NIT</div>
+            <p style={{ color: "rgba(255,255,255,0.7)", maxWidth: "28rem", marginBottom: "1rem" }}>
+              {company.summary}
+            </p>
+            <p className="mono" style={{ color: "rgba(255,255,255,0.55)", marginBottom: "1.5rem" }}>
+              Since {company.founded} · {company.base}
+            </p>
+            <form className="newsletter" onSubmit={onSubmit} aria-label="Newsletter signup">
+              {done ? (
+                <p className="mono" style={{ color: "rgba(255,255,255,0.85)" }}>
+                  Subscribed - welcome to the list.
+                </p>
+              ) : (
+                <>
+                  {error && <p className="mono" style={{ color: "rgba(255,0,0,0.8)" }}>{error}</p>}
+                  <Input
+                    type="email"
+                    placeholder="Email for insights"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    aria-label="Email address"
+                    style={{ background: "#fff", color: "#000" }}
+                    fullBorder
+                  />
+                  <Button type="submit" variant="inverted" disabled={submitting}>
+                    {submitting ? "Subscribing…" : "Subscribe"}
+                  </Button>
+                </>
+              )}
+            </form>
+          </div>
 
 					<div className="footer__col">
 						<h4>Explore</h4>

@@ -12,6 +12,13 @@ export type ConsultationStatus =
 	| "Completed"
 	| "Cancelled";
 
+export type ConsultationWorkflow = {
+	status: "AWAITING_ASSIGNMENT" | "IN_PROGRESS" | "COMPLETED" | "CLOSED";
+	stage: string;
+	closureReason: string | null;
+	nextAction: string | null;
+};
+
 export type DocStatus = "Verified" | "Pending Review" | "Rejected";
 
 /* ─── Branches ───
@@ -148,6 +155,7 @@ export interface MockConsultation {
 	coordinatorAssignedAt?: string | null;
 	coordinatorAssignedByName?: string | null;
 	delegationNote?: string | null;
+	workflow: ConsultationWorkflow;
 }
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";

@@ -364,6 +364,33 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 	const effectiveStatus = isBookingCancelled ? "CANCELLED" : (row.status as ApiConsultation["status"]);
 	const officer = isBookingCancelled ? null : await loadStaff(row.assignedOfficerId);
 
+	const workflow = ((): ApiConsultation["workflow"] => {
+		const base = { stage: "CONSULTATION", closureReason: null as string | null, nextAction: null as string | null };
+
+		if (effectiveStatus === "CANCELLED" || isBookingCancelled) {
+			return {
+				status: "CLOSED",
+				stage: "APPOINTMENT",
+				closureReason: isBookingCancelled ? "APPOINTMENT_CANCELLED" : "CONSULTATION_CANCELLED",
+				nextAction: "REBOOK_APPOINTMENT",
+			};
+		}
+
+		if (effectiveStatus === "COMPLETED") {
+			return { ...base, status: "COMPLETED", nextAction: "PROCEED_TO_ELIGIBILITY" };
+		}
+
+		if (effectiveStatus === "IN_ASSESSMENT") {
+			return { ...base, status: "IN_PROGRESS", nextAction: "AWAIT_ASSESSMENT" };
+		}
+
+		if (officer || effectiveStatus === "ASSIGNED") {
+			return { ...base, status: "IN_PROGRESS", nextAction: "ATTEND_CONSULTATION" };
+		}
+
+		return { ...base, status: "AWAITING_ASSIGNMENT", nextAction: "ASSIGN_STAFF" };
+	})();
+
 	return {
 		id: row.id,
 		reference: row.reference,
@@ -396,6 +423,7 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		requestedDocuments: row.requestedDocuments ?? [],
 		comments: comments.map(toComment),
 		profile: (applicant?.profile as ApplicantProfile) ?? emptyProfile(),
+		workflow,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};

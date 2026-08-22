@@ -177,3 +177,54 @@ export async function feedBlockCount(opsUserId: string): Promise<number> {
 		);
 	return row?.count ?? 0;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Outbound feed — a consultant's own Century NIT bookings as a read-only ICS
+ * subscription, so their personal calendar shows their consultations and they
+ * do not double-book on their side. The token in the URL is the sole credential.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+export type OutboundBooking = {
+	reference: string;
+	serviceName: string;
+	clientName: string;
+	startsAt: Date;
+	endsAt: Date;
+};
+
+/** `YYYYMMDDTHHMMSSZ` — the UTC form iCal DTSTART/DTEND require. */
+function icsUtc(d: Date): string {
+	return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/** Escape iCal text values: backslash, semicolon, comma, newline. */
+function escapeIcs(value: string): string {
+	return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+}
+
+/** Serialise upcoming bookings into a subscribable ICS document. */
+export function renderBookingsIcs(bookings: OutboundBooking[], calendarName = "Century NIT"): string {
+	const stamp = icsUtc(new Date());
+	const lines = [
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//Century NIT//Consultations//EN",
+		`X-WR-CALNAME:${escapeIcs(calendarName)}`,
+		"CALSCALE:GREGORIAN",
+		"METHOD:PUBLISH",
+	];
+	for (const b of bookings) {
+		lines.push(
+			"BEGIN:VEVENT",
+			`UID:century-nit-${escapeIcs(b.reference)}@century-nit`,
+			`DTSTAMP:${stamp}`,
+			`DTSTART:${icsUtc(b.startsAt)}`,
+			`DTEND:${icsUtc(b.endsAt)}`,
+			`SUMMARY:${escapeIcs(`${b.serviceName} · ${b.clientName}`)}`,
+			`DESCRIPTION:${escapeIcs(`Century NIT consultation. Ref: ${b.reference}. Client: ${b.clientName}.`)}`,
+			"END:VEVENT",
+		);
+	}
+	lines.push("END:VCALENDAR");
+	return lines.join("\r\n");
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseIcsBusyBlocks } from "./ics.js";
+import { parseIcsBusyBlocks, renderBookingsIcs } from "./ics.js";
 
 /**
  * Unit tests for the iCal/ICS parser that replaced the Google Calendar
@@ -69,5 +69,36 @@ describe("parseIcsBusyBlocks", () => {
 		// The one-off meeting (Jan 5) and all-day leave (Jan 20) fall outside Feb.
 		expect(blocks.find((b) => b.uid === "meeting-single@test")).toBeUndefined();
 		expect(blocks.find((b) => b.uid === "all-day-leave@test")).toBeUndefined();
+	});
+});
+
+describe("renderBookingsIcs", () => {
+	it("serialises upcoming bookings into a subscribable ICS calendar", () => {
+		const ics = renderBookingsIcs(
+			[
+				{
+					reference: "CN-2026-0001",
+					serviceName: "Visa Assessment",
+					clientName: "Mensah, Kwame",
+					startsAt: new Date("2026-09-01T10:00:00Z"),
+					endsAt: new Date("2026-09-01T10:30:00Z"),
+				},
+			],
+			"My Calendar · Century NIT",
+		);
+
+		expect(ics).toContain("BEGIN:VCALENDAR");
+		expect(ics).toContain("END:VCALENDAR");
+		expect(ics).toContain("VERSION:2.0");
+		expect(ics).toContain("X-WR-CALNAME:My Calendar · Century NIT");
+		// A comma in the value is escaped per iCal text rules; the middle dot is not.
+		expect(ics).toContain("SUMMARY:Visa Assessment · Mensah\\, Kwame");
+		expect(ics).toContain("UID:century-nit-CN-2026-0001@century-nit");
+		expect(ics).toContain("DTSTART:20260901T100000Z");
+		expect(ics).toContain("DTEND:20260901T103000Z");
+		expect(ics).toContain("DTSTAMP:");
+		// Lines are CRLF-separated (iCal wire format).
+		expect(ics).toContain("\r\n");
+		expect(ics).not.toContain("\r\n\n");
 	});
 });

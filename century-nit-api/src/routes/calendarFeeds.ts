@@ -1,8 +1,9 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, like, lt, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { calendarBusyBlocks, staffCalendarFeeds } from "../db/schema.js";
+import { bookings, calendarBusyBlocks, staffCalendarFeeds } from "../db/schema.js";
 import { encrypt } from "../lib/crypto.js";
 import {
 	requireAuth,
@@ -17,9 +18,14 @@ import {
 	setWorkingHours,
 } from "../services/availability.js";
 import { isValidTimeZone } from "../lib/time.js";
-import { removeCalendarFeed } from "../services/calendar/ics.js";
+import { removeCalendarFeed, renderBookingsIcs } from "../services/calendar/ics.js";
 import { queueFeedSync } from "../worker/queues.js";
-import { updateWorkingHoursSchema, workingHoursResponseSchema } from "century-nit-shared";
+import {
+	API_PREFIX,
+	ACTIVE_BOOKING_STATUSES,
+	updateWorkingHoursSchema,
+	workingHoursResponseSchema,
+} from "century-nit-shared";
 
 /**
  * Calendar feeds — the iCal/ICS mirror that replaced Google Calendar.
@@ -38,7 +44,19 @@ const feedResponseSchema = z.object({
 	lastSyncedAt: z.string().datetime().nullable(),
 	lastError: z.string().nullable(),
 	busyBlocksCount: z.number().int(),
+	/** Absolute URL of this consultant's outbound read-only ICS subscription. */
+	outboundUrl: z.string().url().nullable(),
 });
+
+/**
+ * Build the subscribable outbound ICS URL for a feed token, anchored to the
+ * host that served this request (the API's own public origin).
+ */
+function outboundUrl(c: { req: { url: string } }, token: string | null): string | null {
+	if (!token) return null;
+	const origin = new URL(c.req.url).origin;
+	return `${origin}${API_PREFIX}/calendar/feeds/outbound/${token}`;
+}
 
 const upsertFeedSchema = z.object({
 	icsUrl: z
@@ -92,6 +110,7 @@ calendarFeedsRouter.openapi(
 				lastSyncedAt: feed?.lastSyncedAt?.toISOString() ?? null,
 				lastError: feed?.lastError ?? null,
 				busyBlocksCount: countRow?.count ?? 0,
+				outboundUrl: outboundUrl(c, feed?.outboundToken ?? null),
 			},
 			200,
 		);
@@ -125,15 +144,20 @@ calendarFeedsRouter.openapi(
 		const url = toHttps(body.icsUrl);
 
 		const encrypted = encrypt(url);
+		const token = randomUUID();
 		await db
 			.insert(staffCalendarFeeds)
 			.values({
 				opsUserId: staff.opsUserId,
 				icsUrlEncrypted: encrypted,
 				label: body.label ?? null,
+				outboundToken: token,
 			})
 			.onConflictDoUpdate({
 				target: staffCalendarFeeds.opsUserId,
+				// NOTE: outboundToken is intentionally NOT overwritten on replace —
+				// the consultant has already subscribed to it; regenerating would
+				// silently break their existing calendar subscription.
 				set: { icsUrlEncrypted: encrypted, label: body.label ?? null, updatedAt: new Date() },
 			});
 
@@ -142,8 +166,23 @@ calendarFeedsRouter.openapi(
 		await ensureDefaultWorkingHours(staff.opsUserId);
 		await queueFeedSync();
 
+		// Return the (possibly pre-existing) token's outbound URL so the consultant
+		// can subscribe their personal calendar to their Century NIT bookings.
+		const [feed] = await db
+			.select({ outboundToken: staffCalendarFeeds.outboundToken })
+			.from(staffCalendarFeeds)
+			.where(eq(staffCalendarFeeds.opsUserId, staff.opsUserId))
+			.limit(1);
+
 		return c.json(
-			{ hasFeed: true, label: body.label ?? null, lastSyncedAt: null, lastError: null, busyBlocksCount: 0 },
+			{
+				hasFeed: true,
+				label: body.label ?? null,
+				lastSyncedAt: null,
+				lastError: null,
+				busyBlocksCount: 0,
+				outboundUrl: outboundUrl(c, feed?.outboundToken ?? null),
+			},
 			200,
 		);
 	},
@@ -245,5 +284,67 @@ calendarFeedsRouter.openapi(
 			{ workingHours: await listWorkingHours(staff.opsUserId), conflictingBookings },
 			200,
 		);
+	},
+);
+
+/* ── GET /api/v1/calendar/feeds/outbound/{token} ─────────────────────────────
+ * Public (no auth) — the token in the URL is the sole credential. Lets a
+ * consultant subscribe their personal calendar to their own Century NIT
+ * bookings, so the two-way mirror is complete: external events block portal
+ * slots (inbound), and portal bookings block their personal calendar (outbound).
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/feeds/outbound/{token}",
+		tags: ["Calendar"],
+		summary: "Subscribe to a consultant's Century NIT bookings (read-only ICS, public)",
+		description:
+			"Returns upcoming confirmed/assigned consultations for the token owner as an ICS " +
+			"calendar subscription. No authentication — the unguessable token is the credential. " +
+			"Calendar apps subscribe by pointing at this URL.",
+		request: { params: z.object({ token: z.string().min(1) }) },
+		responses: {
+			200: { content: { "text/calendar": { schema: z.string() } }, description: "ICS subscription" },
+			404: { description: "Unknown token" },
+		},
+	}),
+	async (c) => {
+		const { token } = c.req.valid("param");
+		const [feed] = await db
+			.select({ opsUserId: staffCalendarFeeds.opsUserId, label: staffCalendarFeeds.label })
+			.from(staffCalendarFeeds)
+			.where(eq(staffCalendarFeeds.outboundToken, token))
+			.limit(1);
+		if (!feed) return c.body(null, 404);
+
+		const from = new Date();
+		const to = new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+		const rows = await db
+			.select({
+				reference: bookings.reference,
+				serviceName: bookings.serviceName,
+				clientName: bookings.clientName,
+				startsAt: bookings.startsAt,
+				endsAt: bookings.endsAt,
+			})
+			.from(bookings)
+			.where(
+				and(
+					eq(bookings.employeeId, feed.opsUserId),
+					inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
+					gte(bookings.startsAt, from),
+					lt(bookings.startsAt, to),
+				),
+			)
+			.orderBy(bookings.startsAt);
+
+		const ics = renderBookingsIcs(rows, feed.label ? `${feed.label} · Century NIT` : "Century NIT");
+		return c.body(ics, 200, {
+			"content-type": "text/calendar; charset=utf-8",
+			"content-disposition": 'inline; filename="century-nit.ics"',
+			"cache-control": "public, max-age=300",
+		});
 	},
 );

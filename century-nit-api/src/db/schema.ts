@@ -525,6 +525,12 @@ export const staffCalendarFeeds = pgTable(
 		label: varchar("label", { length: 120 }),
 		lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
 		lastError: text("last_error"),
+		/**
+		 * Unguessable token for this consultant's outbound read-only ICS feed
+		 * (their Century NIT bookings, subscribable by any calendar app without
+		 * auth). Acts as the sole credential for the unauthenticated feed route.
+		 */
+		outboundToken: varchar("outbound_token", { length: 64 }).unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},

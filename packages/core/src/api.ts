@@ -583,6 +583,8 @@ export type CalendarStatus = {
 	lastSyncedAt: string | null;
 	lastError: string | null;
 	busyBlocksCount: number;
+	/** Absolute URL to subscribe a calendar app to this consultant's own Century NIT bookings. */
+	outboundUrl: string | null;
 	workingHours: { dayOfWeek: number; start: string; end: string; timezone: string }[];
 };
 
@@ -605,6 +607,7 @@ export const calendarApi = {
 		lastSyncedAt: string | null;
 		lastError: string | null;
 		busyBlocksCount: number;
+		outboundUrl: string | null;
 	}> {
 		return request(`${API_PREFIX}/calendar/feeds/me`, {
 			method: "PUT",

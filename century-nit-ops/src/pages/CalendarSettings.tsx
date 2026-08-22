@@ -168,6 +168,52 @@ function formatSynced(iso: string | null): string {
 	return d.toLocaleString();
 }
 
+/**
+ * The outbound half of the mirror — a read-only ICS URL that publishes this
+ * consultant's own Century NIT consultations, so their personal calendar shows
+ * their bookings and they don't get double-booked on their side. The token in
+ * the URL is the only credential, so keep it private.
+ */
+function OutboundFeed({ url }: { url: string }) {
+	const [copied, setCopied] = useState(false);
+
+	async function copy() {
+		try {
+			await navigator.clipboard.writeText(url);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			setCopied(false);
+		}
+	}
+
+	return (
+		<div className="cal-feed__outbound">
+			<h3 className="cal-hours__title">Your bookings on your calendar</h3>
+			<p className="ops-panel__muted">
+				Subscribe your personal calendar to this secret address to see your Century NIT
+				consultations there — Google/Outlook/Apple all support “add calendar by URL”.
+			</p>
+			<div className="cal-feed__copy">
+				<input
+					type="url"
+					className="input input--full-border"
+					value={url}
+					readOnly
+					aria-label="Outbound ICS subscription URL"
+					onFocus={(e) => e.currentTarget.select()}
+				/>
+				<button type="button" className="btn btn--ghost btn--sm" onClick={copy}>
+					{copied ? "Copied" : "Copy"}
+				</button>
+			</div>
+			<p className="ops-panel__muted cal-feed__warn">
+				Anyone with this link can read your appointment times. Keep it private.
+			</p>
+		</div>
+	);
+}
+
 function FeedSection({
 	status,
 	onSaved,
@@ -274,19 +320,23 @@ function FeedSection({
 						</button>
 					</div>
 
-					<form className="cal-feed__replace" onSubmit={save}>
-						<label className="ops-panel__muted">Replace with a different calendar address</label>
-						<input
-							type="url"
-							className="input input--full-border"
-							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-							value={url}
-							onChange={(e) => setUrl(e.target.value)}
-						/>
-						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-							{busy ? "Saving…" : "Replace feed"}
-						</button>
-					</form>
+				<form className="cal-feed__replace" onSubmit={save}>
+					<label className="ops-panel__muted">Replace with a different calendar address</label>
+					<input
+						type="url"
+						className="input input--full-border"
+						placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+						value={url}
+						onChange={(e) => setUrl(e.target.value)}
+					/>
+					<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+						{busy ? "Saving…" : "Replace feed"}
+					</button>
+				</form>
+
+				{status.outboundUrl && (
+					<OutboundFeed url={status.outboundUrl} />
+				)}
 				</>
 			) : (
 				<form className="cal-feed__add" onSubmit={save}>

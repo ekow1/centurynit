@@ -192,11 +192,11 @@ export function createApp() {
 				name: "Bookings",
 				description: "Appointment booking, assignment, rescheduling and cancellation.",
 			},
-			{
-				name: "Calendar",
-				description:
-					"Staff Google Calendar connection, working hours and change notifications.",
-			},
+		{
+			name: "Calendar",
+			description:
+				"Staff iCal/ICS availability mirror (read-only feed paste) and weekly working hours.",
+		},
 			{
 				name: "Staff",
 				description:
@@ -247,12 +247,23 @@ export function createApp() {
 				"Web Push subscription management. Each authenticated user gets " +
 				"a personal SSE stream at /events/stream.",
 		},
-		{
-			name: "Web Push",
-			description:
-				"Browser push notifications. Subscribe a browser, fetch the VAPID " +
-				"public key, and unsubscribe.",
-		},
+	{
+		name: "Web Push",
+		description:
+			"Browser push notifications. Subscribe a browser, fetch the VAPID " +
+			"public key, and unsubscribe.",
+	},
+	{ name: "Schools", description: "School-application management and scholarships." },
+	{ name: "Tickets", description: "Client support tickets and messages." },
+	{ name: "Payments", description: "Paystack checkout initiation, verification and webhooks." },
+	{ name: "Roles", description: "Staff role definitions and permissions." },
+	{ name: "CRM Leads", description: "Lead capture, events and pipeline management." },
+	{
+		name: "Client Directory & Access Control",
+		description: "Client-user accounts, bans and session revocation.",
+	},
+	{ name: "Communication", description: "Staff presence, routing and conversation context." },
+	{ name: "Marketing", description: "Campaigns, mailing lists and reusable templates." },
 	],
 	};
 

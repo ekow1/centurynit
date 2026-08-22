@@ -1,0 +1,2 @@
+ALTER TABLE "staff_calendar_feeds" ADD COLUMN "outbound_token" varchar(64);--> statement-breakpoint
+ALTER TABLE "staff_calendar_feeds" ADD CONSTRAINT "staff_calendar_feeds_outbound_token_unique" UNIQUE("outbound_token");

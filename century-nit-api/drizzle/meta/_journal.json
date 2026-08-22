@@ -267,6 +267,13 @@
       "when": 1787368835135,
       "tag": "0037_deep_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787372765038,
+      "tag": "0038_abnormal_gideon",
+      "breakpoints": true
     }
   ]
 }

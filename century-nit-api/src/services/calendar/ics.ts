@@ -1,5 +1,5 @@
 import { and, eq, like, lte, gte, sql } from "drizzle-orm";
-import { Component, Event as IcalEvent, Time, parse as parseIcs } from "ical.js";
+import ICAL from "ical.js";
 import { db } from "../../db/index.js";
 import { calendarBusyBlocks, staffCalendarFeeds } from "../../db/schema.js";
 import { decryptNullable } from "../../lib/crypto.js";
@@ -38,20 +38,20 @@ export type BusyBlock = {
  * (the deployment's zone) and a close-enough approximation elsewhere.
  */
 export function parseIcsBusyBlocks(ics: string, from: Date, to: Date): BusyBlock[] {
-	const jcal = parseIcs(ics);
-	const comp = new Component(jcal);
+	const jcal = ICAL.parse(ics);
+	const comp = new ICAL.Component(jcal);
 	const vevents = comp.getAllSubcomponents("vevent");
 	const blocks: BusyBlock[] = [];
 
 	for (const vevent of vevents) {
-		const event = new IcalEvent(vevent);
+		const event = new ICAL.Event(vevent);
 		const uid = event.uid;
 		if (!uid) continue;
 		const summary = event.summary || null;
 
 		if (event.isRecurring()) {
 			const iter = event.iterator();
-			let occurrence: Time | null;
+			let occurrence: ICAL.Time | null;
 			// Occurrences are emitted in ascending order, so the first one past
 			// `to` means we are done — no need to walk the whole unbounded series.
 			while ((occurrence = iter.next()) !== null) {

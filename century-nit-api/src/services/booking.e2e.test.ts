@@ -274,10 +274,10 @@ describe("required end-to-end scenario", () => {
 			durationMinutes: 45,
 			timezone: TZ,
 		});
-		expect(afterMove.find((s) => s.time === "10:00")?.available).toBe(true);
+		expect(afterMove.slots.find((s) => s.time === "10:00")?.available).toBe(true);
 		// Parallel-consultant capacity: 14:00 still holds Enoch's booking, but Ama
 		// is free there, so the slot remains bookable for the branch (not greyed).
-		expect(afterMove.find((s) => s.time === "14:00")?.available).toBe(true);
+		expect(afterMove.slots.find((s) => s.time === "14:00")?.available).toBe(true);
 
 			/* 17–19. Cancel: status CANCELLED and the calendar event is dropped. */
 			const cancelled = await cancelBooking({
@@ -299,7 +299,7 @@ describe("required end-to-end scenario", () => {
 				durationMinutes: 45,
 				timezone: TZ,
 			});
-			expect(afterCancel.find((s) => s.time === "14:00")?.available).toBe(true);
+			expect(afterCancel.slots.find((s) => s.time === "14:00")?.available).toBe(true);
 
 			const employeeFree = await isEmployeeAvailable(
 				employeeA,

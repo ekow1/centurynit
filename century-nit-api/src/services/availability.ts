@@ -472,7 +472,7 @@ export async function branchAvailability(input: {
     }
   }
 
-  const slotsResult = times.map((time) => {
+  const slotsResult = times.map((time): SlotAvailability => {
     const startsAt = zonedTimeToUtc(date, time, timezone);
     const endsAt = addMinutes(startsAt, durationMinutes);
     const slot: SlotAvailability = { time, startsAt, endsAt, available: true };

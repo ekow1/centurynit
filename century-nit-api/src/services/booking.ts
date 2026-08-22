@@ -148,13 +148,13 @@ export async function createBooking(input: {
 	}
 
 	// Server-side re-check (§10) — the client's view of availability is a hint.
-	const slots = await branchAvailability({
+	const availability = await branchAvailability({
 		branchId: data.branchId,
 		date: data.date,
 		durationMinutes: data.durationMinutes,
 		timezone: data.timezone,
 	});
-	const slot = slots.find((s) => s.time === data.time);
+	const slot = availability.slots.find((s) => s.time === data.time);
 	if (!slot) {
 		throw new HttpError(400, "VALIDATION_ERROR", `${data.time} is not a bookable start time`);
 	}
@@ -536,14 +536,14 @@ export async function rescheduleBooking(input: {
 
 	// Re-check availability against the *new* slot, excluding this booking so it
 	// does not conflict with itself.
-	const slots = await branchAvailability({
+	const availability = await branchAvailability({
 		branchId: booking.branchId,
 		date: input.date,
 		durationMinutes: booking.durationMinutes,
 		timezone,
 		excludeBookingId: booking.id,
 	});
-	const slot = slots.find((s) => s.time === input.time);
+	const slot = availability.slots.find((s) => s.time === input.time);
 	if (!slot?.available) {
 		throw new HttpError(
 			409,

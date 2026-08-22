@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { opsUsers, staffCalendarFeeds, calendarSyncStatusEnum } from "../db/schema.js";
+import { opsUsers } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	canModifyBooking,

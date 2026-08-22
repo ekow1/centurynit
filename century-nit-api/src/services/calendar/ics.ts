@@ -278,3 +278,26 @@ export function renderIcs(events: IcsEvent[], calendarName = "Century NIT"): str
 	lines.push("END:VCALENDAR");
 	return lines.join("\r\n");
 }
+
+/**
+ * Convenience wrapper around {@link renderIcs} for the common case of an
+ * outbound bookings feed. Maps each booking to a stable-UID, CONFIRMED event
+ * so a subscription stays in sync across refreshes.
+ */
+export function renderBookingsIcs(
+	bookings: OutboundBooking[],
+	calendarName = "Century NIT",
+): string {
+	const now = new Date();
+	const events: IcsEvent[] = bookings.map((b) => ({
+		uid: `century-nit-${b.reference}@century-nit`,
+		summary: `${b.serviceName} · ${b.clientName}`,
+		description: null,
+		location: null,
+		startsAt: b.startsAt,
+		endsAt: b.endsAt,
+		status: "CONFIRMED",
+		lastModified: now,
+	}));
+	return renderIcs(events, calendarName);
+}

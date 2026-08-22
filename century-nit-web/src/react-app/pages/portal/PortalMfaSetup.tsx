@@ -7,10 +7,8 @@ import {
 	getMfaEnrollment,
 	enrollMfa,
 	confirmMfaOtp,
-	sendMfaOtp,
 	type MfaEnrollmentStatus,
 } from "../../lib/api";
-import { useAppState } from "../../context/AppState";
 
 /**
  * Two-factor setup for portal clients — optional, recommended.
@@ -39,7 +37,6 @@ type Step =
 
 export function PortalMfaSetup() {
 	const nav = useNavigate();
-	const { authUser } = useAppState();
 	const [step, setStep] = useState<Step>("loading");
 	const [status, setStatus] = useState<MfaEnrollmentStatus | null>(null);
 	const [method, setMethod] = useState<"totp" | "email_otp">("totp");
@@ -149,7 +146,8 @@ export function PortalMfaSetup() {
 		setError(null);
 		try {
 			await enrollMfa("email_otp", password);
-			setStep("otp-send");
+			setOtpSent(true);
+			setStep("otp-verify");
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not start setup");
 		} finally {
@@ -157,15 +155,15 @@ export function PortalMfaSetup() {
 		}
 	}
 
-	async function sendOtpCode() {
+	async function resendOtp() {
 		setBusy(true);
 		setError(null);
 		try {
-			await sendMfaOtp();
+			await enrollMfa("email_otp", password);
 			setOtpSent(true);
-			setStep("otp-verify");
+			setCode("");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not send code");
+			setError(err instanceof Error ? err.message : "Could not resend code");
 		} finally {
 			setBusy(false);
 		}
@@ -413,21 +411,6 @@ export function PortalMfaSetup() {
 				</form>
 			)}
 
-			{step === "otp-send" && (
-				<div>
-					<p className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "1rem" }}>
-						We'll send a one-time code to {authUser?.email ?? "your email"} to confirm your email MFA setup works.
-					</p>
-					<div className="cal-actions">
-						<button type="button" className="btn btn--primary" onClick={sendOtpCode} disabled={busy}>
-							{busy ? "Sending..." : "Send verification code"}
-						</button>
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setStep("otp-password")}>
-							Back
-						</button>
-					</div>
-				</div>
-			)}
 
 			{step === "otp-verify" && (
 				<form className="auth-form" onSubmit={confirmOtp} noValidate>
@@ -460,7 +443,7 @@ export function PortalMfaSetup() {
 							onClick={() => {
 								setCode("");
 								setError(null);
-								void sendOtpCode();
+								void resendOtp();
 							}}
 							disabled={busy}
 						>

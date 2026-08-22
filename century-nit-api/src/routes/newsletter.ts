@@ -1,11 +1,9 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
 import { mailingLists, mailingListContacts, leads } from "../db/schema.js";
 import { sendEmail } from "../lib/resend.js";
-import { env } from "../env.js";
 
 function escapeHtml(value: string): string {
 	return value
@@ -118,9 +116,9 @@ newsletterRouter.openapi(
     // Create a lead for this subscriber
     await db.insert(leads).values({
       email: normalized,
-      name: name ?? null,
+      name: name ?? "Newsletter subscriber",
       source: "newsletter",
-      status: "new",
+      stage: "New Lead",
       createdAt: new Date(),
       updatedAt: new Date(),
     });

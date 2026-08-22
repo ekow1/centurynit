@@ -26,7 +26,7 @@ import {
 	meRouter,
 } from "./routes/cases.js";
 import { meSchoolsRouter, opsSchoolsRouter } from "./routes/schools.js";
-import { meTicketsRouter, opsTicketsRouter } from "./routes/tickets.js";
+import { opsTicketsRouter } from "./routes/tickets.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { rolesRouter } from "./routes/roles.js";
 import { leadsRouter } from "./routes/leads.js";
@@ -142,7 +142,6 @@ export function createApp() {
 	app.route(`${API_PREFIX}/applicants`, applicantsRouter);
 	app.route(`${API_PREFIX}/me/schools`, meSchoolsRouter);
 	app.route(`${API_PREFIX}/schools`, opsSchoolsRouter);
-	app.route(`${API_PREFIX}/me/tickets`, meTicketsRouter);
 	app.route(`${API_PREFIX}/tickets`, opsTicketsRouter);
 	app.route(`${API_PREFIX}/payments`, paymentsRouter);
 	app.route(`${API_PREFIX}/roles`, rolesRouter);

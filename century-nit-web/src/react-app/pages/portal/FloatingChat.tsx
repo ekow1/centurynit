@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type FormEvent } from "react";
 import { useAppState } from "../../context/AppState";
-import { useApplicantTickets } from "../../data/opsTicketBridge";
+
 import { type ChatMessage as LocalChatMessage } from "century-nit-core";
 import type { ChatMessage as SharedChatMessage, QuotedMessage } from "century-nit-shared";
 import {
@@ -12,7 +12,7 @@ import {
 import { useApplicantChat } from "../../hooks/useApplicantChat";
 import { useAiChat } from "../../hooks/useAiChat";
 
-type ChatTab = "ai" | "consultant" | "support";
+type ChatTab = "ai" | "consultant";
 
 const AI_SUGGESTIONS = [
 	"What documents do I need?",
@@ -21,7 +21,6 @@ const AI_SUGGESTIONS = [
 	"What IELTS score do I need?",
 ];
 
-const SUPPORT_WELCOME_AT = new Date().toISOString();
 
 const TAB_META: Record<ChatTab, { label: string; subtitle: string; color: string }> = {
 	ai: {
@@ -33,11 +32,6 @@ const TAB_META: Record<ChatTab, { label: string; subtitle: string; color: string
 		label: "Consultant",
 		subtitle: "Responds within 24h",
 		color: "#10b981",
-	},
-	support: {
-		label: "Support",
-		subtitle: "Technical & account help",
-		color: "#f59e0b",
 	},
 };
 
@@ -216,7 +210,6 @@ function ScriptedMessageBubble({ msg }: { msg: LocalChatMessage }) {
 
 export function FloatingChat() {
 	const { authUser, booking, application } = useAppState();
-	const { tickets: myTickets, createTicket, replyToTicket } = useApplicantTickets(authUser?.email);
 	const [open, setOpen] = useState(false);
 	const [tab, setTab] = useState<ChatTab>("ai");
 	const [input, setInput] = useState("");
@@ -247,59 +240,16 @@ export function FloatingChat() {
 	const aiTyping = aiChat.typing;
 	const scrollRef = useRef<HTMLDivElement>(null);
 
-	const openTicket = useMemo(
-		() => myTickets.find((t) => t.status !== "Resolved") ?? null,
-		[myTickets],
-	);
-
-	const supportMessages: LocalChatMessage[] = useMemo(() => {
-		if (!openTicket) {
-			return [
-				{
-					id: "sup-welcome",
-					sender: "support",
-					authorName: "Century Support",
-					text: "Tell us what you need help with and we'll raise a request for you. A member of the team picks it up and replies right here.",
-					at: SUPPORT_WELCOME_AT,
-				},
-			];
-		}
-		return openTicket.messages.map((m) => ({
-			id: m.id,
-			sender: m.role === "applicant" ? "applicant" : "support",
-			authorName: m.role === "applicant" ? (authUser?.name ?? "You") : m.author,
-			text: m.body,
-			at: m.at,
-		}));
-	}, [openTicket, authUser]);
-
 	useEffect(() => {
 		if (scrollRef.current && tab !== "consultant") {
 			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
 		}
-	}, [aiMessages, supportMessages, aiTyping, open, tab]);
+	}, [aiMessages, aiTyping, open, tab]);
 
 	function handleScriptedSubmit(e: FormEvent) {
 		e.preventDefault();
 		const trimmed = input.trim();
 		if (!trimmed) return;
-
-		if (tab === "support") {
-			if (openTicket) {
-				replyToTicket(openTicket.id, trimmed);
-			} else {
-				createTicket({
-					title: trimmed.split(/[.!?\n]/)[0].slice(0, 80) || "Support request",
-					description: trimmed,
-					category: "Other",
-					createdBy: authUser?.name ?? "Applicant",
-					createdByEmail: authUser?.email ?? "",
-					applicantRef: application.applicationId ?? booking.confirmationId ?? undefined,
-				});
-			}
-			setInput("");
-			return;
-		}
 
 		// AI tab — streamed from the Workers AI edge endpoint.
 		setInput("");
@@ -314,14 +264,7 @@ export function FloatingChat() {
 	const meta =
 		tab === "consultant" && (applicantChat.consultantName ?? booking.consultantName)
 			? { ...base, subtitle: `${applicantChat.consultantName ?? booking.consultantName} · responds within 24h` }
-			: tab === "support" && openTicket
-				? {
-						...base,
-						subtitle: `${openTicket.ref} · ${openTicket.status}${
-							openTicket.assignedTo ? ` · ${openTicket.assignedTo}` : " · awaiting triage"
-						}`,
-					}
-				: base;
+			: base;
 
 	// Consultant tab — shared component callbacks.
 	const isOwn = useCallback(
@@ -426,7 +369,7 @@ export function FloatingChat() {
 							background: "var(--card)",
 						}}
 					>
-						{(["ai", "consultant", "support"] as ChatTab[]).map((t) => {
+						{(["ai", "consultant"] as ChatTab[]).map((t) => {
 							const m = TAB_META[t];
 							const active = tab === t;
 							return (
@@ -495,7 +438,7 @@ export function FloatingChat() {
 									gap: "0.75rem",
 								}}
 							>
-								{(tab === "ai" ? aiMessages : supportMessages).map((msg) => (
+								{aiMessages.map((msg) => (
 									<ScriptedMessageBubble key={msg.id} msg={msg} />
 								))}
 

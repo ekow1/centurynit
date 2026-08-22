@@ -224,6 +224,8 @@ authSettings.post(
 
 			// Store in verifications table
 			const { verifications } = await import("../db/schema.js");
+			// Clear any stale enrollment code so the latest one is the only one
+			await db.delete(verifications).where(eq(verifications.identifier, identifier));
 			await db.insert(verifications).values({
 				id: crypto.randomUUID(),
 				identifier,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { CmsManager } from "./CmsManager";
 import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
@@ -174,14 +175,54 @@ const SYSTEM_HEALTH = [
 
 function SystemOverview() {
 	const { activityLog } = useOpsState();
-	const active = STAFF_ACCOUNTS.filter((u) => u.status === "Active").length;
+	const [staffCount, setStaffCount] = useState<number | null>(null);
+	const [activeStaff, setActiveStaff] = useState<number | null>(null);
+	const [rolesCount, setRolesCount] = useState<number | null>(null);
+	const [auditEntries, setAuditEntries] = useState<{ id: string; at: string; actor: string; action: string; detail: string; ip: string }[]>([]);
+
+	useEffect(() => {
+		void (async () => {
+			try {
+				const [staffRes, rolesRes] = await Promise.all([
+					staffApi.list().catch(() => ({ staff: [] })),
+					apiFetch<{ roles: DynamicRole[] }>(`${API_PREFIX}/roles`).catch(() => ({ roles: [] })),
+				]);
+				setStaffCount(staffRes.staff.length);
+				setActiveStaff(staffRes.staff.filter((s) => s.active).length);
+				setRolesCount(rolesRes.roles?.length ?? 0);
+			} catch {
+				/* non-fatal */
+			}
+		})();
+	}, []);
+
+	useEffect(() => {
+		void (async () => {
+			try {
+				const res = await apiFetch<{ entries: { id: string; at: string; actorEmail: string | null; action?: string; key: string; category?: string; ip?: string; newValueMasked?: string | null }[] }>(`${API_PREFIX}/settings/audit`);
+				setAuditEntries(
+					res.entries.slice(0, 8).map((e) => ({
+						id: e.id,
+						at: e.at,
+						actor: e.actorEmail ?? "system",
+						action: e.action ?? e.key,
+						detail: e.category ?? e.newValueMasked ?? "",
+						ip: e.ip ?? "—",
+					})),
+				);
+			} catch {
+				/* non-fatal — audit endpoint may be unavailable */
+			}
+		})();
+	}, []);
+
 	const operationalCount = SYSTEM_HEALTH.filter((s) => s.status === "operational").length;
 
 	return (
 		<>
 			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Staff Accounts" value={String(STAFF_ACCOUNTS.length)} note={`${active} active`} />
-				<Stat label="Roles Configured" value="5" note="Manager · Coordinator · Consultant · Finance · Admin" />
+				<Stat label="Staff Accounts" value={staffCount === null ? "—" : String(staffCount)} note={activeStaff === null ? "Loading…" : `${activeStaff} active`} />
+				<Stat label="Roles Configured" value={rolesCount === null ? "—" : String(rolesCount)} note="System & custom roles" />
 				<Stat label="System Health" value={`${Math.round((operationalCount / SYSTEM_HEALTH.length) * 100)}%`} note={operationalCount === SYSTEM_HEALTH.length ? "All services operational" : `${operationalCount}/${SYSTEM_HEALTH.length} operational`} inverted />
 			</div>
 
@@ -236,12 +277,12 @@ function SystemOverview() {
 				<div className="card">
 					<h2 className="section-title mb-3">Quick Actions</h2>
 					<div className="admin-quick-actions">
-						<button className="admin-quick-action">Manage users</button>
-						<button className="admin-quick-action">Edit site content</button>
-						<button className="admin-quick-action">Configure auth</button>
-						<button className="admin-quick-action">View audit log</button>
-						<button className="admin-quick-action">Manage branches</button>
-						<button className="admin-quick-action">Feature flags</button>
+						<Link to="/users" className="admin-quick-action">Manage users</Link>
+						<Link to="/cms" className="admin-quick-action">Edit site content</Link>
+						<Link to="/auth" className="admin-quick-action">Configure auth</Link>
+						<Link to="/audit" className="admin-quick-action">View audit log</Link>
+						<Link to="/settings" className="admin-quick-action">System config</Link>
+						<Link to="/notifications" className="admin-quick-action">Notifications</Link>
 					</div>
 				</div>
 			</div>
@@ -267,7 +308,11 @@ function SystemOverview() {
 								</tr>
 							</thead>
 							<tbody>
-								{AUDIT_LOG.map((e) => (
+								{auditEntries.length === 0 ? (
+									<tr>
+										<td colSpan={5} className="muted" style={{ padding: "1rem", textAlign: "center" }}>No audit entries recorded yet.</td>
+									</tr>
+								) : auditEntries.map((e) => (
 									<tr key={e.id}>
 										<td className="admin-table__mono">{new Date(e.at).toLocaleString()}</td>
 										<td style={{ fontWeight: 500 }}>{e.actor}</td>

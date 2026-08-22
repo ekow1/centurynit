@@ -1,31 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { ApiError, calendarApi, type CalendarStatus } from "century-nit-core/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 /**
- * Employee Google Calendar connection (§4).
+ * Calendar availability — the iCal/ICS mirror that replaced Google Calendar.
  *
- * The browser never sees a token. "Connect" asks the server for a consent URL
- * and hands the employee to Google; the authorisation code is exchanged
- * server-side and the tokens are stored encrypted. All this screen ever learns
- * is whether a calendar is connected.
+ * A staff member pastes their calendar's read-only secret iCal address (Google
+ * "Secret address in iCal format", Outlook/Apple "publish calendar" .ics link).
+ * The URL is stored encrypted on the server and never returned here — this page
+ * only ever learns whether a feed is set up and when it last mirrored. A worker
+ * pulls the busy windows into the availability check, so an external meeting
+ * blocks the portal slot. Meeting links themselves are set per-booking.
  */
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-/** Outcomes the OAuth callback redirects back with. */
-const CALLBACK_MESSAGE: Record<string, { text: string; tone: "ok" | "warn" }> = {
-	connected: { text: "Google Calendar connected.", tone: "ok" },
-	denied: { text: "Connection cancelled — no access was granted.", tone: "warn" },
-	expired: { text: "That connection link expired. Please try again.", tone: "warn" },
-	failed: { text: "Google could not complete the connection. Please try again.", tone: "warn" },
-	no_refresh_token: {
-		text:
-			"Google did not return long-term access. Remove Century NIT from your Google account permissions, then connect again.",
-		tone: "warn",
-	},
-};
 
 type DayRow = { dayOfWeek: number; enabled: boolean; start: string; end: string };
 
@@ -45,15 +33,10 @@ function toRows(saved: CalendarStatus["workingHours"]): DayRow[] {
 }
 
 /**
- * Weekly hours editor (§3).
- *
- * A day is non-working by being absent from the saved set, so unticking it is
- * how you say "I don't work Fridays" — there is no separate delete.
- *
- * Narrowing hours never touches existing bookings: an appointment already agreed
- * with a client is a commitment, and silently dropping it because someone edited
- * a preference would be worse than the inconsistency. The server reports how
- * many now sit outside the new hours and this says so.
+ * Weekly hours editor. A day is non-working by being absent from the saved set,
+ * so unticking it is how you say "I don't work Fridays". Narrowing hours never
+ * touches existing bookings; the server reports how many now sit outside and
+ * this says so.
  */
 function WorkingHoursEditor({
 	status,
@@ -77,7 +60,6 @@ function WorkingHoursEditor({
 		setSaved(null);
 	}
 
-	// Caught here so the invalid row is visible; the server rejects it too.
 	const invalid = rows.filter((r) => r.enabled && r.start >= r.end);
 
 	async function submit(e: React.FormEvent) {
@@ -179,17 +161,188 @@ function WorkingHoursEditor({
 	);
 }
 
+function formatSynced(iso: string | null): string {
+	if (!iso) return "never";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "never";
+	return d.toLocaleString();
+}
+
+function FeedSection({
+	status,
+	onSaved,
+}: {
+	status: CalendarStatus;
+	onSaved: () => void;
+}) {
+	const [url, setUrl] = useState("");
+	const [label, setLabel] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [ok, setOk] = useState<string | null>(null);
+
+	const [confirmOpen, setConfirmOpen] = useState(false);
+	const confirmActionRef = useRef<() => void>(() => {});
+
+	async function save(e: React.FormEvent) {
+		e.preventDefault();
+		const trimmed = url.trim();
+		if (!trimmed) {
+			setError("Paste your calendar's secret iCal address.");
+			return;
+		}
+		if (!/^https:\/\/|^webcal:\/\//i.test(trimmed)) {
+			setError("The link must start with https:// or webcal://");
+			return;
+		}
+		setBusy(true);
+		setError(null);
+		setOk(null);
+		try {
+			await calendarApi.saveFeed({ icsUrl: trimmed, label: label.trim() || undefined });
+			setUrl("");
+			setLabel("");
+			setOk("Saved — mirroring your calendar now.");
+			onSaved();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not save the feed.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function syncNow() {
+		setBusy(true);
+		setError(null);
+		try {
+			await calendarApi.syncNow();
+			setOk("Syncing — refresh in a moment to see updated busy times.");
+			onSaved();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not sync.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	function remove() {
+		setConfirmOpen(true);
+		confirmActionRef.current = async () => {
+			setBusy(true);
+			try {
+				await calendarApi.removeFeed();
+				onSaved();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Could not remove the feed.");
+			} finally {
+				setBusy(false);
+			}
+		};
+	}
+
+	return (
+		<div className="cal-feed">
+			{status.hasFeed ? (
+				<>
+					<p className="cal-state">
+						<span className="cal-dot cal-dot--on" aria-hidden="true" />
+						{status.label ? `Mirroring “${status.label}”` : "Calendar feed connected"}
+						{status.busyBlocksCount > 0
+							? ` · ${status.busyBlocksCount} busy time${status.busyBlocksCount === 1 ? "" : "s"} mirrored`
+							: ""}
+					</p>
+					<p className="ops-panel__muted">
+						Last synced {formatSynced(status.lastSyncedAt)}.
+						{status.lastError ? ` Last error: ${status.lastError}` : ""}
+					</p>
+					<div className="cal-actions">
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							disabled={busy}
+							onClick={syncNow}
+						>
+							Sync now
+						</button>
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							disabled={busy}
+							onClick={remove}
+						>
+							Remove feed
+						</button>
+					</div>
+
+					<form className="cal-feed__replace" onSubmit={save}>
+						<label className="ops-panel__muted">Replace with a different calendar address</label>
+						<input
+							type="url"
+							className="input input--full-border"
+							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+							value={url}
+							onChange={(e) => setUrl(e.target.value)}
+						/>
+						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+							{busy ? "Saving…" : "Replace feed"}
+						</button>
+					</form>
+				</>
+			) : (
+				<form className="cal-feed__add" onSubmit={save}>
+					<p className="ops-panel__muted">
+						Paste your calendar's read-only secret iCal address so your external meetings
+						block the slots applicants can book. Works with Google, Outlook and Apple — no
+						account connection needed.
+					</p>
+					<ul className="cal-feed__steps">
+						<li><strong>Google:</strong> Calendar settings → Integrate calendar → “Secret address in iCal format”</li>
+						<li><strong>Outlook/Office 365:</strong> Share → Publish calendar → .ics link</li>
+						<li><strong>Apple:</strong> Share → public calendar URL</li>
+					</ul>
+					<input
+						type="url"
+						className="input input--full-border"
+						placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+						value={url}
+						onChange={(e) => setUrl(e.target.value)}
+						aria-label="Secret iCal address"
+					/>
+					<input
+						type="text"
+						className="input input--full-border"
+						placeholder="Label (optional, e.g. Work calendar)"
+						value={label}
+						onChange={(e) => setLabel(e.target.value)}
+						aria-label="Label"
+					/>
+					<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+						{busy ? "Saving…" : "Connect calendar"}
+					</button>
+				</form>
+			)}
+
+			{error && <p className="ops-modal__error">{error}</p>}
+			{ok && <p className="ops-panel__ok">{ok}</p>}
+
+			<ConfirmDialog
+				open={confirmOpen}
+				title="Remove calendar feed?"
+				message="Your external meetings will no longer block booking slots. This cannot be undone."
+				danger
+				onConfirm={() => {
+					setConfirmOpen(false);
+					confirmActionRef.current();
+				}}
+				onCancel={() => setConfirmOpen(false)}
+			/>
+		</div>
+	);
+}
+
 export function CalendarSettings() {
 	const [status, setStatus] = useState<CalendarStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
-	const [params, setParams] = useSearchParams();
-
-	const [confirmOpen, setConfirmOpen] = useState(false);
-	const [confirmTitle, setConfirmTitle] = useState("");
-	const [confirmMessage, setConfirmMessage] = useState("");
-	const [confirmDanger, setConfirmDanger] = useState(false);
-	const confirmActionRef = useRef<() => void>(() => {});
 
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
 
@@ -197,17 +350,6 @@ export function CalendarSettings() {
 		setToast({ type, message });
 	}
 	void _showToast;
-
-	function confirm(title: string, message: string, action: () => void, danger = false) {
-		setConfirmTitle(title);
-		setConfirmMessage(message);
-		setConfirmDanger(danger);
-		confirmActionRef.current = action;
-		setConfirmOpen(true);
-	}
-
-	const callback = params.get("calendar");
-	const banner = callback ? CALLBACK_MESSAGE[callback] : undefined;
 
 	const load = useCallback(() => {
 		calendarApi
@@ -219,7 +361,7 @@ export function CalendarSettings() {
 			.catch((err: unknown) => {
 				setError(
 					err instanceof ApiError && err.isForbidden
-						? "Only staff can connect a calendar."
+						? "Only staff can set up a calendar feed."
 						: err instanceof Error
 							? err.message
 							: "Could not load calendar status.",
@@ -229,126 +371,19 @@ export function CalendarSettings() {
 
 	useEffect(load, [load]);
 
-	// Clear the callback flag so a refresh does not replay the banner.
-	useEffect(() => {
-		if (!callback) return;
-		const timer = window.setTimeout(() => {
-			params.delete("calendar");
-			setParams(params, { replace: true });
-		}, 6000);
-		return () => window.clearTimeout(timer);
-	}, [callback, params, setParams]);
-
-	async function connect() {
-		setBusy(true);
-		setError(null);
-		try {
-			const { url } = await calendarApi.connect();
-			window.location.href = url; // hand off to Google
-		} catch (err) {
-			setError(
-				err instanceof ApiError && err.code === "CALENDAR_NOT_CONFIGURED"
-					? "Google Calendar is not configured on this server yet."
-					: err instanceof Error
-						? err.message
-						: "Could not start the connection.",
-			);
-			setBusy(false);
-		}
-	}
-
-	async function disconnect() {
-		confirm(
-			"Disconnect Google Calendar?",
-			"New bookings will not create meeting links.",
-			async () => {
-				setBusy(true);
-				try {
-					await calendarApi.disconnect();
-					load();
-				} catch (err) {
-					setError(err instanceof Error ? err.message : "Could not disconnect.");
-				} finally {
-					setBusy(false);
-				}
-			},
-			true,
-		);
-	}
-
 	return (
 		<section className="ops-panel" aria-labelledby="calendar-heading">
 			<header className="ops-panel__head">
 				<h2 id="calendar-heading" className="section-title">
-					Google Calendar
+					Calendar availability
 				</h2>
 			</header>
 
-			{banner && (
-				<p className={banner.tone === "ok" ? "ops-panel__ok" : "ops-modal__error"}>{banner.text}</p>
-			)}
 			{error && <p className="ops-modal__error">{error}</p>}
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
 
-			{status && !status.configured && (
-				<p className="ops-panel__muted">
-					Google Calendar is not configured on this server. Bookings still work — meeting
-					links are created automatically once an administrator adds the credentials.
-				</p>
-			)}
-
-			{status?.configured && (
-				<>
-					<p className="cal-state">
-						<span
-							className={`cal-dot ${
-								status.connected ? "cal-dot--on" : status.needsReconnect ? "cal-dot--warn" : "cal-dot--off"
-							}`}
-							aria-hidden="true"
-						/>
-						{status.connected ? (
-							<>
-								Connected{status.googleAccountEmail ? ` as ${status.googleAccountEmail}` : ""}
-							</>
-						) : status.needsReconnect ? (
-							<>Access expired — reconnect to keep creating meeting links</>
-						) : (
-							<>Not connected</>
-						)}
-					</p>
-
-					<div className="cal-actions">
-						{status.connected ? (
-							<button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={disconnect}>
-								Disconnect
-							</button>
-						) : (
-							<button type="button" className="btn btn--primary btn--sm" disabled={busy} onClick={connect}>
-								{busy ? "Opening Google…" : status.needsReconnect ? "Reconnect Google Calendar" : "Connect Google Calendar"}
-							</button>
-						)}
-					</div>
-
-					<p className="ops-modal__foot">
-						Century NIT reads your calendar only to know when you are busy, and creates
-						events for consultations assigned to you. Your credentials stay on the server.
-					</p>
-				</>
-			)}
-
+			{status && <FeedSection status={status} onSaved={load} />}
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
-
-			<ConfirmDialog
-				open={confirmOpen}
-				title={confirmTitle}
-				message={confirmMessage}
-				danger={confirmDanger}
-				onConfirm={() => {
-					setConfirmOpen(false);
-					confirmActionRef.current();
-				}}
-				onCancel={() => setConfirmOpen(false)}
-			/>
 
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</section>

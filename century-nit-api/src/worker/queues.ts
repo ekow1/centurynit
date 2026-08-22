@@ -115,7 +115,25 @@ export async function cancelQueued(idempotencyKey: string): Promise<void> {
 	}
 }
 
-/* ── Push (browser notifications) ────────────────────────────────────────── */
+/**
+ * Queue an on-demand mirror of all iCal feeds now (manual "Sync now" from the
+ * Calendar page). Stable job id so concurrent triggers collapse onto one run.
+ */
+export async function queueFeedSync(): Promise<void> {
+	await calendarQueue.add("syncFeeds", {}, { ...RETRY, jobId: toJobId("feeds:sync:now") });
+}
+
+/**
+ * Schedule the recurring feed mirror. Idempotent — BullMQ dedupes repeatables
+ * by key, so calling this from every worker boot still yields a single timer.
+ */
+export async function scheduleFeedSyncs(): Promise<void> {
+	await calendarQueue.add(
+		"syncFeeds",
+		{},
+		{ repeat: { every: 3 * 60 * 1000 }, jobId: undefined },
+	);
+}
 
 /**
  * One push fan-out: deliver a single notification to every subscription owned

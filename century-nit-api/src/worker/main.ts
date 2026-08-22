@@ -1,6 +1,7 @@
 import { emailWorker } from "./email.js";
+import { feedsWorker } from "./feeds.js";
 import { pushWorker } from "./push.js";
-import { connection, emailQueue, calendarQueue, pushQueue } from "./queues.js";
+import { connection, emailQueue, calendarQueue, pushQueue, scheduleFeedSyncs } from "./queues.js";
 
 /**
  * Background worker process.
@@ -26,6 +27,7 @@ import { connection, emailQueue, calendarQueue, pushQueue } from "./queues.js";
 
 const workers = [
 	{ name: "email", worker: emailWorker },
+	{ name: "feeds", worker: feedsWorker },
 	{ name: "push", worker: pushWorker },
 ];
 
@@ -37,6 +39,9 @@ for (const { name, worker } of workers) {
 	worker.on("ready", () => console.log(`[${name}] ready`));
 	worker.on("error", (err) => console.error(`[${name}] error:`, err.message));
 }
+
+// Schedule the recurring iCal feed mirror (idempotent — BullMQ dedupes by key).
+scheduleFeedSyncs().catch((err) => console.error("[feeds] schedule error:", err.message));
 
 /**
  * Graceful shutdown.

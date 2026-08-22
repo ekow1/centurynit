@@ -8,7 +8,7 @@ import { Toast } from "./OpsDialogs";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockConsultation } from "century-nit-core/ops";
-import { documentsApi } from "century-nit-core/api";
+import { documentsApi, bookingsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "./StaffChatBadge";
 
@@ -75,6 +75,9 @@ export function EnterpriseConsultations() {
 	const showToast = (type: "error" | "success", message: string) => setToast({ type, message });
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
+	const [meetingUrlDraft, setMeetingUrlDraft] = useState("");
+	const [editingMeetingUrl, setEditingMeetingUrl] = useState(false);
+	const [savingMeetingUrl, setSavingMeetingUrl] = useState(false);
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -128,6 +131,8 @@ export function EnterpriseConsultations() {
 		setIsSubmitted(false);
 		setPreviewingDoc(null);
 		setShowReschedule(false);
+		setEditingMeetingUrl(false);
+		setMeetingUrlDraft("");
 	}
 
 	async function handleCompleteAssessment(e: React.FormEvent) {
@@ -585,6 +590,64 @@ export function EnterpriseConsultations() {
 										Get Directions →
 									</a>
 								) : null}
+							</div>
+						)}
+						{active.type === "online" && active.slotConfirmed && active.bookingId && canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
+								<p className="eyebrow">Meeting link</p>
+								{!editingMeetingUrl ? (
+									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+										{active.meetingLink ? (
+											<>
+												<a href={active.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
+												<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{active.meetingLink}</span>
+												<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(active.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
+											</>
+										) : (
+											<button type="button" className="btn btn--primary btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>Add meeting link</button>
+										)}
+									</div>
+								) : (
+									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+										<input
+											type="url"
+											className="input input--sm"
+											style={{ flex: 1, minWidth: "240px" }}
+											placeholder="https://zoom.us/j/… or https://meet.google.com/…"
+											value={meetingUrlDraft}
+											onChange={(e) => setMeetingUrlDraft(e.target.value)}
+										/>
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											disabled={savingMeetingUrl}
+											onClick={async () => {
+												if (!active.bookingId) return;
+												const v = meetingUrlDraft.trim();
+												if (v && !/^https:\/\//i.test(v)) {
+													showToast("error", "Meeting link must start with https://");
+													return;
+												}
+												setSavingMeetingUrl(true);
+												try {
+													await bookingsApi.setMeetingUrl(active.bookingId, v || null);
+													setEditingMeetingUrl(false);
+													showToast("success", v ? "Meeting link saved." : "Meeting link cleared.");
+													void refresh();
+												} catch (err) {
+													showToast("error", err instanceof Error ? err.message : "Could not save the meeting link.");
+												} finally {
+													setSavingMeetingUrl(false);
+												}
+											}}
+										>
+											{savingMeetingUrl ? "Saving…" : "Save"}
+										</button>
+										<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
+											Cancel
+										</button>
+									</div>
+								)}
 							</div>
 						)}
 						{active.status === "In Assessment" && (

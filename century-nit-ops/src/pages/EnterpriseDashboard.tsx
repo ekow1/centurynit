@@ -1,12 +1,13 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
-import { LEAD_STAGE_LABELS } from "century-nit-core";
+import { LEAD_STAGE_LABELS, API_PREFIX } from "century-nit-shared";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { UnassignedBookings } from "./UnassignedBookings";
 import { StaffChatBadge } from "./StaffChatBadge";
+import { apiFetch } from "../lib/api";
 
 /**
  * Every figure on this page is derived from the API, so drilling into a
@@ -18,6 +19,20 @@ export function EnterpriseDashboard() {
 	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
 	const { consultations, applications, applicants, assignees } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [leads, setLeads] = useState<{ id: string; stage: string }[]>([]);
+
+	useEffect(() => {
+		let cancelled = false;
+		void (async () => {
+			try {
+				const res = await apiFetch<{ leads: { id: string; stage: string }[] }>(`${API_PREFIX}/leads`);
+				if (!cancelled) setLeads(res.leads);
+			} catch {
+				/* non-fatal — funnel just shows 0 */
+			}
+		})();
+		return () => { cancelled = true; };
+	}, []);
 
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
 
@@ -65,8 +80,11 @@ export function EnterpriseDashboard() {
 			accepted: scoped.applications.filter((a) => a.status === "Accepted").length,
 			applicants: scoped.applicants.length,
 			activeApplicants: scoped.applicants.filter((a) => a.status === "Active").length,
-			leads: 0,
-			convertedLeads: 0,
+			leads: leads.length,
+			convertedLeads: leads.filter((l) => l.stage === "converted").length,
+			newLeads: leads.filter((l) => l.stage === "new").length,
+			contactedLeads: leads.filter((l) => l.stage === "contacted").length,
+			assessmentCompleteLeads: leads.filter((l) => l.stage === "assessment_complete").length,
 			unassignedConsultations: scoped.consultations.filter((c) => !c.assignedOfficer).length,
 			unassignedApplications: scoped.applications.filter((a) => !a.assignedStaff).length,
 			pendingDocs,
@@ -74,13 +92,13 @@ export function EnterpriseDashboard() {
 			outstanding,
 			collected,
 		};
-	}, [scoped]);
+	}, [scoped, leads]);
 
 	const funnel = useMemo(() => {
 		return [
-			{ label: LEAD_STAGE_LABELS.new, value: 0, to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.contacted, value: 0, to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.assessment_complete, value: 0, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.new, value: stats.newLeads, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.contacted, value: stats.contactedLeads, to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.assessment_complete, value: stats.assessmentCompleteLeads, to: "/crm" },
 			{ label: "Consultations", value: stats.consultations, to: "/consultations" },
 			{ label: "Applications", value: stats.applications, to: "/applications" },
 			{ label: "Applicants", value: stats.applicants, to: "/applicants" },
@@ -151,6 +169,9 @@ type Stats = {
 	activeApplicants: number;
 	leads: number;
 	convertedLeads: number;
+	newLeads: number;
+	contactedLeads: number;
+	assessmentCompleteLeads: number;
 	unassignedConsultations: number;
 	unassignedApplications: number;
 	pendingDocs: number;

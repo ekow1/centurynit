@@ -336,6 +336,18 @@ export const bookingsApi = {
 	markNoShow(bookingId: string): Promise<Booking> {
 		return request(`${API_PREFIX}/bookings/${bookingId}/no-show`, { method: "PATCH" });
 	},
+
+	/**
+	 * Set the meeting link on a booking manually (Zoom, Google Meet, Microsoft
+	 * Teams, …). Pass an empty string or null to clear it. Only https:// URLs are
+	 * accepted. Replaces the removed Google Calendar auto-generated Meet link.
+	 */
+	setMeetingUrl(bookingId: string, meetingUrl: string | null): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/meeting-url`, {
+			method: "PATCH",
+			...json({ meetingUrl: meetingUrl && meetingUrl.trim() ? meetingUrl.trim() : null }),
+		});
+	},
 };
 
 /* ── Staff identity: invitations and MFA ─────────────────────────────────── */
@@ -563,35 +575,57 @@ export const notificationsApi = {
 	},
 };
 
-/* ── Calendar connection (staff) ─────────────────────────────────────────── */
+/* ── Calendar feed (iCal mirror) — staff ──────────────────────────────────── */
 
 export type CalendarStatus = {
-	configured: boolean;
-	connected: boolean;
-	needsReconnect: boolean;
-	googleAccountEmail: string | null;
+	hasFeed: boolean;
+	label: string | null;
+	lastSyncedAt: string | null;
+	lastError: string | null;
+	busyBlocksCount: number;
 	workingHours: { dayOfWeek: number; start: string; end: string; timezone: string }[];
 };
 
 export const calendarApi = {
+	/**
+	 * Feed status plus working hours, merged for the Calendar page. The secret
+	 * iCal URL is never returned — the server only says *whether* a feed exists.
+	 */
 	status(): Promise<CalendarStatus> {
-		return request(`${API_PREFIX}/calendar/status`);
+		return Promise.all([
+			request<Omit<CalendarStatus, "workingHours">>(`${API_PREFIX}/calendar/feeds/me`),
+			request<{ workingHours: CalendarStatus["workingHours"] }>(`${API_PREFIX}/calendar/working-hours`),
+		]).then(([feed, wh]) => ({ ...feed, workingHours: wh.workingHours }));
 	},
 
-	/** Returns the Google consent URL to send the employee to. */
-	connect(): Promise<{ url: string }> {
-		return request(`${API_PREFIX}/calendar/connect`);
+	/** Add or replace the signed-in staff member's read-only iCal/ICS feed. */
+	saveFeed(input: { icsUrl: string; label?: string }): Promise<{
+		hasFeed: boolean;
+		label: string | null;
+		lastSyncedAt: string | null;
+		lastError: string | null;
+		busyBlocksCount: number;
+	}> {
+		return request(`${API_PREFIX}/calendar/feeds/me`, {
+			method: "PUT",
+			...json(input),
+		});
 	},
 
-	disconnect(): Promise<{ disconnected: boolean }> {
-		return request(`${API_PREFIX}/calendar/connection`, { method: "DELETE" });
+	/** Remove the feed and the busy blocks it was mirroring. */
+	removeFeed(): Promise<void> {
+		return request(`${API_PREFIX}/calendar/feeds/me`, { method: "DELETE" });
+	},
+
+	/** Trigger an immediate mirror of every feed (manual "Sync now"). */
+	syncNow(): Promise<void> {
+		return request(`${API_PREFIX}/calendar/feeds/sync`, { method: "POST" });
 	},
 
 	/**
-	 * Replace the signed-in staff member's weekly hours.
-	 *
-	 * `days` is the complete set — omit a day to mark it non-working. The target
-	 * is the session user; there is no id to pass, and none is accepted.
+	 * Replace the signed-in staff member's weekly hours. `days` is the complete
+	 * set — omit a day to mark it non-working. The target is the session user;
+	 * there is no id to pass, and none is accepted.
 	 */
 	updateWorkingHours(input: UpdateWorkingHours): Promise<WorkingHoursResponse> {
 		return request(`${API_PREFIX}/calendar/working-hours`, {

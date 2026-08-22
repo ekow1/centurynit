@@ -410,8 +410,8 @@ export const bookings = pgTable(
 		 * The matching employee-overlap guard is an exclusion constraint, added in
 		 * the migration — Drizzle cannot express EXCLUDE USING gist.
 		 */
-		oneActivePerBranchSlot: uniqueIndex("bookings_branch_slot_unique")
-			.on(t.branchId, t.startsAt)
+		oneActivePerConsultantSlot: uniqueIndex("bookings_branch_consultant_slot_unique")
+			.on(t.branchId, t.employeeId, t.startsAt)
 			.where(sql`status NOT IN ('CANCELLED', 'NO_SHOW')`),
 	}),
 );
@@ -497,6 +497,37 @@ export const calendarBusyBlocks = pgTable(
 		oneRowPerEvent: uniqueIndex("calendar_busy_unique").on(t.opsUserId, t.externalEventId),
 		byWindow: index("calendar_busy_window_idx").on(t.opsUserId, t.startsAt, t.endsAt),
 	}),
+);
+
+/**
+ * A read-only iCal/ICS subscription URL for one staff member.
+ *
+ * Replaces the removed Google Calendar OAuth integration. Each consultant pastes
+ * their calendar's secret iCal address (Google "Secret address in iCal format",
+ * Outlook/Apple "publish calendar" .ics link). A worker fetches it on a
+ * schedule and writes the busy windows into `calendar_busy_blocks`, which the
+ * availability check already subtracts — so an external meeting instantly
+ * blocks the slot on the portal, with zero OAuth and zero verification.
+ *
+ * The URL is a secret address (read access to the calendar's busy times), so it
+ * is encrypted at rest with the same AES-256-GCM scheme as OAuth tokens were
+ * (`lib/crypto.ts`), and never returned to any client.
+ */
+export const staffCalendarFeeds = pgTable(
+	"staff_calendar_feeds",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		opsUserId: uuid("ops_user_id")
+			.notNull()
+			.unique()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		icsUrlEncrypted: text("ics_url_encrypted").notNull(),
+		label: varchar("label", { length: 120 }),
+		lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+		lastError: text("last_error"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
 );
 
 /* ══════════════════════════════════════════════════════════════════════════

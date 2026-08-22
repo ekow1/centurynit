@@ -3,7 +3,8 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { mailingLists, mailingListContacts, leads } from "../db/schema.js";
-import { sendEmail } from "../lib/resend.js";
+import { queueEmail } from "../worker/queues.js";
+import { env } from "../env.js";
 
 function escapeHtml(value: string): string {
 	return value
@@ -123,23 +124,28 @@ newsletterRouter.openapi(
        updatedAt: new Date(),
      });
 
-     // Send welcome email
-     try {
-       await sendEmail({
-         to: normalized,
-         subject: "Welcome to the Century NIT Newsletter!",
-         html: newsletterEmailLayout(
-           "Welcome to the Century NIT Newsletter!",
-           `<p>Hi ${name ? `<strong>${escapeHtml(name)}</strong>` : "there"},</p>
+    // Queue welcome email
+    try {
+      const baseUrl = env.FRONTEND_URL;
+      const safeName = name ? escapeHtml(name) : null;
+      await queueEmail({
+        to: normalized,
+        subject: "Welcome to the Century NIT Newsletter!",
+        html: newsletterEmailLayout(
+          "Welcome to the Century NIT Newsletter!",
+          `<p>Hi ${safeName ? `<strong>${safeName}</strong>` : "there"},</p>
             <p>Thanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.</p>
-            <p>If you ever want to stop receiving these emails, you can <a href="${process.env.FRONTEND_URL ?? ""}/newsletter/unsubscribe?token=${/* placeholder – we don’t have a token now */}">unsubscribe</a>.</p>`
-         ),
-         text: `Welcome to the Century NIT Newsletter!\n\nHi ${name || "there"},\n\nThanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.\n\nTo unsubscribe, visit ${process.env.FRONTEND_URL ?? ""}/newsletter/unsubscribe (you’ll need your email to manage preferences).`,
-       });
-     } catch (emailErr) {
-       // Don’t let a mail failure break the subscription request
-       console.error("[newsletter] welcome email failed:", emailErr);
-     }
+            <p>If you ever want to stop receiving these emails, you can <a href="${baseUrl}/newsletter/unsubscribe?email=${encodeURIComponent(normalized)}">unsubscribe</a>.</p>`
+        ),
+        text: `Welcome to the Century NIT Newsletter!\n\nHi ${name || "there"},\n\nThanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.\n\nTo unsubscribe, visit ${baseUrl}/newsletter/unsubscribe?email=${encodeURIComponent(normalized)}.`,
+        idempotencyKey: `newsletter:welcome:${normalized}`,
+        template: "Newsletter welcome",
+        reference: normalized,
+      });
+    } catch (emailErr) {
+      // Don’t let a queue failure break the subscription request
+      console.error("[newsletter] welcome email queue failed:", emailErr);
+    }
 
      return c.json({
        ok: true,
@@ -286,11 +292,14 @@ async function sendConfirmationEmail(email: string, confirmUrl: string): Promise
 		<p style="margin:0;color:#666666;font-size:13px;">If you didn't subscribe, you can safely ignore this email — we won't send you anything else.</p>
 	`;
 
-	await sendEmail({
+	await queueEmail({
 		to: email,
 		subject: "Confirm your Century NIT newsletter subscription",
 		html: newsletterEmailLayout("Confirm your subscription", bodyHtml),
 		text: `Confirm your Century NIT newsletter subscription by visiting this link: ${confirmUrl}`,
+		idempotencyKey: `newsletter:confirm:${email.toLowerCase()}`,
+		template: "Newsletter confirmation",
+		reference: email,
 	});
 }
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
-import { mailingLists, mailingListContacts } from "../db/schema.js";
+import { mailingLists, mailingListContacts, leads } from "../db/schema.js";
 import { sendEmail } from "../lib/resend.js";
 import { env } from "../env.js";
 

@@ -8,6 +8,7 @@ import type { ProcessStageId } from "century-nit-core";
  * phone. These are one- or two-word names that stay legible at ~120px.
  */
 export const STAGE_SHORT: Record<ProcessStageId, string> = {
+	new: "New",
 	consultation: "Consultation",
 	eligibility: "Eligibility",
 	school_package: "Package",
@@ -22,6 +23,7 @@ export const STAGE_SHORT: Record<ProcessStageId, string> = {
 
 /** Where the applicant continues from a given stage */
 export const STAGE_PATH: Record<ProcessStageId, string> = {
+	new: "/portal/home",
 	consultation: "/portal/consultation",
 	eligibility: "/portal/consultation",
 	school_package: "/portal/package",

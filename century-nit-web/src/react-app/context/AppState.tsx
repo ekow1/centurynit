@@ -786,6 +786,7 @@ export function getJourneyPhase(
 	const next = PROCESS_STAGES.find((s) => s.index === meta.index + 1);
 
 	const labels: Record<ProcessStageId, string> = {
+		new: "Start your journey",
 		consultation: "Stage I · Consultation first",
 		eligibility: "Awaiting eligibility",
 		school_package: "Choose school application package",

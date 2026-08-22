@@ -190,6 +190,7 @@ export function PortalLayout() {
 /** Desktop-width stage name. Phones use the shorter STAGE_SHORT names instead. */
 function stagePill(s: ProcessStageId) {
 	const map: Record<ProcessStageId, string> = {
+		new: "New",
 		consultation: "Consultation",
 		eligibility: "Eligibility review",
 		school_package: "School package",

@@ -17,6 +17,7 @@ function currentStageCta(stage: ProcessStageId): { to: string; label: string } {
 }
 
 const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
+	new: { title: "Start your journey", desc: "Book your first consultation to begin your application with Century NIT." },
 	consultation: { title: "Start your consultation", desc: "Book the first meeting, fill your assessment, and pay the consultation fee." },
 	eligibility: { title: "Eligibility check", desc: "Our handler reviews your consultation and assessment." },
 	school_package: { title: "Choose your school package", desc: "Pick a funding track and degree level to shape school targeting." },

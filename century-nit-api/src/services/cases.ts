@@ -299,8 +299,22 @@ export async function cancelConsultation(
 
 	await db
 		.update(consultations)
-		.set({ status: "CANCELLED", updatedAt: new Date() })
+		.set({
+			status: "CANCELLED",
+			assignedOfficerId: null,
+			assignedAt: null,
+			assignedBy: null,
+			updatedAt: new Date(),
+		})
 		.where(eq(consultations.id, row.id));
+
+	// Release the officer on the applicant record too — the assignment is tied
+	// to the live consultation, and once the consultation is gone the officer
+	// should no longer appear in the portal or ops header.
+	await db
+		.update(applicants)
+		.set({ assignedOfficerId: null, updatedAt: new Date() })
+		.where(eq(applicants.id, row.applicantId));
 
 	// Audit trail — record why the case was cancelled.
 	await db.insert(caseComments).values({

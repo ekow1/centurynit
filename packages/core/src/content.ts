@@ -1730,6 +1730,7 @@ export const PRE_DEPARTURE_KEY = "century-nit-pre-departure";
  * → Admitted → Visa invoice (pay) → Visa tracking → Payment plan → Agency → Complete
  */
 export type ProcessStageId =
+	| "new"
 	| "consultation"
 	| "eligibility"
 	| "school_package"
@@ -1750,6 +1751,15 @@ export const PROCESS_STAGES: {
 	path?: string;
 	band: "consultation" | "application" | "visa" | "travel" | "done";
 }[] = [
+	{
+		id: "new",
+		index: 0,
+		label: "New",
+		detail: "Start your application journey",
+		owner: "you",
+		path: "/portal/home",
+		band: "consultation",
+	},
 	{
 		id: "consultation",
 		index: 1,

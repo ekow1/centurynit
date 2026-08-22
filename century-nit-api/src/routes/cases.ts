@@ -95,7 +95,6 @@ import {
 	portalStateSchema,
 	updatePortalStateSchema,
 	notificationSchema,
-	STAFF_ONLY_NOTIFICATION_TYPES,
 } from "century-nit-shared";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -106,6 +105,24 @@ import {
 	type StaffContext,
 } from "../middleware/auth.js";
 import { env } from "../env.js";
+
+/**
+ * Notification `type` values addressed only to staff (managers, coordinators,
+ * consultants, officers). They never belong in the client portal, so the
+ * `/me/notifications` read excludes them — a staff member who also has a client
+ * profile (dual-role account) must not see "New lead received", "consultation
+ * assigned", etc. on the user end. Types that go to BOTH a client and a staff
+ * member (booking.cancelled, booking.rescheduled, chat.message) are intentionally
+ * absent so applicants still see their own.
+ */
+const STAFF_ONLY_NOTIFICATION_TYPES = [
+	"lead.new",
+	"booking.new",
+	"booking.assigned",
+	"consultation.assigned",
+	"document.uploaded",
+	"ticket.new",
+] as const;
 
 const idParams = z.object({ id: z.string().uuid() });
 

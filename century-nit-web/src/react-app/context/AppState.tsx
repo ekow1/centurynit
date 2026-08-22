@@ -19,7 +19,6 @@ import { invoicesApi } from "century-nit-core/api";
 import {
 	API_PREFIX,
 	JOURNEY_STAGE_TO_PORTAL,
-	isStaffOnlyNotification,
 	type JourneyStage,
 } from "century-nit-shared";
 import {
@@ -56,6 +55,24 @@ import {
 	type SchoolFundingTrack,
 	type SchoolTrackStatus,
 } from "century-nit-core";
+
+/**
+ * Notification `type` values addressed only to staff. The client portal must
+ * never surface them — not from the `/me/notifications` read (the API filters
+ * these) nor from the live SSE stream. Defined here (not imported from shared)
+ * so the portal build does not depend on a freshly-built shared `dist/`.
+ */
+const STAFF_ONLY_NOTIFICATION_TYPES = [
+	"lead.new",
+	"booking.new",
+	"booking.assigned",
+	"consultation.assigned",
+	"document.uploaded",
+	"ticket.new",
+] as const;
+function isStaffOnlyNotification(type: string): boolean {
+	return (STAFF_ONLY_NOTIFICATION_TYPES as readonly string[]).includes(type);
+}
 
 export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone";
 

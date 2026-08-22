@@ -1,6 +1,7 @@
 import { formatInZone } from "../lib/time.js";
 import { renderBookingEmail } from "../lib/email-templates.js";
 
+
 /**
  * Scheduling notifications.
  *
@@ -28,6 +29,8 @@ export type BookingNotificationContext = {
 	meetingUrl?: string | null;
 	branchName?: string;
 	reason?: string | null;
+	/** iCal feed URL for the employee's personal calendar subscription (optional). */
+	calendarSubscriptionUrl?: string | null;
 };
 
 export type QueuedEmail = {

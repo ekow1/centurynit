@@ -1,13 +1,13 @@
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import {
-	SCHEDULING_ERROR_CODES,
-	occupiesSlot,
-	type BookingStatus,
-	type CreateBooking,
-	type RescheduleBooking,
+  SCHEDULING_ERROR_CODES,
+  occupiesSlot,
+  type BookingStatus,
+  type CreateBooking,
+  type RescheduleBooking,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { bookingEvents, bookings, opsUsers } from "../db/schema.js";
+import { bookingEvents, bookings, opsUsers, staffCalendarFeeds } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { isConflictError } from "../lib/db-errors.js";
 import { addMinutes, isValidTimeZone, zonedTimeToUtc } from "../lib/time.js";
@@ -104,22 +104,44 @@ async function loadEmployee(employeeId: string) {
 }
 
 async function notificationContext(
-	booking: BookingRow,
-	employee?: { name: string; email: string } | null,
+  booking: BookingRow,
+  employee?: { name: string; email: string; id?: string } | null,
 ) {
-	return {
-		reference: booking.reference,
-		serviceName: booking.serviceName,
-		startsAt: booking.startsAt,
-		clientTimezone: booking.timezone,
-		employeeTimezone: await defaultTimezone(),
-		durationMinutes: booking.durationMinutes,
-		clientName: booking.clientName,
-		clientEmail: booking.clientEmail,
-		employeeName: employee?.name ?? null,
-		employeeEmail: employee?.email ?? null,
-		meetingUrl: booking.meetingUrl,
-	};
+  const employeeTimezone = await defaultTimezone();
+  let calendarSubscriptionUrl: string | null = null;
+  if (employee?.id) {
+    const [feed] = await db
+      .select({ outboundToken: staffCalendarFeeds.outboundToken })
+      .from(staffCalendarFeeds)
+      .where(eq(staffCalendarFeeds.opsUserId, employee.id))
+      .limit(1);
+    if (feed?.outboundToken) {
+      // Construct absolute URL using the request origin? We'll use env later.
+      // For now, we'll rely on the frontend to build the URL; we can store token only.
+      // But we need full URL. We'll use process.env.BETTER_AUTH_URL? Actually the API base is same as BETTER_AUTH_URL? Not exactly.
+      // We'll use a placeholder; the frontend can replace? Better to return token and let email template build URL using a constant.
+      // We'll add a new field token and let email template construct URL using env variable.
+      // For simplicity, we'll construct using BETTER_AUTH_URL from env (requires importing env). 
+      // Instead we can store token and let email template use a known base: `https://api.softclicksolutions.com/api/v1/calendar/feeds/outbound/${token}`.
+      // We'll assume the API is hosted at that domain (same as BETTER_AUTH_URL). We'll use process.env.BETTER_AUTH_URL.
+      const baseUrl = process.env.BETTER_AUTH_URL ?? "https://api.softclicksolutions.com";
+      calendarSubscriptionUrl = `${baseUrl}/api/v1/calendar/feeds/outbound/${feed.outboundToken}`;
+    }
+  }
+  return {
+    reference: booking.reference,
+    serviceName: booking.serviceName,
+    startsAt: booking.startsAt,
+    clientTimezone: booking.timezone,
+    employeeTimezone,
+    durationMinutes: booking.durationMinutes,
+    clientName: booking.clientName,
+    clientEmail: booking.clientEmail,
+    employeeName: employee?.name ?? null,
+    employeeEmail: employee?.email ?? null,
+    meetingUrl: booking.meetingUrl,
+    calendarSubscriptionUrl,
+  };
 }
 
 /* ── Create ──────────────────────────────────────────────────────────────── */

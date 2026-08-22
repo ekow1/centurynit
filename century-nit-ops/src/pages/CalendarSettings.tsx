@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ApiError, calendarApi, type CalendarStatus, type CalendarSubscription } from "century-nit-core/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
@@ -159,13 +159,6 @@ function WorkingHoursEditor({
 			</div>
 		</form>
 	);
-}
-
-function formatSynced(iso: string | null): string {
-	if (!iso) return "never";
-	const d = new Date(iso);
-	if (Number.isNaN(d.getTime())) return "never";
-	return d.toLocaleString();
 }
 
 /**
@@ -331,181 +324,7 @@ function SyncToPersonalCalendar({
 	);
 }
 
-function FeedSection({
-	status,
-	onSaved,
-}: {
-	status: CalendarStatus;
-	onSaved: () => void;
-}) {
-	const [url, setUrl] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [ok, setOk] = useState<string | null>(null);
 
-	const [confirmOpen, setConfirmOpen] = useState(false);
-	const confirmActionRef = useRef<() => void>(() => {});
-
-	async function save(e: React.FormEvent) {
-		e.preventDefault();
-		const trimmed = url.trim();
-		if (!trimmed) {
-			setError("Paste your calendar's secret iCal address.");
-			return;
-		}
-		if (!/^https:\/\/|^webcal:\/\//i.test(trimmed)) {
-			setError("The link must start with https:// or webcal://");
-			return;
-		}
-		setBusy(true);
-		setError(null);
-		setOk(null);
-		try {
-			await calendarApi.saveFeed({ icsUrl: trimmed });
-			setUrl("");
-			setOk("Saved — mirroring your calendar now.");
-			onSaved();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not save the feed.");
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	async function syncNow() {
-		setBusy(true);
-		setError(null);
-		try {
-			await calendarApi.syncNow();
-			setOk("Syncing — refresh in a moment to see updated busy times.");
-			onSaved();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not sync.");
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	function remove() {
-		setConfirmOpen(true);
-		confirmActionRef.current = async () => {
-			setBusy(true);
-			try {
-				await calendarApi.removeFeed();
-				onSaved();
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "Could not remove the feed.");
-			} finally {
-				setBusy(false);
-			}
-		};
-	}
-
-	return (
-		<div className="cal-feed">
-			{status.hasFeed ? (
-				<>
-					<p className="cal-state">
-						<span className="cal-dot cal-dot--on" aria-hidden="true" />
-						Calendar feed connected
-						{status.busyBlocksCount > 0
-							? ` · ${status.busyBlocksCount} busy time${status.busyBlocksCount === 1 ? "" : "s"} mirrored`
-							: ""}
-					</p>
-					<p className="ops-panel__muted">
-						Last synced {formatSynced(status.lastSyncedAt)}.
-						{status.lastError ? ` Last error: ${status.lastError}` : ""}
-					</p>
-					<div className="cal-actions">
-						<button
-							type="button"
-							className="btn btn--ghost btn--sm"
-							disabled={busy}
-							onClick={syncNow}
-						>
-							Sync now
-						</button>
-						<button
-							type="button"
-							className="btn btn--ghost btn--sm"
-							disabled={busy}
-							onClick={remove}
-						>
-							Remove feed
-						</button>
-					</div>
-
-					<form className="cal-feed__replace" onSubmit={save}>
-						<label className="ops-panel__muted">Replace with a different calendar address</label>
-						<input
-							type="url"
-							className="input input--full-border"
-							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-							value={url}
-							onChange={(e) => setUrl(e.target.value)}
-						/>
-						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-							{busy ? "Saving…" : "Replace feed"}
-						</button>
-					</form>
-				</>
-			) : (
-				<>
-					<p className="ops-panel__muted">
-						Paste your calendar's read-only secret iCal address so your external meetings block the
-						slots applicants can book. Works with Google, Outlook and Apple — no account connection
-						needed.
-					</p>
-
-					<details className="cal-feed__help">
-						<summary>How to find your secret iCal address</summary>
-						<ul className="cal-feed__steps">
-							<li>
-								<strong>Google:</strong> Calendar settings → Integrate calendar → “Secret address in
-								iCal format”
-							</li>
-							<li>
-								<strong>Outlook/Office 365:</strong> Share → Publish calendar → .ics link
-							</li>
-							<li>
-								<strong>Apple:</strong> Share → public calendar URL
-							</li>
-						</ul>
-					</details>
-
-					<form className="cal-feed__add" onSubmit={save}>
-						<input
-							type="url"
-							className="input input--full-border"
-							placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
-							value={url}
-							onChange={(e) => setUrl(e.target.value)}
-							aria-label="Secret iCal address"
-						/>
-						<button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
-							{busy ? "Saving…" : "Connect calendar"}
-						</button>
-					</form>
-				</>
-			)}
-
-			{error && <p className="ops-modal__error">{error}</p>}
-			{ok && <p className="ops-panel__ok">{ok}</p>}
-
-			<ConfirmDialog
-				open={confirmOpen}
-				title="Remove calendar feed?"
-				message="Your external meetings will no longer block booking slots. This cannot be undone."
-				danger
-				onConfirm={() => {
-					setConfirmOpen(false);
-					confirmActionRef.current();
-				}}
-				onCancel={() => setConfirmOpen(false)}
-			/>
-		</div>
-	);
-}
 
 export function CalendarSettings() {
 	const [status, setStatus] = useState<CalendarStatus | null>(null);
@@ -551,7 +370,7 @@ export function CalendarSettings() {
 			{error && <p className="ops-modal__error">{error}</p>}
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
 
-			{status && <FeedSection status={status} onSaved={load} />}
+			
 			{status && <SyncToPersonalCalendar subscription={subscription} onChanged={load} />}
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
 

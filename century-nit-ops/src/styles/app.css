@@ -4,6 +4,12 @@
  Load after century-nit-core/styles/base.css.
  */
 
+/* Override shared chat UI tokens for brutalist ops layout */
+.cn-chat {
+	--cn-chat-radius: 0;
+	--cn-chat-radius-sm: 0;
+}
+
 .card-link {
 	color: inherit;
 	text-decoration: none;

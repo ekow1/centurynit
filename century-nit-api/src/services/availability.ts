@@ -1,19 +1,19 @@
 import { and, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
-import { ACTIVE_BOOKING_STATUSES } from "century-nit-shared";
+import { ACTIVE_BOOKING_STATUSES, type CalendarSyncStatus } from "century-nit-shared";
 import {
-	BRANCH_AVAILABILITY,
-	branches,
-	coreServices,
-	servicePackages,
-	type Branch,
+  BRANCH_AVAILABILITY,
+  branches,
+  coreServices,
+  servicePackages,
+  type Branch,
 } from "century-nit-core/content";
 import { db } from "../db/index.js";
 import {
-	bookings,
-	calendarBusyBlocks,
-	opsUsers,
-	staffCalendarFeeds,
-	staffWorkingHours,
+  bookings,
+  calendarBusyBlocks,
+  opsUsers,
+  staffCalendarFeeds,
+  staffWorkingHours,
 } from "../db/schema.js";
 import { bookingBufferMinutes, defaultTimezone } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
@@ -295,199 +295,227 @@ function dayMinutesInZone(instant: Date, timeZone: string): number {
  * dialog — it additionally accounts for that employee's own commitments.
  */
 export async function branchAvailability(input: {
-	branchId: string;
-	date: string;
-	durationMinutes: number;
-	timezone: string;
-	employeeId?: string;
-	excludeBookingId?: string;
-}): Promise<SlotAvailability[]> {
-	const { branchId, date, durationMinutes, timezone } = input;
-	const times = slotTimesFor(durationMinutes);
-	// Resolved once for the whole grid: every slot in one answer must be judged
-	// against the same buffer.
-	const buffer = await bookingBufferMinutes();
+  branchId: string;
+  date: string;
+  durationMinutes: number;
+  timezone: string;
+  employeeId?: string;
+  excludeBookingId?: string;
+}): Promise<{ slots: SlotAvailability[]; calendarSyncStatus: CalendarSyncStatus }> {
+  const { branchId, date, durationMinutes, timezone, employeeId } = input;
+  const times = slotTimesFor(durationMinutes);
+  // Resolved once for the whole grid: every slot in one answer must be judged
+  // against the same buffer.
+  const buffer = await bookingBufferMinutes();
 
-	getBranchOrThrow(branchId); // reject unknown branch ids from client input
+  getBranchOrThrow(branchId); // reject unknown branch ids from client input
 
-	const dayStart = zonedTimeToUtc(date, "00:00", timezone);
-	const dayEnd = addMinutes(dayStart, 24 * 60);
+  const dayStart = zonedTimeToUtc(date, "00:00", timezone);
+  const dayEnd = addMinutes(dayStart, 24 * 60);
 
-	// The branch is shut that weekday — no slot on it is bookable, whoever asks.
-	if (!branchOpenOnDay(branchId, dayOfWeekInZone(dayStart, timezone))) {
-		return times.map((time) => {
-			const startsAt = zonedTimeToUtc(date, time, timezone);
-			return {
-				time,
-				startsAt,
-				endsAt: addMinutes(startsAt, durationMinutes),
-				available: false,
-				reason: "outside-hours" as const,
-			};
-		});
-	}
+  // The branch is shut that weekday — no slot on it is bookable, whoever asks.
+  if (!branchOpenOnDay(branchId, dayOfWeekInZone(dayStart, timezone))) {
+    return {
+      slots: times.map((time) => {
+        const startsAt = zonedTimeToUtc(date, time, timezone);
+        return {
+          time,
+          startsAt,
+          endsAt: addMinutes(startsAt, durationMinutes),
+          available: false,
+          reason: "outside-hours" as const,
+        };
+      }),
+      calendarSyncStatus: "NOT_REQUIRED",
+    };
+  }
 
-	const branchTaken = await db
-		.select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, employeeId: bookings.employeeId })
-		.from(bookings)
-		.where(
-			and(
-				eq(bookings.branchId, branchId),
-				inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
-				gte(bookings.startsAt, dayStart),
-				lt(bookings.startsAt, dayEnd),
-				input.excludeBookingId ? ne(bookings.id, input.excludeBookingId) : undefined,
-			),
-		);
+  const branchTaken = await db
+    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt, employeeId: bookings.employeeId })
+    .from(bookings)
+    .where(
+      and(
+        eq(bookings.branchId, branchId),
+        inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
+        gte(bookings.startsAt, dayStart),
+        lt(bookings.startsAt, dayEnd),
+        input.excludeBookingId ? ne(bookings.id, input.excludeBookingId) : undefined,
+      ),
+    );
 
-	const employeeIntervals: Interval[] = input.employeeId
-		? [
-				...(await employeeBookings(input.employeeId, dayStart, dayEnd, input.excludeBookingId)),
-				...(await employeeBusyBlocks(input.employeeId, dayStart, dayEnd)),
-			]
-		: [];
+  const employeeIntervals: Interval[] = employeeId
+    ? [
+        ...(await employeeBookings(employeeId, dayStart, dayEnd, input.excludeBookingId)),
+        ...(await employeeBusyBlocks(employeeId, dayStart, dayEnd)),
+      ]
+    : [];
 
-	const hours = input.employeeId
-		? await workingHoursFor(input.employeeId, dayOfWeekInZone(dayStart, timezone))
-		: null;
+  const hours = employeeId
+    ? await workingHoursFor(employeeId, dayOfWeekInZone(dayStart, timezone))
+    : null;
 
-	// Parallel-consultant capacity. A public-form slot is bookable while at
-	// least one consultant is free — working that day, inside their own hours,
-	// not booked (in *any* branch, so cross-branch counts) and not mirrored busy
-	// from their iCal feed. Each unassigned booking already occupying the slot
-	// will consume one free consultant when assigned, so remaining capacity is
-	// freeCount minus the unassigned bookings parked at that instant. A slot
-	// greys out only when no consultant remains free — exactly the behaviour
-	// requested once Google Calendar's per-employee busy feed was replaced by
-	// the iCal mirror.
-	const consultants = input.employeeId
-		? []
-		: (
-				await db
-					.select({ id: opsUsers.id })
-					.from(opsUsers)
-					.where(
-						and(
-							eq(opsUsers.active, true),
-							inArray(opsUsers.role, ["consultant", "coordinator", "manager"]),
-						),
-					)
-			).map((c) => c.id);
+  // Parallel-consultant capacity. A public-form slot is bookable while at
+  // least one consultant is free — working that day, inside their own hours,
+  // not booked (in *any* branch, so cross-branch counts) and not mirrored busy
+  // from their iCal feed. Each unassigned booking already occupying the slot
+  // will consume one free consultant when assigned, so remaining capacity is
+  // freeCount minus the unassigned bookings parked at that instant. A slot
+  // greys out only when no consultant remains free — exactly the behaviour
+  // requested once Google Calendar's per-employee busy feed was replaced by
+  // the iCal mirror.
+  const consultants = employeeId
+    ? []
+    : (
+        await db
+          .select({ id: opsUsers.id })
+          .from(opsUsers)
+          .where(
+            and(
+              eq(opsUsers.active, true),
+              inArray(opsUsers.role, ["consultant", "coordinator", "manager"]),
+            ),
+          )
+      ).map((c) => c.id);
 
-	const consultantHours = new Map<
-		string,
-		{ startMinute: number; endMinute: number; timezone: string }
-	>();
-	const consultantBookings = new Map<string, Interval[]>();
-	const consultantBusy = new Map<string, Interval[]>();
+  const consultantHours = new Map<
+    string,
+    { startMinute: number; endMinute: number; timezone: string }
+  >();
+  const consultantBookings = new Map<string, Interval[]>();
+  const consultantBusy = new Map<string, Interval[]>();
 
-	if (consultants.length > 0) {
-		const dow = dayOfWeekInZone(dayStart, timezone);
-		const hoursRows = await db
-			.select()
-			.from(staffWorkingHours)
-			.where(
-				and(
-					inArray(staffWorkingHours.opsUserId, consultants),
-					eq(staffWorkingHours.dayOfWeek, dow),
-				),
-			);
-		for (const h of hoursRows) {
-			consultantHours.set(h.opsUserId, {
-				startMinute: h.startMinute,
-				endMinute: h.endMinute,
-				timezone: h.timezone,
-			});
-		}
+  if (consultants.length > 0) {
+    const dow = dayOfWeekInZone(dayStart, timezone);
+    const hoursRows = await db
+      .select()
+      .from(staffWorkingHours)
+      .where(
+        and(
+          inArray(staffWorkingHours.opsUserId, consultants),
+          eq(staffWorkingHours.dayOfWeek, dow),
+        ),
+      );
+    for (const h of hoursRows) {
+      consultantHours.set(h.opsUserId, {
+        startMinute: h.startMinute,
+        endMinute: h.endMinute,
+        timezone: h.timezone,
+      });
+    }
 
-		// Per-consultant bookings across *all* branches — a consultant busy in
-		// Accra is not free for a Kumasi slot at the same instant either.
-		const bookingRows = await db
-			.select({
-				employeeId: bookings.employeeId,
-				startsAt: bookings.startsAt,
-				endsAt: bookings.endsAt,
-			})
-			.from(bookings)
-			.where(
-				and(
-					inArray(bookings.employeeId, consultants),
-					inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
-					lt(bookings.startsAt, dayEnd),
-					gte(bookings.endsAt, dayStart),
-					input.excludeBookingId ? ne(bookings.id, input.excludeBookingId) : undefined,
-				),
-			);
-		for (const b of bookingRows) {
-			if (!b.employeeId) continue;
-			const list = consultantBookings.get(b.employeeId) ?? [];
-			list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
-			consultantBookings.set(b.employeeId, list);
-		}
+    // Per-consultant bookings across *all* branches — a consultant busy in
+    // Accra is not free for a Kumasi slot at the same instant either.
+    const bookingRows = await db
+      .select({
+        employeeId: bookings.employeeId,
+        startsAt: bookings.startsAt,
+        endsAt: bookings.endsAt,
+      })
+      .from(bookings)
+      .where(
+        and(
+          inArray(bookings.employeeId, consultants),
+          inArray(bookings.status, ACTIVE_BOOKING_STATUSES),
+          lt(bookings.startsAt, dayEnd),
+          gte(bookings.endsAt, dayStart),
+          input.excludeBookingId ? ne(bookings.id, input.excludeBookingId) : undefined,
+        ),
+      );
+    for (const b of bookingRows) {
+      if (!b.employeeId) continue;
+      const list = consultantBookings.get(b.employeeId) ?? [];
+      list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
+      consultantBookings.set(b.employeeId, list);
+    }
 
-		const busyRows = await db
-			.select({
-				opsUserId: calendarBusyBlocks.opsUserId,
-				startsAt: calendarBusyBlocks.startsAt,
-				endsAt: calendarBusyBlocks.endsAt,
-			})
-			.from(calendarBusyBlocks)
-			.where(
-				and(
-					inArray(calendarBusyBlocks.opsUserId, consultants),
-					lt(calendarBusyBlocks.startsAt, dayEnd),
-					gte(calendarBusyBlocks.endsAt, dayStart),
-				),
-			);
-		for (const b of busyRows) {
-			const list = consultantBusy.get(b.opsUserId) ?? [];
-			list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
-			consultantBusy.set(b.opsUserId, list);
-		}
-	}
+    const busyRows = await db
+      .select({
+        opsUserId: calendarBusyBlocks.opsUserId,
+        startsAt: calendarBusyBlocks.startsAt,
+        endsAt: calendarBusyBlocks.endsAt,
+      })
+      .from(calendarBusyBlocks)
+      .where(
+        and(
+          inArray(calendarBusyBlocks.opsUserId, consultants),
+          lt(calendarBusyBlocks.startsAt, dayEnd),
+          gte(calendarBusyBlocks.endsAt, dayStart),
+        ),
+      );
+    for (const b of busyRows) {
+      const list = consultantBusy.get(b.opsUserId) ?? [];
+      list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
+      consultantBusy.set(b.opsUserId, list);
+    }
+  }
 
-	return times.map((time) => {
-		const startsAt = zonedTimeToUtc(date, time, timezone);
-		const endsAt = addMinutes(startsAt, durationMinutes);
-		const slot: SlotAvailability = { time, startsAt, endsAt, available: true };
+  // Determine calendar sync status for the specific employee (if any)
+  let calendarSyncStatus: CalendarSyncStatus = "NOT_REQUIRED";
+  if (employeeId) {
+    const [feed] = await db
+      .select()
+      .from(staffCalendarFeeds)
+      .where(eq(staffCalendarFeeds.opsUserId, employeeId))
+      .limit(1);
+    if (feed) {
+      if (feed.lastError) {
+        calendarSyncStatus = "FAILED";
+      } else {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const lastSynced = feed.lastSyncedAt ?? new Date(0);
+        if (lastSynced.getTime() < oneHourAgo.getTime()) {
+          calendarSyncStatus = "PENDING";
+        } else {
+          calendarSyncStatus = "SYNCED";
+        }
+      }
+    }
+  }
 
-		if (startsAt.getTime() <= Date.now()) {
-			return { ...slot, available: false, reason: "past" };
-		}
+  const slotsResult = times.map((time) => {
+    const startsAt = zonedTimeToUtc(date, time, timezone);
+    const endsAt = addMinutes(startsAt, durationMinutes);
+    const slot: SlotAvailability = { time, startsAt, endsAt, available: true };
 
-		if (input.employeeId) {
-			// Manager assign dialog — judging one specific consultant.
-			if (!hours) return { ...slot, available: false, reason: "no-working-hours" };
-			const localStart = timeToMinutes(time);
-			if (localStart < hours.startMinute || localStart + durationMinutes > hours.endMinute) {
-				return { ...slot, available: false, reason: "outside-hours" };
-			}
-			if (conflicts({ startsAt, endsAt }, employeeIntervals, buffer)) {
-				return { ...slot, available: false, reason: "conflict" };
-			}
-			return slot;
-		}
+    if (startsAt.getTime() <= Date.now()) {
+      return { ...slot, available: false, reason: "past" };
+    }
 
-		// Public booking form — parallel-consultant capacity.
-		let freeCount = 0;
-		for (const id of consultants) {
-			const h = consultantHours.get(id);
-			if (!h) continue; // not working that day
-			const localStart = dayMinutesInZone(startsAt, h.timezone);
-			const localEnd = localStart + durationMinutes;
-			if (localStart < h.startMinute || localEnd > h.endMinute) continue;
-			if (conflicts({ startsAt, endsAt }, consultantBookings.get(id) ?? [], buffer)) continue;
-			if (conflicts({ startsAt, endsAt }, consultantBusy.get(id) ?? [], buffer)) continue;
-			freeCount += 1;
-		}
-		const unassignedAtSlot = branchTaken.filter(
-			(b) => b.employeeId === null && b.startsAt.getTime() === startsAt.getTime(),
-		).length;
-		if (freeCount - unassignedAtSlot <= 0) {
-			return { ...slot, available: false, reason: freeCount === 0 ? "conflict" : "booked" };
-		}
-		return slot;
-	});
+    if (employeeId) {
+      // Manager assign dialog — judging one specific consultant.
+      if (!hours) return { ...slot, available: false, reason: "no-working-hours" };
+      const localStart = timeToMinutes(time);
+      if (localStart < hours.startMinute || localStart + durationMinutes > hours.endMinute) {
+        return { ...slot, available: false, reason: "outside-hours" };
+      }
+      if (conflicts({ startsAt, endsAt }, employeeIntervals, buffer)) {
+        return { ...slot, available: false, reason: "conflict" };
+      }
+      return slot;
+    }
+
+    // Public booking form — parallel-consultant capacity.
+    let freeCount = 0;
+    for (const id of consultants) {
+      const h = consultantHours.get(id);
+      if (!h) continue; // not working that day
+      const localStart = dayMinutesInZone(startsAt, h.timezone);
+      const localEnd = localStart + durationMinutes;
+      if (localStart < h.startMinute || localEnd > h.endMinute) continue;
+      if (conflicts({ startsAt, endsAt }, consultantBookings.get(id) ?? [], buffer)) continue;
+      if (conflicts({ startsAt, endsAt }, consultantBusy.get(id) ?? [], buffer)) continue;
+      freeCount += 1;
+    }
+    const unassignedAtSlot = branchTaken.filter(
+      (b) => b.employeeId === null && b.startsAt.getTime() === startsAt.getTime(),
+    ).length;
+    if (freeCount - unassignedAtSlot <= 0) {
+      return { ...slot, available: false, reason: freeCount === 0 ? "conflict" : "booked" };
+    }
+    return slot;
+  });
+
+  return { slots: slotsResult, calendarSyncStatus };
 }
 
 /* ── Assign dialog ───────────────────────────────────────────────────────── */

@@ -35,6 +35,8 @@ function escapeHtml(value: string): string {
 
 const NEWSLETTER_LIST_NAME = "Website Newsletter";
 
+export { NEWSLETTER_LIST_NAME, sendConfirmationEmail };
+
 const subscribeBody = z.object({
 	email: z.string().email("Valid email required"),
 	name: z.string().max(255).optional(),

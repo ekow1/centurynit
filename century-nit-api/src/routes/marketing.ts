@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import { eq, sql, and, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
 import {
 	marketingCampaigns,
@@ -13,6 +14,7 @@ import { requireAuth, requireStaff, type AuthVariables } from "../middleware/aut
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { env } from "../env.js";
+import { NEWSLETTER_LIST_NAME, sendConfirmationEmail } from "./newsletter.js";
 
 /* ── Schemas ─────────────────────────────────────────────────────────────── */
 
@@ -41,15 +43,24 @@ const mailingListSchema = z.object({
 	name: z.string(),
 	description: z.string().nullable(),
 	contactCount: z.number(),
+	pendingCount: z.number(),
+	confirmedCount: z.number(),
+	unsubscribedCount: z.number(),
+	isNewsletter: z.boolean(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
 });
+
+const contactStatusSchema = z.enum(["pending", "confirmed", "unsubscribed"]);
 
 const mailingListContactSchema = z.object({
 	id: z.string().uuid(),
 	mailingListId: z.string().uuid(),
 	name: z.string().nullable(),
 	email: z.string(),
+	status: contactStatusSchema,
+	confirmedAt: z.string().nullable(),
+	unsubscribedAt: z.string().nullable(),
 	createdAt: z.string(),
 });
 
@@ -70,6 +81,21 @@ const templateSchema = z.object({
 const idParams = z.object({
 	id: z.string().uuid(),
 });
+
+type ContactStatus = z.infer<typeof contactStatusSchema>;
+
+function serializeContact(r: typeof mailingListContacts.$inferSelect) {
+	return {
+		id: r.id,
+		mailingListId: r.mailingListId,
+		name: r.name,
+		email: r.email,
+		status: r.status as ContactStatus,
+		confirmedAt: r.confirmedAt?.toISOString() ?? null,
+		unsubscribedAt: r.unsubscribedAt?.toISOString() ?? null,
+		createdAt: r.createdAt.toISOString(),
+	};
+}
 
 const campaignIdParams = z.object({
 	id: z.string().uuid(),
@@ -469,10 +495,13 @@ marketingRouter.openapi(
 	}),
 	async (c) => {
 		try {
-			const contactCountSubquery = db
+			const countsSubquery = db
 				.select({
 					mailingListId: mailingListContacts.mailingListId,
 					contactCount: sql<number>`count(*)::int`.as("contact_count"),
+					pendingCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'pending')::int`.as("pending_count"),
+					confirmedCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'confirmed')::int`.as("confirmed_count"),
+					unsubscribedCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'unsubscribed')::int`.as("unsubscribed_count"),
 				})
 				.from(mailingListContacts)
 				.groupBy(mailingListContacts.mailingListId)
@@ -483,16 +512,20 @@ marketingRouter.openapi(
 					id: mailingLists.id,
 					name: mailingLists.name,
 					description: mailingLists.description,
-					contactCount: sql<number>`coalesce(${contactCountSubquery.contactCount}, 0)`,
+					contactCount: sql<number>`coalesce(${countsSubquery.contactCount}, 0)`,
+					pendingCount: sql<number>`coalesce(${countsSubquery.pendingCount}, 0)`,
+					confirmedCount: sql<number>`coalesce(${countsSubquery.confirmedCount}, 0)`,
+					unsubscribedCount: sql<number>`coalesce(${countsSubquery.unsubscribedCount}, 0)`,
 					createdAt: mailingLists.createdAt,
 					updatedAt: mailingLists.updatedAt,
 				})
 				.from(mailingLists)
-				.leftJoin(contactCountSubquery, eq(mailingLists.id, contactCountSubquery.mailingListId))
+				.leftJoin(countsSubquery, eq(mailingLists.id, countsSubquery.mailingListId))
 				.orderBy(sql`${mailingLists.createdAt} desc`);
 
 			const mailingListsResult = rows.map((r) => ({
 				...r,
+				isNewsletter: r.name === NEWSLETTER_LIST_NAME,
 				createdAt: r.createdAt.toISOString(),
 				updatedAt: r.updatedAt.toISOString(),
 			}));
@@ -544,14 +577,18 @@ marketingRouter.openapi(
 				})
 				.returning();
 
-			const mailingList = {
-				...inserted,
-				contactCount: 0,
-				createdAt: inserted.createdAt.toISOString(),
-				updatedAt: inserted.updatedAt.toISOString(),
-			};
+		const mailingList = {
+			...inserted,
+			contactCount: 0,
+			pendingCount: 0,
+			confirmedCount: 0,
+			unsubscribedCount: 0,
+			isNewsletter: inserted.name === NEWSLETTER_LIST_NAME,
+			createdAt: inserted.createdAt.toISOString(),
+			updatedAt: inserted.updatedAt.toISOString(),
+		};
 
-			return c.json({ mailingList }, 201);
+		return c.json({ mailingList }, 201);
 		} catch (err) {
 			console.error("[marketing] POST /mailing-lists error:", err);
 			throw new HttpError(500, "INTERNAL", "Failed to create mailing list");
@@ -592,39 +629,56 @@ marketingRouter.openapi(
 			const { id } = c.req.valid("param");
 			const body = c.req.valid("json");
 
-			const [existing] = await db
-				.select()
-				.from(mailingLists)
-				.where(eq(mailingLists.id, id))
-				.limit(1);
+		const [existing] = await db
+			.select()
+			.from(mailingLists)
+			.where(eq(mailingLists.id, id))
+			.limit(1);
 
-			if (!existing) {
-				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
-			}
+		if (!existing) {
+			throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
+		}
 
-			const updateData: Record<string, unknown> = { updatedAt: new Date() };
-			if (body.name !== undefined) updateData.name = body.name;
-			if (body.description !== undefined) updateData.description = body.description;
+		if (existing.name === NEWSLETTER_LIST_NAME && body.name !== undefined && body.name !== NEWSLETTER_LIST_NAME) {
+			throw new HttpError(
+				400,
+				"NEWSLETTER_LIST_PROTECTED",
+				"The Website Newsletter list cannot be renamed",
+			);
+		}
 
-			const [updated] = await db
-				.update(mailingLists)
-				.set(updateData)
-				.where(eq(mailingLists.id, id))
-				.returning();
+		const updateData: Record<string, unknown> = { updatedAt: new Date() };
+		if (body.name !== undefined) updateData.name = body.name;
+		if (body.description !== undefined) updateData.description = body.description;
 
-			const contactCountResult = await db
-				.select({ count: sql<number>`count(*)::int` })
-				.from(mailingListContacts)
-				.where(eq(mailingListContacts.mailingListId, id));
+		const [updated] = await db
+			.update(mailingLists)
+			.set(updateData)
+			.where(eq(mailingLists.id, id))
+			.returning();
 
-			const mailingList = {
-				...updated,
-				contactCount: contactCountResult[0]?.count ?? 0,
-				createdAt: updated.createdAt.toISOString(),
-				updatedAt: updated.updatedAt.toISOString(),
-			};
+		const [counts] = await db
+			.select({
+				contactCount: sql<number>`count(*)::int`,
+				pendingCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'pending')::int`,
+				confirmedCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'confirmed')::int`,
+				unsubscribedCount: sql<number>`count(*) filter (where ${mailingListContacts.status} = 'unsubscribed')::int`,
+			})
+			.from(mailingListContacts)
+			.where(eq(mailingListContacts.mailingListId, id));
 
-			return c.json({ mailingList });
+		const mailingList = {
+			...updated,
+			contactCount: counts?.contactCount ?? 0,
+			pendingCount: counts?.pendingCount ?? 0,
+			confirmedCount: counts?.confirmedCount ?? 0,
+			unsubscribedCount: counts?.unsubscribedCount ?? 0,
+			isNewsletter: updated.name === NEWSLETTER_LIST_NAME,
+			createdAt: updated.createdAt.toISOString(),
+			updatedAt: updated.updatedAt.toISOString(),
+		};
+
+		return c.json({ mailingList });
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error("[marketing] PUT /mailing-lists/:id error:", err);
@@ -659,23 +713,31 @@ marketingRouter.openapi(
 		try {
 			const { id } = c.req.valid("param");
 
-			const [existing] = await db
-				.select()
-				.from(mailingLists)
-				.where(eq(mailingLists.id, id))
-				.limit(1);
+		const [existing] = await db
+			.select()
+			.from(mailingLists)
+			.where(eq(mailingLists.id, id))
+			.limit(1);
 
-			if (!existing) {
-				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
-			}
+		if (!existing) {
+			throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
+		}
 
-			await db
-				.delete(mailingListContacts)
-				.where(eq(mailingListContacts.mailingListId, id));
+		if (existing.name === NEWSLETTER_LIST_NAME) {
+			throw new HttpError(
+				400,
+				"NEWSLETTER_LIST_PROTECTED",
+				"The Website Newsletter list cannot be deleted (it powers public subscriptions)",
+			);
+		}
 
-			await db.delete(mailingLists).where(eq(mailingLists.id, id));
+		await db
+			.delete(mailingListContacts)
+			.where(eq(mailingListContacts.mailingListId, id));
 
-			return c.json({ success: true });
+		await db.delete(mailingLists).where(eq(mailingLists.id, id));
+
+		return c.json({ success: true });
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error("[marketing] DELETE /mailing-lists/:id error:", err);
@@ -716,6 +778,7 @@ marketingRouter.openapi(
 		try {
 			const { id } = c.req.valid("param");
 			const body = c.req.valid("json");
+			const normalizedEmail = body.email.trim().toLowerCase();
 
 			const [existing] = await db
 				.select()
@@ -727,18 +790,37 @@ marketingRouter.openapi(
 				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
 			}
 
-			const [duplicate] = await db
+			const [dupe] = await db
 				.select()
 				.from(mailingListContacts)
 				.where(
 					and(
 						eq(mailingListContacts.mailingListId, id),
-						eq(mailingListContacts.email, body.email),
+						eq(mailingListContacts.email, normalizedEmail),
 					),
 				)
 				.limit(1);
 
-			if (duplicate) {
+			if (dupe) {
+				// Re-subscribe an unsubscribed contact instead of 409 — staff are
+				// explicitly opting them back in. Confirmed/pending rows stay as-is.
+				if (dupe.status === "unsubscribed") {
+					const token = randomUUID();
+					const [updated] = await db
+						.update(mailingListContacts)
+						.set({
+							status: "confirmed",
+							confirmToken: token,
+							confirmedAt: new Date(),
+							unsubscribedAt: null,
+							name: body.name ?? dupe.name,
+						})
+						.where(eq(mailingListContacts.id, dupe.id))
+						.returning();
+
+					return c.json({ contact: serializeContact(updated) }, 201);
+				}
+
 				throw new HttpError(
 					409,
 					"DUPLICATE",
@@ -746,21 +828,22 @@ marketingRouter.openapi(
 				);
 			}
 
+			// Staff-added contacts start confirmed (sendable immediately) and get a
+			// confirmToken so campaign emails can include an unsubscribe link.
+			const token = randomUUID();
 			const [inserted] = await db
 				.insert(mailingListContacts)
 				.values({
 					mailingListId: id,
 					name: body.name ?? null,
-					email: body.email,
+					email: normalizedEmail,
+					status: "confirmed",
+					confirmToken: token,
+					confirmedAt: new Date(),
 				})
 				.returning();
 
-			const contact = {
-				...inserted,
-				createdAt: inserted.createdAt.toISOString(),
-			};
-
-			return c.json({ contact }, 201);
+			return c.json({ contact: serializeContact(inserted) }, 201);
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error("[marketing] POST /mailing-lists/:id/contacts error:", err);
@@ -824,6 +907,283 @@ marketingRouter.openapi(
 	},
 );
 
+/* ── GET /mailing-lists/:id/contacts ─────────────────────────────────────── */
+
+const listContactsQuery = z.object({
+	status: contactStatusSchema.optional(),
+	q: z.string().optional(),
+	limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+	offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
+marketingRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/mailing-lists/{id}/contacts",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: {
+			params: idParams,
+			query: listContactsQuery,
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							contacts: z.array(mailingListContactSchema),
+							total: z.number(),
+						}),
+					},
+				},
+				description: "Contacts in the mailing list",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id } = c.req.valid("param");
+			const { status, q, limit, offset } = c.req.valid("query");
+
+			const [list] = await db
+				.select({ id: mailingLists.id })
+				.from(mailingLists)
+				.where(eq(mailingLists.id, id))
+				.limit(1);
+
+			if (!list) {
+				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
+			}
+
+			const conditions = [eq(mailingListContacts.mailingListId, id)];
+			if (status) conditions.push(eq(mailingListContacts.status, status));
+			if (q) {
+				const like = `%${q.toLowerCase()}%`;
+				conditions.push(
+					sql`(lower(${mailingListContacts.email}) like ${like} or lower(coalesce(${mailingListContacts.name}, '')) like ${like})`,
+				);
+			}
+
+			const where = and(...conditions);
+
+			const [countRow] = await db
+				.select({ total: sql<number>`count(*)::int` })
+				.from(mailingListContacts)
+				.where(where);
+
+			const rows = await db
+				.select()
+				.from(mailingListContacts)
+				.where(where)
+				.orderBy(sql`${mailingListContacts.createdAt} desc`)
+				.limit(limit)
+				.offset(offset);
+
+			const contacts = rows.map(serializeContact);
+
+			return c.json({ contacts, total: countRow?.total ?? 0 });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] GET /mailing-lists/:id/contacts error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to list contacts");
+		}
+	},
+);
+
+/* ── POST /mailing-lists/:id/contacts/:contactId/confirm ─────────────────── */
+/* Manually confirm a pending contact or re-subscribe an unsubscribed one.   */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/mailing-lists/{id}/contacts/{contactId}/confirm",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: contactIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ contact: mailingListContactSchema }),
+					},
+				},
+				description: "Contact confirmed",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id, contactId } = c.req.valid("param");
+
+			const [existing] = await db
+				.select()
+				.from(mailingListContacts)
+				.where(
+					and(
+						eq(mailingListContacts.id, contactId),
+						eq(mailingListContacts.mailingListId, id),
+					),
+				)
+				.limit(1);
+
+			if (!existing) {
+				throw new HttpError(404, "NOT_FOUND", "Contact not found in this list");
+			}
+
+			if (existing.status === "confirmed") {
+				throw new HttpError(400, "ALREADY_CONFIRMED", "Contact is already confirmed");
+			}
+
+			const token = existing.confirmToken ?? randomUUID();
+			const [updated] = await db
+				.update(mailingListContacts)
+				.set({
+					status: "confirmed",
+					confirmToken: token,
+					confirmedAt: new Date(),
+					unsubscribedAt: null,
+				})
+				.where(eq(mailingListContacts.id, contactId))
+				.returning();
+
+			return c.json({ contact: serializeContact(updated) });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] POST .../contacts/:contactId/confirm error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to confirm contact");
+		}
+	},
+);
+
+/* ── POST /mailing-lists/:id/contacts/:contactId/resend-confirmation ──────── */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/mailing-lists/{id}/contacts/{contactId}/resend-confirmation",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: contactIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ ok: z.boolean() }),
+					},
+				},
+				description: "Confirmation email re-sent",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id, contactId } = c.req.valid("param");
+
+			const [existing] = await db
+				.select()
+				.from(mailingListContacts)
+				.where(
+					and(
+						eq(mailingListContacts.id, contactId),
+						eq(mailingListContacts.mailingListId, id),
+					),
+				)
+				.limit(1);
+
+			if (!existing) {
+				throw new HttpError(404, "NOT_FOUND", "Contact not found in this list");
+			}
+
+			if (existing.status !== "pending") {
+				throw new HttpError(
+					400,
+					"NOT_PENDING",
+					"Only pending contacts can be sent a confirmation email",
+				);
+			}
+
+			const token = randomUUID();
+			await db
+				.update(mailingListContacts)
+				.set({ confirmToken: token, confirmedAt: null })
+				.where(eq(mailingListContacts.id, contactId));
+
+			const confirmUrl = `${env.FRONTEND_URL}/newsletter/confirm?token=${token}`;
+			void sendConfirmationEmail(existing.email, confirmUrl).catch((err) => {
+				console.error(`[marketing] resend confirmation to ${existing.email} failed:`, err);
+			});
+
+			return c.json({ ok: true });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] POST .../resend-confirmation error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to resend confirmation");
+		}
+	},
+);
+
+/* ── POST /mailing-lists/:id/contacts/:contactId/unsubscribe ──────────────── */
+/* Staff-initiated unsubscribe (e.g. recipient asked via phone/email).        */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/mailing-lists/{id}/contacts/{contactId}/unsubscribe",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: contactIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ contact: mailingListContactSchema }),
+					},
+				},
+				description: "Contact unsubscribed",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id, contactId } = c.req.valid("param");
+
+			const [existing] = await db
+				.select()
+				.from(mailingListContacts)
+				.where(
+					and(
+						eq(mailingListContacts.id, contactId),
+						eq(mailingListContacts.mailingListId, id),
+					),
+				)
+				.limit(1);
+
+			if (!existing) {
+				throw new HttpError(404, "NOT_FOUND", "Contact not found in this list");
+			}
+
+			if (existing.status === "unsubscribed") {
+				throw new HttpError(400, "ALREADY_UNSUBSCRIBED", "Contact is already unsubscribed");
+			}
+
+			const [updated] = await db
+				.update(mailingListContacts)
+				.set({
+					status: "unsubscribed",
+					unsubscribedAt: new Date(),
+				})
+				.where(eq(mailingListContacts.id, contactId))
+				.returning();
+
+			return c.json({ contact: serializeContact(updated) });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] POST .../unsubscribe error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to unsubscribe contact");
+		}
+	},
+);
+
 /* ── POST /mailing-lists/:id/import-leads ────────────────────────────────── */
 
 marketingRouter.openapi(
@@ -863,35 +1223,40 @@ marketingRouter.openapi(
 				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
 			}
 
-			const allLeads = await db
-				.select({ email: leads.email, name: leads.name })
-				.from(leads);
+		const allLeads = await db
+			.select({ email: leads.email, name: leads.name })
+			.from(leads);
 
-			const existingContacts = await db
-				.select({ email: mailingListContacts.email })
-				.from(mailingListContacts)
-				.where(eq(mailingListContacts.mailingListId, id));
+		const existingContacts = await db
+			.select({ email: mailingListContacts.email })
+			.from(mailingListContacts)
+			.where(eq(mailingListContacts.mailingListId, id));
 
-			const existingEmails = new Set(existingContacts.map((c) => c.email));
+		const existingEmails = new Set(existingContacts.map((c) => c.email.toLowerCase()));
 
-			let imported = 0;
-			let skipped = 0;
+		let imported = 0;
+		let skipped = 0;
 
-			for (const lead of allLeads) {
-				if (existingEmails.has(lead.email)) {
-					skipped++;
-					continue;
-				}
-
-				await db.insert(mailingListContacts).values({
-					mailingListId: id,
-					name: lead.name,
-					email: lead.email,
-				});
-				imported++;
+		for (const lead of allLeads) {
+			const normalizedEmail = lead.email.trim().toLowerCase();
+			if (existingEmails.has(normalizedEmail)) {
+				skipped++;
+				continue;
 			}
 
-			return c.json({ imported, skipped });
+			await db.insert(mailingListContacts).values({
+				mailingListId: id,
+				name: lead.name,
+				email: normalizedEmail,
+				status: "confirmed",
+				confirmToken: randomUUID(),
+				confirmedAt: new Date(),
+			});
+			existingEmails.add(normalizedEmail);
+			imported++;
+		}
+
+		return c.json({ imported, skipped });
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error("[marketing] POST /mailing-lists/:id/import-leads error:", err);
@@ -939,38 +1304,43 @@ marketingRouter.openapi(
 				throw new HttpError(404, "NOT_FOUND", "Mailing list not found");
 			}
 
-			const applicants = await db
-				.select({ email: leads.email, name: leads.name })
-				.from(leads)
-				.where(
-					inArray(leads.stage, ["Assessment Complete", "Enrolled"]),
-				);
+		const applicants = await db
+			.select({ email: leads.email, name: leads.name })
+			.from(leads)
+			.where(
+				inArray(leads.stage, ["Assessment Complete", "Enrolled"]),
+			);
 
-			const existingContacts = await db
-				.select({ email: mailingListContacts.email })
-				.from(mailingListContacts)
-				.where(eq(mailingListContacts.mailingListId, id));
+		const existingContacts = await db
+			.select({ email: mailingListContacts.email })
+			.from(mailingListContacts)
+			.where(eq(mailingListContacts.mailingListId, id));
 
-			const existingEmails = new Set(existingContacts.map((c) => c.email));
+		const existingEmails = new Set(existingContacts.map((c) => c.email.toLowerCase()));
 
-			let imported = 0;
-			let skipped = 0;
+		let imported = 0;
+		let skipped = 0;
 
-			for (const lead of applicants) {
-				if (existingEmails.has(lead.email)) {
-					skipped++;
-					continue;
-				}
-
-				await db.insert(mailingListContacts).values({
-					mailingListId: id,
-					name: lead.name,
-					email: lead.email,
-				});
-				imported++;
+		for (const lead of applicants) {
+			const normalizedEmail = lead.email.trim().toLowerCase();
+			if (existingEmails.has(normalizedEmail)) {
+				skipped++;
+				continue;
 			}
 
-			return c.json({ imported, skipped });
+			await db.insert(mailingListContacts).values({
+				mailingListId: id,
+				name: lead.name,
+				email: normalizedEmail,
+				status: "confirmed",
+				confirmToken: randomUUID(),
+				confirmedAt: new Date(),
+			});
+			existingEmails.add(normalizedEmail);
+			imported++;
+		}
+
+		return c.json({ imported, skipped });
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error(

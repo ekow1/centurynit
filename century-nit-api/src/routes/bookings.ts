@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
-import { opsUsers } from "../db/schema.js";
+import { opsUsers, staffCalendarFeeds, calendarSyncStatusEnum } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	canModifyBooking,
@@ -131,42 +131,43 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 
 /* ── GET /api/v1/bookings/availability ──────────────────────────────────────── */
 
-bookingsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/availability",
-		tags: ["Bookings"],
-		request: { query: availabilityQuerySchema },
-		responses: {
-			200: {
-				description: "Available slots",
-				content: { "application/json": { schema: availabilityResponseSchema } },
-			},
-		},
-	}),
-	async (c) => {
-		const query = c.req.valid("query");
-		const branch = getBranchOrThrow(query.branchId);
-		const slots = await branchAvailability({
-			branchId: query.branchId,
-			date: query.date,
-			durationMinutes: query.durationMinutes,
-			timezone: branch.timezone,
-			employeeId: query.employeeId,
-		});
-		return c.json({
-			branchId: branch.id,
-			date: query.date,
-			timezone: branch.timezone,
-			durationMinutes: query.durationMinutes,
-			slots: slots.map((s) => ({
-				time: s.time,
-				startsAt: s.startsAt.toISOString(),
-				available: s.available,
-				reason: s.reason,
-			})),
-		});
-	},
+  bookingsRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/availability",
+    tags: ["Bookings"],
+    request: { query: availabilityQuerySchema },
+    responses: {
+      200: {
+        description: "Available slots",
+        content: { "application/json": { schema: availabilityResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const query = c.req.valid("query");
+    const branch = getBranchOrThrow(query.branchId);
+    const result = await branchAvailability({
+      branchId: query.branchId,
+      date: query.date,
+      durationMinutes: query.durationMinutes,
+      timezone: branch.timezone,
+      employeeId: query.employeeId,
+    });
+    return c.json({
+      branchId: branch.id,
+      date: query.date,
+      timezone: branch.timezone,
+      durationMinutes: query.durationMinutes,
+      slots: result.slots.map((s) => ({
+        time: s.time,
+        startsAt: s.startsAt.toISOString(),
+        available: s.available,
+        reason: s.reason,
+      })),
+      calendarSyncStatus: result.calendarSyncStatus,
+    });
+  },
 );
 
 /* ── POST /api/v1/bookings/checkout ─────────────────────────────────────────── */

@@ -269,6 +269,14 @@ export async function acceptInvitation(input: {
 		userId = created.id;
 	}
 
+	// Invitations are sent to a verified email address, so the invitee is
+	// verified at the point of acceptance. This avoids the
+	// EMAIL_NOT_VERIFIED guard when they first sign in.
+	await db
+		.update(users)
+		.set({ emailVerified: true, updatedAt: new Date() })
+		.where(eq(users.id, userId));
+
 	const [opsUser] = await db
 		.insert(opsUsers)
 		.values({

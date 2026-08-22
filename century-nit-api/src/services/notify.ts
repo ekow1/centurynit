@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "../db/index.js";
 import { notifications, opsUsers } from "../db/schema.js";
@@ -152,6 +152,12 @@ export async function notifyMany(events: NotifyEvent[]): Promise<void> {
 /* ── Staff lookup helpers ─────────────────────────────────────────────────── */
 
 /**
+ * Roles that receive broadcast notifications for new work landing in the
+ * operations queue (leads, cases, tickets, bookings, documents, etc.).
+ */
+const TRIAGE_ROLES = ["manager", "admin", "super_admin", "coordinator"] as const;
+
+/**
  * Get user.ids for all active managers, coordinators, and super_admins.
  * Used to broadcast "new booking" / "new lead" notifications to the people
  * who triage incoming work.
@@ -162,7 +168,7 @@ export async function getManagerAndCoordinatorUserIds(): Promise<
 	const rows = await db
 		.select({ userId: opsUsers.userId })
 		.from(opsUsers)
-		.where(eq(opsUsers.active, true));
+		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, TRIAGE_ROLES)));
 	return rows
 		.filter((r): r is { userId: string } => r.userId !== null)
 		.map((r) => ({ userId: r.userId }));
@@ -179,7 +185,7 @@ export async function getManagerAndCoordinatorContacts(): Promise<
 	const rows = await db
 		.select({ userId: opsUsers.userId, email: opsUsers.email, name: opsUsers.name })
 		.from(opsUsers)
-		.where(eq(opsUsers.active, true));
+		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, TRIAGE_ROLES)));
 	return rows
 		.filter((r): r is { userId: string; email: string; name: string } => r.userId !== null);
 }

@@ -325,7 +325,7 @@ bookingsRouter.openapi(
 					branchId: booking.branchId,
 					type: booking.type,
 				});
-				await createConsultationInvoice({
+				const invoice = await createConsultationInvoice({
 					clientUserId: user.id,
 					applicantName: user.name ?? user.email,
 					applicantEmail: user.email,
@@ -334,6 +334,26 @@ bookingsRouter.openapi(
 					amountCents: txn.amountCents,
 					issuedBy: "System",
 				});
+
+				// Record the Paystack transaction in the canonical payment ledger
+				// (payment_transactions). The booking flow previously skipped this
+				// table, so consultation payments were missing from the ops Payments
+				// Log even though Paystack and the invoice both showed paid.
+				// onConflictDoNothing: the Paystack reference is unique; a retry that
+				// reaches here (race after the idempotency pre-check) must not fail.
+				await db
+					.insert(paymentTransactions)
+					.values({
+						invoiceId: invoice.id,
+						clientUserId: user.id,
+						reference,
+						gateway: "paystack",
+						amountCents: txn.amountCents,
+						currency: txn.currency,
+						status: "success",
+						paidAt: new Date(),
+					})
+					.onConflictDoNothing({ target: paymentTransactions.reference });
 			} catch {
 				// Non-fatal — booking still succeeds; ops can still find the booking
 			}

@@ -97,6 +97,19 @@ export async function createInvitation(input: {
 	// reality rather than blocking on a dead invitation.
 	await expireOverdue();
 
+	// Auto-revoke any still-valid pending invitation for the same email so
+	// re-inviting works without the user having to manually revoke the old one
+	// (which was a 409 "An invitation for that address is already outstanding").
+	await db
+		.update(staffInvitations)
+		.set({ status: "REVOKED", revokedAt: new Date(), updatedAt: new Date() })
+		.where(
+			and(
+				eq(staffInvitations.email, email),
+				eq(staffInvitations.status, "PENDING"),
+			),
+		);
+
 	const token = newToken();
 	const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
 

@@ -277,15 +277,40 @@ bookingsRouter.openapi(
 		}
 
 		const serviceName = resolveServiceName(bookingPayload.serviceId);
-		const booking = await createBooking({
-			data: bookingPayload,
-			client: {
-				id: user.id,
-				name: user.name ?? user.email,
-				email: user.email,
-			},
-			serviceName,
-		});
+		let booking: BookingRow;
+		try {
+			booking = await createBooking({
+				data: bookingPayload,
+				client: {
+					id: user.id,
+					name: user.name ?? user.email,
+					email: user.email,
+				},
+				serviceName,
+			});
+		} catch (err) {
+			// If the slot was taken between the first call and this one
+			// (race condition or React StrictMode double-fire), look up
+			// the existing booking for this client + slot and return it
+			// instead of failing — the payment already succeeded.
+			if (err instanceof HttpError && err.status === 409) {
+				const [fallback] = await db
+					.select()
+					.from(bookingsTable)
+					.where(
+						and(
+							eq(bookingsTable.clientUserId, user.id),
+							eq(bookingsTable.serviceId, bookingPayload.serviceId),
+							eq(bookingsTable.startsAt, existingStartsAt),
+						),
+					)
+					.limit(1);
+				if (fallback) {
+					return c.json(toBookingResponse(fallback), 200);
+				}
+			}
+			throw err;
+		}
 
 		// Immediately create the consultation row so ops see it in the intake queue.
 		if (bookingPayload.serviceId === "consultation") {

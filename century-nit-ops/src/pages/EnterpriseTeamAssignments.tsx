@@ -78,52 +78,83 @@ export function EnterpriseTeamAssignments() {
 		staff: staffList.length,
 	}), [items, staffList]);
 
-	return (
-		<div className="ops-panel">
-			<div className="ops-panel__header">
-				<h1 className="ops-panel__title">Team Assignments</h1>
-				<p className="ops-panel__muted">Track every case, consultation and ticket assigned to your team.</p>
-			</div>
+	const baseInput = {
+		border: "1px solid #000",
+		borderRadius: 0,
+		padding: "0.5rem 0.75rem",
+		fontSize: "0.8rem",
+		background: "#fff",
+	};
 
-			{loading && <p className="ops-panel__muted">Loading assignments…</p>}
-			{error && <p className="ops-panel__error">{error}</p>}
+	return (
+		<div style={{ padding: "1.5rem" }}>
+			<header style={{ marginBottom: "1.5rem" }}>
+				<h1 style={{ fontSize: "1.25rem", fontWeight: 600, margin: "0 0 0.25rem" }}>Team Assignments</h1>
+				<p style={{ fontSize: "0.85rem", color: "#6b6b6b", margin: 0 }}>Track every case, consultation and ticket assigned to your team.</p>
+			</header>
+
+			{loading && <p style={{ fontSize: "0.85rem", color: "#6b6b6b" }}>Loading assignments…</p>}
+			{error && <p style={{ fontSize: "0.85rem", color: "#b91c1c" }}>{error}</p>}
 
 			{!loading && !error && (
 				<>
-					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-						<div className="ops-card" style={{ padding: "1.25rem" }}>
-							<p className="ops-panel__muted" style={{ margin: 0, fontSize: "0.75rem", textTransform: "uppercase" }}>Cases</p>
-							<p style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0.25rem 0 0" }}>{stats.cases}</p>
-						</div>
-						<div className="ops-card" style={{ padding: "1.25rem" }}>
-							<p className="ops-panel__muted" style={{ margin: 0, fontSize: "0.75rem", textTransform: "uppercase" }}>Consultations</p>
-							<p style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0.25rem 0 0" }}>{stats.consultations}</p>
-						</div>
-						<div className="ops-card" style={{ padding: "1.25rem" }}>
-							<p className="ops-panel__muted" style={{ margin: 0, fontSize: "0.75rem", textTransform: "uppercase" }}>Tickets</p>
-							<p style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0.25rem 0 0" }}>{stats.tickets}</p>
-						</div>
-						<div className="ops-card" style={{ padding: "1.25rem" }}>
-							<p className="ops-panel__muted" style={{ margin: 0, fontSize: "0.75rem", textTransform: "uppercase" }}>Staff</p>
-							<p style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0.25rem 0 0" }}>{stats.staff}</p>
-						</div>
-					</div>
+					<section
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(4, 1fr)",
+							borderTop: "1px solid #000",
+							borderBottom: "1px solid #000",
+							marginBottom: "1.5rem",
+						}}
+					>
+						{[
+							{ label: "Cases", value: stats.cases },
+							{ label: "Consultations", value: stats.consultations },
+							{ label: "Tickets", value: stats.tickets },
+							{ label: "Staff", value: stats.staff },
+						].map((s, idx, arr) => (
+							<div
+								key={s.label}
+								style={{
+									padding: "1rem",
+									borderRight: idx < arr.length - 1 ? "1px solid #000" : undefined,
+								}}
+							>
+								<p style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#6b6b6b", margin: "0 0 0.25rem" }}>{s.label}</p>
+								<p style={{ fontSize: "1.75rem", fontWeight: 600, margin: 0 }}>{s.value}</p>
+							</div>
+						))}
+					</section>
 
-					<div className="ops-card" style={{ padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
-						<div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center" }}>
+					<section style={{ marginBottom: "1.5rem" }}>
+						<div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", alignItems: "center", borderBottom: "1px solid #000", paddingBottom: "1rem" }}>
 							<div style={{ display: "flex", gap: "0.5rem" }}>
 								{TYPES.map((t) => (
 									<button
 										key={t}
 										type="button"
-										className={`btn btn--sm ${type === t ? "btn--primary" : "btn--ghost"}`}
 										onClick={() => setType(t)}
+										style={{
+											border: "none",
+											borderBottom: type === t ? "2px solid #000" : "2px solid transparent",
+											background: "transparent",
+											fontSize: "0.75rem",
+											textTransform: "uppercase",
+											letterSpacing: "0.05em",
+											padding: "0.35rem 0.25rem",
+											cursor: "pointer",
+											color: "#000",
+										}}
 									>
 										{TYPE_LABELS[t]}
 									</button>
 								))}
 							</div>
-							<select className="input input--sm" value={staff} onChange={(e) => setStaff(e.target.value)} style={{ minWidth: "160px" }}>
+							<select
+								value={staff}
+								onChange={(e) => setStaff(e.target.value)}
+								style={{ ...baseInput, minWidth: "160px" }}
+							>
 								<option value="all">All staff</option>
 								{staffList.map((s) => (
 									<option key={s.id} value={s.id}>{s.name}</option>
@@ -131,78 +162,120 @@ export function EnterpriseTeamAssignments() {
 							</select>
 							<input
 								type="text"
-								className="input input--sm"
 								placeholder="Search reference, client, or staff…"
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
-								style={{ minWidth: "220px", flex: 1 }}
+								style={{ ...baseInput, minWidth: "240px", flex: 1 }}
 							/>
-							<div style={{ fontSize: "0.85rem", color: "var(--muted-foreground)" }}>
-								{filtered.length} item{filtered.length === 1 ? "" : "s"}
-							</div>
+							<span style={{ fontSize: "0.8rem", color: "#6b6b6b" }}>{filtered.length} item{filtered.length === 1 ? "" : "s"}</span>
 						</div>
-					</div>
+					</section>
 
-					<div className="ops-table-wrap" style={{ marginBottom: "1.5rem" }}>
-						<table className="ops-table" style={{ width: "100%" }}>
+					<section style={{ marginBottom: "1.5rem" }}>
+						<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
 							<thead>
-								<tr>
-									<th>Type</th>
-									<th>Reference</th>
-									<th>Client</th>
-									<th>Assigned to</th>
-									<th>Stage / Status</th>
-									<th>Updated</th>
-									<th style={{ width: "80px" }} />
+								<tr style={{ borderBottom: "1px solid #000" }}>
+									<th style={{ ...headerCell, width: "90px" }}>Type</th>
+									<th style={headerCell}>Reference</th>
+									<th style={headerCell}>Client</th>
+									<th style={headerCell}>Assigned to</th>
+									<th style={headerCell}>Stage / Status</th>
+									<th style={{ ...headerCell, width: "100px" }}>Updated</th>
+									<th style={{ ...headerCell, width: "60px" }} />
 								</tr>
 							</thead>
 							<tbody>
 								{filtered.length === 0 ? (
 									<tr>
-										<td colSpan={7} style={{ textAlign: "center", padding: "2rem" }}>No assignments found.</td>
+										<td colSpan={7} style={{ padding: "2rem 0", textAlign: "left", color: "#6b6b6b" }}>No assignments found.</td>
 									</tr>
 								) : (
 									filtered.map((i) => (
-										<tr key={`${i.type}-${i.id}`}>
-											<td>
-												<span className="ops-status" style={{ textTransform: "capitalize" }}>{i.type}</span>
+										<tr key={`${i.type}-${i.id}`} style={{ borderBottom: "1px solid #e5e5e5" }}>
+											<td style={{ padding: "0.85rem 0" }}>
+												<span
+													style={{
+														display: "inline-block",
+														border: "1px solid #000",
+														padding: "0.15rem 0.4rem",
+														fontSize: "0.65rem",
+														textTransform: "uppercase",
+														letterSpacing: "0.04em",
+													}}
+												>
+													{i.type}
+												</span>
 											</td>
-											<td>{i.reference}</td>
-											<td>{i.clientName}</td>
-											<td>{i.assignedStaffName ?? "—"}</td>
-											<td>
-												<span className="ops-status">{i.stageOrStatusLabel}</span>
-												{i.priority ? <span className="ops-badge" style={{ marginLeft: "0.5rem" }}>{i.priority}</span> : null}
+											<td style={cell}>{i.reference}</td>
+											<td style={cell}>{i.clientName}</td>
+											<td style={cell}>{i.assignedStaffName ?? "—"}</td>
+											<td style={cell}>
+												<span
+													style={{
+														border: "1px solid #000",
+														padding: "0.15rem 0.4rem",
+														fontSize: "0.65rem",
+														textTransform: "uppercase",
+														letterSpacing: "0.04em",
+													}}
+												>
+													{i.stageOrStatusLabel}
+												</span>
+												{i.priority ? <span style={{ marginLeft: "0.5rem", fontSize: "0.65rem", textTransform: "uppercase", color: "#6b6b6b" }}>{i.priority}</span> : null}
 											</td>
-											<td style={{ whiteSpace: "nowrap" }}>{relativeTime(i.updatedAt)}</td>
-											<td>
-												<Link className="btn btn--sm btn--ghost" to={`${i.link}/${i.id}`}>Open</Link>
+											<td style={{ ...cell, whiteSpace: "nowrap" }}>{relativeTime(i.updatedAt)}</td>
+											<td style={cell}>
+												<Link to={`${i.link}/${i.id}`} style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#000", textDecoration: "none", borderBottom: "1px solid #000" }}>Open</Link>
 											</td>
 										</tr>
 									))
 								)}
 							</tbody>
 						</table>
-					</div>
+					</section>
 
 					{staffList.length > 0 && (
-						<div>
-							<h3 className="heading-4" style={{ marginBottom: "0.75rem" }}>Workload by staff</h3>
-							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "1rem" }}>
-								{staffList.map((s) => (
-									<div key={s.id} className="ops-card" style={{ padding: "1rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+						<section style={{ borderTop: "1px solid #000", paddingTop: "1rem" }}>
+							<h2 style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.75rem", fontWeight: 600 }}>Workload by staff</h2>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0" }}>
+								{staffList.map((s, idx) => (
+									<div
+										key={s.id}
+										style={{
+											padding: "0.75rem 0",
+											borderTop: idx > 0 ? "1px solid #e5e5e5" : "1px solid #000",
+											display: "flex",
+											justifyContent: "space-between",
+											alignItems: "center",
+										}}
+									>
 										<div>
-											<p style={{ fontWeight: 600, margin: 0 }}>{s.name}</p>
-											<p className="ops-panel__muted" style={{ fontSize: "0.75rem", margin: "0.15rem 0 0" }}>{s.count} active assignment{s.count === 1 ? "" : "s"}</p>
+											<p style={{ fontWeight: 600, margin: 0, fontSize: "0.9rem" }}>{s.name}</p>
+											<p style={{ fontSize: "0.75rem", color: "#6b6b6b", margin: "0.1rem 0 0" }}>{s.count} active assignment{s.count === 1 ? "" : "s"}</p>
 										</div>
-										<p style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0 }}>{s.count}</p>
+										<p style={{ fontSize: "1.25rem", fontWeight: 600, margin: 0 }}>{s.count}</p>
 									</div>
 								))}
 							</div>
-						</div>
+						</section>
 					)}
 				</>
 			)}
 		</div>
 	);
 }
+
+const headerCell = {
+	padding: "0.6rem 0",
+	textAlign: "left" as const,
+	fontSize: "0.65rem",
+	textTransform: "uppercase" as const,
+	letterSpacing: "0.06em",
+	fontWeight: 600,
+	color: "#6b6b6b",
+};
+
+const cell = {
+	padding: "0.85rem 0.5rem 0.85rem 0",
+};
+

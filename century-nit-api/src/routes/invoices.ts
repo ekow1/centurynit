@@ -29,6 +29,7 @@ import {
 	serializeInvoice,
 	voidInvoice,
 } from "../services/invoice.js";
+import { getApplicantByUserId } from "../services/cases.js";
 
 
 /**
@@ -101,10 +102,20 @@ invoicesRouter.openapi(
 		const query = c.req.valid("query");
 
 		// Applicants: their own invoices only, no filters to leak through.
-		if (!staff) {
+		// A user who is BOTH staff and an applicant (e.g. a customer_service rep
+		// with their own application) is still an applicant here — the portal
+		// calls this route to load their own invoices, so we prefer the applicant
+		// view before applying staff module gating.
+		const applicant = await getApplicantByUserId(user.id);
+		if (applicant) {
 			const rows = await listInvoicesForClient(user.id);
 			const list = await Promise.all(rows.map(serializeInvoice));
 			return c.json({ invoices: list, total: list.length });
+		}
+
+		// Staff-only beyond this point.
+		if (!staff) {
+			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
 
 		// Staff: module-gated — same rule requireModule enforces, applied here

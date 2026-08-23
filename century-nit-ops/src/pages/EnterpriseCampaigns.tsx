@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { apiFetch } from "../lib/api";
+import { apiFetch, ApiError } from "../lib/api";
 import { API_PREFIX } from "century-nit-shared";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
@@ -189,6 +189,18 @@ export function EnterpriseCampaigns() {
 		Promise.all([fetchCampaigns(), fetchMailingLists(), fetchTemplates()]).finally(() => setLoading(false));
 	}, [fetchCampaigns, fetchMailingLists, fetchTemplates]);
 
+	/*
+	 * The single place contacts are (re)fetched from list-open, filter and
+	 * search changes. The 300ms delay debounces search typing — one request
+	 * per keystroke against a 500-row query was pure waste — and also
+	 * coalesces rapid filter clicks.
+	 */
+	useEffect(() => {
+		if (!editingListId) return;
+		const timer = setTimeout(() => void fetchContacts(editingListId), 300);
+		return () => clearTimeout(timer);
+	}, [editingListId, fetchContacts]);
+
 	const openEditList = (listId: string, name: string, description?: string) => {
 		setEditingListId(listId);
 		setListName(name);
@@ -197,7 +209,7 @@ export function EnterpriseCampaigns() {
 		setContactsTotal(0);
 		setContactsFilter("all");
 		setContactSearch("");
-		void fetchContacts(listId, { status: "all", q: "" });
+		setContactsLoading(true);
 	};
 
 	const closeEditList = () => {
@@ -330,21 +342,20 @@ export function EnterpriseCampaigns() {
 
 	const handleAddContact = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!editingListId || !contactName.trim() || !contactEmail.trim()) return;
+		if (!editingListId || !contactEmail.trim()) return;
 		try {
 			await apiFetch(`${MKT}/mailing-lists/${editingListId}/contacts`, {
 				method: "POST",
-				body: JSON.stringify({ name: contactName.trim(), email: contactEmail.trim() }),
+				body: JSON.stringify({ name: contactName.trim() || undefined, email: contactEmail.trim() }),
 			});
 			setContactName("");
 			setContactEmail("");
 			refreshContactsAndList();
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : "Unknown error";
-			if (msg.toLowerCase().includes("duplicate")) {
+			if (err instanceof ApiError && err.code === "DUPLICATE") {
 				showToast("error", "This email already exists in the list.");
 			} else {
-				showToast("error", `Failed to add contact: ${msg}`);
+				showToast("error", `Failed to add contact: ${err instanceof Error ? err.message : "Unknown error"}`);
 			}
 		}
 	};
@@ -685,9 +696,9 @@ export function EnterpriseCampaigns() {
 												</td>
 												<td style={{ color: "var(--muted-foreground)" }}>{camp.audience}</td>
 												<td>
-													<span style={{ fontSize: "0.85rem", color: camp.status === "Sent" ? "#10b981" : "var(--muted-foreground)" }}>
-														{camp.status}
-													</span>
+												<span style={{ fontSize: "0.85rem", color: camp.status.toLowerCase() === "sent" ? "#10b981" : "var(--muted-foreground)" }}>
+													{camp.status}
+												</span>
 												</td>
 												<td>{camp.recipientCount}</td>
 												<td style={{ color: "#10b981" }}>{camp.deliveredCount}</td>
@@ -1001,14 +1012,14 @@ export function EnterpriseCampaigns() {
 							>
 								<div>
 									<label className="label">Name</label>
-									<input type="text" className="input" placeholder="Contact name" value={contactName} onChange={(e) => setContactName(e.target.value)} />
+									<input type="text" className="input" placeholder="Contact name (optional)" value={contactName} onChange={(e) => setContactName(e.target.value)} />
 								</div>
 								<div>
 									<label className="label">Email</label>
 									<input type="email" className="input" placeholder="email@example.com" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
 								</div>
 								<div style={{ display: "flex", alignItems: "flex-end" }}>
-									<button type="submit" className="btn btn--primary btn--sm" disabled={!contactName.trim() || !contactEmail.trim()}>
+									<button type="submit" className="btn btn--primary btn--sm" disabled={!contactEmail.trim()}>
 										Add Contact
 									</button>
 								</div>
@@ -1026,10 +1037,7 @@ export function EnterpriseCampaigns() {
 											fontWeight: contactsFilter === f ? 600 : 400,
 											borderColor: contactsFilter === f ? "var(--primary)" : undefined,
 										}}
-										onClick={() => {
-											setContactsFilter(f);
-											if (editingListId) void fetchContacts(editingListId, { status: f, q: contactSearch });
-										}}
+										onClick={() => setContactsFilter(f)}
 									>
 										{f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
 									</button>
@@ -1039,10 +1047,7 @@ export function EnterpriseCampaigns() {
 									className="input"
 									placeholder="Search name or email..."
 									value={contactSearch}
-									onChange={(e) => {
-										setContactSearch(e.target.value);
-										if (editingListId) void fetchContacts(editingListId, { q: e.target.value });
-									}}
+									onChange={(e) => setContactSearch(e.target.value)}
 									style={{ flex: 1, minWidth: "180px", fontSize: "0.8rem", padding: "0.3rem 0.6rem" }}
 								/>
 							</div>

@@ -81,6 +81,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 			{ to: "/payment-config", module: "payment-config", label: "Payment Config", blurb: "Schedule options & plans", icon: "finance" },
 			{ to: "/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
+			{ to: "/team", module: "reports", label: "Team Assignments", blurb: "Track staff workload", icon: "reports" },
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },

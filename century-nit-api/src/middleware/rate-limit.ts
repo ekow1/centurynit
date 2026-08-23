@@ -14,13 +14,13 @@ import { HttpError } from "./error.js";
 
 
 export async function rateLimit(c: Context, next: Next) {
-	const ip = c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || "unknown-ip";
-	
+	const ip = clientIp(c);
+
 	let routePath = c.req.routePath;
 	if (routePath === "/*" || routePath === "/api/auth/*" || routePath === "*") {
 		routePath = c.req.path;
 	}
-	
+
 	let limit = 0;
 	let windowSeconds = 60;
 
@@ -42,13 +42,25 @@ export async function rateLimit(c: Context, next: Next) {
 		return next();
 	}
 
-	const key = `ratelimit:${routePath}:${ip}`;
+	await enforce(`ratelimit:${routePath}:${ip}`, limit, windowSeconds);
 
+	await next();
+}
+
+function clientIp(c: Context): string {
+	return c.req.header("x-forwarded-for") || c.req.header("cf-connecting-ip") || "unknown-ip";
+}
+
+/**
+ * Count one hit against `key` and reject over `limit`.
+ *
+ * Redis is raced against a short timeout: with maxRetriesPerRequest: null an
+ * unreachable Redis retries forever and the promise never settles, so without
+ * the race a Redis outage would deadlock every request it guards. Any Redis
+ * failure fails open — availability of the guarded flow beats the limiter.
+ */
+async function enforce(key: string, limit: number, windowSeconds: number): Promise<void> {
 	try {
-		// Race the Redis op against a short timeout. If Redis is unreachable,
-		// ioredis with maxRetriesPerRequest: null retries forever and the promise
-		// never settles — the try/catch below only catches thrown errors, not a
-		// hang, so without this the entire auth flow deadlocks on every request.
 		const current = await Promise.race([
 			connection.incr(key),
 			new Promise<never>((_, reject) =>
@@ -73,6 +85,16 @@ export async function rateLimit(c: Context, next: Next) {
 		// Redis error or timeout — fail open so auth still works.
 		console.error("[RateLimit] Redis unavailable, failing open:", e);
 	}
+}
 
+/**
+ * Limiter for the public newsletter subscription.
+ *
+ * No session exists to key on and nothing else gates this endpoint, yet each
+ * hit writes two rows and queues an email — cheap to flood. Five per IP per
+ * hour comfortably covers humans; a bot burning addresses gets cut off.
+ */
+export async function newsletterSubscribeRateLimit(c: Context, next: Next) {
+	await enforce(`ratelimit:newsletter-subscribe:${clientIp(c)}`, 5, 3_600);
 	await next();
 }

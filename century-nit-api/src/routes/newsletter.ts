@@ -1,10 +1,12 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
 import { mailingLists, mailingListContacts, leads } from "../db/schema.js";
 import { queueEmail } from "../worker/queues.js";
 import { env } from "../env.js";
+import { newsletterSubscribeRateLimit } from "../middleware/rate-limit.js";
 
 function escapeHtml(value: string): string {
 	return value
@@ -42,6 +44,9 @@ const subscribeBody = z.object({
 });
 
 export const newsletterRouter = new OpenAPIHono();
+
+/* Public, unauthenticated, and it writes rows + queues an email — throttle it. */
+newsletterRouter.use("/subscribe", newsletterSubscribeRateLimit);
 
 /* ── POST /api/v1/newsletter/subscribe ──────────────────────────────────── */
  
@@ -90,62 +95,79 @@ newsletterRouter.openapi(
       });
     }
  
-    // Confirm the subscription (set status to confirmed)
-    if (existing) {
-      await db
-        .update(mailingListContacts)
-        .set({
-          status: "confirmed",
-          confirmedAt: new Date(),
-          unsubscribedAt: null,
-          confirmToken: null,
-          name: name ?? existing.name,
-        })
-        .where(eq(mailingListContacts.id, existing.id));
-    } else {
-      await db.insert(mailingListContacts).values({
-        mailingListId: list.id,
-        email: normalized,
-        name: name ?? null,
-        status: "confirmed",
-        confirmedAt: new Date(),
-        unsubscribedAt: null,
-        confirmToken: null,
-      });
-    }
- 
-     // Create a lead for this subscriber
-     await db.insert(leads).values({
-       email: normalized,
-       name: name ?? "Newsletter subscriber",
-       source: "newsletter",
-       stage: "New Lead",
-       createdAt: new Date(),
-       updatedAt: new Date(),
-     });
+	// Every contact carries a secret token from day one — it is the unsubscribe
+	// credential in the welcome email and in campaign footers.
+	const token = existing?.confirmToken ?? randomUUID();
 
-    // Queue welcome email
-    try {
-      const baseUrl = env.FRONTEND_URL;
-      const safeName = name ? escapeHtml(name) : null;
-      await queueEmail({
-        to: normalized,
-        subject: "Welcome to the Century NIT Newsletter!",
-        html: newsletterEmailLayout(
-          "Welcome to the Century NIT Newsletter!",
-          `<p>Hi ${safeName ? `<strong>${safeName}</strong>` : "there"},</p>
+	if (existing) {
+		await db
+			.update(mailingListContacts)
+			.set({
+				status: "confirmed",
+				confirmedAt: new Date(),
+				unsubscribedAt: null,
+				confirmToken: token,
+				name: name ?? existing.name,
+			})
+			.where(eq(mailingListContacts.id, existing.id));
+	} else {
+		await db.insert(mailingListContacts).values({
+			mailingListId: list.id,
+			email: normalized,
+			name: name ?? null,
+			status: "confirmed",
+			confirmedAt: new Date(),
+			unsubscribedAt: null,
+			confirmToken: token,
+		});
+	}
+
+	// Mirror the subscriber into the CRM as a lead, de-duplicated by email:
+	// re-subscribes and popup+footer double submits must not stack rows.
+	try {
+		const [existingLead] = await db
+			.select({ id: leads.id })
+			.from(leads)
+			.where(sql`lower(${leads.email}) = ${normalized}`)
+			.limit(1);
+		if (!existingLead) {
+			await db.insert(leads).values({
+				email: normalized,
+				name: name ?? "Newsletter subscriber",
+				source: "newsletter",
+				stage: "New Lead",
+				createdAt: new Date(),
+				updatedAt: new Date(),
+			});
+		}
+	} catch (leadErr) {
+		// The subscription itself succeeded; a CRM hiccup must not fail it.
+		console.error("[newsletter] lead creation failed:", leadErr);
+	}
+
+	// Queue welcome email
+	try {
+		const baseUrl = env.FRONTEND_URL;
+		const safeName = name ? escapeHtml(name) : null;
+		const unsubscribeUrl = `${baseUrl}/newsletter/unsubscribe?token=${token}`;
+		await queueEmail({
+			to: normalized,
+			subject: "Welcome to the Century NIT Newsletter!",
+			html: newsletterEmailLayout(
+				"Welcome to the Century NIT Newsletter!",
+				`<p>Hi ${safeName ? `<strong>${safeName}</strong>` : "there"},</p>
             <p>Thanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.</p>
-            <p>If you ever want to stop receiving these emails, you can <a href="${baseUrl}/newsletter/unsubscribe?email=${encodeURIComponent(normalized)}">unsubscribe</a>.</p>`
-        ),
-        text: `Welcome to the Century NIT Newsletter!\n\nHi ${name || "there"},\n\nThanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.\n\nTo unsubscribe, visit ${baseUrl}/newsletter/unsubscribe?email=${encodeURIComponent(normalized)}.`,
-        idempotencyKey: `newsletter:welcome:${normalized}`,
-        template: "Newsletter welcome",
-        reference: normalized,
-      });
-    } catch (emailErr) {
-      // Don’t let a queue failure break the subscription request
-      console.error("[newsletter] welcome email queue failed:", emailErr);
-    }
+            <p>If you ever want to stop receiving these emails, you can <a href="${escapeHtml(unsubscribeUrl)}">unsubscribe</a>.</p>`
+			),
+			text: `Welcome to the Century NIT Newsletter!\n\nHi ${name || "there"},\n\nThanks for subscribing! You’ll receive updates, scholarship alerts, visa news, and event invites.\n\nTo unsubscribe, visit ${unsubscribeUrl}.`,
+			idempotencyKey: `newsletter:welcome:${normalized}`,
+			template: "Newsletter welcome",
+			reference: normalized,
+		});
+	} catch (emailErr) {
+		// Don’t let a queue failure break the subscription request
+		console.error("[newsletter] welcome email queue failed:", emailErr);
+	}
 
      return c.json({
        ok: true,

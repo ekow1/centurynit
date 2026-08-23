@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { API_PREFIX } from "century-nit-shared";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Field";
 import { EnquiryButton } from "../EnquiryContext";
@@ -21,7 +22,7 @@ export function Footer() {
     setSubmitting(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v1/newsletter/subscribe`, {
+      const response = await fetch(`${API_PREFIX}/newsletter/subscribe`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -30,11 +31,11 @@ export function Footer() {
         credentials: "include",
       });
       if (!response.ok) {
-        // try to get error message from body
+        // API errors are shaped { error: { code, message } }
         let errorMsg = "Failed to subscribe";
         try {
           const err = await response.json();
-          if (err?.message) errorMsg = err.message;
+          errorMsg = err?.error?.message ?? err?.message ?? errorMsg;
         } catch (_) {/* ignore */}
         setError(errorMsg);
         return;

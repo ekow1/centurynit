@@ -42,6 +42,7 @@ const EnterpriseUniversities = lazyNamed(() => import("./pages/EnterpriseUnivers
 const EnterprisePrograms = lazyNamed(() => import("./pages/EnterprisePrograms"), "EnterprisePrograms");
 const EnterprisePackages = lazyNamed(() => import("./pages/EnterprisePackages"), "EnterprisePackages");
 const EnterpriseReports = lazyNamed(() => import("./pages/EnterpriseReports"), "EnterpriseReports");
+const EnterpriseTeamAssignments = lazyNamed(() => import("./pages/EnterpriseTeamAssignments"), "EnterpriseTeamAssignments");
 const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppointments"), "EnterpriseAppointments");
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
 const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
@@ -138,6 +139,7 @@ export default function App() {
 									<Route path="programs" element={<Ops module="programs"><EnterprisePrograms /></Ops>} />
 									<Route path="packages" element={<Ops module="packages"><EnterprisePackages /></Ops>} />
 									<Route path="reports" element={<Ops module="reports"><EnterpriseReports /></Ops>} />
+									<Route path="team" element={<Ops module="reports"><EnterpriseTeamAssignments /></Ops>} />
 									<Route path="marketing" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									{/* Personal calendar connection. Gated on "dashboard" rather than
 									    "settings": consultants must reach this, admins never take bookings. */}

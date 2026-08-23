@@ -97,6 +97,24 @@ function serializeContact(r: typeof mailingListContacts.$inferSelect) {
 	};
 }
 
+/**
+ * Give a contact an unsubscribe token if it somehow lacks one.
+ *
+ * Every campaign email must carry a working opt-out link, and that link is
+ * keyed on this token. Rows created before tokens were mandatory have NULL
+ * here — rather than shipping those recipients unsubscription-less mail, mint
+ * a token at send time and persist it.
+ */
+async function ensureConfirmToken(contactId: string, current: string | null): Promise<string> {
+	if (current) return current;
+	const token = randomUUID();
+	await db
+		.update(mailingListContacts)
+		.set({ confirmToken: token })
+		.where(eq(mailingListContacts.id, contactId));
+	return token;
+}
+
 const campaignIdParams = z.object({
 	id: z.string().uuid(),
 });
@@ -414,12 +432,9 @@ marketingRouter.openapi(
 					.replace(/\{\{name\}\}/g, contactName)
 					.replace(/\{\{Name\}\}/g, contactName);
 
-				const unsubscribeUrl = contact.confirmToken
-					? `${env.FRONTEND_URL}/newsletter/unsubscribe?token=${contact.confirmToken}`
-					: null;
-				const footerNote = unsubscribeUrl
-					? `You're receiving this because you subscribed to Century NIT updates. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`
-					: undefined;
+				const unsubscribeToken = await ensureConfirmToken(contact.id, contact.confirmToken);
+				const unsubscribeUrl = `${env.FRONTEND_URL}/newsletter/unsubscribe?token=${unsubscribeToken}`;
+				const footerNote = `You're receiving this because you subscribed to Century NIT updates. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`;
 
 				const html = emailLayout({
 					title: personalizedSubject,

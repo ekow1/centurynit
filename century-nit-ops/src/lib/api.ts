@@ -542,8 +542,24 @@ export function createStageAssignment(body: {
 	});
 }
 
-export function listStageAssignments(applicationId: string): Promise<{ assignments: StageAssignment[] }> {
-	return apiFetch<{ assignments: StageAssignment[] }>(`${COMM}/stage-assignments?applicationId=${applicationId}`);
+export type TeamAssignment = {
+	id: string;
+	type: "case" | "consultation" | "ticket";
+	reference: string;
+	clientName: string;
+	clientEmail: string | null;
+	assignedStaffId: string | null;
+	assignedStaffName: string | null;
+	assignedStaffEmail: string | null;
+	stageOrStatus: string;
+	stageOrStatusLabel: string;
+	priority: string | null;
+	updatedAt: string;
+	link: string;
+};
+
+export function getTeamAssignments(limit = 200): Promise<{ items: TeamAssignment[] }> {
+	return apiFetch<{ items: TeamAssignment[] }>(`${API_PREFIX}/team/assignments?limit=${limit}`);
 }
 
 /* ── Schools (Ops) ── */

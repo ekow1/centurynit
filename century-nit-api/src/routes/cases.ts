@@ -22,7 +22,7 @@ import {
 	getApplication,
 	getConsultation,
 	getConsultationActivity,
-	getCoordinatorWorkload,
+	getStaffWorkload,
 	latestApplicationForApplicant,
 	latestConsultationForApplicant,
 	listApplicants,
@@ -852,10 +852,7 @@ consultationsRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff");
 		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may view workload");
-		}
-		return c.json(await getCoordinatorWorkload());
+		return c.json(await getStaffWorkload(staff.branch ?? undefined));
 	},
 );
 

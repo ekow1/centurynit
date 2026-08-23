@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { API_PREFIX, type ChatRealtimeEvent } from "century-nit-shared";
 
 /**
- * Shared SSE subscription for chat events.
+ * Shared SSE subscription for ops events.
  *
  * The ops console already has `/api/v1/events/stream` for notifications — the
  * backend now publishes `chat.message`, `chat.conversation.created`, and
@@ -18,8 +18,10 @@ import { API_PREFIX, type ChatRealtimeEvent } from "century-nit-shared";
 type ChatSSEEvent = ChatRealtimeEvent;
 
 type Listener = (event: ChatSSEEvent) => void;
+type AnyEventListener = (event: { type: string; [key: string]: unknown }) => void;
 
 const listeners = new Set<Listener>();
+const anyListeners = new Set<AnyEventListener>();
 let es: EventSource | null = null;
 let refCount = 0;
 
@@ -33,6 +35,15 @@ function ensureOpen() {
 		es.addEventListener("notification", (ev) => {
 			try {
 				const parsed = JSON.parse((ev as MessageEvent).data) as ChatSSEEvent;
+				// Dispatch to all-events listeners (used by useCasesApi for
+				// real-time refresh on case-relevant notifications).
+				for (const fn of anyListeners) {
+					try {
+						fn(parsed);
+					} catch {
+						// ignore
+					}
+				}
 				if (!parsed?.type?.startsWith?.("chat.")) return;
 				for (const fn of listeners) {
 					try {
@@ -75,6 +86,30 @@ export function useChatStream(listener: Listener): void {
 		ensureOpen();
 		return () => {
 			listeners.delete(stable);
+			refCount -= 1;
+			maybeClose();
+		};
+	}, []);
+}
+
+/**
+ * Subscribe to ALL SSE events (not just chat) for the lifetime of the
+ * calling component. Used by `useCasesApi` to auto-refresh when a
+ * case-relevant notification arrives (e.g. `booking.new`, `stage.changed`,
+ * `assessment.complete`, `lead.new`, etc.) without opening a second
+ * EventSource — reuses the same singleton connection as `useChatStream`.
+ */
+export function useOpsSSE(listener: AnyEventListener): void {
+	const ref = useRef(listener);
+	ref.current = listener;
+
+	useEffect(() => {
+		const stable: AnyEventListener = (e) => ref.current(e);
+		anyListeners.add(stable);
+		refCount += 1;
+		ensureOpen();
+		return () => {
+			anyListeners.delete(stable);
 			refCount -= 1;
 			maybeClose();
 		};

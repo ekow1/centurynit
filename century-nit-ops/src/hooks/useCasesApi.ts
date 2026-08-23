@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	applicantsApi,
 	applicationsApi,
@@ -21,6 +21,7 @@ import {
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
+import { useOpsSSE } from "./useChatStream";
 import type {
 	Assignee,
 	MockApplicant,
@@ -231,6 +232,7 @@ export function useCasesApi() {
 	const [assignees, setAssignees] = useState<Assignee[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const refresh = useCallback(async () => {
 		setError(null);
@@ -264,6 +266,38 @@ export function useCasesApi() {
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
+
+	// Real-time refresh: listen to the shared SSE singleton for case-relevant
+	// notifications and debounce-refresh so a burst of events only triggers
+	// one API call.
+	const refreshRef = useRef(refresh);
+	refreshRef.current = refresh;
+	useOpsSSE((event) => {
+		const t = event.type;
+		if (
+			t === "booking.new" ||
+			t === "booking.assigned" ||
+			t === "booking.rescheduled" ||
+			t === "booking.cancelled" ||
+			t === "lead.new" ||
+			t === "consultation.assigned" ||
+			t === "assessment.complete" ||
+			t === "case.assigned" ||
+			t === "stage.changed" ||
+			t === "visa.stage_changed" ||
+			t === "coordinator_delegated" ||
+			t === "coordinator_reassigned" ||
+			t === "status_changed" ||
+			t === "consultant_assigned" ||
+			t === "auto_escalated" ||
+			t === "document.uploaded" ||
+			t === "ticket.new" ||
+			t === "ticket.assigned"
+		) {
+			if (refreshTimer.current) clearTimeout(refreshTimer.current);
+			refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);
+		}
+	});
 
 	const replaceConsultation = (row: ApiConsultation) => {
 		const adapted = toConsultation(row);

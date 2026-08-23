@@ -693,11 +693,41 @@ export const bookingEvents = pgTable(
 );
 
 /**
+ * Configurable fee definitions.
+ *
+ * Hardcoded defaults live in the ops and portal UI (title, category, billing
+ * stage, etc.) so the product can display a meaningful label even before a fee
+ * is configured in the database. This table holds the dynamic, staff-authored
+ * fee records that can be added without a code change. Amounts can be set per
+ * fee in the `platform_settings` table using the fee key as the setting key.
+ */
+export const feeDefinitions = pgTable(
+	"fee_definitions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		key: varchar("key", { length: 64 }).notNull().unique(),
+		title: varchar("title", { length: 120 }).notNull(),
+		category: varchar("category", { length: 120 }).notNull(),
+		description: text("description"),
+		billingStage: varchar("billing_stage", { length: 120 }).notNull(),
+		badge: varchar("badge", { length: 60 }).notNull(),
+		defaultCents: integer("default_cents").notNull().default(0),
+		active: boolean("active").notNull().default(true),
+		createdBy: uuid("created_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byCategory: index("fee_definitions_category_idx").on(t.category),
+		byActive: index("fee_definitions_active_idx").on(t.active),
+	}),
+);
+
+/**
  * Platform-level settings — integration credentials managed from the ops UI.
  *
  * Stores encrypted values (AES-256-GCM via lib/crypto.ts) for things like
- * Resend, Supabase Storage, and Google OAuth. The ENCRYPTION_KEY env var
- * encrypts at rest; the API reads and decrypts on demand with an in-memory
+ * Resend, Supabase Storage, and Google OAuth. The API reads and decrypts on demand with an in-memory
  * cache. Infrastructure secrets (DATABASE_URL, BETTER_AUTH_SECRET, etc.) stay
  * in environment variables and are never stored here.
  */

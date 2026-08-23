@@ -46,7 +46,7 @@ import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
 import { publishChatEvent, notifyOfflineParticipants } from "./chat.js";
 import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
-import { serializeMessageRow } from "./message-serializer.js";
+import { serializeMessageRow, hydrateMessages } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -861,9 +861,10 @@ export async function getCustomerMessages(
 		.limit(limit + 1);
 	const hasMore = rows.length > limit;
 	const sliced = hasMore ? rows.slice(0, limit) : rows;
+	const hydrated = await hydrateMessages(sliced.reverse(), { userId });
 	return {
-		messages: sliced.reverse().map(serializeMessage),
-		total: sliced.length,
+		messages: hydrated,
+		total: hydrated.length,
 		hasMore,
 	};
 }
@@ -990,7 +991,7 @@ export async function sendCustomerMessage(
 		}
 	})().catch(() => {});
 
-	return serializeMessage(created);
+	return { ...serializeMessage(created), deliveryStatus: "sent" };
 }
 
 export async function markCustomerRead(conversationId: string, userId: string): Promise<void> {

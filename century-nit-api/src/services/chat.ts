@@ -297,9 +297,63 @@ export async function listConversations(
 
 /* ── Get single conversation ────────────────────────────────────────────── */
 
+/**
+ * Support-queue roles that can see all type:"support" conversations.
+ * Must stay in sync with the `listConversations` bypass above.
+ */
+const SUPPORT_QUEUE_ROLES = new Set([
+	"customer_service",
+	"coordinator",
+	"manager",
+	"super_admin",
+	"admin",
+]);
+
+/**
+ * If the staff member is a support-queue role and the conversation is a
+ * support conversation they're not yet a participant in, auto-join them as
+ * a "member" so they can view and reply. This is called from getConversation
+ * and getMessages to bridge the gap between list visibility (which lets them
+ * see support conversations) and detail access (which requires membership).
+ */
+async function ensureSupportQueueAccess(
+	conversationId: string,
+	opsUserId: string,
+	staffRole: string,
+): Promise<void> {
+	if (!SUPPORT_QUEUE_ROLES.has(staffRole)) return;
+	const [conv] = await db
+		.select({ type: conversations.type })
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (conv?.type !== "support") return;
+	const [existing] = await db
+		.select({ id: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, opsUserId),
+			),
+		)
+		.limit(1);
+	if (!existing) {
+		await db
+			.insert(conversationParticipants)
+			.values({
+				conversationId,
+				opsUserId,
+				role: "member",
+			})
+			.onConflictDoNothing();
+	}
+}
+
 export async function getConversation(
 	conversationId: string,
 	opsUserId: string,
+	staffRole?: string,
 ): Promise<ChatConversation> {
 	const [row] = await db
 		.select()
@@ -307,6 +361,12 @@ export async function getConversation(
 		.where(eq(conversations.id, conversationId))
 		.limit(1);
 	if (!row) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+
+	// Auto-join support-queue staff into support conversations they're not
+	// yet a participant in so they can view and reply.
+	if (staffRole) {
+		await ensureSupportQueueAccess(conversationId, opsUserId, staffRole);
+	}
 
 	const isParticipant = await db
 		.select()
@@ -460,6 +520,7 @@ export async function getMessages(
 	conversationId: string,
 	opsUserId: string,
 	opts: { limit?: number; before?: string } = {},
+	staffRole?: string,
 ): Promise<ChatMessageList> {
 	// Authorization: only participants may read a conversation. Without this
 	// check any staff member with chat access could read any conversation —
@@ -467,6 +528,11 @@ export async function getMessages(
 	// An empty opsUserId is the internal/trusted path (e.g. the applicant
 	// route, which does its own ownership check before calling in).
 	if (opsUserId) {
+		// Auto-join support-queue staff into support conversations so they can
+		// read the thread.
+		if (staffRole) {
+			await ensureSupportQueueAccess(conversationId, opsUserId, staffRole);
+		}
 		const [membership] = await db
 			.select({ conversationId: conversationParticipants.conversationId })
 			.from(conversationParticipants)
@@ -658,8 +724,13 @@ export async function sendMessage(
 	conversationId: string,
 	senderOpsUser: { id: string; name: string; email: string },
 	input: SendMessage,
+	staffRole?: string,
 ): Promise<ChatMessage> {
-	// Verify membership
+	// Verify membership — but auto-join support-queue staff into support
+	// conversations first so they can reply to threads they just opened.
+	if (staffRole) {
+		await ensureSupportQueueAccess(conversationId, senderOpsUser.id, staffRole);
+	}
 	const isParticipant = await db
 		.select()
 		.from(conversationParticipants)

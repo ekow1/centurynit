@@ -118,7 +118,7 @@ chatRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
-		const conv = await getConversation(id, staff.opsUserId);
+		const conv = await getConversation(id, staff.opsUserId, staff.role);
 		return c.json(conv);
 	},
 );
@@ -149,7 +149,7 @@ chatRouter.openapi(
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		const query = c.req.valid("query");
-		const list = await getMessages(id, staff.opsUserId, query);
+		const list = await getMessages(id, staff.opsUserId, query, staff.role);
 		return c.json(list);
 	},
 );
@@ -180,7 +180,7 @@ chatRouter.openapi(
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
-		const msg = await sendMessage(id, { id: staff.opsUserId, name: staff.name, email: staff.email }, body);
+		const msg = await sendMessage(id, { id: staff.opsUserId, name: staff.name, email: staff.email }, body, staff.role);
 		return c.json(msg, 201);
 	},
 );

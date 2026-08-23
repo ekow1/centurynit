@@ -36,7 +36,7 @@ export function useChatConversations(enabled = true) {
 		if (forbiddenRef.current) return;
 		try {
 			const res = await listChatConversations();
-			setConversations(res.conversations);
+			setConversations(Array.isArray(res?.conversations) ? res.conversations : []);
 			setError(null);
 		} catch (e: any) {
 			if (isForbidden(e)) { forbiddenRef.current = true; return; }

@@ -241,12 +241,16 @@ export function useCasesApi() {
 				applicantsApi.list(),
 				staffApi.list().catch(() => ({ staff: [] })),
 			]);
-			const apps = a.applications;
-			setConsultations(c.consultations.map(toConsultation));
+			const apps = Array.isArray(a?.applications) ? a.applications : [];
+			const rawConsultations = Array.isArray(c?.consultations) ? c.consultations : [];
+			const rawApplicants = Array.isArray(p?.applicants) ? p.applicants : [];
+			const rawStaff = Array.isArray(staff?.staff) ? staff.staff : [];
+
+			setConsultations(rawConsultations.map(toConsultation));
 			setApplications(apps.map(toApplication));
-			setApplicants(p.applicants.map((row) => toApplicant(row, apps)));
+			setApplicants(rawApplicants.map((row) => toApplicant(row, apps)));
 			setAssignees(
-				staff.staff
+				rawStaff
 					.filter((s) => s.active && (s.role === "consultant" || s.role === "coordinator"))
 					.map((s) => ({ name: s.name, email: s.email, branch: s.branch ?? "", opsUserId: s.id })),
 			);

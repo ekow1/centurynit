@@ -72,9 +72,13 @@ export function CommunicationHub() {
 	// Map staff by name/opsUserId for quick presence lookup
 	const staffPresenceMap = useMemo(() => {
 		const map = new Map<string, StaffPresence>();
-		for (const s of directory) {
-			map.set(s.name.toLowerCase(), s.presence);
-			map.set(s.opsUserId, s.presence);
+		if (Array.isArray(directory)) {
+			for (const s of directory) {
+				if (s) {
+					map.set((s.name || "").toLowerCase(), s.presence);
+					map.set(s.opsUserId, s.presence);
+				}
+			}
 		}
 		return map;
 	}, [directory]);
@@ -120,8 +124,9 @@ export function CommunicationHub() {
 		setDirLoading(true);
 		try {
 			const res = await getCommunicationStaffDirectory();
-			setDirectory(res.staff);
-			const me = res.staff.find((s) => s.email === opsUser?.email);
+			const list = Array.isArray(res?.staff) ? res.staff : [];
+			setDirectory(list);
+			const me = list.find((s) => s.email === opsUser?.email);
 			if (me) setPresenceStatus(me.presence);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : "Couldn't load staff directory");
@@ -153,19 +158,21 @@ export function CommunicationHub() {
 
 	/* ── Filter Conversations ── */
 	const internalConversations = useMemo(() => {
+		if (!Array.isArray(conversations)) return [];
 		return conversations
-			.filter((c) => c.type === "direct" || c.type === "group" || c.type === "internal")
-			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+			.filter((c) => c && (c.type === "direct" || c.type === "group" || c.type === "internal"))
+			.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
 	}, [conversations]);
 
 	const externalConversations = useMemo(() => {
+		if (!Array.isArray(conversations)) return [];
 		return conversations
-			.filter((c) => c.type === "applicant" || c.type === "support" || c.type === "case" || c.type === "stage" || c.type === "entity")
-			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+			.filter((c) => c && (c.type === "applicant" || c.type === "support" || c.type === "case" || c.type === "stage" || c.type === "entity"))
+			.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
 	}, [conversations]);
 
 	const totalUnread = useMemo(
-		() => conversations.reduce((sum, c) => sum + c.unreadCount, 0),
+		() => Array.isArray(conversations) ? conversations.reduce((sum, c) => sum + (c?.unreadCount || 0), 0) : 0,
 		[conversations],
 	);
 

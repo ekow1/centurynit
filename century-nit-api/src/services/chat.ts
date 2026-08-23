@@ -576,8 +576,9 @@ async function sendMessageInternal(
 		sender.id,
 	);
 
-	// Notify offline participants via email
-	await notifyOfflineParticipants(conversationId, sender, created);
+	// Notify offline participants via email — fire-and-forget so the
+	// per-participant DB lookups + email queueing never delay the send.
+	void notifyOfflineParticipants(conversationId, sender, created);
 
 	// In-app: when a staff member replies into an applicant conversation, alert
 	// the applicant so they see the reply without polling. Fire-and-forget.

@@ -334,17 +334,39 @@ auth.get("/me", async (c) => {
 		return c.json({ user: null, staff: null }, 200);
 	}
 
-	const [staff] = await db
+	let [staff] = await db
 		.select()
 		.from(schema.opsUsers)
 		.where(eq(schema.opsUsers.userId, session.user.id))
 		.limit(1);
 
+	if (!staff && session.user.email) {
+		const [byEmail] = await db
+			.select()
+			.from(schema.opsUsers)
+			.where(eq(schema.opsUsers.email, session.user.email))
+			.limit(1);
+		if (byEmail) {
+			await db
+				.update(schema.opsUsers)
+				.set({ userId: session.user.id, updatedAt: new Date() })
+				.where(eq(schema.opsUsers.id, byEmail.id));
+			staff = { ...byEmail, userId: session.user.id };
+		}
+	}
+
+	const resolvedName =
+		staff?.name?.trim() && !staff.name.includes("@")
+			? staff.name.trim()
+			: session.user.name?.trim() && !session.user.name.includes("@")
+				? session.user.name.trim()
+				: session.user.email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (w) => w.toUpperCase());
+
 	return c.json({
 		user: {
 			id: session.user.id,
 			email: session.user.email,
-			name: session.user.name ?? null,
+			name: resolvedName,
 		},
 		staff:
 			staff && staff.active
@@ -352,7 +374,7 @@ auth.get("/me", async (c) => {
 						opsUserId: staff.id,
 						role: staff.role,
 						branch: staff.branch,
-						name: staff.name,
+						name: resolvedName,
 						email: staff.email,
 					}
 				: null,

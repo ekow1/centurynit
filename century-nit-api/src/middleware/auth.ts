@@ -80,11 +80,26 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 		name: session.user.name ?? null,
 	});
 
-	const [staff] = await db
+	let [staff] = await db
 		.select()
 		.from(opsUsers)
 		.where(eq(opsUsers.userId, session.user.id))
 		.limit(1);
+
+	if (!staff && session.user.email) {
+		const [byEmail] = await db
+			.select()
+			.from(opsUsers)
+			.where(eq(opsUsers.email, session.user.email))
+			.limit(1);
+		if (byEmail) {
+			await db
+				.update(opsUsers)
+				.set({ userId: session.user.id, updatedAt: new Date() })
+				.where(eq(opsUsers.id, byEmail.id));
+			staff = { ...byEmail, userId: session.user.id };
+		}
+	}
 
 	c.set(
 		"staff",

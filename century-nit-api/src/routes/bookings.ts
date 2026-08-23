@@ -45,7 +45,7 @@ import {
 import type { Booking, CreateBooking } from "century-nit-shared";
 import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
 import { createPaystackCheckout, verifyPaystackTransaction } from "../services/paystack.js";
-import { consultations, bookings as bookingsTable } from "../db/schema.js";
+import { consultations, bookings as bookingsTable, paymentTransactions } from "../db/schema.js";
 
 const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 

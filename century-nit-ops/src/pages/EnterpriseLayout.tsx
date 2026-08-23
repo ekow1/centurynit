@@ -327,7 +327,9 @@ export function EnterpriseLayout() {
 					<div className="portal__topbar-left">
 						<p className="eyebrow">{roleName}</p>
 						<p className="portal__welcome">
-							{opsUser ? `${opsUser.name.split(" ")[0]}'s Command Center` : "Operations"}
+							{opsUser
+								? `${opsUser.name.includes("@") ? opsUser.name.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : opsUser.name.split(" ")[0]}'s Command Center`
+								: "Operations"}
 						</p>
 					</div>
 					<div className="portal__topbar-right">

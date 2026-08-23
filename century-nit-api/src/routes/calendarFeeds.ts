@@ -165,7 +165,7 @@ calendarFeedsRouter.openapi(
 		path: "/feeds/me",
 		tags: ["Calendar"],
 		summary: "My calendar feed status",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		responses: {
 			200: { content: { "application/json": { schema: feedResponseSchema } }, description: "Feed status (URL never returned)" },
 		},
@@ -214,7 +214,7 @@ calendarFeedsRouter.openapi(
 			"Paste a calendar's read-only secret iCal/ICS address (Google \"Secret address in iCal format\", " +
 			"Outlook/Apple \"publish calendar\" .ics link). The URL is encrypted and never returned. " +
 			"Replaces any existing feed for this staff member and mirrors it immediately.",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		request: {
 			body: { content: { "application/json": { schema: upsertFeedSchema } }, required: true },
 		},
@@ -281,7 +281,7 @@ calendarFeedsRouter.openapi(
 		path: "/feeds/me",
 		tags: ["Calendar"],
 		summary: "Remove my calendar feed",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		responses: {
 			204: { description: "Feed and mirrored busy blocks removed" },
 		},
@@ -301,7 +301,7 @@ calendarFeedsRouter.openapi(
 		path: "/feeds/sync",
 		tags: ["Calendar"],
 		summary: "Mirror all calendar feeds now",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		responses: {
 			202: { description: "Sync queued" },
 		},
@@ -320,7 +320,7 @@ calendarFeedsRouter.openapi(
 		path: "/working-hours",
 		tags: ["Calendar"],
 		summary: "My weekly working hours",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		responses: {
 			200: {
 				content: { "application/json": { schema: z.object({ workingHours: workingHoursResponseSchema.shape.workingHours }) } },
@@ -346,7 +346,7 @@ calendarFeedsRouter.openapi(
 			"The complete weekly set — omit a day to mark it non-working. The target is the session " +
 			"staff member; there is no id to pass, and none is accepted. Narrowing hours never cancels " +
 			"existing bookings; the count now outside the new hours is returned.",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "consultant")] as const,
+		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant")] as const,
 		request: {
 			body: { content: { "application/json": { schema: updateWorkingHoursSchema } }, required: true },
 		},

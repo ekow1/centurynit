@@ -149,12 +149,18 @@ async function notificationContext(
 /**
  * Create a booking. Always UNASSIGNED — assignment is a manager's decision
  * (§1), never automatic and never round-robin.
+ *
+ * When `paidUpfront` is true (payment has already been collected), the
+ * branch-level slot availability check is skipped. The booking is created
+ * regardless of consultant capacity, and ops determines whether a
+ * consultant can be assigned or the appointment needs rescheduling.
  */
 export async function createBooking(input: {
 	data: CreateBooking;
 	client: { id: string; name: string; email: string; phone?: string | null };
 	serviceName: string;
 	idempotencyKey?: string;
+	paidUpfront?: boolean;
 }): Promise<BookingRow> {
 	const { data, client } = input;
 
@@ -170,22 +176,27 @@ export async function createBooking(input: {
 	}
 
 	// Server-side re-check (§10) — the client's view of availability is a hint.
-	const availability = await branchAvailability({
-		branchId: data.branchId,
-		date: data.date,
-		durationMinutes: data.durationMinutes,
-		timezone: data.timezone,
-	});
-	const slot = availability.slots.find((s) => s.time === data.time);
-	if (!slot) {
-		throw new HttpError(400, "VALIDATION_ERROR", `${data.time} is not a bookable start time`);
-	}
-	if (!slot.available) {
-		throw new HttpError(
-			409,
-			SCHEDULING_ERROR_CODES.SLOT_TAKEN,
-			"That time has just been taken. Please choose another.",
-		);
+	// When the payment has already been collected (paidUpfront), skip the
+	// capacity gate — the booking is created as UNASSIGNED and ops decides
+	// whether a consultant can be assigned or the slot needs rescheduling.
+	if (!input.paidUpfront) {
+		const availability = await branchAvailability({
+			branchId: data.branchId,
+			date: data.date,
+			durationMinutes: data.durationMinutes,
+			timezone: data.timezone,
+		});
+		const slot = availability.slots.find((s) => s.time === data.time);
+		if (!slot) {
+			throw new HttpError(400, "VALIDATION_ERROR", `${data.time} is not a bookable start time`);
+		}
+		if (!slot.available) {
+			throw new HttpError(
+				409,
+				SCHEDULING_ERROR_CODES.SLOT_TAKEN,
+				"That time has just been taken. Please choose another.",
+			);
+		}
 	}
 
 	let booking: BookingRow;

@@ -287,12 +287,12 @@ bookingsRouter.openapi(
 					email: user.email,
 				},
 				serviceName,
+				paidUpfront: true,
 			});
 		} catch (err) {
-			// If the slot was taken between the first call and this one
-			// (race condition or React StrictMode double-fire), look up
-			// the existing booking for this client + slot and return it
-			// instead of failing — the payment already succeeded.
+			// Race condition / React StrictMode double-fire: the booking
+			// was already created on a previous call. Return it instead of
+			// failing — the payment already succeeded.
 			if (err instanceof HttpError && err.status === 409) {
 				const [fallback] = await db
 					.select()
@@ -308,20 +308,6 @@ bookingsRouter.openapi(
 				if (fallback) {
 					return c.json(toBookingResponse(fallback), 200);
 				}
-
-				// The slot was taken by ANOTHER user — the payment already
-				// succeeded so we can't just show "slot taken". Return a
-				// pending state so the frontend shows a friendly message and
-				// ops can follow up to reschedule.
-				return c.json({
-					reference: null,
-					status: "pending_reschedule",
-					message:
-						"Your payment was received but the selected time is no longer available. Our team will contact you shortly to schedule your consultation.",
-					paymentReference: reference,
-					amountCents: txn.amountCents,
-					serviceId: bookingPayload.serviceId,
-				} as unknown as Booking, 200);
 			}
 			throw err;
 		}

@@ -3315,18 +3315,8 @@ export function PortalPayCallback() {
 				}
 				
 				if (params.get("booking") === "consultation") {
-					const result = (await bookingsApi.verifyPayment(reference)) as unknown as Record<string, unknown>;
+					await bookingsApi.verifyPayment(reference);
 					if (cancelled) return;
-
-				if (result.status === "pending_reschedule") {
-					nav("/portal/appointments", { replace: true });
-					toast.success(
-						typeof result.message === "string"
-							? result.message
-							: "Payment received. Our team will contact you to schedule your consultation.",
-					);
-					return;
-				}
 
 					// Force a sync to get the new booking into AppState
 					// or we can optimistically update booking here, but a reload is safer.

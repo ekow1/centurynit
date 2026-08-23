@@ -16,7 +16,7 @@ import {
  *   1. If already enrolled (method known), skip to verification
  *   2. Otherwise, show method selection (TOTP or Email OTP)
  *   3. For TOTP: password → QR code → verify → backup codes → done
- *   4. For Email OTP: password → send code → verify → done
+ *   4. For Email OTP: password → verify → done
  */
 
 const authClient = createAuthClient({
@@ -32,7 +32,6 @@ type Step =
 	| "totp-verify"
 	| "totp-codes"
 	| "otp-password"
-	| "otp-send"
 	| "otp-verify"
 	| "done";
 
@@ -220,7 +219,6 @@ export function MfaSetup() {
 					{step === "totp-verify" && "Step 2 of 3 · Scan & Verify"}
 					{step === "totp-codes" && "Step 3 of 3 · Backup Recovery"}
 					{step === "otp-password" && "Step 1 of 2 · Email OTP Setup"}
-					{step === "otp-send" && "Step 2 of 2 · Send Code"}
 					{step === "otp-verify" && "Step 2 of 2 · Verify Code"}
 					{step === "done" && "Setup Complete"}
 				</p>

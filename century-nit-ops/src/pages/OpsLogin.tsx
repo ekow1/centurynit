@@ -201,7 +201,7 @@ export function OpsLogin() {
 										{useBackupCode ? "Use Authenticator App" : "Use a backup recovery code"}
 									</button>
 								)}
-								{mfaMethod === "email_otp" && otpSent && (
+								{mfaMethod === "email_otp" && (
 									<button
 										type="button"
 										onClick={async () => {

@@ -31,7 +31,6 @@ type Step =
 	| "totp-verify"
 	| "totp-codes"
 	| "otp-password"
-	| "otp-send"
 	| "otp-verify"
 	| "done";
 

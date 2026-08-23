@@ -6,6 +6,7 @@
  * components can drop in place of the mock `invoices` from OpsStateContext.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useOpsAuth } from "../pages/OpsAuthContext";
 import {
 	type Invoice,
 	type InvoiceStatus,
@@ -78,11 +79,18 @@ function adaptInvoice(api: ApiInvoice): Invoice {
 }
 
 export function useInvoiceApi() {
+	const { hasPermission } = useOpsAuth();
 	const [invoices, setInvoices] = useState<Invoice[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
 	const refresh = useCallback(async () => {
+		if (!hasPermission("invoices")) {
+			setInvoices([]);
+			setError(null);
+			setLoading(false);
+			return;
+		}
 		setLoading(true);
 		setError(null);
 		try {

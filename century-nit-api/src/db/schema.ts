@@ -854,6 +854,36 @@ export const consultations = pgTable(
 	}),
 );
 
+export const packageCodeEnum = pgEnum("package_code", [
+	"non_scholarship",
+	"scholarship",
+	"hybrid",
+	"undecided",
+]);
+
+export const servicePackages = pgTable(
+	"service_packages",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		code: packageCodeEnum("code").notNull().unique(),
+		name: varchar("name", { length: 120 }).notNull(),
+		tagline: text("tagline"),
+		priceCents: integer("price_cents").notNull(),
+		currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+		features: jsonb("features").$type<string[]>().notNull().default([]),
+		exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
+		includedFeeKeys: jsonb("included_fee_keys").$type<string[]>().notNull().default([]),
+		maxSchools: integer("max_schools").notNull().default(0),
+		sortOrder: integer("sort_order").notNull().default(0),
+		active: boolean("active").notNull().default(true),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byActive: index("service_packages_active_idx").on(t.active, t.sortOrder),
+	}),
+);
+
 export const applications = pgTable(
 	"applications",
 	{
@@ -875,6 +905,8 @@ export const applications = pgTable(
 		stage: varchar("stage", { length: 80 }).notNull().default("document_verification"),
 		status: applicationStatusEnum("status").notNull().default("UNDER_REVIEW"),
 		fundingTrack: text("funding_track"),
+		packageId: uuid("package_id").references(() => servicePackages.id, { onDelete: "set null" }),
+		packageSelectedAt: timestamp("package_selected_at", { withTimezone: true }),
 		notes: text("notes"),
 		checklist: jsonb("checklist")
 			.$type<{ id: string; label: string; checked: boolean }[]>()

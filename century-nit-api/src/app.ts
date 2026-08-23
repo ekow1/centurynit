@@ -39,6 +39,7 @@ import { marketingRouter } from "./routes/marketing.js";
 import { newsletterRouter } from "./routes/newsletter.js";
 import { eventsRouter } from "./routes/events.js";
 import { teamRouter } from "./routes/team.js";
+import { packagesRouter } from "./routes/packages.js";
 
 
 /**
@@ -157,6 +158,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/newsletter`, newsletterRouter);
 	app.route(`${API_PREFIX}/team`, teamRouter);
+app.route(`${API_PREFIX}/packages`, packagesRouter);
 
 
 	const openApiInfo = {

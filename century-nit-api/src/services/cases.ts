@@ -19,8 +19,12 @@ import {
 	caseComments,
 	consultationActivities,
 	consultations,
+	invoices,
+	invoiceEvents,
+	invoiceLines,
 	notifications,
 	opsUsers,
+	servicePackages,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
@@ -460,6 +464,8 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote,
 		paymentPlanId: row.paymentPlanId,
+		packageId: row.packageId,
+		packageSelectedAt: row.packageSelectedAt?.toISOString() ?? null,
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
 		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
@@ -1194,30 +1200,152 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
  * applicant's own actions, not just staff's.
  */
 
+import { AGENCY_STAGES } from "century-nit-core/content";
+import { nextProformaNumber } from "./invoice.js";
+
 export async function setApplicationPackage(input: {
 	id: string;
-	fundingTrack: string;
+	packageCode: string;
 	degreeLevel: string;
-}): Promise<ApplicationRow> {
-	const row = await getApplication(input.id);
-	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	const [updated] = await db
-		.update(applications)
-		.set({
-			fundingTrack: input.fundingTrack,
-			degreeLevel: input.degreeLevel,
-			updatedAt: new Date(),
-		})
-		.where(eq(applications.id, row.id))
-		.returning();
-	await db.insert(caseComments).values({
-		targetType: "application",
-		targetId: row.id,
-		kind: "status",
-		text: `Package chosen: ${input.fundingTrack} · ${input.degreeLevel}`,
-		authorName: "Applicant",
+}): Promise<{ application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null }> {
+	return db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+
+		const [app] = await tx
+			.select()
+			.from(applications)
+			.where(eq(applications.id, input.id))
+			.limit(1);
+		if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+		const [applicant] = await tx
+			.select({ userId: applicants.userId, name: applicants.name, email: applicants.email })
+			.from(applicants)
+			.where(eq(applicants.id, app.applicantId))
+			.limit(1);
+		if (!applicant) throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "Applicant not found");
+
+		const consultation = app.consultationId
+			? await tx
+					.select({ assessmentResult: consultations.assessmentResult, status: consultations.status })
+					.from(consultations)
+					.where(eq(consultations.id, app.consultationId))
+					.limit(1)
+					.then((rows) => rows[0])
+			: null;
+
+		const outcome = (consultation?.assessmentResult as { outcome?: string } | null)?.outcome?.toLowerCase() ?? "";
+		const eligible = outcome === "eligible" || outcome === "conditionally eligible";
+		if (!eligible || consultation?.status !== "COMPLETED") {
+			throw new HttpError(403, "CONSULTATION_NOT_ELIGIBLE", "Package selection requires a completed, eligible consultation");
+		}
+
+		const [pkg] = await tx
+			.select()
+			.from(servicePackages)
+			.where(eq(servicePackages.code, input.packageCode as any))
+			.limit(1);
+		if (!pkg) throw new HttpError(404, "PACKAGE_NOT_FOUND", "Package not found");
+		if (!pkg.active) throw new HttpError(400, "PACKAGE_INACTIVE", "Package is no longer available");
+
+		const [updated] = await tx
+			.update(applications)
+			.set({
+				packageId: pkg.id,
+				packageSelectedAt: new Date(),
+				fundingTrack: input.packageCode,
+				degreeLevel: input.degreeLevel,
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, app.id))
+			.returning();
+
+		// Void any prior agency proforma for this applicant.
+		const prior = await tx
+			.select({ id: invoices.id })
+			.from(invoices)
+			.where(
+				and(
+					eq(invoices.clientUserId, applicant.userId ?? ""),
+					eq(invoices.type, "agency"),
+					eq(invoices.status, "proforma"),
+				),
+			);
+		for (const p of prior) {
+			await tx
+				.update(invoices)
+				.set({ status: "void", voidedAt: new Date(), voidReason: "Package re-selected" })
+				.where(eq(invoices.id, p.id));
+			await tx.insert(invoiceEvents).values({
+				invoiceId: p.id,
+				action: "voided",
+				actor: "system",
+				detail: "Replaced by new package selection",
+			});
+		}
+
+		// Raise the agency proforma pre-split into deposit / pre-departure / post-arrival milestones.
+		const price = pkg.priceCents;
+		const milestoneLines = AGENCY_STAGES.map((stage, i) => ({
+			position: i,
+			label: stage.label,
+			detail: stage.detail,
+			amountCents: i === AGENCY_STAGES.length - 1
+				? price - AGENCY_STAGES.slice(0, -1).reduce((n, s) => n + Math.round(price * s.portion), 0)
+				: Math.round(price * stage.portion),
+		})).filter((l) => l.amountCents > 0);
+
+		const subtotalCents = milestoneLines.reduce((n, l) => n + l.amountCents, 0);
+		let proformaInvoice: typeof invoices.$inferSelect | null = null;
+
+		if (subtotalCents > 0) {
+			const invoiceNumber = await nextProformaNumber(txDb);
+			const [created] = await tx
+				.insert(invoices)
+				.values({
+					invoiceNumber,
+					clientUserId: applicant.userId ?? null,
+					applicantName: applicant.name ?? "Applicant",
+					applicantEmail: applicant.email ?? null,
+					type: "agency",
+					subtotalCents,
+					status: "proforma",
+					issuedBy: null,
+					issuedByName: "Century NIT",
+					note: `Service package: ${pkg.name}`,
+				})
+				.returning();
+
+			await tx.insert(invoiceLines).values(
+				milestoneLines.map((l) => ({
+					invoiceId: created.id,
+					position: l.position,
+					label: l.label,
+					detail: l.detail,
+					amountCents: l.amountCents,
+				})),
+			);
+
+			await tx.insert(invoiceEvents).values({
+				invoiceId: created.id,
+				action: "proforma",
+				actor: "system",
+				detail: `Raised from package ${pkg.code}`,
+			});
+
+			proformaInvoice = created;
+		}
+
+		await tx.insert(caseComments).values({
+			targetType: "application",
+			targetId: app.id,
+			kind: "status",
+			text: `Package Agreement: ${pkg.name} · ${input.degreeLevel}`,
+			authorName: "Applicant",
+		});
+
+		return { application: updated, proformaInvoice };
 	});
-	return updated;
 }
 
 export async function setApplicationPaymentPlan(input: {

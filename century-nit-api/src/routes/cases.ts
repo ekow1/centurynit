@@ -996,12 +996,17 @@ meRouter.openapi(
 	},
 );
 
+const packageSelectionResponseSchema = z.object({
+	application: applicationSchema,
+	proformaInvoice: z.any().nullable().describe("Raised agency proforma split into milestones"),
+});
+
 /**
  * Applicant self-service: choose the school application package.
  *
- * Sets `fundingTrack` and `degreeLevel` on the applicant's latest application.
- * Requires an application to exist (i.e. the consultation assessment has been
- * completed and produced an eligible outcome); refuses with 409 otherwise.
+ * Binds packageId, fundingTrack and degreeLevel, voids any previous agency
+ * proforma, and raises a new agency proforma pre-split into AGENCY_STAGES.
+ * Requires a completed, eligible consultation.
  */
 meRouter.openapi(
 	createRoute({
@@ -1014,8 +1019,8 @@ meRouter.openapi(
 		},
 		responses: {
 			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "The updated application",
+				content: { "application/json": { schema: packageSelectionResponseSchema } },
+				description: "Package bound and proforma raised",
 			},
 		},
 	}),
@@ -1030,12 +1035,15 @@ meRouter.openapi(
 			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
 		}
 		const body = c.req.valid("json");
-		const updated = await setApplicationPackage({
+		const { application: updated, proformaInvoice } = await setApplicationPackage({
 			id: application.id,
-			fundingTrack: body.fundingTrack,
+			packageCode: body.packageCode,
 			degreeLevel: body.degreeLevel,
 		});
-		return c.json(await serializeApplication(updated));
+		return c.json({
+			application: await serializeApplication(updated),
+			proformaInvoice,
+		});
 	},
 );
 

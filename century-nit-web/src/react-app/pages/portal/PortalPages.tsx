@@ -95,7 +95,7 @@ function SchoolPackageInner() {
 			// Two commands in sequence: package first, then the payment plan
 			// that depends on it. Both target the applicant's latest application,
 			// resolved server-side from the session.
-			await meApi.choosePackage({ fundingTrack: funding, degreeLevel: level });
+			await meApi.choosePackage({ packageCode: funding, degreeLevel: level });
 			await meApi.choosePaymentPlan({ paymentPlanId: plan });
 			// Optimistic local update so the UI reflects the choice immediately;
 			// refreshSession re-syncs from the authority in the background.

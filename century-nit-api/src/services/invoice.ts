@@ -47,7 +47,7 @@ async function nextInvoiceNumber(tx: typeof db): Promise<string> {
 }
 
 /** `PRO-2026-0007`. Advisory-locked so concurrent proforma creates cannot collide. */
-async function nextProformaNumber(tx: typeof db): Promise<string> {
+export async function nextProformaNumber(tx: typeof db): Promise<string> {
 	const year = new Date().getUTCFullYear();
 	await tx.execute(sql`SELECT pg_advisory_xact_lock(710003, ${year})`);
 	const [row] = await tx

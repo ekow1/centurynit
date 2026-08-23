@@ -26,6 +26,16 @@ const DB_TO_OPS_PRIORITY: Record<string, InternalTicket["priority"]> = {
 	urgent: "Urgent",
 };
 
+const OPS_TO_DB_PRIORITY: Record<
+	InternalTicket["priority"],
+	"low" | "medium" | "high" | "urgent"
+> = {
+	Low: "low",
+	Medium: "medium",
+	High: "high",
+	Urgent: "urgent",
+};
+
 /* ── Map a DB ticket into the InternalTicket shape the ops UI expects ──── */
 
 let refCounter = 0;
@@ -164,7 +174,10 @@ export function useTicketsApi() {
 				subject: input.title,
 				category: input.category,
 				message: input.description,
-				priority: (input.priority as any) ?? "medium",
+				// The UI's display casing ("Medium") must become the API's enum
+				// value ("medium") — the zod schema rejects anything else.
+				priority:
+					OPS_TO_DB_PRIORITY[input.priority as InternalTicket["priority"]] ?? "medium",
 			});
 			refreshTickets();
 		},

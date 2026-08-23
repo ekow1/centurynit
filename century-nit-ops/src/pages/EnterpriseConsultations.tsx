@@ -73,7 +73,7 @@ export function EnterpriseConsultations() {
 	const [recCountry, setRecCountry] = useState("Canada");
 	const [recUniversity, setRecUniversity] = useState("University of Toronto");
 	const [recProgram, setRecProgram] = useState("Master of Science in Computer Science");
-	const [recPackage, setRecPackage] = useState("Premium Study Package");
+	const [recPackage, setRecPackage] = useState("undecided");
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [branchFilter, setBranchFilter] = useState("all");
@@ -1117,9 +1117,10 @@ export function EnterpriseConsultations() {
 										<div>
 											<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Package</label>
 											<select value={recPackage} onChange={(e) => setRecPackage(e.target.value)} className="input" style={{ width: "100%" }}>
-												<option value="Premium Study Package">Premium Study Package</option>
-												<option value="Standard Admission">Standard Admission</option>
-												<option value="Visa Only Support">Visa Only Support</option>
+												<option value="undecided">Undecided</option>
+												<option value="non_scholarship">Non-Scholarship</option>
+												<option value="scholarship">Scholarship</option>
+												<option value="hybrid">Hybrid</option>
 											</select>
 										</div>
 									</div>

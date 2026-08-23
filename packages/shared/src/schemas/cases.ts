@@ -245,6 +245,8 @@ export const applicationSchema = z.object({
 	visaInvoicePaid: z.boolean(),
 	visaCounselorNote: z.string().nullable(),
 	paymentPlanId: z.string().nullable(),
+	packageId: z.string().uuid().nullable(),
+	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),
 	agencySettled: z.boolean(),
 	travelClearance: z.enum(["pending", "cleared"]),
@@ -326,13 +328,6 @@ export const updateMyProfileSchema = z.object({
 	profile: applicantProfileSchema.optional(),
 });
 export type UpdateMyProfile = z.infer<typeof updateMyProfileSchema>;
-
-/** Choose the school application package (funding track + degree level). */
-export const choosePackageSchema = z.object({
-	fundingTrack: z.string().min(1).max(80),
-	degreeLevel: z.string().min(1).max(64),
-});
-export type ChoosePackage = z.infer<typeof choosePackageSchema>;
 
 /** Choose the post-admission payment plan (full or installment). */
 export const choosePaymentPlanSchema = z.object({

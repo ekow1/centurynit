@@ -288,6 +288,13 @@
       "when": 1787405005538,
       "tag": "0040_newsletter_double_optin",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787480235856,
+      "tag": "0041_tiny_morph",
+      "breakpoints": true
     }
   ]
 }

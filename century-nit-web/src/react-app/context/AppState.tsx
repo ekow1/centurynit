@@ -196,6 +196,7 @@ export type ApplicationData = {
 	schoolFundingTrack: SchoolFundingTrack | "";
 	schoolDegreeLevel: SchoolDegreeLevel | "";
 	packageChosenAt: string | null;
+	packageSelectedAt: string | null;
 	/** Installment vs full - after admitted, before visa/travel */
 	paymentPlanId: PaymentPlanId | "";
 	paymentPlanChosenAt: string | null;
@@ -406,6 +407,7 @@ const defaultApplication: ApplicationData = {
 	schoolFundingTrack: "",
 	schoolDegreeLevel: "",
 	packageChosenAt: null,
+	packageSelectedAt: null,
 	paymentPlanId: "",
 	paymentPlanChosenAt: null,
 	agencyTotal: 0,
@@ -600,7 +602,7 @@ export function isVisaInvoicePaid(app: ApplicationData) {
 
 export function hasSchoolPackage(app: ApplicationData) {
 	return Boolean(
-		app.packageChosenAt && app.schoolFundingTrack && app.schoolDegreeLevel,
+		app.packageSelectedAt && app.schoolFundingTrack && app.schoolDegreeLevel,
 	);
 }
 

@@ -267,6 +267,8 @@ export function createApp() {
 	},
 	{ name: "Communication", description: "Staff presence, routing and conversation context." },
 	{ name: "Marketing", description: "Campaigns, mailing lists and reusable templates." },
+	{ name: "Newsletter", description: "Public website newsletter subscription and opt-out." },
+	{ name: "Team", description: "Manager dashboard for staff case assignments." },
 	],
 	};
 

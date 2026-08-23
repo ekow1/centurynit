@@ -397,7 +397,7 @@ function UsersAndRoles() {
 	const [roles, setRoles] = useState<DynamicRole[]>(DEFAULT_SYSTEM_ROLES);
 	const [selectedRoleId, setSelectedRoleId] = useState<string>("super_admin");
 	const [invitations, setInvitations] = useState<
-		{ id: string; email: string; name: string; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
+		{ id: string; email: string; name: string | null; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
 	>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -412,7 +412,7 @@ function UsersAndRoles() {
 	const [copiedInvite, setCopiedInvite] = useState(false);
 	const [editing, setEditing] = useState<StaffRow | null>(null);
 	const [creatingRole, setCreatingRole] = useState(false);
-	const [draft, setDraft] = useState({ name: "", email: "", role: "consultant" as OpsRole, branch: "accra" });
+	const [draft, setDraft] = useState({ email: "", role: "consultant" as OpsRole, branch: "accra" });
 
 	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [confirmTitle, setConfirmTitle] = useState("");
@@ -520,11 +520,10 @@ function UsersAndRoles() {
 
 	async function submitInvite(e: React.FormEvent) {
 		e.preventDefault();
-		if (!draft.email.trim() || !draft.name.trim()) return;
+		if (!draft.email.trim()) return;
 		try {
 			const created = await staffApi.createInvitation({
 				email: draft.email.trim(),
-				name: draft.name.trim(),
 				role: draft.role,
 				branch: draft.branch,
 			});
@@ -541,7 +540,7 @@ function UsersAndRoles() {
 			}
 			setCreatedInvite({
 				email: created.email,
-				name: draft.name.trim(),
+				name: "—",
 				role: draft.role,
 				acceptUrl: finalUrl,
 			});
@@ -555,7 +554,7 @@ function UsersAndRoles() {
 				}
 			}
 			setInviting(false);
-			setDraft({ name: "", email: "", role: "consultant", branch: "accra" });
+			setDraft({ email: "", role: "consultant", branch: "accra" });
 			await refresh();
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not send invitation");
@@ -608,7 +607,7 @@ function UsersAndRoles() {
 			}
 			setCreatedInvite({
 				email: created.email,
-				name: created.name,
+				name: created.name ?? "—",
 				role: created.role,
 				acceptUrl: finalUrl,
 			});
@@ -894,32 +893,20 @@ function UsersAndRoles() {
 									</button>
 								</header>
 
-								<form onSubmit={submitInvite} className="invite-form" style={{ marginTop: "1rem" }}>
-									<div className="field">
-										<label htmlFor="inv-name">Full Name <span style={{ color: "#b00020" }}>*</span></label>
-										<input
-											id="inv-name"
-											className="input input--full-border"
-											placeholder="e.g. Kwame Mensah"
-											value={draft.name}
-											onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-											required
-											autoFocus
-										/>
-									</div>
-
-									<div className="field">
-										<label htmlFor="inv-email">Work Email <span style={{ color: "#b00020" }}>*</span></label>
-										<input
-											id="inv-email"
-											className="input input--full-border"
-											type="email"
-											placeholder="k.mensah@century-nit.com"
-											value={draft.email}
-											onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-											required
-										/>
-									</div>
+							<form onSubmit={submitInvite} className="invite-form" style={{ marginTop: "1rem" }}>
+								<div className="field">
+									<label htmlFor="inv-email">Work Email <span style={{ color: "#b00020" }}>*</span></label>
+									<input
+										id="inv-email"
+										className="input input--full-border"
+										type="email"
+										placeholder="k.mensah@century-nit.com"
+										value={draft.email}
+										onChange={(e) => setDraft({ ...draft, email: e.target.value })}
+										required
+										autoFocus
+									/>
+								</div>
 
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
 										<div className="field">
@@ -1164,7 +1151,7 @@ function UsersAndRoles() {
 								{pending.map((i) => (
 									<li key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
 										<div>
-											<strong>{i.name}</strong> <span className="muted">{i.email}</span>
+											<strong>{i.name ?? i.email}</strong> <span className="muted">{i.email}</span>
 											<p className="muted" style={{ margin: 0 }}>
 												{roleLabelMap[i.role] ?? i.role} · expires {new Date(i.expiresAt).toLocaleDateString()}
 											</p>

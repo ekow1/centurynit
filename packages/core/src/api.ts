@@ -1201,6 +1201,24 @@ export const invoicesApi = {
 	},
 };
 
+/* ── Fee Schedule ────────────────────────────────────────────────────────── */
+
+export const feesApi = {
+	/** Live fee schedule (USD cents) from platform_settings. */
+	schedule(): Promise<{
+		appBaseCents: number;
+		appPerSchoolCents: number;
+		appDocVerifyCents: number;
+		appMatchReviewCents: number;
+		visaBaseCents: number;
+		visaBiometricsCents: number;
+		visaTranslationCents: number;
+		consultationCents: number;
+	}> {
+		return request(`${API_PREFIX}/fees`);
+	},
+};
+
 
 /* ── Schools & Applications ──────────────────────────────────────────────── */
 

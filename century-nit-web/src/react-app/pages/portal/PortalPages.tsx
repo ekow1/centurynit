@@ -35,6 +35,7 @@ import {
 	serviceFeeFor,
 	SCHOOL_TRACK_STATUS_LABELS,
 	VISA_INVOICE_AMOUNT,
+	CONSULTATION_FEE_AMOUNT,
 	type SchoolDegreeLevel,
 	type PaymentPlanId,
 	type SchoolFundingTrack,
@@ -43,8 +44,8 @@ import {
 	universitiesForDestination,
 	CONSULTATION_DURATIONS,
 } from "century-nit-core";
-import { meApi, bookingsApi, invoicesApi, schoolsApi, documentsApi, ApiError } from "century-nit-core/api";
-import type { ApiInvoice, AvailabilitySlot, ApiConsultation } from "century-nit-shared";
+import { meApi, bookingsApi, invoicesApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
+import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 
 
@@ -1424,13 +1425,29 @@ export function PortalConsultationBookingFlow() {
 		updateBooking,
 		updateAssessment,
 		updateAssessmentDoc,
-		
+
 		setEligibilityOutcome,
 		revealOutcome,
-		
+
 	} = useAppState();
 	const { toast } = useNotifier();
 	const [selectedTab, setSelectedTab] = useState(0);
+
+	// Live consultation fee (USD) from platform_settings — what ops configured,
+	// not the hardcoded default. Falls back to CONSULTATION_FEE_AMOUNT on error.
+	const [consultationFeeUsd, setConsultationFeeUsd] = useState<number>(CONSULTATION_FEE_AMOUNT);
+	useEffect(() => {
+		let active = true;
+		(async () => {
+			try {
+				const fees = await feesApi.schedule();
+				if (active) setConsultationFeeUsd(fees.consultationCents / 100);
+			} catch {
+				/* keep default */
+			}
+		})();
+		return () => { active = false; };
+	}, []);
 	const tab = useMemo(() => {
 		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "cancelled") {
 			return CONSULT_TABS.length - 1;
@@ -1639,7 +1656,7 @@ export function PortalConsultationBookingFlow() {
 				{tab === 5 && (					<>
 						<p className="eyebrow">Consultation fee</p>
 						<p className="display mt-2" style={{ fontSize: "2rem" }}>
-							{formatDualCurrency(75)}
+							{formatDualCurrency(consultationFeeUsd)}
 						</p>
 						<p className="muted mt-1">Confirm your booking details below. Payment will be collected at the branch.</p>
 
@@ -1675,12 +1692,12 @@ export function PortalConsultationBookingFlow() {
 									</div>
 									<div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-light)", paddingTop: "0.5rem", marginTop: "0.25rem" }}>
 										<span className="muted">Fee</span>
-										<span style={{ fontWeight: 600 }}>{formatDualCurrency(75)}</span>
+										<span style={{ fontWeight: 600 }}>{formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
 								</div>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
-										Confirm Booking — {formatDualCurrency(75)}
+										Confirm Booking — {formatDualCurrency(consultationFeeUsd)}
 									</Button>
 								</div>
 							</div>
@@ -1717,7 +1734,7 @@ export function PortalConsultationBookingFlow() {
 							<div className="card card--pad mt-3" style={{ textAlign: "center", background: "var(--foreground)", color: "var(--accent-foreground)" }}>
 								<p className="eyebrow">Booking confirmed</p>
 								<p className="display mt-2" style={{ fontSize: "1.35rem" }}>
-									✓ {formatDualCurrency(75)} consultation booked
+									✓ {formatDualCurrency(consultationFeeUsd)} consultation booked
 								</p>
 								<p className="mono mt-2" style={{ opacity: 0.85 }}>
 									Redirecting to booking confirmation…
@@ -1771,11 +1788,13 @@ export function PortalConsultation() {
 	const { booking } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
+	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
 	const refreshLiveCase = useCallback(async () => {
 		try {
 			const res = await meApi.application();
 			setLiveConsultation(res.consultation ?? null);
+			setLiveApplication(res.application ?? null);
 		} catch {
 			/* ignore network drop */
 		} finally {
@@ -1787,7 +1806,11 @@ export function PortalConsultation() {
 		void refreshLiveCase();
 	}, [refreshLiveCase]);
 
-	const hasActiveCase = Boolean(liveConsultation || booking.confirmationId);
+	// An active case exists if there's a consultation OR an application. Ops
+	// can create the application directly (bypassing consultation), and a
+	// silent consultation-creation failure after payment shouldn't strand the
+	// applicant on the fee page when their application is already in flight.
+	const hasActiveCase = Boolean(liveConsultation || liveApplication || booking.confirmationId);
 	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
 	const activeOfficer = liveConsultation?.assignedOfficerName;
 	const workflow = liveConsultation?.workflow;

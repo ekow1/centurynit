@@ -96,21 +96,22 @@ function emailLayout({
 /* ── 1. Staff Invitation Email Template ──────────────────────────────────── */
 
 export function renderInvitationEmail(data: {
-	name: string;
+	name?: string | null;
 	inviterName: string;
 	role: string;
 	branch?: string | null;
 	acceptUrl: string;
 	expiresDays: number;
 }): { html: string; text: string } {
-	const safeName = escapeHtml(data.name.trim());
+	const safeName = data.name ? escapeHtml(data.name.trim()) : null;
+	const greeting = safeName ? `Hello <strong>${safeName}</strong>,` : `Hello,`;
 	const safeInviter = escapeHtml(data.inviterName.trim());
 	const safeRole = escapeHtml(data.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
 	const safeBranch = data.branch ? escapeHtml(data.branch.toUpperCase()) : null;
 
 	const bodyHtml = `
 		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
-			Hello <strong>${safeName}</strong>,
+			${greeting}
 		</p>
 
 		<p style="margin:0 0 20px 0;color:#000000;">
@@ -163,7 +164,7 @@ export function renderInvitationEmail(data: {
 	`;
 
 	const text = [
-		`Hello ${data.name.trim()},`,
+		safeName ? `Hello ${data.name!.trim()},` : `Hello,`,
 		``,
 		`${data.inviterName.trim()} has invited you to join the Century NIT Operations Center as ${data.role.replace(/_/g, " ")}${data.branch ? ` (${data.branch.toUpperCase()})` : ""}.`,
 		``,

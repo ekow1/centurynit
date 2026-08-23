@@ -58,11 +58,14 @@ export function MessageBubble({
 	ensureChatUiStyles();
 	const [showActions, setShowActions] = useState(false);
 	const [showReactionPicker, setShowReactionPicker] = useState(false);
-	const longPress = useLongPress(() => setShowActions(true));
+	const [menuOpen, setMenuOpen] = useState(false);
+	const longPress = useLongPress(() => setMenuOpen(true));
 
 	const deleted = message.deletedAt !== null && message.deletedAt !== undefined;
 	const edited = message.editedAt !== null && message.editedAt !== undefined;
 	const isSystem = message.messageType === "system";
+
+	const isActionsVisible = (showActions || menuOpen) && !deleted;
 
 	// System / action messages render as centered pills, not bubbles.
 	if (isSystem) {
@@ -116,37 +119,95 @@ export function MessageBubble({
 			onMouseEnter={() => setShowActions(true)}
 			onMouseLeave={() => {
 				setShowActions(false);
-				setShowReactionPicker(false);
+				if (!menuOpen) setShowReactionPicker(false);
 			}}
 			{...longPress}
 		>
+			{/* Backdrop to dismiss persistent menu when clicked outside */}
+			{menuOpen && (
+				<div
+					onMouseDown={(e) => {
+						e.stopPropagation();
+						setMenuOpen(false);
+						setShowReactionPicker(false);
+						setShowActions(false);
+					}}
+					style={{
+						position: "fixed",
+						inset: 0,
+						zIndex: 18,
+						background: "transparent",
+					}}
+				/>
+			)}
+
 			<div style={{ position: "relative", maxWidth: "78%" }}>
-				{/* Contextual actions — positioned above the bubble, on the sender's side */}
-				{showActions && !deleted && (
+				{/* Contextual actions — seamless hover bridge via paddingBottom */}
+				{isActionsVisible && (
 					<div
+						onMouseEnter={() => setShowActions(true)}
+						onMouseLeave={() => {
+							if (!menuOpen) {
+								setShowActions(false);
+								setShowReactionPicker(false);
+							}
+						}}
 						style={{
 							position: "absolute",
-							top: -8,
+							top: 0,
 							[isOwn ? "right" : "left"]: 0,
 							transform: "translateY(-100%)",
+							paddingBottom: "6px",
 							zIndex: 20,
 						}}
 					>
 						{showReactionPicker ? (
 							<ReactionPicker
-								onSelect={(emoji) => onReact?.(message, emoji)}
-								onClose={() => setShowReactionPicker(false)}
+								onSelect={(emoji) => {
+									onReact?.(message, emoji);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
+								onClose={() => {
+									setShowReactionPicker(false);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
 							/>
 						) : (
 							<MessageActions
 								actions={actions}
-								onReply={() => onReply?.(message)}
+								onReply={() => {
+									onReply?.(message);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
 								onReact={() => setShowReactionPicker(true)}
-								onForward={() => onForward?.(message)}
-								onCopy={handleCopy}
-								onEdit={() => onEdit?.(message)}
-								onDelete={() => onDelete?.(message)}
-								onMore={() => onMore?.(message)}
+								onForward={() => {
+									onForward?.(message);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
+								onCopy={() => {
+									handleCopy();
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
+								onEdit={() => {
+									onEdit?.(message);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
+								onDelete={() => {
+									onDelete?.(message);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
+								onMore={() => {
+									onMore?.(message);
+									setMenuOpen(false);
+									setShowActions(false);
+								}}
 							/>
 						)}
 					</div>

@@ -203,7 +203,7 @@ export const staffInvitations = pgTable(
 	{
 		id: uuid("id").primaryKey().defaultRandom(),
 		email: varchar("email", { length: 255 }).notNull(),
-		name: text("name").notNull(),
+		name: text("name"),
 		role: varchar("role", { length: 64 }).notNull(),
 		branch: varchar("branch", { length: 64 }),
 

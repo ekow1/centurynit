@@ -47,7 +47,7 @@ export function toE164(input: string, defaultCountryCode = "233"): string {
 
 export const createInvitationSchema = z.object({
 	email: z.string().email(),
-	name: z.string().min(1).max(120),
+	name: z.string().min(1).max(120).optional(),
 	role: roleSchema,
 	branch: z.string().max(64).optional(),
 });
@@ -56,10 +56,12 @@ export type CreateInvitation = z.infer<typeof createInvitationSchema>;
 /**
  * Accepting an invitation is where the account is actually created, so the
  * invitee — not the inviter — chooses the password. Nobody else ever knows it.
+ * The invitee also enters their own name (unless the inviter already provided one).
  */
 export const acceptInvitationSchema = z
 	.object({
 		token: z.string().min(20),
+		name: z.string().min(1, "Enter your name").max(120),
 		password: z.string().min(12, "Use at least 12 characters"),
 		confirmPassword: z.string(),
 	})
@@ -80,7 +82,7 @@ export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 export const invitationSchema = z.object({
 	id: z.string().uuid(),
 	email: z.string().email(),
-	name: z.string(),
+	name: z.string().nullable(),
 	role: roleSchema,
 	branch: z.string().nullable(),
 	status: invitationStatusSchema,
@@ -112,7 +114,7 @@ export type CreatedInvitation = z.infer<typeof createdInvitationSchema>;
 /** What an invitee is shown before choosing a password — never the token itself. */
 export const invitationPreviewSchema = z.object({
 	email: z.string().email(),
-	name: z.string(),
+	name: z.string().nullable(),
 	role: roleSchema,
 	branch: z.string().nullable(),
 	organisation: z.string(),

@@ -63,7 +63,7 @@ export type InvitationRow = typeof staffInvitations.$inferSelect;
 
 export async function createInvitation(input: {
 	email: string;
-	name: string;
+	name?: string;
 	role: OpsRole;
 	branch?: string;
 	invitedBy: { opsUserId: string; name: string; role: string };
@@ -106,7 +106,7 @@ export async function createInvitation(input: {
 			.insert(staffInvitations)
 			.values({
 				email,
-				name: input.name.trim(),
+				name: input.name?.trim() ?? null,
 				role: input.role,
 				branch: input.branch ?? null,
 				tokenHash: hashToken(token),
@@ -135,7 +135,7 @@ export async function createInvitation(input: {
 				: env.CONSOLE_URL;
 	const acceptUrl = `${consoleBase}/accept-invite?token=${token}`;
 	const { html, text } = renderInvitationEmail({
-		name: input.name,
+		name: input.name ?? null,
 		inviterName: input.invitedBy.name,
 		role: input.role,
 		branch: input.branch,
@@ -223,9 +223,15 @@ export async function findByToken(token: string): Promise<InvitationRow> {
  */
 export async function acceptInvitation(input: {
 	token: string;
+	name: string;
 	password: string;
 }): Promise<{ opsUserId: string; email: string; role: string }> {
 	const invitation = await findByToken(input.token);
+
+	// The invitee's name takes precedence; fall back to whatever the inviter
+	// pre-filled (which may be null in the new flow where name is entered at
+	// acceptance, not creation).
+	const fullName = input.name.trim() || invitation.name || invitation.email.split("@")[0];
 
 	const [existingUser] = await db
 		.select({ id: users.id })
@@ -256,7 +262,7 @@ export async function acceptInvitation(input: {
 	} else {
 		const authInstance = await getAuthInstance();
 		await authInstance.api.signUpEmail({
-			body: { email: invitation.email, password: input.password, name: invitation.name },
+			body: { email: invitation.email, password: input.password, name: fullName },
 		});
 		const [created] = await db
 			.select({ id: users.id })
@@ -282,7 +288,7 @@ export async function acceptInvitation(input: {
 		.values({
 			userId,
 			email: invitation.email,
-			name: invitation.name,
+			name: fullName,
 			role: invitation.role,
 			branch: invitation.branch,
 			active: true,
@@ -291,7 +297,7 @@ export async function acceptInvitation(input: {
 			target: opsUsers.email,
 			set: {
 				userId,
-				name: invitation.name,
+				name: fullName,
 				role: invitation.role,
 				branch: invitation.branch,
 				active: true,
@@ -358,7 +364,7 @@ export async function resendInvitation(
 	// Issue a fresh invitation for the same person.
 	return createInvitation({
 		email: original.email,
-		name: original.name,
+		name: original.name ?? undefined,
 		role: original.role as OpsRole,
 		branch: original.branch ?? undefined,
 		invitedBy: resender,

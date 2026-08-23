@@ -261,7 +261,7 @@ staffRouter.openapi(
 	}),
 	async (c) => {
 		const body = c.req.valid("json");
-		const result = await acceptInvitation({ token: body.token, password: body.password });
+		const result = await acceptInvitation({ token: body.token, name: body.name, password: body.password });
 		return c.json(
 			{
 				email: result.email,

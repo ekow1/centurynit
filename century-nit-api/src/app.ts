@@ -40,6 +40,7 @@ import { newsletterRouter } from "./routes/newsletter.js";
 import { eventsRouter } from "./routes/events.js";
 import { teamRouter } from "./routes/team.js";
 import { packagesRouter } from "./routes/packages.js";
+import { feesRouter } from "./routes/fees.js";
 
 
 /**
@@ -159,6 +160,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/newsletter`, newsletterRouter);
 	app.route(`${API_PREFIX}/team`, teamRouter);
 app.route(`${API_PREFIX}/packages`, packagesRouter);
+app.route(`${API_PREFIX}/fees`, feesRouter);
 
 
 	const openApiInfo = {

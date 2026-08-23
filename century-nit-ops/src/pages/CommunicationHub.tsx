@@ -48,8 +48,36 @@ export function CommunicationHub() {
 	const [directory, setDirectory] = useState<StaffDirectoryEntryDetailed[]>([]);
 	const [dirLoading, setDirLoading] = useState(false);
 	const [presenceStatus, setPresenceStatus] = useState<StaffPresence>("available");
+	const [showDirectoryDrawer, setShowDirectoryDrawer] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [error, setError] = useState<string | null>(null);
+
+	/* ── Helper to format relative conversation timestamp ── */
+	const formatConvTime = (dateStr?: string) => {
+		if (!dateStr) return "";
+		const date = new Date(dateStr);
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+		if (diffDays === 0) {
+			return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+		}
+		if (diffDays === 1) return "Yesterday";
+		if (diffDays < 7) {
+			return date.toLocaleDateString([], { weekday: "short" });
+		}
+		return date.toLocaleDateString([], { month: "short", day: "numeric" });
+	};
+
+	// Map staff by name/opsUserId for quick presence lookup
+	const staffPresenceMap = useMemo(() => {
+		const map = new Map<string, StaffPresence>();
+		for (const s of directory) {
+			map.set(s.name.toLowerCase(), s.presence);
+			map.set(s.opsUserId, s.presence);
+		}
+		return map;
+	}, [directory]);
 
 	const canChat = roleCanAccess(opsRole as OpsRole, "chat");
 	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
@@ -420,122 +448,312 @@ export function CommunicationHub() {
 
 					{/* Hub Workspace */}
 					<div style={expanded ? workspaceSplitStyle : workspaceStandardStyle}>
-						{/* Mode 1: Internal Staff DMs */}
+						{/* Mode 1: Internal Staff DMs (WhatsApp-style Unified Inbox) */}
 						{mode === "internal" && !activeConvId && (
 							<div style={directoryContainerStyle}>
-								{/* Search */}
-								<div style={{ padding: "8px 10px", borderBottom: "1px solid #e4e4e7" }}>
-									<input
-										type="text"
-										value={searchQuery}
-										onChange={(e) => setSearchQuery(e.target.value)}
-										placeholder="Filter colleagues by name, role or branch..."
-										style={searchInputStyle}
-									/>
-								</div>
-
-								{/* Active Direct Chats */}
-								{internalConversations.length > 0 && !searchQuery && (
-									<div style={{ borderBottom: "1px solid #e4e4e7" }}>
-										<div style={sectionHeaderStyle}>ACTIVE 1-ON-1 SESSIONS</div>
-										<div style={{ maxHeight: "150px", overflowY: "auto" }}>
-											{internalConversations.map((c) => (
-												<button
-													key={c.id}
-													type="button"
-													onClick={() => openConversation(c)}
-													style={activeChatRowStyle}
-												>
-													<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-														<span style={avatarMiniStyle}>
-															{c.title.slice(0, 2).toUpperCase()}
-														</span>
-														<div style={{ textAlign: "left" }}>
-															<div style={{ fontSize: "11px", fontWeight: 700, color: "#000000", letterSpacing: "0.02em" }}>
-																{c.title.toUpperCase()}
-															</div>
-															<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-																{c.lastMessage?.content.slice(0, 32) || "No messages yet"}
-															</div>
-														</div>
-													</div>
-													{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
-												</button>
-											))}
-										</div>
+								{/* Top Bar: Search & New Chat Action */}
+								{showDirectoryDrawer ? (
+									<div style={{ padding: "8px 12px", borderBottom: "1px solid #e4e4e7", background: "#f4f4f5", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+										<span style={{ fontSize: "11px", fontWeight: 700, color: "#18181b", letterSpacing: "0.04em", textTransform: "uppercase" }}>New Direct Message</span>
+										<button
+											type="button"
+											onClick={() => { setShowDirectoryDrawer(false); setSearchQuery(""); }}
+											style={{ background: "#ffffff", border: "1px solid #18181b", padding: "3px 10px", fontSize: "10px", fontWeight: 700, cursor: "pointer", color: "#18181b" }}
+										>
+											← Back to Chats
+										</button>
+									</div>
+								) : (
+									<div style={{ padding: "8px 10px", borderBottom: "1px solid #e4e4e7", display: "flex", gap: "6px", alignItems: "center" }}>
+										<input
+											type="text"
+											value={searchQuery}
+											onChange={(e) => setSearchQuery(e.target.value)}
+											placeholder="Search chats or colleagues..."
+											style={{ ...searchInputStyle, margin: 0, flex: 1, padding: "8px 10px" }}
+										/>
+										<button
+											type="button"
+											onClick={() => setShowDirectoryDrawer(true)}
+											style={{
+												background: "#18181b",
+												color: "#ffffff",
+												border: "1px solid #18181b",
+												padding: "7px 12px",
+												fontSize: "10px",
+												fontWeight: 700,
+												textTransform: "uppercase",
+												letterSpacing: "0.04em",
+												cursor: "pointer",
+												whiteSpace: "nowrap",
+												display: "flex",
+												alignItems: "center",
+												gap: "4px",
+											}}
+											title="New Message"
+										>
+											+ New Chat
+										</button>
 									</div>
 								)}
 
-								{/* Full Staff Directory */}
-								<div style={sectionHeaderStyle}>STAFF DIRECTORY (CLICK TO CHAT)</div>
-								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
-									{dirLoading ? (
-										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
-											LOADING DIRECTORY...
+								{/* Drawer View: Full Staff Directory to start a new chat */}
+								{showDirectoryDrawer && (
+									<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
+										<div style={{ padding: "8px 10px" }}>
+											<input
+												type="text"
+												value={searchQuery}
+												onChange={(e) => setSearchQuery(e.target.value)}
+												placeholder="Filter staff by name, role or branch..."
+												style={{ ...searchInputStyle, margin: 0, width: "100%" }}
+												autoFocus
+											/>
 										</div>
-									) : filteredDirectory.length === 0 ? (
-										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
-											NO STAFF FOUND.
-										</div>
-									) : (
-										filteredDirectory.map((staff) => (
-											<button
-												key={staff.opsUserId}
-												type="button"
-												onClick={() => startDM(staff)}
-												style={staffCardBtnStyle}
-											>
-												<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-													<span style={avatarPillStyle}>
-														{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
-													</span>
-													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
-															{staff.name.toUpperCase()}
+										<div style={sectionHeaderStyle}>ALL STAFF DIRECTORY</div>
+										{dirLoading ? (
+											<div style={{ textAlign: "center", color: "#52525b", padding: "24px", fontSize: "11px", fontFamily: "monospace" }}>
+												LOADING DIRECTORY...
+											</div>
+										) : filteredDirectory.length === 0 ? (
+											<div style={{ textAlign: "center", color: "#52525b", padding: "24px", fontSize: "11px", fontFamily: "monospace" }}>
+												NO STAFF FOUND.
+											</div>
+										) : (
+											filteredDirectory.map((staff) => (
+												<button
+													key={staff.opsUserId}
+													type="button"
+													onClick={() => {
+														setShowDirectoryDrawer(false);
+														setSearchQuery("");
+														startDM(staff);
+													}}
+													style={staffCardBtnStyle}
+												>
+													<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+														<div style={{ position: "relative" }}>
+															<span style={avatarPillStyle}>
+																{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+															</span>
+															<span
+																style={{
+																	position: "absolute",
+																	bottom: "0",
+																	right: "0",
+																	width: "8px",
+																	height: "8px",
+																	borderRadius: "50%",
+																	background:
+																		staff.presence === "available" ? "#10b981" :
+																		staff.presence === "busy" ? "#ef4444" :
+																		staff.presence === "on_leave" ? "#f59e0b" : "#a1a1aa",
+																	border: "1px solid #ffffff",
+																}}
+															/>
 														</div>
-														<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-															{staff.role.toUpperCase()} · {(staff.branch || "").toUpperCase()}
+														<div style={{ textAlign: "left" }}>
+															<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
+																{staff.name.toUpperCase()}
+															</div>
+															<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
+																{staff.role.toUpperCase()} · {(staff.branch || "").toUpperCase()}
+															</div>
 														</div>
 													</div>
-												</div>
-												<span
-													style={{
-														...presenceBadgeStyle,
-														background:
-															staff.presence === "available" ? "#ecfdf5" :
-															staff.presence === "busy" ? "#fef2f2" :
-															staff.presence === "on_leave" ? "#fffbeb" : "#f4f4f5",
-														color:
-															staff.presence === "available" ? "#065f46" :
-															staff.presence === "busy" ? "#991b1b" :
-															staff.presence === "on_leave" ? "#92400e" : "#3f3f46",
-														border: `1px solid ${
-															staff.presence === "available" ? "#a7f3d0" :
-															staff.presence === "busy" ? "#fecaca" :
-															staff.presence === "on_leave" ? "#fde68a" : "#e4e4e7"
-														}`,
-														display: "inline-flex",
-														alignItems: "center",
-														gap: "4px",
-													}}
-												>
 													<span
 														style={{
-															width: "6px",
-															height: "6px",
-															borderRadius: "50%",
+															...presenceBadgeStyle,
 															background:
-																staff.presence === "available" ? "#10b981" :
-																staff.presence === "busy" ? "#ef4444" :
-																staff.presence === "on_leave" ? "#f59e0b" : "#a1a1aa",
+																staff.presence === "available" ? "#ecfdf5" :
+																staff.presence === "busy" ? "#fef2f2" :
+																staff.presence === "on_leave" ? "#fffbeb" : "#f4f4f5",
+															color:
+																staff.presence === "available" ? "#065f46" :
+																staff.presence === "busy" ? "#991b1b" :
+																staff.presence === "on_leave" ? "#92400e" : "#3f3f46",
+															border: `1px solid ${
+																staff.presence === "available" ? "#a7f3d0" :
+																staff.presence === "busy" ? "#fecaca" :
+																staff.presence === "on_leave" ? "#fde68a" : "#e4e4e7"
+															}`,
+															display: "inline-flex",
+															alignItems: "center",
+															gap: "4px",
 														}}
-													/>
-													{staff.presence.replace("_", " ").toUpperCase()}
-												</span>
-											</button>
-										))
-									)}
-								</div>
+													>
+														{staff.presence.replace("_", " ").toUpperCase()}
+													</span>
+												</button>
+											))
+										)}
+									</div>
+								)}
+
+								{/* Default View: WhatsApp Unified Thread Inbox */}
+								{!showDirectoryDrawer && (
+									<div style={{ flex: 1, overflowY: "auto" }}>
+										{/* If searching, show filtered active chats + potential new contacts */}
+										{searchQuery.trim() ? (
+											<>
+												{internalConversations
+													.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()) || (c.lastMessage?.content || "").toLowerCase().includes(searchQuery.toLowerCase()))
+													.map((c) => {
+														const presence = staffPresenceMap.get(c.title.toLowerCase()) || "offline";
+														return (
+															<button
+																key={c.id}
+																type="button"
+																onClick={() => openConversation(c)}
+																style={activeChatRowStyle}
+															>
+																<div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+																	<div style={{ position: "relative" }}>
+																		<span style={avatarPillStyle}>
+																			{c.title.slice(0, 2).toUpperCase()}
+																		</span>
+																		<span
+																			style={{
+																				position: "absolute",
+																				bottom: "0",
+																				right: "0",
+																				width: "8px",
+																				height: "8px",
+																				borderRadius: "50%",
+																				background:
+																					presence === "available" ? "#10b981" :
+																					presence === "busy" ? "#ef4444" :
+																					presence === "on_leave" ? "#f59e0b" : "#a1a1aa",
+																				border: "1px solid #ffffff",
+																			}}
+																		/>
+																	</div>
+																	<div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+																		<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+																			<div style={{ fontSize: "11px", fontWeight: 800, color: "#18181b", letterSpacing: "0.02em" }}>
+																				{c.title.toUpperCase()}
+																			</div>
+																			<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+																				{formatConvTime(c.updatedAt)}
+																			</div>
+																		</div>
+																		<div style={{ fontSize: "11px", color: "#52525b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+																			{c.lastMessage?.content || "No messages yet"}
+																		</div>
+																	</div>
+																</div>
+																{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
+															</button>
+														);
+													})}
+
+												{/* Show colleagues matching search to start new DM */}
+												{filteredDirectory.length > 0 && (
+													<>
+														<div style={sectionHeaderStyle}>START NEW CHAT WITH</div>
+														{filteredDirectory.map((staff) => (
+															<button
+																key={staff.opsUserId}
+																type="button"
+																onClick={() => {
+																	setSearchQuery("");
+																	startDM(staff);
+																}}
+																style={staffCardBtnStyle}
+															>
+																<div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+																	<span style={avatarPillStyle}>
+																		{staff.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+																	</span>
+																	<div style={{ textAlign: "left" }}>
+																		<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000" }}>
+																			{staff.name.toUpperCase()}
+																		</div>
+																		<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
+																			{staff.role.toUpperCase()} · {(staff.branch || "").toUpperCase()}
+																		</div>
+																	</div>
+																</div>
+																<span style={{ fontSize: "10px", fontWeight: 700, color: "#18181b", border: "1px solid #18181b", padding: "2px 8px" }}>
+																	CHAT
+																</span>
+															</button>
+														))}
+													</>
+												)}
+											</>
+										) : internalConversations.length === 0 ? (
+											<div style={{ textAlign: "center", padding: "48px 20px" }}>
+												<div style={{ fontSize: "28px", marginBottom: "8px" }}>💬</div>
+												<p style={{ fontWeight: 800, fontSize: "13px", color: "#18181b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+													No Active Conversations
+												</p>
+												<p style={{ fontSize: "11px", color: "#71717a", marginTop: "4px", marginBottom: "16px", maxWidth: "260px", margin: "4px auto 16px auto" }}>
+													Start a direct message session with any team member across all branches.
+												</p>
+												<button
+													type="button"
+													className="btn btn--primary"
+													style={{ fontSize: "11px", padding: "8px 16px" }}
+													onClick={() => setShowDirectoryDrawer(true)}
+												>
+													+ Start a Conversation
+												</button>
+											</div>
+										) : (
+											<>
+												{internalConversations.map((c) => {
+													const presence = staffPresenceMap.get(c.title.toLowerCase()) || "offline";
+													return (
+														<button
+															key={c.id}
+															type="button"
+															onClick={() => openConversation(c)}
+															style={activeChatRowStyle}
+														>
+															<div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+																<div style={{ position: "relative", flexShrink: 0 }}>
+																	<span style={avatarPillStyle}>
+																		{c.title.slice(0, 2).toUpperCase()}
+																	</span>
+																	<span
+																		style={{
+																			position: "absolute",
+																			bottom: "0",
+																			right: "0",
+																			width: "8px",
+																			height: "8px",
+																			borderRadius: "50%",
+																			background:
+																				presence === "available" ? "#10b981" :
+																				presence === "busy" ? "#ef4444" :
+																				presence === "on_leave" ? "#f59e0b" : "#a1a1aa",
+																			border: "1px solid #ffffff",
+																		}}
+																	/>
+																</div>
+																<div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+																	<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+																		<div style={{ fontSize: "11px", fontWeight: 800, color: "#18181b", letterSpacing: "0.02em" }}>
+																			{c.title.toUpperCase()}
+																		</div>
+																		<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+																			{formatConvTime(c.updatedAt)}
+																		</div>
+																	</div>
+																	<div style={{ fontSize: "11px", color: c.unreadCount > 0 ? "#18181b" : "#52525b", fontWeight: c.unreadCount > 0 ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+																		{c.lastMessage?.content || "No messages yet"}
+																	</div>
+																</div>
+															</div>
+															{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
+														</button>
+													);
+												})}
+											</>
+										)}
+									</div>
+								)}
 							</div>
 						)}
 
@@ -543,14 +761,14 @@ export function CommunicationHub() {
 						{mode === "external" && !activeConvId && (
 							<div style={directoryContainerStyle}>
 								<div style={sectionHeaderStyle}>ASSIGNED CLIENT CHATS</div>
-								<div style={{ flex: 1, overflowY: "auto", padding: "4px" }}>
+								<div style={{ flex: 1, overflowY: "auto" }}>
 									{convsLoading ? (
 										<div style={{ textAlign: "center", color: "#52525b", padding: "20px", fontSize: "11px", fontFamily: "monospace" }}>
 											LOADING CLIENT CHATS...
 										</div>
 									) : externalConversations.length === 0 ? (
 										<div style={{ textAlign: "center", color: "#52525b", padding: "40px 20px" }}>
-											<p style={{ fontWeight: 700, color: "#000000", fontSize: "12px", letterSpacing: "0.04em" }}>NO ACTIVE CLIENT CHATS</p>
+											<p style={{ fontWeight: 800, color: "#000000", fontSize: "12px", letterSpacing: "0.04em", textTransform: "uppercase" }}>NO ACTIVE CLIENT CHATS</p>
 											<p style={{ fontSize: "11px", color: "#52525b", marginTop: "4px" }}>
 												Client case messages will appear here.
 											</p>
@@ -563,20 +781,25 @@ export function CommunicationHub() {
 												onClick={() => openConversation(c)}
 												style={clientChatCardBtnStyle}
 											>
-												<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-													<span style={avatarPillStyle}>
+												<div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
+													<span style={{ ...avatarPillStyle, flexShrink: 0 }}>
 														{c.title.slice(0, 2).toUpperCase()}
 													</span>
-													<div style={{ textAlign: "left" }}>
-														<div style={{ fontWeight: 700, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
-															{c.title.toUpperCase()}
+													<div style={{ textAlign: "left", flex: 1, minWidth: 0 }}>
+														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+															<div style={{ fontWeight: 800, fontSize: "11px", color: "#000000", letterSpacing: "0.02em" }}>
+																{c.title.toUpperCase()}
+															</div>
+															<div style={{ fontSize: "10px", color: "#71717a", fontFamily: "monospace" }}>
+																{formatConvTime(c.updatedAt)}
+															</div>
 														</div>
-														<div style={{ fontSize: "10px", color: "#52525b", fontFamily: "monospace" }}>
-															{c.lastMessage?.content.slice(0, 36) || "No messages yet"}
+														<div style={{ fontSize: "11px", color: c.unreadCount > 0 ? "#18181b" : "#52525b", fontWeight: c.unreadCount > 0 ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+															{c.lastMessage?.content || "No messages yet"}
 														</div>
 													</div>
 												</div>
-												<div style={{ textAlign: "right" }}>
+												<div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: "6px", marginLeft: "8px", flexShrink: 0 }}>
 													<span style={stagePillMiniStyle}>{c.type.toUpperCase()}</span>
 													{c.unreadCount > 0 && <span style={unreadSquareBadgeInlineStyle}>{c.unreadCount}</span>}
 												</div>
@@ -1040,20 +1263,7 @@ const avatarPillStyle: CSSProperties = {
 	border: "1px solid #e4e4e7",
 };
 
-const avatarMiniStyle: CSSProperties = {
-	width: "28px",
-	height: "28px",
-	borderRadius: "50%",
-	background: "#f4f4f5",
-	color: "#18181b",
-	fontWeight: 600,
-	fontSize: "10px",
-	fontFamily: "system-ui, -apple-system, sans-serif",
-	display: "flex",
-	alignItems: "center",
-	justifyContent: "center",
-	border: "1px solid #e4e4e7",
-};
+
 
 const presenceBadgeStyle: CSSProperties = {
 	fontSize: "10px",

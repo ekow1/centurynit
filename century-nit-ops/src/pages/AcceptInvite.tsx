@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<string, string> = {
 	admin: "System Administrator",
 	manager: "Manager",
 	coordinator: "Coordinator",
+	customer_service: "Customer Service",
 	consultant: "Consultant",
 	finance: "Finance Officer",
 };
@@ -51,6 +52,7 @@ export function AcceptInvite() {
 	const [loading, setLoading] = useState(true);
 
 	const { opsSignInWithCredentials } = useOpsAuth();
+	const [name, setName] = useState("");
 	const [password, setPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -87,7 +89,7 @@ export function AcceptInvite() {
 		setSubmitting(true);
 		setError(null);
 		try {
-			const result = await staffApi.acceptInvitation({ token, password, confirmPassword });
+			const result = await staffApi.acceptInvitation({ token, name: name || (preview?.name ?? ""), password, confirmPassword });
 			// The staff profile and password are now live. Sign in right away
 			// so the invitee never has to type the password a second time.
 			const signIn = await opsSignInWithCredentials(result.email, password);
@@ -139,13 +141,27 @@ export function AcceptInvite() {
 					{preview?.hasExistingLogin ? "Confirm your password" : "Set your password"}
 				</h1>
 				<p className="invite-card__body">
-					Hello {preview?.name}. You have been invited as{" "}
+					You have been invited as{" "}
 					<strong>{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}</strong>
 					{preview?.branch ? ` at ${preview.branch}` : ""}.
 				</p>
 				<p className="invite-card__meta">{preview?.email}</p>
 
 				<form onSubmit={submit} className="invite-form">
+					<div className="field">
+						<label htmlFor="invite-name">Your name</label>
+						<input
+							id="invite-name"
+							type="text"
+							className="input input--full-border"
+							autoComplete="name"
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							placeholder="Enter your full name"
+							defaultValue={preview?.name ?? ""}
+							required
+						/>
+					</div>
 					<div className="field">
 						<label htmlFor="invite-password">
 							{preview?.hasExistingLogin ? "Your existing password" : "Choose a password"}

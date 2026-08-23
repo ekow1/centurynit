@@ -1958,6 +1958,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					meetingLink: c.meetingUrl ?? prev.meetingLink,
 					date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
 				}));
+			} else if (res.application) {
+				// No consultation row, but an application exists — ops created it
+				// directly (or consultation creation failed silently after payment).
+				// Either way, the applicant's journey has moved past the consultation
+				// fee page. Mark it done so they're not stranded re-paying $75.
+				setBooking((prev) =>
+					prev.confirmationId && prev.consultationPhase === "outcome"
+						? prev
+						: {
+								...prev,
+								confirmationId: prev.confirmationId ?? `APP-${res.application!.id.slice(0, 8)}`,
+								consultationPhase: "outcome",
+								paymentStatus: "success",
+								paidAt: prev.paidAt ?? res.application!.createdAt,
+								eligibilityOutcome: "eligible",
+							},
+				);
 			}
 			if (res.applicant) {
 				const a = res.applicant;

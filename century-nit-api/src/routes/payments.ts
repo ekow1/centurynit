@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
 	initializePaymentResponseSchema,
@@ -6,13 +7,21 @@ import {
 	paymentVerificationResultSchema,
 } from "century-nit-shared";
 import { env } from "../env.js";
-import { requireAuth, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
+import { HttpError } from "../middleware/error.js";
+import { db } from "../db/index.js";
+import { paymentTransactions, bookings as bookingsTable, users } from "../db/schema.js";
 import {
 	initializePayment,
 	processPaystackWebhook,
 	verifyAndSettlePayment,
 } from "../services/payments.js";
-import { listPaystackTransactions } from "../services/paystack.js";
+import { listPaystackTransactions, verifyPaystackTransaction } from "../services/paystack.js";
+import { createBooking } from "../services/booking.js";
+import { createConsultationInvoice } from "../services/invoice.js";
+import { ensureCaseForBooking } from "../services/cases.js";
+import { resolveServiceName } from "../services/availability.js";
+import { zonedTimeToUtc } from "../lib/time.js";
 
 const verifyParams = z.object({ reference: z.string().min(1) });
 const verifyQuery = z.object({ gateway: z.enum(["paystack", "stripe"]).default("paystack") });

@@ -472,7 +472,7 @@ calendarFeedsRouter.openapi(
  * inbound mirror — and may regenerate it at any time to invalidate a leaked URL.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-const SUBSCRIPTION_ROLES = ["super_admin", "admin", "manager", "coordinator", "consultant"] as const;
+const SUBSCRIPTION_ROLES = ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant"] as const;
 
 /* ── GET /api/v1/calendar/subscription ─────────────────────────────────────── */
 

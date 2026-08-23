@@ -45,7 +45,7 @@ import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
 import { publishChatEvent } from "./chat.js";
-import { notifyMany, getCustomerServiceUserIds } from "./notify.js";
+import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -937,18 +937,26 @@ export async function sendCustomerMessage(
 
 		if (recipients.length === 0) {
 			// No staff participants — for support conversations, fall back to
-			// alerting all customer_service agents so the message isn't stranded.
+			// alerting customer_service + managers/coordinators so the message
+			// isn't stranded.
 			const [convRow] = await db
 				.select({ type: conversations.type })
 				.from(conversations)
 				.where(eq(conversations.id, conversationId))
 				.limit(1);
 			if (convRow?.type === "support") {
-				const csAgents = await getCustomerServiceUserIds();
-				if (csAgents.length > 0) {
+				const [csAgents, mgrCoordinators] = await Promise.all([
+					getCustomerServiceUserIds(),
+					getManagerAndCoordinatorUserIds(),
+				]);
+				const fallbackRecipients = [
+					...csAgents.map(({ userId }) => userId),
+					...mgrCoordinators.map(({ userId }) => userId),
+				].filter((id, idx, arr) => id != null && arr.indexOf(id) === idx);
+				if (fallbackRecipients.length > 0) {
 					await notifyMany(
-						csAgents.map(({ userId }) => ({
-							recipientUserId: userId,
+						fallbackRecipients.map((recipientUserId) => ({
+							recipientUserId,
 							type: "chat.message",
 							title: `${user.name ?? "A client"} sent a support message`,
 							body: preview,

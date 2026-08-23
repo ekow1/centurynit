@@ -193,9 +193,16 @@ export async function listConversations(
 		.where(eq(conversationParticipants.opsUserId, opsUserId))
 		.as("membership");
 
-	const isCustomerService = staffRole === "customer_service";
+	const SUPPORT_QUEUE_ROLES = new Set([
+		"customer_service",
+		"coordinator",
+		"manager",
+		"super_admin",
+		"admin",
+	]);
+	const canSeeSupportQueue = !!staffRole && SUPPORT_QUEUE_ROLES.has(staffRole);
 
-	const rows = isCustomerService
+	const rows = canSeeSupportQueue
 		? await db
 				.select()
 				.from(conversations)

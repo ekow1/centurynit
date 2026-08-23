@@ -1,7 +1,6 @@
 import { emailWorker } from "./email.js";
 import { feedsWorker } from "./feeds.js";
-import { pushWorker } from "./push.js";
-import { connection, emailQueue, calendarQueue, pushQueue, scheduleFeedSyncs } from "./queues.js";
+import { connection, emailQueue, calendarQueue, scheduleFeedSyncs } from "./queues.js";
 
 /**
  * Background worker process.
@@ -10,7 +9,6 @@ import { connection, emailQueue, calendarQueue, pushQueue, scheduleFeedSyncs } f
  *
  *   email     notifications and reminders — queued, never sent inline, so a
  *             failed send can never roll back a successful booking (§13)
- *   push      browser push fan-out for staff notifications
  *
  * Google Calendar handling has been removed — meeting links are set manually
  * by staff, so there is no calendar worker anymore.
@@ -28,7 +26,6 @@ import { connection, emailQueue, calendarQueue, pushQueue, scheduleFeedSyncs } f
 const workers = [
 	{ name: "email", worker: emailWorker },
 	{ name: "feeds", worker: feedsWorker },
-	{ name: "push", worker: pushWorker },
 ];
 
 console.log(
@@ -64,7 +61,7 @@ async function shutdown(signal: string) {
 
 	try {
 		await Promise.all(workers.map(({ worker }) => worker.close()));
-		await Promise.all([emailQueue.close(), calendarQueue.close(), pushQueue.close()]);
+		await Promise.all([emailQueue.close(), calendarQueue.close()]);
 		await connection.quit();
 		clearTimeout(timeout);
 		console.log("Workers stopped cleanly.");

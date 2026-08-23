@@ -132,7 +132,7 @@ const PLATFORM_NAV: NavEntry[] = [
 function MainNavItem({
 	to,
 	label,
-	blurb,
+	blurb: _blurb,
 	icon,
 }: {
 	to: string;
@@ -150,7 +150,6 @@ function MainNavItem({
 			<Icon name={icon} />
 			<span className="portal-nav__meta">
 				<span className="portal-nav__label">{label}</span>
-				<span className="portal-nav__blurb">{blurb}</span>
 			</span>
 		</NavLink>
 	);
@@ -159,7 +158,7 @@ function MainNavItem({
 function MainNavGroup({
 	group,
 	icon,
-	blurb,
+	blurb: _blurb,
 	children,
 	defaultOpen,
 }: {
@@ -184,7 +183,6 @@ function MainNavGroup({
 				<Icon name={icon} />
 				<span className="portal-nav__meta">
 					<span className="portal-nav__label">{group}</span>
-					<span className="portal-nav__blurb">{blurb}</span>
 				</span>
 				<span className={`portal-nav__chevron${open ? " portal-nav__chevron--open" : ""}`} aria-hidden>
 					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>

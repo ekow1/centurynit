@@ -646,8 +646,9 @@ async function sendMessageInternal(
 	// per-participant DB lookups + email queueing never delay the send.
 	void notifyOfflineParticipants(conversationId, sender, created);
 
-	// In-app: when a staff member replies into an applicant conversation, alert
-	// the applicant so they see the reply without polling. Fire-and-forget.
+	// In-app: when a staff member replies into a customer-facing conversation
+	// (applicant/support/case/stage), alert the applicant so they see the reply
+	// without polling. Fire-and-forget.
 	(async () => {
 		try {
 			const [conv] = await db
@@ -656,7 +657,15 @@ async function sendMessageInternal(
 				.where(eq(conversations.id, conversationId))
 				.limit(1);
 
-			if (conv?.type === "applicant" && conv.userId && conv.userId !== sender.id) {
+			const isCustomerFacing =
+				conv?.userId &&
+				conv.userId !== sender.id &&
+				(conv.type === "applicant" ||
+					conv.type === "support" ||
+					conv.type === "case" ||
+					conv.type === "stage");
+
+			if (isCustomerFacing && conv.userId) {
 				const preview = created.content.length > 160 ? `${created.content.slice(0, 160)}…` : created.content;
 				await notify({
 					recipientUserId: conv.userId,
@@ -672,7 +681,7 @@ async function sendMessageInternal(
 			// in-app bell + push. Without this, staff only saw SSE (if online
 			// with the chat hub open) or email (if offline for 5+ min) — no
 			// bell, no push, and no trace in the notifications table.
-			if (conv && conv.type !== "applicant") {
+			if (conv && !isCustomerFacing) {
 				const participants = await getParticipants(conversationId);
 				const others = participants.filter(
 					(p): p is typeof p & { opsUserId: string } =>

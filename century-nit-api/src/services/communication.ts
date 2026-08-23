@@ -754,12 +754,19 @@ export async function routeCustomerChat(
 	}
 
 	if (!caseId) {
-		// No case — open / create the SUPPORT conversation.
+		// No case — open / create the SUPPORT conversation. Title it with
+		// the applicant's name so staff can identify who they're talking to
+		// in the support queue, not a generic "Support" label.
+		const [applicant] = await db
+			.select({ name: applicants.name })
+			.from(applicants)
+			.where(eq(applicants.userId, userId))
+			.limit(1);
 		const { row } = await findOrCreateConversation({
 			type: "support",
 			userId,
 			createdByOpsUserId: opts.createdByOpsUserId || null,
-			title: "Support",
+			title: applicant?.name ?? "Support",
 		});
 		return serializeConversation(row, { userId });
 	}

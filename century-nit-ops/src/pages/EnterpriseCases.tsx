@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -11,6 +12,7 @@ import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 export function EnterpriseCases() {
+	const [searchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
@@ -38,6 +40,14 @@ export function EnterpriseCases() {
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+	const queryId = searchParams.get("id");
+	useEffect(() => {
+		if (queryId) {
+			const match = applications.find((a) => a.id === queryId);
+			if (match) setSelectedApp(match);
+		}
+	}, [queryId, applications]);
 	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
 
 	const canSeeAll = canSeeAllBranches;

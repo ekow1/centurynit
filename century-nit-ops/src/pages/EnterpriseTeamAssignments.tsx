@@ -225,7 +225,7 @@ export function EnterpriseTeamAssignments() {
 											</td>
 											<td style={{ ...cell, whiteSpace: "nowrap" }}>{relativeTime(i.updatedAt)}</td>
 											<td style={cell}>
-												<Link to={`${i.link}/${i.id}`} style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#000", textDecoration: "none", borderBottom: "1px solid #000" }}>Open</Link>
+												<Link to={`${i.link}?id=${i.id}`} style={{ fontSize: "0.75rem", textTransform: "uppercase", color: "#000", textDecoration: "none", borderBottom: "1px solid #000" }}>Open</Link>
 											</td>
 										</tr>
 									))

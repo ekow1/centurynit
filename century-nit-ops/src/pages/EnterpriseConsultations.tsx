@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -34,6 +35,7 @@ const DOC_STATUS_MAP: Record<string, string> = {
 };
 
 export function EnterpriseConsultations() {
+	const [searchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		consultations,
@@ -55,6 +57,14 @@ export function EnterpriseConsultations() {
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedConsultation, setSelectedConsultation] = useState<MockConsultation | null>(null);
+
+	const queryId = searchParams.get("id");
+	useEffect(() => {
+		if (queryId) {
+			const match = consultations.find((c) => c.id === queryId);
+			if (match) setSelectedConsultation(match);
+		}
+	}, [queryId, consultations]);
 	const [detailTab, setDetailTab] = useState<"profile" | "documents" | "assessment">("profile");
 	const [previewingDoc, setPreviewingDoc] = useState<DocPreviewData | null>(null);
 

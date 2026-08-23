@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useTicketsApi } from "../hooks/useTicketsApi";
 import { branchName } from "century-nit-core/ops";
@@ -36,6 +37,7 @@ const CATEGORIES: TicketCategory[] = [
 type Queue = "external" | "internal";
 
 export function EnterpriseHelpdesk() {
+	const [searchParams] = useSearchParams();
 	const { opsUser, opsRole } = useOpsAuth();
 
 	const {
@@ -53,6 +55,12 @@ export function EnterpriseHelpdesk() {
 	const [statusFilter, setStatusFilter] = useState<"all" | TicketStatus>("all");
 	const [search, setSearch] = useState("");
 	const [selectedId, setSelectedId] = useState<string | null>(null);
+
+	const queryId = searchParams.get("id");
+	useEffect(() => {
+		if (queryId) setSelectedId(queryId);
+	}, [queryId]);
+
 	const [composing, setComposing] = useState(false);
 	const [reply, setReply] = useState("");
 

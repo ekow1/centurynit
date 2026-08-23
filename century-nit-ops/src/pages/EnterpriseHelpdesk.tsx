@@ -72,8 +72,12 @@ export function EnterpriseHelpdesk() {
 	});
 
 	const by = opsUser?.name ?? "Staff";
-	/** Manager and coordinator are the triage desk; admin handles escalations */
-	const canTriage = opsRole === "manager" || opsRole === "coordinator";
+	/** Manager, coordinator, admin, and super_admin can triage and assign tickets */
+	const canTriage =
+		opsRole === "manager" ||
+		opsRole === "coordinator" ||
+		opsRole === "admin" ||
+		opsRole === "super_admin";
 	const isAdmin = opsRole === "admin";
 
 	const scoped = useMemo(() => {
@@ -427,7 +431,7 @@ function TicketDetail({
 					</div>
 				) : (
 					<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-						Only a manager or coordinator can route tickets.
+						Only a manager, coordinator, or admin can route tickets.
 					</span>
 				)}
 			</div>

@@ -280,6 +280,32 @@ export async function createInternalTicket(
 		message: input.message,
 	});
 
+	// In-app + push: alert the triage queue (managers, coordinators, admin,
+	// super_admin) so internal tickets surface in the bell and push — not just
+	// the helpdesk list. Fire-and-forget so it never blocks ticket creation.
+	(async () => {
+		try {
+			const title = `Internal ticket: ${created.subject}`;
+			const body = `${staffName} — ${created.category}`;
+			const managers = await getManagerAndCoordinatorUserIds();
+			const recipients = managers.filter((m) => m.userId !== user.id);
+			if (recipients.length === 0) return;
+			await notifyMany(
+				recipients.map((m) => ({
+					recipientUserId: m.userId,
+					type: "ticket.new",
+					title,
+					body,
+					link: "/helpdesk",
+					entityType: "ticket",
+					entityId: created.id,
+				})),
+			);
+		} catch {
+			// Notification failure must not block ticket creation.
+		}
+	})().catch(() => {});
+
 	return serializeTicket(created);
 }
 

@@ -451,7 +451,7 @@ export function setChatTyping(
 ): Promise<{ ok: boolean }> {
 	return apiFetch<{ ok: boolean }>(`${CHAT}/conversations/${conversationId}/typing`, {
 		method: "POST",
-		body: JSON.stringify({ isTyping }),
+		body: JSON.stringify({ typing: isTyping }),
 	});
 }
 

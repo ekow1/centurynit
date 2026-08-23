@@ -632,7 +632,7 @@ async function sendMessageInternal(
 							body: preview,
 							link: `/chat?conversation=${conversationId}`,
 							entityType: "chat",
-							entityId: conversationId,
+							entityId: created.id,
 						})),
 				);
 			}

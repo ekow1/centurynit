@@ -142,16 +142,21 @@ function serializeConversation(
 	participantsMap: Map<string, Awaited<ReturnType<typeof getParticipants>>>,
 	unreadMap: Map<string, number>,
 	lastMsgMap: Map<string, typeof messages.$inferSelect | undefined>,
+	viewerOpsUserId: string,
 ): ChatConversation {
 	const participants = participantsMap.get(row.id) ?? [];
 	const unread = unreadMap.get(row.id) ?? 0;
 	const lastMsg = lastMsgMap.get(row.id);
+	const title =
+		row.type === "direct"
+			? (participants.find((p) => p.opsUserId != null && p.opsUserId !== viewerOpsUserId)?.name ?? row.title)
+			: row.title;
 
 	return {
 		id: row.id,
 		type: row.type as "applicant" | "direct" | "entity" | "group",
 		status: (row as any).status ?? "open",
-		title: row.title,
+		title,
 		linkedEntityType: row.linkedEntityType,
 		linkedEntityId: row.linkedEntityId,
 		createdBy: row.createdBy,
@@ -263,7 +268,7 @@ export async function listConversations(opsUserId: string): Promise<ChatConversa
 	}
 
 	const list = rows.map((r) =>
-		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap),
+		serializeConversation(r.conversations, participantsMap, unreadMap, lastMsgMap, opsUserId),
 	);
 
 	return { conversations: list, total: list.length };
@@ -311,7 +316,7 @@ export async function getConversation(
 	const lastMsgMap = new Map<string, typeof messages.$inferSelect>();
 	if (lastMsg) lastMsgMap.set(conversationId, lastMsg);
 
-	return serializeConversation(row, participantsMap, unreadMap, lastMsgMap);
+	return serializeConversation(row, participantsMap, unreadMap, lastMsgMap, opsUserId);
 }
 
 /* ── Create conversation ────────────────────────────────────────────────── */

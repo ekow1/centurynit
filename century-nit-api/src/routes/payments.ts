@@ -22,6 +22,7 @@ import { createConsultationInvoice } from "../services/invoice.js";
 import { ensureCaseForBooking } from "../services/cases.js";
 import { resolveServiceName } from "../services/availability.js";
 import { zonedTimeToUtc } from "../lib/time.js";
+import { sendPaymentReceiptEmail } from "../services/receiptEmail.js";
 
 const verifyParams = z.object({ reference: z.string().min(1) });
 const verifyQuery = z.object({ gateway: z.enum(["paystack", "stripe"]).default("paystack") });
@@ -330,4 +331,56 @@ paymentsRouter.openapi(
 		);
 	},
 );
+
+/* ── POST /api/v1/payments/send-receipt ────────────────────────────────────── */
+
+paymentsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/send-receipt",
+		tags: ["Payments"],
+		summary: "Send official payment receipt email to client",
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							recipientEmail: z.string().email(),
+							recipientName: z.string(),
+							recipientPhone: z.string().optional().nullable(),
+							receiptNumber: z.string(),
+							invoiceNumber: z.string(),
+							amountGhs: z.number(),
+							amountUsd: z.number().optional().nullable(),
+							paymentDate: z.string(),
+							paymentChannel: z.string(),
+							reference: z.string(),
+							description: z.string().optional(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							sent: z.boolean(),
+							message: z.string(),
+						}),
+					},
+				},
+				description: "Receipt email delivery status",
+			},
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json");
+		await sendPaymentReceiptEmail(body);
+		return c.json({ sent: true, message: `Official receipt sent to ${body.recipientEmail}` }, 200);
+	},
+);
+
 

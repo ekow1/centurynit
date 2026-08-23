@@ -1381,6 +1381,46 @@ function OfficialReceiptModal({
 	tx: EnrichedTransaction;
 	onClose: () => void;
 }) {
+	const [sending, setSending] = useState(false);
+	const [emailSent, setEmailSent] = useState(false);
+
+	const handleSendEmail = async () => {
+		if (!tx.applicantEmail) {
+			alert("No applicant email found for this transaction.");
+			return;
+		}
+		setSending(true);
+		try {
+			const res = await fetch("/api/v1/payments/send-receipt", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					recipientEmail: tx.applicantEmail,
+					recipientName: tx.applicantName,
+					recipientPhone: tx.applicantPhone,
+					receiptNumber: `REC-#${tx.reference.replace(/^pstk_/i, "").toUpperCase()}`,
+					invoiceNumber: tx.invoiceNumber,
+					amountGhs: tx.grossAmount,
+					amountUsd: tx.grossAmount / 15,
+					paymentDate: new Date(tx.date).toLocaleDateString(),
+					paymentChannel: tx.channelLabel,
+					reference: tx.reference,
+					description: `Settlement for Invoice ${tx.invoiceNumber}`,
+				}),
+			});
+			if (res.ok) {
+				setEmailSent(true);
+				setTimeout(() => setEmailSent(false), 4000);
+			} else {
+				alert("Could not send receipt email. Verify Resend configuration.");
+			}
+		} catch {
+			alert("Failed to send receipt email.");
+		} finally {
+			setSending(false);
+		}
+	};
+
 	return (
 		<div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
 			<div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)" }} />
@@ -1401,7 +1441,23 @@ function OfficialReceiptModal({
 				{/* Modal Actions Header */}
 				<div style={{ padding: "12px 20px", borderBottom: "1px solid #e4e4e7", background: "#f4f4f5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
 					<span style={{ fontSize: "11px", fontWeight: 800, textTransform: "uppercase" }}>Official Receipt Preview</span>
-					<div style={{ display: "flex", gap: "8px" }}>
+					<div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+						<button
+							type="button"
+							onClick={handleSendEmail}
+							disabled={sending}
+							style={{
+								background: emailSent ? "#15803d" : "#0284c7",
+								color: "#ffffff",
+								border: "none",
+								padding: "4px 12px",
+								fontSize: "11px",
+								fontWeight: 700,
+								cursor: sending ? "not-allowed" : "pointer",
+							}}
+						>
+							{sending ? "Sending…" : emailSent ? "✓ Email Sent!" : "✉️ Email Receipt to Client"}
+						</button>
 						<button
 							type="button"
 							onClick={() => window.print()}

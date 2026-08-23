@@ -8,11 +8,13 @@ import type {
 import { db } from "../db/index.js";
 import {
 	applications,
+	applicants,
 	paymentTransactions,
 } from "../db/schema.js";
 import { getInvoice, recordPayment } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
+import { sendPaymentReceiptEmail } from "./receiptEmail.js";
 
 
 const GHS_USD_RATE = 15.0; // 1 USD = 15.00 GHS for presentation / MoMo charge in Ghana
@@ -250,6 +252,34 @@ export async function verifyAndSettlePayment(
 					updatedAt: now,
 				})
 				.catch(() => {});
+		}
+
+		// Send official Century NIT Consult electronic receipt email
+		if (invoice.applicantEmail) {
+			let phone: string | null = null;
+			try {
+				const [appRow] = await db
+					.select({ phone: applicants.phone })
+					.from(applicants)
+					.where(eq(applicants.email, invoice.applicantEmail))
+					.limit(1);
+				phone = appRow?.phone ?? null;
+			} catch {}
+
+			const grossAmountGhs = tx.amountCents / 100;
+			void sendPaymentReceiptEmail({
+				recipientEmail: invoice.applicantEmail,
+				recipientName: invoice.applicantName || "Valued Client",
+				recipientPhone: phone,
+				receiptNumber: `REC-#${tx.reference.replace(/^pstk_/i, "").toUpperCase()}`,
+				invoiceNumber: invoice.invoiceNumber,
+				amountGhs: grossAmountGhs,
+				amountUsd: grossAmountGhs / GHS_USD_RATE,
+				paymentDate: now.toLocaleDateString("en-US"),
+				paymentChannel: gateway === "paystack" ? "MOMO / Paystack" : "Stripe Card",
+				reference: tx.reference,
+				description: `Settlement for Invoice ${invoice.invoiceNumber}`,
+			}).catch(() => {});
 		}
 	}
 

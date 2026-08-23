@@ -386,10 +386,19 @@ auth.post("/check-email", async (c) => {
 	if (!body?.email || typeof body.email !== "string") {
 		return c.json({ exists: false }, 400);
 	}
+	const email = body.email.trim().toLowerCase();
 	const user = await db.query.users.findFirst({
-		where: eq(schema.users.email, body.email.trim().toLowerCase()),
+		where: eq(schema.users.email, email),
 	});
-	return c.json({ exists: !!user });
+	if (user) return c.json({ exists: true });
+	// Also check opsUsers so a dangling staff email (no linked users row)
+	// is still reported as taken.
+	const [staff] = await db
+		.select({ id: schema.opsUsers.id })
+		.from(schema.opsUsers)
+		.where(eq(schema.opsUsers.email, email))
+		.limit(1);
+	return c.json({ exists: !!staff });
 });
 
 auth.use("*", rateLimit);
@@ -459,6 +468,17 @@ auth.post("/complete-email-signup", async (c) => {
 	await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
 
 	// 2. Reject if an account already exists for this email.
+	// Check opsUsers first so a staff email can't be used to create a
+	// client login (even if the linked users row was deleted).
+	const [existingStaff] = await db
+		.select({ id: schema.opsUsers.id })
+		.from(schema.opsUsers)
+		.where(eq(schema.opsUsers.email, email))
+		.limit(1);
+	if (existingStaff) {
+		return c.json({ error: "That address already belongs to a staff member. Sign in instead." }, 409);
+	}
+
 	const existing = await db.query.users.findFirst({
 		where: eq(schema.users.email, email),
 	});

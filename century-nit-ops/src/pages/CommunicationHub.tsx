@@ -15,7 +15,7 @@ import {
 import { ApiError } from "../lib/api";
 import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import { roleCanAccess, type ChatMessage, type QuotedMessage } from "century-nit-shared";
-import { registerOpenDM } from "./ChatHubContext";
+import { registerOpenDM, registerOpenConversation } from "./ChatHubContext";
 import {
 	ensureChatUiStyles,
 	MessageList,
@@ -185,7 +185,7 @@ export function CommunicationHub() {
 		[openConversation],
 	);
 
-	/** Expose a simplified openDM(opsUserId) to the rest of the ops console. */
+	/** Expose openDM + openConversation to the rest of the ops console. */
 	useEffect(() => {
 		registerOpenDM(async (opsUserId: string) => {
 			try {
@@ -195,6 +195,15 @@ export function CommunicationHub() {
 				setOpen(true);
 			} catch (e) {
 				setError(e instanceof Error ? e.message : "Couldn't start direct message session");
+			}
+		});
+		registerOpenConversation(async (conversationId: string) => {
+			try {
+				setActiveConvId(conversationId);
+				setMode("external");
+				setOpen(true);
+			} catch (e) {
+				setError(e instanceof Error ? e.message : "Couldn't open conversation");
 			}
 		});
 	}, [openConversation]);

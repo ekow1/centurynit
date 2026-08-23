@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOpsNotifications } from "../hooks/useOpsNotifications";
+import { useChatHub } from "./ChatHubContext";
 
 function NotifIcon({ type, read }: { type: string; read: boolean }) {
 	const opacity = read ? 0.4 : 1;
@@ -78,6 +79,7 @@ export function OpsNotificationBell() {
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
 	const nav = useNavigate();
+	const { openConversation } = useChatHub();
 
 	useEffect(() => {
 		function handleClickOutside(e: MouseEvent) {
@@ -107,7 +109,20 @@ export function OpsNotificationBell() {
 	function handleNotifClick(id: string, link?: string | null) {
 		void markRead(id);
 		setOpen(false);
-		if (link) nav(normalizeLink(link));
+		if (!link) return;
+		// Chat notification links carry the conversation ID as a query param
+		// (e.g. "/chat?conversation=abc"). Open the CommunicationHub on that
+		// conversation instead of navigating to a non-existent route.
+		const chatMatch = link.match(/^\/chat(?:\?conversation=([^&]+))?/);
+		if (chatMatch) {
+			if (chatMatch[1]) {
+				void openConversation(chatMatch[1]);
+			} else {
+				nav("/inbox");
+			}
+			return;
+		}
+		nav(normalizeLink(link));
 	}
 
 	return (

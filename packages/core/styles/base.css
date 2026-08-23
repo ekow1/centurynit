@@ -2093,7 +2093,7 @@ h6 {
 }
 
 .portal__brand .nav__logo span {
-	opacity: 0.8;
+	opacity: 0.9;
 }
 
 .portal__tagline {
@@ -2101,7 +2101,8 @@ h6 {
 	font-size: var(--text-xs);
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
-	opacity: 0.8;
+	color: rgba(255, 255, 255, 0.78);
+	opacity: 1;
 	margin-top: 0.35rem;
 }
 
@@ -2124,8 +2125,14 @@ h6 {
 }
 
 .portal-nav__item:hover {
-	background: rgba(255, 255, 255, 0.1);
-	border-color: rgba(255, 255, 255, 0.25);
+	background: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.32);
+}
+
+.portal-nav__item:focus-visible,
+.portal-nav__group-btn:focus-visible {
+	outline: 2px solid #ffffff;
+	outline-offset: -1px;
 }
 
 .portal-nav__item--active {
@@ -2199,7 +2206,7 @@ h6 {
 }
 
 .portal__user {
-	border-top: 1px solid rgba(255, 255, 255, 0.12);
+	border-top: 1px solid rgba(255, 255, 255, 0.22);
 	padding-top: 1rem;
 	margin-top: auto;
 	display: flex;
@@ -2208,23 +2215,28 @@ h6 {
 	border-radius: 0 !important;
 }
 
+/* At 3% white on black the card had no perceptible edge, so the footer read as
+   loose text rather than a bounded identity panel. */
 .portal__user-card {
 	display: flex;
 	align-items: center;
 	gap: 0.75rem;
 	padding: 0.6rem 0.75rem;
-	background: rgba(255, 255, 255, 0.03);
-	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(255, 255, 255, 0.07);
+	border: 1px solid rgba(255, 255, 255, 0.2);
 	border-radius: 0 !important;
 	position: relative;
 	transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .portal__user-card:hover {
-	background: rgba(255, 255, 255, 0.06);
-	border-color: rgba(255, 255, 255, 0.16);
+	background: rgba(255, 255, 255, 0.12);
+	border-color: rgba(255, 255, 255, 0.34);
 }
 
+/* Inverted, not black-on-black: a black chip inside a dark card was invisible
+   until you noticed the hairline border. White matches the active-nav
+   treatment, so the avatar reads as the one solid anchor in the footer. */
 .portal__user-avatar {
 	position: relative;
 	width: 34px;
@@ -2232,24 +2244,24 @@ h6 {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: #000000;
-	color: #ffffff;
-	border: 1px solid rgba(255, 255, 255, 0.25);
+	background: #ffffff;
+	color: #000000;
+	border: 1px solid #ffffff;
 	border-radius: 0 !important;
 	font-family: var(--font-mono, monospace);
 	font-size: 0.75rem;
-	font-weight: 700;
+	font-weight: 800;
 	letter-spacing: 0.04em;
 	flex-shrink: 0;
 }
 
 .portal__user-status-dot {
 	position: absolute;
-	top: -2px;
-	right: -2px;
-	width: 7px;
-	height: 7px;
-	background: #10b981;
+	top: -3px;
+	right: -3px;
+	width: 8px;
+	height: 8px;
+	background: #22c55e;
 	border: 1px solid #000000;
 	border-radius: 0 !important;
 }
@@ -2272,12 +2284,14 @@ h6 {
 	letter-spacing: -0.01em;
 }
 
+/* 0.65rem is small text, so it needs the full 4.5:1. #a1a1aa on near-black
+   only just cleared it before the parent card's tint was applied. */
 .portal__user-role-badge {
 	font-family: var(--font-mono, monospace);
 	font-size: 0.65rem;
 	text-transform: uppercase;
 	letter-spacing: 0.05em;
-	color: #a1a1aa;
+	color: #d4d4d8;
 	margin-top: 2px;
 	white-space: nowrap;
 	overflow: hidden;
@@ -2291,25 +2305,32 @@ h6 {
 	gap: 6px;
 }
 
+/* These are the sign-out and public-site escape hatches. A 12%-white border
+   left them looking disabled; they need to read as pressable controls. */
 .portal__user-action-btn {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	padding: 6px 8px;
+	padding: 7px 8px;
 	font-family: var(--font-body, system-ui, -apple-system, sans-serif);
 	font-size: 0.7rem;
-	font-weight: 600;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
-	background: rgba(255, 255, 255, 0.04);
-	color: #d4d4d8;
-	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: rgba(255, 255, 255, 0.08);
+	color: #f4f4f5;
+	border: 1px solid rgba(255, 255, 255, 0.3);
 	border-radius: 0 !important;
 	cursor: pointer;
 	text-decoration: none;
 	transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 	line-height: 1;
+}
+
+.portal__user-action-btn:focus-visible {
+	outline: 2px solid #ffffff;
+	outline-offset: 2px;
 }
 
 .portal__user-action-btn:hover {
@@ -2324,6 +2345,8 @@ h6 {
 	border-color: #ffffff;
 }
 
+/* 30% white on black is roughly 2.3:1 — below even the relaxed floor for
+   incidental text. Decorative or not, it was rendering as noise. */
 .portal__user-brand-stamp {
 	margin-top: 2px;
 	padding: 0 2px;
@@ -2332,7 +2355,7 @@ h6 {
 	justify-content: space-between;
 	font-family: var(--font-mono, monospace);
 	font-size: 0.58rem;
-	color: rgba(255, 255, 255, 0.3);
+	color: rgba(255, 255, 255, 0.55);
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	user-select: none;

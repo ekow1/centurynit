@@ -243,9 +243,7 @@ export function EnterpriseLayout() {
 				<nav className="portal-nav" aria-label="Enterprise modules">
 					{operationsNav.length > 0 && (
 						<>
-							<p className="eyebrow" style={{ padding: "0 0 0.4rem", opacity: 0.8, fontSize: "0.6rem" }}>
-								Operations
-							</p>
+							<p className="portal-nav__section">Operations</p>
 							{operationsNav.map((entry) =>
 								isGroup(entry) ? (
 									<MainNavGroup key={entry.group} group={entry.group} icon={entry.icon} blurb={entry.blurb} children={entry.children.filter((c) => hasPermission(c.module))} defaultOpen={entry.children.some((c) => location.pathname.startsWith(c.to))} />
@@ -257,14 +255,7 @@ export function EnterpriseLayout() {
 					)}
 					{platformNav.length > 0 && (
 						<>
-							<p
-								className="eyebrow"
-								style={{
-									padding: operationsNav.length ? "1rem 0 0.4rem" : "0 0 0.4rem",
-									opacity: 0.8,
-									fontSize: "0.6rem",
-								}}
-							>
+							<p className={`portal-nav__section${operationsNav.length ? " portal-nav__section--spaced" : ""}`}>
 								Platform
 							</p>
 							{platformNav.map((entry) =>

@@ -70,15 +70,22 @@ const OPERATIONS_NAV: NavEntry[] = [
 		],
 	},
 	{
-		group: "Reports",
-		icon: "reports",
-		blurb: "Finance & analytics",
+		group: "Finance",
+		icon: "finance",
+		blurb: "Invoicing, payments & pricing",
 		children: [
 			{ to: "/invoices", module: "invoices", label: "Invoices", blurb: "Raise, chase & settle", icon: "finance" },
 			{ to: "/ledger", module: "ledger", label: "Client Ledger", blurb: "Per-client journal & installments", icon: "finance" },
 			{ to: "/payments", module: "payments", label: "Payments Log", blurb: "All incoming payments", icon: "finance" },
 			{ to: "/fee-schedule", module: "finance", label: "Fee Schedule", blurb: "Official service pricing", icon: "finance" },
 			{ to: "/payment-config", module: "payment-config", label: "Payment Config", blurb: "Schedule options & plans", icon: "finance" },
+		],
+	},
+	{
+		group: "Reports",
+		icon: "reports",
+		blurb: "Workload & analytics",
+		children: [
 			{ to: "/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
 			{ to: "/team", module: "reports", label: "Team Assignments", blurb: "Track staff workload", icon: "reports" },

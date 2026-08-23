@@ -39,6 +39,7 @@ const TAB_PREFERENCE: Record<OpsRole, string[]> = {
 	super_admin: ["/system", "/users", "/dashboard", "/settings"],
 	manager: ["/dashboard", "/consultations", "/applications", "/workflow"],
 	coordinator: ["/dashboard", "/consultations", "/appointments", "/applicants"],
+	customer_service: ["/inbox", "/leads", "/consultations", "/applications"],
 	consultant: ["/dashboard", "/consultations", "/applicants", "/documents"],
 	finance: ["/dashboard", "/finance", "/packages", "/reports"],
 	admin: ["/system", "/users", "/cms", "/settings"],
@@ -46,7 +47,7 @@ const TAB_PREFERENCE: Record<OpsRole, string[]> = {
 
 /** Pick up to four permitted tabs, falling back to whatever the role can reach */
 export function pickTabs(all: OpsNavItem[], role: OpsRole | null): OpsNavItem[] {
-	const preferred = role ? TAB_PREFERENCE[role] : [];
+	const preferred = (role && TAB_PREFERENCE[role]) || [];
 	const chosen: OpsNavItem[] = [];
 
 	for (const path of preferred) {

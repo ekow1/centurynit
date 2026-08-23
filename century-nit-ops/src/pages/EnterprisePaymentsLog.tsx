@@ -1366,7 +1366,7 @@ function OfficialReceiptModal({
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "2px solid #18181b", paddingBottom: "16px", marginBottom: "20px" }}>
 						<div>
 							<h2 style={{ margin: 0, fontSize: "18px", fontWeight: 900, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-								CENTURY NIT EDUCATION
+								CENTURY NIT CONSULT
 							</h2>
 							<p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#52525b" }}>
 								Travel, Visa & University Admissions Consulting
@@ -1446,7 +1446,7 @@ function OfficialReceiptModal({
 					{/* Official Stamp & Verification Footer */}
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderTop: "1px solid #e4e4e7", paddingTop: "16px" }}>
 						<div style={{ fontSize: "10px", color: "#71717a", maxWidth: "300px" }}>
-							<p style={{ margin: 0 }}>This is an electronically generated official receipt from Century NIT Education Ops Console.</p>
+							<p style={{ margin: 0 }}>This is an electronically generated official receipt from Century NIT Consult Ops Console.</p>
 							<p style={{ margin: "2px 0 0 0" }}>Verified via Paystack Gateway Rails.</p>
 						</div>
 						<div style={{ border: "2px solid #18181b", padding: "6px 14px", textAlign: "center" }}>

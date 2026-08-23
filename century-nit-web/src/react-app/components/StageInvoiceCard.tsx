@@ -76,7 +76,7 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta }
 			.map((l) => `  ${l.label} - ${l.detail}: $${l.amount}`)
 			.join("\n");
 		const receipt = [
-			"CENTURY-NIT EDUCATIONAL CONSULTANTS",
+			"CENTURY NIT CONSULT",
 			"====================================",
 			"",
 			`Invoice ref: ${invoice.id ?? "N/A"}`,

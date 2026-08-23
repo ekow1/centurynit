@@ -17,14 +17,3 @@ createRoot(document.getElementById("root")!).render(
 		<App />
 	</StrictMode>,
 );
-
-// Service worker registration — required for Web Push delivery. The ops worker
-// (`/sw.js`) only handles `push` and `notificationclick`; it does no caching,
-// so registering it never risks serving a stale admin bundle.
-if ("serviceWorker" in navigator) {
-	window.addEventListener("load", () => {
-		navigator.serviceWorker.register("/sw.js").catch(() => {
-			/* silent — prototype may run without SW in some environments */
-		});
-	});
-}

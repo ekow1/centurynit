@@ -259,8 +259,6 @@ export function useCasesApi() {
 
 	useEffect(() => {
 		void refresh();
-		const interval = setInterval(() => void refresh(), 30000);
-		return () => clearInterval(interval);
 	}, [refresh]);
 
 	const replaceConsultation = (row: ApiConsultation) => {

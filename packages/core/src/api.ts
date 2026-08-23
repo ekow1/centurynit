@@ -535,16 +535,6 @@ export type NotificationLogItem = {
 	sentAt: string;
 };
 
-export type OpsNotification = {
-	id: string;
-	type: string;
-	title: string;
-	body: string;
-	link: string | null;
-	read: boolean;
-	createdAt: string;
-};
-
 export const notificationsApi = {
 	log(limit?: number, status?: "sent" | "failed"): Promise<{
 		notifications: NotificationLogItem[];
@@ -557,21 +547,6 @@ export const notificationsApi = {
 		if (status) params.set("status", status);
 		const qs = params.toString() ? `?${params.toString()}` : "";
 		return request(`${API_PREFIX}/notifications/log${qs}`);
-	},
-
-	/** Ops staff: list the signed-in member's notifications. */
-	opsList(): Promise<{ notifications: OpsNotification[] }> {
-		return request(`${API_PREFIX}/notifications/ops`);
-	},
-
-	/** Ops staff: mark a single notification read. */
-	opsMarkRead(id: string): Promise<{ ok: boolean }> {
-		return request(`${API_PREFIX}/notifications/ops/${id}/read`, { method: "PATCH" });
-	},
-
-	/** Ops staff: mark every notification read. */
-	opsMarkAllRead(): Promise<{ ok: boolean }> {
-		return request(`${API_PREFIX}/notifications/ops/read-all`, { method: "POST" });
 	},
 };
 

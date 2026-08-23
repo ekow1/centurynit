@@ -274,8 +274,6 @@ export function assessmentCompleteForClient(ctx: {
 		html,
 		text,
 		idempotencyKey: `notify:assessment_complete:${ctx.reference}`,
-		template: "Assessment complete",
-		reference: ctx.reference,
 	};
 }
 

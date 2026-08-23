@@ -46,9 +46,7 @@ export type SettingKey =
 	| "VISA_BASE_FEE_CENTS"
 	| "VISA_BIOMETRICS_FEE_CENTS"
 	| "VISA_TRANSLATION_FEE_CENTS"
-	| "CONSULTATION_FEE_CENTS"
-	| "VAPID_PUBLIC_KEY"
-	| "VAPID_PRIVATE_KEY";
+	| "CONSULTATION_FEE_CENTS";
 
 
 /** All keys this service manages, with metadata for the UI. */
@@ -207,21 +205,6 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "Initial consultation fee in USD cents. Default: 7500 ($75).",
-	},
-	VAPID_PUBLIC_KEY: {
-		label: "VAPID Public Key",
-		group: "Web Push",
-		secret: false,
-		description:
-			"Voluntary Application Server Identity public key, URL-safe base64. " +
-			"Auto-generated on first use; clients pass this to pushManager.subscribe().",
-	},
-	VAPID_PRIVATE_KEY: {
-		label: "VAPID Private Key",
-		group: "Web Push",
-		secret: true,
-		description:
-			"Paired with VAPID_PUBLIC_KEY to sign push payloads. Auto-generated on first use.",
 	},
 };
 

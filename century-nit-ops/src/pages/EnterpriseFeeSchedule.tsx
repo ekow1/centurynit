@@ -142,6 +142,20 @@ function dollarsToCents(dollars: string): number {
 	return Math.round(float * 100);
 }
 
+const feeHeader = {
+	padding: "0.6rem 0",
+	textAlign: "left" as const,
+	fontSize: "0.65rem",
+	textTransform: "uppercase" as const,
+	letterSpacing: "0.06em",
+	fontWeight: 600,
+	color: "#6b6b6b",
+};
+
+const feeCell = {
+	padding: "0.85rem 0.5rem 0.85rem 0",
+};
+
 export function EnterpriseFeeSchedule() {
 	const { opsRole } = useOpsAuth();
 	const [settings, setSettings] = useState<SettingView[]>([]);
@@ -321,13 +335,23 @@ export function EnterpriseFeeSchedule() {
 			)}
 
 			{/* Category Filter Tabs */}
-			<div className="admin-env-tabs" style={{ marginBottom: "1.5rem" }}>
+			<div style={{ display: "flex", gap: "1rem", borderBottom: "1px solid #000", marginBottom: "1.5rem" }}>
 				{categories.map((c) => (
 					<button
 						key={c}
 						type="button"
 						onClick={() => setSelectedCategory(c)}
-						className={`admin-env-tab${selectedCategory === c ? " admin-env-tab--active" : ""}`}
+						style={{
+							border: "none",
+							borderBottom: selectedCategory === c ? "2px solid #000" : "2px solid transparent",
+							background: "transparent",
+							fontSize: "0.75rem",
+							textTransform: "uppercase",
+							letterSpacing: "0.05em",
+							padding: "0.5rem 0.25rem",
+							cursor: "pointer",
+							color: "#000",
+						}}
 					>
 						{c === "all" ? `All Fee Schedules (${allFees.length})` : c}
 					</button>
@@ -336,87 +360,74 @@ export function EnterpriseFeeSchedule() {
 
 			{/* Fee Schedule Cards Grid */}
 			{loading ? (
-				<div className="card" style={{ padding: "3rem", textAlign: "center" }}>
-					<p className="muted">Loading official fee schedules…</p>
-				</div>
+				<p style={{ color: "#6b6b6b" }}>Loading official fee schedules…</p>
 			) : filteredFees.length === 0 ? (
-				<div className="card" style={{ padding: "3rem", textAlign: "center" }}>
-					<p className="muted">No fee schedules found for "{selectedCategory}".</p>
-				</div>
+				<p style={{ color: "#6b6b6b" }}>No fee schedules found for "{selectedCategory}".</p>
 			) : (
-				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "1.25rem", marginBottom: "2rem" }}>
-				{filteredFees.map((fee) => {
-					const cents = getFeeValue(fee.key, fee.defaultCents);
-					const dollars = centsToDollars(cents);
-					const approxGhs = (Number.parseFloat(dollars) * 15.5).toFixed(2);
+				<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", marginBottom: "2rem" }}>
+					<thead>
+						<tr style={{ borderBottom: "1px solid #000" }}>
+							<th style={feeHeader}>Service</th>
+							<th style={feeHeader}>Stage</th>
+							<th style={{ ...feeHeader, textAlign: "right" }}>Rate</th>
+							<th style={{ ...feeHeader, textAlign: "right" }}>Est. GH₵</th>
+							<th style={feeHeader} />
+						</tr>
+					</thead>
+					<tbody>
+						{filteredFees.map((fee) => {
+							const cents = getFeeValue(fee.key, fee.defaultCents);
+							const dollars = centsToDollars(cents);
+							const approxGhs = (Number.parseFloat(dollars) * 15.5).toFixed(2);
 
-					return (
-						<div key={fee.key} className="card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "1.5rem" }}>
-							<div>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
-									<div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
-										<span
-											style={{
-												fontSize: "0.65rem",
-												fontFamily: "var(--font-mono)",
-												textTransform: "uppercase",
-												padding: "0.15rem 0.45rem",
-												border: "var(--thin)",
-												background: "var(--foreground)",
-												color: "var(--background)",
-												borderRadius: "2px",
-											}}
-										>
-											{fee.badge}
-										</span>
-									</div>
-									<span className="mono muted" style={{ fontSize: "0.7rem" }}>
-										{fee.billingStage}
-									</span>
-								</div>
-
-								<h3 style={{ margin: "0.25rem 0 0.5rem", fontSize: "1.05rem", fontWeight: 700 }}>
-									{fee.title}
-								</h3>
-								<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0 0 1rem", lineHeight: 1.4 }}>
-									{fee.description}
-								</p>
-							</div>
-
-							<div style={{ borderTop: "var(--hairline)", paddingTop: "1rem", marginTop: "0.5rem" }}>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
-									<div>
-										<span style={{ fontSize: "1.5rem", fontWeight: 700, fontFamily: "var(--font-mono)" }}>
-											${dollars}
-										</span>
-										<span className="muted" style={{ fontSize: "var(--text-xs)", marginLeft: "0.3rem" }}>USD</span>
-									</div>
-									<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-										≈ GH₵ {approxGhs}
-									</span>
-								</div>
-
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-									<code className="mono muted" style={{ fontSize: "0.65rem" }}>
-										{fee.key}
-									</code>
-									<div style={{ display: "flex", gap: "0.3rem" }}>
+							return (
+								<tr key={fee.key} style={{ borderBottom: "1px solid #e5e5e5" }}>
+									<td style={feeCell}>
+										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+											<span
+												style={{
+													border: "1px solid #000",
+													padding: "0.15rem 0.4rem",
+													fontSize: "0.65rem",
+													textTransform: "uppercase",
+													letterSpacing: "0.04em",
+												}}
+											>
+												{fee.badge}
+											</span>
+											<div>
+												<p style={{ fontWeight: 600, margin: 0 }}>{fee.title}</p>
+												<p style={{ color: "#6b6b6b", fontSize: "0.75rem", margin: "0.15rem 0 0" }}>{fee.description}</p>
+											</div>
+										</div>
+									</td>
+									<td style={{ ...feeCell, color: "#6b6b6b", fontSize: "0.75rem" }}>{fee.billingStage}</td>
+									<td style={{ ...feeCell, textAlign: "right", fontWeight: 600 }}>${dollars} USD</td>
+									<td style={{ ...feeCell, textAlign: "right", color: "#6b6b6b" }}>≈ GH₵ {approxGhs}</td>
+									<td style={feeCell}>
 										{isSuperAdmin && (
 											<button
 												type="button"
-												className="btn btn--ghost btn--sm"
 												onClick={() => handleOpenEdit(fee)}
+												style={{
+													border: "1px solid #000",
+													borderRadius: 0,
+													background: "transparent",
+													fontSize: "0.7rem",
+													textTransform: "uppercase",
+													padding: "0.35rem 0.6rem",
+													cursor: "pointer",
+												}}
 											>
-												Edit Rate
+												Edit
 											</button>
 										)}
-									</div>
-								</div>
-							</div>
-						</div>
-					);
-				})}
-				</div>
+									</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
 			)}
 
 		{/* Edit Fee Modal */}

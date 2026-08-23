@@ -46,7 +46,10 @@ export type SettingKey =
 	| "VISA_BASE_FEE_CENTS"
 	| "VISA_BIOMETRICS_FEE_CENTS"
 	| "VISA_TRANSLATION_FEE_CENTS"
-	| "CONSULTATION_FEE_CENTS";
+	| "CONSULTATION_FEE_CENTS"
+	| "TRAVEL_COORDINATION_FEE_CENTS"
+	| "HOUSING_ASSISTANCE_FEE_CENTS"
+	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS";
 
 
 /** All keys this service manages, with metadata for the UI. */
@@ -205,6 +208,24 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "Initial consultation fee in USD cents. Default: 7500 ($75).",
+	},
+	TRAVEL_COORDINATION_FEE_CENTS: {
+		label: "Travel Coordination Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Flight and travel booking assistance fee in USD cents. Default: 5000 ($50).",
+	},
+	HOUSING_ASSISTANCE_FEE_CENTS: {
+		label: "Housing Assistance Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Student housing and accommodation guidance fee in USD cents. Default: 10000 ($100).",
+	},
+	PRE_DEPARTURE_BRIEFING_FEE_CENTS: {
+		label: "Pre-Departure Briefing Fee (cents)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Pre-departure and airport arrival support fee in USD cents. Default: 4000 ($40).",
 	},
 };
 

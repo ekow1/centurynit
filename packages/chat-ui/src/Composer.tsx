@@ -29,14 +29,7 @@ export interface ComposerProps {
 
 /**
  * Message composer with three modes: normal, replying, editing.
- *
- * The parent owns the draft and all side effects (send, attach, typing). This
- * component is purely the input surface — a textarea that grows with content,
- * a reply/edit preview header when applicable, and a send button that swaps
- * to a spinner while `sending` is true.
- *
- * Enter sends; Shift+Enter inserts a newline. This matches every modern
- * messaging app and is the single behavior users expect.
+ * Auto-focuses when reply or edit state changes, and allows Esc to cancel.
  */
 export function Composer({
 	value,
@@ -54,6 +47,13 @@ export function Composer({
 }: ComposerProps) {
 	ensureChatUiStyles();
 	const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+	// Auto-focus and scroll to input when replying or editing
+	useEffect(() => {
+		if (replyTo || editing) {
+			taRef.current?.focus();
+		}
+	}, [replyTo, editing]);
 
 	// Auto-grow the textarea up to a max height, then scroll inside.
 	useEffect(() => {
@@ -77,27 +77,35 @@ export function Composer({
 			style={{
 				display: "flex",
 				flexDirection: "column",
-				borderTop: "1px solid var(--cn-chat-border-light)",
-				background: "var(--cn-chat-card)",
+				borderTop: "1px solid var(--cn-chat-border)",
+				background: "#ffffff",
 				...style,
 			}}
 		>
-			{replyTo && <ReplyPreview message={replyTo} onCancel={onCancelReply ?? (() => {})} />}
+			{/* Quoted Reply Banner */}
+			{replyTo && (
+				<ReplyPreview
+					message={replyTo}
+					onCancel={onCancelReply ?? (() => {})}
+				/>
+			)}
+
+			{/* Editing Banner */}
 			{editing && (
 				<div
 					style={{
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "space-between",
-						padding: "8px 12px",
+						padding: "6px 12px",
 						borderBottom: "1px solid var(--cn-chat-border-light)",
-						background: "var(--cn-chat-muted)",
-						fontSize: 12,
+						background: "#fef3c7",
+						fontSize: 11,
 						fontFamily: "var(--cn-chat-font-mono)",
-						color: "var(--cn-chat-muted-fg)",
+						color: "#92400e",
 					}}
 				>
-					<span>Editing message</span>
+					<span style={{ fontWeight: 700 }}>EDITING MESSAGE (Esc to cancel)</span>
 					<button
 						type="button"
 						onClick={onCancelEdit}
@@ -105,7 +113,7 @@ export function Composer({
 						style={{
 							background: "transparent",
 							border: "none",
-							color: "var(--cn-chat-muted-fg)",
+							color: "#92400e",
 							cursor: "pointer",
 							padding: 4,
 							display: "flex",
@@ -116,7 +124,9 @@ export function Composer({
 					</button>
 				</div>
 			)}
-			<div style={{ display: "flex", alignItems: "flex-end", gap: 8, padding: "8px 12px" }}>
+
+			{/* Input Box Row */}
+			<div style={{ display: "flex", alignItems: "flex-end", gap: 6, padding: "8px 10px" }}>
 				{onAttach && (
 					<button
 						type="button"
@@ -132,7 +142,7 @@ export function Composer({
 							display: "flex",
 							alignItems: "center",
 							justifyContent: "center",
-							borderRadius: "var(--cn-chat-radius-sm)",
+							borderRadius: 0,
 							flexShrink: 0,
 							transition: "color 120ms",
 						}}
@@ -142,6 +152,7 @@ export function Composer({
 						<PaperclipIcon size={18} />
 					</button>
 				)}
+
 				<textarea
 					ref={taRef}
 					value={value}
@@ -153,6 +164,9 @@ export function Composer({
 						if (e.key === "Enter" && !e.shiftKey) {
 							e.preventDefault();
 							submit(e as unknown as FormEvent);
+						} else if (e.key === "Escape") {
+							if (replyTo) onCancelReply?.();
+							if (editing) onCancelEdit?.();
 						}
 					}}
 					placeholder={placeholder ?? "Type a message…"}
@@ -161,50 +175,42 @@ export function Composer({
 					style={{
 						flex: 1,
 						resize: "none",
-						border: "1px solid var(--cn-chat-border)",
-						borderRadius: "var(--cn-chat-radius-sm)",
-						padding: "8px 12px",
-						fontSize: 14,
+						border: "1px solid #18181b",
+						borderRadius: 0,
+						padding: "8px 10px",
+						fontSize: 13,
 						fontFamily: "var(--cn-chat-font-sans)",
-						background: "var(--cn-chat-bg)",
-						color: "var(--cn-chat-fg)",
+						background: "#ffffff",
+						color: "#18181b",
 						outline: "none",
 						maxHeight: 140,
 						overflowY: "auto",
 						lineHeight: 1.4,
+						boxSizing: "border-box",
 					}}
 				/>
+
 				<button
 					type="submit"
 					disabled={!value.trim() || sending}
 					aria-label={editing ? "Save edit" : "Send message"}
 					style={{
-						width: 36,
-						height: 36,
-						flexShrink: 0,
+						background: !value.trim() || sending ? "#e4e4e7" : "#18181b",
+						border: "1px solid #18181b",
+						color: !value.trim() || sending ? "#a1a1aa" : "#ffffff",
+						cursor: !value.trim() || sending ? "not-allowed" : "pointer",
+						padding: "8px 12px",
+						height: "36px",
 						display: "flex",
 						alignItems: "center",
 						justifyContent: "center",
-						background: "var(--cn-chat-primary)",
-						color: "var(--cn-chat-primary-fg)",
-						border: "none",
-						borderRadius: "var(--cn-chat-radius-sm)",
-						cursor: value.trim() && !sending ? "pointer" : "default",
-						opacity: value.trim() && !sending ? 1 : 0.4,
-						transition: "opacity 120ms",
+						borderRadius: 0,
+						flexShrink: 0,
+						transition: "background 150ms ease, color 150ms ease",
 					}}
 				>
 					{sending ? (
-						<span
-							style={{
-								width: 14,
-								height: 14,
-								border: "2px solid currentColor",
-								borderTopColor: "transparent",
-								borderRadius: "50%",
-								animation: "cn-chat-typing 0.6s linear infinite",
-							}}
-						/>
+						<span style={{ fontSize: 10, fontFamily: "var(--cn-chat-font-mono)", fontWeight: 700 }}>…</span>
 					) : (
 						<SendIcon size={16} />
 					)}

@@ -839,7 +839,14 @@ export function CommunicationHub() {
 								onLoadMore={loadMore}
 								onBack={() => setActiveConvId(null)}
 								onReact={(messageId, emoji) => void react(messageId, emoji)}
-								onQuoteClick={() => {/* scroll-to-original — TODO via ref map */}}
+								onQuoteClick={(messageId) => {
+									const el = document.getElementById(`msg-${messageId}`);
+									if (el) {
+										el.scrollIntoView({ behavior: "smooth", block: "center" });
+										el.classList.add("cn-chat-highlight-pulse");
+										setTimeout(() => el.classList.remove("cn-chat-highlight-pulse"), 1800);
+									}
+								}}
 							/>
 						)}
 					</div>
@@ -1026,18 +1033,18 @@ const launcherSquareBtnStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "56px",
-	height: "56px",
+	width: "52px",
+	height: "52px",
 	background: "#18181b",
 	color: "#ffffff",
-	border: "none",
-	borderRadius: "50%",
-	boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)",
+	border: "1px solid #000000",
+	borderRadius: "0px",
+	boxShadow: "0 8px 30px rgba(0,0,0,0.3)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+	transition: "transform 0.15s ease",
 };
 
 const unreadSquareBadgeStyle: CSSProperties = {
@@ -1059,13 +1066,13 @@ const windowContainerStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "420px",
-	height: "600px",
+	width: "430px",
+	height: "620px",
 	maxHeight: "calc(100vh - 48px)",
 	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	borderRadius: "16px",
-	boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15), 0 4px 6px -2px rgba(0,0,0,0.05)",
+	border: "1px solid #18181b",
+	borderRadius: "0px",
+	boxShadow: "0 12px 48px rgba(0,0,0,0.22)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",

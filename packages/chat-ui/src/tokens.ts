@@ -58,6 +58,13 @@ const CSS = `
 	0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
 	30% { opacity: 1; transform: translateY(-3px); }
 }
+@keyframes cn-chat-highlight {
+	0% { background: rgba(255, 255, 0, 0.35); }
+	100% { background: transparent; }
+}
+.cn-chat-highlight-pulse {
+	animation: cn-chat-highlight 1.8s ease-out;
+}
 `;
 
 let injected = false;

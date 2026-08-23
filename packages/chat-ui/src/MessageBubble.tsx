@@ -34,11 +34,7 @@ export interface MessageBubbleProps {
  * Renders the full WhatsApp-style message entity: quoted reply preview,
  * forwarded indicator, body (or tombstone if deleted), edit marker,
  * attachments, reactions row, timestamp, and delivery ticks. Contextual
- * actions appear on hover (desktop) or long-press (mobile).
- *
- * The parent owns the message list and decides authorship, authorization for
- * edit/delete, and scroll-to-original behavior. This component is purely
- * presentational.
+ * actions appear on hover (desktop) or long-press / menu trigger (mobile).
  */
 export function MessageBubble({
 	message,
@@ -59,6 +55,7 @@ export function MessageBubble({
 	const [showActions, setShowActions] = useState(false);
 	const [showReactionPicker, setShowReactionPicker] = useState(false);
 	const [menuOpen, setMenuOpen] = useState(false);
+	const [copied, setCopied] = useState(false);
 	const longPress = useLongPress(() => setMenuOpen(true));
 
 	const deleted = message.deletedAt !== null && message.deletedAt !== undefined;
@@ -71,6 +68,8 @@ export function MessageBubble({
 	if (isSystem) {
 		return (
 			<div
+				id={`msg-${message.id}`}
+				data-message-id={message.id}
 				className="cn-chat-system"
 				style={{
 					display: "flex",
@@ -81,7 +80,7 @@ export function MessageBubble({
 			>
 				<span
 					style={{
-						fontSize: 12,
+						fontSize: 11,
 						color: "var(--cn-chat-muted-fg)",
 						background: "var(--cn-chat-muted)",
 						padding: "4px 10px",
@@ -102,18 +101,43 @@ export function MessageBubble({
 
 	const handleCopy = () => {
 		if (deleted) return;
-		void navigator.clipboard?.writeText(message.content).catch(() => {});
+		try {
+			if (navigator.clipboard?.writeText) {
+				navigator.clipboard.writeText(message.content).catch(() => fallbackCopy());
+			} else {
+				fallbackCopy();
+			}
+		} catch {
+			fallbackCopy();
+		}
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1800);
 		onCopy?.(message);
+	};
+
+	const fallbackCopy = () => {
+		const ta = document.createElement("textarea");
+		ta.value = message.content;
+		ta.style.position = "fixed";
+		ta.style.opacity = "0";
+		document.body.appendChild(ta);
+		ta.focus();
+		ta.select();
+		document.execCommand("copy");
+		document.body.removeChild(ta);
 	};
 
 	return (
 		<div
+			id={`msg-${message.id}`}
+			data-message-id={message.id}
 			className="cn-chat-message"
 			style={{
 				display: "flex",
 				width: "100%",
 				justifyContent: isOwn ? "flex-end" : "flex-start",
 				position: "relative",
+				padding: "2px 0",
 				...style,
 			}}
 			onMouseEnter={() => setShowActions(true)}
@@ -141,8 +165,31 @@ export function MessageBubble({
 				/>
 			)}
 
-			<div style={{ position: "relative", maxWidth: "78%" }}>
-				{/* Contextual actions — seamless hover bridge via paddingBottom */}
+			<div style={{ position: "relative", maxWidth: "80%", minWidth: "90px" }}>
+				{/* Copied visual feedback toast badge */}
+				{copied && (
+					<div
+						style={{
+							position: "absolute",
+							top: -24,
+							[isOwn ? "right" : "left"]: 0,
+							background: "#18181b",
+							color: "#ffffff",
+							padding: "2px 8px",
+							fontSize: 10,
+							fontWeight: 700,
+							borderRadius: 4,
+							zIndex: 30,
+							fontFamily: "var(--cn-chat-font-mono)",
+							boxShadow: "var(--cn-chat-shadow-md)",
+							animation: "cn-chat-fade-in 100ms ease-out",
+						}}
+					>
+						✓ Copied!
+					</div>
+				)}
+
+				{/* Contextual actions toolbar */}
 				{isActionsVisible && (
 					<div
 						onMouseEnter={() => setShowActions(true)}
@@ -221,11 +268,13 @@ export function MessageBubble({
 						borderRadius: isOwn
 							? "var(--cn-chat-radius) var(--cn-chat-radius) 4px var(--cn-chat-radius)"
 							: "var(--cn-chat-radius) var(--cn-chat-radius) var(--cn-chat-radius) 4px",
-						fontSize: 14,
+						fontSize: 13.5,
 						lineHeight: 1.45,
 						fontFamily: "var(--cn-chat-font-sans)",
 						wordBreak: "break-word",
 						opacity: deleted ? 0.6 : 1,
+						boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+						border: isOwn ? "none" : "1px solid var(--cn-chat-border)",
 					}}
 				>
 					{/* Forwarded indicator */}
@@ -235,11 +284,13 @@ export function MessageBubble({
 								display: "flex",
 								alignItems: "center",
 								gap: 4,
-								fontSize: 11,
-								fontWeight: 600,
+								fontSize: 10,
+								fontWeight: 700,
 								color: subtleFg,
 								marginBottom: 4,
 								fontFamily: "var(--cn-chat-font-mono)",
+								textTransform: "uppercase",
+								letterSpacing: "0.04em",
 							}}
 						>
 							<ForwardIcon size={12} />
@@ -251,16 +302,21 @@ export function MessageBubble({
 					{message.replyTo && !deleted && (
 						<button
 							type="button"
-							onClick={() => onQuoteClick?.(message.replyTo!.id)}
+							onClick={(e) => {
+								e.stopPropagation();
+								onQuoteClick?.(message.replyTo!.id);
+							}}
+							title="Jump to quoted message"
 							style={{
 								display: "flex",
-								gap: 6,
+								flexDirection: "column",
+								gap: 2,
 								padding: "4px 8px",
-								marginBottom: 4,
-								background: isOwn ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.06)",
+								marginBottom: 6,
+								background: isOwn ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)",
 								border: "none",
-								borderLeft: `3px solid ${isOwn ? "rgba(255,255,255,0.5)" : "var(--cn-chat-primary)"}`,
-								borderRadius: 4,
+								borderLeft: `3px solid ${isOwn ? "#ffffff" : "var(--cn-chat-primary)"}`,
+								borderRadius: 2,
 								cursor: "pointer",
 								textAlign: "left",
 								width: "100%",
@@ -269,19 +325,19 @@ export function MessageBubble({
 						>
 							<span
 								style={{
-									fontSize: 11,
-									fontWeight: 700,
+									fontSize: 10,
+									fontWeight: 800,
 									color: subtleFg,
 									fontFamily: "var(--cn-chat-font-mono)",
-									flexShrink: 0,
+									textTransform: "uppercase",
 								}}
 							>
 								{message.replyTo.senderName}
 							</span>
 							<span
 								style={{
-									fontSize: 12,
-									opacity: 0.85,
+									fontSize: 11,
+									opacity: 0.9,
 									whiteSpace: "nowrap",
 									overflow: "hidden",
 									textOverflow: "ellipsis",
@@ -297,11 +353,12 @@ export function MessageBubble({
 						<div
 							style={{
 								fontSize: 11,
-								fontWeight: 700,
+								fontWeight: 800,
 								color: "var(--cn-chat-primary)",
 								fontFamily: "var(--cn-chat-font-mono)",
 								letterSpacing: "0.02em",
 								marginBottom: 2,
+								textTransform: "uppercase",
 							}}
 						>
 							{message.senderName}
@@ -314,7 +371,7 @@ export function MessageBubble({
 							style={{
 								fontStyle: "italic",
 								color: subtleFg,
-								fontSize: 13,
+								fontSize: 12,
 							}}
 						>
 							🚫 This message was deleted
@@ -398,13 +455,13 @@ export function MessageBubble({
 							alignItems: "center",
 							justifyContent: "flex-end",
 							gap: 4,
-							marginTop: 2,
+							marginTop: 3,
 							fontSize: 10,
 							fontFamily: "var(--cn-chat-font-mono)",
 							color: subtleFg,
 						}}
 					>
-						{edited && !deleted && <span style={{ fontStyle: "italic" }}>edited</span>}
+						{edited && !deleted && <span style={{ fontStyle: "italic", opacity: 0.8 }}>edited</span>}
 						<span>{formatTime(message.createdAt)}</span>
 						{isOwn && !deleted && <DeliveryTicks status={message.deliveryStatus} />}
 					</div>
@@ -416,19 +473,19 @@ export function MessageBubble({
 
 function DeliveryTicks({ status }: { status?: ChatMessage["deliveryStatus"] }) {
 	if (!status || status === "sending") {
-		return <ClockIcon size={12} style={{ opacity: 0.6 }} />;
+		return <ClockIcon size={11} style={{ opacity: 0.6 }} />;
 	}
 	if (status === "sent") {
-		return <CheckIcon size={12} style={{ opacity: 0.6 }} />;
+		return <CheckIcon size={11} style={{ opacity: 0.6 }} />;
 	}
 	if (status === "delivered") {
-		return <CheckCheckIcon size={13} style={{ opacity: 0.6 }} />;
+		return <CheckCheckIcon size={12} style={{ opacity: 0.6 }} />;
 	}
 	if (status === "read") {
-		return <CheckCheckIcon size={13} style={{ color: "var(--cn-chat-success)" }} />;
+		return <CheckCheckIcon size={12} style={{ color: "#10b981" }} />;
 	}
 	if (status === "failed") {
-		return <span style={{ color: "var(--cn-chat-danger)", fontSize: 10, fontWeight: 700 }}>!</span>;
+		return <span style={{ color: "#dc2626", fontSize: 10, fontWeight: 800 }}>!</span>;
 	}
 	return null;
 }

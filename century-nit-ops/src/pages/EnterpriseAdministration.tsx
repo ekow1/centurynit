@@ -12,9 +12,9 @@ import { ClientDirectory } from "./ClientDirectory";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 const INVITEABLE: Record<string, OpsRole[]> = {
-	super_admin: ["super_admin", "admin", "manager", "coordinator", "consultant", "finance"],
-	admin: ["manager", "coordinator", "consultant", "finance"],
-	manager: ["coordinator", "consultant", "finance"],
+	super_admin: ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance"],
+	admin: ["manager", "coordinator", "customer_service", "consultant", "finance"],
+	manager: ["coordinator", "customer_service", "consultant", "finance"],
 };
 
 /**

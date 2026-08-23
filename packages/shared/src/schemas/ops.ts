@@ -12,6 +12,7 @@ export const SYSTEM_ROLES = [
 	"super_admin",
 	"manager",
 	"coordinator",
+	"customer_service",
 	"consultant",
 	"finance",
 	"admin",
@@ -143,6 +144,10 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
 		"programs", "packages", "reports", "chat",
 	],
+	customer_service: [
+		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk",
+		"workflow", "documents", "appointments", "chat",
+	],
 	consultant: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing", "workflow",
 		"visa", "travel", "documents", "appointments", "universities", "programs", "packages", "reports", "chat",
@@ -158,7 +163,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 /**
  * Capability lists — viewing a module is not the same as changing it.
  */
-export const ASSIGN_WORK_ROLES = ["super_admin", "manager", "coordinator"] as const;
+export const ASSIGN_WORK_ROLES = ["super_admin", "manager", "coordinator", "customer_service"] as const;
 export const EDIT_PACKAGES_ROLES = ["super_admin", "manager", "finance"] as const;
 export const EDIT_UNIVERSITIES_ROLES = ["super_admin", "manager"] as const;
 

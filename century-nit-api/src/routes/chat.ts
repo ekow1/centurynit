@@ -65,7 +65,7 @@ chatRouter.openapi(
 	}),
 	async (c) => {
 		const staff = c.get("staff")!;
-		const list = await listConversations(staff.opsUserId);
+		const list = await listConversations(staff.opsUserId, staff.role);
 		return c.json(list);
 	},
 );

@@ -1,7 +1,7 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
-import { notifyMany, getManagerAndCoordinatorContacts } from "./notify.js";
+import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContacts } from "./notify.js";
 import { queueEmails } from "../worker/queues.js";
 import { leadCreatedForManager } from "./notifications.js";
 
@@ -206,7 +206,11 @@ async function notifyManagersOfNewLead(
 	source: string,
 	leadId: string,
 ): Promise<void> {
-	const contacts = await getManagerAndCoordinatorContacts();
+	const [mgrContacts, csContacts] = await Promise.all([
+		getManagerAndCoordinatorContacts(),
+		getCustomerServiceContacts(),
+	]);
+	const contacts = [...mgrContacts, ...csContacts];
 	if (contacts.length === 0) return;
 
 	// In-app + SSE + Web Push
@@ -220,7 +224,7 @@ async function notifyManagersOfNewLead(
 		})),
 	);
 
-	// Email — one per manager, each with its own idempotency key
+	// Email — one per recipient, each with its own idempotency key
 	await queueEmails(
 		contacts.map((c) => leadCreatedForManager({ name, source, leadId }, c.email)),
 	).catch(() => {

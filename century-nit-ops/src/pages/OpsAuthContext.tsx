@@ -52,6 +52,7 @@ export const ROLE_HOME: Record<OpsRole, string> = {
 	super_admin: "/system",
 	manager: "/dashboard",
 	coordinator: "/dashboard",
+	customer_service: "/inbox",
 	consultant: "/dashboard",
 	finance: "/dashboard",
 	admin: "/system",
@@ -70,6 +71,7 @@ export const ROLE_LABELS: Record<OpsRole, string> = {
 	super_admin: "Super Administrator",
 	manager: "Manager",
 	coordinator: "Coordinator",
+	customer_service: "Customer Service",
 	consultant: "Consultant",
 	finance: "Finance Officer",
 	admin: "System Administrator",
@@ -82,6 +84,8 @@ export const ROLE_DESCRIPTIONS: Record<OpsRole, string> = {
 		"Covers every branch. Assigns consultants to consultations, creates school applications after assessment, edits package and university catalogues, and sees full revenue reporting.",
 	coordinator:
 		"Desk for the assigned branch. Reviews incoming consultations, checks uploaded identity and academic documents, and assigns consultations to consultants.",
+	customer_service:
+		"Owns the support queue and inbound leads. Handles client inquiries, coordinates case assignments, and ensures no message goes unanswered.",
 	consultant:
 		"Works only the cases assigned to them. Reviews documents, adds comments and recommendations, requests further documents, updates progress, and can reschedule an assigned consultation.",
 	finance:
@@ -100,6 +104,7 @@ function isKnownRole(role: unknown): role is OpsRole {
 		role === "super_admin" ||
 		role === "manager" ||
 		role === "coordinator" ||
+		role === "customer_service" ||
 		role === "consultant" ||
 		role === "finance" ||
 		role === "admin"
@@ -331,6 +336,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		opsRole === "admin" ||
 		opsRole === "manager" ||
 		opsRole === "coordinator" ||
+		opsRole === "customer_service" ||
 		opsRole === "finance";
 	const branchScopeId = opsUser?.branch ?? null;
 	const requiresAssignmentScope = opsRole === "consultant";

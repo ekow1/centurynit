@@ -45,7 +45,7 @@ import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
 import { publishChatEvent } from "./chat.js";
-import { notifyMany } from "./notify.js";
+import { notifyMany, getCustomerServiceUserIds } from "./notify.js";
 import { serializeMessageRow } from "./message-serializer.js";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
@@ -931,11 +931,36 @@ export async function sendCustomerMessage(
 						ne(conversationParticipants.role, "former"),
 					),
 				);
-			const recipients = staffParticipants
-				.map((p) => p.userId)
-				.filter((id): id is string => id != null);
-			if (recipients.length === 0) return;
-			await notifyMany(
+		const recipients = staffParticipants
+			.map((p) => p.userId)
+			.filter((id): id is string => id != null);
+
+		if (recipients.length === 0) {
+			// No staff participants — for support conversations, fall back to
+			// alerting all customer_service agents so the message isn't stranded.
+			const [convRow] = await db
+				.select({ type: conversations.type })
+				.from(conversations)
+				.where(eq(conversations.id, conversationId))
+				.limit(1);
+			if (convRow?.type === "support") {
+				const csAgents = await getCustomerServiceUserIds();
+				if (csAgents.length > 0) {
+					await notifyMany(
+						csAgents.map(({ userId }) => ({
+							recipientUserId: userId,
+							type: "chat.message",
+							title: `${user.name ?? "A client"} sent a support message`,
+							body: preview,
+							link: "/inbox",
+						})),
+					);
+				}
+			}
+			return;
+		}
+
+		await notifyMany(
 				recipients.map((recipientUserId) => ({
 					recipientUserId,
 					type: "chat.message",

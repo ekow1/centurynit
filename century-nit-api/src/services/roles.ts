@@ -31,6 +31,10 @@ const ROLE_LABELS: Record<SystemRole, { name: string; description: string }> = {
 		name: "Coordinator",
 		description: "Manages CRM leads, assigns consultants to bookings, and tracks admissions.",
 	},
+	customer_service: {
+		name: "Customer Service",
+		description: "Owns the support queue, handles inbound leads, and coordinates client inquiries.",
+	},
 	consultant: {
 		name: "Consultant",
 		description: "Advises assigned clients, reviews documentation, and handles visa guidance.",

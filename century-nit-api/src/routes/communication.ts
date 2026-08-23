@@ -270,7 +270,7 @@ communicationRouter.openapi(
 		method: "post",
 		path: "/stage-assignments",
 		tags: ["Communication"],
-		middleware: [requireAuth, requireMfa, requireModule("chat"), requireRole("manager", "coordinator", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("chat"), requireRole("manager", "coordinator", "customer_service", "super_admin")] as const,
 		request: { body: { content: { "application/json": { schema: createStageAssignmentSchema } }, required: true } },
 		responses: {
 			201: {

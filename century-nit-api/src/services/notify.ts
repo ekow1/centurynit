@@ -191,6 +191,35 @@ export async function getManagerAndCoordinatorContacts(): Promise<
 }
 
 /**
+ * Get user.ids for all active customer_service staff.
+ */
+export async function getCustomerServiceUserIds(): Promise<
+	{ userId: string }[]
+> {
+	const rows = await db
+		.select({ userId: opsUsers.userId })
+		.from(opsUsers)
+		.where(and(eq(opsUsers.active, true), eq(opsUsers.role, "customer_service")));
+	return rows
+		.filter((r): r is { userId: string } => r.userId !== null)
+		.map((r) => ({ userId: r.userId }));
+}
+
+/**
+ * Same as getCustomerServiceUserIds but also returns email and name.
+ */
+export async function getCustomerServiceContacts(): Promise<
+	{ userId: string; email: string; name: string }[]
+> {
+	const rows = await db
+		.select({ userId: opsUsers.userId, email: opsUsers.email, name: opsUsers.name })
+		.from(opsUsers)
+		.where(and(eq(opsUsers.active, true), eq(opsUsers.role, "customer_service")));
+	return rows
+		.filter((r): r is { userId: string; email: string; name: string } => r.userId !== null);
+}
+
+/**
  * Get the user.id for an ops_user by their email.
  * Used to notify a specific staff member when a booking is assigned to them.
  */

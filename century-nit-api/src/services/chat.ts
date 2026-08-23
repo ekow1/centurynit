@@ -183,18 +183,32 @@ function serializeMessage(row: typeof messages.$inferSelect): ChatMessage {
 
 /* ── List conversations ─────────────────────────────────────────────────── */
 
-export async function listConversations(opsUserId: string): Promise<ChatConversationList> {
+export async function listConversations(
+	opsUserId: string,
+	staffRole?: string,
+): Promise<ChatConversationList> {
 	const membership = db
 		.select({ conversationId: conversationParticipants.conversationId })
 		.from(conversationParticipants)
 		.where(eq(conversationParticipants.opsUserId, opsUserId))
 		.as("membership");
 
-	const rows = await db
-		.select()
-		.from(conversations)
-		.innerJoin(membership, eq(conversations.id, membership.conversationId))
-		.orderBy(desc(conversations.updatedAt));
+	const isCustomerService = staffRole === "customer_service";
+
+	const rows = isCustomerService
+		? await db
+				.select()
+				.from(conversations)
+				.leftJoin(membership, eq(conversations.id, membership.conversationId))
+				.where(
+					sql`(${membership.conversationId} IS NOT NULL OR ${conversations.type} = 'support')`,
+				)
+				.orderBy(desc(conversations.updatedAt))
+		: await db
+				.select()
+				.from(conversations)
+				.innerJoin(membership, eq(conversations.id, membership.conversationId))
+				.orderBy(desc(conversations.updatedAt));
 
 	const conversationIds = rows.map((r) => r.conversations.id);
 	if (conversationIds.length === 0) {

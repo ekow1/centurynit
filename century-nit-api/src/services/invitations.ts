@@ -35,10 +35,10 @@ const INVITE_TTL_DAYS = 7;
  * exists to maintain.
  */
 const CAN_INVITE: Record<string, OpsRole[]> = {
-	super_admin: ["super_admin", "admin", "manager", "coordinator", "consultant", "finance"],
-	admin: ["manager", "coordinator", "consultant", "finance"],
-	manager: ["coordinator", "consultant", "finance"],
-	coordinator: [],
+	super_admin: ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance"],
+	admin: ["manager", "coordinator", "customer_service", "consultant", "finance"],
+	manager: ["coordinator", "customer_service", "consultant", "finance"],
+	coordinator: ["customer_service"],
 	consultant: [],
 	finance: [],
 };

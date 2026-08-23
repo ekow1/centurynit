@@ -718,13 +718,18 @@ async function sendMessageInternal(
 							entityId: created.id,
 						})),
 				);
-			}
-		} catch {
-			// Notification failure must not block the message send.
 		}
+	} catch {
+		// Notification failure must not block the message send.
+	}
 	})().catch(() => {});
 
-	return serializeMessage(created);
+	// Return the hydrated owner view so the sender sees the correct delivery
+	// status (double-check "delivered") immediately — mirroring editMessage
+	// and forwardMessage. Returning the bare serializeMessage (deliveryStatus:
+	// null) makes the bubble render a clock icon that looks like "still sending".
+	const [ownerView] = await hydrateMessages([created], { opsUserId: sender.id });
+	return ownerView;
 }
 
 /* ── Send message (public) ──────────────────────────────────────────────── */

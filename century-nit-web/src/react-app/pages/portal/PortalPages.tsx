@@ -43,6 +43,7 @@ import {
 	universities,
 	universitiesForDestination,
 	CONSULTATION_DURATIONS,
+	getBranchName,
 } from "century-nit-core";
 import { meApi, bookingsApi, invoicesApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication } from "century-nit-shared";
@@ -1676,7 +1677,7 @@ export function PortalConsultationBookingFlow() {
 								<div style={{ display: "grid", gap: "0.5rem", fontSize: "var(--text-sm)" }}>
 									<div style={{ display: "flex", justifyContent: "space-between" }}>
 										<span className="muted">Branch</span>
-										<span>{booking.branchId || "—"}</span>
+										<span>{getBranchName(booking.branchId)}</span>
 									</div>
 									<div style={{ display: "flex", justifyContent: "space-between" }}>
 										<span className="muted">Date</span>
@@ -1894,7 +1895,7 @@ export function PortalConsultation() {
 								{liveConsultation?.type === "in_person" ? "In-Person Consultation" : "Online Advisory Session"}
 							</h2>
 							<p className="muted" style={{ fontSize: "0.9rem" }}>
-								Branch: <strong>{liveConsultation?.branch ?? booking.branchId}</strong> ·{" "}
+								Branch: <strong>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</strong> ·{" "}
 								{liveConsultation?.startsAt
 									? new Date(liveConsultation.startsAt).toLocaleString(undefined, {
 											weekday: "short",
@@ -1966,7 +1967,7 @@ export function PortalConsultation() {
 						) : (
 							<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
 								Your file is currently in the intake queue. A designated advisor at the{" "}
-								<strong>{liveConsultation?.branch ?? booking.branchId}</strong> branch is being assigned.
+								<strong>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</strong> is being assigned.
 							</p>
 						)}
 					</div>

@@ -30,6 +30,7 @@ import {
 	SCHOOL_TRACK_STATUS_LABELS,
 	VISA_INVOICE_AMOUNT,
 	REQUIRED_DOCUMENTS,
+	getBranchName,
 } from "century-nit-core";
 import { documentsApi, invoicesApi, meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -312,7 +313,7 @@ export function PortalProfile() {
 							label="Location"
 							value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ")}
 						/>
-						<DataRow label="Branch" value={booking.branchId} />
+						<DataRow label="Branch" value={getBranchName(booking.branchId)} />
 						<DataRow label="Date" value={booking.date} />
 						<DataRow label="Time" value={booking.time} />
 						<DataRow

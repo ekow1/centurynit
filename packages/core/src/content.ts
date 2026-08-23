@@ -941,6 +941,26 @@ export function getBranch(id: string) {
 	return branches.find((b) => b.id === id);
 }
 
+export function getBranchName(branchIdOrName?: string | null): string {
+	if (!branchIdOrName) return "Accra Headquarters";
+	const trimmed = branchIdOrName.trim();
+	const b = branches.find((br) => br.id.toLowerCase() === trimmed.toLowerCase() || br.name.toLowerCase() === trimmed.toLowerCase());
+	if (b?.name) return b.name;
+	const lower = trimmed.toLowerCase();
+	if (lower === "accra-hq" || lower === "accra" || lower === "accra headquarters" || lower === "accra-headquarters") return "Accra Headquarters";
+	if (lower === "kumasi" || lower === "kumasi branch" || lower === "kumasi-branch") return "Kumasi Branch";
+	if (lower === "takoradi" || lower === "takoradi branch" || lower === "takoradi-branch") return "Takoradi Branch";
+	if (lower === "tamale" || lower === "tamale branch") return "Tamale Branch";
+	if (lower === "sunyani" || lower === "sunyani branch") return "Sunyani Branch";
+	if (lower === "cape-coast" || lower === "cape coast") return "Cape Coast Branch";
+	if (lower === "ho" || lower === "ho branch") return "Ho Branch";
+	if (lower === "koforidua") return "Koforidua Branch";
+	return trimmed
+		.replace(/-hq$/i, " Headquarters")
+		.replace(/[-_]/g, " ")
+		.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function getConsultant(id: string | null | undefined) {
 	if (!id) return undefined;
 	return consultants.find((c) => c.id === id);

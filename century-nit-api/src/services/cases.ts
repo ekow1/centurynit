@@ -962,6 +962,35 @@ export async function assignApplication(input: {
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
+
+	// Notify the assigned staff member by email and in-app.
+	const applicant = await getApplicant(row.applicantId);
+	const staffUserId = await getStaffUserId(employee.id);
+	if (applicant) {
+		try {
+			await queueEmails([
+				mail.caseAssigned({
+					reference: updated.appNumber,
+					clientName: applicant.name ?? "Client",
+					clientEmail: applicant.email ?? "",
+					employeeName: employee.name,
+					employeeEmail: employee.email,
+				}),
+			]);
+		} catch {
+			// Email failure must not block the assignment.
+		}
+	}
+	if (staffUserId) {
+		notify({
+			recipientUserId: staffUserId,
+			type: "case.assigned",
+			title: "New case assigned",
+			body: `${applicant?.name ?? "A client"}'s case has been assigned to you. Ref: ${updated.appNumber}`,
+			link: "/applications",
+		}).catch(() => {});
+	}
+
 	return updated;
 }
 

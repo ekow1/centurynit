@@ -279,7 +279,64 @@ export function assessmentCompleteForClient(ctx: {
 	};
 }
 
-/** New lead captured — sent to every manager/coordinator/super_admin. */
+/** Application/case assigned to a staff member. */
+export function caseAssigned(ctx: {
+	reference: string;
+	clientName: string;
+	clientEmail: string;
+	employeeName: string;
+	employeeEmail: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.employeeName}</strong>,`,
+		`A case has been assigned to you.`,
+		`<strong>Client:</strong> ${ctx.clientName} (${ctx.clientEmail})`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		`Log in to the Operations Center to review the application and begin working with the client.`,
+	];
+	const { html, text } = formatEmail("A case has been assigned to you", lines, null, ctx.reference);
+	return {
+		to: ctx.employeeEmail,
+		subject: `New case assigned · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:case:assigned:${ctx.reference}:${ctx.employeeEmail}`,
+		template: "Case assigned",
+		reference: ctx.reference,
+	};
+}
+
+/** Helpdesk ticket assigned to a staff member. */
+export function ticketAssigned(ctx: {
+	ticketId: string;
+	subject: string;
+	category: string;
+	priority: string;
+	clientName: string;
+	employeeName: string;
+	employeeEmail: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.employeeName}</strong>,`,
+		`A support ticket has been assigned to you.`,
+		`<strong>Client:</strong> ${ctx.clientName}`,
+		`<strong>Category:</strong> ${ctx.category}`,
+		`<strong>Priority:</strong> ${ctx.priority}`,
+		`<strong>Subject:</strong> ${ctx.subject}`,
+		`Log in to the Operations Center to review and respond.`,
+	];
+	const { html, text } = formatEmail("A support ticket has been assigned to you", lines, null, ctx.ticketId);
+	return {
+		to: ctx.employeeEmail,
+		subject: `New ticket assigned · ${ctx.subject}`,
+		html,
+		text,
+		idempotencyKey: `notify:ticket:assigned:${ctx.ticketId}:${ctx.employeeEmail}`,
+		template: "Ticket assigned",
+		reference: ctx.ticketId,
+	};
+}
+
 export function leadCreatedForManager(
 	ctx: { name: string; source: string; leadId: string },
 	managerEmail: string,

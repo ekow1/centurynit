@@ -15,6 +15,8 @@ import {
 	tickets,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { queueEmails } from "../worker/queues.js";
+import * as mail from "./notifications.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
 
 /* ── Category-based routing ────────────────────────────────────────────────── */
@@ -195,15 +197,38 @@ export async function createTicket(
 			const body = `${applicantName} — ${created.category}`;
 
 			if (created.assignedStaffId) {
-				const staffUserId = await getStaffUserId(created.assignedStaffId);
-				if (staffUserId) {
-					await notify({
-						recipientUserId: staffUserId,
-						type: "ticket.new",
-						title,
-						body,
-						link: "/helpdesk",
-					});
+				const [staff] = await db
+					.select({ id: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
+					.from(opsUsers)
+					.where(eq(opsUsers.id, created.assignedStaffId))
+					.limit(1);
+				if (staff) {
+					try {
+						await queueEmails([
+							mail.ticketAssigned({
+								ticketId: created.id,
+								subject: created.subject,
+								category: created.category,
+								priority: created.priority,
+								clientName: applicantName,
+								employeeName: staff.name,
+								employeeEmail: staff.email,
+							}),
+						]);
+					} catch {
+						// Email failure must not block ticket creation.
+					}
+
+					const staffUserId = await getStaffUserId(staff.id);
+					if (staffUserId) {
+						await notify({
+							recipientUserId: staffUserId,
+							type: "ticket.new",
+							title,
+							body,
+							link: "/helpdesk",
+						});
+					}
 					return;
 				}
 			}
@@ -315,5 +340,50 @@ export async function updateTicketStatus(
 		.where(eq(tickets.id, ticketId))
 		.returning();
 
-	return serializeTicket(updated);
+	const result = await serializeTicket(updated);
+
+	// If the ticket was reassigned, alert the new staff member.
+	if (
+		input.assignedStaffId !== undefined &&
+		input.assignedStaffId !== ticket.assignedStaffId &&
+		input.assignedStaffId
+	) {
+		(async () => {
+			try {
+				const [staff] = await db
+					.select({ id: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
+					.from(opsUsers)
+					.where(eq(opsUsers.id, input.assignedStaffId!))
+					.limit(1);
+				if (!staff) return;
+
+				await queueEmails([
+					mail.ticketAssigned({
+						ticketId: updated.id,
+						subject: updated.subject,
+						category: updated.category,
+						priority: updated.priority,
+						clientName: updated.applicantName,
+						employeeName: staff.name,
+						employeeEmail: staff.email,
+					}),
+				]);
+
+				const staffUserId = await getStaffUserId(staff.id);
+				if (staffUserId) {
+					await notify({
+						recipientUserId: staffUserId,
+						type: "ticket.assigned",
+						title: `Ticket assigned: ${updated.subject}`,
+						body: `${updated.applicantName} — ${updated.category}`,
+						link: "/helpdesk",
+					});
+				}
+			} catch {
+				// Notification failure must not block the status update.
+			}
+		})().catch(() => {});
+	}
+
+	return result;
 }

@@ -119,31 +119,59 @@ export function PortalLayout() {
 				</nav>
 
 				<div className="portal__user">
-					{authUser ? (
-						<>
-							<p className="portal__user-name">{authUser.name}</p>
-							<p className="portal__user-email muted">{authUser.email}</p>
-							<button
-								type="button"
-								className="btn btn--ghost btn--sm"
-								onClick={async () => {
-									try {
-										await signOut();
-									} catch (err) {
-										console.error("Sign out failed on the server", err);
-										toast.error(
-											"Couldn't reach the server to end your session — please try again. Your account is still signed in.",
-										);
-									}
-								}}
-							>
-								Sign out
-							</button>
-						</>
-					) : null}
-					<Link to="/" className="link-arrow portal__home">
-						← Public site
-					</Link>
+					{authUser && (
+						<div className="portal__user-card">
+							<div className="portal__user-avatar">
+								<span>
+									{authUser.name
+										? authUser.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
+										: "AP"}
+								</span>
+								<span className="portal__user-status-dot" title="Active Account" />
+							</div>
+							<div className="portal__user-info">
+								<p className="portal__user-name" title={authUser.name}>{authUser.name}</p>
+								<div className="portal__user-role-badge">
+									Applicant · Student Portal
+								</div>
+							</div>
+						</div>
+					)}
+
+					<div className="portal__user-actions">
+						<Link
+							to="/"
+							className="portal__user-action-btn"
+							title="Open Public Website"
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+							<span>Public Site</span>
+						</Link>
+						<button
+							type="button"
+							className="portal__user-action-btn portal__user-action-btn--signout"
+							title="Sign Out of Portal"
+							onClick={async () => {
+								try {
+									await signOut();
+								} catch (err) {
+									console.error("Sign out failed on the server", err);
+									toast.error(
+										"Couldn't reach the server to end your session — please try again. Your account is still signed in.",
+									);
+								}
+							}}
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+							<span>Sign out</span>
+						</button>
+					</div>
+
+					<div className="portal__user-brand-stamp">
+						<span>Century NIT Consult</span>
+						<span>•</span>
+						<span>Student Portal</span>
+					</div>
 				</div>
 			</aside>
 

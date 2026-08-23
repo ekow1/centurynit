@@ -280,37 +280,45 @@ export function EnterpriseLayout() {
 
 				<div className="portal__user">
 					{opsUser && (
-						<>
-							<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
-								<span style={{
-									width: "32px",
-									height: "32px",
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									background: "#fff",
-									color: "#000",
-									fontSize: "var(--text-xs)",
-									fontFamily: "var(--font-mono)",
-									fontWeight: 600,
-									flexShrink: 0,
-								}}>
-									{opsUser.avatar}
-								</span>
-								<div style={{ minWidth: 0 }}>
-									<p className="portal__user-name">{opsUser.name}</p>
-									<p className="portal__user-email">{roleName}</p>
+						<div className="portal__user-card">
+							<div className="portal__user-avatar">
+								<span>{opsUser.avatar}</span>
+								<span className="portal__user-status-dot" title="Active Ops Session" />
+							</div>
+							<div className="portal__user-info">
+								<p className="portal__user-name" title={opsUser.name}>{opsUser.name}</p>
+								<div className="portal__user-role-badge">
+									{roleName} · {staffBranchName(opsUser.branch)}
 								</div>
 							</div>
-							<p style={{ fontSize: "var(--text-xs)", opacity: 0.8, color: "#fff" }}>{staffBranchName(opsUser.branch)}</p>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={opsSignOut} style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
-								Sign out
-							</button>
-						</>
+						</div>
 					)}
-					<a href={publicSiteUrl()} className="link-arrow portal__home">
-						← Public site
-					</a>
+
+					<div className="portal__user-actions">
+						<a
+							href={publicSiteUrl()}
+							className="portal__user-action-btn"
+							title="Open Public Site"
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+							<span>Public Site</span>
+						</a>
+						<button
+							type="button"
+							onClick={opsSignOut}
+							className="portal__user-action-btn portal__user-action-btn--signout"
+							title="Sign Out of Operations Console"
+						>
+							<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+							<span>Sign out</span>
+						</button>
+					</div>
+
+					<div className="portal__user-brand-stamp">
+						<span>Century NIT Consult</span>
+						<span>•</span>
+						<span>Ops Center</span>
+					</div>
 				</div>
 			</aside>
 

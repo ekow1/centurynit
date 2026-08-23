@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { staffApi } from "century-nit-core/api";
 import { getMfaEnrollment } from "../lib/api";
-import { useOpsAuth, ROLE_HOME, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
+import { useOpsAuth, ROLE_HOME, type OpsModule } from "./OpsAuthContext";
 import type { ReactNode } from "react";
 
 function Spinner() {
@@ -101,18 +101,7 @@ export function OpsRequireModule({
 
 	if (!hasPermission(module)) {
 		const home = opsRole ? ROLE_HOME[opsRole] : "/login";
-		return (
-			<div className="ops-forbidden" role="alert">
-				<h1 className="ops-forbidden__title">Not available to your role</h1>
-				<p className="ops-forbidden__body">
-					You are signed in as <strong>{opsRole ? ROLE_LABELS[opsRole] : "an unknown role"}</strong>,
-					which does not have access to this area.
-				</p>
-				<Link className="ops-forbidden__link" to={home}>
-					Back to your workspace
-				</Link>
-			</div>
-		);
+		return <Navigate to={home} replace />;
 	}
 
 	return <>{children}</>;

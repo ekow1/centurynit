@@ -44,7 +44,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
 import { canSeeApplication } from "./cases.js";
-import { publishChatEvent } from "./chat.js";
+import { publishChatEvent, notifyOfflineParticipants } from "./chat.js";
 import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow } from "./message-serializer.js";
 
@@ -977,6 +977,14 @@ export async function sendCustomerMessage(
 					link: "/inbox",
 				})),
 			);
+
+		// Email: notify offline staff participants via email so they don't
+		// miss the message while away from the console.
+		await notifyOfflineParticipants(
+			conversationId,
+			{ id: user.id, name: user.name ?? "A client", email: user.email },
+			created,
+		);
 		} catch {
 			// Notification failure must not block the message send.
 		}

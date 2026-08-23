@@ -27,7 +27,7 @@ import { queueEmail } from "../worker/queues.js";
 import type { QueuedEmail } from "./notifications.js";
 import { renderBookingEmail } from "../lib/email-templates.js";
 import { env } from "../env.js";
-import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId } from "./notify.js";
+import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId, isStaffActive } from "./notify.js";
 import { publishToUser } from "../worker/pubsub.js";
 import { serializeMessageRow, hydrateMessages, getMessageReactions } from "./message-serializer.js";
 
@@ -1067,7 +1067,7 @@ export async function getStaffDirectory(): Promise<StaffDirectory> {
 
 /* ── Email notifications for offline participants ───────────────────────── */
 
-async function notifyOfflineParticipants(
+export async function notifyOfflineParticipants(
 	conversationId: string,
 	sender: { id: string; name: string; email: string },
 	sentMessage: typeof messages.$inferSelect,
@@ -1103,12 +1103,11 @@ async function notifyOfflineParticipants(
 
 		if (!authUser?.email) continue;
 
-		// Determine if the participant is "offline" (no read within last 5 min)
-		const isRecentlyActive =
-			p.lastReadAt &&
-			Date.now() - p.lastReadAt.getTime() < 5 * 60 * 1000;
-
-		if (isRecentlyActive) continue; // they're active, no email needed
+		// Determine if the participant is "offline" using staff presence
+		// (heartbeat within last 15 min, not explicitly offline). If they're
+		// active, skip the email — they'll get the SSE + push notification.
+		const isActive = await isStaffActive(p.opsUserId);
+		if (isActive) continue;
 
 		const preview = sentMessage.content.length > 120
 			? `${sentMessage.content.slice(0, 120)}...`

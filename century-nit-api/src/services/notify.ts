@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "../db/index.js";
-import { notifications, opsUsers } from "../db/schema.js";
+import { notifications, opsUsers, staffPresence } from "../db/schema.js";
 import { queueEmail, queuePush } from "../worker/queues.js";
 import { publishToUser } from "../worker/pubsub.js";
 import type { QueuedEmail } from "./notifications.js";
@@ -280,4 +280,58 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 				eq(notifications.read, false),
 			),
 		);
+}
+
+/* ── Presence-based channel selection ──────────────────────────────────── */
+
+const PRESENCE_STALE_MS = 15 * 60 * 1000;
+
+/**
+ * Check if a staff member is currently active based on their heartbeat.
+ *
+ * Uses the same 15-minute rule as getPresence() in communication.ts:
+ * if `lastSeenAt` is within the last 15 minutes AND status is not explicitly
+ * "offline", the staff member is considered active (online). Used to decide
+ * whether to send an email (inactive) or just push (active) for chat messages.
+ */
+export async function isStaffActive(opsUserId: string): Promise<boolean> {
+	const [row] = await db
+		.select({ status: staffPresence.status, lastSeenAt: staffPresence.lastSeenAt })
+		.from(staffPresence)
+		.where(eq(staffPresence.opsUserId, opsUserId))
+		.limit(1);
+	if (!row) return false;
+	if (row.status === "offline") return false;
+	if (!row.lastSeenAt) return false;
+	return Date.now() - row.lastSeenAt.getTime() < PRESENCE_STALE_MS;
+}
+
+/**
+ * Batch version of isStaffActive: returns the set of opsUserIds that are
+ * currently INACTIVE (offline / stale / no presence row). Callers use this
+ * to decide which staff should receive an email alongside the push.
+ */
+export async function getInactiveStaffOpsUserIds(
+	opsUserIds: string[],
+): Promise<Set<string>> {
+	if (opsUserIds.length === 0) return new Set();
+	const rows = await db
+		.select({
+			opsUserId: staffPresence.opsUserId,
+			status: staffPresence.status,
+			lastSeenAt: staffPresence.lastSeenAt,
+		})
+		.from(staffPresence)
+		.where(inArray(staffPresence.opsUserId, opsUserIds));
+	const activeIds = new Set<string>();
+	for (const row of rows) {
+		if (
+			row.status !== "offline" &&
+			row.lastSeenAt &&
+			Date.now() - row.lastSeenAt.getTime() < PRESENCE_STALE_MS
+		) {
+			activeIds.add(row.opsUserId);
+		}
+	}
+	return new Set(opsUserIds.filter((id) => !activeIds.has(id)));
 }

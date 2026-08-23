@@ -584,3 +584,19 @@ export function fetchPaystackLiveTransactions(): Promise<{ status: boolean; data
 	return apiFetch<{ status: boolean; data: any[]; error?: string }>(`${API_PREFIX}/payments/paystack/transactions`);
 }
 
+export type ReconcileResult = {
+	reconciled: boolean;
+	reference: string;
+	status: string;
+	bookingId: string | null;
+	invoiceId: string | null;
+	message: string;
+};
+
+export function reconcilePaystackTransaction(reference: string): Promise<ReconcileResult> {
+	return apiFetch<ReconcileResult>(`${API_PREFIX}/payments/reconcile-paystack`, {
+		method: "POST",
+		body: JSON.stringify({ reference }),
+	});
+}
+

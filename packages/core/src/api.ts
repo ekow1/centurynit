@@ -248,7 +248,7 @@ export const bookingsApi = {
 		return request(`${API_PREFIX}/bookings/checkout`, { method: "POST", ...json(input) });
 	},
 
-	verifyPayment(reference: string): Promise<Booking> {
+	verifyPayment(reference: string): Promise<Booking & { status?: string; message?: string }> {
 		return request(`${API_PREFIX}/bookings/verify-payment`, { method: "POST", ...json({ reference }) });
 	},
 

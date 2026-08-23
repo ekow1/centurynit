@@ -116,6 +116,7 @@ export type PaystackVerifiedTransaction = {
 	amountCents: number;
 	currency: string;
 	invoiceId?: string;
+	customerEmail?: string;
 	metadata?: Record<string, any>;
 };
 
@@ -137,6 +138,7 @@ export async function verifyPaystackTransaction(
 			status?: string;
 			amount?: number;
 			currency?: string;
+			customer?: { email?: string };
 			metadata?: { invoiceId?: string } & Record<string, any>;
 		};
 	};
@@ -148,6 +150,7 @@ export async function verifyPaystackTransaction(
 		amountCents: body.data.amount ?? 0,
 		currency: body.data.currency ?? "USD",
 		invoiceId: body.data.metadata?.invoiceId,
+		customerEmail: body.data.customer?.email,
 		metadata: body.data.metadata,
 	};
 }

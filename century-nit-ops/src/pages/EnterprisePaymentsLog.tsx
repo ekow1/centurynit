@@ -4,7 +4,7 @@ import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { fmtGhs, fmtUsd, GHS_PER_USD } from "./currency";
 import { methodGateway } from "century-nit-core/ops";
-import { fetchPaystackLiveTransactions } from "../lib/api";
+import { fetchPaystackLiveTransactions, reconcilePaystackTransaction } from "../lib/api";
 
 /* ── Filter Types & Presets ──────────────────────────────────────────────── */
 const RANGES = [
@@ -382,6 +382,31 @@ export function EnterprisePaymentsLog() {
 	const [verifyingId, setVerifyingId] = useState<string | null>(null);
 	const [verifyResult, setVerifyResult] = useState<string | null>(null);
 
+	// Reconcile: backfill missing booking/invoice/payment_transactions for a
+	// Paystack transaction that succeeded but was never recorded in our DB
+	// (the 409-on-refresh bug orphaned payments this way).
+	const [reconcilingRef, setReconcilingRef] = useState<string | null>(null);
+	const [reconcileMsg, setReconcileMsg] = useState<string | null>(null);
+
+	const handleReconcile = useCallback(async (tx: EnrichedTransaction) => {
+		setReconcilingRef(tx.reference);
+		setReconcileMsg(null);
+		try {
+			const result = await reconcilePaystackTransaction(tx.reference);
+			setReconcileMsg(`${result.reconciled ? "Reconciled" : "No action"}: ${result.message}`);
+			if (result.reconciled) {
+				// Reload live Paystack data so the invoice link shows up.
+				void loadLivePaystack();
+			}
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Reconciliation failed.";
+			setReconcileMsg(`Failed: ${msg}`);
+		} finally {
+			setReconcilingRef(null);
+			setTimeout(() => setReconcileMsg(null), 8000);
+		}
+	}, [loadLivePaystack]);
+
 	const handleVerifyPaystack = useCallback(async (tx: EnrichedTransaction) => {
 		setVerifyingId(tx.id);
 		setVerifyResult(null);
@@ -534,6 +559,12 @@ export function EnterprisePaymentsLog() {
 				{syncMessage && (
 					<div style={{ fontSize: "11px", color: "#065f46", background: "#ecfdf5", padding: "4px 8px", border: "1px solid #a7f3d0", fontWeight: 600 }}>
 						✓ {syncMessage}
+					</div>
+				)}
+
+				{reconcileMsg && (
+					<div style={{ fontSize: "11px", color: reconcileMsg.startsWith("Failed") ? "#991b1b" : "#065f46", background: reconcileMsg.startsWith("Failed") ? "#fef2f2" : "#ecfdf5", padding: "4px 8px", border: `1px solid ${reconcileMsg.startsWith("Failed") ? "#fecaca" : "#a7f3d0"}`, fontWeight: 600 }}>
+						{reconcileMsg.startsWith("Failed") ? "⚠" : "✓"} {reconcileMsg}
 					</div>
 				)}
 			</div>
@@ -882,6 +913,30 @@ export function EnterprisePaymentsLog() {
 												>
 													Receipt
 												</button>
+
+												{tx.gateway === "paystack" && tx.status === "success" && !tx.invoiceId && (
+													<button
+														type="button"
+														onClick={(e) => {
+															e.stopPropagation();
+															void handleReconcile(tx);
+														}}
+														disabled={reconcilingRef === tx.reference}
+														title="Backfill the missing booking, invoice, and payment record from this Paystack transaction."
+														style={{
+															background: "#18181b",
+															border: "1px solid #18181b",
+															fontSize: "10px",
+															fontWeight: 700,
+															padding: "3px 8px",
+															cursor: reconcilingRef === tx.reference ? "wait" : "pointer",
+															color: "#ffffff",
+															opacity: reconcilingRef === tx.reference ? 0.6 : 1,
+														}}
+													>
+														{reconcilingRef === tx.reference ? "Reconciling…" : "Reconcile"}
+													</button>
+												)}
 											</div>
 										</td>
 									</tr>

@@ -308,6 +308,20 @@ bookingsRouter.openapi(
 				if (fallback) {
 					return c.json(toBookingResponse(fallback), 200);
 				}
+
+				// The slot was taken by ANOTHER user — the payment already
+				// succeeded so we can't just show "slot taken". Return a
+				// pending state so the frontend shows a friendly message and
+				// ops can follow up to reschedule.
+				return c.json({
+					reference: null,
+					status: "pending_reschedule",
+					message:
+						"Your payment was received but the selected time is no longer available. Our team will contact you shortly to schedule your consultation.",
+					paymentReference: reference,
+					amountCents: txn.amountCents,
+					serviceId: bookingPayload.serviceId,
+				}, 200);
 			}
 			throw err;
 		}

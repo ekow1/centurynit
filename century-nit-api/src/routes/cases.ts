@@ -111,9 +111,11 @@ import { env } from "../env.js";
  * consultants, officers). They never belong in the client portal, so the
  * `/me/notifications` read excludes them — a staff member who also has a client
  * profile (dual-role account) must not see "New lead received", "consultation
- * assigned", etc. on the user end. Types that go to BOTH a client and a staff
- * member (booking.cancelled, booking.rescheduled, chat.message) are intentionally
- * absent so applicants still see their own.
+ * assigned", etc. on the user end.
+ *
+ * `chat.message` is staff-to-staff chat — the applicant-facing equivalent is
+ * `chat.reply`, which is intentionally NOT listed here so applicants still see
+ * their own consultant replies. `ticket.assigned` is also staff-only.
  */
 const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"lead.new",
@@ -122,6 +124,8 @@ const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"consultation.assigned",
 	"document.uploaded",
 	"ticket.new",
+	"ticket.assigned",
+	"chat.message",
 ] as const;
 
 const idParams = z.object({ id: z.string().uuid() });

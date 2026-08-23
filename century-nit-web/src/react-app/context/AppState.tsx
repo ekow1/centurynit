@@ -61,6 +61,9 @@ import {
  * never surface them — not from the `/me/notifications` read (the API filters
  * these) nor from the live SSE stream. Defined here (not imported from shared)
  * so the portal build does not depend on a freshly-built shared `dist/`.
+ *
+ * `chat.message` is staff-to-staff chat — applicants get `chat.reply` instead.
+ * `ticket.assigned` is also staff-only.
  */
 const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"lead.new",
@@ -69,6 +72,8 @@ const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"consultation.assigned",
 	"document.uploaded",
 	"ticket.new",
+	"ticket.assigned",
+	"chat.message",
 ] as const;
 function isStaffOnlyNotification(type: string): boolean {
 	return (STAFF_ONLY_NOTIFICATION_TYPES as readonly string[]).includes(type);

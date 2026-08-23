@@ -577,3 +577,10 @@ export function updateSchoolStatus(
 		body: JSON.stringify(body),
 	});
 }
+
+/* ── Paystack Transactions (Ops) ── */
+
+export function fetchPaystackLiveTransactions(): Promise<{ status: boolean; data: any[]; error?: string }> {
+	return apiFetch<{ status: boolean; data: any[]; error?: string }>(`${API_PREFIX}/payments/paystack/transactions`);
+}
+

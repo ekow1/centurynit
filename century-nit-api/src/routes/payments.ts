@@ -12,6 +12,7 @@ import {
 	processPaystackWebhook,
 	verifyAndSettlePayment,
 } from "../services/payments.js";
+import { listPaystackTransactions } from "../services/paystack.js";
 
 const verifyParams = z.object({ reference: z.string().min(1) });
 const verifyQuery = z.object({ gateway: z.enum(["paystack", "stripe"]).default("paystack") });
@@ -94,3 +95,30 @@ paymentsRouter.openapi(
 		return c.json({ status: "success" });
 	},
 );
+
+/* ── GET /api/v1/payments/paystack/transactions ────────────────────────────── */
+
+paymentsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/paystack/transactions",
+		tags: ["Payments"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ status: z.boolean(), data: z.array(z.any()) }) } },
+				description: "Live transactions list from Paystack",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const data = await listPaystackTransactions({ perPage: 100 });
+			return c.json({ status: true, data });
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "Could not fetch Paystack transactions";
+			return c.json({ status: false, data: [], error: msg });
+		}
+	},
+);
+

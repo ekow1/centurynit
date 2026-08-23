@@ -29,7 +29,7 @@ import {
 	type BookingRow,
 } from "../services/booking.js";
 import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
-import { createConsultationInvoice } from "../services/invoice.js";
+import { createConsultationInvoice, getFeeSchedule } from "../services/invoice.js";
 import {
 	assignBookingSchema,
 	assignableEmployeeSchema,
@@ -196,10 +196,16 @@ bookingsRouter.openapi(
 		const user = c.get("user");
 		const body = c.req.valid("json");
 		const origin = c.req.header("origin") || c.req.header("referer")?.split("/").slice(0, 3).join("/") || "https://centurynit.softclicksolutions.com";
-		
+
+		// Live consultation fee from platform_settings (CONSULTATION_FEE_CENTS),
+		// falling back to the shared default when unset. Previously hardcoded at
+		// 7500 cents ($75), so Paystack always charged GHS 1,125 regardless of
+		// what ops configured.
+		const fees = await getFeeSchedule();
+
 		const checkout = await createPaystackCheckout({
 			email: user.email,
-			amountCents: 7500, // Fixed consultation fee
+			amountCents: fees.consultationCents,
 			callbackUrl: `${origin}/portal/pay?paystack=1&booking=consultation`,
 			customMetadata: { bookingPayload: body },
 		});
@@ -363,13 +369,14 @@ bookingsRouter.openapi(
 					branchId: booking.branchId,
 					type: booking.type,
 				});
+				const fees = await getFeeSchedule();
 				await createConsultationInvoice({
 					clientUserId: user.id,
 					applicantName: user.name ?? user.email,
 					applicantEmail: user.email,
 					bookingId: booking.id,
 					reference: booking.reference,
-					amountCents: 7500,
+					amountCents: fees.consultationCents,
 					issuedBy: "System",
 				});
 			} catch {

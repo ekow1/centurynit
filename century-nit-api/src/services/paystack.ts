@@ -170,3 +170,32 @@ export async function verifyPaystackSignature(
 	const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
 	return expected === signature.toLowerCase();
 }
+
+/** Fetch live transactions directly from the Paystack API. */
+export async function listPaystackTransactions(params?: {
+	perPage?: number;
+	page?: number;
+}): Promise<any[]> {
+	const secretKey = await paystackSecretKey();
+	const perPage = params?.perPage ?? 50;
+	const page = params?.page ?? 1;
+	const response = await fetch(`${PAYSTACK_API}/transaction?perPage=${perPage}&page=${page}`, {
+		headers: {
+			Authorization: `Bearer ${secretKey}`,
+		},
+	});
+	const body = (await response.json()) as {
+		status?: boolean;
+		message?: string;
+		data?: any[];
+	};
+	if (!response.ok || !body.status || !Array.isArray(body.data)) {
+		throw new HttpError(
+			502,
+			"PAYMENT_GATEWAY_ERROR",
+			`Could not fetch Paystack transactions${body.message ? `: ${body.message}` : "."}`,
+		);
+	}
+	return body.data;
+}
+

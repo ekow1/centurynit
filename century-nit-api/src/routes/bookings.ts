@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { opsUsers } from "../db/schema.js";
@@ -244,6 +244,32 @@ bookingsRouter.openapi(
 			throw new HttpError(400, "BAD_REQUEST", "Transaction missing booking payload");
 		}
 		
+		// Idempotency: if the applicant refreshes the callback page (or React
+		// StrictMode double-fires the effect), this route is called again with
+		// the same Paystack reference. The first call already created the
+		// booking, so the slot is now taken — a second createBooking would
+		// throw 409 SLOT_TAKEN even though the payment succeeded. Deduplicate
+		// by matching the client + serviceId + startsAt of an existing booking.
+		const existingStartsAt = zonedTimeToUtc(
+			bookingPayload.date,
+			bookingPayload.time,
+			bookingPayload.timezone,
+		);
+		const [existing] = await db
+			.select()
+			.from(bookingsTable)
+			.where(
+				and(
+					eq(bookingsTable.clientUserId, user.id),
+					eq(bookingsTable.serviceId, bookingPayload.serviceId),
+					eq(bookingsTable.startsAt, existingStartsAt),
+				),
+			)
+			.limit(1);
+		if (existing) {
+			return c.json(toBookingResponse(existing), 200);
+		}
+
 		const serviceName = resolveServiceName(bookingPayload.serviceId);
 		const booking = await createBooking({
 			data: bookingPayload,

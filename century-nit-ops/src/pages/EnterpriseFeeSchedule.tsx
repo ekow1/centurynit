@@ -33,7 +33,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Initial Advisory Consultation",
 		category: "Consultations",
 		description: "Standard 45-minute comprehensive university and visa pathway evaluation session.",
-		defaultCents: 7500,
+		defaultCents: 100,
 		billingStage: "Upon Booking / Pre-session",
 		badge: "Advisory",
 	},
@@ -42,7 +42,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "University Application Base Fee",
 		category: "Admissions & Processing",
 		description: "Initial application setup, credential review, and admissions portal filing.",
-		defaultCents: 35000,
+		defaultCents: 100,
 		billingStage: "Upon Application Initiation",
 		badge: "Admissions",
 	},
@@ -51,7 +51,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Additional University Submission",
 		category: "Admissions & Processing",
 		description: "Supplementary fee per each additional university beyond the first institution.",
-		defaultCents: 10000,
+		defaultCents: 100,
 		billingStage: "Per Additional Institution",
 		badge: "Per-School",
 	},
@@ -60,7 +60,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Official Document Verification & Notarization",
 		category: "Admissions & Processing",
 		description: "Transcript notarization, WES/credential evaluation assistance, and apostille verification.",
-		defaultCents: 4000,
+		defaultCents: 100,
 		billingStage: "Pre-submission Review",
 		badge: "Verification",
 	},
@@ -69,7 +69,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Program Matching & Eligibility Audit",
 		category: "Admissions & Processing",
 		description: "Deep academic transcript evaluation and tailored scholarship match analysis.",
-		defaultCents: 3000,
+		defaultCents: 100,
 		billingStage: "Advisory Stage",
 		badge: "Matching",
 	},
@@ -78,7 +78,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Visa Filing & Documentation Guidance",
 		category: "Visa & Immigration",
 		description: "Embassy filing package preparation, CAS review, financial statement verification, and interview prep.",
-		defaultCents: 35000,
+		defaultCents: 100,
 		billingStage: "Upon Unconditional Offer / CAS",
 		badge: "Immigration",
 	},
@@ -87,7 +87,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Embassy Biometrics & Appointment Coordination",
 		category: "Visa & Immigration",
 		description: "VFS / TLScontact appointment booking, priority courier handling, and document scanning assistance.",
-		defaultCents: 4000,
+		defaultCents: 100,
 		billingStage: "Post-Submission Stage",
 		badge: "Biometrics",
 	},
@@ -96,7 +96,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Certified Document Translation",
 		category: "Visa & Immigration",
 		description: "Certified legal and academic document translation per certified page.",
-		defaultCents: 3000,
+		defaultCents: 100,
 		billingStage: "As Requested",
 		badge: "Translation",
 	},
@@ -105,7 +105,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Traveling & Flight Booking Assistance",
 		category: "Travel & Relocation",
 		description: "Flight itinerary coordination, student discount fares, and baggage allowance assistance.",
-		defaultCents: 5000,
+		defaultCents: 100,
 		billingStage: "Post-Visa Approval",
 		badge: "Travel",
 	},
@@ -114,7 +114,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Student Housing & Accommodation Guidance",
 		category: "Travel & Relocation",
 		description: "University dorm reservation support, student apartment search, and lease review.",
-		defaultCents: 10000,
+		defaultCents: 100,
 		billingStage: "Pre-Departure Stage",
 		badge: "Housing",
 	},
@@ -123,7 +123,7 @@ export const FEE_DEFINITIONS: FeeItem[] = [
 		title: "Pre-Departure & Airport Arrival Support",
 		category: "Travel & Relocation",
 		description: "Cultural & academic orientation, transit guidance, and airport arrival assistance.",
-		defaultCents: 4000,
+		defaultCents: 100,
 		billingStage: "Pre-Departure Stage",
 		badge: "Relocation",
 	},
@@ -369,16 +369,16 @@ export function EnterpriseFeeSchedule() {
 						<tr style={{ borderBottom: "1px solid #000" }}>
 							<th style={feeHeader}>Service</th>
 							<th style={feeHeader}>Stage</th>
-							<th style={{ ...feeHeader, textAlign: "right" }}>Rate</th>
-							<th style={{ ...feeHeader, textAlign: "right" }}>Est. GH₵</th>
+							<th style={{ ...feeHeader, textAlign: "right" }}>GHS (₵)</th>
+							<th style={{ ...feeHeader, textAlign: "right" }}>USD Equivalent</th>
 							<th style={feeHeader} />
 						</tr>
 					</thead>
 					<tbody>
 						{filteredFees.map((fee) => {
 							const cents = getFeeValue(fee.key, fee.defaultCents);
-							const dollars = centsToDollars(cents);
-							const approxGhs = (Number.parseFloat(dollars) * 15.5).toFixed(2);
+							const ghs = centsToDollars(cents);
+							const usd = (Number.parseFloat(ghs) / 15.5).toFixed(2);
 
 							return (
 								<tr key={fee.key} style={{ borderBottom: "1px solid #e5e5e5" }}>
@@ -402,8 +402,8 @@ export function EnterpriseFeeSchedule() {
 										</div>
 									</td>
 									<td style={{ ...feeCell, color: "#6b6b6b", fontSize: "0.75rem" }}>{fee.billingStage}</td>
-									<td style={{ ...feeCell, textAlign: "right", fontWeight: 600 }}>${dollars} USD</td>
-									<td style={{ ...feeCell, textAlign: "right", color: "#6b6b6b" }}>≈ GH₵ {approxGhs}</td>
+									<td style={{ ...feeCell, textAlign: "right", fontWeight: 600 }}>GH₵ {ghs}</td>
+									<td style={{ ...feeCell, textAlign: "right", color: "#6b6b6b" }}>≈ ${usd} USD</td>
 									<td style={feeCell}>
 										{isSuperAdmin && (
 											<button

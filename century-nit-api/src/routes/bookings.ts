@@ -321,7 +321,7 @@ bookingsRouter.openapi(
 					paymentReference: reference,
 					amountCents: txn.amountCents,
 					serviceId: bookingPayload.serviceId,
-				}, 200);
+				} as unknown as Booking, 200);
 			}
 			throw err;
 		}

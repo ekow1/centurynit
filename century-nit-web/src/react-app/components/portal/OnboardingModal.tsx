@@ -12,6 +12,7 @@ export function OnboardingModal() {
 
 	const [fullName, setFullName] = useState("");
 	const [phone, setPhone] = useState("");
+	const [email, setEmail] = useState("");
 	const [referralSource, setReferralSource] = useState("");
 
 	const isPhoneAuth = authUser?.method === "phone";
@@ -22,15 +23,27 @@ export function OnboardingModal() {
 		authUser?.method === "apple" ||
 		authUser?.method === "linkedin";
 
-	// Fetch real applicant from server on mount to check if details are missing.
-	// A brand-new user has no applicant row yet — the modal should still show so
-	// they can provide their name/phone/referral, which creates the applicant via
-	// PATCH /me/application.
 	useEffect(() => {
 		if (!authUser) {
 			setLoading(false);
 			return;
 		}
+
+		// Don't interrupt if user is completing payment or already dismissed
+		const isPaymentFlow =
+			window.location.search.includes("paystack") ||
+			window.location.search.includes("verify") ||
+			window.location.pathname.includes("/pay");
+
+		const dismissedKey = `cn_onboarding_dismissed_${authUser.id || "user"}`;
+		const isDismissed = localStorage.getItem(dismissedKey) === "true";
+
+		if (isPaymentFlow || isDismissed) {
+			setLoading(false);
+			setShow(false);
+			return;
+		}
+
 		let cancelled = false;
 		Promise.all([meApi.application(), meApi.portalState()])
 			.then(([res, portalState]) => {
@@ -38,31 +51,32 @@ export function OnboardingModal() {
 				const app = res.applicant;
 				const onboardingDone = portalState?.onboardingCompleted === true;
 
-				// Pre-fill name from server or auth (social sign-in populates authUser.name)
+				if (onboardingDone) {
+					setShow(false);
+					return;
+				}
+
+				// Pre-fill name
 				const serverName = app?.name?.trim() || "";
 				const authName = authUser.name?.trim() || "";
 				const displayName = serverName || authName;
 				setFullName(displayName);
 
-				// Pre-fill phone
+				// Pre-fill phone / email
 				if (isPhoneAuth) {
-					setPhone(
-						authUser.email.replace("phone_", "").replace("@example.com", ""),
-					);
+					setPhone(authUser.email.replace("phone_", "").replace("@example.com", ""));
+					setEmail(authUser.email.includes("@example.com") ? "" : authUser.email);
 				} else if (app?.phone) {
 					setPhone(app.phone);
 				}
 
-				const serverReferral = (app?.profile as Record<string, string>)
-					?.referralSource;
+				const serverReferral = (app?.profile as Record<string, string>)?.referralSource;
 				if (serverReferral) setReferralSource(serverReferral);
 
-				// Show modal only if onboarding wasn't completed and a field is missing.
-				// For a new user with no applicant record, all fields are missing.
+				// Only show if essential details are missing (e.g. no name or no phone)
 				const needsName = !displayName;
 				const needsPhone = isEmailAuth && !app?.phone;
-				const needsReferral = !serverReferral;
-				setShow(!onboardingDone && (needsName || needsPhone || needsReferral));
+				setShow(needsName || needsPhone);
 			})
 			.catch(() => {
 				/* don't block portal on network error */
@@ -77,41 +91,40 @@ export function OnboardingModal() {
 
 	if (!authUser || loading || !show) return null;
 
+	const handleDismiss = () => {
+		const dismissedKey = `cn_onboarding_dismissed_${authUser.id || "user"}`;
+		localStorage.setItem(dismissedKey, "true");
+		setShow(false);
+		void meApi.updatePortalState({ onboardingCompleted: true }).catch(() => {});
+	};
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setSaving(true);
 		try {
 			await meApi.updateProfile({
 				name: fullName.trim() || undefined,
-				...(isEmailAuth ? { phone } : {}),
-				profile: { referralSource },
+				...(isEmailAuth ? { phone: phone.trim() || undefined } : {}),
+				profile: {
+					referralSource: referralSource || undefined,
+					...(isPhoneAuth && email.trim() ? { email: email.trim() } : {}),
+				},
 			});
 			await meApi.updatePortalState({ onboardingCompleted: true });
-			// Sync local auth state so the name shows immediately everywhere
-			if (fullName.trim()) {
-				updateApplication({
-					firstName: fullName.trim().split(" ")[0] || "",
-					lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
-					phone,
-					referralSource,
-					onboardingCompleted: true,
-				});
-			} else {
-				updateApplication({
-					phone,
-					referralSource,
-					onboardingCompleted: true,
-				});
-			}
-			setShow(false);
-		} catch {
-			// Still close — the data might have saved; user can retry on next refresh
+
+			const dismissedKey = `cn_onboarding_dismissed_${authUser.id || "user"}`;
+			localStorage.setItem(dismissedKey, "true");
+
 			updateApplication({
+				firstName: fullName.trim().split(" ")[0] || "",
+				lastName: fullName.trim().split(" ").slice(1).join(" ") || "",
 				phone,
 				referralSource,
 				onboardingCompleted: true,
 			});
 			setShow(false);
+		} catch {
+			handleDismiss();
 		} finally {
 			setSaving(false);
 		}
@@ -127,29 +140,51 @@ export function OnboardingModal() {
 				inset: 0,
 				backgroundColor: "rgba(0,0,0,0.6)",
 				zIndex: 9999,
+				padding: "16px",
 			}}
 		>
 			<div
 				className="card fade-in"
 				style={{
+					position: "relative",
 					width: "100%",
 					maxWidth: "420px",
 					padding: "2rem",
-					boxShadow:
-						"0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+					background: "#ffffff",
+					boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
 				}}
 			>
-				<h2 style={{ marginBottom: "0.5rem", fontSize: "1.4rem" }}>
+				{/* Dismiss button */}
+				<button
+					type="button"
+					onClick={handleDismiss}
+					style={{
+						position: "absolute",
+						top: "16px",
+						right: "16px",
+						background: "transparent",
+						border: "none",
+						fontSize: "16px",
+						fontWeight: 700,
+						color: "#71717a",
+						cursor: "pointer",
+					}}
+					title="Remind me later"
+				>
+					✕
+				</button>
+
+				<h2 style={{ marginBottom: "0.5rem", fontSize: "1.3rem", fontWeight: 800 }}>
 					Welcome to Century NIT!
 				</h2>
 				<p
 					style={{
 						color: "var(--muted-foreground)",
 						marginBottom: "1.5rem",
-						fontSize: "0.9rem",
+						fontSize: "0.85rem",
 					}}
 				>
-					Just a few more details to complete your account setup.
+					Just a few details to complete your account setup.
 				</p>
 				<form onSubmit={handleSubmit}>
 					<Field label="Full Name" htmlFor="ob-name">
@@ -170,6 +205,7 @@ export function OnboardingModal() {
 								type="tel"
 								value={phone}
 								onChange={(e) => setPhone(e.target.value)}
+								placeholder="+233 24 000 0000"
 								required
 								fullBorder
 							/>
@@ -180,9 +216,9 @@ export function OnboardingModal() {
 							<Input
 								id="ob-email"
 								type="email"
-								value={phone}
-								onChange={(e) => setPhone(e.target.value)}
-								required
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+								placeholder="name@example.com"
 								fullBorder
 							/>
 						</Field>
@@ -198,9 +234,8 @@ export function OnboardingModal() {
 							}}
 							value={referralSource}
 							onChange={(e) => setReferralSource(e.target.value)}
-							required
 						>
-							<option value="">Select an option</option>
+							<option value="">Select an option (optional)</option>
 							<option value="Social Media">
 								Social Media (Facebook, Instagram, etc.)
 							</option>
@@ -212,10 +247,25 @@ export function OnboardingModal() {
 							<option value="Other">Other</option>
 						</select>
 					</Field>
-					<div style={{ marginTop: "1.5rem" }}>
+					<div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "1.5rem" }}>
 						<Button type="submit" block arrow disabled={saving}>
 							{saving ? "Saving..." : "Continue to Dashboard"}
 						</Button>
+						<button
+							type="button"
+							onClick={handleDismiss}
+							style={{
+								background: "transparent",
+								border: "none",
+								color: "#71717a",
+								fontSize: "12px",
+								padding: "6px",
+								cursor: "pointer",
+								textDecoration: "underline",
+							}}
+						>
+							Remind me later
+						</button>
 					</div>
 				</form>
 			</div>

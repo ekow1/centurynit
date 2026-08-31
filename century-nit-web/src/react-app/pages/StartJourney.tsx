@@ -66,6 +66,24 @@ export function StartJourney() {
 	const [resendCooldown, setResendCooldown] = useState(0);
 	const [mfaCode, setMfaCode] = useState("");
 
+	// Debounced real-time email existence check for both password and code tabs.
+	useEffect(() => {
+		const mail = email.trim().toLowerCase();
+		if (!mail.includes("@")) {
+			setEmailExists(null);
+			return;
+		}
+		const timer = window.setTimeout(async () => {
+			try {
+				const exists = await checkEmailExists(mail);
+				setEmailExists(exists);
+			} catch {
+				setEmailExists(null);
+			}
+		}, 350);
+		return () => window.clearTimeout(timer);
+	}, [email]);
+
 	// Sign-up email verification OTP
 	const [signupOtp, setSignupOtp] = useState("");
 	const [signupEmail, setSignupEmail] = useState("");
@@ -187,12 +205,6 @@ export function StartJourney() {
 			setLoading(false);
 			setError(err instanceof Error ? err.message : "Google sign-in failed");
 		}
-	}
-
-	async function handleEmailBlur() {
-		if (!email.includes("@")) return;
-		const exists = await checkEmailExists(email);
-		setEmailExists(exists);
 	}
 
 	async function onEmail(e: FormEvent) {
@@ -659,7 +671,6 @@ export function StartJourney() {
 											type="email"
 											value={email}
 											onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
-											onBlur={handleEmailBlur}
 											placeholder="you@example.com"
 											fullBorder
 										/>
@@ -750,7 +761,6 @@ export function StartJourney() {
 												autoComplete="email"
 												value={email}
 												onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
-												onBlur={handleEmailBlur}
 												placeholder="you@example.com"
 												fullBorder
 											/>

@@ -45,7 +45,7 @@ import {
 	CONSULTATION_DURATIONS,
 	getBranchName,
 } from "century-nit-core";
-import { meApi, bookingsApi, invoicesApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
+import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 
@@ -2155,8 +2155,8 @@ function ApplicationHubInner() {
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 
 	const fetchInvoice = useCallback(() => {
-		invoicesApi
-			.list()
+		meApi
+			.invoices()
 			.then((res) => {
 				const found = res.invoices.find((i) => i.type === "application");
 				if (found) setServerInvoice(found);
@@ -2234,7 +2234,7 @@ function ApplicationHubInner() {
 	async function payInvoice() {
 		setPayPhase("loading");
 		try {
-			const { invoices } = await invoicesApi.list();
+			const { invoices } = await meApi.invoices();
 			const backend = invoices.find((i) => i.type === "application" && i.balanceCents > 0);
 			if (!backend) {
 				toast.error(
@@ -3025,7 +3025,7 @@ function VisaHubInner() {
 	async function pay() {
 		setPayPhase("loading");
 		try {
-			const { invoices } = await invoicesApi.list();
+			const { invoices } = await meApi.invoices();
 			const backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0);
 			if (!backend) {
 				toast.error(

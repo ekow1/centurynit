@@ -32,7 +32,7 @@ import {
 	REQUIRED_DOCUMENTS,
 	getBranchName,
 } from "century-nit-core";
-import { documentsApi, invoicesApi, meApi, ApiError } from "century-nit-core/api";
+import { documentsApi, meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
@@ -879,7 +879,7 @@ export function PortalFinancial() {
 	useEffect(() => {
 		async function load() {
 			try {
-				const { invoices: list } = await invoicesApi.list();
+				const { invoices: list } = await meApi.invoices();
 				setInvoices(list);
 				setInvoicesLoaded(true);
 			} catch (err) {

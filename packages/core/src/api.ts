@@ -904,6 +904,21 @@ export const meApi = {
 	},
 
 	/**
+	 * List invoices belonging to the signed-in user. This is the applicant-portal
+	 * path; it does not require staff module permissions.
+	 */
+	invoices(query?: { status?: string; type?: string; q?: string; limit?: number; offset?: number }): Promise<{ invoices: ApiInvoice[]; total: number }> {
+		const params = new URLSearchParams();
+		if (query?.status) params.set("status", query.status);
+		if (query?.type) params.set("type", query.type);
+		if (query?.q) params.set("q", query.q);
+		if (query?.limit) params.set("limit", String(query.limit));
+		if (query?.offset) params.set("offset", String(query.offset));
+		const qs = params.toString();
+		return request(`${API_PREFIX}/me/invoices${qs ? `?${qs}` : ""}`);
+	},
+
+	/**
 	 * Update the signed-in applicant's own profile. The server resolves the
 	 * applicant from the session, so no id is sent. `branch` is not accepted
 	 * here — that's an ops placement decision.

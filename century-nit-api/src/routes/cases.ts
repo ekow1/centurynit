@@ -78,6 +78,7 @@ import {
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_TO_PORTAL,
 	type JourneyStage,
+	invoiceListSchema,
 	invoiceSchema,
 	myApplicationSchema,
 	paystackCheckoutSchema,
@@ -936,6 +937,33 @@ meRouter.openapi(
 			consultation: consultation ? await serializeConsultation(consultation) : null,
 			application: application ? await serializeApplication(application) : null,
 		});
+	},
+);
+
+/**
+ * Applicant self-service: list their own invoices.
+ *
+ * Unlike /api/v1/invoices this is not gated by staff module permissions, because
+ * the portal (not operations staff) uses it to show the user their invoices.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/invoices",
+		tags: ["Applicants"],
+		middleware: [requireAuth, requireMfa] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: invoiceListSchema } },
+				description: "Signed-in user's invoices",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const rows = await listInvoicesForClient(user.id);
+		const list = await Promise.all(rows.map(serializeInvoice));
+		return c.json({ invoices: list, total: list.length });
 	},
 );
 

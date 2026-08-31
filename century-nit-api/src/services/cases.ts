@@ -1569,12 +1569,15 @@ const DEFAULT_MAX_CAPACITY = 10;
 const ACTIVE_CONSULTATION_STATUSES = ["UNDER_REVIEW", "ASSIGNED", "IN_ASSESSMENT"] as const;
 
 /**
- * Get per-coordinator workload across the platform.
+ * Get per-staff workload across the platform.
  *
- * Returns one entry per coordinator with their active / overdue counts and
- * a capacity percentage.  Used for the heatmap and the delegation picker.
+ * Returns one entry per active staff member with their active / overdue counts
+ * and a capacity percentage. Used for the heatmap and the delegation picker.
+ * A "coordinator" is simply the staff member currently responsible for a
+ * consultation, not a separate job title, so any active staff can be delegated
+ * a case.
  */
-export async function getCoordinatorWorkload(branch?: string): Promise<{
+export async function getStaffWorkload(branch?: string): Promise<{
 	coordinators: Array<{
 		opsUserId: string;
 		name: string;
@@ -1587,13 +1590,13 @@ export async function getCoordinatorWorkload(branch?: string): Promise<{
 	}>;
 	maxCapacityPerCoordinator: number;
 }> {
-	const coordinators = await db
+	const staff = await db
 		.select()
 		.from(opsUsers)
 		.where(and(STAFF_ACTIVE, branch ? eq(opsUsers.branch, branch) : undefined));
 
-	const coordinatorIds = coordinators.map((c) => c.id);
-	if (coordinatorIds.length === 0) {
+	const staffIds = staff.map((c) => c.id);
+	if (staffIds.length === 0) {
 		return { coordinators: [], maxCapacityPerCoordinator: DEFAULT_MAX_CAPACITY };
 	}
 
@@ -1604,7 +1607,7 @@ export async function getCoordinatorWorkload(branch?: string): Promise<{
 		})
 		.from(consultations)
 		.where(
-			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(coordinatorIds.map((id) => sql`${id}`), sql`, `)})`} 
+			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(staffIds.map((id) => sql`${id}`), sql`, `)})`}
 				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`}`,
 		);
 
@@ -1613,8 +1616,8 @@ export async function getCoordinatorWorkload(branch?: string): Promise<{
 		.select({ coordinatorId: consultations.coordinatorId })
 		.from(consultations)
 		.where(
-			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(coordinatorIds.map((id) => sql`${id}`), sql`, `)})`} 
-				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`} 
+			sql`${consultations.coordinatorId} IN ${sql`(${sql.join(staffIds.map((id) => sql`${id}`), sql`, `)})`}
+				AND ${consultations.status} IN ${sql`(${sql.join(ACTIVE_CONSULTATION_STATUSES.map((s) => sql`${s}`), sql`, `)})`}
 				AND ${consultations.coordinatorAssignedAt} < ${overdueThreshold}`,
 		);
 
@@ -1630,7 +1633,7 @@ export async function getCoordinatorWorkload(branch?: string): Promise<{
 		overdueMap.set(row.coordinatorId, (overdueMap.get(row.coordinatorId) ?? 0) + 1);
 	}
 
-	const result = coordinators.map((c) => {
+	const result = staff.map((c) => {
 		const active = countMap.get(c.id) ?? 0;
 		const overdue = overdueMap.get(c.id) ?? 0;
 		return {
@@ -1719,7 +1722,7 @@ export async function checkAndEscalate(options?: {
 
 	if (stale.length === 0) return [];
 
-	const workload = await getCoordinatorWorkload();
+	const workload = await getStaffWorkload();
 	const leastBusy = workload.coordinators.find((c) => c.capacityPercent < 100);
 	if (!leastBusy) return [];
 

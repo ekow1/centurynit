@@ -15,7 +15,6 @@ import {
 import { safeGetJSON, safeRemoveItem, safeSetJSON, meApi } from "century-nit-core";
 import { useNotifier } from "../components/notifier/Notifier";
 import { usePushNotifications } from "../hooks/usePushNotifications";
-import { invoicesApi } from "century-nit-core/api";
 import {
 	API_PREFIX,
 	JOURNEY_STAGE_TO_PORTAL,
@@ -1959,23 +1958,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
 				}));
 			} else if (res.application) {
-				// No consultation row, but an application exists — ops created it
-				// directly (or consultation creation failed silently after payment).
-				// Either way, the applicant's journey has moved past the consultation
-				// fee page. Mark it done so they're not stranded re-paying $75.
-				setBooking((prev) =>
-					prev.confirmationId && prev.consultationPhase === "outcome"
-						? prev
-						: {
-								...prev,
-								confirmationId: prev.confirmationId ?? `APP-${res.application!.id.slice(0, 8)}`,
-								consultationPhase: "outcome",
-								paymentStatus: "success",
-								paidAt: prev.paidAt ?? res.application!.createdAt,
-								eligibilityOutcome: "eligible",
-							},
-				);
-			}
+			// No consultation row, but an application exists — ops created it
+			// directly (or consultation creation failed silently after payment).
+			// Either way, the applicant's journey has moved past the consultation
+			// fee page. Mark it done so they're not stranded re-paying $75.
+			setBooking((prev) =>
+				prev.confirmationId && prev.consultationPhase === "outcome"
+					? prev
+					: {
+							...prev,
+							confirmationId: prev.confirmationId ?? `APP-${res.application!.id.slice(0, 8)}`,
+							consultationPhase: "outcome",
+							paymentStatus: "success",
+							paidAt: prev.paidAt ?? res.application!.createdAt,
+							eligibilityOutcome: "eligible",
+						},
+			);
+		} else {
+			// Server has no active case for this signed-in user. Wipe any stale
+			// local journey state so a deleted/completed case doesn't linger in
+			// the dashboard after we truncated the production database.
+			resetJourney();
+		}
 			if (res.applicant) {
 				const a = res.applicant;
 				setApplication((prev) => ({
@@ -2070,7 +2074,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		 * stage index is derived from how far through the plan the payments
 		 * have gone (deposit 10% → pre-departure +50% → post-arrival 40%). */
 		try {
-			const { invoices: agencyInvoices } = await invoicesApi.list({ type: "agency" });
+			const { invoices: agencyInvoices } = await meApi.invoices({ type: "agency" });
 			const agencyInvoice = agencyInvoices[0];
 			if (agencyInvoice) {
 				const totalUsd = agencyInvoice.subtotalCents / 100;
@@ -2099,7 +2103,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		} catch {
 			/* keep local values — server may be unreachable */
 		}
-	}, [authUser]);
+	}, [authUser, resetJourney]);
 
 	/** Run on mount */
 	useEffect(() => {

@@ -95,7 +95,9 @@ export function OnboardingModal() {
 		const dismissedKey = `cn_onboarding_dismissed_${authUser.id || "user"}`;
 		localStorage.setItem(dismissedKey, "true");
 		setShow(false);
-		void meApi.updatePortalState({ onboardingCompleted: true }).catch(() => {});
+		// Don't call PATCH /me/portal-state here; if updateProfile failed there is
+		// no applicant row yet and the server returns APPLICANT_NOT_FOUND.
+		// Submitting the form explicitly creates the applicant first.
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {

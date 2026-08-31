@@ -1123,6 +1123,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	/** Persist portal state to server whenever key fields change (debounced). */
 	useEffect(() => {
 		if (!authUser) return;
+		// Only sync when there is an active case; otherwise the server has no
+		// applicant row to attach the state to and returns APPLICANT_NOT_FOUND.
+		const hasCase = Boolean(application.applicationId || booking.confirmationId);
+		if (!hasCase) return;
 		const t = window.setTimeout(() => {
 			void meApi.updatePortalState({
 				preDepartureTasks,
@@ -1132,7 +1136,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			}).catch(() => { /* keep local */ });
 		}, 1500);
 		return () => window.clearTimeout(t);
-	}, [authUser, preDepartureTasks, application.postArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules]);
+	}, [authUser, preDepartureTasks, application.postArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules, application.applicationId, booking.confirmationId]);
 
 	/** Prefill profile from consultation when eligible (no invoice yet) */
 	useEffect(() => {

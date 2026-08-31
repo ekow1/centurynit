@@ -143,6 +143,12 @@ const schema = z.object({
 	BOOKING_BUFFER_MINUTES: z.coerce.number().int().min(0).max(120).default(0),
 	/** Default IANA zone for branches and working hours. */
 	DEFAULT_TIMEZONE: z.string().default("Africa/Accra"),
+	/** Number of appointment slots offered per branch per day. */
+	SLOTS_PER_DAY: z.coerce.number().int().min(1).max(48).default(8),
+	/** Branch opening time in HH:MM, used to compute slot times. */
+	BRANCH_OPEN_START: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default("09:00"),
+	/** Branch closing time in HH:MM, used to compute slot times. */
+	BRANCH_OPEN_END: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default("17:00"),
 
 	/**
 	 * Paystack — invoice payments from the portal.

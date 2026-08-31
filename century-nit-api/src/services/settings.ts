@@ -37,6 +37,9 @@ export type SettingKey =
 	| "GOOGLE_WEBHOOK_TOKEN"
 	| "BOOKING_BUFFER_MINUTES"
 	| "DEFAULT_TIMEZONE"
+	| "SLOTS_PER_DAY"
+	| "BRANCH_OPEN_START"
+	| "BRANCH_OPEN_END"
 	| "PAYSTACK_SECRET_KEY"
 	| "STRIPE_SECRET_KEY"
 	| "APP_BASE_FEE_CENTS"
@@ -146,6 +149,24 @@ export const SETTING_DEFS: Record<
 		group: "Scheduling",
 		secret: false,
 		description: "Default IANA zone for branches and working hours.",
+	},
+	SLOTS_PER_DAY: {
+		label: "Consultation Slots Per Day",
+		group: "Scheduling",
+		secret: false,
+		description: "Number of appointment start times offered per branch per day. Times are auto-calculated across opening hours.",
+	},
+	BRANCH_OPEN_START: {
+		label: "Branch Opening Time",
+		group: "Scheduling",
+		secret: false,
+		description: "Opening time in HH:MM used to compute slot times. Example: 09:00.",
+	},
+	BRANCH_OPEN_END: {
+		label: "Branch Closing Time",
+		group: "Scheduling",
+		secret: false,
+		description: "Closing time in HH:MM used to compute slot times. Example: 17:00.",
 	},
 	PAYSTACK_SECRET_KEY: {
 		label: "Paystack Secret Key",
@@ -326,6 +347,28 @@ export async function defaultTimezone(): Promise<string> {
 	return value && value.trim() ? value.trim() : env.DEFAULT_TIMEZONE;
 }
 
+/** Number of consultation slots offered per branch per day. */
+export async function slotsPerDay(): Promise<number> {
+	const raw = await getSetting("SLOTS_PER_DAY");
+	const parsed = Number(raw);
+	if (raw == null || raw === "" || !Number.isFinite(parsed) || parsed < 1 || parsed > 48) {
+		return env.SLOTS_PER_DAY;
+	}
+	return Math.floor(parsed);
+}
+
+/** Branch opening time in HH:MM. */
+export async function branchOpenStart(): Promise<string> {
+	const value = await getSetting("BRANCH_OPEN_START");
+	return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : env.BRANCH_OPEN_START;
+}
+
+/** Branch closing time in HH:MM. */
+export async function branchOpenEnd(): Promise<string> {
+	const value = await getSetting("BRANCH_OPEN_END");
+	return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : env.BRANCH_OPEN_END;
+}
+
 /** Read all settings with masked values, for the UI. */
 export async function listSettingsForDisplay(): Promise<
 	Array<{
@@ -425,6 +468,19 @@ export async function writeSetting(
 
 function validateSettingValue(key: SettingKey, value: string | null): void {
 	if (value == null) return;
+
+	if (key === "SLOTS_PER_DAY") {
+		const parsed = Number(value);
+		if (!Number.isInteger(parsed) || parsed < 1 || parsed > 48) {
+			throw new Error("Slots per day must be a whole number between 1 and 48");
+		}
+	}
+
+	if (key === "BRANCH_OPEN_START" || key === "BRANCH_OPEN_END") {
+		if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+			throw new Error("Time must be in 24-hour HH:MM format");
+		}
+	}
 
 	if (key === "GOOGLE_REDIRECT_URI" || key === "GOOGLE_AUTH_REDIRECT_URI") {
 		let url: URL;

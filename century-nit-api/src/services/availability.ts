@@ -15,7 +15,13 @@ import {
   staffCalendarFeeds,
   staffWorkingHours,
 } from "../db/schema.js";
-import { bookingBufferMinutes, defaultTimezone } from "./settings.js";
+import {
+  bookingBufferMinutes,
+  branchOpenEnd,
+  branchOpenStart,
+  defaultTimezone,
+  slotsPerDay,
+} from "./settings.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	addMinutes,
@@ -44,18 +50,33 @@ import {
  * occupies — travel and note-taking time either side.
  */
 
-/** Slot start times offered per duration. Mirrors CONSULTATION_DURATIONS in core. */
-const SLOT_TIMES: Record<number, string[]> = {
-	30: [
-		"09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-		"13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
-	],
-	45: ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"],
-	60: ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"],
-};
+/**
+ * Compute slot start times from configured opening hours and slots-per-day.
+ *
+ * Staff configure how many appointment slots the branch offers per day and the
+ * branch open/close times; the actual slot start times are derived evenly
+ * across that window. The requested duration only affects where each slot ends,
+ * not which start times are offered.
+ */
+export async function slotTimesFor(): Promise<string[]> {
+	const [start, end, count] = await Promise.all([
+		branchOpenStart(),
+		branchOpenEnd(),
+		slotsPerDay(),
+	]);
+	const startMin = timeToMinutes(start);
+	const endMin = timeToMinutes(end);
+	const total = endMin - startMin;
+	if (total <= 0 || count <= 0) return [];
 
-export function slotTimesFor(durationMinutes: number): string[] {
-	return SLOT_TIMES[durationMinutes] ?? SLOT_TIMES[45];
+	const step = Math.floor(total / count);
+	if (step <= 0) return [minutesToTime(startMin)];
+
+	const times: string[] = [];
+	for (let i = 0; i < count; i++) {
+		times.push(minutesToTime(startMin + i * step));
+	}
+	return times;
 }
 
 /* ── Branch and service catalogue ────────────────────────────────────────────
@@ -303,7 +324,7 @@ export async function branchAvailability(input: {
   excludeBookingId?: string;
 }): Promise<{ slots: SlotAvailability[]; calendarSyncStatus: CalendarSyncStatus }> {
   const { branchId, date, durationMinutes, timezone, employeeId } = input;
-  const times = slotTimesFor(durationMinutes);
+  const times = await slotTimesFor();
   // Resolved once for the whole grid: every slot in one answer must be judged
   // against the same buffer.
   const buffer = await bookingBufferMinutes();

@@ -1463,8 +1463,12 @@ export function PortalConsultationBookingFlow() {
 		if (payState === "paid" || payState === "processing" || payState === "success") return;
 		// Gate payment on the required booking fields — Paystack will reject
 		// an incomplete booking anyway, so fail fast with a clear message.
-		if (!booking.branchId || !booking.date || !booking.time) {
-			toast.error("Please complete all steps before paying");
+		const missing: string[] = [];
+		if (!booking.branchId) missing.push("a branch");
+		if (!booking.date) missing.push("a date");
+		if (!booking.time) missing.push("a time");
+		if (missing.length > 0) {
+			toast.error(`Please select ${missing.join(", ")} before paying.`);
 			return;
 		}
 		setPayState("processing");

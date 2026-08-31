@@ -1003,6 +1003,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		"checking" | "authenticated" | "unauthenticated"
 	>("checking");
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
+	const syncCountRef = useRef(0);
 
 	/**
 	 * Silent Web Push subscription — active whenever the user is signed in.
@@ -1978,12 +1979,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							eligibilityOutcome: "eligible",
 						},
 			);
-		} else {
+		} else if (syncCountRef.current === 0) {
 			// Server has no active case for this signed-in user. Wipe any stale
 			// local journey state so a deleted/completed case doesn't linger in
-			// the dashboard after we truncated the production database.
+			// the dashboard after we truncated the production database. Only do
+			// this on the first sync — the 30s poll must not erase in-progress
+			// booking selections before the user can pay.
 			resetJourney();
 		}
+		syncCountRef.current += 1;
 			if (res.applicant) {
 				const a = res.applicant;
 				setApplication((prev) => ({

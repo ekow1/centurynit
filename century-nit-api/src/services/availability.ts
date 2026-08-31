@@ -17,10 +17,8 @@ import {
 } from "../db/schema.js";
 import {
   bookingBufferMinutes,
-  branchOpenEnd,
-  branchOpenStart,
   defaultTimezone,
-  slotsPerDay,
+  weeklySlotSchedule,
 } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -50,22 +48,9 @@ import {
  * occupies — travel and note-taking time either side.
  */
 
-/**
- * Compute slot start times from configured opening hours and slots-per-day.
- *
- * Staff configure how many appointment slots the branch offers per day and the
- * branch open/close times; the actual slot start times are derived evenly
- * across that window. The requested duration only affects where each slot ends,
- * not which start times are offered.
- */
-export async function slotTimesFor(): Promise<string[]> {
-	const [start, end, count] = await Promise.all([
-		branchOpenStart(),
-		branchOpenEnd(),
-		slotsPerDay(),
-	]);
-	const startMin = timeToMinutes(start);
-	const endMin = timeToMinutes(end);
+function computeSlotTimes(openStart: string, openEnd: string, count: number): string[] {
+	const startMin = timeToMinutes(openStart);
+	const endMin = timeToMinutes(openEnd);
 	const total = endMin - startMin;
 	if (total <= 0 || count <= 0) return [];
 
@@ -77,6 +62,20 @@ export async function slotTimesFor(): Promise<string[]> {
 		times.push(minutesToTime(startMin + i * step));
 	}
 	return times;
+}
+
+/**
+ * Compute slot start times for a given weekday from the weekly schedule.
+ *
+ * Managers configure each day independently: whether it is active, how many
+ * appointment slots to offer, and the open/close window. The requested
+ * duration only affects where each slot ends, not which start times are offered.
+ */
+export async function slotTimesFor(dayOfWeek: number): Promise<string[]> {
+	const schedule = await weeklySlotSchedule();
+	const day = schedule.days.find((d) => d.dayOfWeek === dayOfWeek);
+	if (!day?.enabled) return [];
+	return computeSlotTimes(day.openStart, day.openEnd, day.slotsPerDay);
 }
 
 /* ── Branch and service catalogue ────────────────────────────────────────────
@@ -324,7 +323,6 @@ export async function branchAvailability(input: {
   excludeBookingId?: string;
 }): Promise<{ slots: SlotAvailability[]; calendarSyncStatus: CalendarSyncStatus }> {
   const { branchId, date, durationMinutes, timezone, employeeId } = input;
-  const times = await slotTimesFor();
   // Resolved once for the whole grid: every slot in one answer must be judged
   // against the same buffer.
   const buffer = await bookingBufferMinutes();
@@ -333,9 +331,11 @@ export async function branchAvailability(input: {
 
   const dayStart = zonedTimeToUtc(date, "00:00", timezone);
   const dayEnd = addMinutes(dayStart, 24 * 60);
+  const dayOfWeek = dayOfWeekInZone(dayStart, timezone);
+  const times = await slotTimesFor(dayOfWeek);
 
   // The branch is shut that weekday — no slot on it is bookable, whoever asks.
-  if (!branchOpenOnDay(branchId, dayOfWeekInZone(dayStart, timezone))) {
+  if (!branchOpenOnDay(branchId, dayOfWeek)) {
     return {
       slots: times.map((time) => {
         const startsAt = zonedTimeToUtc(date, time, timezone);

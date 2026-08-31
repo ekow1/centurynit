@@ -562,15 +562,19 @@ export type CalendarStatus = {
 	outboundUrl: string | null;
 	workingHours: { dayOfWeek: number; start: string; end: string; timezone: string }[];
 	/** Branch-wide slot configuration set by managers/systems. Consultants see this read-only. */
-	branchSlots: BranchSlots | null;
+	branchSlots: BranchSlotSchedule | null;
 };
 
-export type BranchSlots = {
-	slotsPerDay: number;
-	openStart: string;
-	openEnd: string;
+export type BranchSlotSchedule = {
 	timezone: string;
-	times: string[];
+	days: {
+		dayOfWeek: number;
+		enabled: boolean;
+		slotsPerDay: number;
+		openStart: string;
+		openEnd: string;
+		times: string[];
+	}[];
 };
 
 /** The staff member's personalized, revocable read-only iCal subscription URL. */

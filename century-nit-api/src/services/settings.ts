@@ -1,4 +1,5 @@
 import { desc } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../db/index.js";
 import { platformSettings, settingsAudit } from "../db/schema.js";
 import { encrypt, decrypt } from "../lib/crypto.js";
@@ -40,6 +41,7 @@ export type SettingKey =
 	| "SLOTS_PER_DAY"
 	| "BRANCH_OPEN_START"
 	| "BRANCH_OPEN_END"
+	| "WEEKLY_SLOT_SCHEDULE"
 	| "PAYSTACK_SECRET_KEY"
 	| "STRIPE_SECRET_KEY"
 	| "APP_BASE_FEE_CENTS"
@@ -167,6 +169,13 @@ export const SETTING_DEFS: Record<
 		group: "Scheduling",
 		secret: false,
 		description: "Closing time in HH:MM used to compute slot times. Example: 17:00.",
+	},
+	WEEKLY_SLOT_SCHEDULE: {
+		label: "Weekly Slot Schedule",
+		group: "Scheduling",
+		secret: false,
+		description:
+			"JSON weekly schedule: which days are active, how many slots per day, and opening/closing times. Managed from the Scheduling page.",
 	},
 	PAYSTACK_SECRET_KEY: {
 		label: "Paystack Secret Key",
@@ -369,6 +378,60 @@ export async function branchOpenEnd(): Promise<string> {
 	return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : env.BRANCH_OPEN_END;
 }
 
+export type WeeklySlotScheduleDay = {
+	dayOfWeek: number;
+	enabled: boolean;
+	slotsPerDay: number;
+	openStart: string;
+	openEnd: string;
+};
+
+export type WeeklySlotSchedule = {
+	timezone: string;
+	days: WeeklySlotScheduleDay[];
+};
+
+const weeklySlotScheduleSchema = z.object({
+	timezone: z.string().min(1),
+	days: z
+		.array(
+			z.object({
+				dayOfWeek: z.number().int().min(0).max(6),
+				enabled: z.boolean(),
+				slotsPerDay: z.number().int().min(1).max(48),
+				openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+				openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+			}),
+		)
+		.length(7),
+});
+
+function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
+	return {
+		timezone: env.DEFAULT_TIMEZONE,
+		days: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+			dayOfWeek,
+			enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
+			slotsPerDay: env.SLOTS_PER_DAY,
+			openStart: env.BRANCH_OPEN_START,
+			openEnd: env.BRANCH_OPEN_END,
+		})),
+	};
+}
+
+/** Whole-week branch slot schedule. Falls back to the legacy global settings. */
+export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
+	const raw = await getSetting("WEEKLY_SLOT_SCHEDULE");
+	if (!raw) return defaultWeeklySlotSchedule();
+	try {
+		const parsed = JSON.parse(raw);
+		return weeklySlotScheduleSchema.parse(parsed);
+	} catch (err) {
+		console.error("[Settings] Invalid WEEKLY_SLOT_SCHEDULE, falling back to defaults:", err);
+		return defaultWeeklySlotSchedule();
+	}
+}
+
 /** Read all settings with masked values, for the UI. */
 export async function listSettingsForDisplay(): Promise<
 	Array<{
@@ -479,6 +542,14 @@ function validateSettingValue(key: SettingKey, value: string | null): void {
 	if (key === "BRANCH_OPEN_START" || key === "BRANCH_OPEN_END") {
 		if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
 			throw new Error("Time must be in 24-hour HH:MM format");
+		}
+	}
+
+	if (key === "WEEKLY_SLOT_SCHEDULE") {
+		try {
+			weeklySlotScheduleSchema.parse(JSON.parse(value));
+		} catch (err) {
+			throw new Error("Weekly slot schedule is invalid");
 		}
 	}
 

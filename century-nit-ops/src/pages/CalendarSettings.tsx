@@ -178,35 +178,57 @@ function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) 
 		<div className="cal-branch-slots" style={{ marginBottom: "2rem" }}>
 			<h3 className="cal-hours__title">Branch consultation slots</h3>
 			<p className="ops-panel__muted">
-				{slots.slotsPerDay} slots per day between {slots.openStart} and {slots.openEnd} (
-				{slots.timezone}). These are the times applicants see in the portal. Your own
-				working hours below decide which of these you can take.
+				Managers set a different slot template for each weekday. These are the times
+				applicants see in the portal ({slots.timezone}). Your own working hours below
+				decide which of these you can take.
 			</p>
-			<div
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "0.5rem",
-					marginTop: "0.75rem",
-					padding: "0.75rem",
-					background: "var(--surface)",
-					borderRadius: "0.5rem",
-				}}
-			>
-				{slots.times.map((t) => (
-					<span
-						key={t}
+			<div style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
+				{slots.days.map((day) => (
+					<div
+						key={day.dayOfWeek}
 						style={{
-							padding: "0.35rem 0.7rem",
-							background: "var(--bg-elevated)",
-							borderRadius: "0.35rem",
-							fontFamily: "var(--font-mono)",
-							fontSize: "var(--text-sm)",
-							border: "var(--medium)",
+							padding: "0.75rem",
+							background: "var(--surface)",
+							borderRadius: "0.5rem",
+							opacity: day.enabled ? 1 : 0.55,
 						}}
 					>
-						{t}
-					</span>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								marginBottom: day.enabled ? "0.5rem" : 0,
+								fontWeight: 600,
+								fontSize: "var(--text-sm)",
+							}}
+						>
+							<span>{DAY_NAMES[day.dayOfWeek]}</span>
+							<span className="muted">
+								{day.enabled
+									? `${day.openStart}–${day.openEnd}, ${day.slotsPerDay} slots`
+									: "No slots"}
+							</span>
+						</div>
+						{day.enabled && (
+							<div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
+								{day.times.map((t) => (
+									<span
+										key={t}
+										style={{
+											padding: "0.25rem 0.5rem",
+											background: "var(--bg-elevated)",
+											borderRadius: "0.25rem",
+											fontFamily: "var(--font-mono)",
+											fontSize: "var(--text-xs)",
+											border: "var(--medium)",
+										}}
+									>
+										{t}
+									</span>
+									))}
+							</div>
+						)}
+					</div>
 				))}
 			</div>
 		</div>

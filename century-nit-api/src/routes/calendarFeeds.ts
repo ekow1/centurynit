@@ -16,15 +16,9 @@ import {
 	ensureDefaultWorkingHours,
 	listWorkingHours,
 	setWorkingHours,
-	slotTimesFor,
 } from "../services/availability.js";
-import {
-	branchOpenEnd,
-	branchOpenStart,
-	defaultTimezone,
-	slotsPerDay,
-} from "../services/settings.js";
-import { isValidTimeZone } from "../lib/time.js";
+import { weeklySlotSchedule, type WeeklySlotScheduleDay } from "../services/settings.js";
+import { isValidTimeZone, minutesToTime, timeToMinutes } from "../lib/time.js";
 import { removeCalendarFeed, renderIcs, type IcsEvent } from "../services/calendar/ics.js";
 import { queueFeedSync } from "../worker/queues.js";
 import {
@@ -385,13 +379,42 @@ calendarFeedsRouter.openapi(
  * Only managers/systems/super admins can change it via /api/v1/scheduling.
  */
 
+const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
 const branchSlotsResponseSchema = z.object({
-	slotsPerDay: z.number().int(),
-	openStart: z.string(),
-	openEnd: z.string(),
 	timezone: z.string(),
-	times: z.array(z.string()),
+	days: z.array(
+		z.object({
+			dayOfWeek: z.number().int(),
+			enabled: z.boolean(),
+			slotsPerDay: z.number().int(),
+			openStart: z.string(),
+			openEnd: z.string(),
+			times: z.array(timeStringSchema),
+		}),
+	),
 });
+
+function computeSlotTimes(openStart: string, openEnd: string, count: number): string[] {
+	const startMin = timeToMinutes(openStart);
+	const endMin = timeToMinutes(openEnd);
+	const total = endMin - startMin;
+	if (total <= 0 || count <= 0) return [];
+	const step = Math.floor(total / count);
+	if (step <= 0) return [minutesToTime(startMin)];
+	const times: string[] = [];
+	for (let i = 0; i < count; i++) {
+		times.push(minutesToTime(startMin + i * step));
+	}
+	return times;
+}
+
+function dayResponse(day: WeeklySlotScheduleDay) {
+	return {
+		...day,
+		times: day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.slotsPerDay) : [],
+	};
+}
 
 calendarFeedsRouter.openapi(
 	createRoute({
@@ -415,20 +438,11 @@ calendarFeedsRouter.openapi(
 		},
 	}),
 	async (c) => {
-		const [times, openStart, openEnd, slotsPerDayValue, timezone] = await Promise.all([
-			slotTimesFor(),
-			branchOpenStart(),
-			branchOpenEnd(),
-			slotsPerDay(),
-			defaultTimezone(),
-		]);
+		const schedule = await weeklySlotSchedule();
 		return c.json(
 			{
-				slotsPerDay: slotsPerDayValue,
-				openStart,
-				openEnd,
-				timezone,
-				times,
+				timezone: schedule.timezone,
+				days: schedule.days.map((d) => dayResponse(d)),
 			},
 			200,
 		);

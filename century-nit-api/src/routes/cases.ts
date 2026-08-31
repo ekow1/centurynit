@@ -909,6 +909,37 @@ consultationsRouter.openapi(
 
 export const meRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
+const identitySchema = z.object({
+	isStaff: z.boolean(),
+	isApplicant: z.boolean(),
+	isBanned: z.boolean(),
+});
+
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/identity",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: identitySchema } },
+				description: "Identity flags for the signed-in user",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const staff = c.get("staff");
+		const applicant = await getApplicantByUserId(user.id);
+		return c.json({
+			isStaff: Boolean(staff),
+			isApplicant: Boolean(applicant),
+			isBanned: false,
+		});
+	},
+);
+
 meRouter.openapi(
 	createRoute({
 		method: "get",

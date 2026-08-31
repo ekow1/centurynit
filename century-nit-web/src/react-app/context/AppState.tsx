@@ -1788,6 +1788,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					email: data.user.email,
 					image: data.user.image ?? null,
 				});
+				try {
+					const identity = await meApi.identity();
+					if (identity.isStaff || identity.isBanned) {
+						// Staff/banned accounts should not use the applicant portal.
+						await authSignOut();
+						setAuthUser(null);
+						safeRemoveItem(AUTH_STORAGE_KEY);
+						setSessionStatus("unauthenticated");
+						return;
+					}
+				} catch {
+					/* identity endpoint may be unavailable until API redeploy — allow */
+				}
 			} else {
 				setAuthUser(null);
 				safeRemoveItem(AUTH_STORAGE_KEY);

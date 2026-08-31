@@ -895,6 +895,10 @@ export const applicantsApi = {
 };
 
 export const meApi = {
+	identity(): Promise<{ isStaff: boolean; isApplicant: boolean; isBanned: boolean }> {
+		return request(`${API_PREFIX}/me/identity`);
+	},
+
 	application(): Promise<{
 		applicant: ApiApplicant | null;
 		consultation: ApiConsultation | null;

@@ -61,6 +61,8 @@ export const opsModuleSchema = z.enum([
 	"site",
 	"notifications",
 	"settings",
+	// ── Branch scheduling configuration (manager + systems) ──
+	"scheduling",
 ]);
 
 export type OpsModule = z.infer<typeof opsModuleSchema>;
@@ -124,6 +126,7 @@ export const MODULE_GROUPS: Array<{
 			{ id: "site", label: "Site & UI", description: "Public website branding and navigation" },
 			{ id: "notifications", label: "Notifications", description: "Automated templates and communication channels" },
 			{ id: "settings", label: "System Configuration", description: "API keys, fee schedule, and integration credentials" },
+			{ id: "scheduling", label: "Scheduling Configuration", description: "Branch consultation slots and operating hours" },
 		],
 	},
 ];
@@ -137,7 +140,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
 		"finance", "invoices", "ledger", "payments", "payment-config",
 		"workflow", "visa", "travel", "documents", "appointments", "universities",
-		"programs", "packages", "reports", "chat",
+		"programs", "packages", "reports", "chat", "scheduling",
 	],
 	coordinator: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing",
@@ -156,7 +159,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 		"dashboard", "finance", "invoices", "ledger", "payments", "payment-config", "packages", "reports", "helpdesk", "chat",
 	],
 	admin: [
-		"system", "users", "auth", "cms", "lookups", "site", "notifications", "settings", "helpdesk", "chat",
+		"system", "users", "auth", "cms", "lookups", "site", "notifications", "settings", "scheduling", "helpdesk", "chat",
 	],
 };
 

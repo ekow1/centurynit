@@ -47,6 +47,7 @@ const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppoint
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
 const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
 const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"), "EnterpriseAuditLogs");
+const SchedulingConfig = lazyNamed(() => import("./pages/SchedulingConfig"), "SchedulingConfig");
 const ClientDirectory = lazyNamed(() => import("./pages/ClientDirectory"), "ClientDirectory");
 const OpsLogin = lazyNamed(() => import("./pages/OpsLogin"), "OpsLogin");
 
@@ -144,6 +145,7 @@ export default function App() {
 									{/* Personal calendar connection. Gated on "dashboard" rather than
 									    "settings": consultants must reach this, admins never take bookings. */}
 									<Route path="my-calendar" element={<Ops module="dashboard"><CalendarSettings /></Ops>} />
+									<Route path="scheduling" element={<Ops module="scheduling"><SchedulingConfig /></Ops>} />
 									<Route path="inbox" element={<Ops module="dashboard"><EnterpriseInbox /></Ops>} />
 
 									{/* Platform administration - admin only */}

@@ -16,6 +16,7 @@ import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
 import { avatarRouter } from "./routes/avatar.js";
 import { settingsRouter } from "./routes/settings.js";
+import { schedulingRouter } from "./routes/scheduling.js";
 import { lookupsRouter } from "./routes/lookups.js";
 import { catalogRoutes } from "./routes/catalog.js";
 import { webhooksRouter } from "./routes/webhooks.js";
@@ -137,6 +138,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/auth-settings`, authSettings);
 	app.route(`${API_PREFIX}/documents`, documentsRouter);
 	app.route(`${API_PREFIX}/settings`, settingsRouter);
+	app.route(`${API_PREFIX}/scheduling`, schedulingRouter);
 	app.route(`${API_PREFIX}/lookups`, lookupsRouter);
 	app.route(`${API_PREFIX}/catalog`, catalogRoutes);
 	app.route(`${API_PREFIX}/consultations`, consultationsRouter);
@@ -228,6 +230,10 @@ app.route(`${API_PREFIX}/fees`, feesRouter);
 			{
 				name: "Settings",
 				description: "Platform integration credentials, managed from the ops console.",
+			},
+			{
+				name: "Scheduling",
+				description: "Branch consultation slot configuration, managed by managers and system administrators.",
 			},
 			{
 				name: "Webhooks",

@@ -58,21 +58,43 @@ const CACHE_TTL_MS = 30_000;
  */
 export async function seedSystemRoles(): Promise<void> {
 	for (const roleKey of SYSTEM_ROLES) {
-		const existing = await db
+		const [existing] = await db
 			.select()
 			.from(opsRoles)
 			.where(eq(opsRoles.id, roleKey))
 			.limit(1);
 
-		if (existing.length === 0) {
-			const meta = ROLE_LABELS[roleKey];
+		const meta = ROLE_LABELS[roleKey];
+		const expectedPermissions = ROLE_PERMISSIONS[roleKey];
+
+		if (!existing) {
 			await db.insert(opsRoles).values({
 				id: roleKey,
 				name: meta.name,
 				description: meta.description,
 				isSystem: true,
-				permissions: ROLE_PERMISSIONS[roleKey],
+				permissions: expectedPermissions,
 			});
+			continue;
+		}
+
+		const existingPerms = (existing.permissions ?? []) as OpsModule[];
+		const needsUpdate =
+			existing.name !== meta.name ||
+			existing.description !== meta.description ||
+			existingPerms.length !== expectedPermissions.length ||
+			!expectedPermissions.every((p) => existingPerms.includes(p));
+
+		if (needsUpdate) {
+			await db
+				.update(opsRoles)
+				.set({
+					name: meta.name,
+					description: meta.description,
+					permissions: expectedPermissions,
+					updatedAt: new Date(),
+				})
+				.where(eq(opsRoles.id, roleKey));
 		}
 	}
 }

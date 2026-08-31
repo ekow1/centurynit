@@ -92,6 +92,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
+	{ to: "/scheduling", module: "scheduling", label: "Scheduling", blurb: "Branch slot configuration", icon: "appointments" },
 	{ to: "/my-calendar", module: "dashboard", label: "My Calendar", blurb: "Google Calendar sync", icon: "appointments" },
 ];
 

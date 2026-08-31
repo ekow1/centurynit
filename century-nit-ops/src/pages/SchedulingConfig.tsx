@@ -107,9 +107,23 @@ export function SchedulingConfig() {
 			<div style={{ marginBottom: "2rem" }}>
 				<h1 className="page-title">Scheduling Configuration</h1>
 				<p className="lead mt-2">
-					Set how many consultation slots the branch offers per day and the operating
-					hours. Slot times are calculated automatically and shown to applicants in the
-					portal. This is separate from any consultant's personal calendar.
+					Set the branch-wide consultation slot template. The times below are calculated
+					automatically and shown to applicants in the portal.
+				</p>
+			</div>
+
+			<div
+				className="card"
+				style={{
+					padding: "1rem 1.25rem",
+					marginBottom: "1.5rem",
+					borderLeft: "4px solid var(--primary)",
+				}}
+			>
+				<p className="muted" style={{ margin: 0 }}>
+					Only <strong>Manager, Systems, and Super Admin</strong> can edit this.
+					Consultants control their own availability separately in{" "}
+					<strong>My Availability</strong>.
 				</p>
 			</div>
 

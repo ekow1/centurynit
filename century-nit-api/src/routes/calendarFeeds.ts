@@ -16,7 +16,14 @@ import {
 	ensureDefaultWorkingHours,
 	listWorkingHours,
 	setWorkingHours,
+	slotTimesFor,
 } from "../services/availability.js";
+import {
+	branchOpenEnd,
+	branchOpenStart,
+	defaultTimezone,
+	slotsPerDay,
+} from "../services/settings.js";
 import { isValidTimeZone } from "../lib/time.js";
 import { removeCalendarFeed, renderIcs, type IcsEvent } from "../services/calendar/ics.js";
 import { queueFeedSync } from "../worker/queues.js";
@@ -367,6 +374,62 @@ calendarFeedsRouter.openapi(
 		const conflictingBookings = await setWorkingHours(staff.opsUserId, body);
 		return c.json(
 			{ workingHours: await listWorkingHours(staff.opsUserId), conflictingBookings },
+			200,
+		);
+	},
+);
+
+/* ── GET /api/v1/calendar/branch-slots ─────────────────────────────────────────
+ * Read-only branch slot template. Every staff member sees it on their own
+ * availability page so consultants understand which slots the portal will offer.
+ * Only managers/systems/super admins can change it via /api/v1/scheduling.
+ */
+
+const branchSlotsResponseSchema = z.object({
+	slotsPerDay: z.number().int(),
+	openStart: z.string(),
+	openEnd: z.string(),
+	timezone: z.string(),
+	times: z.array(z.string()),
+});
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/branch-slots",
+		tags: ["Calendar"],
+		summary: "Branch consultation slot template",
+		description:
+			"The branch-wide slot configuration that drives the portal booking grid. " +
+			"Consultants see this read-only; only scheduling-authorized roles can edit it.",
+		middleware: [
+			requireAuth,
+			requireMfa,
+			requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant"),
+		] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: branchSlotsResponseSchema } },
+				description: "Branch slot template",
+			},
+		},
+	}),
+	async (c) => {
+		const [times, openStart, openEnd, slotsPerDayValue, timezone] = await Promise.all([
+			slotTimesFor(),
+			branchOpenStart(),
+			branchOpenEnd(),
+			slotsPerDay(),
+			defaultTimezone(),
+		]);
+		return c.json(
+			{
+				slotsPerDay: slotsPerDayValue,
+				openStart,
+				openEnd,
+				timezone,
+				times,
+			},
 			200,
 		);
 	},

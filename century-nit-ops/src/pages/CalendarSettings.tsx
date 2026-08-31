@@ -3,7 +3,7 @@ import { ApiError, calendarApi, type CalendarStatus, type CalendarSubscription }
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 /**
- * Calendar availability — the iCal/ICS mirror that replaced Google Calendar.
+ * My Availability — personal working hours and external calendar sync.
  *
  * A staff member pastes their calendar's read-only secret iCal address (Google
  * "Secret address in iCal format", Outlook/Apple "publish calendar" .ics link).
@@ -11,6 +11,10 @@ import { ConfirmDialog, Toast } from "./OpsDialogs";
  * only ever learns whether a feed is set up and when it last mirrored. A worker
  * pulls the busy windows into the availability check, so an external meeting
  * blocks the portal slot. Meeting links themselves are set per-booking.
+ *
+ * Branch-wide consultation slot times are configured separately by managers and
+ * systems staff. Consultants see those slots read-only here so they can align
+ * their own availability with the branch schedule.
  */
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -158,6 +162,54 @@ function WorkingHoursEditor({
 				</button>
 			</div>
 		</form>
+	);
+}
+
+/**
+ * Branch slot template — read-only for consultants.
+ *
+ * Managers and systems staff control how many slots the branch offers per day
+ * and the operating hours. This view lets every staff member see the resulting
+ * times so they can align their own working hours.
+ */
+function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) {
+	if (!slots) return null;
+	return (
+		<div className="cal-branch-slots" style={{ marginBottom: "2rem" }}>
+			<h3 className="cal-hours__title">Branch consultation slots</h3>
+			<p className="ops-panel__muted">
+				{slots.slotsPerDay} slots per day between {slots.openStart} and {slots.openEnd} (
+				{slots.timezone}). These are the times applicants see in the portal. Your own
+				working hours below decide which of these you can take.
+			</p>
+			<div
+				style={{
+					display: "flex",
+					flexWrap: "wrap",
+					gap: "0.5rem",
+					marginTop: "0.75rem",
+					padding: "0.75rem",
+					background: "var(--surface)",
+					borderRadius: "0.5rem",
+				}}
+			>
+				{slots.times.map((t) => (
+					<span
+						key={t}
+						style={{
+							padding: "0.35rem 0.7rem",
+							background: "var(--bg-elevated)",
+							borderRadius: "0.35rem",
+							fontFamily: "var(--font-mono)",
+							fontSize: "var(--text-sm)",
+							border: "var(--medium)",
+						}}
+					>
+						{t}
+					</span>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -363,14 +415,14 @@ export function CalendarSettings() {
 		<section className="ops-panel" aria-labelledby="calendar-heading">
 			<header className="ops-panel__head">
 				<h2 id="calendar-heading" className="section-title">
-					Calendar availability
+					My Availability
 				</h2>
 			</header>
 
 			{error && <p className="ops-modal__error">{error}</p>}
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
 
-			
+			{status && <BranchSlotPreview slots={status.branchSlots} />}
 			{status && <SyncToPersonalCalendar subscription={subscription} onChanged={load} />}
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
 

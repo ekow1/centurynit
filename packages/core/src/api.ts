@@ -561,6 +561,16 @@ export type CalendarStatus = {
 	/** Absolute URL to subscribe a calendar app to this consultant's own Century NIT bookings. */
 	outboundUrl: string | null;
 	workingHours: { dayOfWeek: number; start: string; end: string; timezone: string }[];
+	/** Branch-wide slot configuration set by managers/systems. Consultants see this read-only. */
+	branchSlots: BranchSlots | null;
+};
+
+export type BranchSlots = {
+	slotsPerDay: number;
+	openStart: string;
+	openEnd: string;
+	timezone: string;
+	times: string[];
 };
 
 /** The staff member's personalized, revocable read-only iCal subscription URL. */
@@ -577,9 +587,10 @@ export const calendarApi = {
 	 */
 	status(): Promise<CalendarStatus> {
 		return Promise.all([
-			request<Omit<CalendarStatus, "workingHours">>(`${API_PREFIX}/calendar/feeds/me`),
+			request<Omit<CalendarStatus, "workingHours" | "branchSlots">>(`${API_PREFIX}/calendar/feeds/me`),
 			request<{ workingHours: CalendarStatus["workingHours"] }>(`${API_PREFIX}/calendar/working-hours`),
-		]).then(([feed, wh]) => ({ ...feed, workingHours: wh.workingHours }));
+			request<BranchSlots>(`${API_PREFIX}/calendar/branch-slots`),
+		]).then(([feed, wh, slots]) => ({ ...feed, workingHours: wh.workingHours, branchSlots: slots }));
 	},
 
 	/** Add or replace the signed-in staff member's read-only iCal/ICS feed. */

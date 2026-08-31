@@ -8,5 +8,5 @@ export function publicSiteUrl(): string {
 	const fromEnv = import.meta.env.VITE_PUBLIC_SITE_URL;
 	if (typeof fromEnv === "string" && fromEnv.length > 0) return fromEnv.replace(/\/$/, "");
 	if (import.meta.env.DEV) return "http://localhost:5173";
-	return "https://centurynit.com";
+	return "https://centurynit.softclicksolutions.com";
 }

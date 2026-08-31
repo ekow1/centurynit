@@ -896,6 +896,8 @@ type AppStateContextValue = {
 	authUser: AuthUser | null;
 	isAuthenticated: boolean;
 	sessionStatus: "checking" | "authenticated" | "unauthenticated";
+	sessionError: string | null;
+	clearSessionError: () => void;
 	signIn: (user: Omit<AuthUser, "signedInAt">) => void;
 	signOut: () => Promise<void>;
 	/** Self-service account edit - syncs the auth record and application/assessment email */
@@ -1002,6 +1004,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const [sessionStatus, setSessionStatus] = useState<
 		"checking" | "authenticated" | "unauthenticated"
 	>("checking");
+	const [sessionError, setSessionError] = useState<string | null>(null);
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
 	const syncCountRef = useRef(0);
 
@@ -1756,6 +1759,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
+	const clearSessionError = useCallback(() => {
+		setSessionError(null);
+	}, []);
+
 	const signOut = useCallback(async () => {
 		try {
 			await authSignOut();
@@ -1796,6 +1803,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						setAuthUser(null);
 						safeRemoveItem(AUTH_STORAGE_KEY);
 						setSessionStatus("unauthenticated");
+						setSessionError(
+							identity.isBanned
+								? "Your account has been suspended. Please contact support."
+								: "User already exists with this email as staff. Please use the staff console instead.",
+						);
 						return;
 					}
 				} catch {
@@ -2359,6 +2371,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			authUser,
 			isAuthenticated: Boolean(authUser),
 			sessionStatus,
+			sessionError,
+			clearSessionError,
 			signIn,
 			signOut,
 			updateAccount,
@@ -2423,6 +2437,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			confirmInterview,
 			authUser,
 			sessionStatus,
+			sessionError,
+			clearSessionError,
 			signIn,
 			signOut,
 			updateAccount,

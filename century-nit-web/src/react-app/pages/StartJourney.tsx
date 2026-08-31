@@ -49,7 +49,7 @@ const FEATURES = [
 type AuthStep = "signin" | "forgot" | "verify" | "set" | "done" | "mfa_otp" | "verify_email";
 
 export function StartJourney() {
-	const { isAuthenticated, signIn, sessionStatus } = useAppState();
+	const { isAuthenticated, signIn, sessionStatus, sessionError, clearSessionError } = useAppState();
 	const nav = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
@@ -199,6 +199,7 @@ export function StartJourney() {
 		e.preventDefault();
 		const mail = email.trim().toLowerCase();
 		setError("");
+		clearSessionError();
 		if (!mail.includes("@")) {
 			setError("Enter a valid email address");
 			return;
@@ -566,9 +567,9 @@ export function StartJourney() {
 						</div>
 					) : null}
 
-					{error ? (
+					{error || sessionError ? (
 						<div className="auth-error" role="alert">
-							{error}
+							{error || sessionError}
 						</div>
 					) : null}
 
@@ -577,7 +578,7 @@ export function StartJourney() {
 							<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--border-light)" }}>
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signin"); setError(""); setPasswordTouched(false); setEmailExists(null); }}
+									onClick={() => { setAuthMode("signin"); setError(""); clearSessionError(); setPasswordTouched(false); setEmailExists(null); }}
 									style={{
 										padding: "0.5rem 1rem",
 										borderBottom: authMode === "signin" ? "2px solid var(--primary)" : "2px solid transparent",
@@ -589,7 +590,7 @@ export function StartJourney() {
 								</button>
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signup"); setError(""); setPasswordTouched(false); setEmailExists(null); }}
+									onClick={() => { setAuthMode("signup"); setError(""); clearSessionError(); setPasswordTouched(false); setEmailExists(null); }}
 									style={{
 										padding: "0.5rem 1rem",
 										borderBottom: authMode === "signup" ? "2px solid var(--primary)" : "2px solid transparent",
@@ -615,6 +616,7 @@ export function StartJourney() {
 												setCodeSentTo(null);
 												setOtpCode("");
 												setError("");
+												clearSessionError();
 												setEmailExists(null);
 											}}
 										>

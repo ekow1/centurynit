@@ -593,7 +593,7 @@ export const calendarApi = {
 		return Promise.all([
 			request<Omit<CalendarStatus, "workingHours" | "branchSlots">>(`${API_PREFIX}/calendar/feeds/me`),
 			request<{ workingHours: CalendarStatus["workingHours"] }>(`${API_PREFIX}/calendar/working-hours`),
-			request<BranchSlots>(`${API_PREFIX}/calendar/branch-slots`),
+			request<BranchSlotSchedule>(`${API_PREFIX}/calendar/branch-slots`).catch(() => null as BranchSlotSchedule | null),
 		]).then(([feed, wh, slots]) => ({ ...feed, workingHours: wh.workingHours, branchSlots: slots }));
 	},
 

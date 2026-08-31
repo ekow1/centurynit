@@ -173,7 +173,7 @@ function WorkingHoursEditor({
  * times so they can align their own working hours.
  */
 function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) {
-	if (!slots) return null;
+	if (!slots?.days) return null;
 	return (
 		<div className="cal-branch-slots" style={{ marginBottom: "2rem" }}>
 			<h3 className="cal-hours__title">Branch consultation slots</h3>

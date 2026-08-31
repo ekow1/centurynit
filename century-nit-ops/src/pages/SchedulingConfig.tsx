@@ -57,7 +57,6 @@ function updateDayPreview(day: SchedulingDay): SchedulingDay {
 }
 
 export function SchedulingConfig() {
-	const [config, setConfig] = useState<SchedulingConfig | null>(null);
 	const [days, setDays] = useState<SchedulingDay[]>([]);
 	const [timezone, setTimezone] = useState<string>("Africa/Accra");
 	const [loading, setLoading] = useState(true);
@@ -70,7 +69,6 @@ export function SchedulingConfig() {
 		setError(null);
 		try {
 			const res = await apiFetch<SchedulingConfig>(`${API_PREFIX}/scheduling`);
-			setConfig(res);
 			setTimezone(res.timezone);
 			setDays(res.days.map((d) => ({ ...d })));
 		} catch (err) {
@@ -133,7 +131,6 @@ export function SchedulingConfig() {
 				method: "PUT",
 				body: JSON.stringify(body),
 			});
-			setConfig(res);
 			setDays(res.days.map((d) => ({ ...d })));
 			setSuccess("Scheduling configuration saved. The portal will show the updated slot times.");
 		} catch (err) {

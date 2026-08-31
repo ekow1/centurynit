@@ -174,63 +174,81 @@ function WorkingHoursEditor({
  */
 function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) {
 	if (!slots?.days) return null;
+
+	// Monday first, matching the working hours editor directly above.
+	const ordered = [1, 2, 3, 4, 5, 6, 0]
+		.map((dow) => slots.days.find((d) => d.dayOfWeek === dow))
+		.filter((d): d is NonNullable<typeof d> => Boolean(d));
+	const open = ordered.filter((d) => d.enabled);
+	const closed = ordered.filter((d) => !d.enabled);
+
+	/*
+	 * Almost every branch runs the same hours every open day, so spelling out
+	 * seven near-identical rows buries the one line a consultant actually needs.
+	 * The detail is still one click away for the days that differ.
+	 */
+	const uniformHours =
+		open.length > 0 &&
+		open.every(
+			(d) =>
+				d.openStart === open[0].openStart &&
+				d.openEnd === open[0].openEnd &&
+				d.slotsPerDay === open[0].slotsPerDay,
+		);
+
 	return (
-		<div className="cal-branch-slots" style={{ marginBottom: "2rem" }}>
+		<div className="branch-slots">
 			<h3 className="cal-hours__title">Branch consultation slots</h3>
+
+			{open.length === 0 ? (
+				<p className="branch-slots__summary">
+					The branch is currently closed for bookings on every day.
+				</p>
+			) : (
+				<p className="branch-slots__summary">
+					Open <strong>{open.map((d) => DAY_NAMES[d.dayOfWeek].slice(0, 3)).join(", ")}</strong>
+					{uniformHours ? (
+						<>
+							{" "}
+							<strong>
+								{open[0].openStart}–{open[0].openEnd}
+							</strong>{" "}
+							with <strong>{open[0].slotsPerDay} slots</strong> a day.
+						</>
+					) : (
+						<> with hours that vary by day.</>
+					)}{" "}
+					{closed.length > 0 && (
+						<>Closed {closed.map((d) => DAY_NAMES[d.dayOfWeek]).join(" and ")}. </>
+					)}
+					Times are shown in {slots.timezone}.
+				</p>
+			)}
+
 			<p className="ops-panel__muted">
-				Managers set a different slot template for each weekday. These are the times
-				applicants see in the portal ({slots.timezone}). Your own working hours below
-				decide which of these you can take.
+				Managers set this template. Your working hours above decide which of these
+				slots you can be assigned.
 			</p>
-			<div style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
-				{slots.days.map((day) => (
-					<div
-						key={day.dayOfWeek}
-						style={{
-							padding: "0.75rem",
-							background: "var(--surface)",
-							borderRadius: "0.5rem",
-							opacity: day.enabled ? 1 : 0.55,
-						}}
-					>
-						<div
-							style={{
-								display: "flex",
-								justifyContent: "space-between",
-								marginBottom: day.enabled ? "0.5rem" : 0,
-								fontWeight: 600,
-								fontSize: "var(--text-sm)",
-							}}
-						>
-							<span>{DAY_NAMES[day.dayOfWeek]}</span>
-							<span className="muted">
-								{day.enabled
-									? `${day.openStart}–${day.openEnd}, ${day.slotsPerDay} slots`
-									: "No slots"}
-							</span>
-						</div>
-						{day.enabled && (
-							<div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
-								{day.times.map((t) => (
-									<span
-										key={t}
-										style={{
-											padding: "0.25rem 0.5rem",
-											background: "var(--bg-elevated)",
-											borderRadius: "0.25rem",
-											fontFamily: "var(--font-mono)",
-											fontSize: "var(--text-xs)",
-											border: "var(--medium)",
-										}}
-									>
-										{t}
-									</span>
+
+			{open.length > 0 && (
+				<details className="branch-slots__detail">
+					<summary>View slot times</summary>
+					<div style={{ marginTop: "0.5rem" }}>
+						{open.map((day) => (
+							<div key={day.dayOfWeek} className="branch-slots__day">
+								<span className="branch-slots__day-name">{DAY_NAMES[day.dayOfWeek]}</span>
+								<span className="slotcfg__times">
+									{day.times.map((t) => (
+										<span key={t} className="slotcfg__chip">
+											{t}
+										</span>
 									))}
+								</span>
 							</div>
-						)}
+						))}
 					</div>
-				))}
-			</div>
+				</details>
+			)}
 		</div>
 	);
 }
@@ -444,9 +462,9 @@ export function CalendarSettings() {
 			{error && <p className="ops-modal__error">{error}</p>}
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
 
-			{status && <BranchSlotPreview slots={status.branchSlots} />}
 			{status && <SyncToPersonalCalendar subscription={subscription} onChanged={load} />}
 			{status && <WorkingHoursEditor status={status} onSaved={load} />}
+			{status && <BranchSlotPreview slots={status.branchSlots} />}
 
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</section>

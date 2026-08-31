@@ -888,3 +888,242 @@
 .perm-item-row:hover {
 	background: var(--surface-subtle, #fafafa);
 }
+
+/* ── Branch slot configuration (weekday table) ───────────────────────────────
+ * The branch slot template is a small, fixed 7-row grid, so it reads far better
+ * as a dense table than as seven near-identical cards. Every row is the same
+ * shape, which is exactly what makes a table the right control here.
+ */
+
+.slotcfg__presets {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	padding-bottom: 1rem;
+	margin-bottom: 1rem;
+	border-bottom: var(--hairline);
+}
+
+.slotcfg__presets-label {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted, #666);
+	margin-right: 0.25rem;
+}
+
+.slotcfg-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm, 0.875rem);
+}
+
+.slotcfg-table th {
+	text-align: left;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted, #666);
+	font-weight: 500;
+	padding: 0.5rem 0.6rem;
+	border-bottom: var(--thin);
+	white-space: nowrap;
+}
+
+.slotcfg-table td {
+	padding: 0.6rem;
+	border-bottom: var(--hairline);
+	vertical-align: middle;
+}
+
+.slotcfg-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.slotcfg-row--off td {
+	opacity: 0.45;
+}
+
+.slotcfg-row--off:hover td {
+	opacity: 0.7;
+}
+
+.slotcfg__day {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+/* Compact inputs: the table is dense, so the default field chrome is too tall. */
+.slotcfg__num,
+.slotcfg__time {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	padding: 0.3rem 0.4rem;
+	border: var(--thin);
+	background: var(--background);
+	color: var(--foreground);
+	box-sizing: border-box;
+}
+
+.slotcfg__num {
+	width: 4.5rem;
+	text-align: center;
+}
+
+.slotcfg__time {
+	width: 7.5rem;
+}
+
+.slotcfg__num:disabled,
+.slotcfg__time:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+
+.slotcfg__times {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+}
+
+.slotcfg__chip {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	padding: 0.15rem 0.4rem;
+	border: var(--hairline);
+	background: var(--surface-subtle, #f6f6f6);
+	white-space: nowrap;
+}
+
+.slotcfg__closed {
+	font-size: var(--text-xs);
+	color: var(--text-muted, #666);
+	font-style: italic;
+}
+
+.slotcfg__interval {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--text-muted, #666);
+	white-space: nowrap;
+}
+
+/* Save bar only appears once something is actually dirty — a permanently
+ * visible primary button trains people to ignore it. */
+.slotcfg__savebar {
+	position: sticky;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+	margin-top: 1.25rem;
+	padding: 0.85rem 1rem;
+	border: var(--medium);
+	background: var(--background);
+	box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.slotcfg__savebar-note {
+	font-size: var(--text-sm);
+	margin: 0;
+}
+
+@media (max-width: 860px) {
+	.slotcfg-table thead {
+		display: none;
+	}
+
+	.slotcfg-table tr {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+		padding: 0.85rem 0;
+		border-bottom: var(--thin);
+	}
+
+	.slotcfg-table td {
+		border: 0;
+		padding: 0;
+	}
+
+	.slotcfg-table td[data-col="times"] {
+		grid-column: 1 / -1;
+	}
+}
+
+/* ── Branch slot summary (read-only, My Availability) ── */
+
+.branch-slots {
+	margin-top: 1.5rem;
+	padding-top: 1.25rem;
+	border-top: var(--hairline);
+}
+
+.branch-slots__summary {
+	font-size: var(--text-sm);
+	margin: 0 0 0.5rem;
+}
+
+.branch-slots__detail {
+	border: var(--thin);
+	background: var(--surface-subtle, #f6f6f6);
+	padding: 0.65rem 0.85rem;
+	margin-top: 0.5rem;
+}
+
+.branch-slots__detail summary {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	list-style: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.branch-slots__detail summary::-webkit-details-marker {
+	display: none;
+}
+
+.branch-slots__detail summary::after {
+	content: "+";
+	font-size: 1.1rem;
+	line-height: 1;
+}
+
+.branch-slots__detail[open] summary::after {
+	content: "−";
+}
+
+.branch-slots__day {
+	display: grid;
+	grid-template-columns: 6.5rem 1fr;
+	align-items: baseline;
+	gap: 0.75rem;
+	padding: 0.4rem 0;
+	border-bottom: var(--hairline);
+}
+
+.branch-slots__day:last-child {
+	border-bottom: 0;
+}
+
+.branch-slots__day-name {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+@media (max-width: 560px) {
+	.branch-slots__day {
+		grid-template-columns: 1fr;
+		gap: 0.25rem;
+	}
+}

@@ -11,6 +11,8 @@ import { apiFetch, ApiError } from "../lib/api";
  * tied to any individual consultant's calendar.
  */
 
+/** Monday first — the working week reads better than Sunday-first here. */
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 interface SchedulingDay {
@@ -49,6 +51,13 @@ function computeSlotTimes(openStart: string, openEnd: string, count: number): st
 	return times;
 }
 
+/** Minutes between consecutive slots — the number staff actually reason about. */
+function slotInterval(day: SchedulingDay): number {
+	const total = timeToMinutes(day.openEnd) - timeToMinutes(day.openStart);
+	if (total <= 0 || day.slotsPerDay <= 0) return 0;
+	return Math.floor(total / day.slotsPerDay);
+}
+
 function updateDayPreview(day: SchedulingDay): SchedulingDay {
 	return {
 		...day,
@@ -56,9 +65,26 @@ function updateDayPreview(day: SchedulingDay): SchedulingDay {
 	};
 }
 
+/** Compare ignoring the derived preview, so only real edits mark the form dirty. */
+function sameSchedule(a: SchedulingDay[], b: SchedulingDay[]): boolean {
+	if (a.length !== b.length) return false;
+	return a.every((day, i) => {
+		const other = b[i];
+		return (
+			day.dayOfWeek === other.dayOfWeek &&
+			day.enabled === other.enabled &&
+			day.slotsPerDay === other.slotsPerDay &&
+			day.openStart === other.openStart &&
+			day.openEnd === other.openEnd
+		);
+	});
+}
+
 export function SchedulingConfig() {
 	const [days, setDays] = useState<SchedulingDay[]>([]);
+	const [saved, setSaved] = useState<SchedulingDay[]>([]);
 	const [timezone, setTimezone] = useState<string>("Africa/Accra");
+	const [savedTimezone, setSavedTimezone] = useState<string>("Africa/Accra");
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -69,8 +95,11 @@ export function SchedulingConfig() {
 		setError(null);
 		try {
 			const res = await apiFetch<SchedulingConfig>(`${API_PREFIX}/scheduling`);
+			const fresh = res.days.map((d) => ({ ...d }));
 			setTimezone(res.timezone);
-			setDays(res.days.map((d) => ({ ...d })));
+			setSavedTimezone(res.timezone);
+			setDays(fresh);
+			setSaved(fresh.map((d) => ({ ...d })));
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not load scheduling configuration.");
 		} finally {
@@ -83,10 +112,47 @@ export function SchedulingConfig() {
 	}, [load]);
 
 	const previewDays = useMemo(() => days.map((d) => updateDayPreview(d)), [days]);
+	const orderedDays = useMemo(
+		() =>
+			WEEK_ORDER.map((dow) => previewDays.find((d) => d.dayOfWeek === dow)).filter(
+				(d): d is SchedulingDay => Boolean(d),
+			),
+		[previewDays],
+	);
+	const dirty = timezone !== savedTimezone || !sameSchedule(days, saved);
+	const activeCount = days.filter((d) => d.enabled).length;
+	const weeklyTotal = days.reduce((sum, d) => sum + (d.enabled ? d.slotsPerDay : 0), 0);
 
 	function updateDay(dayOfWeek: number, patch: Partial<SchedulingDay>) {
 		setDays((prev) =>
 			prev.map((d) => (d.dayOfWeek === dayOfWeek ? updateDayPreview({ ...d, ...patch }) : d)),
+		);
+		setSuccess(null);
+	}
+
+	/** Copy one day's hours and slot count onto every other active day. */
+	function copyToAll(sourceDayOfWeek: number) {
+		const source = days.find((d) => d.dayOfWeek === sourceDayOfWeek);
+		if (!source) return;
+		setDays((prev) =>
+			prev.map((d) =>
+				d.dayOfWeek === sourceDayOfWeek || !d.enabled
+					? d
+					: updateDayPreview({
+							...d,
+							slotsPerDay: source.slotsPerDay,
+							openStart: source.openStart,
+							openEnd: source.openEnd,
+						}),
+			),
+		);
+		setSuccess(null);
+	}
+
+	/** Enable exactly the given weekdays, leaving each day's own hours intact. */
+	function setActiveDays(active: number[]) {
+		setDays((prev) =>
+			prev.map((d) => updateDayPreview({ ...d, enabled: active.includes(d.dayOfWeek) })),
 		);
 		setSuccess(null);
 	}
@@ -131,7 +197,10 @@ export function SchedulingConfig() {
 				method: "PUT",
 				body: JSON.stringify(body),
 			});
-			setDays(res.days.map((d) => ({ ...d })));
+			const fresh = res.days.map((d) => ({ ...d }));
+			setDays(fresh);
+			setSaved(fresh.map((d) => ({ ...d })));
+			setSavedTimezone(res.timezone);
 			setSuccess("Scheduling configuration saved. The portal will show the updated slot times.");
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not save scheduling configuration.");
@@ -142,26 +211,11 @@ export function SchedulingConfig() {
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ marginBottom: "2rem" }}>
+			<div style={{ marginBottom: "1.25rem" }}>
 				<h1 className="page-title">Scheduling Configuration</h1>
 				<p className="lead mt-2">
-					Set the branch-wide consultation slot template for each weekday. Disabled
-					days have no slots. Times are calculated automatically and shown to applicants in
-					the portal.
-				</p>
-			</div>
-
-			<div
-				className="card"
-				style={{
-					padding: "1rem 1.25rem",
-					marginBottom: "1.5rem",
-					borderLeft: "4px solid var(--primary)",
-				}}
-			>
-				<p className="muted" style={{ margin: 0 }}>
-					Only <strong>Manager, Systems, and Super Admin</strong> can edit this.
-					Consultants control their own availability separately in{" "}
+					The branch-wide slot template. Applicants can only book the times generated
+					here; consultants set their own working hours separately in{" "}
 					<strong>My Availability</strong>.
 				</p>
 			</div>
@@ -180,176 +234,184 @@ export function SchedulingConfig() {
 				</div>
 			)}
 
-			<div className="card" style={{ padding: "1.5rem" }}>
+			<div className="ops-panel">
 				{loading ? (
-					<p className="muted">Loading configuration…</p>
+					<p className="ops-panel__muted">Loading configuration…</p>
 				) : (
 					<form onSubmit={handleSubmit}>
-						<div style={{ marginBottom: "1.25rem" }}>
-							<label htmlFor="timezone" className="label">
-								Timezone
-							</label>
-							<input
-								id="timezone"
-								type="text"
-								value={timezone}
-								onChange={(e) => setTimezone(e.target.value)}
-								className="input input--full-border"
-								style={{ maxWidth: "18rem" }}
-								required
-							/>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.35rem" }}>
-								IANA timezone used for slot labels. Example: Africa/Accra.
-							</p>
+						<div className="slotcfg__presets">
+							<span className="slotcfg__presets-label">Quick set</span>
+							<button
+								type="button"
+								className="perm-quick-btn"
+								onClick={() => setActiveDays([1, 2, 3, 4, 5])}
+							>
+								Weekdays only
+							</button>
+							<button
+								type="button"
+								className="perm-quick-btn"
+								onClick={() => setActiveDays([1, 2, 3, 4, 5, 6])}
+							>
+								Include Saturday
+							</button>
+							<button
+								type="button"
+								className="perm-quick-btn"
+								onClick={() => copyToAll(1)}
+							>
+								Copy Monday to all
+							</button>
+							<button type="button" className="perm-quick-btn" onClick={() => setActiveDays([])}>
+								Close all
+							</button>
+
+							<span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+								<label className="slotcfg__presets-label" htmlFor="timezone" style={{ margin: 0 }}>
+									Timezone
+								</label>
+								<input
+									id="timezone"
+									type="text"
+									value={timezone}
+									onChange={(e) => {
+										setTimezone(e.target.value);
+										setSuccess(null);
+									}}
+									className="slotcfg__time"
+									style={{ width: "11rem" }}
+									required
+								/>
+							</span>
 						</div>
 
-						<div
-							style={{
-								display: "grid",
-								gap: "1rem",
-								gridTemplateColumns: "repeat(auto-fill, minmax(18rem, 1fr))",
-							}}
-						>
-							{previewDays.map((day) => (
-								<div
-									key={day.dayOfWeek}
-									className="card"
-									style={{
-										padding: "1rem",
-										opacity: day.enabled ? 1 : 0.6,
-										borderLeft: day.enabled ? "3px solid var(--primary)" : "3px solid transparent",
-									}}
-								>
-									<div
-										style={{
-											display: "flex",
-											justifyContent: "space-between",
-											alignItems: "center",
-											marginBottom: "0.75rem",
+						<table className="slotcfg-table">
+							<thead>
+								<tr>
+									<th scope="col">Day</th>
+									<th scope="col">Open</th>
+									<th scope="col">Slots</th>
+									<th scope="col">From</th>
+									<th scope="col">To</th>
+									<th scope="col">Every</th>
+									<th scope="col">Generated times</th>
+								</tr>
+							</thead>
+							<tbody>
+								{orderedDays.map((day) => {
+									const interval = slotInterval(day);
+									return (
+										<tr
+											key={day.dayOfWeek}
+											className={day.enabled ? undefined : "slotcfg-row--off"}
+										>
+											<td className="slotcfg__day" data-col="day">
+												{DAY_NAMES[day.dayOfWeek]}
+											</td>
+											<td data-col="open">
+												<label className="perm-switch" title={`Toggle ${DAY_NAMES[day.dayOfWeek]}`}>
+													<input
+														type="checkbox"
+														checked={day.enabled}
+														aria-label={`${DAY_NAMES[day.dayOfWeek]} open for bookings`}
+														onChange={(e) =>
+															updateDay(day.dayOfWeek, { enabled: e.target.checked })
+														}
+													/>
+													<span className="perm-switch__slider" />
+												</label>
+											</td>
+											<td data-col="slots">
+												<input
+													type="number"
+													min={1}
+													max={48}
+													className="slotcfg__num"
+													value={day.slotsPerDay}
+													disabled={!day.enabled}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} slots per day`}
+													onChange={(e) =>
+														updateDay(day.dayOfWeek, {
+															slotsPerDay: Number.parseInt(e.target.value, 10) || 0,
+														})
+													}
+												/>
+											</td>
+											<td data-col="from">
+												<input
+													type="time"
+													className="slotcfg__time"
+													value={day.openStart}
+													disabled={!day.enabled}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} opening time`}
+													onChange={(e) => updateDay(day.dayOfWeek, { openStart: e.target.value })}
+												/>
+											</td>
+											<td data-col="to">
+												<input
+													type="time"
+													className="slotcfg__time"
+													value={day.openEnd}
+													disabled={!day.enabled}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} closing time`}
+													onChange={(e) => updateDay(day.dayOfWeek, { openEnd: e.target.value })}
+												/>
+											</td>
+											<td data-col="every">
+												<span className="slotcfg__interval">
+													{day.enabled && interval > 0 ? `${interval} min` : "—"}
+												</span>
+											</td>
+											<td data-col="times">
+												{!day.enabled ? (
+													<span className="slotcfg__closed">Closed — no bookings offered</span>
+												) : day.preview.length === 0 ? (
+													<span className="slotcfg__closed">Closing time must be after opening time</span>
+												) : (
+													<span className="slotcfg__times">
+														{day.preview.map((t) => (
+															<span key={t} className="slotcfg__chip">
+																{t}
+															</span>
+														))}
+													</span>
+												)}
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+
+						<p className="ops-panel__muted" style={{ marginTop: "1rem" }}>
+							{activeCount} open {activeCount === 1 ? "day" : "days"} · {weeklyTotal} bookable
+							slots per week · times shown in {timezone}
+						</p>
+
+						{dirty && (
+							<div className="slotcfg__savebar">
+								<p className="slotcfg__savebar-note">
+									You have unsaved changes to the branch slot template.
+								</p>
+								<span className="cal-actions">
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										disabled={saving}
+										onClick={() => {
+											setDays(saved.map((d) => ({ ...d })));
+											setTimezone(savedTimezone);
+											setError(null);
 										}}
 									>
-										<h3
-											className="section-title"
-											style={{ fontSize: "1rem", margin: 0 }}
-										>
-											{DAY_NAMES[day.dayOfWeek]}
-										</h3>
-										<label
-											style={{
-												display: "flex",
-												alignItems: "center",
-												gap: "0.35rem",
-												fontSize: "var(--text-sm)",
-												cursor: "pointer",
-											}}
-										>
-											<input
-												type="checkbox"
-												checked={day.enabled}
-												onChange={(e) =>
-													updateDay(day.dayOfWeek, { enabled: e.target.checked })
-												}
-											/>
-											Active
-										</label>
-									</div>
-
-									{day.enabled && (
-										<>
-											<div style={{ display: "grid", gap: "0.75rem" }}>
-												<div>
-													<label className="label" style={{ fontSize: "var(--text-sm)" }}>
-														Slots
-													</label>
-													<input
-														type="number"
-														min={1}
-														max={48}
-														value={day.slotsPerDay}
-														onChange={(e) =>
-															updateDay(day.dayOfWeek, {
-																slotsPerDay: Number.parseInt(e.target.value, 10) || 0,
-															})
-														}
-														className="input input--full-border"
-														style={{ width: "100%" }}
-														required={day.enabled}
-													/>
-												</div>
-
-												<div style={{ display: "flex", gap: "0.5rem" }}>
-													<div style={{ flex: 1 }}>
-														<label
-															className="label"
-															style={{ fontSize: "var(--text-sm)" }}
-														>
-															Open
-														</label>
-														<input
-															type="time"
-															value={day.openStart}
-															onChange={(e) =>
-																updateDay(day.dayOfWeek, { openStart: e.target.value })
-															}
-															className="input input--full-border"
-															style={{ width: "100%" }}
-															required={day.enabled}
-														/>
-													</div>
-													<div style={{ flex: 1 }}>
-														<label
-															className="label"
-															style={{ fontSize: "var(--text-sm)" }}
-														>
-															Close
-														</label>
-														<input
-															type="time"
-															value={day.openEnd}
-															onChange={(e) =>
-																updateDay(day.dayOfWeek, { openEnd: e.target.value })
-															}
-															className="input input--full-border"
-															style={{ width: "100%" }}
-															required={day.enabled}
-														/>
-													</div>
-												</div>
-											</div>
-
-											{day.preview.length > 0 ? (
-												<div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.75rem" }}>
-													{day.preview.map((t) => (
-														<span
-															key={t}
-															style={{
-																padding: "0.25rem 0.5rem",
-																background: "var(--surface)",
-																borderRadius: "0.25rem",
-																fontFamily: "var(--font-mono)",
-																fontSize: "var(--text-xs)",
-															}}
-														>
-															{t}
-														</span>
-													))}
-												</div>
-											) : (
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-													No valid slots for this range.
-												</p>
-											)}
-										</>
-									)}
-								</div>
-							))}
-						</div>
-
-						<div style={{ marginTop: "1.5rem" }}>
-							<button type="submit" className="btn btn--primary" disabled={saving}>
-								{saving ? "Saving…" : "Save weekly scheduling configuration"}
-							</button>
-						</div>
+										Discard
+									</button>
+									<button type="submit" className="btn btn--primary btn--sm" disabled={saving}>
+										{saving ? "Saving…" : "Save changes"}
+									</button>
+								</span>
+							</div>
+						)}
 					</form>
 				)}
 			</div>

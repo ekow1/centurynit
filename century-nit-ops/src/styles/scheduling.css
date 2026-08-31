@@ -1127,3 +1127,226 @@
 		gap: 0.25rem;
 	}
 }
+
+/* ── My Availability page ────────────────────────────────────────────────────
+ * Two jobs live on this page: the consultant's own working hours (the task) and
+ * their external calendar link (setup, done once). Splitting them into a
+ * primary column and a sidebar stops the one-off setup block from pushing the
+ * weekly editor below the fold.
+ */
+
+.avail__head {
+	margin-bottom: 1.25rem;
+}
+
+.avail__title {
+	margin: 0;
+	font-size: var(--text-xl, 1.4rem);
+}
+
+.avail__lead {
+	margin: 0.4rem 0 0;
+	color: var(--text-muted, #666);
+	font-size: var(--text-sm);
+	max-width: 46rem;
+}
+
+/* At-a-glance answers to "am I set up?" without reading the whole page. */
+.avail__stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	gap: 0;
+	border: var(--medium);
+	margin-bottom: 1.5rem;
+}
+
+.avail__stat {
+	padding: 0.85rem 1rem;
+	border-right: var(--hairline);
+}
+
+.avail__stat:last-child {
+	border-right: 0;
+}
+
+.avail__stat-label {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted, #666);
+	margin-bottom: 0.3rem;
+}
+
+.avail__stat-value {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	font-size: var(--text-base, 1rem);
+	font-weight: 600;
+}
+
+.avail__layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+	gap: 1.5rem;
+	align-items: start;
+}
+
+@media (max-width: 1040px) {
+	.avail__layout {
+		grid-template-columns: 1fr;
+	}
+}
+
+.avail__card {
+	border: var(--medium);
+	background: var(--background);
+	padding: 1.25rem;
+}
+
+.avail__card + .avail__card {
+	margin-top: 1.5rem;
+}
+
+.avail__card-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-bottom: 0.35rem;
+}
+
+.avail__card-title {
+	margin: 0;
+	font-size: var(--text-sm, 0.875rem);
+	font-family: var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+/* ── Working hours table ── */
+
+.wh-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm, 0.875rem);
+	margin-top: 0.5rem;
+}
+
+.wh-table th {
+	text-align: left;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-weight: 500;
+	color: var(--text-muted, #666);
+	padding: 0.5rem 0.5rem;
+	border-bottom: var(--thin);
+	white-space: nowrap;
+}
+
+.wh-table td {
+	padding: 0.5rem;
+	border-bottom: var(--hairline);
+	vertical-align: middle;
+}
+
+.wh-table tr:last-child td {
+	border-bottom: 0;
+}
+
+.wh-row--off td {
+	opacity: 0.45;
+}
+
+.wh-row--off:hover td {
+	opacity: 0.7;
+}
+
+.wh-row--bad td {
+	background: rgba(176, 0, 32, 0.05);
+}
+
+.wh__day {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.wh__dash {
+	color: var(--text-muted, #666);
+	padding: 0 0.15rem;
+}
+
+.wh__span {
+	display: flex;
+	align-items: center;
+	gap: 0.25rem;
+}
+
+.wh__duration {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--text-muted, #666);
+	white-space: nowrap;
+}
+
+.wh__duration--bad {
+	color: #b00020;
+}
+
+@media (max-width: 620px) {
+	.wh-table thead {
+		display: none;
+	}
+
+	.wh-table tr {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.7rem 0;
+		border-bottom: var(--thin);
+	}
+
+	.wh-table td {
+		border: 0;
+		padding: 0;
+	}
+
+	.wh-table td[data-col="span"],
+	.wh-table td[data-col="duration"] {
+		grid-column: 2;
+	}
+}
+
+/* ── Calendar sync card ── */
+
+.avail__sync-state {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: var(--text-sm);
+	margin: 0 0 0.75rem;
+}
+
+.avail__url {
+	display: flex;
+	gap: 0.4rem;
+	align-items: center;
+	margin: 0.5rem 0;
+}
+
+.avail__url input {
+	flex: 1;
+	min-width: 0;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	padding: 0.35rem 0.45rem;
+	border: var(--thin);
+	background: var(--surface-subtle, #f6f6f6);
+	color: var(--foreground);
+}

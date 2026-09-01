@@ -3412,6 +3412,45 @@ img.tabbar__avatar {
 	color: var(--foreground);
 }
 
+/* MFA challenge alternative actions */
+
+.auth-alt {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem 1.25rem;
+	margin-top: 1.25rem;
+}
+
+.auth-alt__link {
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	text-align: center;
+	transition: color 100ms;
+}
+
+.auth-alt__link:hover:not(:disabled) {
+	color: var(--foreground);
+}
+
+.auth-alt__link:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.auth-alt__link:focus-visible {
+	outline: 3px solid var(--ring);
+	outline-offset: 2px;
+}
+
 /* Reset success panel */
 
 .auth-done {

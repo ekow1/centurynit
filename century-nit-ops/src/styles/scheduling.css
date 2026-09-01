@@ -905,6 +905,32 @@
 	border-bottom: var(--hairline);
 }
 
+.slotcfg__branch-hours {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 1.25rem 2rem;
+	padding: 1rem 1.25rem;
+	margin-bottom: 1rem;
+	background: var(--surface-raised, rgba(0, 0, 0, 0.02));
+	border: var(--hairline);
+	border-radius: 6px;
+}
+
+.slotcfg__branch-hours-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.slotcfg__branch-hours-field .slotcfg__time {
+	min-width: 7rem;
+}
+
+.slotcfg__branch-hours p {
+	flex-basis: 100%;
+}
+
 .slotcfg__presets-label {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);

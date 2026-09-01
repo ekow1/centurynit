@@ -24,19 +24,17 @@ const scheduleDaySchema = z.object({
 	dayOfWeek: z.number().int().min(0).max(6),
 	enabled: z.boolean(),
 	slotsPerDay: z.coerce.number().int().min(1).max(48),
-	openStart: timeStringSchema,
-	openEnd: timeStringSchema,
 });
 
 const schedulingResponseSchema = z.object({
 	timezone: z.string(),
+	openStart: timeStringSchema,
+	openEnd: timeStringSchema,
 	days: z.array(
 		z.object({
 			dayOfWeek: z.number().int(),
 			enabled: z.boolean(),
 			slotsPerDay: z.number().int(),
-			openStart: timeStringSchema,
-			openEnd: timeStringSchema,
 			preview: z.array(timeStringSchema),
 		}),
 	),
@@ -44,6 +42,8 @@ const schedulingResponseSchema = z.object({
 
 const updateSchedulingSchema = z.object({
 	timezone: z.string().min(1),
+	openStart: timeStringSchema,
+	openEnd: timeStringSchema,
 	days: z.array(scheduleDaySchema).length(7),
 });
 
@@ -61,34 +61,30 @@ function computePreview(start: string, end: string, count: number): string[] {
 	return times;
 }
 
-function dayResponse(day: WeeklySlotScheduleDay) {
+function dayResponse(day: WeeklySlotScheduleDay, openStart: string, openEnd: string) {
 	return {
 		...day,
-		preview: day.enabled ? computePreview(day.openStart, day.openEnd, day.slotsPerDay) : [],
+		preview: day.enabled ? computePreview(openStart, openEnd, day.slotsPerDay) : [],
 	};
 }
 
 async function readSchedulingConfig(schedule: WeeklySlotSchedule): Promise<{
 	timezone: string;
+	openStart: string;
+	openEnd: string;
 	days: (WeeklySlotScheduleDay & { preview: string[] })[];
 }> {
 	return {
 		timezone: schedule.timezone,
-		days: schedule.days.map((d) => dayResponse(d)),
+		openStart: schedule.openStart,
+		openEnd: schedule.openEnd,
+		days: schedule.days.map((d) => dayResponse(d, schedule.openStart, schedule.openEnd)),
 	};
 }
 
 function validateSchedule(schedule: WeeklySlotSchedule) {
-	const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-	for (const day of schedule.days) {
-		if (!day.enabled) continue;
-		if (timeToMinutes(day.openEnd) <= timeToMinutes(day.openStart)) {
-			throw new HttpError(
-				400,
-				"BAD_REQUEST",
-				`${days[day.dayOfWeek]} closing time must be after opening time`,
-			);
-		}
+	if (timeToMinutes(schedule.openEnd) <= timeToMinutes(schedule.openStart)) {
+		throw new HttpError(400, "BAD_REQUEST", "Branch closing time must be after opening time");
 	}
 }
 
@@ -147,6 +143,8 @@ schedulingRouter.openapi(
 
 		const schedule: WeeklySlotSchedule = {
 			timezone: body.timezone,
+			openStart: body.openStart,
+			openEnd: body.openEnd,
 			days: body.days,
 		};
 		validateSchedule(schedule);

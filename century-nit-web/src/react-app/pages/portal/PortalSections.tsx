@@ -511,13 +511,15 @@ export function PortalProfile() {
 				<div className="profile-section__head profile-section__head--editable">
 					<span className="profile-section__num">06</span>
 					<h2 className="profile-section__title">Security</h2>
-					<Link
-						to="/portal/security"
-						className="profile-edit-btn"
-						aria-label="Manage two-factor authentication"
-					>
-						{mfaStatus?.enrolled ? "Manage" : "Set up"}
-					</Link>
+					{mfaStatus?.applicable === false ? null : (
+						<Link
+							to="/portal/security"
+							className="profile-edit-btn"
+							aria-label="Manage two-factor authentication"
+						>
+							{mfaStatus?.enrolled ? "Manage" : "Set up"}
+						</Link>
+					)}
 				</div>
 				<div className="profile-block">
 					<DataRow
@@ -532,18 +534,28 @@ export function PortalProfile() {
 										? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
 										: ""}
 								</span>
+							) : mfaStatus.applicable === false ? (
+								<span className="muted">Not applicable</span>
 							) : (
 								<span className="muted">Not set — recommended</span>
 							)
 						}
 					/>
-					<DataRow
-						label="Requirement"
-						value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
-					/>
+					{mfaStatus?.applicable === false ? null : (
+						<DataRow
+							label="Requirement"
+							value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
+						/>
+					)}
+					{/*
+					 * An empty Security section reads as a missing feature. Users who
+					 * sign in without a password here are told why there is nothing to
+					 * do, rather than being left to wonder.
+					 */}
 					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "40rem" }}>
-						Add a second step at sign-in to keep your application documents and payment history safe.
-						You can enable or manage it anytime from the Security page.
+						{mfaStatus?.applicable === false
+							? "You sign in without a Century NIT password, so there is no password here for a second step to protect. Your account is secured by the provider you sign in with — manage security there."
+							: "Add a second step at sign-in to keep your application documents and payment history safe. You can enable or manage it anytime from the Security page."}
 					</p>
 				</div>
 			</section>

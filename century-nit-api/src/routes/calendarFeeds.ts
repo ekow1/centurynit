@@ -409,10 +409,14 @@ function computeSlotTimes(openStart: string, openEnd: string, count: number): st
 	return times;
 }
 
-function dayResponse(day: WeeklySlotScheduleDay) {
+function dayResponse(day: WeeklySlotScheduleDay, openStart: string, openEnd: string) {
 	return {
-		...day,
-		times: day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.slotsPerDay) : [],
+		dayOfWeek: day.dayOfWeek,
+		enabled: day.enabled,
+		slotsPerDay: day.slotsPerDay,
+		openStart,
+		openEnd,
+		times: day.enabled ? computeSlotTimes(openStart, openEnd, day.slotsPerDay) : [],
 	};
 }
 
@@ -442,7 +446,7 @@ calendarFeedsRouter.openapi(
 		return c.json(
 			{
 				timezone: schedule.timezone,
-				days: schedule.days.map((d) => dayResponse(d)),
+				days: schedule.days.map((d) => dayResponse(d, schedule.openStart, schedule.openEnd)),
 			},
 			200,
 		);

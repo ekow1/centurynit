@@ -204,6 +204,34 @@ export async function verifyTotp(code: string) {
 	return data;
 }
 
+/**
+ * Email the second-factor code during the sign-in challenge.
+ *
+ * Callable without a session: Better Auth holds a short-lived two-factor cookie
+ * between the password step and this one, which is what identifies the user.
+ * Delivery is the `otpOptions.sendOTP` hook configured on the server.
+ */
+export async function sendMfaEmailCode() {
+	const { error } = await authClient.twoFactor.sendOtp();
+	if (error) throw new Error(formatError(error, "Could not send the code"));
+}
+
+export async function verifyMfaEmailCode(code: string) {
+	const { data, error } = await authClient.twoFactor.verifyOtp({ code });
+	if (error) throw new Error(formatError(error, "That code was not accepted"));
+	return data;
+}
+
+/**
+ * Redeem one of the single-use recovery codes issued at enrolment — the way
+ * back in when the authenticator app or the inbox is gone.
+ */
+export async function verifyMfaBackupCode(code: string) {
+	const { data, error } = await authClient.twoFactor.verifyBackupCode({ code });
+	if (error) throw new Error(formatError(error, "That recovery code was not accepted"));
+	return data;
+}
+
 export async function checkEmailExists(email: string): Promise<boolean> {
 	const baseURL = typeof window === "undefined" ? "" : window.location.origin;
 	const res = await fetch(`${baseURL}/api/auth/check-email`, {

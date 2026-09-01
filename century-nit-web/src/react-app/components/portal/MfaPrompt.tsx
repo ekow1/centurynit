@@ -59,6 +59,10 @@ export function MfaPrompt() {
 
 	if (!loaded || !authUser) return null;
 	if (status?.enrolled) return null;
+	// Google and passwordless users hold no password here, so a second factor
+	// would guard nothing — and enrolment, which asks for that password, could
+	// not complete anyway. Say nothing rather than offer a dead end.
+	if (status?.applicable === false) return null;
 	if (skipped) return null;
 
 	const isRequired = status?.required === true;

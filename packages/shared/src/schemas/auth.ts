@@ -236,5 +236,14 @@ export const mfaEnrollmentSchema = z.object({
 	method: mfaMethodSchema.nullable(),
 	required: z.boolean(),
 	availableMethods: z.array(mfaMethodSchema),
+	/**
+	 * Whether a second factor would protect anything.
+	 *
+	 * False for users with no stored password — Google accounts, and
+	 * passwordless email-code sign-ins whose only factor is already the inbox.
+	 * Callers should hide the enrolment prompts entirely rather than offering a
+	 * step that cannot help (and, for those users, cannot even complete).
+	 */
+	applicable: z.boolean(),
 });
 export type MfaEnrollment = z.infer<typeof mfaEnrollmentSchema>;

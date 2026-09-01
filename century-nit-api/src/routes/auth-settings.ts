@@ -6,8 +6,8 @@ import {
 import { requireAuth, requireModule, requireStaff } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { db } from "../db/index.js";
-import { users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { accounts, users } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
 import { getAuthInstance } from "./auth.js";
 import {
 	getAuthSettings,
@@ -165,11 +165,34 @@ authSettings.get(
 		const enrolled = Boolean(dbUser?.mfaEnrolled || dbUser?.twoFactorEnabled);
 		const method = dbUser?.mfaMethod ?? (dbUser?.twoFactorEnabled ? "totp" : null);
 
+		/*
+		 * Whether a second factor protects anything for this user.
+		 *
+		 * MFA guards a stored credential. A Google user has none here — their
+		 * account is held by Google, and enrolment would fail anyway because it
+		 * needs a password to confirm. A passwordless email-code user has none
+		 * either, and their sign-in factor is already the inbox, so an emailed
+		 * second code is the same factor twice.
+		 *
+		 * Derived per-request from the account rows rather than from how they
+		 * signed up: linking Google, or setting a password via reset, moves a
+		 * user between these groups, and the answer has to follow.
+		 */
+		const credentials = await db
+			.select({ password: accounts.password })
+			.from(accounts)
+			.where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")));
+		const hasPassword = credentials.some((a) => Boolean(a.password));
+
 		return c.json({
 			enrolled,
 			method,
 			required: mfaRequired,
 			availableMethods,
+			// Already-enrolled users always stay applicable. Hiding the controls
+			// on an active second factor would strand them with no way to see or
+			// change it.
+			applicable: hasPassword || enrolled,
 		});
 	},
 );
@@ -217,8 +240,34 @@ authSettings.post(
 		}
 
 		if (method === "email_otp") {
-			// For email OTP, we just need to verify the password and mark as enrolled
-			// Generate a verification code and send it to confirm the email works
+			/*
+			 * Email OTP is a second factor delivered by Better Auth's twoFactor
+			 * plugin (see `otpOptions.sendOTP` in routes/auth.ts), not a bespoke
+			 * mechanism. It therefore has to arm the plugin exactly as TOTP does:
+			 * `twoFactorEnabled` is the only flag sign-in consults, so skipping
+			 * this leaves the account enrolled in name while a password alone
+			 * still grants a full session.
+			 *
+			 * The user never sees the TOTP URI — the shared secret exists but goes
+			 * unused, because the code is emailed rather than generated on-device.
+			 */
+			const armed = await authInstance.api.enableTwoFactor({
+				body: { password },
+				headers: c.req.raw.headers,
+			});
+
+			if (!armed) {
+				throw new HttpError(
+					400,
+					"MFA_ENROLL_FAILED",
+					"Could not enable two-factor authentication. Check your password.",
+				);
+			}
+
+			// Confirm the inbox actually receives mail before relying on it as a
+			// factor. Enrollment is recorded here rather than at confirm time
+			// because the plugin is already armed — and the challenge is email,
+			// so an abandoned setup can still sign in rather than locking out.
 			const code = Math.floor(100000 + Math.random() * 900000).toString();
 			const identifier = `mfa-enroll:${user.id}`;
 
@@ -246,9 +295,17 @@ authSettings.post(
 				html,
 			});
 
+			await db
+				.update(users)
+				.set({ mfaMethod: "email_otp", mfaEnrolled: true })
+				.where(eq(users.id, user.id));
+
 			return c.json({
 				message: "Verification code sent to your email",
 				email: user.email,
+				// Same escape hatch TOTP users get: without these, losing inbox
+				// access would mean losing the account.
+				backupCodes: (armed as { backupCodes?: string[] }).backupCodes ?? [],
 			});
 		}
 

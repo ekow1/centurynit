@@ -382,25 +382,26 @@ export type WeeklySlotScheduleDay = {
 	dayOfWeek: number;
 	enabled: boolean;
 	slotsPerDay: number;
-	openStart: string;
-	openEnd: string;
 };
 
 export type WeeklySlotSchedule = {
 	timezone: string;
+	/** Branch-wide opening hours — set once, applied to every open day. */
+	openStart: string;
+	openEnd: string;
 	days: WeeklySlotScheduleDay[];
 };
 
 const weeklySlotScheduleSchema = z.object({
 	timezone: z.string().min(1),
+	openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+	openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 	days: z
 		.array(
 			z.object({
 				dayOfWeek: z.number().int().min(0).max(6),
 				enabled: z.boolean(),
 				slotsPerDay: z.number().int().min(1).max(48),
-				openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-				openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 			}),
 		)
 		.length(7),
@@ -409,12 +410,12 @@ const weeklySlotScheduleSchema = z.object({
 function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
 	return {
 		timezone: env.DEFAULT_TIMEZONE,
+		openStart: env.BRANCH_OPEN_START,
+		openEnd: env.BRANCH_OPEN_END,
 		days: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
 			dayOfWeek,
 			enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
 			slotsPerDay: env.SLOTS_PER_DAY,
-			openStart: env.BRANCH_OPEN_START,
-			openEnd: env.BRANCH_OPEN_END,
 		})),
 	};
 }
@@ -425,6 +426,24 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 	if (!raw) return defaultWeeklySlotSchedule();
 	try {
 		const parsed = JSON.parse(raw);
+		/*
+		 * Legacy schedules stored openStart/openEnd on each day. Lift the first
+		 * enabled day's window to the branch-global fields so old settings still
+		 * load after the schema change. New writes always use the global shape.
+		 */
+		if (parsed && !parsed.openStart && Array.isArray(parsed.days)) {
+			const first = parsed.days.find(
+				(d: { enabled?: boolean; openStart?: string; openEnd?: string }) => d?.enabled && d.openStart && d.openEnd,
+			);
+			if (first) {
+				parsed.openStart = first.openStart;
+				parsed.openEnd = first.openEnd;
+			}
+			for (const d of parsed.days) {
+				delete d?.openStart;
+				delete d?.openEnd;
+			}
+		}
 		return weeklySlotScheduleSchema.parse(parsed);
 	} catch (err) {
 		console.error("[Settings] Invalid WEEKLY_SLOT_SCHEDULE, falling back to defaults:", err);

@@ -31,7 +31,12 @@ const DEFAULTS: AuthSettings = {
 	"portal.email_password": true,
 	"portal.social_google": true,
 	"portal.email_otp": true,
-	"portal.mfa_required": true,
+	/*
+	 * Optional for clients. `requireMfa` only gates staff roles, so a `true`
+	 * here enforced nothing and merely made the portal claim MFA was mandatory
+	 * while letting every unenrolled user straight through.
+	 */
+	"portal.mfa_required": false,
 	"portal.mfa_methods": ["totp", "email_otp"],
 	"ops.email_password": true,
 	"ops.google_sso": false,

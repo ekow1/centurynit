@@ -66,6 +66,12 @@ export type MfaEnrollmentStatus = {
 	method: string | null;
 	required: boolean;
 	availableMethods: string[];
+	/**
+	 * Whether a second factor would protect anything for this user. False for
+	 * Google and passwordless sign-ins, which hold no password here — offering
+	 * them MFA would add a step that secures nothing and cannot complete.
+	 */
+	applicable: boolean;
 };
 
 export function getMfaEnrollment(): Promise<MfaEnrollmentStatus> {

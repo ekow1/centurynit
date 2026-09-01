@@ -67,15 +67,15 @@ function computeSlotTimes(openStart: string, openEnd: string, count: number): st
 /**
  * Compute slot start times for a given weekday from the weekly schedule.
  *
- * Managers configure each day independently: whether it is active, how many
- * appointment slots to offer, and the open/close window. The requested
- * duration only affects where each slot ends, not which start times are offered.
+ * Opening hours are branch-wide (set once); each day only declares whether it
+ * is open and how many slots to offer. The requested duration only affects
+ * where each slot ends, not which start times are offered.
  */
 export async function slotTimesFor(dayOfWeek: number): Promise<string[]> {
 	const schedule = await weeklySlotSchedule();
 	const day = schedule.days.find((d) => d.dayOfWeek === dayOfWeek);
 	if (!day?.enabled) return [];
-	return computeSlotTimes(day.openStart, day.openEnd, day.slotsPerDay);
+	return computeSlotTimes(schedule.openStart, schedule.openEnd, day.slotsPerDay);
 }
 
 /* ── Branch and service catalogue ────────────────────────────────────────────

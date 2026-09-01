@@ -198,6 +198,37 @@ export function PortalMfaSetup() {
 		);
 	}
 
+	/*
+	 * This page is reachable by direct URL, so the guard belongs here and not
+	 * only on the links into it. Without a stored password there is nothing for
+	 * a second factor to protect — and enrolment asks for that very password, so
+	 * the wizard could never complete. Explain rather than show a dead end.
+	 *
+	 * Anyone already enrolled keeps the full page regardless, so a second factor
+	 * can always be inspected and changed by the person who set it up.
+	 */
+	if (status?.applicable === false && !status.enrolled) {
+		return (
+			<div className="portal-section" style={{ maxWidth: 560 }}>
+				<Link to="/portal/profile" className="link-arrow" style={{ marginBottom: "1rem", display: "inline-block" }}>
+					← Back to profile
+				</Link>
+				<p className="eyebrow">Security</p>
+				<h1 className="page-title mt-1">Two-factor authentication</h1>
+				<div className="card mt-4" style={{ padding: "1.5rem" }}>
+					<p style={{ fontWeight: 600, marginBottom: "0.5rem" }}>
+						This doesn't apply to your account
+					</p>
+					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+						You sign in without a Century NIT password, so there is no password here
+						for a second step to protect. Your account is secured by whichever
+						provider you sign in with — add two-factor authentication there instead.
+					</p>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="portal-section" style={{ maxWidth: 560 }}>
 			<Link to="/portal/profile" className="link-arrow" style={{ marginBottom: "1rem", display: "inline-block" }}>

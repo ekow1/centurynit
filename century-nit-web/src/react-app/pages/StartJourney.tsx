@@ -9,6 +9,9 @@ import {
 	sendEmailCode,
 	verifyEmailCode,
 	verifyTotp,
+	sendMfaEmailCode,
+	verifyMfaEmailCode,
+	verifyMfaBackupCode,
 	requestPasswordReset,
 	resetPassword,
 	checkEmailExists,
@@ -65,6 +68,17 @@ export function StartJourney() {
 	const [loading, setLoading] = useState(false);
 	const [resendCooldown, setResendCooldown] = useState(0);
 	const [mfaCode, setMfaCode] = useState("");
+	/*
+	 * Which second factor the user is answering with.
+	 *
+	 * The challenge arrives with no session, so the server cannot tell us whether
+	 * they enrolled with an authenticator or email — and a recovery code has to
+	 * be available whichever they chose. The screen therefore offers all three
+	 * and lets the user say, rather than guessing and stranding them.
+	 */
+	const [mfaMode, setMfaMode] = useState<"totp" | "email" | "backup">("totp");
+	const [mfaEmailSent, setMfaEmailSent] = useState(false);
+	const [mfaBackupCode, setMfaBackupCode] = useState("");
 
 	// Debounced real-time email existence check for both password and code tabs.
 	useEffect(() => {
@@ -382,14 +396,20 @@ export function StartJourney() {
 		}
 	}
 
-	/** Verify the MFA TOTP / email-OTP code entered by the user. */
+	/** Verify the second factor — authenticator, emailed code, or recovery code. */
 	async function onMfaSubmit(e: FormEvent) {
 		e.preventDefault();
-		if (mfaCode.length !== 6) return;
+		if (mfaMode === "backup") {
+			if (!mfaBackupCode.trim()) return;
+		} else if (mfaCode.length !== 6) {
+			return;
+		}
 		setError("");
 		setLoading(true);
 		try {
-			await verifyTotp(mfaCode);
+			if (mfaMode === "backup") await verifyMfaBackupCode(mfaBackupCode.trim());
+			else if (mfaMode === "email") await verifyMfaEmailCode(mfaCode);
+			else await verifyTotp(mfaCode);
 			// After MFA verification the session is established — reload so
 			// probeSession() picks up the cookie and RequireAuth admits us.
 			window.location.href = "/portal";
@@ -397,6 +417,24 @@ export function StartJourney() {
 			setLoading(false);
 			setError(err instanceof Error ? err.message : "That code was not accepted");
 			setMfaCode("");
+			setMfaBackupCode("");
+		}
+	}
+
+	/** Switch the challenge to an emailed code and send the first one. */
+	async function switchToEmailedCode() {
+		setError("");
+		setLoading(true);
+		try {
+			await sendMfaEmailCode();
+			setMfaMode("email");
+			setMfaEmailSent(true);
+			setMfaCode("");
+			setResendCooldown(30);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not send the code");
+		} finally {
+			setLoading(false);
 		}
 	}
 
@@ -908,26 +946,114 @@ export function StartJourney() {
 
 					{step === "mfa_otp" ? (
 						<form className="auth-form" onSubmit={onMfaSubmit} noValidate>
-							<Field
-								label="6-digit security code"
-								htmlFor="sj-mfa"
-								hint="Enter the code from your authenticator app or email."
+							{mfaMode === "backup" ? (
+								<Field
+									label="Recovery code"
+									htmlFor="sj-mfa-backup"
+									hint="One of the single-use codes you saved when you set up two-factor authentication."
+								>
+									<Input
+										id="sj-mfa-backup"
+										type="text"
+										autoComplete="one-time-code"
+										value={mfaBackupCode}
+										onChange={(e) => setMfaBackupCode(e.target.value)}
+										placeholder="xxxxx-xxxxx"
+										fullBorder
+									/>
+								</Field>
+							) : (
+								<Field
+									label="6-digit security code"
+									htmlFor="sj-mfa"
+									hint={
+										mfaMode === "email"
+											? mfaEmailSent
+												? "We emailed you a code. It expires in a few minutes."
+												: "Enter the code we emailed you."
+											: "Enter the code from your authenticator app."
+									}
+								>
+									<Input
+										id="sj-mfa"
+										type="text"
+										inputMode="numeric"
+										autoComplete="one-time-code"
+										maxLength={6}
+										value={mfaCode}
+										onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+										placeholder="000000"
+										fullBorder
+									/>
+								</Field>
+							)}
+
+							<Button
+								type="submit"
+								block
+								arrow
+								disabled={
+									loading ||
+									(mfaMode === "backup" ? !mfaBackupCode.trim() : mfaCode.length !== 6)
+								}
 							>
-								<Input
-									id="sj-mfa"
-									type="text"
-									inputMode="numeric"
-									autoComplete="one-time-code"
-									maxLength={6}
-									value={mfaCode}
-									onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-									placeholder="000000"
-									fullBorder
-								/>
-							</Field>
-							<Button type="submit" block arrow disabled={loading || mfaCode.length !== 6}>
 								{loading ? "Verifying..." : "Verify"}
 							</Button>
+
+							{/*
+							 * Every enrolled user needs a route in even when the thing they
+							 * enrolled with is unavailable, so both alternatives stay on
+							 * screen rather than hiding behind the method we assumed.
+							 */}
+							<div className="auth-alt">
+								{mfaMode !== "email" ? (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={switchToEmailedCode}
+										disabled={loading}
+									>
+										Email me a code instead
+									</button>
+								) : (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={switchToEmailedCode}
+										disabled={loading || resendCooldown > 0}
+									>
+										{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+									</button>
+								)}
+								{mfaMode !== "backup" ? (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={() => {
+											setMfaMode("backup");
+											setError("");
+											setMfaCode("");
+										}}
+										disabled={loading}
+									>
+										Use a recovery code
+									</button>
+								) : (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={() => {
+											setMfaMode("totp");
+											setError("");
+											setMfaBackupCode("");
+										}}
+										disabled={loading}
+									>
+										Back to security code
+									</button>
+								)}
+							</div>
+
 							<button type="button" className="auth-back" onClick={backToSignIn}>
 								← Back to sign in
 							</button>

@@ -16,7 +16,9 @@ import { defaultTimezone } from "./settings.js";
 import {
 	getCalendarClient,
 	loadCredentials,
+	loadCompanyCredentials,
 	markNeedsReconnect,
+	markCompanyNeedsReconnect,
 	CalendarAuthError,
 } from "./calendar/index.js";
 import * as mail from "./notifications.js";
@@ -429,11 +431,14 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 	const employee = await loadEmployee(booking.employeeId);
 	if (!employee) return booking;
 
-	const account = await loadCredentials(booking.employeeId);
+	// Prefer the company Google account — one account creates every Meet link,
+	// so consultants never need to connect their own calendar. Fall back to the
+	// per-employee connection only if the company account is not configured.
+	const companyAccount = await loadCompanyCredentials();
+	const account = companyAccount ?? (await loadCredentials(booking.employeeId));
 	if (!account) {
-		// Google Calendar integration has been removed. Meeting links are now
-		// set manually by staff via PATCH /bookings/:id/meeting-url — no
-		// automatic fallback URL is generated here.
+		// No Google Calendar integration is configured. Meeting links must be
+		// set manually by staff via PATCH /bookings/:id/meeting-url.
 		return booking;
 	}
 
@@ -448,6 +453,7 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 				`Century NIT ${booking.serviceName}`,
 				`Reference: ${booking.reference}`,
 				`Client: ${booking.clientName} (${booking.clientEmail})`,
+				`Consultant: ${employee.name} (${employee.email})`,
 				booking.notes ? `Notes: ${booking.notes}` : "",
 			]
 				.filter(Boolean)
@@ -456,8 +462,8 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 			endsAt: booking.endsAt,
 			timezone: booking.timezone,
 			attendees: [
-				{ email: employee.email, displayName: employee.name, organizer: true },
 				{ email: booking.clientEmail, displayName: booking.clientName },
+				{ email: employee.email, displayName: employee.name },
 			],
 			// Stable per booking — this is the idempotency handle Google honours.
 			requestId: `century-nit-${booking.id}`,
@@ -484,7 +490,11 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 		return updated;
 	} catch (err) {
 		if (err instanceof CalendarAuthError) {
-			await markNeedsReconnect(booking.employeeId);
+			if (companyAccount) {
+				await markCompanyNeedsReconnect();
+			} else {
+				await markNeedsReconnect(booking.employeeId);
+			}
 		}
 		const message = err instanceof Error ? err.message : "Calendar sync failed";
 		const failed = await markSyncFailed(booking.id, message);

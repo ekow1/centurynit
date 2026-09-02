@@ -36,6 +36,11 @@ export type SettingKey =
 	| "GOOGLE_AUTH_REDIRECT_URI"
 	| "GOOGLE_WEBHOOK_URL"
 	| "GOOGLE_WEBHOOK_TOKEN"
+	| "GOOGLE_COMPANY_ACCOUNT_EMAIL"
+	| "GOOGLE_COMPANY_CALENDAR_ID"
+	| "GOOGLE_COMPANY_REFRESH_TOKEN"
+	| "GOOGLE_COMPANY_ACCESS_TOKEN"
+	| "GOOGLE_COMPANY_TOKEN_EXPIRES_AT"
 	| "BOOKING_BUFFER_MINUTES"
 	| "DEFAULT_TIMEZONE"
 	| "SLOTS_PER_DAY"
@@ -139,6 +144,36 @@ export const SETTING_DEFS: Record<
 		group: "Google",
 		secret: true,
 		description: "Shared secret echoed in the webhook channel token.",
+	},
+	GOOGLE_COMPANY_ACCOUNT_EMAIL: {
+		label: "Company Google Account Email",
+		group: "Company Google Calendar",
+		secret: false,
+		description: "The company Google account that creates all consultation Meet links.",
+	},
+	GOOGLE_COMPANY_CALENDAR_ID: {
+		label: "Company Calendar ID",
+		group: "Company Google Calendar",
+		secret: false,
+		description: "Which calendar events are written to. Usually \"primary\".",
+	},
+	GOOGLE_COMPANY_REFRESH_TOKEN: {
+		label: "Company Google Refresh Token",
+		group: "Company Google Calendar",
+		secret: true,
+		description: "Long-lived OAuth refresh token for the company Google account. Set via the Connect flow.",
+	},
+	GOOGLE_COMPANY_ACCESS_TOKEN: {
+		label: "Company Google Access Token",
+		group: "Company Google Calendar",
+		secret: true,
+		description: "Short-lived access token, auto-refreshed by the backend.",
+	},
+	GOOGLE_COMPANY_TOKEN_EXPIRES_AT: {
+		label: "Company Token Expires At",
+		group: "Company Google Calendar",
+		secret: false,
+		description: "ISO timestamp when the access token expires. Managed by the backend.",
 	},
 	BOOKING_BUFFER_MINUTES: {
 		label: "Booking Buffer (minutes)",
@@ -545,6 +580,49 @@ export async function writeSetting(
 	 * the settings list right after saving, and reading back the old value would
 	 * look like the save had failed.
 	 */
+	cache.set(key, plaintext);
+}
+
+/**
+ * Write a setting on behalf of the system (OAuth callbacks, token refreshes)
+ * where no human actor is present. `updatedBy` is null and the audit entry is
+ * recorded with a "system" actor email so the trail is still complete.
+ */
+export async function writeSettingSystem(
+	key: SettingKey,
+	plaintext: string | null,
+): Promise<void> {
+	await loadCache();
+	const def = SETTING_DEFS[key];
+	if (!def) throw new Error(`Unknown setting key: ${key}`);
+	validateSettingValue(key, plaintext);
+
+	const oldValue = cache.get(key) ?? null;
+	const oldMasked = oldValue ? mask(oldValue, def.secret) : null;
+	const newMasked = plaintext ? mask(plaintext, def.secret) : null;
+
+	const encryptedValue = plaintext ? encrypt(plaintext) : null;
+
+	await db
+		.insert(platformSettings)
+		.values({ key, encryptedValue, updatedBy: null })
+		.onConflictDoUpdate({
+			target: platformSettings.key,
+			set: {
+				encryptedValue,
+				updatedBy: null,
+				updatedAt: new Date(),
+			},
+		});
+
+	await db.insert(settingsAudit).values({
+		key,
+		actorId: null,
+		actorEmail: "system",
+		oldValueMasked: oldMasked,
+		newValueMasked: newMasked,
+	});
+
 	cache.set(key, plaintext);
 }
 

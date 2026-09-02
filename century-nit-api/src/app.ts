@@ -11,6 +11,7 @@ import { health } from "./routes/health.js";
 import { auth, getAuthInstance } from "./routes/auth.js";
 import { bookingsRouter } from "./routes/bookings.js";
 import { calendarFeedsRouter } from "./routes/calendarFeeds.js";
+import { calendarCompanyRouter } from "./routes/calendarCompany.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { staffRouter } from "./routes/staff.js";
 import { documentsRouter } from "./routes/documents.js";
@@ -133,6 +134,7 @@ export function createApp() {
 	 */
 	app.route(`${API_PREFIX}/bookings`, bookingsRouter);
 	app.route(`${API_PREFIX}/calendar`, calendarFeedsRouter);
+	app.route(`${API_PREFIX}/calendar`, calendarCompanyRouter);
 	app.route(`${API_PREFIX}/invoices`, invoicesRouter);
 	app.route(`${API_PREFIX}/staff`, staffRouter);
 	app.route(`${API_PREFIX}/auth-settings`, authSettings);

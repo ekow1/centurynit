@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
+import { CompanyGoogleCalendarCard } from "./CompanyGoogleCalendarCard";
 
 /**
  * Platform Settings — integration credentials and fee schedule.
@@ -156,7 +157,7 @@ export function PlatformSettings() {
 
 	const tabGroups = useMemo(() => {
 		if (activeTab === "integrations") {
-			return ["Email", "Storage", "Google Integration", "Payment Gateways"];
+			return ["Email", "Storage", "Google Calendar", "Company Google Calendar", "Google Sign-In", "Google", "Payment Gateways"];
 		}
 		if (activeTab === "defaults") {
 			return ["Scheduling", "General", "System"];
@@ -169,8 +170,8 @@ export function PlatformSettings() {
 			if (activeTab !== "audit") {
 				if (!tabGroups.includes(s.group) && selectedGroup === "all") {
 					// Fallback for general custom groups
-					if (activeTab === "integrations" && !["Email", "Storage", "Google Integration", "Payment Gateways"].includes(s.group)) return false;
-					if (activeTab === "defaults" && ["Email", "Storage", "Google Integration", "Payment Gateways"].includes(s.group)) return false;
+					if (activeTab === "integrations" && !["Email", "Storage", "Google Calendar", "Company Google Calendar", "Google Sign-In", "Google", "Payment Gateways"].includes(s.group)) return false;
+					if (activeTab === "defaults" && ["Email", "Storage", "Google Calendar", "Company Google Calendar", "Google Sign-In", "Google", "Payment Gateways"].includes(s.group)) return false;
 				}
 				if (selectedGroup !== "all" && s.group !== selectedGroup) return false;
 			}
@@ -396,6 +397,9 @@ export function PlatformSettings() {
 			)}
 
 			{/* Tab 1 & Tab 2: Grouped Settings Tables */}
+			{activeTab !== "audit" && (
+				activeTab === "integrations" && <CompanyGoogleCalendarCard />
+			)}
 			{activeTab !== "audit" && (
 				grouped.length === 0 ? (
 					<div className="card" style={{ padding: "2rem", textAlign: "center" }}>

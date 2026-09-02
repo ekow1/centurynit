@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
 import { API_PREFIX, LookupValue } from "century-nit-shared";
@@ -47,7 +47,10 @@ import {
 } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication } from "century-nit-shared";
+import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
+import { UploadPickModal } from "../../components/portal/UploadPickModal";
+import { prepareDocumentForUpload } from "../../lib/upload";
 
 
 
@@ -450,6 +453,7 @@ function AssessmentForm({
 	onUpdate: (patch: Partial<AssessmentData>) => void;
 	onDocUpdate: (id: string, fileName: string | null, documentId?: string | null) => void;
 }) {
+	const { toast } = useNotifier();
 	const [section, setSection] = useState(0);
 	const [lookups, setLookups] = useState<LookupValue[]>([]);
 	const [catalogUnis, setCatalogUnis] = useState<any[]>([]);
@@ -482,7 +486,7 @@ function AssessmentForm({
 		));
 	};
 	const [uploading, setUploading] = useState<Record<string, number>>({});
-	const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+	const [pickDocId, setPickDocId] = useState<string | null>(null);
 
 	const sections = [
 		{ label: "Personal", icon: "◎" },
@@ -496,24 +500,44 @@ function AssessmentForm({
 	];
 
 	function handleDocUpload(id: string) {
-		const input = fileInputRefs.current[id];
-		if (input) {
-			input.value = "";
-			input.click();
-		}
+		setPickDocId(id);
 	}
 
-	async function handleFileSelected(id: string, e: ChangeEvent<HTMLInputElement>) {
-		const file = e.target.files?.[0];
-		if (!file) return;
+	function closePickModal() {
+		setPickDocId(null);
+	}
+
+	async function handleFileChosen(file: File) {
+		const id = pickDocId;
+		if (!id) return;
+		setPickDocId(null);
+
+		if (file.size > MAX_DOCUMENT_BYTES) {
+			toast.error(`${file.name} is larger than 15 MB. Please upload a smaller scan.`);
+			return;
+		}
+		if (!(ALLOWED_DOCUMENT_TYPES as readonly string[]).includes(file.type)) {
+			toast.error("Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).");
+			return;
+		}
+
 		setUploading((prev) => ({ ...prev, [id]: 0 }));
 		try {
-			const doc = await documentsApi.upload(file, id, {
+			const ready = await prepareDocumentForUpload(file, (pct) => {
+				setUploading((prev) => ({ ...prev, [id]: pct }));
+			});
+			if (ready.size > MAX_DOCUMENT_BYTES) {
+				toast.error(`${file.name} is still larger than 15 MB after compression. Please upload a smaller scan.`);
+				return;
+			}
+			const doc = await documentsApi.upload(ready, id, {
 				onProgress: (pct) => setUploading((prev) => ({ ...prev, [id]: pct })),
 			});
 			onDocUpdate(id, doc.fileName, doc.id);
-		} catch {
-			alert("Upload failed. Please try again.");
+			toast.success(`${file.name} uploaded.`);
+		} catch (err) {
+			const msg = err instanceof ApiError ? err.message : `Could not upload ${file.name}. Please try again.`;
+			toast.error(msg);
 		} finally {
 			setUploading((prev) => { const n = { ...prev }; delete n[id]; return n; });
 		}
@@ -760,13 +784,6 @@ function AssessmentForm({
 							const isUploading = pct !== undefined;
 							return (
 								<div key={doc.id} className="card card--pad">
-									<input
-										type="file"
-										accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-										style={{ display: "none" }}
-										ref={(el) => { fileInputRefs.current[doc.id] = el; }}
-										onChange={(e) => void handleFileSelected(doc.id, e)}
-									/>
 									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
 										<div>
 											<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{doc.label}</p>
@@ -818,6 +835,15 @@ function AssessmentForm({
 					Next section →
 				</Button>
 			</div>
+
+			<UploadPickModal
+				open={pickDocId !== null}
+				title={pickDocId ? (assessmentDocs[pickDocId]?.fileName ? "Replace document" : "Upload document") : ""}
+				subtitle={pickDocId ? ASSESSMENT_DOC_FIELDS.find((d) => d.id === pickDocId)?.label : undefined}
+				extraNotes="Large images are compressed automatically before upload."
+				onFileChosen={(file) => void handleFileChosen(file)}
+				onClose={closePickModal}
+			/>
 		</>
 	);
 }

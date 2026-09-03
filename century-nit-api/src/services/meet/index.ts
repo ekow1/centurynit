@@ -50,11 +50,33 @@ async function meetClient() {
 	return google.meet({ version: "v2", auth });
 }
 
-/** Create a Google Meet space. Caller must ensure no existing space is stored. */
+/**
+ * Create a Google Meet space.
+ *
+ * The space is created with `accessType: "TRUSTED"`: members of the same
+ * Google Workspace org as the company account (i.e. consultants) join
+ * directly, while external clients must "knock" and wait in the lobby until
+ * the consultant admits them. This makes the consultant the effective host —
+ * they control admission, mute, and removal — so staff start the meeting,
+ * not the client.
+ *
+ * Prerequisite: the company Google account must be a Workspace account and
+ * consultants must sign in with an account in the same org. If the company
+ * account is a consumer @gmail.com account, TRUSTED behaves like RESTRICTED
+ * (everyone knocks) — still safe, just less convenient.
+ *
+ * Caller must ensure no existing space is stored (idempotency is on the caller).
+ */
 export async function createMeeting(): Promise<MeetingSpace> {
 	const client = await meetClient();
 	try {
-		const res = await client.spaces.create({ requestBody: {} });
+		const res = await client.spaces.create({
+			requestBody: {
+				config: {
+					accessType: "TRUSTED",
+				},
+			},
+		});
 		const space = res.data;
 		if (!space?.meetingUri) {
 			throw new MeetUnavailableError("Google returned a space with no meeting URI");

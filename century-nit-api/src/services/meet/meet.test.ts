@@ -69,7 +69,9 @@ describe("Google Meet service", () => {
 			expect(space.spaceId).toBe("spaces/abc123");
 			expect(space.meetingUri).toBe("https://meet.google.com/xxx-yyyy-zzz");
 			expect(space.meetingCode).toBe("xxx-yyyy-zzz");
-			expect(spacesMock.create).toHaveBeenCalledWith({ requestBody: {} });
+			expect(spacesMock.create).toHaveBeenCalledWith({
+				requestBody: { config: { accessType: "TRUSTED" } },
+			});
 		});
 
 		it("throws MeetUnavailableError when Google returns no meeting URI", async () => {

@@ -667,6 +667,35 @@ export function PortalJourney() {
 	const current = journeyPhase.stage;
 	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
 
+	// Document vault status — fetched live so the journey reflects the same
+	// server-backed verification state the vault page shows.
+	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
+	useEffect(() => {
+		let active = true;
+		void (async () => {
+			try {
+				const res = await documentsApi.list();
+				if (active) setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
+			} catch {
+				if (active) setLiveDocs(null);
+			}
+		})();
+		return () => {
+			active = false;
+		};
+	}, []);
+
+	const totalDocs = REQUIRED_DOCUMENTS.length;
+	const uploadedDocs = liveDocs ? REQUIRED_DOCUMENTS.filter((r) => liveDocs.has(r.id)).length : 0;
+	const verifiedDocs = liveDocs
+		? REQUIRED_DOCUMENTS.filter((r) => liveDocs.get(r.id)?.status === "VERIFIED").length
+		: 0;
+	const rejectedDocs = liveDocs
+		? REQUIRED_DOCUMENTS.filter((r) => liveDocs.get(r.id)?.status === "REJECTED").length
+		: 0;
+	const docsLoaded = liveDocs !== null;
+	const allDocsVerified = docsLoaded && verifiedDocs === totalDocs;
+
 	const stageToPath: Record<string, string> = {
 		consultation: "/portal/consultation",
 		eligibility: "/portal/consultation",
@@ -779,6 +808,24 @@ export function PortalJourney() {
 									Updated{" "}
 									{application.visaUpdatedAt ? new Date(application.visaUpdatedAt).toLocaleString() : "-"}
 								</p>
+							</div>
+							<div className="journey-track__cell">
+								<p className="journey-track__label">Document vault</p>
+								<p className="journey-track__value">
+									{docsLoaded ? `${uploadedDocs}/${totalDocs}` : "—"}
+								</p>
+								<p className="muted mt-1">
+									{!docsLoaded
+										? "Loading…"
+										: allDocsVerified
+											? "All verified ✓"
+											: `${verifiedDocs} verified${rejectedDocs > 0 ? ` · ${rejectedDocs} to resubmit` : ""}`}
+								</p>
+								<div className="row mt-3">
+									<Link to="/portal/documents" className="link-arrow">
+										{allDocsVerified ? "View vault →" : uploadedDocs < totalDocs ? "Upload documents →" : "Check status →"}
+									</Link>
+								</div>
 							</div>
 						</div>
 					</div>

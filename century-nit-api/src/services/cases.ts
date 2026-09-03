@@ -8,6 +8,7 @@ import {
 	type ApplicantProfile,
 	type AssessmentResult,
 	type CaseApplicationStatus,
+	DEFAULT_FEE_CENTS,
 	JOURNEY_STAGES,
 	type JourneyStage,
 } from "century-nit-shared";
@@ -31,6 +32,8 @@ import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, getStaffUserId } from "./notify.js";
+import { listSchoolsForApplicant } from "./schools.js";
+import { createInvoice } from "./invoice.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -1019,6 +1022,95 @@ export async function acceptApplication(id: string, actor: Actor): Promise<Appli
 	return updated;
 }
 
+/**
+ * Guard for stage transitions — checks the real prerequisites that the
+ * portal assumes when it maps a `JourneyStage` to a portal chapter.
+ * Returns a human-readable block reason, or `null` if the transition is
+ * allowed. Mirrors the portal's `getStageStatus` signal checks.
+ */
+export function canAdvanceTo(
+	stage: JourneyStage,
+	signals: {
+		hasPackage: boolean;
+		hasSelection: boolean;
+		hasAdmitted: boolean;
+		hasAppInvoice: boolean;
+		hasVisaInvoice: boolean;
+		visaDone: boolean;
+		travelClearance: string | null;
+	},
+): string | null {
+	switch (stage) {
+		case "document_verification":
+			return null;
+		case "school_submission":
+			return signals.hasPackage
+				? null
+				: "Cannot advance to School Submission: no school application package selected.";
+		case "offer_letter_review":
+			return signals.hasSelection
+				? null
+				: "Cannot advance to Offer Letter Review: no schools selected.";
+		case "visa_processing":
+			return signals.hasAdmitted
+				? null
+				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
+		case "payment_execution":
+			return signals.hasAdmitted
+				? null
+				: "Cannot advance to Payment Execution: no accepted offer (admitted).";
+		case "travel_assistance":
+			return signals.visaDone
+				? null
+				: "Cannot advance to Travel Assistance: visa stage is not complete.";
+		case "completed":
+			return signals.travelClearance === "cleared"
+				? null
+				: "Cannot advance to Completed: travel clearance is not 'cleared'.";
+		default:
+			return null;
+	}
+}
+
+/** List invoices for an applicant (by applicantId → userId). */
+async function listInvoicesForApplicant(applicantId: string) {
+	const [applicant] = await db
+		.select({ userId: applicants.userId })
+		.from(applicants)
+		.where(eq(applicants.id, applicantId))
+		.limit(1);
+	if (!applicant?.userId) return [];
+	return db
+		.select()
+		.from(invoices)
+		.where(eq(invoices.clientUserId, applicant.userId));
+}
+
+/** Auto-raise a visa invoice when entering visa_processing with no visa invoice. */
+async function raiseVisaInvoiceForApplication(
+	app: ApplicationRow,
+	applicant: ApplicantRow,
+	actor: Actor,
+): Promise<void> {
+	const clientUserId = applicant.userId ?? undefined;
+	await createInvoice({
+		data: {
+			applicantName: applicant.name,
+			applicantEmail: applicant.email ?? undefined,
+			clientUserId,
+			type: "visa",
+			lines: [
+				{
+					label: "Visa processing fee",
+					amountCents: DEFAULT_FEE_CENTS.visaBase,
+				},
+			],
+			note: `Auto-raised when stage advanced to visa_processing (application ${app.appNumber}).`,
+		},
+		actor,
+	});
+}
+
 export async function setApplicationStage(
 	id: string,
 	stage: JourneyStage,
@@ -1029,6 +1121,39 @@ export async function setApplicationStage(
 	}
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	// ── Fetch signals for the precondition guard ────────────────────────
+	const [applicant, schoolTracks, clientInvoices] = await Promise.all([
+		getApplicant(row.applicantId),
+		listSchoolsForApplicant(row.applicantId),
+		row.applicantId ? listInvoicesForApplicant(row.applicantId) : [],
+	]);
+	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Draft");
+	const hasAdmitted = schoolTracks.schools.some(
+		(s) => s.status === "Unconditional Offer" || s.status === "Offer Accepted",
+	);
+	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
+	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
+
+	// ── Guard: refuse if prerequisites aren't met ───────────────────────
+	const blockReason = canAdvanceTo(stage, {
+		hasPackage: Boolean(row.fundingTrack),
+		hasSelection,
+		hasAdmitted,
+		hasAppInvoice,
+		hasVisaInvoice,
+		visaDone: row.visaStage === "complete",
+		travelClearance: row.travelClearance,
+	});
+	if (blockReason) {
+		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", blockReason);
+	}
+
+	// ── Auto-raise visa invoice on entering visa_processing ──────────────
+	if (stage === "visa_processing" && !hasVisaInvoice && applicant) {
+		await raiseVisaInvoiceForApplication(row, applicant, actor);
+	}
+
 	const [updated] = await db
 		.update(applications)
 		.set({ stage, updatedAt: new Date() })

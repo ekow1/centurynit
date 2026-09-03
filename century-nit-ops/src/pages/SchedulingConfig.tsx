@@ -28,8 +28,10 @@ interface SchedulingConfig {
 	days: SchedulingDay[];
 }
 
-function timeToMinutes(value: string): number {
+function timeToMinutes(value: string | undefined | null): number {
+	if (!value || typeof value !== "string") return 0;
 	const [h, m] = value.split(":").map(Number);
+	if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
 	return h * 60 + m;
 }
 
@@ -40,10 +42,15 @@ function minutesToTime(min: number): string {
 }
 
 /** Slot start times from start to end at the given interval. */
-function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
+function computeSlotTimes(
+	openStart: string | undefined,
+	openEnd: string | undefined,
+	intervalMinutes: number | undefined,
+): string[] {
+	if (!openStart || !openEnd || !intervalMinutes || intervalMinutes <= 0) return [];
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
-	if (endMin <= startMin || intervalMinutes <= 0) return [];
+	if (endMin <= startMin) return [];
 	const times: string[] = [];
 	for (let t = startMin; t < endMin; t += intervalMinutes) {
 		times.push(minutesToTime(t));
@@ -87,8 +94,30 @@ export function SchedulingConfig() {
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await apiFetch<SchedulingConfig>(`${API_PREFIX}/scheduling`);
-			const fresh = res.days.map((d) => ({ ...d }));
+			const res = await apiFetch<SchedulingConfig & { openStart?: string; openEnd?: string }>(`${API_PREFIX}/scheduling`);
+			// Tolerate the legacy API shape (global openStart/openEnd + per-day
+			// slotsPerDay) by lifting the global window onto any day missing its
+			// own and converting slotsPerDay into an interval.
+			const globalStart = res.openStart ?? "09:00";
+			const globalEnd = res.openEnd ?? "17:00";
+			const fresh: SchedulingDay[] = res.days.map((d) => {
+				const openStart = d.openStart ?? globalStart;
+				const openEnd = d.openEnd ?? globalEnd;
+				let intervalMinutes = d.intervalMinutes;
+				if (!intervalMinutes) {
+					const total = timeToMinutes(openEnd) - timeToMinutes(openStart);
+					const count = (d as { slotsPerDay?: number }).slotsPerDay ?? 1;
+					intervalMinutes = total > 0 && count > 0 ? Math.max(5, Math.floor(total / count)) : 60;
+				}
+				return {
+					dayOfWeek: d.dayOfWeek,
+					enabled: d.enabled,
+					openStart,
+					openEnd,
+					intervalMinutes,
+					preview: d.preview ?? [],
+				};
+			});
 			setTimezone(res.timezone);
 			setSavedTimezone(res.timezone);
 			setDays(fresh);

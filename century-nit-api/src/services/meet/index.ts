@@ -14,7 +14,7 @@ import {
  *
  * Creates and manages Meet spaces via the Google Meet REST API
  * (`meet({version:'v2'}).spaces.*`). Uses the company Google account's OAuth
- * credentials — the same tokens stored by the `/calendar/company/*` OAuth flow,
+ * credentials — the same tokens stored by the `/calendar/company/consent` OAuth flow,
  * just with the `meetings.space.created` scope.
  *
  * The service is intentionally stateless: every call loads fresh credentials

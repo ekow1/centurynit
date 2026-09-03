@@ -26,7 +26,7 @@ import {
  *
  * Flow:
  *   1. Admin opens GET /company/consent → redirected to Google consent screen.
- *   2. Google redirects back to GET /company/callback?code=...&state=...
+ *   2. Google redirects back to GET /callback?code=...&state=...
  *   3. Backend exchanges the code for tokens, stores them in platform settings.
  *   4. Admin checks status via GET /company/status.
  *   5. Admin disconnects via POST /company/disconnect.
@@ -86,7 +86,7 @@ calendarCompanyRouter.openapi(consentRoute, async (c) => {
 
 const callbackRoute = createRoute({
 	method: "get",
-	path: "/company/callback",
+	path: "/callback",
 	tags: ["Company Google Meet"],
 	summary: "OAuth callback — exchanges the code for tokens",
 	request: {

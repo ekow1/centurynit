@@ -276,20 +276,23 @@ export function EnterprisePrograms() {
 
 			{/* Edit Program Modal */}
 			{editingProg && (
-				<div className="modal-overlay" onClick={() => setEditingProg(null)}>
-					<div className="modal-content" style={{ maxWidth: "500px" }} onClick={(e) => e.stopPropagation()}>
-						<div className="modal-header">
-							<h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>{editingProg.id ? "Edit Program" : "Add Program"}</h3>
-							<button className="modal-close" onClick={() => setEditingProg(null)}>×</button>
-						</div>
+				<div className="ops-modal-backdrop" onClick={() => setEditingProg(null)} role="dialog" aria-modal="true" aria-label="Program editor">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<h2 className="ops-modal__title">{editingProg.id ? "Edit Program" : "Add Program"}</h2>
+								<p className="ops-modal__sub">Catalog program record</p>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingProg(null)}>✕ Close</button>
+						</header>
 						<form onSubmit={saveProgram} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 							<label className="field">
 								<span className="field-label">Name</span>
-								<input type="text" value={editingProg.name || ""} onChange={(e) => setEditingProg({ ...editingProg, name: e.target.value })} required />
+								<input className="input" type="text" value={editingProg.name || ""} onChange={(e) => setEditingProg({ ...editingProg, name: e.target.value })} required />
 							</label>
 							<label className="field">
 								<span className="field-label">University</span>
-								<select value={editingProg.universityId || ""} onChange={(e) => setEditingProg({ ...editingProg, universityId: e.target.value })}>
+								<select className="select" value={editingProg.universityId || ""} onChange={(e) => setEditingProg({ ...editingProg, universityId: e.target.value })}>
 									<option value="">Select university...</option>
 									{universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
 								</select>
@@ -297,16 +300,16 @@ export function EnterprisePrograms() {
 							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
 								<label className="field">
 									<span className="field-label">Level</span>
-									<input type="text" value={editingProg.level || ""} onChange={(e) => setEditingProg({ ...editingProg, level: e.target.value })} />
+									<input className="input" type="text" value={editingProg.level || ""} onChange={(e) => setEditingProg({ ...editingProg, level: e.target.value })} />
 								</label>
 								<label className="field">
 									<span className="field-label">Tuition</span>
-									<input type="text" value={editingProg.tuition || ""} onChange={(e) => setEditingProg({ ...editingProg, tuition: e.target.value })} />
+									<input className="input" type="text" value={editingProg.tuition || ""} onChange={(e) => setEditingProg({ ...editingProg, tuition: e.target.value })} />
 								</label>
 							</div>
-							<div className="modal-actions" style={{ marginTop: "1rem" }}>
-								<button type="button" className="btn btn--ghost" onClick={() => setEditingProg(null)}>Cancel</button>
-								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingProg(null)} disabled={saving}>Cancel</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
 							</div>
 						</form>
 					</div>
@@ -315,20 +318,23 @@ export function EnterprisePrograms() {
 
 			{/* Edit Scholarship Modal */}
 			{editingSchol && (
-				<div className="modal-overlay" onClick={() => setEditingSchol(null)}>
-					<div className="modal-content" style={{ maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
-						<div className="modal-header">
-							<h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600 }}>{editingSchol.id ? "Edit Scholarship" : "Add Scholarship"}</h3>
-							<button className="modal-close" onClick={() => setEditingSchol(null)}>×</button>
-						</div>
+				<div className="ops-modal-backdrop" onClick={() => setEditingSchol(null)} role="dialog" aria-modal="true" aria-label="Scholarship editor">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "28rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<h2 className="ops-modal__title">{editingSchol.id ? "Edit Scholarship" : "Add Scholarship"}</h2>
+								<p className="ops-modal__sub">Catalog scholarship record</p>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingSchol(null)}>✕ Close</button>
+						</header>
 						<form onSubmit={saveScholarship} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 							<label className="field">
 								<span className="field-label">Name</span>
-								<input type="text" value={editingSchol.name || ""} onChange={(e) => setEditingSchol({ ...editingSchol, name: e.target.value })} required />
+								<input className="input" type="text" value={editingSchol.name || ""} onChange={(e) => setEditingSchol({ ...editingSchol, name: e.target.value })} required />
 							</label>
 							<label className="field">
 								<span className="field-label">University</span>
-								<select value={editingSchol.universityId || ""} onChange={(e) => setEditingSchol({ ...editingSchol, universityId: e.target.value })}>
+								<select className="select" value={editingSchol.universityId || ""} onChange={(e) => setEditingSchol({ ...editingSchol, universityId: e.target.value })}>
 									<option value="">Select university...</option>
 									{universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
 								</select>
@@ -336,21 +342,21 @@ export function EnterprisePrograms() {
 							<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
 								<label className="field">
 									<span className="field-label">Amount</span>
-									<input type="text" value={editingSchol.amount || ""} onChange={(e) => setEditingSchol({ ...editingSchol, amount: e.target.value })} />
+									<input className="input" type="text" value={editingSchol.amount || ""} onChange={(e) => setEditingSchol({ ...editingSchol, amount: e.target.value })} />
 								</label>
 								<label className="field">
 									<span className="field-label">Deadline</span>
-									<input type="text" value={editingSchol.deadline || ""} onChange={(e) => setEditingSchol({ ...editingSchol, deadline: e.target.value })} />
+									<input className="input" type="text" value={editingSchol.deadline || ""} onChange={(e) => setEditingSchol({ ...editingSchol, deadline: e.target.value })} />
 								</label>
 							</div>
-							<div className="modal-actions" style={{ marginTop: "1rem" }}>
-								<button type="button" className="btn btn--ghost" onClick={() => setEditingSchol(null)}>Cancel</button>
-								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving..." : "Save"}</button>
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingSchol(null)} disabled={saving}>Cancel</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
 							</div>
 						</form>
 					</div>
 				</div>
-		)}
+			)}
 
 			<ConfirmDialog
 				open={confirmOpen}

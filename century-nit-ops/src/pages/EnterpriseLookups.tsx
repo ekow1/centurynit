@@ -187,81 +187,82 @@ export function EnterpriseLookups() {
 			)}
 
 			{editing && (
-				<div className="modal-backdrop">
-					<div className="modal-content" style={{ maxWidth: "500px" }}>
-						<div className="modal-header">
-							<h3>{editing.id ? "Edit Option" : "New Option"}</h3>
-							<button className="btn-close" onClick={() => setEditing(null)}>×</button>
-						</div>
-						<form onSubmit={(e) => void handleSave(e)}>
-							<div className="modal-body form-grid">
-								<div className="field">
-									<label>Category</label>
-									<select
-										className="select"
-										value={editing.category ?? ""}
-										onChange={(e) => setEditing({ ...editing, category: e.target.value })}
-										required
-									>
-										{categories.map((c) => (
-											<option key={c} value={c}>{c}</option>
-										))}
-									</select>
-								</div>
-								<div className="field">
-									<label>Internal Value (ID)</label>
-									<input
-										className="input"
-										value={editing.value ?? ""}
-										onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-										placeholder="e.g. high_school"
-										required
-										pattern="^[a-zA-Z0-9_]+$"
-										title="Only letters, numbers, and underscores"
-									/>
-									<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Must be unique within category. No spaces.</p>
-								</div>
-								<div className="field">
-									<label>Display Label</label>
-									<input
-										className="input"
-										value={editing.label ?? ""}
-										onChange={(e) => setEditing({ ...editing, label: e.target.value })}
-										placeholder="e.g. High School / WASSCE"
-										required
-									/>
-								</div>
-								<div className="field">
-									<label>Sort Order</label>
-									<input
-										type="number"
-										className="input"
-										value={editing.sortOrder ?? 0}
-										onChange={(e) => setEditing({ ...editing, sortOrder: Number.parseInt(e.target.value) || 0 })}
-										required
-									/>
-									<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Lower numbers appear first.</p>
-								</div>
-								<div className="field" style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.5rem" }}>
-									<input
-										type="checkbox"
-										id="l-active"
-										checked={editing.isActive ?? true}
-										onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })}
-									/>
-									<label htmlFor="l-active" style={{ margin: 0 }}>Active (visible to applicants)</label>
-								</div>
+				<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Lookup option editor">
+					<div className="ops-modal" style={{ maxWidth: "32rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<h2 className="ops-modal__title">{editing.id ? "Edit Option" : "New Option"}</h2>
+								<p className="ops-modal__sub">Form dropdown lookup</p>
 							</div>
-							<div className="modal-footer">
-								<button type="button" className="btn btn--ghost" onClick={() => setEditing(null)}>Cancel</button>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>✕ Close</button>
+						</header>
+						<form onSubmit={(e) => void handleSave(e)} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+							<div className="field">
+								<label>Category</label>
+								<select
+									className="select"
+									value={editing.category ?? ""}
+									onChange={(e) => setEditing({ ...editing, category: e.target.value })}
+									required
+								>
+									{categories.map((c) => (
+										<option key={c} value={c}>{c}</option>
+									))}
+								</select>
+							</div>
+							<div className="field">
+								<label>Internal Value (ID)</label>
+								<input
+									className="input"
+									value={editing.value ?? ""}
+									onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+									placeholder="e.g. high_school"
+									required
+									pattern="^[a-zA-Z0-9_]+$"
+									title="Only letters, numbers, and underscores"
+								/>
+								<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Must be unique within category. No spaces.</p>
+							</div>
+							<div className="field">
+								<label>Display Label</label>
+								<input
+									className="input"
+									value={editing.label ?? ""}
+									onChange={(e) => setEditing({ ...editing, label: e.target.value })}
+									placeholder="e.g. High School / WASSCE"
+									required
+								/>
+							</div>
+							<div className="field">
+								<label>Sort Order</label>
+								<input
+									type="number"
+									className="input"
+									value={editing.sortOrder ?? 0}
+									onChange={(e) => setEditing({ ...editing, sortOrder: Number.parseInt(e.target.value) || 0 })}
+									required
+								/>
+								<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>Lower numbers appear first.</p>
+							</div>
+							<div className="field" style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.5rem" }}>
+								<input
+									type="checkbox"
+									id="l-active"
+									checked={editing.isActive ?? true}
+									onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })}
+								/>
+								<label htmlFor="l-active" style={{ margin: 0 }}>Active (visible to applicants)</label>
+							</div>
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)} disabled={saving}>Cancel</button>
 								<button type="submit" className="btn btn--primary" disabled={saving}>
-									{saving ? "Saving..." : "Save Option"}
+									{saving ? "Saving…" : "Save Option"}
 								</button>
 							</div>
 						</form>
 					</div>
 				</div>
-		)}
+			)}
 
 			<ConfirmDialog
 				open={confirmOpen}

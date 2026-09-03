@@ -852,8 +852,8 @@ const CONSULT_TABS = [
 	"Type",
 	"Location",
 	"Branch",
-	"Schedule",
 	"Assessment",
+	"Schedule",
 	"Pay",
 	"Review",
 	"Outcome",
@@ -1667,6 +1667,14 @@ export function PortalConsultationBookingFlow() {
 					</>
 				)}
 				{tab === 3 && (
+					<AssessmentForm
+						assessment={booking.assessment}
+						assessmentDocs={booking.assessmentDocs}
+						onUpdate={updateAssessment}
+						onDocUpdate={updateAssessmentDoc}
+					/>
+				)}
+				{tab === 4 && (
 					<SlotPickerLive
 						branchId={booking.branchId}
 						date={booking.date}
@@ -1674,14 +1682,6 @@ export function PortalConsultationBookingFlow() {
 						time={booking.time}
 						onTimeChange={(t) => updateBooking({ time: t })}
 						durationMinutes={45}
-					/>
-				)}
-				{tab === 4 && (
-					<AssessmentForm
-						assessment={booking.assessment}
-						assessmentDocs={booking.assessmentDocs}
-						onUpdate={updateAssessment}
-						onDocUpdate={updateAssessmentDoc}
 					/>
 				)}
 				{tab === 5 && (					<>

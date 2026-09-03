@@ -311,13 +311,11 @@ function upcomingDates(count = 21): { value: string; weekday: string; dayMonth: 
 		const y = cursor.getFullYear();
 		const m = String(cursor.getMonth() + 1).padStart(2, "0");
 		const d = String(cursor.getDate()).padStart(2, "0");
-		if (cursor.getDay() !== 0) {
-			out.push({
-				value: `${y}-${m}-${d}`,
-				weekday: cursor.toLocaleDateString("en-US", { weekday: "short" }),
-				dayMonth: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-			});
-		}
+		out.push({
+			value: `${y}-${m}-${d}`,
+			weekday: cursor.toLocaleDateString("en-US", { weekday: "short" }),
+			dayMonth: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+		});
 		cursor.setDate(cursor.getDate() + 1);
 	}
 	return out;

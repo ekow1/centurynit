@@ -1,42 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_PREFIX } from "century-nit-shared";
+import {
+	API_PREFIX,
+	generateSlots,
+	effectiveDayValues,
+	validateScheduleConfig,
+	timeToMinutes,
+	type WeeklySlotScheduleGeneral,
+	type WeeklySlotScheduleDay,
+} from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 
 /**
- * Scheduling Configuration — general template + per-weekday overrides.
+ * Scheduling Configuration — general template + per-weekday custom overrides.
  *
  * The admin sets a **general** template (start, end, interval, max slots per
- * day) that applies to every open day by default. Each weekday has two
- * toggles:
- *
- *   - **Open** — whether the day is open for bookings at all.
- *   - **Custom** — when ON, the day uses its own start/end/interval/maxSlots
- *     instead of inheriting the general template.
- *
- * `maxSlotsPerDay` caps the generated slot count. 0 or empty = no cap.
+ * day) that applies to every day by default. A weekday can optionally override
+ * the general template when its "Custom Schedule" toggle is ON. When OFF, the day
+ * inherits the general settings. Stored custom values are preserved, but only
+ * take effect while the toggle is ON.
  */
 
 /** Monday first — the working week reads better than Sunday-first here. */
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-interface General {
-	openStart: string;
-	openEnd: string;
-	intervalMinutes: number;
-	maxSlotsPerDay: number | null;
-}
+type General = WeeklySlotScheduleGeneral;
 
-interface SchedulingDay {
-	dayOfWeek: number;
-	enabled: boolean;
-	override: boolean;
-	openStart: string;
-	openEnd: string;
-	intervalMinutes: number;
-	maxSlotsPerDay: number | null;
-	preview: string[];
-}
+type SchedulingDay = WeeklySlotScheduleDay & { preview: string[] };
 
 interface SchedulingConfig {
 	timezone: string;
@@ -44,62 +34,9 @@ interface SchedulingConfig {
 	days: SchedulingDay[];
 }
 
-function timeToMinutes(value: string | undefined | null): number {
-	if (!value || typeof value !== "string") return 0;
-	const [h, m] = value.split(":").map(Number);
-	if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
-	return h * 60 + m;
-}
-
-function minutesToTime(min: number): string {
-	const h = Math.floor(min / 60).toString().padStart(2, "0");
-	const m = (min % 60).toString().padStart(2, "0");
-	return `${h}:${m}`;
-}
-
-/** Slot start times from start to end at the given interval, capped by maxSlots. */
-function computeSlotTimes(
-	openStart: string | undefined,
-	openEnd: string | undefined,
-	intervalMinutes: number | undefined,
-	maxSlotsPerDay: number | null | undefined,
-): string[] {
-	if (!openStart || !openEnd || !intervalMinutes || intervalMinutes <= 0) return [];
-	const startMin = timeToMinutes(openStart);
-	const endMin = timeToMinutes(openEnd);
-	if (endMin <= startMin) return [];
-	const times: string[] = [];
-	for (let t = startMin; t < endMin; t += intervalMinutes) {
-		times.push(minutesToTime(t));
-		if (maxSlotsPerDay && maxSlotsPerDay > 0 && times.length >= maxSlotsPerDay) break;
-	}
-	return times;
-}
-
-/** Resolve the effective values for a day — its own if override, else general. */
-function effectiveDay(day: SchedulingDay, general: General) {
-	if (day.override) {
-		return {
-			openStart: day.openStart,
-			openEnd: day.openEnd,
-			intervalMinutes: day.intervalMinutes,
-			maxSlotsPerDay: day.maxSlotsPerDay,
-		};
-	}
-	return {
-		openStart: general.openStart,
-		openEnd: general.openEnd,
-		intervalMinutes: general.intervalMinutes,
-		maxSlotsPerDay: general.maxSlotsPerDay,
-	};
-}
-
 function updateDayPreview(day: SchedulingDay, general: General): SchedulingDay {
-	const eff = effectiveDay(day, general);
-	return {
-		...day,
-		preview: day.enabled ? computeSlotTimes(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay) : [],
-	};
+	const eff = effectiveDayValues(day, general);
+	return { ...day, preview: generateSlots(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay) };
 }
 
 /** Compare ignoring the derived preview, so only real edits mark the form dirty. */
@@ -109,8 +46,7 @@ function sameSchedule(a: SchedulingDay[], b: SchedulingDay[]): boolean {
 		const other = b[i];
 		return (
 			day.dayOfWeek === other.dayOfWeek &&
-			day.enabled === other.enabled &&
-			day.override === other.override &&
+			day.customEnabled === other.customEnabled &&
 			day.openStart === other.openStart &&
 			day.openEnd === other.openEnd &&
 			day.intervalMinutes === other.intervalMinutes &&
@@ -149,8 +85,9 @@ export function SchedulingConfig() {
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await apiFetch<SchedulingConfig & { openStart?: string; openEnd?: string }>(`${API_PREFIX}/scheduling`);
-			// Tolerate legacy API shapes (no general, no override, no maxSlots).
+			const res = await apiFetch<SchedulingConfig & { openStart?: string; openEnd?: string }>(
+				`${API_PREFIX}/scheduling`,
+			);
 			const g: General = {
 				openStart: res.general?.openStart ?? res.openStart ?? "09:00",
 				openEnd: res.general?.openEnd ?? res.openEnd ?? "17:00",
@@ -166,23 +103,27 @@ export function SchedulingConfig() {
 					const count = (d as { slotsPerDay?: number }).slotsPerDay ?? 1;
 					intervalMinutes = total > 0 && count > 0 ? Math.max(5, Math.floor(total / count)) : 60;
 				}
+				const customEnabled =
+					"customEnabled" in d
+						? d.customEnabled
+						: ((d as { override?: boolean }).override ?? false);
 				return {
 					dayOfWeek: d.dayOfWeek,
-					enabled: d.enabled,
-					override: d.override ?? true, // legacy per-day hours preserved
+					customEnabled,
 					openStart,
 					openEnd,
 					intervalMinutes,
 					maxSlotsPerDay: d.maxSlotsPerDay ?? null,
-					preview: d.preview ?? [],
+					preview: [],
 				};
 			});
+			const withPreviews = fresh.map((d) => updateDayPreview(d, g));
 			setGeneral(g);
 			setSavedGeneral(g);
 			setTimezone(res.timezone);
 			setSavedTimezone(res.timezone);
-			setDays(fresh.map((d) => updateDayPreview(d, g)));
-			setSavedDays(fresh.map((d) => ({ ...d })));
+			setDays(withPreviews);
+			setSavedDays(withPreviews.map((d) => ({ ...d })));
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not load scheduling configuration.");
 		} finally {
@@ -205,20 +146,18 @@ export function SchedulingConfig() {
 		timezone !== savedTimezone ||
 		!sameGeneral(general, savedGeneral) ||
 		!sameSchedule(days, savedDays);
-	const activeCount = days.filter((d) => d.enabled).length;
-	const weeklySlots = days
-		.filter((d) => d.enabled)
-		.reduce(
-			(sum, d) =>
-				sum +
-				computeSlotTimes(
-					effectiveDay(d, general).openStart,
-					effectiveDay(d, general).openEnd,
-					effectiveDay(d, general).intervalMinutes,
-					effectiveDay(d, general).maxSlotsPerDay,
-				).length,
-			0,
-		);
+	const customCount = days.filter((d) => d.customEnabled).length;
+	const weeklySlots = days.reduce(
+		(sum, d) =>
+			sum +
+			generateSlots(
+				effectiveDayValues(d, general).openStart,
+				effectiveDayValues(d, general).openEnd,
+				effectiveDayValues(d, general).intervalMinutes,
+				effectiveDayValues(d, general).maxSlotsPerDay,
+			).length,
+		0,
+	);
 
 	function updateGeneral(patch: Partial<General>) {
 		setGeneral((prev) => {
@@ -236,38 +175,9 @@ export function SchedulingConfig() {
 		setSuccess(null);
 	}
 
-	/** Enable/override exactly the given weekdays. A single per-day toggle now
-	 * controls both "open" and "custom": ON = open with this day's custom
-	 * values, OFF = closed / no custom override. */
-	function setActiveDays(active: number[]) {
-		setDays((prev) =>
-			prev.map((d) =>
-				updateDayPreview(
-					{ ...d, enabled: active.includes(d.dayOfWeek), override: active.includes(d.dayOfWeek) },
-					general,
-				),
-			),
-		);
-		setSuccess(null);
-	}
-
 	function validate(): string | null {
-		if (timeToMinutes(general.openEnd) <= timeToMinutes(general.openStart)) {
-			return "General: closing time must be after opening time.";
-		}
-		if (general.intervalMinutes < 5 || general.intervalMinutes > 480) {
-			return "General: interval must be between 5 and 480 minutes.";
-		}
-		for (const day of days) {
-			if (!day.enabled || !day.override) continue;
-			if (timeToMinutes(day.openEnd) <= timeToMinutes(day.openStart)) {
-				return `${DAY_NAMES[day.dayOfWeek]}: closing time must be after opening time.`;
-			}
-			if (day.intervalMinutes < 5 || day.intervalMinutes > 480) {
-				return `${DAY_NAMES[day.dayOfWeek]}: interval must be between 5 and 480 minutes.`;
-			}
-		}
-		return null;
+		const validationError = validateScheduleConfig(general, days);
+		return validationError ? validationError.message : null;
 	}
 
 	async function handleSubmit(e: React.FormEvent) {
@@ -288,8 +198,7 @@ export function SchedulingConfig() {
 				general,
 				days: days.map((d) => ({
 					dayOfWeek: d.dayOfWeek,
-					enabled: d.enabled,
-					override: d.override,
+					customEnabled: d.customEnabled,
 					openStart: d.openStart,
 					openEnd: d.openEnd,
 					intervalMinutes: d.intervalMinutes,
@@ -314,7 +223,7 @@ export function SchedulingConfig() {
 		}
 	}
 
-	const generalPreview = computeSlotTimes(general.openStart, general.openEnd, general.intervalMinutes, general.maxSlotsPerDay);
+	const generalPreview = generateSlots(general.openStart, general.openEnd, general.intervalMinutes, general.maxSlotsPerDay);
 
 	return (
 		<div className="page-content fade-in">
@@ -430,34 +339,17 @@ export function SchedulingConfig() {
 							</p>
 						</div>
 
-						{/* ── Quick set ────────────────────────────────────────────── */}
-						<div className="slotcfg__presets">
-							<span className="slotcfg__presets-label">Quick set</span>
-							<button
-								type="button"
-								className="perm-quick-btn"
-								onClick={() => setActiveDays([1, 2, 3, 4, 5])}
-							>
-								Weekdays only
-							</button>
-							<button
-								type="button"
-								className="perm-quick-btn"
-								onClick={() => setActiveDays([1, 2, 3, 4, 5, 6])}
-							>
-								Include Saturday
-							</button>
-							<button type="button" className="perm-quick-btn" onClick={() => setActiveDays([])}>
-								Close all
-							</button>
-						</div>
+						{/* ── Per-day overrides ───────────────────────────────────── */}
+						<p className="ops-panel__muted" style={{ margin: "0.75rem 0", fontSize: "var(--text-xs)" }}>
+							Each day inherits the General settings unless Custom Schedule is turned on.
+						</p>
 
 						{/* ── Per-day table ────────────────────────────────────────── */}
 						<table className="slotcfg-table">
 							<thead>
 								<tr>
 									<th scope="col">Day</th>
-									<th scope="col">Custom</th>
+									<th scope="col">Custom Schedule</th>
 									<th scope="col">Start</th>
 									<th scope="col">End</th>
 									<th scope="col">Every (min)</th>
@@ -467,27 +359,33 @@ export function SchedulingConfig() {
 							</thead>
 							<tbody>
 								{orderedDays.map((day) => {
-									const eff = effectiveDay(day, general);
-									const slotCount = day.enabled
-										? computeSlotTimes(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay).length
-										: 0;
+									const eff = effectiveDayValues(day, general);
+									const slotCount = generateSlots(
+										eff.openStart,
+										eff.openEnd,
+										eff.intervalMinutes,
+										eff.maxSlotsPerDay,
+									).length;
+									const inherited = !day.customEnabled;
 									return (
-										<tr
-											key={day.dayOfWeek}
-											className={day.enabled ? undefined : "slotcfg-row--off"}
-										>
+										<tr key={day.dayOfWeek} className={inherited ? "slotcfg-row--off" : undefined}>
 											<td className="slotcfg__day" data-col="day">
 												{DAY_NAMES[day.dayOfWeek]}
+												{inherited && (
+													<span className="muted" style={{ fontSize: "var(--text-xs)", display: "block" }}>
+														Inherited
+													</span>
+												)}
 											</td>
-											<td data-col="override">
-												<label className="perm-switch" title={`${DAY_NAMES[day.dayOfWeek]} hours`}>
+											<td data-col="custom">
+												<label className="perm-switch" title={`${DAY_NAMES[day.dayOfWeek]} custom schedule`}>
 													<input
 														type="checkbox"
-														checked={day.override}
-														aria-label={`${DAY_NAMES[day.dayOfWeek]} custom hours`}
+														checked={day.customEnabled}
+														aria-label={`${DAY_NAMES[day.dayOfWeek]} custom schedule`}
 														onChange={(e) => {
 															const on = e.target.checked;
-															updateDay(day.dayOfWeek, { enabled: on, override: on });
+															updateDay(day.dayOfWeek, { customEnabled: on });
 														}}
 													/>
 													<span className="perm-switch__slider" />
@@ -497,13 +395,11 @@ export function SchedulingConfig() {
 												<input
 													type="time"
 													className="slotcfg__time"
-													value={day.override ? day.openStart : general.openStart}
-													disabled={!day.enabled || !day.override}
+													value={day.customEnabled ? day.openStart : general.openStart}
+													disabled={!day.customEnabled}
 													aria-label={`${DAY_NAMES[day.dayOfWeek]} opening time`}
-													onChange={(e) =>
-														updateDay(day.dayOfWeek, { openStart: e.target.value })
-													}
-													required={day.override}
+													onChange={(e) => updateDay(day.dayOfWeek, { openStart: e.target.value })}
+													required={day.customEnabled}
 													style={{ width: "6rem" }}
 												/>
 											</td>
@@ -511,13 +407,11 @@ export function SchedulingConfig() {
 												<input
 													type="time"
 													className="slotcfg__time"
-													value={day.override ? day.openEnd : general.openEnd}
-													disabled={!day.enabled || !day.override}
+													value={day.customEnabled ? day.openEnd : general.openEnd}
+													disabled={!day.customEnabled}
 													aria-label={`${DAY_NAMES[day.dayOfWeek]} closing time`}
-													onChange={(e) =>
-														updateDay(day.dayOfWeek, { openEnd: e.target.value })
-													}
-													required={day.override}
+													onChange={(e) => updateDay(day.dayOfWeek, { openEnd: e.target.value })}
+													required={day.customEnabled}
 													style={{ width: "6rem" }}
 												/>
 											</td>
@@ -528,8 +422,8 @@ export function SchedulingConfig() {
 													max={480}
 													step={5}
 													className="slotcfg__num"
-													value={day.override ? day.intervalMinutes : general.intervalMinutes}
-													disabled={!day.enabled || !day.override}
+													value={day.customEnabled ? day.intervalMinutes : general.intervalMinutes}
+													disabled={!day.customEnabled}
 													aria-label={`${DAY_NAMES[day.dayOfWeek]} slot interval in minutes`}
 													onChange={(e) =>
 														updateDay(day.dayOfWeek, {
@@ -545,8 +439,8 @@ export function SchedulingConfig() {
 													max={48}
 													step={1}
 													className="slotcfg__num"
-													value={(day.override ? day.maxSlotsPerDay : general.maxSlotsPerDay) ?? 0}
-													disabled={!day.enabled || !day.override}
+													value={(day.customEnabled ? day.maxSlotsPerDay : general.maxSlotsPerDay) ?? 0}
+													disabled={!day.customEnabled}
 													aria-label={`${DAY_NAMES[day.dayOfWeek]} max slots`}
 													onChange={(e) => {
 														const n = Number.parseInt(e.target.value, 10);
@@ -555,10 +449,8 @@ export function SchedulingConfig() {
 												/>
 											</td>
 											<td data-col="times">
-												{!day.enabled ? (
-													<span className="slotcfg__closed">Closed — no bookings offered</span>
-												) : day.preview.length === 0 ? (
-													<span className="slotcfg__closed">Closing time must be after opening time</span>
+												{day.preview.length === 0 ? (
+													<span className="slotcfg__closed">No slots generated</span>
 												) : (
 													<span className="slotcfg__times">
 														{day.preview.map((t) => (
@@ -567,7 +459,7 @@ export function SchedulingConfig() {
 															</span>
 														))}
 														<span className="muted" style={{ fontSize: "0.75rem", marginLeft: "0.4rem" }}>
-															({slotCount} slots{day.override ? "" : " · general"})
+															({slotCount} slots{day.customEnabled ? " · custom" : " · inherited"})
 														</span>
 													</span>
 												)}
@@ -579,7 +471,7 @@ export function SchedulingConfig() {
 						</table>
 
 						<p className="ops-panel__muted" style={{ marginTop: "1rem" }}>
-							{activeCount} open {activeCount === 1 ? "day" : "days"} · {weeklySlots} bookable
+							{customCount} custom {customCount === 1 ? "day" : "days"} · {weeklySlots} bookable
 							slots per week · times shown in {timezone}
 						</p>
 

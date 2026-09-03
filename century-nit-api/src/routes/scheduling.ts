@@ -7,7 +7,7 @@ import {
 	effectiveDayValues,
 	writeSetting,
 } from "../services/settings.js";
-import { minutesToTime, timeToMinutes } from "../lib/time.js";
+import { validateScheduleConfig, generateSlots } from "century-nit-shared";
 
 /**
  * Scheduling configuration — per-weekday branch consultation slots.
@@ -18,8 +18,6 @@ import { minutesToTime, timeToMinutes } from "../lib/time.js";
  */
 
 const schedulingRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
 
@@ -32,8 +30,7 @@ const generalSchema = z.object({
 
 const scheduleDaySchema = z.object({
 	dayOfWeek: z.number().int().min(0).max(6),
-	enabled: z.boolean(),
-	override: z.boolean(),
+	customEnabled: z.boolean(),
 	openStart: timeStringSchema,
 	openEnd: timeStringSchema,
 	intervalMinutes: z.coerce.number().int().min(5).max(480),
@@ -46,8 +43,7 @@ const schedulingResponseSchema = z.object({
 	days: z.array(
 		z.object({
 			dayOfWeek: z.number().int(),
-			enabled: z.boolean(),
-			override: z.boolean(),
+			customEnabled: z.boolean(),
 			openStart: timeStringSchema,
 			openEnd: timeStringSchema,
 			intervalMinutes: z.number().int(),
@@ -63,28 +59,11 @@ const updateSchedulingSchema = z.object({
 	days: z.array(scheduleDaySchema).length(7),
 });
 
-function computePreview(
-	openStart: string,
-	openEnd: string,
-	intervalMinutes: number,
-	maxSlotsPerDay: number | null,
-): string[] {
-	const startMin = timeToMinutes(openStart);
-	const endMin = timeToMinutes(openEnd);
-	if (endMin <= startMin || intervalMinutes <= 0) return [];
-	const times: string[] = [];
-	for (let t = startMin; t < endMin; t += intervalMinutes) {
-		times.push(minutesToTime(t));
-		if (maxSlotsPerDay && maxSlotsPerDay > 0 && times.length >= maxSlotsPerDay) break;
-	}
-	return times;
-}
-
 function dayResponse(day: WeeklySlotScheduleDay, general: WeeklySlotSchedule["general"]) {
 	const eff = effectiveDayValues(day, general);
 	return {
 		...day,
-		preview: day.enabled ? computePreview(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay) : [],
+		preview: generateSlots(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay),
 	};
 }
 
@@ -96,28 +75,14 @@ async function readSchedulingConfig(schedule: WeeklySlotSchedule): Promise<{
 	return {
 		timezone: schedule.timezone,
 		general: schedule.general,
-		days: schedule.days.map((d) => dayResponse(d, schedule.general)),
+		days: schedule.days.map((d: WeeklySlotScheduleDay) => dayResponse(d, schedule.general)),
 	};
 }
 
 function validateSchedule(schedule: WeeklySlotSchedule) {
-	// Validate the general template.
-	const g = schedule.general;
-	if (timeToMinutes(g.openEnd) <= timeToMinutes(g.openStart)) {
-		throw new HttpError(400, "BAD_REQUEST", "General: closing time must be after opening time");
-	}
-	for (const day of schedule.days) {
-		if (!day.enabled) continue;
-		// Only validate the day's own values if it overrides; otherwise the
-		// general template was already checked.
-		if (!day.override) continue;
-		if (timeToMinutes(day.openEnd) <= timeToMinutes(day.openStart)) {
-			throw new HttpError(
-				400,
-				"BAD_REQUEST",
-				`${DAY_NAMES[day.dayOfWeek]}: closing time must be after opening time`,
-			);
-		}
+	const error = validateScheduleConfig(schedule.general, schedule.days);
+	if (error) {
+		throw new HttpError(400, "BAD_REQUEST", error.message);
 	}
 }
 

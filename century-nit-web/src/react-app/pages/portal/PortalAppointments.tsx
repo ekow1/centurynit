@@ -24,17 +24,14 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 		const y = cursor.getFullYear();
 		const m = String(cursor.getMonth() + 1).padStart(2, "0");
 		const d = String(cursor.getDate()).padStart(2, "0");
-		// Sunday is closed everywhere, so do not offer it at all.
-		if (cursor.getDay() !== 0) {
-			out.push({
-				value: `${y}-${m}-${d}`,
-				label: cursor.toLocaleDateString(undefined, {
-					weekday: "short",
-					day: "numeric",
-					month: "short",
-				}),
-			});
-		}
+		out.push({
+			value: `${y}-${m}-${d}`,
+			label: cursor.toLocaleDateString(undefined, {
+				weekday: "short",
+				day: "numeric",
+				month: "short",
+			}),
+		});
 		cursor.setDate(cursor.getDate() + 1);
 	}
 	return out;

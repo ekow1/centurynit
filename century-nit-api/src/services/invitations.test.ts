@@ -189,6 +189,7 @@ describe("accepting an invitation", () => {
 
 		const result = await acceptInvitation({
 			token,
+			name: "New Staff",
 			password: "a-sufficiently-long-password",
 		});
 
@@ -226,10 +227,10 @@ describe("accepting an invitation", () => {
 		});
 		const token = new URL(acceptUrl).searchParams.get("token")!;
 
-		await acceptInvitation({ token, password: "a-sufficiently-long-password" });
+		await acceptInvitation({ token, name: "Once", password: "a-sufficiently-long-password" });
 
 		await expect(
-			acceptInvitation({ token, password: "a-sufficiently-long-password" }),
+			acceptInvitation({ token, name: "Once", password: "a-sufficiently-long-password" }),
 		).rejects.toMatchObject({ code: "INVITATION_ALREADY_ACCEPTED" });
 	});
 

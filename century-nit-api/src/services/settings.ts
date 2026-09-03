@@ -1,10 +1,13 @@
 import { desc } from "drizzle-orm";
-import { z } from "zod";
 import { db } from "../db/index.js";
 import { platformSettings, settingsAudit } from "../db/schema.js";
 import { encrypt, decrypt } from "../lib/crypto.js";
 import { env } from "../env.js";
 import { timeToMinutes } from "../lib/time.js";
+import {
+	type WeeklySlotSchedule,
+	weeklySlotScheduleSchema,
+} from "century-nit-shared";
 
 /**
  * Platform settings service.
@@ -417,97 +420,9 @@ export async function branchOpenEnd(): Promise<string> {
 	return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : env.BRANCH_OPEN_END;
 }
 
-export type WeeklySlotScheduleGeneral = {
-	/** Default opening time, HH:MM. Used by days with override=false. */
-	openStart: string;
-	/** Default closing time, HH:MM. */
-	openEnd: string;
-	/** Default minutes between slot start times. */
-	intervalMinutes: number;
-	/** Cap on slots per day. null or 0 = no cap. */
-	maxSlotsPerDay: number | null;
-};
+export type { WeeklySlotSchedule, WeeklySlotScheduleGeneral, WeeklySlotScheduleDay } from "century-nit-shared";
+export { effectiveDayValues, generateSlots } from "century-nit-shared";
 
-export type WeeklySlotScheduleDay = {
-	dayOfWeek: number;
-	enabled: boolean;
-	/**
-	 * When true, this day uses its own openStart/openEnd/intervalMinutes/
-	 * maxSlotsPerDay instead of the general template. When false, the day
-	 * inherits from `general` (but `enabled` still controls open/closed).
-	 */
-	override: boolean;
-	/** Day-specific opening time, HH:MM. Used only when override=true. */
-	openStart: string;
-	/** Day-specific closing time, HH:MM. */
-	openEnd: string;
-	/** Day-specific minutes between slot start times. */
-	intervalMinutes: number;
-	/** Day-specific cap on slots. null or 0 = no cap. */
-	maxSlotsPerDay: number | null;
-};
-
-export type WeeklySlotSchedule = {
-	timezone: string;
-	/** Default values applied to every day with override=false. */
-	general: WeeklySlotScheduleGeneral;
-	days: WeeklySlotScheduleDay[];
-};
-
-/**
- * Resolve the effective slot values for a day — its own if override=true,
- * otherwise the general template. Consumers (availability, feeds, scheduling
- * preview) call this so there is one place that knows the inheritance rule.
- */
-export function effectiveDayValues(
-	day: WeeklySlotScheduleDay,
-	general: WeeklySlotScheduleGeneral,
-): {
-	openStart: string;
-	openEnd: string;
-	intervalMinutes: number;
-	maxSlotsPerDay: number | null;
-} {
-	if (day.override) {
-		return {
-			openStart: day.openStart,
-			openEnd: day.openEnd,
-			intervalMinutes: day.intervalMinutes,
-			maxSlotsPerDay: day.maxSlotsPerDay,
-		};
-	}
-	return {
-		openStart: general.openStart,
-		openEnd: general.openEnd,
-		intervalMinutes: general.intervalMinutes,
-		maxSlotsPerDay: general.maxSlotsPerDay,
-	};
-}
-
-const generalSchema = z.object({
-	openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-	openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-	intervalMinutes: z.number().int().min(5).max(480),
-	maxSlotsPerDay: z.number().int().min(0).max(48).nullable(),
-});
-
-const weeklySlotScheduleSchema = z.object({
-	timezone: z.string().min(1),
-	general: generalSchema,
-	days: z
-		.array(
-			z.object({
-				dayOfWeek: z.number().int().min(0).max(6),
-				enabled: z.boolean(),
-				override: z.boolean(),
-				openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-				openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-				intervalMinutes: z.number().int().min(5).max(480),
-				maxSlotsPerDay: z.number().int().min(0).max(48).nullable(),
-			}),
-		)
-		.length(7),
-});
 
 function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
 	const defaultInterval = Math.max(
@@ -524,10 +439,7 @@ function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
 		},
 		days: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
 			dayOfWeek,
-			enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
-			// Days start non-overriding — they inherit from `general`. The admin
-			// flips override=true on the days that need their own hours.
-			override: false,
+			customEnabled: false,
 			openStart: env.BRANCH_OPEN_START,
 			openEnd: env.BRANCH_OPEN_END,
 			intervalMinutes: defaultInterval,
@@ -542,37 +454,19 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 	if (!raw) return defaultWeeklySlotSchedule();
 	try {
 		const parsed = JSON.parse(raw);
-		/*
-		 * Legacy schedules stored a branch-global openStart/openEnd and a
-		 * per-day slotsPerDay count. Migrate to per-day start/end/interval:
-		 * lift the global window onto every enabled day and convert the count
-		 * to an interval (window / count). New writes always use the per-day
-		 * shape.
-		 */
+		// Legacy schedules may be missing `general`, use per-day `slotsPerDay`,
+		// or use `enabled`/`override` instead of `customEnabled`.
 		if (parsed && Array.isArray(parsed.days)) {
-			/*
-			 * Two legacy shapes need migrating:
-			 *
-			 *   1. v1 — branch-global openStart/openEnd + per-day slotsPerDay.
-			 *   2. v2 — per-day openStart/openEnd/intervalMinutes, no general,
-			 *           no override, no maxSlotsPerDay.
-			 *
-			 * Both are lifted into the v3 shape: a `general` template derived
-			 * from the first enabled day (or env defaults), and every day
-			 * marked override=true so existing per-day hours are preserved
-			 * exactly. The admin can then switch days to inherit from general
-			 * by toggling override off.
-			 */
 			if (!parsed.general) {
-				const firstEnabled = parsed.days.find(
-					(d: { enabled?: boolean; openStart?: string }) => d?.enabled && d.openStart,
+				const firstDay = parsed.days.find(
+					(d: { openStart?: string }) => d?.openStart,
 				);
-				const globalStart = parsed.openStart ?? firstEnabled?.openStart ?? env.BRANCH_OPEN_START;
-				const globalEnd = parsed.openEnd ?? firstEnabled?.openEnd ?? env.BRANCH_OPEN_END;
-				let globalInterval = firstEnabled?.intervalMinutes as number | undefined;
+				const globalStart = parsed.openStart ?? firstDay?.openStart ?? env.BRANCH_OPEN_START;
+				const globalEnd = parsed.openEnd ?? firstDay?.openEnd ?? env.BRANCH_OPEN_END;
+				let globalInterval = firstDay?.intervalMinutes as number | undefined;
 				if (!globalInterval) {
 					const total = timeToMinutes(globalEnd) - timeToMinutes(globalStart);
-					const count = (firstEnabled as { slotsPerDay?: number } | undefined)?.slotsPerDay ?? env.SLOTS_PER_DAY;
+					const count = (firstDay as { slotsPerDay?: number } | undefined)?.slotsPerDay ?? env.SLOTS_PER_DAY;
 					globalInterval = total > 0 && count > 0 ? Math.max(5, Math.floor(total / count)) : 60;
 				}
 				parsed.general = {
@@ -584,16 +478,22 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 			}
 			for (const d of parsed.days) {
 				if (d && typeof d.slotsPerDay === "number" && !d.intervalMinutes) {
-					const total = timeToMinutes(d.openEnd ?? parsed.general.openEnd) - timeToMinutes(d.openStart ?? parsed.general.openStart);
+					const start = d.openStart ?? parsed.general.openStart;
+					const end = d.openEnd ?? parsed.general.openEnd;
+					const total = timeToMinutes(end) - timeToMinutes(start);
 					d.intervalMinutes = total > 0 && d.slotsPerDay > 0
 						? Math.max(5, Math.floor(total / d.slotsPerDay))
 						: parsed.general.intervalMinutes;
 				}
 				if (!d.openStart) d.openStart = parsed.general.openStart;
 				if (!d.openEnd) d.openEnd = parsed.general.openEnd;
-				if (d.override == null) d.override = true; // preserve existing per-day hours
 				if (d.maxSlotsPerDay == null) d.maxSlotsPerDay = null;
+				if (typeof d.customEnabled !== "boolean") {
+					d.customEnabled = d.override ?? (d.enabled ?? true);
+				}
 				delete d.slotsPerDay;
+				delete d.override;
+				delete d.enabled;
 			}
 			delete parsed.openStart;
 			delete parsed.openEnd;
@@ -764,7 +664,7 @@ function validateSettingValue(key: SettingKey, value: string | null): void {
 	if (key === "WEEKLY_SLOT_SCHEDULE") {
 		try {
 			weeklySlotScheduleSchema.parse(JSON.parse(value));
-		} catch (err) {
+		} catch {
 			throw new Error("Weekly slot schedule is invalid");
 		}
 	}

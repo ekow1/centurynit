@@ -1431,7 +1431,11 @@ meRouter.openapi(
 				stageStatuses: Object.fromEntries(
 					PORTAL_STAGE_ORDER.map((sid) => [
 						sid,
-						sid === "consultation" ? "current" : "locked",
+						(sid === "consultation" ? "current" : "locked") as
+							| "done"
+							| "current"
+							| "locked"
+							| "skipped",
 					]),
 				),
 				label: "Stage I · Consultation first",
@@ -1467,9 +1471,10 @@ meRouter.openapi(
 		);
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
-		const isPreDepartureDone =
+		const isPreDepartureDone = Boolean(
 			(application?.checklist?.length ?? 0) > 0 &&
-			application?.checklist?.every((item) => item.checked);
+				application?.checklist?.every((item) => item.checked)
+		);
 		const isCompleted = application?.travelClearance === "cleared";
 
 		// ── Determine stage ────────────────────────────────────────────────

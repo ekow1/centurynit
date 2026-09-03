@@ -154,7 +154,7 @@ export async function lockSchoolsForApplicant(
 		await db
 			.update(applications)
 			.set({
-				stage: "School Applications Locked",
+				stage: "offer_letter_review",
 				updatedAt: new Date(),
 			})
 			.where(eq(applications.id, app.id));

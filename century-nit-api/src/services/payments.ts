@@ -237,7 +237,7 @@ export async function verifyAndSettlePayment(
 				.update(applications)
 				.set({
 					status: "ACCEPTED",
-					stage: "Application Tracking Active",
+					stage: "school_submission",
 					agencySettled: true,
 					updatedAt: now,
 				})

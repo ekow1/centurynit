@@ -577,12 +577,20 @@ export type CalendarStatus = {
 
 export type BranchSlotSchedule = {
 	timezone: string;
+	general: {
+		openStart: string;
+		openEnd: string;
+		intervalMinutes: number;
+		maxSlotsPerDay: number | null;
+	};
 	days: {
 		dayOfWeek: number;
 		enabled: boolean;
-		slotsPerDay: number;
+		override: boolean;
 		openStart: string;
 		openEnd: string;
+		intervalMinutes: number;
+		maxSlotsPerDay: number | null;
 		times: string[];
 	}[];
 };

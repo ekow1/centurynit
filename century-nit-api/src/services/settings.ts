@@ -417,51 +417,121 @@ export async function branchOpenEnd(): Promise<string> {
 	return value && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : env.BRANCH_OPEN_END;
 }
 
+export type WeeklySlotScheduleGeneral = {
+	/** Default opening time, HH:MM. Used by days with override=false. */
+	openStart: string;
+	/** Default closing time, HH:MM. */
+	openEnd: string;
+	/** Default minutes between slot start times. */
+	intervalMinutes: number;
+	/** Cap on slots per day. null or 0 = no cap. */
+	maxSlotsPerDay: number | null;
+};
+
 export type WeeklySlotScheduleDay = {
 	dayOfWeek: number;
 	enabled: boolean;
-	/** Day-specific opening time, HH:MM. */
+	/**
+	 * When true, this day uses its own openStart/openEnd/intervalMinutes/
+	 * maxSlotsPerDay instead of the general template. When false, the day
+	 * inherits from `general` (but `enabled` still controls open/closed).
+	 */
+	override: boolean;
+	/** Day-specific opening time, HH:MM. Used only when override=true. */
 	openStart: string;
 	/** Day-specific closing time, HH:MM. */
 	openEnd: string;
-	/** Minutes between consecutive slot start times. */
+	/** Day-specific minutes between slot start times. */
 	intervalMinutes: number;
+	/** Day-specific cap on slots. null or 0 = no cap. */
+	maxSlotsPerDay: number | null;
 };
 
 export type WeeklySlotSchedule = {
 	timezone: string;
+	/** Default values applied to every day with override=false. */
+	general: WeeklySlotScheduleGeneral;
 	days: WeeklySlotScheduleDay[];
 };
 
+/**
+ * Resolve the effective slot values for a day — its own if override=true,
+ * otherwise the general template. Consumers (availability, feeds, scheduling
+ * preview) call this so there is one place that knows the inheritance rule.
+ */
+export function effectiveDayValues(
+	day: WeeklySlotScheduleDay,
+	general: WeeklySlotScheduleGeneral,
+): {
+	openStart: string;
+	openEnd: string;
+	intervalMinutes: number;
+	maxSlotsPerDay: number | null;
+} {
+	if (day.override) {
+		return {
+			openStart: day.openStart,
+			openEnd: day.openEnd,
+			intervalMinutes: day.intervalMinutes,
+			maxSlotsPerDay: day.maxSlotsPerDay,
+		};
+	}
+	return {
+		openStart: general.openStart,
+		openEnd: general.openEnd,
+		intervalMinutes: general.intervalMinutes,
+		maxSlotsPerDay: general.maxSlotsPerDay,
+	};
+}
+
+const generalSchema = z.object({
+	openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+	openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+	intervalMinutes: z.number().int().min(5).max(480),
+	maxSlotsPerDay: z.number().int().min(0).max(48).nullable(),
+});
+
 const weeklySlotScheduleSchema = z.object({
 	timezone: z.string().min(1),
+	general: generalSchema,
 	days: z
 		.array(
 			z.object({
 				dayOfWeek: z.number().int().min(0).max(6),
 				enabled: z.boolean(),
+				override: z.boolean(),
 				openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 				openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 				intervalMinutes: z.number().int().min(5).max(480),
+				maxSlotsPerDay: z.number().int().min(0).max(48).nullable(),
 			}),
 		)
 		.length(7),
 });
 
 function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
+	const defaultInterval = Math.max(
+		15,
+		Math.floor((8 * 60) / Math.max(1, env.SLOTS_PER_DAY)),
+	);
 	return {
 		timezone: env.DEFAULT_TIMEZONE,
+		general: {
+			openStart: env.BRANCH_OPEN_START,
+			openEnd: env.BRANCH_OPEN_END,
+			intervalMinutes: defaultInterval,
+			maxSlotsPerDay: null,
+		},
 		days: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
 			dayOfWeek,
 			enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
+			// Days start non-overriding — they inherit from `general`. The admin
+			// flips override=true on the days that need their own hours.
+			override: false,
 			openStart: env.BRANCH_OPEN_START,
 			openEnd: env.BRANCH_OPEN_END,
-			// Default interval derived from the legacy slots-per-day: an 8-hour
-			// window divided into SLOTS_PER_DAY slots. 8h / 8 slots = 60 min.
-			intervalMinutes: Math.max(
-				15,
-				Math.floor((8 * 60) / Math.max(1, env.SLOTS_PER_DAY)),
-			),
+			intervalMinutes: defaultInterval,
+			maxSlotsPerDay: null,
 		})),
 	};
 }
@@ -480,17 +550,49 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 		 * shape.
 		 */
 		if (parsed && Array.isArray(parsed.days)) {
-			const globalStart = parsed.openStart ?? env.BRANCH_OPEN_START;
-			const globalEnd = parsed.openEnd ?? env.BRANCH_OPEN_END;
+			/*
+			 * Two legacy shapes need migrating:
+			 *
+			 *   1. v1 — branch-global openStart/openEnd + per-day slotsPerDay.
+			 *   2. v2 — per-day openStart/openEnd/intervalMinutes, no general,
+			 *           no override, no maxSlotsPerDay.
+			 *
+			 * Both are lifted into the v3 shape: a `general` template derived
+			 * from the first enabled day (or env defaults), and every day
+			 * marked override=true so existing per-day hours are preserved
+			 * exactly. The admin can then switch days to inherit from general
+			 * by toggling override off.
+			 */
+			if (!parsed.general) {
+				const firstEnabled = parsed.days.find(
+					(d: { enabled?: boolean; openStart?: string }) => d?.enabled && d.openStart,
+				);
+				const globalStart = parsed.openStart ?? firstEnabled?.openStart ?? env.BRANCH_OPEN_START;
+				const globalEnd = parsed.openEnd ?? firstEnabled?.openEnd ?? env.BRANCH_OPEN_END;
+				let globalInterval = firstEnabled?.intervalMinutes as number | undefined;
+				if (!globalInterval) {
+					const total = timeToMinutes(globalEnd) - timeToMinutes(globalStart);
+					const count = (firstEnabled as { slotsPerDay?: number } | undefined)?.slotsPerDay ?? env.SLOTS_PER_DAY;
+					globalInterval = total > 0 && count > 0 ? Math.max(5, Math.floor(total / count)) : 60;
+				}
+				parsed.general = {
+					openStart: globalStart,
+					openEnd: globalEnd,
+					intervalMinutes: globalInterval,
+					maxSlotsPerDay: null,
+				};
+			}
 			for (const d of parsed.days) {
 				if (d && typeof d.slotsPerDay === "number" && !d.intervalMinutes) {
-					const total = timeToMinutes(d.openEnd ?? globalEnd) - timeToMinutes(d.openStart ?? globalStart);
+					const total = timeToMinutes(d.openEnd ?? parsed.general.openEnd) - timeToMinutes(d.openStart ?? parsed.general.openStart);
 					d.intervalMinutes = total > 0 && d.slotsPerDay > 0
 						? Math.max(5, Math.floor(total / d.slotsPerDay))
-						: 60;
+						: parsed.general.intervalMinutes;
 				}
-				if (!d.openStart) d.openStart = globalStart;
-				if (!d.openEnd) d.openEnd = globalEnd;
+				if (!d.openStart) d.openStart = parsed.general.openStart;
+				if (!d.openEnd) d.openEnd = parsed.general.openEnd;
+				if (d.override == null) d.override = true; // preserve existing per-day hours
+				if (d.maxSlotsPerDay == null) d.maxSlotsPerDay = null;
 				delete d.slotsPerDay;
 			}
 			delete parsed.openStart;

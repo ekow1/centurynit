@@ -16,6 +16,7 @@ import {
 import {
   bookingBufferMinutes,
   defaultTimezone,
+  effectiveDayValues,
   weeklySlotSchedule,
 } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
@@ -46,7 +47,12 @@ import {
  * occupies — travel and note-taking time either side.
  */
 
-function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
+function computeSlotTimes(
+	openStart: string,
+	openEnd: string,
+	intervalMinutes: number,
+	maxSlotsPerDay: number | null,
+): string[] {
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
 	if (endMin <= startMin || intervalMinutes <= 0) return [];
@@ -54,6 +60,7 @@ function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: n
 	const times: string[] = [];
 	for (let t = startMin; t < endMin; t += intervalMinutes) {
 		times.push(minutesToTime(t));
+		if (maxSlotsPerDay && maxSlotsPerDay > 0 && times.length >= maxSlotsPerDay) break;
 	}
 	return times;
 }
@@ -61,14 +68,15 @@ function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: n
 /**
  * Compute slot start times for a given weekday from the weekly schedule.
  *
- * Each day carries its own opening window and interval — Monday can be
- * 09:00–17:00 every 60 minutes while Saturday is 10:00–14:00 every 90.
+ * Each day either overrides the general template (its own open hours and
+ * interval) or inherits it. `maxSlotsPerDay` caps the generated count.
  */
 export async function slotTimesFor(dayOfWeek: number): Promise<string[]> {
 	const schedule = await weeklySlotSchedule();
 	const day = schedule.days.find((d) => d.dayOfWeek === dayOfWeek);
 	if (!day?.enabled) return [];
-	return computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes);
+	const eff = effectiveDayValues(day, schedule.general);
+	return computeSlotTimes(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay);
 }
 
 /* ── Branch and service catalogue ────────────────────────────────────────────

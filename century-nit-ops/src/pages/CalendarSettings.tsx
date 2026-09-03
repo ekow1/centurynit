@@ -317,7 +317,7 @@ function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) 
 			(d) =>
 				d.openStart === open[0].openStart &&
 				d.openEnd === open[0].openEnd &&
-				d.slotsPerDay === open[0].slotsPerDay,
+				d.intervalMinutes === open[0].intervalMinutes,
 		);
 
 	return (
@@ -339,7 +339,7 @@ function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) 
 							<strong>
 								{open[0].openStart}–{open[0].openEnd}
 							</strong>{" "}
-							with <strong>{open[0].slotsPerDay} slots</strong> a day.
+							with <strong>{open[0].times.length} slots</strong> a day.
 						</>
 					) : (
 						<> with hours that vary by day.</>

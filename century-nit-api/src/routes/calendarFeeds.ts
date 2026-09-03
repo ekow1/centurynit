@@ -17,7 +17,7 @@ import {
 	listWorkingHours,
 	setWorkingHours,
 } from "../services/availability.js";
-import { weeklySlotSchedule, type WeeklySlotScheduleDay } from "../services/settings.js";
+import { weeklySlotSchedule, type WeeklySlotScheduleDay, effectiveDayValues } from "../services/settings.js";
 import { isValidTimeZone, minutesToTime, timeToMinutes } from "../lib/time.js";
 import { removeCalendarFeed, renderIcs, type IcsEvent } from "../services/calendar/ics.js";
 import { queueFeedSync } from "../worker/queues.js";
@@ -383,37 +383,54 @@ const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 const branchSlotsResponseSchema = z.object({
 	timezone: z.string(),
+	general: z.object({
+		openStart: z.string(),
+		openEnd: z.string(),
+		intervalMinutes: z.number().int(),
+		maxSlotsPerDay: z.number().int().nullable(),
+	}),
 	days: z.array(
 		z.object({
 			dayOfWeek: z.number().int(),
 			enabled: z.boolean(),
+			override: z.boolean(),
 			openStart: z.string(),
 			openEnd: z.string(),
 			intervalMinutes: z.number().int(),
+			maxSlotsPerDay: z.number().int().nullable(),
 			times: z.array(timeStringSchema),
 		}),
 	),
 });
 
-function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
+function computeSlotTimes(
+	openStart: string,
+	openEnd: string,
+	intervalMinutes: number,
+	maxSlotsPerDay: number | null,
+): string[] {
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
 	if (endMin <= startMin || intervalMinutes <= 0) return [];
 	const times: string[] = [];
 	for (let t = startMin; t < endMin; t += intervalMinutes) {
 		times.push(minutesToTime(t));
+		if (maxSlotsPerDay && maxSlotsPerDay > 0 && times.length >= maxSlotsPerDay) break;
 	}
 	return times;
 }
 
-function dayResponse(day: WeeklySlotScheduleDay) {
+function dayResponse(day: WeeklySlotScheduleDay, general: import("../services/settings.js").WeeklySlotScheduleGeneral) {
+	const eff = effectiveDayValues(day, general);
 	return {
 		dayOfWeek: day.dayOfWeek,
 		enabled: day.enabled,
-		openStart: day.openStart,
-		openEnd: day.openEnd,
-		intervalMinutes: day.intervalMinutes,
-		times: day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes) : [],
+		override: day.override,
+		openStart: eff.openStart,
+		openEnd: eff.openEnd,
+		intervalMinutes: eff.intervalMinutes,
+		maxSlotsPerDay: eff.maxSlotsPerDay,
+		times: day.enabled ? computeSlotTimes(eff.openStart, eff.openEnd, eff.intervalMinutes, eff.maxSlotsPerDay) : [],
 	};
 }
 
@@ -443,7 +460,8 @@ calendarFeedsRouter.openapi(
 		return c.json(
 			{
 				timezone: schedule.timezone,
-				days: schedule.days.map((d) => dayResponse(d)),
+				general: schedule.general,
+				days: schedule.days.map((d) => dayResponse(d, schedule.general)),
 			},
 			200,
 		);

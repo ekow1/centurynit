@@ -4,7 +4,7 @@ import type { AssignableEmployee, Booking } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
 
 /**
- * The manager's triage queue (§2).
+ * The manager's triage queue (§2) — shared unassigned-bookings panel.
  *
  * Bookings arrive UNASSIGNED — clients book, nobody is allocated automatically
  * and there is no round-robin. A manager or coordinator picks the person, and
@@ -13,6 +13,9 @@ import { useOpsAuth } from "./OpsAuthContext";
  * This reads the real API rather than the ops localStorage store: these records
  * live in Postgres, and the availability shown has to be the server's answer,
  * not a browser's guess.
+ *
+ * Consumed by the Dashboard, Workspace, and Team Workload pages so the same
+ * triage surface appears wherever a manager dispatches work.
  */
 
 function formatWhen(booking: Booking): { date: string; time: string } {
@@ -158,7 +161,7 @@ function AssignDialog({
 	);
 }
 
-export function UnassignedBookings() {
+export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: string }) {
 	const { canAssignWork } = useOpsAuth();
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -192,7 +195,7 @@ export function UnassignedBookings() {
 		<section className="ops-panel" aria-labelledby="unassigned-heading">
 			<header className="ops-panel__head">
 				<h2 id="unassigned-heading" className="section-title">
-					Unassigned bookings
+					{title}
 					{bookings && bookings.length > 0 && (
 						<span className="ops-pill">{bookings.length}</span>
 					)}

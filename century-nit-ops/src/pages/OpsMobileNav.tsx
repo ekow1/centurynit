@@ -128,15 +128,9 @@ export function OpsAppBar({
 export function OpsTabBar({
 	operationsNav,
 	platformNav,
-	onRoleSwitch,
-	switchableRoles,
-	onReset,
 }: {
 	operationsNav: OpsNavItem[];
 	platformNav: OpsNavItem[];
-	onRoleSwitch: (role: OpsRole) => void;
-	switchableRoles: OpsRole[];
-	onReset: () => void;
 }) {
 	const [moreOpen, setMoreOpen] = useState(false);
 	const { pathname } = useLocation();
@@ -245,35 +239,8 @@ export function OpsTabBar({
 				) : null}
 
 				<section className="sheet-group">
-					<h3 className="sheet-group__title">Prototype</h3>
-					<label className="sheet-select">
-						<span>View as</span>
-						<select
-							value={opsRole ?? "admin"}
-							onChange={(e) => {
-								onRoleSwitch(e.target.value as OpsRole);
-								setMoreOpen(false);
-							}}
-						>
-							{switchableRoles.map((r) => (
-								<option key={r} value={r}>
-									{ROLE_LABELS[r]}
-								</option>
-							))}
-						</select>
-					</label>
+					<h3 className="sheet-group__title">Account</h3>
 					<div className="sheet-group__links">
-						<button
-							type="button"
-							className="sheet-link"
-							onClick={() => {
-								onReset();
-								setMoreOpen(false);
-							}}
-						>
-							Reset prototype data
-							<span aria-hidden>↺</span>
-						</button>
 						<Link to="/" className="sheet-link">
 							Public site
 							<span aria-hidden>↗</span>
@@ -297,7 +264,7 @@ export function OpsTabBar({
 	);
 }
 
-/** Tab labels have ~70px - trim the long module names */
+/** Tab labels have ~70px — trim the long module names, then hard-cap as a fallback. */
 function shortLabel(label: string) {
 	const map: Record<string, string> = {
 		Dashboard: "Home",
@@ -309,6 +276,17 @@ function shortLabel(label: string) {
 		"Content (CMS)": "Content",
 		"System Config": "Config",
 		Universities: "Schools",
+		"Live Meetings": "Live",
+		"Visa Processing": "Visa",
+		"Travel Assistance": "Travel",
+		"Clients Directory": "Clients",
+		"Fee Schedule": "Fees",
+		"Payment Config": "PayCfg",
+		"Team Assignments": "Team",
+		"Analytics Reports": "Stats",
+		"Finance Reports": "Finance",
+		"My Availability": "Hours",
 	};
-	return map[label] ?? label;
+	const mapped = map[label] ?? label;
+	return mapped.length > 10 ? mapped.slice(0, 9) + "…" : mapped;
 }

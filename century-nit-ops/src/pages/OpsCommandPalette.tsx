@@ -5,15 +5,15 @@ import { useCases } from "../hooks/useCases";
 import { useOpsAuth, ROLE_LABELS, type OpsModule } from "./OpsAuthContext";
 
 export function OpsCommandPalette() {
-	const { isCommandOpen, openCommandPalette, closeCommandPalette } = useOpsState();
+	const { isCommandOpen, openCommandPalette, closeCommandPalette, recentRecords, pushRecentRecord } = useOpsState();
 	const { consultations, applications, applicants } = useCases();
-	const { opsRole, hasPermission } = useOpsAuth();
+	const { opsRole, opsUser, hasPermission, scopeRecords } = useOpsAuth();
 	const navigate = useNavigate();
 	const [query, setQuery] = useState("");
 	const [selectedIndex, setSelectedIndex] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	// Keyboard listener for ⌘K or /
+	// Keyboard listener for ⌘K or Ctrl+K, and "/" (excluding editable fields).
 	useEffect(() => {
 		function handleKeyDown(e: KeyboardEvent) {
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -28,7 +28,7 @@ export function OpsCommandPalette() {
 			} else if (
 				e.key === "/" &&
 				!isCommandOpen &&
-				!["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)
+				!isEditableTarget(e.target as HTMLElement | null)
 			) {
 				e.preventDefault();
 				setQuery("");
@@ -66,45 +66,91 @@ export function OpsCommandPalette() {
 		{ type: "Module", title: "System Settings", subtitle: "Configuration & Preferences", path: "/settings", module: "settings" },
 	].filter((item) => hasPermission(item.module as OpsModule));
 
-	const consultationResults = consultations
+	// Record results are scoped to the current user's role/assignment, matching
+	// the dashboard scoping. A finance role shouldn't see consultation statuses.
+	const canSeeConsultations = hasPermission("consultations");
+	const canSeeApplications = hasPermission("applications");
+	const canSeeApplicants = hasPermission("applicants");
+
+	const scopedConsultations = canSeeConsultations
+		? scopeRecords(
+				consultations,
+				(c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
+			)
+		: [];
+	const scopedApplications = canSeeApplications
+		? scopeRecords(
+				applications,
+				(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
+			)
+		: [];
+	const scopedApplicantsRecord = canSeeApplicants
+		? scopeRecords(
+				applicants,
+				(a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name,
+			)
+		: [];
+
+	const consultationResults = scopedConsultations
 		.filter((c) => c.applicantName.toLowerCase().includes(query.toLowerCase()) || c.ref.toLowerCase().includes(query.toLowerCase()))
 		.map((c) => ({
 			type: "Consultation",
 			title: `${c.applicantName} (${c.ref})`,
 			subtitle: `Targeting ${c.targetCountry} · ${c.dateTime} · ${c.status}`,
-			path: "/consultations",
+			path: `/consultations?focus=${encodeURIComponent(c.id)}`,
+			recordId: c.id,
 		}));
 
-	const applicationResults = applications
+	const applicationResults = scopedApplications
 		.filter((a) => a.applicantName.toLowerCase().includes(query.toLowerCase()) || a.appId.toLowerCase().includes(query.toLowerCase()) || a.university.toLowerCase().includes(query.toLowerCase()))
 		.map((a) => ({
 			type: "Application",
 			title: `${a.applicantName} - ${a.appId}`,
 			subtitle: `${a.university} (${a.program}) · ${a.status}`,
-			path: "/applications",
+			path: `/applications?focus=${encodeURIComponent(a.id)}`,
+			recordId: a.id,
 		}));
 
-	const applicantResults = applicants
+	const applicantResults = scopedApplicantsRecord
 		.filter((ap) => ap.name.toLowerCase().includes(query.toLowerCase()) || ap.applicantId.toLowerCase().includes(query.toLowerCase()))
 		.map((ap) => ({
 			type: "Applicant",
 			title: `${ap.name} (${ap.applicantId})`,
 			subtitle: `${ap.university} · Stage: ${ap.currentStage} · ${ap.status}`,
-			path: "/applicants",
+			path: `/applicants?focus=${encodeURIComponent(ap.id)}`,
+			recordId: ap.id,
 		}));
 
-	const allResults = [...navItems, ...consultationResults, ...applicationResults, ...applicantResults].filter((res) => {
-		if (!query.trim()) return res.type === "Module";
-		return (
-			res.title.toLowerCase().includes(query.toLowerCase()) ||
-			res.subtitle.toLowerCase().includes(query.toLowerCase()) ||
-			res.type.toLowerCase().includes(query.toLowerCase())
-		);
-	});
+	const recordResults = [...consultationResults, ...applicationResults, ...applicantResults];
 
-	function handleSelect(path: string) {
+	const allResults = (() => {
+		if (!query.trim()) {
+			// Empty query: show modules + recent records (most useful default state).
+			const recent = recentRecords.filter((r) => r.type !== "Module");
+			return [...navItems, ...recent];
+		}
+		return [...navItems, ...recordResults].filter((res) => {
+			if (res.type === "Module") return true;
+			return (
+				res.title.toLowerCase().includes(query.toLowerCase()) ||
+				res.subtitle.toLowerCase().includes(query.toLowerCase()) ||
+				res.type.toLowerCase().includes(query.toLowerCase())
+			);
+		});
+	})();
+
+	function handleSelect(item: typeof allResults[number]) {
+		// Push record selections to recent so they surface on an empty query.
+		if (item.type !== "Module") {
+			pushRecentRecord({
+				path: item.path,
+				title: item.title,
+				subtitle: item.subtitle,
+				type: item.type,
+			});
+		}
 		closeCommandPalette();
-		navigate(path);
+		navigate(item.path);
 	}
 
 	function handleKeyDown(e: React.KeyboardEvent) {
@@ -116,42 +162,20 @@ export function OpsCommandPalette() {
 			setSelectedIndex((prev) => (prev > 0 ? prev - 1 : allResults.length - 1));
 		} else if (e.key === "Enter" && allResults[selectedIndex]) {
 			e.preventDefault();
-			handleSelect(allResults[selectedIndex].path);
+			handleSelect(allResults[selectedIndex]);
 		}
 	}
 
 	return (
-		<div
-			style={{
-				position: "fixed",
-				inset: 0,
-				zIndex: 2000,
-				display: "flex",
-				justifyContent: "center",
-				alignItems: "flex-start",
-				paddingTop: "8vh",
-				background: "rgba(0, 0, 0, 0.65)",
-				backdropFilter: "blur(4px)",
-			}}
-			onClick={closeCommandPalette}
-		>
+		<div className="ops-modal-backdrop" onClick={closeCommandPalette}>
 			<div
+				className="ops-modal ops-command-palette"
 				onClick={(e) => e.stopPropagation()}
-				style={{
-					width: "100%",
-					maxWidth: "640px",
-					background: "var(--background)",
-					border: "1px solid var(--border)",
-					boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
-					display: "flex",
-					flexDirection: "column",
-					overflow: "hidden",
-					animation: "ops-fade-in 0.15s ease-out",
-				}}
+				style={{ maxWidth: "640px" }}
 			>
 				{/* Search Input Bar */}
-				<div style={{ display: "flex", alignItems: "center", padding: "1rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
-					<span style={{ fontSize: "1.2rem", marginRight: "0.75rem", opacity: 0.6 }}>⚲</span>
+				<div className="ops-command-palette__input-row">
+					<span className="ops-command-palette__search-icon" aria-hidden>⚲</span>
 					<input
 						ref={inputRef}
 						type="text"
@@ -162,78 +186,59 @@ export function OpsCommandPalette() {
 						}}
 						onKeyDown={handleKeyDown}
 						placeholder="Type a command or search across all records... (Esc to cancel)"
-						style={{
-							width: "100%",
-							border: "none",
-							background: "transparent",
-							outline: "none",
-							fontFamily: "var(--font-body)",
-							fontSize: "var(--text-base)",
-						}}
+						className="ops-command-palette__input"
+						aria-label="Search commands and records"
 					/>
-					<span className="portal-pill" style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.5rem" }}>
+					<span className="portal-pill ops-command-palette__role">
 						{opsRole ? ROLE_LABELS[opsRole] : "Ops"}
 					</span>
 				</div>
 
 				{/* Results List */}
-				<div style={{ maxHeight: "380px", overflowY: "auto", padding: "0.5rem" }}>
+				<div className="ops-command-palette__results">
 					{allResults.length === 0 ? (
-						<p style={{ padding: "2rem", textAlign: "center" }} className="muted">
+						<p className="muted ops-command-palette__empty">
 							No command or record matching &quot;{query}&quot;.
 						</p>
 					) : (
-						allResults.map((item, idx) => (
-							<div
-								key={idx}
-								onClick={() => handleSelect(item.path)}
-								onMouseEnter={() => setSelectedIndex(idx)}
-								style={{
-									display: "flex",
-									justifyContent: "space-between",
-									alignItems: "center",
-									padding: "0.85rem 1rem",
-									border: "1px solid",
-									borderColor: selectedIndex === idx ? "var(--border)" : "transparent",
-									background: selectedIndex === idx ? "var(--foreground)" : "transparent",
-									color: selectedIndex === idx ? "var(--background)" : "var(--foreground)",
-									cursor: "pointer",
-									transition: "all 100ms",
-								}}
-							>
-								<div>
-									<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: selectedIndex === idx ? "var(--background)" : "var(--foreground)" }}>
-										{item.title}
-									</p>
-									<p style={{ fontSize: "var(--text-xs)", opacity: 0.7, color: selectedIndex === idx ? "var(--muted)" : "var(--muted-foreground)" }}>
-										{item.subtitle}
-									</p>
-								</div>
-								<span
-									style={{
-										fontFamily: "var(--font-mono)",
-										fontSize: "var(--text-xs)",
-										textTransform: "uppercase",
-										padding: "0.2rem 0.5rem",
-										border: "1px solid",
-										borderColor: selectedIndex === idx ? "var(--background)" : "var(--border-light)",
-										color: selectedIndex === idx ? "var(--background)" : "var(--muted-foreground)",
-									}}
+						allResults.map((item, idx) => {
+							const isRecent = !query.trim() && item.type !== "Module";
+							return (
+								<div
+									key={`${item.type}-${item.path}-${idx}`}
+									onClick={() => handleSelect(item)}
+									onMouseEnter={() => setSelectedIndex(idx)}
+									className={`ops-command-palette__item${selectedIndex === idx ? " ops-command-palette__item--active" : ""}`}
 								>
-									{item.type}
-								</span>
-							</div>
-						))
+									<div className="ops-command-palette__item-text">
+										<p className="ops-command-palette__item-title">
+											{item.title}
+											{isRecent ? <span className="ops-command-palette__recent-tag">Recent</span> : null}
+										</p>
+										<p className="ops-command-palette__item-sub muted">{item.subtitle}</p>
+									</div>
+									<span className="ops-command-palette__item-type">{item.type}</span>
+								</div>
+							);
+						})
 					)}
 				</div>
 
 				{/* Footer Shortcuts */}
-				<div style={{ padding: "0.75rem 1.25rem", borderTop: "1px solid var(--border-light)", background: "var(--muted)", display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)" }} className="muted">
-					<span>Use <strong style={{ color: "var(--foreground)" }}>↑ ↓</strong> to navigate</span>
-					<span>Press <strong style={{ color: "var(--foreground)" }}>↵ Enter</strong> to select</span>
-					<span>Press <strong style={{ color: "var(--foreground)" }}>Esc</strong> to close</span>
+				<div className="ops-command-palette__footer muted">
+					<span>Use <strong>↑ ↓</strong> to navigate</span>
+					<span>Press <strong>↵ Enter</strong> to select</span>
+					<span>Press <strong>Esc</strong> to close</span>
 				</div>
 			</div>
 		</div>
 	);
+}
+
+function isEditableTarget(el: HTMLElement | null): boolean {
+	if (!el) return false;
+	const tag = el.tagName;
+	if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+	if (el.isContentEditable) return true;
+	return false;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
 import { roleCanAccess } from "century-nit-shared";
@@ -33,20 +33,21 @@ function Icon({ name }: { name: string }) {
 
 /** Business operations - manager and consultant. */
 const OPERATIONS_NAV: NavEntry[] = [
-	{ to: "/workspace", module: "dashboard", label: "Workspace", blurb: "Action queue", icon: "dashboard" },
-	{ to: "/dashboard", module: "dashboard", label: "Dashboard", blurb: "Mission control", icon: "dashboard" },
+	{ to: "/workspace", module: "dashboard", label: "Workspace", blurb: "Action queue & today's work", icon: "dashboard" },
+	{ to: "/dashboard", module: "dashboard", label: "Dashboard", blurb: "KPIs & mission control", icon: "dashboard" },
 	{
 		group: "Cases",
 		icon: "applications",
 		blurb: "Client work & progression",
 		children: [
-			{ to: "/clients", module: "applicants", label: "Clients Directory", blurb: "Accounts, status & access", icon: "users" },
+			{ to: "/clients", module: "dashboard", label: "Clients Directory", blurb: "Accounts, status & access", icon: "users" },
 			{ to: "/applications", module: "applications", label: "Applications", blurb: "Active applications", icon: "applications" },
 			{ to: "/consultations", module: "consultations", label: "Consultations", blurb: "Meetings & assessments", icon: "consultations" },
-			{ to: "/visa", module: "visa", label: "Visa Processing", blurb: "Visa tracking & sub-steps", icon: "applications" },
-			{ to: "/travel", module: "travel", label: "Travel Assistance", blurb: "Pre-departure & clearance", icon: "applications" },
+			{ to: "/visa", module: "visa", label: "Visa Processing", blurb: "Visa tracking & sub-steps", icon: "visa" },
+			{ to: "/travel", module: "travel", label: "Travel Assistance", blurb: "Pre-departure & clearance", icon: "travel" },
 			{ to: "/applicants", module: "applicants", label: "Applicants", blurb: "Client records", icon: "applicants" },
 			{ to: "/workflow", module: "workflow", label: "Workflow", blurb: "Visual pipeline", icon: "workflow" },
+			{ to: "/team", module: "reports", label: "Team Workload", blurb: "Staff dispatch & rebalancing", icon: "reports" },
 		],
 	},
 	{
@@ -54,9 +55,10 @@ const OPERATIONS_NAV: NavEntry[] = [
 		icon: "crm",
 		blurb: "Leads, internal tickets & marketing",
 		children: [
-			{ to: "/leads", module: "leads", label: "Leads", blurb: "Lead management", icon: "leads" },
+			{ to: "/crm", module: "crm", label: "Leads", blurb: "Lead management", icon: "leads" },
 			{ to: "/appointments", module: "appointments", label: "Appointments", blurb: "Calendar", icon: "appointments" },
-		{ to: "/live-meetings", module: "appointments", label: "Live Meetings", blurb: "In-progress video calls", icon: "appointments" },
+			{ to: "/live-meetings", module: "appointments", label: "Live Meetings", blurb: "In-progress video calls", icon: "appointments" },
+			{ to: "/inbox", module: "dashboard", label: "Inbox", blurb: "Notifications & messages", icon: "inbox" },
 			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Support tickets & requests", icon: "helpdesk" },
 			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
 		],
@@ -90,7 +92,6 @@ const OPERATIONS_NAV: NavEntry[] = [
 		children: [
 			{ to: "/finance", module: "finance", label: "Finance Reports", blurb: "Revenue & payments", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
-			{ to: "/team", module: "reports", label: "Team Assignments", blurb: "Track staff workload", icon: "reports" },
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
@@ -171,17 +172,22 @@ function MainNavGroup({
 	children: NavItem[];
 	defaultOpen: boolean;
 }) {
-	const [open, setOpen] = useState(defaultOpen);
 	const { pathname } = useLocation();
 	const hasActiveChild = children.some((c) => pathname.startsWith(c.to));
+	// Auto-open when a child is active so deep links never hide the active item.
+	const [userToggled, setUserToggled] = useState(false);
+	const [userOpen, setUserOpen] = useState(defaultOpen);
+	const open = userToggled ? userOpen : hasActiveChild || defaultOpen;
+	const panelId = `nav-group-${group.toLowerCase().replace(/\s+/g, "-")}`;
 
 	return (
 		<div className="portal-nav__group">
 			<button
 				type="button"
 				className={`portal-nav__group-btn${hasActiveChild ? " portal-nav__group-btn--active" : ""}`}
-				onClick={() => setOpen((v) => !v)}
+				onClick={() => { setUserToggled(true); setUserOpen((v) => !v); }}
 				aria-expanded={open}
+				aria-controls={panelId}
 			>
 				<Icon name={icon} />
 				<span className="portal-nav__meta">
@@ -192,7 +198,7 @@ function MainNavGroup({
 				</span>
 			</button>
 			{open && (
-				<div className="portal-nav__sub">
+				<div className="portal-nav__sub" id={panelId}>
 					{children.map((child) => (
 						<MainNavItem key={child.to} {...child} />
 					))}
@@ -208,6 +214,9 @@ export function EnterpriseLayout() {
 	const { openCommandPalette, resetOpsState } = useOpsState();
 	const location = useLocation();
 	const [confirmReset, setConfirmReset] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+	const cmdKey = isMac ? "⌘" : "Ctrl";
 
 	const operationsNav = OPERATIONS_NAV.filter((entry) => {
 		if (isGroup(entry)) return entry.children.some((c) => hasPermission(c.module));
@@ -218,6 +227,12 @@ export function EnterpriseLayout() {
 		return hasPermission(entry.module);
 	});
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
+
+	// Breadcrumb: find the active nav item's label for the current path.
+	const allNav = [...operationsNav, ...platformNav];
+	const breadcrumb = allNav
+		.flatMap((e) => (isGroup(e) ? e.children : [e]))
+		.find((item) => location.pathname.startsWith(item.to));
 
 	// The bell badge reflects the real, server-side notification count — not a
 	// heuristic derived from polled leads/consultations. Those still get polled
@@ -232,7 +247,7 @@ export function EnterpriseLayout() {
 	return (
 		<CasesProvider>
 		<ChatHubProvider>
-		<div className="portal">
+		<div className={`portal${sidebarCollapsed ? " portal--collapsed" : ""}`}>
 			<OpsCommandPalette />
 
 			<aside className="portal__aside">
@@ -241,6 +256,15 @@ export function EnterpriseLayout() {
 						Century NIT <span>Operations</span>
 					</Link>
 					<p className="portal__tagline">Mission Control</p>
+					<button
+						type="button"
+						className="portal__collapse-btn"
+						onClick={() => setSidebarCollapsed((v) => !v)}
+						aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+						title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+					</button>
 				</div>
 
 				<nav className="portal-nav" aria-label="Enterprise modules">
@@ -320,19 +344,22 @@ export function EnterpriseLayout() {
 				{/* Below 960px the sidebar is hidden - the app bar and bottom tabs
 				    take over, exactly as they do on the portal and public site. */}
 				<OpsAppBar
-					title={roleName}
+					title={breadcrumb?.label ?? roleName}
 					operationsNav={flattenNav(operationsNav)}
 					platformNav={flattenNav(platformNav)}
 				/>
 
 				<header className="portal__topbar">
 					<div className="portal__topbar-left">
-						<p className="eyebrow">{roleName}</p>
-						<p className="portal__welcome">
-							{opsUser
-								? `${opsUser.name.includes("@") ? opsUser.name.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : opsUser.name.split(" ")[0]}'s Command Center`
-								: "Operations"}
-						</p>
+						<nav className="ops-breadcrumb" aria-label="Breadcrumb">
+							<span className="ops-breadcrumb__root">{roleName}</span>
+							{breadcrumb ? (
+								<>
+									<span className="ops-breadcrumb__sep" aria-hidden>/</span>
+									<span className="ops-breadcrumb__current" aria-current="page">{breadcrumb.label}</span>
+								</>
+							) : null}
+						</nav>
 					</div>
 					<div className="portal__topbar-right">
 						<button
@@ -342,7 +369,7 @@ export function EnterpriseLayout() {
 						>
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 							<span>Search everywhere...</span>
-							<kbd>⌘K</kbd>
+							<kbd>{cmdKey}K</kbd>
 						</button>
 
 						{/* Notification bell */}
@@ -351,18 +378,9 @@ export function EnterpriseLayout() {
 						<button
 							type="button"
 							onClick={pushState.subscription ? pushState.unsubscribe : pushState.subscribe}
-							style={{
-								fontSize: "0.65rem",
-								fontWeight: 600,
-								color: pushState.subscription ? "#ffffff" : "#52525b",
-								cursor: "pointer",
-								background: pushState.subscription ? "#18181b" : "transparent",
-								border: pushState.subscription ? "1px solid #18181b" : "1px solid #e4e4e7",
-								padding: "0.2rem 0.5rem",
-								transition: "all 0.2s ease",
-								whiteSpace: "nowrap",
-							}}
+							className={`ops-push-toggle${pushState.subscription ? " ops-push-toggle--on" : ""}`}
 							title={pushState.subscription ? "Stop receiving push alerts on this device" : "Enable push alerts on this device"}
+							aria-pressed={Boolean(pushState.subscription)}
 						>
 							{pushState.subscription ? "Alerts on" : "Enable alerts"}
 						</button>
@@ -377,9 +395,18 @@ export function EnterpriseLayout() {
 							Reset
 						</button>
 						) : null}
+
+						{opsUser && (
+							<div className="portal__topbar-user" title={opsUser.name}>
+								<span className="portal__topbar-avatar" aria-hidden>
+									{opsUser.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+								</span>
+								<span className="portal__topbar-user-name">{opsUser.name.split(" ")[0]}</span>
+							</div>
+						)}
 					</div>
 				</header>
-				<div className="portal__content">
+				<div className="portal__content" id="main-content" tabIndex={-1}>
 					<Outlet />
 				</div>
 			</div>
@@ -387,46 +414,14 @@ export function EnterpriseLayout() {
 		<OpsTabBar
 			operationsNav={flattenNav(operationsNav)}
 			platformNav={flattenNav(platformNav)}
-			onRoleSwitch={() => {}}
-			switchableRoles={[]}
-			onReset={() => {
-				// Reset is a dev-only tool — same gate as the header button.
-				if (isDev) setConfirmReset(true);
-			}}
 		/>
 
 			{/* In-app confirm for the dev-only data reset — no native dialogs. */}
 			{confirmReset && (
-				<div
-					role="dialog"
-					aria-modal="true"
-					aria-label="Confirm reset"
-					style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
-					onClick={() => setConfirmReset(false)}
-				>
-					<div
-						style={{ background: "var(--background)", border: "1px solid var(--border-light)", padding: "1.5rem", maxWidth: "420px", width: "90%" }}
-						onClick={(e) => e.stopPropagation()}
-					>
-						<h2 style={{ fontSize: "var(--text-base)", fontWeight: 700, marginBottom: "0.5rem" }}>Reset operations data?</h2>
-						<p style={{ fontSize: "var(--text-sm)", color: "var(--muted-foreground)", marginBottom: "1rem" }}>
-							This resets all operations data back to the original seed state. This cannot be undone.
-						</p>
-						<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setConfirmReset(false)}>
-								Cancel
-							</button>
-							<button
-								type="button"
-								className="btn btn--sm"
-								style={{ color: "#991b1b", borderColor: "#fca5a5" }}
-								onClick={() => { setConfirmReset(false); resetOpsState(); }}
-							>
-								Reset Data
-							</button>
-						</div>
-					</div>
-				</div>
+				<ConfirmResetDialog
+					onCancel={() => setConfirmReset(false)}
+					onConfirm={() => { setConfirmReset(false); resetOpsState(); }}
+				/>
 			)}
 
 			{/* Floating communication hub — context-aware case chat (§6) */}
@@ -434,5 +429,73 @@ export function EnterpriseLayout() {
 		</div>
 		</ChatHubProvider>
 		</CasesProvider>
+	);
+}
+
+/** Dev-only reset confirm dialog with proper focus trap, Escape, and restore. */
+function ConfirmResetDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+	const dialogRef = useRef<HTMLDivElement>(null);
+	const cancelRef = useRef<HTMLButtonElement>(null);
+
+	useEffect(() => {
+		const previouslyFocused = document.activeElement as HTMLElement | null;
+		const dialog = dialogRef.current;
+		const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+		const trapFocus = (e: KeyboardEvent) => {
+			if (e.key === "Escape") { onCancel(); return; }
+			if (e.key !== "Tab" || !dialog) return;
+			const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector));
+			if (focusable.length === 0) return;
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault(); last.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault(); first.focus();
+			}
+		};
+
+		cancelRef.current?.focus();
+		document.addEventListener("keydown", trapFocus);
+		return () => {
+			document.removeEventListener("keydown", trapFocus);
+			previouslyFocused?.focus?.();
+		};
+	}, [onCancel]);
+
+	return (
+		<div
+			className="ops-modal-backdrop"
+			onClick={onCancel}
+		>
+			<div
+				ref={dialogRef}
+				className="ops-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Confirm reset"
+				style={{ maxWidth: "420px" }}
+				onClick={(e) => e.stopPropagation()}
+			>
+				<header className="ops-modal__head">
+					<div>
+						<h2 className="ops-modal__title">Reset operations data?</h2>
+						<p className="ops-modal__sub">This cannot be undone</p>
+					</div>
+				</header>
+				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+					This resets all operations data back to the original seed state.
+				</p>
+				<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+					<button type="button" ref={cancelRef} className="btn btn--ghost btn--sm" onClick={onCancel}>
+						Cancel
+					</button>
+					<button type="button" className="btn btn--sm ops-btn--danger" onClick={onConfirm}>
+						Reset Data
+					</button>
+				</div>
+			</div>
+		</div>
 	);
 }

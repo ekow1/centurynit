@@ -68,6 +68,13 @@ function ScrollToTop() {
 	const { pathname } = useLocation();
 	useEffect(() => {
 		window.scrollTo(0, 0);
+		// Move focus to the main content heading so screen-reader and keyboard
+		// users land on the new page rather than being stranded on the nav.
+		// `tabIndex={-1}` makes a non-interactive element focusable.
+		const main = document.getElementById("main-content");
+		if (main) {
+			main.focus();
+		}
 	}, [pathname]);
 	return null;
 }
@@ -87,7 +94,7 @@ export default function App() {
 			<OpsAuthProvider>
 				<OpsStateProvider>
 					<ScrollToTop />
-					<a href="#main" className="skip-link">
+					<a href="#main-content" className="skip-link">
 						Skip to content
 					</a>
 					<main id="main" className="page">

@@ -1,6 +1,6 @@
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { publicSiteUrl } from "../lib/publicSite";
 
 const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -21,6 +21,25 @@ export function OpsLogin() {
 	const [otpSent, setOtpSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [resendCooldown, setResendCooldown] = useState(0);
+
+	// #35: auto-submit the MFA form once the user types the full 6 digits.
+	useEffect(() => {
+		if (!twoFactorRequired || loading) return;
+		if (mfaMethod === "email_otp" || (!useBackupCode && twoFactorCode.length === 6)) {
+			const form = document.getElementById("mfa-form") as HTMLFormElement | null;
+			if (form && form.requestSubmit) {
+				form.requestSubmit();
+			}
+		}
+	}, [twoFactorCode, twoFactorRequired, mfaMethod, useBackupCode, loading]);
+
+	// #36: tick down the resend cooldown timer once per second.
+	useEffect(() => {
+		if (resendCooldown <= 0) return;
+		const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+		return () => clearTimeout(t);
+	}, [resendCooldown]);
 
 	// If already logged in, redirect
 	if (authInitializing) {
@@ -123,7 +142,7 @@ export function OpsLogin() {
 					</div>
 				</div>
 
-				<p className="ops-login__copy">Century NIT &copy; 2026 &middot; Operations Center</p>
+				<p className="ops-login__copy">Century NIT &copy; {new Date().getFullYear()} &middot; Operations Center</p>
 			</div>
 
 			{/* Right panel - login form */}
@@ -144,7 +163,7 @@ export function OpsLogin() {
 							</p>
 						</div>
 
-						<form onSubmit={handleTwoFactorSubmit} className="ops-login__form">
+						<form id="mfa-form" onSubmit={handleTwoFactorSubmit} className="ops-login__form">
 							<div className="ops-login__field">
 								<label className="ops-login__label">
 									<span dangerouslySetInnerHTML={{ __html: LOCK_SVG }} />
@@ -155,13 +174,14 @@ export function OpsLogin() {
 								<input
 									type="text"
 									value={twoFactorCode}
-									onChange={(e) =>
+									onChange={(e) => {
+										if (error) setError(null);
 										setTwoFactorCode(
 											(mfaMethod === "email_otp" || !useBackupCode)
 												? e.target.value.replace(/\D/g, "").slice(0, 6)
 												: e.target.value.trim(),
-										)
-									}
+										);
+									}}
 									placeholder={
 										mfaMethod === "email_otp"
 											? "000000"
@@ -204,11 +224,13 @@ export function OpsLogin() {
 								{mfaMethod === "email_otp" && (
 									<button
 										type="button"
+										disabled={resendCooldown > 0}
 										onClick={async () => {
 											setError(null);
 											try {
 												await opsSendMfaOtp();
 												setOtpSent(true);
+												setResendCooldown(30);
 											} catch {
 												setError("Could not resend code");
 											}
@@ -216,7 +238,7 @@ export function OpsLogin() {
 										className="btn btn--ghost btn--xs"
 										style={{ padding: "0.25rem 0.5rem" }}
 									>
-										Resend code
+										{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
 									</button>
 								)}
 								<button
@@ -252,7 +274,7 @@ export function OpsLogin() {
 									<input
 										type="email"
 										value={email}
-										onChange={(e) => setEmail(e.target.value)}
+										onChange={(e) => { setEmail(e.target.value); if (error) setError(null); }}
 										placeholder="you@century-nit.com"
 										className="ops-login__input"
 										required
@@ -267,7 +289,7 @@ export function OpsLogin() {
 									<input
 										type="password"
 										value={password}
-										onChange={(e) => setPassword(e.target.value)}
+										onChange={(e) => { setPassword(e.target.value); if (error) setError(null); }}
 										placeholder="••••••••"
 										className="ops-login__input"
 										required
@@ -276,7 +298,7 @@ export function OpsLogin() {
 								{error ? (
 									<p className="ops-login__error" role="alert">{error}</p>
 								) : null}
-							<button type="submit" disabled={loading} className="btn btn--primary ops-login__submit">
+							<button type="submit" disabled={loading || !email || !password} className="btn btn--primary ops-login__submit">
 								<span>{loading ? "Signing in…" : "Sign In"}</span>
 								{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 							</button>

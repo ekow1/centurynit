@@ -48,14 +48,15 @@ const ASSIGN_WORK: readonly OpsRole[] = ASSIGN_WORK_ROLES;
 
 /** Where each role lands when they open the console. */
 export const ROLE_HOME: Record<OpsRole, string> = {
-	// Spans both halves, so the platform console is the sensible landing page.
+	// Oversight roles land on mission control.
 	super_admin: "/system",
 	manager: "/dashboard",
-	coordinator: "/dashboard",
-	customer_service: "/inbox",
-	consultant: "/dashboard",
 	finance: "/dashboard",
 	admin: "/system",
+	// Operational roles land on their personal desk, not the aggregate dashboard.
+	coordinator: "/workspace",
+	consultant: "/workspace",
+	customer_service: "/workspace",
 };
 
 export interface OpsUser {

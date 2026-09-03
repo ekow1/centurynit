@@ -6,7 +6,7 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { API_PREFIX } from "century-nit-shared";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
-import { UnassignedBookings } from "./UnassignedBookings";
+import { UnassignedQueue } from "./UnassignedBookings";
 import { LiveMeetings } from "./LiveMeetings";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { apiFetch } from "../lib/api";
@@ -21,7 +21,7 @@ export function EnterpriseDashboard() {
 	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
 	const { consultations, applications, applicants, assignees } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
-	const [leads, setLeads] = useState<{ id: string; stage: string }[]>([]);
+	const [leads, setLeads] = useState<{ id: string; stage: string }[] | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -31,6 +31,7 @@ export function EnterpriseDashboard() {
 				if (!cancelled) setLeads(res.leads);
 			} catch {
 				/* non-fatal — funnel just shows 0 */
+				if (!cancelled) setLeads([]);
 			}
 		})();
 		return () => { cancelled = true; };
@@ -82,11 +83,11 @@ export function EnterpriseDashboard() {
 			accepted: scoped.applications.filter((a) => a.status === "Accepted").length,
 			applicants: scoped.applicants.length,
 			activeApplicants: scoped.applicants.filter((a) => a.status === "Active").length,
-			leads: leads.length,
-			convertedLeads: leads.filter((l) => l.stage === "converted").length,
-			newLeads: leads.filter((l) => l.stage === "new").length,
-			contactedLeads: leads.filter((l) => l.stage === "contacted").length,
-			assessmentCompleteLeads: leads.filter((l) => l.stage === "assessment_complete").length,
+			leads: leads ? leads.length : 0,
+			convertedLeads: leads ? leads.filter((l) => l.stage === "converted").length : 0,
+			newLeads: leads ? leads.filter((l) => l.stage === "new").length : 0,
+			contactedLeads: leads ? leads.filter((l) => l.stage === "contacted").length : 0,
+			assessmentCompleteLeads: leads ? leads.filter((l) => l.stage === "assessment_complete").length : 0,
 			unassignedConsultations: scoped.consultations.filter((c) => !c.assignedOfficer).length,
 			unassignedApplications: scoped.applications.filter((a) => !a.assignedStaff).length,
 			pendingDocs,
@@ -217,7 +218,7 @@ function ManagerView({
 			</div>
 
 			<div style={{ marginBottom: "2rem" }}>
-				<UnassignedBookings />
+				<UnassignedQueue />
 			</div>
 
 			<div style={{ marginBottom: "2rem" }}>
@@ -238,7 +239,7 @@ function ManagerView({
 					<h2 className="section-title mb-3">Needs Attention</h2>
 					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
 						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/applications" />
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/workspace?filter=needs_action" />
 						<ActivityItem title="Consultations to assess" time={`${stats.inAssessment} in assessment`} to="/consultations" />
 						<ActivityItem
 							title="Lead → applicant rate"
@@ -312,12 +313,12 @@ function CoordinatorView({
 				</div>
 				<div className="card">
 					<h2 className="section-title mb-3">Workflow Status</h2>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/consultations" />
-						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/applications" />
+					<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/workspace?filter=needs_assignment" />
+						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/workspace?filter=needs_assignment" />
 						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/applications" />
-					</ul>
+						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/workspace?filter=needs_action" />
+					</div>
 				</div>
 			</div>
 		</>
@@ -354,7 +355,7 @@ function ConsultantView({
 					{toAssess.length === 0 ? (
 						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Nothing waiting on you.</p>
 					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
 							{toAssess.slice(0, 6).map((c) => (
 								<ActivityItem
 									key={c.id}
@@ -372,7 +373,7 @@ function ConsultantView({
 									}
 								/>
 							))}
-						</ul>
+						</div>
 					)}
 				</div>
 				<div className="card">
@@ -380,7 +381,7 @@ function ConsultantView({
 					{applications.length === 0 ? (
 						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No cases assigned to you.</p>
 					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
 							{applications.slice(0, 6).map((a) => (
 								<ActivityItem
 									key={a.id}
@@ -398,7 +399,7 @@ function ConsultantView({
 									}
 								/>
 							))}
-						</ul>
+						</div>
 					)}
 				</div>
 			</div>
@@ -427,8 +428,8 @@ function FinanceView({
 	return (
 		<>
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ≈ ${fmtUsd(stats.outstanding)}`} inverted to="/finance" />
-				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ≈ ${fmtUsd(stats.collected)}`} to="/finance" />
+				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ${fmtUsd(stats.outstanding)}`} inverted to="/finance" />
+				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ${fmtUsd(stats.collected)}`} to="/finance" />
 				<KPICard label="Settled Accounts" value={String(settled)} note={`${stats.applicants - settled} with a balance`} to="/finance" />
 				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note="Currently billable" to="/applicants" />
 			</div>
@@ -439,28 +440,28 @@ function FinanceView({
 					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
 				) : (
 					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+						<table className="ops-table">
 							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "1rem" }}>Applicant ID</th>
-									<th style={{ padding: "1rem" }}>Name</th>
-									<th style={{ padding: "1rem" }}>Total</th>
-									<th style={{ padding: "1rem" }}>Paid</th>
-									<th style={{ padding: "1rem" }}>Outstanding</th>
-									<th style={{ padding: "1rem" }}>Plan</th>
+								<tr>
+									<th>Applicant ID</th>
+									<th>Name</th>
+									<th>Total</th>
+									<th>Paid</th>
+									<th>Outstanding</th>
+									<th>Plan</th>
 								</tr>
 							</thead>
 							<tbody>
 								{applicants.map((a) => (
-									<tr key={a.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-										<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600 }}>{a.applicantId}</td>
-										<td style={{ padding: "1rem" }}>
+									<tr key={a.id}>
+										<td className="mono">{a.applicantId}</td>
+										<td>
 											<Link to="/applicants" style={{ textDecoration: "underline" }}>{a.name}</Link>
 										</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.totalAmount)}</td>
-										<td style={{ padding: "1rem", fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.paidAmount)}</td>
-										<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-xs)" }}>{fmtFin(a.financials.outstanding)}</td>
-										<td style={{ padding: "1rem" }} className="muted">{a.financials.plan}</td>
+										<td>{fmtFin(a.financials.totalAmount)}</td>
+										<td>{fmtFin(a.financials.paidAmount)}</td>
+										<td><strong>{fmtFin(a.financials.outstanding)}</strong></td>
+										<td className="muted">{a.financials.plan}</td>
 									</tr>
 								))}
 							</tbody>
@@ -485,9 +486,9 @@ function KPICard({ label, value, note, inverted, to }: { label: string; value: s
 				flexDirection: "column",
 			}}
 		>
-			<p className="eyebrow" style={inverted ? { color: "var(--background)", opacity: 0.7 } : undefined}>{label}</p>
+			<p className="eyebrow" style={inverted ? { color: "rgba(255,255,255,0.85)" } : undefined}>{label}</p>
 			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
-			<p className="muted mt-2" style={{ ...(inverted ? { color: "var(--background)", opacity: 0.7 } : undefined), marginTop: "auto" }}>{note}</p>
+			<p className="muted mt-2" style={{ ...(inverted ? { color: "rgba(255,255,255,0.85)" } : undefined), marginTop: "auto" }}>{note}</p>
 		</div>
 	);
 	if (!to) return card;
@@ -504,8 +505,10 @@ function KPICard({ label, value, note, inverted, to }: { label: string; value: s
 }
 
 function ActivityItem({ title, time, to, chat }: { title: string; time: string; to?: string; chat?: ReactNode }) {
+	// Render as a div (not <li>) so it can safely wrap in a <Link> without
+	// producing invalid <a><li> nesting. Callers render these inside a <ul>.
 	const item = (
-		<li style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
+		<div className="ops-activity-item" style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
 				<div style={{ minWidth: 0 }}>
 					<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{title}</p>
@@ -513,7 +516,7 @@ function ActivityItem({ title, time, to, chat }: { title: string; time: string; 
 				</div>
 				{chat}
 			</div>
-		</li>
+		</div>
 	);
 	if (!to) return item;
 	return (

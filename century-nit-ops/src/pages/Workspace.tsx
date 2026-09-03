@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -148,7 +148,16 @@ export function Workspace() {
 
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [search, setSearch] = useState("");
-	const [filter, setFilter] = useState<string>("all");
+	const [searchParams, setSearchParams] = useSearchParams();
+	const initialFilter = searchParams.get("filter") ?? "all";
+	const [filter, setFilterState] = useState<string>(initialFilter);
+	const setFilter = (next: string) => {
+		setFilterState(next);
+		const params = new URLSearchParams(searchParams);
+		if (next === "all") params.delete("filter");
+		else params.set("filter", next);
+		setSearchParams(params, { replace: true });
+	};
 	const [selected, setSelected] = useState<WorkItem | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);

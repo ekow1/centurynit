@@ -1,7 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getTeamAssignments, type TeamAssignment } from "../lib/api";
+import { useCases } from "../hooks/useCases";
+import { useTicketsApi } from "../hooks/useTicketsApi";
+import { useOpsAuth } from "./OpsAuthContext";
 import { useChatHub } from "./ChatHubContext";
+import { UnassignedQueue } from "./UnassignedBookings";
+import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+
+/**
+ * Unified row shape built from the shared cases store + tickets hook.
+ *
+ * Previously this page called `GET /team/assignments` — a bespoke endpoint
+ * that duplicated the data already in `useCases()` (applications +
+ * consultations) and `useTicketsApi()` (tickets). That endpoint is now
+ * retired; the rows below are derived from the same single source of
+ * truth every other page uses, so there is no second API to keep in
+ * sync and no heuristic stage mapping.
+ */
+type AssignmentRow = {
+	id: string;
+	type: "case" | "consultation" | "ticket";
+	reference: string;
+	clientName: string;
+	clientEmail: string | null;
+	assignedStaffId: string | null;
+	assignedStaffName: string | null;
+	assignedStaffEmail: string | null;
+	stageOrStatus: string;
+	stageOrStatusLabel: string;
+	priority: string | null;
+	updatedAt: string;
+	link: string;
+};
 
 const TYPES = ["all", "case", "consultation", "ticket", "unassigned"] as const;
 const TYPE_LABELS: Record<string, string> = {
@@ -26,52 +56,122 @@ function relativeTime(iso: string) {
 	return date.toLocaleDateString();
 }
 
+/**
+ * Stage progress derived from the real enum values, not string
+ * `includes()` heuristics. Cases use `JOURNEY_STAGES` — the same array
+ * the Workflow board and Applications page use — so a case is always on
+ * the same step here as it is there. Consultations and tickets map their
+ * status enum directly to a step.
+ */
 function getStageProgress(type: "case" | "consultation" | "ticket", stageOrStatus: string): { step: number; total: number; label: string } {
-	const s = stageOrStatus.toLowerCase();
-	if (type === "consultation") {
-		if (s.includes("cancel") || s.includes("closed")) return { step: 0, total: 4, label: "Closed" };
-		if (s.includes("complete") || s.includes("eligible") || s.includes("outcome")) return { step: 4, total: 4, label: "Outcome Ready" };
-		if (s.includes("assigned") || s.includes("in_progress") || s.includes("review")) return { step: 3, total: 4, label: "Under Review" };
-		if (s.includes("intake") || s.includes("pending")) return { step: 2, total: 4, label: "Intake Queue" };
-		return { step: 1, total: 4, label: "Booked" };
-	}
 	if (type === "case") {
-		if (s.includes("enrolled") || s.includes("visa_approved") || s.includes("accepted")) return { step: 5, total: 5, label: "Offer / Visa" };
-		if (s.includes("submitted") || s.includes("tracking")) return { step: 4, total: 5, label: "Tracked" };
-		if (s.includes("assessment") || s.includes("review")) return { step: 3, total: 5, label: "Assessed" };
-		if (s.includes("document") || s.includes("draft")) return { step: 2, total: 5, label: "Docs In Progress" };
-		return { step: 1, total: 5, label: "Initiated" };
+		const idx = JOURNEY_STAGES.indexOf(stageOrStatus as JourneyStage);
+		const step = idx >= 0 ? idx + 1 : 1;
+		const label = JOURNEY_STAGE_LABELS[stageOrStatus as JourneyStage] ?? stageOrStatus;
+		return { step, total: JOURNEY_STAGES.length, label };
 	}
-	// Ticket
-	if (s.includes("resolve") || s.includes("close")) return { step: 3, total: 3, label: "Resolved" };
-	if (s.includes("in_progress") || s.includes("review") || s.includes("assigned")) return { step: 2, total: 3, label: "In Progress" };
-	return { step: 1, total: 3, label: "Open Triage" };
+	if (type === "consultation") {
+		const map: Record<string, { step: number; label: string }> = {
+			"Under Review": { step: 1, label: "Under Review" },
+			"Assigned": { step: 2, label: "Assigned" },
+			"In Assessment": { step: 3, label: "In Assessment" },
+			"Completed": { step: 4, label: "Completed" },
+			"Cancelled": { step: 0, label: "Cancelled" },
+		};
+		return { step: map[stageOrStatus]?.step ?? 1, total: 4, label: map[stageOrStatus]?.label ?? stageOrStatus };
+	}
+	const map: Record<string, { step: number; label: string }> = {
+		"Open": { step: 1, label: "Open" },
+		"In Progress": { step: 2, label: "In Progress" },
+		"Waiting": { step: 2, label: "Waiting" },
+		"Resolved": { step: 3, label: "Resolved" },
+	};
+	return { step: map[stageOrStatus]?.step ?? 1, total: 3, label: map[stageOrStatus]?.label ?? stageOrStatus };
 }
 
 export function EnterpriseTeamAssignments() {
-	const [items, setItems] = useState<TeamAssignment[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const { scopeRecords } = useOpsAuth();
+	const { applications, consultations, assignees, loading: casesLoading, error: casesError, refresh: refreshCases } = useCases();
+	const { tickets, loading: ticketsLoading, error: ticketsError, refreshTickets } = useTicketsApi();
 	const [type, setType] = useState<(typeof TYPES)[number]>("all");
 	const [selectedStaff, setSelectedStaff] = useState<string>("all");
 	const [search, setSearch] = useState("");
 
 	const { openDM } = useChatHub();
 
-	const loadData = () => {
-		setLoading(true);
-		getTeamAssignments()
-			.then((res) => {
-				setItems(res.items);
-				setError(null);
-			})
-			.catch((err) => setError(err instanceof Error ? err.message : "Failed to load team assignments"))
-			.finally(() => setLoading(false));
-	};
+	const loading = casesLoading || ticketsLoading;
+	const error = casesError ?? ticketsError;
 
-	useEffect(() => {
-		loadData();
-	}, []);
+	const staffIdByEmail = (email: string) => assignees.find((a) => a.email === email)?.opsUserId ?? null;
+
+	/** Derive the unified rows from the shared stores — no separate API call. */
+	const items = useMemo<AssignmentRow[]>(() => {
+		const scopedApps = scopeRecords(applications, (a) => Boolean(a.assignedStaffEmail || a.assignedStaff));
+		const scopedCons = scopeRecords(consultations, (c) => Boolean(c.assignedOfficerEmail || c.assignedOfficer));
+
+		const rows: AssignmentRow[] = [];
+
+		for (const app of scopedApps) {
+			rows.push({
+				id: app.id,
+				type: "case",
+				reference: app.appId,
+				clientName: app.applicantName,
+				clientEmail: app.email,
+				assignedStaffId: staffIdByEmail(app.assignedStaffEmail),
+				assignedStaffName: app.assignedStaff || null,
+				assignedStaffEmail: app.assignedStaffEmail || null,
+				stageOrStatus: app.stage,
+				stageOrStatusLabel: JOURNEY_STAGE_LABELS[app.stage as JourneyStage] ?? app.stage,
+				priority: null,
+				updatedAt: app.submittedDate,
+				link: "/applications",
+			});
+		}
+
+		for (const c of scopedCons) {
+			rows.push({
+				id: c.id,
+				type: "consultation",
+				reference: c.ref,
+				clientName: c.applicantName,
+				clientEmail: c.email,
+				assignedStaffId: staffIdByEmail(c.assignedOfficerEmail),
+				assignedStaffName: c.assignedOfficer || null,
+				assignedStaffEmail: c.assignedOfficerEmail || null,
+				stageOrStatus: c.status,
+				stageOrStatusLabel: c.status,
+				priority: null,
+				updatedAt: c.slotDate ?? c.dateTime,
+				link: "/consultations",
+			});
+		}
+
+		for (const t of tickets) {
+			rows.push({
+				id: t.id,
+				type: "ticket",
+				reference: t.ref,
+				clientName: t.createdBy,
+				clientEmail: t.createdByEmail ?? null,
+				assignedStaffId: null,
+				assignedStaffName: t.assignedTo || null,
+				assignedStaffEmail: t.assignedToEmail || null,
+				stageOrStatus: t.status,
+				stageOrStatusLabel: t.status,
+				priority: t.priority,
+				updatedAt: t.updatedAt,
+				link: "/helpdesk",
+			});
+		}
+
+		return rows;
+	}, [applications, consultations, tickets, scopeRecords, assignees]);
+
+	const loadData = () => {
+		void refreshCases();
+		void refreshTickets();
+	 };
 
 	// Roster of staff members and their respective breakdown
 	const staffList = useMemo(() => {
@@ -191,6 +291,11 @@ export function EnterpriseTeamAssignments() {
 					{error}
 				</div>
 			)}
+
+			{/* Shared triage queue — same panel as the Dashboard */}
+			<div style={{ marginBottom: "1.5rem" }}>
+				<UnassignedQueue />
+			</div>
 
 			{/* KPI Summary Tiles */}
 			<section

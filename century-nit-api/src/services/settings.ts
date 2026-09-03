@@ -65,7 +65,7 @@ export type SettingKey =
 /** All keys this service manages, with metadata for the UI. */
 export const SETTING_DEFS: Record<
 	SettingKey,
-	{ label: string; group: string; secret: boolean; description: string }
+	{ label: string; group: string; secret: boolean; description: string; hidden?: boolean }
 > = {
 	RESEND_API_KEY: {
 		label: "Resend API Key",
@@ -147,32 +147,35 @@ export const SETTING_DEFS: Record<
 	},
 	GOOGLE_COMPANY_ACCOUNT_EMAIL: {
 		label: "Company Google Account Email",
-		group: "Company Google Calendar",
+		group: "Google Calendar",
 		secret: false,
-		description: "The company Google account that creates all consultation Meet links.",
+		description: "The company Google account that creates all consultation Meet links. Set automatically when you connect.",
 	},
 	GOOGLE_COMPANY_CALENDAR_ID: {
 		label: "Company Calendar ID",
-		group: "Company Google Calendar",
+		group: "Google Calendar",
 		secret: false,
-		description: "Which calendar events are written to. Usually \"primary\".",
+		description: "Which calendar events are written to. Usually \"primary\". Set automatically when you connect.",
 	},
 	GOOGLE_COMPANY_REFRESH_TOKEN: {
 		label: "Company Google Refresh Token",
-		group: "Company Google Calendar",
+		group: "Google Calendar",
 		secret: true,
-		description: "Long-lived OAuth refresh token for the company Google account. Set via the Connect flow.",
+		hidden: true,
+		description: "Long-lived OAuth refresh token. Managed by the OAuth callback — do not edit manually.",
 	},
 	GOOGLE_COMPANY_ACCESS_TOKEN: {
 		label: "Company Google Access Token",
-		group: "Company Google Calendar",
+		group: "Google Calendar",
 		secret: true,
-		description: "Short-lived access token, auto-refreshed by the backend.",
+		hidden: true,
+		description: "Short-lived access token, auto-refreshed by the backend. Managed by the OAuth callback.",
 	},
 	GOOGLE_COMPANY_TOKEN_EXPIRES_AT: {
 		label: "Company Token Expires At",
-		group: "Company Google Calendar",
+		group: "Google Calendar",
 		secret: false,
+		hidden: true,
 		description: "ISO timestamp when the access token expires. Managed by the backend.",
 	},
 	BOOKING_BUFFER_MINUTES: {
@@ -505,7 +508,7 @@ export async function listSettingsForDisplay(): Promise<
 		.from(platformSettings);
 	const updatedAtByKey = new Map(rows.map((r) => [r.key as SettingKey, r.updatedAt]));
 
-	return ALL_KEYS.map((key) => {
+	return ALL_KEYS.filter((key) => !SETTING_DEFS[key].hidden).map((key) => {
 		const def = SETTING_DEFS[key];
 		const dbValue = cache.get(key);
 		const envValue = env[key as keyof typeof env] as string | undefined;

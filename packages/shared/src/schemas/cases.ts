@@ -62,6 +62,42 @@ export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
 	completed: "completed",
 };
 
+/**
+ * Canonical portal stage labels — the single source of truth for the
+ * fine-grained `ProcessStageId` display text. The ops UI uses
+ * `JOURNEY_STAGE_LABELS` (coarse); the portal and the /me/journey route
+ * use this (fine). Delete the duplicate label maps that used to live in
+ * AppState.tsx (getJourneyPhase) and the /me/journey route.
+ */
+export const PORTAL_STAGE_LABELS: Record<string, string> = {
+	new: "New",
+	consultation: "Stage I · Consultation first",
+	eligibility: "Awaiting eligibility",
+	school_package: "Choose school application package",
+	school_select: "Select schools & programmes",
+	application_invoice: "Pay application invoice",
+	school_tracking: "Application process / tracking",
+	visa_invoice: "Pay visa invoice",
+	visa: "Visa tracking in progress",
+	pre_departure: "Travel & pre-departure",
+	completed: "Application complete",
+};
+
+/** Canonical portal stage order — matches PROCESS_STAGES[].index. */
+export const PORTAL_STAGE_ORDER: string[] = [
+	"new",
+	"consultation",
+	"eligibility",
+	"school_package",
+	"school_select",
+	"application_invoice",
+	"school_tracking",
+	"visa_invoice",
+	"visa",
+	"pre_departure",
+	"completed",
+];
+
 export const consultationWorkflowSchema = z.object({
 	status: z.enum(["AWAITING_ASSIGNMENT", "IN_PROGRESS", "COMPLETED", "CLOSED"]),
 	stage: z.string(),

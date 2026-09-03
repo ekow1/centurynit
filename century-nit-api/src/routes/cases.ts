@@ -77,6 +77,8 @@ import {
 	delegateConsultationSchema,
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_TO_PORTAL,
+	PORTAL_STAGE_LABELS,
+	PORTAL_STAGE_ORDER,
 	type JourneyStage,
 	invoiceListSchema,
 	invoiceSchema,
@@ -1537,36 +1539,12 @@ meRouter.openapi(
 		const currentStage: string = coarseStage ?? portalStage;
 
 		// ── Labels ─────────────────────────────────────────────────────────
-		const stageLabel: Record<PortalStage, string> = {
-			consultation: "Stage I \u00b7 Consultation first",
-			eligibility: "Awaiting eligibility",
-			school_package: "Choose school application package",
-			school_select: "Select schools & programmes",
-			application_invoice: "Pay application invoice",
-			school_tracking: "Application process / tracking",
-			visa_invoice: "Pay visa invoice",
-			visa: "Visa tracking in progress",
-			pre_departure: "Travel & pre-departure",
-			completed: "Application complete",
-		};
-
-		const stageOrder: PortalStage[] = [
-			"consultation",
-			"eligibility",
-			"school_package",
-			"school_select",
-			"application_invoice",
-			"school_tracking",
-			"visa_invoice",
-			"visa",
-			"pre_departure",
-			"completed",
-		];
-
-		const idx = stageOrder.indexOf(portalStage);
+		// Canonical labels/order live in shared (PORTAL_STAGE_LABELS /
+		// PORTAL_STAGE_ORDER) — no longer rebuilt inline here.
+		const idx = PORTAL_STAGE_ORDER.indexOf(portalStage);
 		const nextUnlock =
-			idx >= 0 && idx < stageOrder.length - 1
-				? stageLabel[stageOrder[idx + 1]]
+			idx >= 0 && idx < PORTAL_STAGE_ORDER.length - 1
+				? PORTAL_STAGE_LABELS[PORTAL_STAGE_ORDER[idx + 1]]
 				: null;
 
 		// ── Chapter unlocks ────────────────────────────────────────────────
@@ -1585,7 +1563,7 @@ meRouter.openapi(
 			currentStage,
 			portalStage,
 			chapterUnlocks,
-			label: stageLabel[portalStage],
+			label: PORTAL_STAGE_LABELS[portalStage],
 			nextUnlock,
 		});
 	},

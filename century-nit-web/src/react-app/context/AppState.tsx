@@ -18,6 +18,7 @@ import { usePushNotifications } from "../hooks/usePushNotifications";
 import {
 	API_PREFIX,
 	JOURNEY_STAGE_TO_PORTAL,
+	PORTAL_STAGE_LABELS,
 	type JourneyStage,
 } from "century-nit-shared";
 import {
@@ -791,28 +792,10 @@ export function getJourneyPhase(
 	const meta = PROCESS_STAGES.find((s) => s.id === stage)!;
 	const next = PROCESS_STAGES.find((s) => s.index === meta.index + 1);
 
-	const labels: Record<ProcessStageId, string> = {
-		new: "Start your journey",
-		consultation: "Stage I · Consultation first",
-		eligibility: "Awaiting eligibility",
-		school_package: "Choose school application package",
-		school_select: "Select schools & programmes",
-		application_invoice: "Pay application invoice (before tracking)",
-		school_tracking: "Application process / tracking",
-		visa_invoice: "Pay visa invoice (before process)",
-		visa: "Visa tracking in progress",
-		pre_departure: "Travel & pre-departure",
-		completed: "Application complete",
-	};
-
 	return {
 		phase: meta.index,
-		label: labels[stage],
-		nextUnlock: next
-			? next.owner === "you"
-				? `Next for you: ${next.label}`
-				: `Next: ${next.label} (${next.owner})`
-			: null,
+		label: PORTAL_STAGE_LABELS[stage],
+		nextUnlock: next ? PORTAL_STAGE_LABELS[next.id] : null,
 		stage,
 	};
 }

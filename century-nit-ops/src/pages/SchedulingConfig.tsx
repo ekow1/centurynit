@@ -341,7 +341,6 @@ export function SchedulingConfig() {
 											updateGeneral({ maxSlotsPerDay: !n || n <= 0 ? null : n });
 										}}
 									/>
-									<span className="slotcfg__helper" style={{ marginTop: "0.15rem" }}>0 = no cap</span>
 								</label>
 							</div>
 							<p className="slotcfg__preview">

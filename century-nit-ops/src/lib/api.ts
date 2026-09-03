@@ -107,6 +107,29 @@ export function signOut(): Promise<unknown> {
 	});
 }
 
+/* ── Password reset (staff forgot-password) ── */
+
+/**
+ * Request a password reset email. Better Auth's `sendResetPassword` callback
+ * sends a link containing a one-time token; when clicked, the API verifies the
+ * token and redirects to `redirectTo` with `?token=...` appended for the
+ * reset page to consume.
+ */
+export function requestPasswordReset(email: string, redirectTo: string): Promise<{ status?: boolean }> {
+	return apiFetch<{ status?: boolean }>("/api/auth/forget-password", {
+		method: "POST",
+		body: JSON.stringify({ email, redirectTo }),
+	});
+}
+
+/** Set a new password using the token from the reset email. */
+export function resetPassword(token: string, newPassword: string): Promise<{ status?: boolean }> {
+	return apiFetch<{ status?: boolean }>("/api/auth/reset-password", {
+		method: "POST",
+		body: JSON.stringify({ token, newPassword }),
+	});
+}
+
 /* ── Auth Settings ── */
 
 export type AuthSettingsResponse = {

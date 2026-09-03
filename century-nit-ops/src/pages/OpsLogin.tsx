@@ -281,6 +281,12 @@ export function OpsLogin() {
 								{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 							</button>
 						</form>
+
+						<div style={{ marginTop: "1rem", textAlign: "center" }}>
+							<Link to="/forgot-password" className="ops-login__back" style={{ margin: 0 }}>
+								Forgot password?
+							</Link>
+						</div>
 					</>
 				)}
 				</div>

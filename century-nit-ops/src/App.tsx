@@ -51,6 +51,8 @@ const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"
 const SchedulingConfig = lazyNamed(() => import("./pages/SchedulingConfig"), "SchedulingConfig");
 const ClientDirectory = lazyNamed(() => import("./pages/ClientDirectory"), "ClientDirectory");
 const OpsLogin = lazyNamed(() => import("./pages/OpsLogin"), "OpsLogin");
+const OpsForgotPassword = lazyNamed(() => import("./pages/OpsForgotPassword"), "OpsForgotPassword");
+const OpsResetPassword = lazyNamed(() => import("./pages/OpsResetPassword"), "OpsResetPassword");
 
 /** Short alias — the route table reads better without the long name. */
 const Ops = OpsRequireModule;
@@ -93,6 +95,8 @@ export default function App() {
 								{/* Unprotected: reached before an account exists or before a
 								    second factor is enrolled, so neither can sit behind the guard. */}
 								<Route path="/login" element={<OpsLogin />} />
+								<Route path="/forgot-password" element={<OpsForgotPassword />} />
+								<Route path="/reset-password" element={<OpsResetPassword />} />
 								<Route path="/accept-invite" element={<AcceptInvite />} />
 								<Route
 									path="/mfa-setup"

@@ -236,15 +236,18 @@ export function SchedulingConfig() {
 		setSuccess(null);
 	}
 
-	/** Switch every day to inherit the general template. */
-	function resetAllToGeneral() {
-		setDays((prev) => prev.map((d) => updateDayPreview({ ...d, override: false }, general)));
-		setSuccess(null);
-	}
-
-	/** Enable exactly the given weekdays, leaving each day's own settings intact. */
+	/** Enable/override exactly the given weekdays. A single per-day toggle now
+	 * controls both "open" and "custom": ON = open with this day's custom
+	 * values, OFF = closed / no custom override. */
 	function setActiveDays(active: number[]) {
-		setDays((prev) => prev.map((d) => updateDayPreview({ ...d, enabled: active.includes(d.dayOfWeek) }, general)));
+		setDays((prev) =>
+			prev.map((d) =>
+				updateDayPreview(
+					{ ...d, enabled: active.includes(d.dayOfWeek), override: active.includes(d.dayOfWeek) },
+					general,
+				),
+			),
+		);
 		setSuccess(null);
 	}
 
@@ -366,21 +369,11 @@ export function SchedulingConfig() {
 						</div>
 
 						{/* ── General template ─────────────────────────────────────── */}
-						<div className="slotcfg__presets" style={{ flexDirection: "column", alignItems: "stretch", gap: "1rem" }}>
-							<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-								<span className="slotcfg__presets-label" style={{ margin: 0 }}>
-									General — applies to every open day
-								</span>
-								<button
-									type="button"
-									className="perm-quick-btn"
-									onClick={resetAllToGeneral}
-									title="Switch every day to inherit the general template"
-								>
-									Reset all days to general
-								</button>
-							</div>
-							<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))", gap: "1rem" }}>
+						<div className="slotcfg__presets" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
+							<span className="slotcfg__presets-label" style={{ margin: 0 }}>
+								General — default values when a day is enabled
+							</span>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(7.5rem, 1fr))", gap: "0.5rem" }}>
 								<label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
 									<span className="ops-panel__muted" style={{ fontSize: "var(--text-xs)" }}>Start</span>
 									<input
@@ -464,7 +457,6 @@ export function SchedulingConfig() {
 							<thead>
 								<tr>
 									<th scope="col">Day</th>
-									<th scope="col">Open</th>
 									<th scope="col">Custom</th>
 									<th scope="col">Start</th>
 									<th scope="col">End</th>
@@ -487,29 +479,16 @@ export function SchedulingConfig() {
 											<td className="slotcfg__day" data-col="day">
 												{DAY_NAMES[day.dayOfWeek]}
 											</td>
-											<td data-col="open">
-												<label className="perm-switch" title={`Toggle ${DAY_NAMES[day.dayOfWeek]} open`}>
-													<input
-														type="checkbox"
-														checked={day.enabled}
-														aria-label={`${DAY_NAMES[day.dayOfWeek]} open for bookings`}
-														onChange={(e) =>
-															updateDay(day.dayOfWeek, { enabled: e.target.checked })
-														}
-													/>
-													<span className="perm-switch__slider" />
-												</label>
-											</td>
 											<td data-col="override">
-												<label className="perm-switch" title={`Custom hours for ${DAY_NAMES[day.dayOfWeek]}`}>
+												<label className="perm-switch" title={`${DAY_NAMES[day.dayOfWeek]} hours`}>
 													<input
 														type="checkbox"
 														checked={day.override}
-														disabled={!day.enabled}
 														aria-label={`${DAY_NAMES[day.dayOfWeek]} custom hours`}
-														onChange={(e) =>
-															updateDay(day.dayOfWeek, { override: e.target.checked })
-														}
+														onChange={(e) => {
+															const on = e.target.checked;
+															updateDay(day.dayOfWeek, { enabled: on, override: on });
+														}}
 													/>
 													<span className="perm-switch__slider" />
 												</label>
@@ -525,6 +504,7 @@ export function SchedulingConfig() {
 														updateDay(day.dayOfWeek, { openStart: e.target.value })
 													}
 													required={day.override}
+													style={{ width: "6rem" }}
 												/>
 											</td>
 											<td data-col="end">
@@ -538,6 +518,7 @@ export function SchedulingConfig() {
 														updateDay(day.dayOfWeek, { openEnd: e.target.value })
 													}
 													required={day.override}
+													style={{ width: "6rem" }}
 												/>
 											</td>
 											<td data-col="interval">

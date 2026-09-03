@@ -12,5 +12,6 @@ UPDATE applications SET stage = 'document_verification' WHERE stage IS NULL OR s
 --> statement-breakpoint
 
 CREATE TYPE "public"."journey_stage" AS ENUM('document_verification', 'school_submission', 'offer_letter_review', 'visa_processing', 'payment_execution', 'travel_assistance', 'completed');--> statement-breakpoint
+ALTER TABLE "applications" ALTER COLUMN "stage" DROP DEFAULT;--> statement-breakpoint
 ALTER TABLE "applications" ALTER COLUMN "stage" SET DATA TYPE journey_stage USING stage::journey_stage;--> statement-breakpoint
 ALTER TABLE "applications" ALTER COLUMN "stage" SET DEFAULT 'document_verification';

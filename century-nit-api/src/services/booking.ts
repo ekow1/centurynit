@@ -16,11 +16,11 @@ import { defaultTimezone } from "./settings.js";
 import {
 	getCalendarClient,
 	loadCredentials,
-	loadCompanyCredentials,
 	markNeedsReconnect,
 	markCompanyNeedsReconnect,
 	CalendarAuthError,
 } from "./calendar/index.js";
+import { createMeeting, meetConnected, MeetAuthError, MeetNotConnectedError } from "./meet/index.js";
 import * as mail from "./notifications.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserIdByEmail } from "./notify.js";
 import { queueCalendar, queueEmails, queueReminder, cancelQueued, releaseCalendarJob } from "../worker/queues.js";
@@ -423,80 +423,49 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 	if (!booking.employeeId || booking.type !== "online") {
 		return booking;
 	}
-	// If a real Google Calendar event already exists with a Meet link, keep it.
-	if (booking.calendarEventId && booking.meetingUrl) {
+	// Idempotent: if a Meet space was already created, keep it.
+	if (booking.meetingUrl && booking.meetingSpace) {
 		return booking;
 	}
 
-	const employee = await loadEmployee(booking.employeeId);
-	if (!employee) return booking;
-
-	// Prefer the company Google account — one account creates every Meet link,
-	// so consultants never need to connect their own calendar. Fall back to the
-	// per-employee connection only if the company account is not configured.
-	const companyAccount = await loadCompanyCredentials();
-	const account = companyAccount ?? (await loadCredentials(booking.employeeId));
-	if (!account) {
-		// No Google Calendar integration is configured. Meeting links must be
-		// set manually by staff via PATCH /bookings/:id/meeting-url.
+	// No Google Meet integration is configured. Meeting links must be set
+	// manually by staff via PATCH /bookings/:id/meeting-url.
+	if (!(await meetConnected())) {
 		return booking;
 	}
 
-	// If we already have a fallback URL but no calendar event, proceed to
-	// create the real Google Calendar event (the fallback gets replaced).
-	const client = await getCalendarClient();
 	try {
-		const event = await client.createEvent(account.credentials, {
-			calendarId: account.calendarId,
-			summary: `${booking.serviceName} · ${booking.clientName}`,
-			description: [
-				`Century NIT ${booking.serviceName}`,
-				`Reference: ${booking.reference}`,
-				`Client: ${booking.clientName} (${booking.clientEmail})`,
-				`Consultant: ${employee.name} (${employee.email})`,
-				booking.notes ? `Notes: ${booking.notes}` : "",
-			]
-				.filter(Boolean)
-				.join("\n"),
-			startsAt: booking.startsAt,
-			endsAt: booking.endsAt,
-			timezone: booking.timezone,
-			attendees: [
-				{ email: booking.clientEmail, displayName: booking.clientName },
-				{ email: employee.email, displayName: employee.name },
-			],
-			// Stable per booking — this is the idempotency handle Google honours.
-			requestId: `century-nit-${booking.id}`,
-			withMeet: true,
-		});
+		const space = await createMeeting();
 
 		const [updated] = await db
 			.update(bookings)
 			.set({
-				calendarEventId: event.eventId,
-				calendarId: event.calendarId,
-				meetingUrl: event.meetingUrl,
-				calendarSyncStatus: event.meetingUrl ? "SYNCED" : "FAILED",
-				calendarSyncError: event.meetingUrl ? null : "Google returned no meeting link",
+				meetingUrl: space.meetingUri,
+				meetingProvider: "google_meet",
+				meetingSpace: space.spaceId,
+				calendarSyncStatus: "SYNCED",
+				calendarSyncError: null,
 				updatedAt: new Date(),
 			})
 			.where(eq(bookings.id, booking.id))
 			.returning();
 
-		await audit(booking.id, "calendar.synced", "system", {
-			eventId: event.eventId,
-			meetingUrl: event.meetingUrl,
+		await audit(booking.id, "meet.created", "system", {
+			spaceId: space.spaceId,
+			meetingUrl: space.meetingUri,
 		});
 		return updated;
 	} catch (err) {
-		if (err instanceof CalendarAuthError) {
-			if (companyAccount) {
-				await markCompanyNeedsReconnect();
-			} else {
-				await markNeedsReconnect(booking.employeeId);
-			}
+		if (err instanceof MeetAuthError) {
+			await markCompanyNeedsReconnect();
 		}
-		const message = err instanceof Error ? err.message : "Calendar sync failed";
+		// MeetNotConnectedError is not an error worth marking FAILED — the
+		// booking is still valid, staff just need to connect Meet or paste a
+		// link manually.
+		if (err instanceof MeetNotConnectedError) {
+			return booking;
+		}
+		const message = err instanceof Error ? err.message : "Google Meet creation failed";
 		const failed = await markSyncFailed(booking.id, message);
 		// Retry out of band; the booking itself is untouched and still valid.
 		await queueCalendar({ type: "sync", bookingId: booking.id });
@@ -1032,7 +1001,7 @@ export async function cancelCalendarForBooking(bookingId: string): Promise<void>
 
 	await db
 		.update(bookings)
-		.set({ calendarSyncStatus: "NOT_REQUIRED", meetingUrl: null, updatedAt: new Date() })
+		.set({ calendarSyncStatus: "NOT_REQUIRED", meetingUrl: null, meetingProvider: null, meetingSpace: null, updatedAt: new Date() })
 		.where(eq(bookings.id, bookingId));
 	await audit(bookingId, "calendar.cancelled", "system");
 }

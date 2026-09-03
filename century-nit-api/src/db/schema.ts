@@ -369,8 +369,10 @@ export const bookings = pgTable(
 		assignedAt: timestamp("assigned_at", { withTimezone: true }),
 		assignedBy: uuid("assigned_by").references(() => opsUsers.id, { onDelete: "set null" }),
 
-		/* Google Calendar / Meet */
+		/* Google Meet / video conferencing */
 		meetingUrl: text("meeting_url"),
+		meetingProvider: text("meeting_provider"),
+		meetingSpace: text("meeting_space"),
 		calendarEventId: text("calendar_event_id"),
 		calendarId: text("calendar_id"),
 		calendarSyncStatus: calendarSyncStatusEnum("calendar_sync_status")

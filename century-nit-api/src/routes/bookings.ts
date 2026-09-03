@@ -114,6 +114,8 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 		employeeEmail: employee?.email ?? null,
 		assignedAt: row.assignedAt?.toISOString() ?? null,
 		meetingUrl: row.meetingUrl ?? null,
+		meetingProvider: row.meetingProvider ?? null,
+		meetingSpace: row.meetingSpace ?? null,
 		calendarEventId: row.calendarEventId ?? null,
 		calendarSyncStatus: row.calendarSyncStatus,
 		rescheduledAt: row.rescheduledAt?.toISOString() ?? null,

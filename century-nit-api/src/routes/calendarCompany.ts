@@ -21,7 +21,7 @@ import {
 } from "../services/calendar/index.js";
 
 /**
- * Company Google Calendar — one company account creates every consultation
+ * Company Google Meet — one company account creates every consultation
  * Meet link. Consultants never connect their own calendar.
  *
  * Flow:
@@ -55,12 +55,12 @@ function signState(opsUserId: string): string {
 const consentRoute = createRoute({
 	method: "get",
 	path: "/company/consent",
-	tags: ["Company Google Calendar"],
+	tags: ["Company Google Meet"],
 	summary: "Start the company Google account OAuth flow",
 	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
 	responses: {
 		302: { description: "Redirect to Google consent screen" },
-		400: { description: "Google Calendar is not configured" },
+		400: { description: "Google Meet is not configured" },
 	},
 });
 
@@ -87,7 +87,7 @@ calendarCompanyRouter.openapi(consentRoute, async (c) => {
 const callbackRoute = createRoute({
 	method: "get",
 	path: "/company/callback",
-	tags: ["Company Google Calendar"],
+	tags: ["Company Google Meet"],
 	summary: "OAuth callback — exchanges the code for tokens",
 	request: {
 		query: z.object({
@@ -194,7 +194,7 @@ calendarCompanyRouter.openapi(callbackRoute, async (c) => {
 const statusRoute = createRoute({
 	method: "get",
 	path: "/company/status",
-	tags: ["Company Google Calendar"],
+	tags: ["Company Google Meet"],
 	summary: "Whether the company Google account is connected",
 	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
 	responses: {
@@ -233,7 +233,7 @@ calendarCompanyRouter.openapi(statusRoute, async (c) => {
 const disconnectRoute = createRoute({
 	method: "post",
 	path: "/company/disconnect",
-	tags: ["Company Google Calendar"],
+	tags: ["Company Google Meet"],
 	summary: "Disconnect the company Google account",
 	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
 	responses: {
@@ -248,3 +248,5 @@ calendarCompanyRouter.openapi(disconnectRoute, async (c) => {
 	await clearCompanyTokens();
 	return c.json({ ok: true });
 });
+
+

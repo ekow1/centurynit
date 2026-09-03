@@ -13,19 +13,17 @@ import {
 } from "./types.js";
 
 /**
- * Google Calendar / Meet.
+ * Google Meet integration.
  *
- * Meet links are not created directly — there is no "create a Meet" API. You
- * create a Calendar event and attach a `conferenceData` create-request; Google
- * allocates the conference and returns the URL on the event. That is why §5
- * routes through Calendar, and why `conferenceDataVersion: 1` below is not
- * optional: without it Google silently ignores the request and returns an event
- * with no conference at all.
+ * Meet links are created via the dedicated Google Meet REST API
+ * (`meet({version:'v2'}).spaces.create`), not through Google Calendar events.
+ * The application's internal calendar is the sole source of truth for
+ * availability and booking; Google Meet is only the video-conferencing provider.
  */
 
-/** Only what the feature needs. Narrow scope, so consent is easy to justify. */
+/** Only what the Meet integration needs. Narrow scope, easy to justify. */
 export const GOOGLE_SCOPES = [
-	"https://www.googleapis.com/auth/calendar.events",
+	"https://www.googleapis.com/auth/meetings.space.created",
 	"https://www.googleapis.com/auth/userinfo.email",
 ];
 

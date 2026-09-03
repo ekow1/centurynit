@@ -199,6 +199,8 @@ export const bookingSchema = z.object({
 	assignedAt: z.string().datetime().nullable(),
 
 	meetingUrl: z.string().url().nullable(),
+	meetingProvider: z.string().nullable(),
+	meetingSpace: z.string().nullable(),
 	calendarEventId: z.string().nullable(),
 	calendarSyncStatus: calendarSyncStatusSchema,
 

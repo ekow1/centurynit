@@ -16,6 +16,10 @@ export const CatalogDestinationSchema = z.object({
 	updatedAt: z.string().nullable().optional(),
 });
 export type CatalogDestination = z.infer<typeof CatalogDestinationSchema>;
+export const CatalogDestinationCreateSchema = CatalogDestinationSchema.omit({ createdAt: true, updatedAt: true }).partial({ id: true });
+export type CatalogDestinationCreate = z.infer<typeof CatalogDestinationCreateSchema>;
+export const CatalogDestinationUpdateSchema = CatalogDestinationSchema.omit({ id: true, createdAt: true, updatedAt: true }).partial();
+export type CatalogDestinationUpdate = z.infer<typeof CatalogDestinationUpdateSchema>;
 
 export const CatalogUniversitySchema = z.object({
 	id: z.string(),
@@ -33,6 +37,10 @@ export const CatalogUniversitySchema = z.object({
 	updatedAt: z.string().nullable().optional(),
 });
 export type CatalogUniversity = z.infer<typeof CatalogUniversitySchema>;
+export const CatalogUniversityCreateSchema = CatalogUniversitySchema.omit({ createdAt: true, updatedAt: true }).partial({ id: true });
+export type CatalogUniversityCreate = z.infer<typeof CatalogUniversityCreateSchema>;
+export const CatalogUniversityUpdateSchema = CatalogUniversitySchema.omit({ id: true, createdAt: true, updatedAt: true }).partial();
+export type CatalogUniversityUpdate = z.infer<typeof CatalogUniversityUpdateSchema>;
 
 export const CatalogProgramSchema = z.object({
 	id: z.string(),
@@ -51,6 +59,10 @@ export const CatalogProgramSchema = z.object({
 	updatedAt: z.string().nullable().optional(),
 });
 export type CatalogProgram = z.infer<typeof CatalogProgramSchema>;
+export const CatalogProgramCreateSchema = CatalogProgramSchema.omit({ createdAt: true, updatedAt: true }).partial({ id: true });
+export type CatalogProgramCreate = z.infer<typeof CatalogProgramCreateSchema>;
+export const CatalogProgramUpdateSchema = CatalogProgramSchema.omit({ id: true, createdAt: true, updatedAt: true }).partial();
+export type CatalogProgramUpdate = z.infer<typeof CatalogProgramUpdateSchema>;
 
 export const CatalogScholarshipSchema = z.object({
 	id: z.string(),
@@ -65,3 +77,7 @@ export const CatalogScholarshipSchema = z.object({
 	updatedAt: z.string().nullable().optional(),
 });
 export type CatalogScholarship = z.infer<typeof CatalogScholarshipSchema>;
+export const CatalogScholarshipCreateSchema = CatalogScholarshipSchema.omit({ createdAt: true, updatedAt: true }).partial({ id: true });
+export type CatalogScholarshipCreate = z.infer<typeof CatalogScholarshipCreateSchema>;
+export const CatalogScholarshipUpdateSchema = CatalogScholarshipSchema.omit({ id: true, createdAt: true, updatedAt: true }).partial();
+export type CatalogScholarshipUpdate = z.infer<typeof CatalogScholarshipUpdateSchema>;

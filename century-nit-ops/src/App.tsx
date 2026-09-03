@@ -19,6 +19,7 @@ function lazyNamed<P extends object>(
 
 const EnterpriseLayout = lazyNamed(() => import("./pages/EnterpriseLayout"), "EnterpriseLayout");
 const EnterpriseDashboard = lazyNamed(() => import("./pages/EnterpriseDashboard"), "EnterpriseDashboard");
+const Workspace = lazyNamed(() => import("./pages/Workspace"), "Workspace");
 const CalendarSettings = lazyNamed(() => import("./pages/CalendarSettings"), "CalendarSettings");
 const AcceptInvite = lazyNamed(() => import("./pages/AcceptInvite"), "AcceptInvite");
 const MfaSetup = lazyNamed(() => import("./pages/MfaSetup"), "MfaSetup");
@@ -120,7 +121,8 @@ export default function App() {
 									{/* Operations. Every route is gated on the same permission
 									    matrix the sidebar uses — without this, typing a URL
 									    reaches any module. */}
-									<Route path="dashboard" element={<Ops module="dashboard"><EnterpriseDashboard /></Ops>} />
+									<Route path="workspace" element={<Ops module="dashboard"><Workspace /></Ops>} />
+								<Route path="dashboard" element={<Ops module="dashboard"><EnterpriseDashboard /></Ops>} />
 									<Route path="applications" element={<Ops module="applications"><EnterpriseCases /></Ops>} />
 									<Route path="consultations" element={<Ops module="consultations"><EnterpriseConsultations /></Ops>} />
 									<Route path="applicants" element={<Ops module="applicants"><EnterpriseApplicants /></Ops>} />

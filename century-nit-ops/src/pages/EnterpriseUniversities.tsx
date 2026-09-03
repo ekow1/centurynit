@@ -1,23 +1,32 @@
 import { useState, useEffect } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { API_PREFIX, type CatalogUniversity, type CatalogDestination } from "century-nit-shared";
+import {
+	API_PREFIX,
+	type CatalogUniversity,
+	type CatalogDestination,
+	type CatalogUniversityUpdate,
+	type CatalogDestinationUpdate,
+} from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 import { EnterpriseLookups } from "./EnterpriseLookups";
 
 type Tab = "universities" | "countries" | "form-dropdowns";
 
+type UniversityFormInput = CatalogUniversityUpdate & { id?: string };
+type DestinationFormInput = CatalogDestinationUpdate & { id?: string };
+
 export function EnterpriseUniversities() {
 	const { canEditUniversities } = useOpsAuth();
 	const [tab, setTab] = useState<Tab>("universities");
 	const [search, setSearch] = useState("");
 	
-	const [universities, setUniversities] = useState<any[]>([]);
-	const [destinations, setDestinations] = useState<any[]>([]);
+	const [universities, setUniversities] = useState<CatalogUniversity[]>([]);
+	const [destinations, setDestinations] = useState<CatalogDestination[]>([]);
 	const [loading, setLoading] = useState(true);
 
-	const [editingUni, setEditingUni] = useState<any | null>(null);
-	const [editingDest, setEditingDest] = useState<any | null>(null);
+	const [editingUni, setEditingUni] = useState<UniversityFormInput | null>(null);
+	const [editingDest, setEditingDest] = useState<DestinationFormInput | null>(null);
 	const [saving, setSaving] = useState(false);
 
 	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
@@ -48,14 +57,17 @@ export function EnterpriseUniversities() {
 
 	async function saveUniversity(e: React.FormEvent) {
 		e.preventDefault();
+		if (!editingUni) return;
 		setSaving(true);
 		try {
 			const method = editingUni.id ? "PUT" : "POST";
 			const url = editingUni.id ? `${API_PREFIX}/catalog/universities/${editingUni.id}` : `${API_PREFIX}/catalog/universities`;
 			
-			// ensure id exists for POST
-			const payload = { ...editingUni };
-			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+			// Strip audit-only fields; the API sets createdAt/updatedAt and generates an id for POSTs.
+			const payload: Record<string, unknown> = { ...editingUni };
+			delete payload.id;
+			delete payload.createdAt;
+			delete payload.updatedAt;
 
 			await apiFetch(url, {
 				method,
@@ -72,13 +84,16 @@ export function EnterpriseUniversities() {
 
 	async function saveDestination(e: React.FormEvent) {
 		e.preventDefault();
+		if (!editingDest) return;
 		setSaving(true);
 		try {
 			const method = editingDest.id ? "PUT" : "POST";
 			const url = editingDest.id ? `${API_PREFIX}/catalog/destinations/${editingDest.id}` : `${API_PREFIX}/catalog/destinations`;
 			
-			const payload = { ...editingDest };
-			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+			const payload: Record<string, unknown> = { ...editingDest };
+			delete payload.id;
+			delete payload.createdAt;
+			delete payload.updatedAt;
 
 			await apiFetch(url, {
 				method,
@@ -125,12 +140,12 @@ export function EnterpriseUniversities() {
 	});
 
 	const filteredDestinations = destinations.filter((d) => {
-		if (q && !d.name.toLowerCase().includes(q) && !d.region.toLowerCase().includes(q)) return false;
+		if (q && !d.name.toLowerCase().includes(q) && !d.region?.toLowerCase().includes(q)) return false;
 		return true;
 	});
 
-	function destName(destId: string): string {
-		return destinations.find((d) => d.id === destId)?.name ?? destId;
+	function destName(destId: string | null | undefined): string {
+		return destinations.find((d) => d.id === destId)?.name ?? destId ?? "—";
 	}
 
 	return (

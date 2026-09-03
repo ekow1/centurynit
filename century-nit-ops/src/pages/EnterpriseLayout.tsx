@@ -33,6 +33,7 @@ function Icon({ name }: { name: string }) {
 
 /** Business operations - manager and consultant. */
 const OPERATIONS_NAV: NavEntry[] = [
+	{ to: "/workspace", module: "dashboard", label: "Workspace", blurb: "Action queue", icon: "dashboard" },
 	{ to: "/dashboard", module: "dashboard", label: "Dashboard", blurb: "Mission control", icon: "dashboard" },
 	{
 		group: "Cases",

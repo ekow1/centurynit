@@ -1,23 +1,33 @@
 import { useState, useEffect } from "react";
 import { useOpsAuth } from "./OpsAuthContext";
-import { API_PREFIX, type CatalogProgram, type CatalogScholarship, type CatalogUniversity } from "century-nit-shared";
+import {
+	API_PREFIX,
+	type CatalogProgram,
+	type CatalogScholarship,
+	type CatalogUniversity,
+	type CatalogProgramUpdate,
+	type CatalogScholarshipUpdate,
+} from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 type Tab = "programs" | "scholarships";
+
+type ProgramFormInput = CatalogProgramUpdate & { id?: string };
+type ScholarshipFormInput = CatalogScholarshipUpdate & { id?: string };
 
 export function EnterprisePrograms() {
 	const { canEditUniversities: canEditPrograms } = useOpsAuth();
 	const [tab, setTab] = useState<Tab>("programs");
 	const [search, setSearch] = useState("");
 	
-	const [programs, setPrograms] = useState<any[]>([]);
-	const [scholarships, setScholarships] = useState<any[]>([]);
-	const [universities, setUniversities] = useState<any[]>([]);
+	const [programs, setPrograms] = useState<CatalogProgram[]>([]);
+	const [scholarships, setScholarships] = useState<CatalogScholarship[]>([]);
+	const [universities, setUniversities] = useState<CatalogUniversity[]>([]);
 	const [loading, setLoading] = useState(true);
 
-	const [editingProg, setEditingProg] = useState<any | null>(null);
-	const [editingSchol, setEditingSchol] = useState<any | null>(null);
+	const [editingProg, setEditingProg] = useState<ProgramFormInput | null>(null);
+	const [editingSchol, setEditingSchol] = useState<ScholarshipFormInput | null>(null);
 	const [saving, setSaving] = useState(false);
 
 	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
@@ -50,13 +60,16 @@ export function EnterprisePrograms() {
 
 	async function saveProgram(e: React.FormEvent) {
 		e.preventDefault();
+		if (!editingProg) return;
 		setSaving(true);
 		try {
 			const method = editingProg.id ? "PUT" : "POST";
 			const url = editingProg.id ? `${API_PREFIX}/catalog/programs/${editingProg.id}` : `${API_PREFIX}/catalog/programs`;
 			
-			const payload = { ...editingProg };
-			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+			const payload: Record<string, unknown> = { ...editingProg };
+			delete payload.id;
+			delete payload.createdAt;
+			delete payload.updatedAt;
 
 			await apiFetch(url, {
 				method,
@@ -73,13 +86,16 @@ export function EnterprisePrograms() {
 
 	async function saveScholarship(e: React.FormEvent) {
 		e.preventDefault();
+		if (!editingSchol) return;
 		setSaving(true);
 		try {
 			const method = editingSchol.id ? "PUT" : "POST";
 			const url = editingSchol.id ? `${API_PREFIX}/catalog/scholarships/${editingSchol.id}` : `${API_PREFIX}/catalog/scholarships`;
 			
-			const payload = { ...editingSchol };
-			if (!payload.id) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+			const payload: Record<string, unknown> = { ...editingSchol };
+			delete payload.id;
+			delete payload.createdAt;
+			delete payload.updatedAt;
 
 			await apiFetch(url, {
 				method,
@@ -130,8 +146,8 @@ export function EnterprisePrograms() {
 		return true;
 	});
 
-	function uniName(uniId: string): string {
-		return universities.find((u) => u.id === uniId)?.name ?? uniId;
+	function uniName(uniId: string | null | undefined): string {
+		return universities.find((u) => u.id === uniId)?.name ?? uniId ?? "—";
 	}
 
 	return (

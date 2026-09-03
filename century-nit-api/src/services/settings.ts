@@ -4,6 +4,7 @@ import { db } from "../db/index.js";
 import { platformSettings, settingsAudit } from "../db/schema.js";
 import { encrypt, decrypt } from "../lib/crypto.js";
 import { env } from "../env.js";
+import { timeToMinutes } from "../lib/time.js";
 
 /**
  * Platform settings service.
@@ -419,27 +420,29 @@ export async function branchOpenEnd(): Promise<string> {
 export type WeeklySlotScheduleDay = {
 	dayOfWeek: number;
 	enabled: boolean;
-	slotsPerDay: number;
+	/** Day-specific opening time, HH:MM. */
+	openStart: string;
+	/** Day-specific closing time, HH:MM. */
+	openEnd: string;
+	/** Minutes between consecutive slot start times. */
+	intervalMinutes: number;
 };
 
 export type WeeklySlotSchedule = {
 	timezone: string;
-	/** Branch-wide opening hours — set once, applied to every open day. */
-	openStart: string;
-	openEnd: string;
 	days: WeeklySlotScheduleDay[];
 };
 
 const weeklySlotScheduleSchema = z.object({
 	timezone: z.string().min(1),
-	openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
-	openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
 	days: z
 		.array(
 			z.object({
 				dayOfWeek: z.number().int().min(0).max(6),
 				enabled: z.boolean(),
-				slotsPerDay: z.number().int().min(1).max(48),
+				openStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+				openEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+				intervalMinutes: z.number().int().min(5).max(480),
 			}),
 		)
 		.length(7),
@@ -448,12 +451,17 @@ const weeklySlotScheduleSchema = z.object({
 function defaultWeeklySlotSchedule(): WeeklySlotSchedule {
 	return {
 		timezone: env.DEFAULT_TIMEZONE,
-		openStart: env.BRANCH_OPEN_START,
-		openEnd: env.BRANCH_OPEN_END,
 		days: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
 			dayOfWeek,
 			enabled: dayOfWeek >= 1 && dayOfWeek <= 5,
-			slotsPerDay: env.SLOTS_PER_DAY,
+			openStart: env.BRANCH_OPEN_START,
+			openEnd: env.BRANCH_OPEN_END,
+			// Default interval derived from the legacy slots-per-day: an 8-hour
+			// window divided into SLOTS_PER_DAY slots. 8h / 8 slots = 60 min.
+			intervalMinutes: Math.max(
+				15,
+				Math.floor((8 * 60) / Math.max(1, env.SLOTS_PER_DAY)),
+			),
 		})),
 	};
 }
@@ -465,22 +473,28 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 	try {
 		const parsed = JSON.parse(raw);
 		/*
-		 * Legacy schedules stored openStart/openEnd on each day. Lift the first
-		 * enabled day's window to the branch-global fields so old settings still
-		 * load after the schema change. New writes always use the global shape.
+		 * Legacy schedules stored a branch-global openStart/openEnd and a
+		 * per-day slotsPerDay count. Migrate to per-day start/end/interval:
+		 * lift the global window onto every enabled day and convert the count
+		 * to an interval (window / count). New writes always use the per-day
+		 * shape.
 		 */
-		if (parsed && !parsed.openStart && Array.isArray(parsed.days)) {
-			const first = parsed.days.find(
-				(d: { enabled?: boolean; openStart?: string; openEnd?: string }) => d?.enabled && d.openStart && d.openEnd,
-			);
-			if (first) {
-				parsed.openStart = first.openStart;
-				parsed.openEnd = first.openEnd;
-			}
+		if (parsed && Array.isArray(parsed.days)) {
+			const globalStart = parsed.openStart ?? env.BRANCH_OPEN_START;
+			const globalEnd = parsed.openEnd ?? env.BRANCH_OPEN_END;
 			for (const d of parsed.days) {
-				delete d?.openStart;
-				delete d?.openEnd;
+				if (d && typeof d.slotsPerDay === "number" && !d.intervalMinutes) {
+					const total = timeToMinutes(d.openEnd ?? globalEnd) - timeToMinutes(d.openStart ?? globalStart);
+					d.intervalMinutes = total > 0 && d.slotsPerDay > 0
+						? Math.max(5, Math.floor(total / d.slotsPerDay))
+						: 60;
+				}
+				if (!d.openStart) d.openStart = globalStart;
+				if (!d.openEnd) d.openEnd = globalEnd;
+				delete d.slotsPerDay;
 			}
+			delete parsed.openStart;
+			delete parsed.openEnd;
 		}
 		return weeklySlotScheduleSchema.parse(parsed);
 	} catch (err) {

@@ -48,18 +48,14 @@ import {
  * occupies — travel and note-taking time either side.
  */
 
-function computeSlotTimes(openStart: string, openEnd: string, count: number): string[] {
+function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
-	const total = endMin - startMin;
-	if (total <= 0 || count <= 0) return [];
-
-	const step = Math.floor(total / count);
-	if (step <= 0) return [minutesToTime(startMin)];
+	if (endMin <= startMin || intervalMinutes <= 0) return [];
 
 	const times: string[] = [];
-	for (let i = 0; i < count; i++) {
-		times.push(minutesToTime(startMin + i * step));
+	for (let t = startMin; t < endMin; t += intervalMinutes) {
+		times.push(minutesToTime(t));
 	}
 	return times;
 }
@@ -67,15 +63,14 @@ function computeSlotTimes(openStart: string, openEnd: string, count: number): st
 /**
  * Compute slot start times for a given weekday from the weekly schedule.
  *
- * Opening hours are branch-wide (set once); each day only declares whether it
- * is open and how many slots to offer. The requested duration only affects
- * where each slot ends, not which start times are offered.
+ * Each day carries its own opening window and interval — Monday can be
+ * 09:00–17:00 every 60 minutes while Saturday is 10:00–14:00 every 90.
  */
 export async function slotTimesFor(dayOfWeek: number): Promise<string[]> {
 	const schedule = await weeklySlotSchedule();
 	const day = schedule.days.find((d) => d.dayOfWeek === dayOfWeek);
 	if (!day?.enabled) return [];
-	return computeSlotTimes(schedule.openStart, schedule.openEnd, day.slotsPerDay);
+	return computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes);
 }
 
 /* ── Branch and service catalogue ────────────────────────────────────────────

@@ -387,36 +387,33 @@ const branchSlotsResponseSchema = z.object({
 		z.object({
 			dayOfWeek: z.number().int(),
 			enabled: z.boolean(),
-			slotsPerDay: z.number().int(),
 			openStart: z.string(),
 			openEnd: z.string(),
+			intervalMinutes: z.number().int(),
 			times: z.array(timeStringSchema),
 		}),
 	),
 });
 
-function computeSlotTimes(openStart: string, openEnd: string, count: number): string[] {
+function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
-	const total = endMin - startMin;
-	if (total <= 0 || count <= 0) return [];
-	const step = Math.floor(total / count);
-	if (step <= 0) return [minutesToTime(startMin)];
+	if (endMin <= startMin || intervalMinutes <= 0) return [];
 	const times: string[] = [];
-	for (let i = 0; i < count; i++) {
-		times.push(minutesToTime(startMin + i * step));
+	for (let t = startMin; t < endMin; t += intervalMinutes) {
+		times.push(minutesToTime(t));
 	}
 	return times;
 }
 
-function dayResponse(day: WeeklySlotScheduleDay, openStart: string, openEnd: string) {
+function dayResponse(day: WeeklySlotScheduleDay) {
 	return {
 		dayOfWeek: day.dayOfWeek,
 		enabled: day.enabled,
-		slotsPerDay: day.slotsPerDay,
-		openStart,
-		openEnd,
-		times: day.enabled ? computeSlotTimes(openStart, openEnd, day.slotsPerDay) : [],
+		openStart: day.openStart,
+		openEnd: day.openEnd,
+		intervalMinutes: day.intervalMinutes,
+		times: day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes) : [],
 	};
 }
 
@@ -446,7 +443,7 @@ calendarFeedsRouter.openapi(
 		return c.json(
 			{
 				timezone: schedule.timezone,
-				days: schedule.days.map((d) => dayResponse(d, schedule.openStart, schedule.openEnd)),
+				days: schedule.days.map((d) => dayResponse(d)),
 			},
 			200,
 		);

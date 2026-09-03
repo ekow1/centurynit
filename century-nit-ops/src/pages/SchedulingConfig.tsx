@@ -5,10 +5,9 @@ import { apiFetch, ApiError } from "../lib/api";
 /**
  * Scheduling Configuration — per-weekday branch consultation slot setup.
  *
- * Only roles with the "scheduling" module (manager, system administrator, and
- * super_admin by default) reach this page. The slot times here are derived from
- * the configured opening hours and slots-per-day for each weekday; they are not
- * tied to any individual consultant's calendar.
+ * Each day has its own opening window (start/end) and slot interval. Monday
+ * can be 09:00–17:00 every 60 minutes while Saturday is 10:00–14:00 every 90.
+ * Only roles with the "scheduling" module reach this page.
  */
 
 /** Monday first — the working week reads better than Sunday-first here. */
@@ -18,14 +17,14 @@ const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 interface SchedulingDay {
 	dayOfWeek: number;
 	enabled: boolean;
-	slotsPerDay: number;
+	openStart: string;
+	openEnd: string;
+	intervalMinutes: number;
 	preview: string[];
 }
 
 interface SchedulingConfig {
 	timezone: string;
-	openStart: string;
-	openEnd: string;
 	days: SchedulingDay[];
 }
 
@@ -34,50 +33,42 @@ function timeToMinutes(value: string): number {
 	return h * 60 + m;
 }
 
-function computeSlotTimes(openStart: string, openEnd: string, count: number): string[] {
+function minutesToTime(min: number): string {
+	const h = Math.floor(min / 60).toString().padStart(2, "0");
+	const m = (min % 60).toString().padStart(2, "0");
+	return `${h}:${m}`;
+}
+
+/** Slot start times from start to end at the given interval. */
+function computeSlotTimes(openStart: string, openEnd: string, intervalMinutes: number): string[] {
 	const startMin = timeToMinutes(openStart);
 	const endMin = timeToMinutes(openEnd);
-	const total = endMin - startMin;
-	if (total <= 0 || count <= 0) return [];
-	const step = Math.floor(total / count);
-	if (step <= 0) return [openStart];
+	if (endMin <= startMin || intervalMinutes <= 0) return [];
 	const times: string[] = [];
-	for (let i = 0; i < count; i++) {
-		const min = startMin + i * step;
-		const h = Math.floor(min / 60).toString().padStart(2, "0");
-		const m = (min % 60).toString().padStart(2, "0");
-		times.push(`${h}:${m}`);
+	for (let t = startMin; t < endMin; t += intervalMinutes) {
+		times.push(minutesToTime(t));
 	}
 	return times;
 }
 
-/** Minutes between consecutive slots — the number staff actually reason about. */
-function slotInterval(openStart: string, openEnd: string, slotsPerDay: number): number {
-	const total = timeToMinutes(openEnd) - timeToMinutes(openStart);
-	if (total <= 0 || slotsPerDay <= 0) return 0;
-	return Math.floor(total / slotsPerDay);
-}
-
-function updateDayPreview(day: SchedulingDay, openStart: string, openEnd: string): SchedulingDay {
+function updateDayPreview(day: SchedulingDay): SchedulingDay {
 	return {
 		...day,
-		preview: day.enabled ? computeSlotTimes(openStart, openEnd, day.slotsPerDay) : [],
+		preview: day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes) : [],
 	};
 }
 
 /** Compare ignoring the derived preview, so only real edits mark the form dirty. */
-function sameSchedule(
-	a: { openStart: string; openEnd: string; days: SchedulingDay[] },
-	b: { openStart: string; openEnd: string; days: SchedulingDay[] },
-): boolean {
-	if (a.openStart !== b.openStart || a.openEnd !== b.openEnd) return false;
-	if (a.days.length !== b.days.length) return false;
-	return a.days.every((day, i) => {
-		const other = b.days[i];
+function sameSchedule(a: SchedulingDay[], b: SchedulingDay[]): boolean {
+	if (a.length !== b.length) return false;
+	return a.every((day, i) => {
+		const other = b[i];
 		return (
 			day.dayOfWeek === other.dayOfWeek &&
 			day.enabled === other.enabled &&
-			day.slotsPerDay === other.slotsPerDay
+			day.openStart === other.openStart &&
+			day.openEnd === other.openEnd &&
+			day.intervalMinutes === other.intervalMinutes
 		);
 	});
 }
@@ -85,10 +76,6 @@ function sameSchedule(
 export function SchedulingConfig() {
 	const [days, setDays] = useState<SchedulingDay[]>([]);
 	const [saved, setSaved] = useState<SchedulingDay[]>([]);
-	const [openStart, setOpenStart] = useState<string>("09:00");
-	const [openEnd, setOpenEnd] = useState<string>("17:00");
-	const [savedOpenStart, setSavedOpenStart] = useState<string>("09:00");
-	const [savedOpenEnd, setSavedOpenEnd] = useState<string>("17:00");
 	const [timezone, setTimezone] = useState<string>("Africa/Accra");
 	const [savedTimezone, setSavedTimezone] = useState<string>("Africa/Accra");
 	const [loading, setLoading] = useState(true);
@@ -104,10 +91,6 @@ export function SchedulingConfig() {
 			const fresh = res.days.map((d) => ({ ...d }));
 			setTimezone(res.timezone);
 			setSavedTimezone(res.timezone);
-			setOpenStart(res.openStart);
-			setOpenEnd(res.openEnd);
-			setSavedOpenStart(res.openStart);
-			setSavedOpenEnd(res.openEnd);
 			setDays(fresh);
 			setSaved(fresh.map((d) => ({ ...d })));
 		} catch (err) {
@@ -121,31 +104,27 @@ export function SchedulingConfig() {
 		void load();
 	}, [load]);
 
-	const previewDays = useMemo(() => days.map((d) => updateDayPreview(d, openStart, openEnd)), [days, openStart, openEnd]);
 	const orderedDays = useMemo(
 		() =>
-			WEEK_ORDER.map((dow) => previewDays.find((d) => d.dayOfWeek === dow)).filter(
+			WEEK_ORDER.map((dow) => days.find((d) => d.dayOfWeek === dow)).filter(
 				(d): d is SchedulingDay => Boolean(d),
 			),
-		[previewDays],
+		[days],
 	);
-	const dirty =
-		timezone !== savedTimezone ||
-		openStart !== savedOpenStart ||
-		openEnd !== savedOpenEnd ||
-		!sameSchedule({ openStart, openEnd, days }, { openStart: savedOpenStart, openEnd: savedOpenEnd, days: saved });
+	const dirty = timezone !== savedTimezone || !sameSchedule(days, saved);
 	const activeCount = days.filter((d) => d.enabled).length;
-	const weeklyTotal = days.reduce((sum, d) => sum + (d.enabled ? d.slotsPerDay : 0), 0);
-	const branchInterval = slotInterval(openStart, openEnd, Math.max(1, days.find((d) => d.enabled)?.slotsPerDay ?? 1));
+	const weeklySlots = days
+		.filter((d) => d.enabled)
+		.reduce((sum, d) => sum + computeSlotTimes(d.openStart, d.openEnd, d.intervalMinutes).length, 0);
 
 	function updateDay(dayOfWeek: number, patch: Partial<SchedulingDay>) {
 		setDays((prev) =>
-			prev.map((d) => (d.dayOfWeek === dayOfWeek ? updateDayPreview({ ...d, ...patch }, openStart, openEnd) : d)),
+			prev.map((d) => (d.dayOfWeek === dayOfWeek ? updateDayPreview({ ...d, ...patch }) : d)),
 		);
 		setSuccess(null);
 	}
 
-	/** Copy one day's slot count onto every other active day. */
+	/** Copy one day's window + interval onto every other active day. */
 	function copyToAll(sourceDayOfWeek: number) {
 		const source = days.find((d) => d.dayOfWeek === sourceDayOfWeek);
 		if (!source) return;
@@ -153,28 +132,31 @@ export function SchedulingConfig() {
 			prev.map((d) =>
 				d.dayOfWeek === sourceDayOfWeek || !d.enabled
 					? d
-					: updateDayPreview({ ...d, slotsPerDay: source.slotsPerDay }, openStart, openEnd),
+					: updateDayPreview({
+							...d,
+							openStart: source.openStart,
+							openEnd: source.openEnd,
+							intervalMinutes: source.intervalMinutes,
+						}),
 			),
 		);
 		setSuccess(null);
 	}
 
-	/** Enable exactly the given weekdays, leaving each day's own slot count intact. */
+	/** Enable exactly the given weekdays, leaving each day's own window intact. */
 	function setActiveDays(active: number[]) {
-		setDays((prev) =>
-			prev.map((d) => updateDayPreview({ ...d, enabled: active.includes(d.dayOfWeek) }, openStart, openEnd)),
-		);
+		setDays((prev) => prev.map((d) => updateDayPreview({ ...d, enabled: active.includes(d.dayOfWeek) })));
 		setSuccess(null);
 	}
 
 	function validate(): string | null {
-		if (timeToMinutes(openEnd) <= timeToMinutes(openStart)) {
-			return "Branch closing time must be after opening time.";
-		}
 		for (const day of days) {
 			if (!day.enabled) continue;
-			if (day.slotsPerDay < 1 || day.slotsPerDay > 48) {
-				return `${DAY_NAMES[day.dayOfWeek]}: slots must be between 1 and 48.`;
+			if (timeToMinutes(day.openEnd) <= timeToMinutes(day.openStart)) {
+				return `${DAY_NAMES[day.dayOfWeek]}: closing time must be after opening time.`;
+			}
+			if (day.intervalMinutes < 5 || day.intervalMinutes > 480) {
+				return `${DAY_NAMES[day.dayOfWeek]}: interval must be between 5 and 480 minutes.`;
 			}
 		}
 		return null;
@@ -195,12 +177,12 @@ export function SchedulingConfig() {
 		try {
 			const body = {
 				timezone,
-				openStart,
-				openEnd,
 				days: days.map((d) => ({
 					dayOfWeek: d.dayOfWeek,
 					enabled: d.enabled,
-					slotsPerDay: d.slotsPerDay,
+					openStart: d.openStart,
+					openEnd: d.openEnd,
+					intervalMinutes: d.intervalMinutes,
 				})),
 			};
 			const res = await apiFetch<SchedulingConfig>(`${API_PREFIX}/scheduling`, {
@@ -211,8 +193,6 @@ export function SchedulingConfig() {
 			setDays(fresh);
 			setSaved(fresh.map((d) => ({ ...d })));
 			setSavedTimezone(res.timezone);
-			setSavedOpenStart(res.openStart);
-			setSavedOpenEnd(res.openEnd);
 			setSuccess("Scheduling configuration saved. The portal will show the updated slot times.");
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Could not save scheduling configuration.");
@@ -226,9 +206,8 @@ export function SchedulingConfig() {
 			<div style={{ marginBottom: "1.25rem" }}>
 				<h1 className="page-title">Scheduling Configuration</h1>
 				<p className="lead mt-2">
-					The branch-wide slot template. Applicants can only book the times generated
-					here; consultants set their own working hours separately in{" "}
-					<strong>My Availability</strong>.
+					The branch-wide slot template. Each day has its own opening hours and slot
+					interval — applicants can only book the times generated here.
 				</p>
 			</div>
 
@@ -253,38 +232,6 @@ export function SchedulingConfig() {
 					<form onSubmit={handleSubmit}>
 						<div className="slotcfg__branch-hours">
 							<div className="slotcfg__branch-hours-field">
-								<label className="slotcfg__presets-label" htmlFor="openStart">
-									Branch opening time
-								</label>
-								<input
-									id="openStart"
-									type="time"
-									className="slotcfg__time"
-									value={openStart}
-									onChange={(e) => {
-										setOpenStart(e.target.value);
-										setSuccess(null);
-									}}
-									required
-								/>
-							</div>
-							<div className="slotcfg__branch-hours-field">
-								<label className="slotcfg__presets-label" htmlFor="openEnd">
-									Branch closing time
-								</label>
-								<input
-									id="openEnd"
-									type="time"
-									className="slotcfg__time"
-									value={openEnd}
-									onChange={(e) => {
-										setOpenEnd(e.target.value);
-										setSuccess(null);
-									}}
-									required
-								/>
-							</div>
-							<div className="slotcfg__branch-hours-field">
 								<label className="slotcfg__presets-label" htmlFor="timezone">
 									Timezone
 								</label>
@@ -302,8 +249,8 @@ export function SchedulingConfig() {
 								/>
 							</div>
 							<p className="ops-panel__muted" style={{ margin: 0 }}>
-								Set once — these hours apply to every open day below. Each day only
-								toggles whether it's open and how many slots to offer.
+								All slot times are shown in this timezone. Each day below sets its own
+								opening window and interval.
 							</p>
 						</div>
 
@@ -323,12 +270,8 @@ export function SchedulingConfig() {
 							>
 								Include Saturday
 							</button>
-							<button
-								type="button"
-								className="perm-quick-btn"
-								onClick={() => copyToAll(1)}
-							>
-								Copy Monday slots to all
+							<button type="button" className="perm-quick-btn" onClick={() => copyToAll(1)}>
+								Copy Monday to all open days
 							</button>
 							<button type="button" className="perm-quick-btn" onClick={() => setActiveDays([])}>
 								Close all
@@ -340,14 +283,15 @@ export function SchedulingConfig() {
 								<tr>
 									<th scope="col">Day</th>
 									<th scope="col">Open</th>
-									<th scope="col">Slots</th>
-									<th scope="col">Every</th>
+									<th scope="col">Start</th>
+									<th scope="col">End</th>
+									<th scope="col">Every (min)</th>
 									<th scope="col">Generated times</th>
 								</tr>
 							</thead>
 							<tbody>
 								{orderedDays.map((day) => {
-									const interval = slotInterval(openStart, openEnd, day.slotsPerDay);
+									const slotCount = day.enabled ? computeSlotTimes(day.openStart, day.openEnd, day.intervalMinutes).length : 0;
 									return (
 										<tr
 											key={day.dayOfWeek}
@@ -369,26 +313,48 @@ export function SchedulingConfig() {
 													<span className="perm-switch__slider" />
 												</label>
 											</td>
-											<td data-col="slots">
+											<td data-col="start">
+												<input
+													type="time"
+													className="slotcfg__time"
+													value={day.openStart}
+													disabled={!day.enabled}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} opening time`}
+													onChange={(e) =>
+														updateDay(day.dayOfWeek, { openStart: e.target.value })
+													}
+													required
+												/>
+											</td>
+											<td data-col="end">
+												<input
+													type="time"
+													className="slotcfg__time"
+													value={day.openEnd}
+													disabled={!day.enabled}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} closing time`}
+													onChange={(e) =>
+														updateDay(day.dayOfWeek, { openEnd: e.target.value })
+													}
+													required
+												/>
+											</td>
+											<td data-col="interval">
 												<input
 													type="number"
-													min={1}
-													max={48}
+													min={5}
+													max={480}
+													step={5}
 													className="slotcfg__num"
-													value={day.slotsPerDay}
+													value={day.intervalMinutes}
 													disabled={!day.enabled}
-													aria-label={`${DAY_NAMES[day.dayOfWeek]} slots per day`}
+													aria-label={`${DAY_NAMES[day.dayOfWeek]} slot interval in minutes`}
 													onChange={(e) =>
 														updateDay(day.dayOfWeek, {
-															slotsPerDay: Number.parseInt(e.target.value, 10) || 0,
+															intervalMinutes: Number.parseInt(e.target.value, 10) || 0,
 														})
 													}
 												/>
-											</td>
-											<td data-col="every">
-												<span className="slotcfg__interval">
-													{day.enabled && interval > 0 ? `${interval} min` : "—"}
-												</span>
 											</td>
 											<td data-col="times">
 												{!day.enabled ? (
@@ -402,6 +368,9 @@ export function SchedulingConfig() {
 																{t}
 															</span>
 														))}
+														<span className="muted" style={{ fontSize: "0.75rem", marginLeft: "0.4rem" }}>
+															({slotCount} slots)
+														</span>
 													</span>
 												)}
 											</td>
@@ -412,9 +381,8 @@ export function SchedulingConfig() {
 						</table>
 
 						<p className="ops-panel__muted" style={{ marginTop: "1rem" }}>
-							{activeCount} open {activeCount === 1 ? "day" : "days"} · {weeklyTotal} bookable
-							slots per week · {branchInterval > 0 ? `${branchInterval} min intervals` : "set valid hours"} · times
-							shown in {timezone}
+							{activeCount} open {activeCount === 1 ? "day" : "days"} · {weeklySlots} bookable
+							slots per week · times shown in {timezone}
 						</p>
 
 						{dirty && (
@@ -430,8 +398,6 @@ export function SchedulingConfig() {
 										onClick={() => {
 											setDays(saved.map((d) => ({ ...d })));
 											setTimezone(savedTimezone);
-											setOpenStart(savedOpenStart);
-											setOpenEnd(savedOpenEnd);
 											setError(null);
 										}}
 									>

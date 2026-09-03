@@ -18,23 +18,27 @@ import { minutesToTime, timeToMinutes } from "../lib/time.js";
 
 const schedulingRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
+const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
 
 const scheduleDaySchema = z.object({
 	dayOfWeek: z.number().int().min(0).max(6),
 	enabled: z.boolean(),
-	slotsPerDay: z.coerce.number().int().min(1).max(48),
+	openStart: timeStringSchema,
+	openEnd: timeStringSchema,
+	intervalMinutes: z.coerce.number().int().min(5).max(480),
 });
 
 const schedulingResponseSchema = z.object({
 	timezone: z.string(),
-	openStart: timeStringSchema,
-	openEnd: timeStringSchema,
 	days: z.array(
 		z.object({
 			dayOfWeek: z.number().int(),
 			enabled: z.boolean(),
-			slotsPerDay: z.number().int(),
+			openStart: timeStringSchema,
+			openEnd: timeStringSchema,
+			intervalMinutes: z.number().int(),
 			preview: z.array(timeStringSchema),
 		}),
 	),
@@ -42,49 +46,47 @@ const schedulingResponseSchema = z.object({
 
 const updateSchedulingSchema = z.object({
 	timezone: z.string().min(1),
-	openStart: timeStringSchema,
-	openEnd: timeStringSchema,
 	days: z.array(scheduleDaySchema).length(7),
 });
 
-function computePreview(start: string, end: string, count: number): string[] {
+function computePreview(start: string, end: string, intervalMinutes: number): string[] {
 	const startMin = timeToMinutes(start);
 	const endMin = timeToMinutes(end);
-	const total = endMin - startMin;
-	if (total <= 0 || count <= 0) return [];
-	const step = Math.floor(total / count);
-	if (step <= 0) return [minutesToTime(startMin)];
+	if (endMin <= startMin || intervalMinutes <= 0) return [];
 	const times: string[] = [];
-	for (let i = 0; i < count; i++) {
-		times.push(minutesToTime(startMin + i * step));
+	for (let t = startMin; t < endMin; t += intervalMinutes) {
+		times.push(minutesToTime(t));
 	}
 	return times;
 }
 
-function dayResponse(day: WeeklySlotScheduleDay, openStart: string, openEnd: string) {
+function dayResponse(day: WeeklySlotScheduleDay) {
 	return {
 		...day,
-		preview: day.enabled ? computePreview(openStart, openEnd, day.slotsPerDay) : [],
+		preview: day.enabled ? computePreview(day.openStart, day.openEnd, day.intervalMinutes) : [],
 	};
 }
 
 async function readSchedulingConfig(schedule: WeeklySlotSchedule): Promise<{
 	timezone: string;
-	openStart: string;
-	openEnd: string;
 	days: (WeeklySlotScheduleDay & { preview: string[] })[];
 }> {
 	return {
 		timezone: schedule.timezone,
-		openStart: schedule.openStart,
-		openEnd: schedule.openEnd,
-		days: schedule.days.map((d) => dayResponse(d, schedule.openStart, schedule.openEnd)),
+		days: schedule.days.map((d) => dayResponse(d)),
 	};
 }
 
 function validateSchedule(schedule: WeeklySlotSchedule) {
-	if (timeToMinutes(schedule.openEnd) <= timeToMinutes(schedule.openStart)) {
-		throw new HttpError(400, "BAD_REQUEST", "Branch closing time must be after opening time");
+	for (const day of schedule.days) {
+		if (!day.enabled) continue;
+		if (timeToMinutes(day.openEnd) <= timeToMinutes(day.openStart)) {
+			throw new HttpError(
+				400,
+				"BAD_REQUEST",
+				`${DAY_NAMES[day.dayOfWeek]}: closing time must be after opening time`,
+			);
+		}
 	}
 }
 
@@ -143,8 +145,6 @@ schedulingRouter.openapi(
 
 		const schedule: WeeklySlotSchedule = {
 			timezone: body.timezone,
-			openStart: body.openStart,
-			openEnd: body.openEnd,
 			days: body.days,
 		};
 		validateSchedule(schedule);

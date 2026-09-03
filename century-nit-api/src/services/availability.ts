@@ -10,9 +10,7 @@ import {
 import { db } from "../db/index.js";
 import {
   bookings,
-  calendarBusyBlocks,
   opsUsers,
-  staffCalendarFeeds,
   staffWorkingHours,
 } from "../db/schema.js";
 import {
@@ -173,30 +171,6 @@ export async function employeeBookings(
 	return rows;
 }
 
-/**
- * External calendar commitments, from the cache the webhook keeps warm.
- *
- * Read from our own table rather than calling Google inline: an availability
- * lookup renders a whole month of slots and must not fan out into dozens of
- * third-party requests, nor fail because Google is slow.
- */
-export async function employeeBusyBlocks(
-	employeeId: string,
-	from: Date,
-	to: Date,
-): Promise<Interval[]> {
-	return db
-		.select({ startsAt: calendarBusyBlocks.startsAt, endsAt: calendarBusyBlocks.endsAt })
-		.from(calendarBusyBlocks)
-		.where(
-			and(
-				eq(calendarBusyBlocks.opsUserId, employeeId),
-				lt(calendarBusyBlocks.startsAt, to),
-				gte(calendarBusyBlocks.endsAt, from),
-			),
-		);
-}
-
 export type WorkingWindow = { startMinute: number; endMinute: number; timezone: string };
 
 export async function workingHoursFor(
@@ -274,14 +248,10 @@ export async function isEmployeeAvailable(
 		return { available: false, reason: "outside-hours" };
 	}
 
-	const [booked, busy] = await Promise.all([
-		employeeBookings(employeeId, addMinutes(startsAt, -240), addMinutes(endsAt, 240), options.excludeBookingId),
-		employeeBusyBlocks(employeeId, addMinutes(startsAt, -240), addMinutes(endsAt, 240)),
-	]);
+	const booked = await employeeBookings(employeeId, addMinutes(startsAt, -240), addMinutes(endsAt, 240), options.excludeBookingId);
 
 	const buffer = await bookingBufferMinutes();
 	if (conflicts({ startsAt, endsAt }, booked, buffer)) return { available: false, reason: "booked" };
-	if (conflicts({ startsAt, endsAt }, busy, buffer)) return { available: false, reason: "conflict" };
 
 	return { available: true };
 }
@@ -360,10 +330,7 @@ export async function branchAvailability(input: {
     );
 
   const employeeIntervals: Interval[] = employeeId
-    ? [
-        ...(await employeeBookings(employeeId, dayStart, dayEnd, input.excludeBookingId)),
-        ...(await employeeBusyBlocks(employeeId, dayStart, dayEnd)),
-      ]
+    ? await employeeBookings(employeeId, dayStart, dayEnd, input.excludeBookingId)
     : [];
 
   const hours = employeeId
@@ -372,13 +339,12 @@ export async function branchAvailability(input: {
 
   // Parallel-consultant capacity. A public-form slot is bookable while at
   // least one consultant is free — working that day, inside their own hours,
-  // not booked (in *any* branch, so cross-branch counts) and not mirrored busy
-  // from their iCal feed. Each unassigned booking already occupying the slot
-  // will consume one free consultant when assigned, so remaining capacity is
-  // freeCount minus the unassigned bookings parked at that instant. A slot
-  // greys out only when no consultant remains free — exactly the behaviour
-  // requested once Google Calendar's per-employee busy feed was replaced by
-  // the iCal mirror.
+  // and not booked (in *any* branch, so cross-branch counts). Each unassigned
+  // booking already occupying the slot will consume one free consultant when
+  // assigned, so remaining capacity is freeCount minus the unassigned bookings
+  // parked at that instant. A slot greys out only when no consultant remains
+  // free. The internal calendar is the sole source of truth — no external
+  // Google Calendar busy blocks are consulted.
   const consultants = employeeId
     ? []
     : (
@@ -398,7 +364,6 @@ export async function branchAvailability(input: {
     { startMinute: number; endMinute: number; timezone: string }
   >();
   const consultantBookings = new Map<string, Interval[]>();
-  const consultantBusy = new Map<string, Interval[]>();
 
   if (consultants.length > 0) {
     const dow = dayOfWeekInZone(dayStart, timezone);
@@ -443,50 +408,11 @@ export async function branchAvailability(input: {
       list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
       consultantBookings.set(b.employeeId, list);
     }
-
-    const busyRows = await db
-      .select({
-        opsUserId: calendarBusyBlocks.opsUserId,
-        startsAt: calendarBusyBlocks.startsAt,
-        endsAt: calendarBusyBlocks.endsAt,
-      })
-      .from(calendarBusyBlocks)
-      .where(
-        and(
-          inArray(calendarBusyBlocks.opsUserId, consultants),
-          lt(calendarBusyBlocks.startsAt, dayEnd),
-          gte(calendarBusyBlocks.endsAt, dayStart),
-        ),
-      );
-    for (const b of busyRows) {
-      const list = consultantBusy.get(b.opsUserId) ?? [];
-      list.push({ startsAt: b.startsAt, endsAt: b.endsAt });
-      consultantBusy.set(b.opsUserId, list);
-    }
   }
 
-  // Determine calendar sync status for the specific employee (if any)
-  let calendarSyncStatus: CalendarSyncStatus = "NOT_REQUIRED";
-  if (employeeId) {
-    const [feed] = await db
-      .select()
-      .from(staffCalendarFeeds)
-      .where(eq(staffCalendarFeeds.opsUserId, employeeId))
-      .limit(1);
-    if (feed) {
-      if (feed.lastError) {
-        calendarSyncStatus = "FAILED";
-      } else {
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        const lastSynced = feed.lastSyncedAt ?? new Date(0);
-        if (lastSynced.getTime() < oneHourAgo.getTime()) {
-          calendarSyncStatus = "PENDING";
-        } else {
-          calendarSyncStatus = "SYNCED";
-        }
-      }
-    }
-  }
+  // The internal calendar is the sole source of truth. There is no external
+  // calendar feed to sync, so the response always reports NOT_REQUIRED.
+  const calendarSyncStatus: CalendarSyncStatus = "NOT_REQUIRED";
 
   const slotsResult = times.map((time): SlotAvailability => {
     const startsAt = zonedTimeToUtc(date, time, timezone);
@@ -519,7 +445,6 @@ export async function branchAvailability(input: {
       const localEnd = localStart + durationMinutes;
       if (localStart < h.startMinute || localEnd > h.endMinute) continue;
       if (conflicts({ startsAt, endsAt }, consultantBookings.get(id) ?? [], buffer)) continue;
-      if (conflicts({ startsAt, endsAt }, consultantBusy.get(id) ?? [], buffer)) continue;
       freeCount += 1;
     }
     const unassignedAtSlot = branchTaken.filter(
@@ -572,11 +497,6 @@ export async function assignableEmployees(input: {
 			),
 		);
 
-	const connected = await db
-		.select({ opsUserId: staffCalendarFeeds.opsUserId })
-		.from(staffCalendarFeeds);
-	const connectedIds = new Set(connected.map((c) => c.opsUserId));
-
 	return Promise.all(
 		staff.map(async (s) => {
 			const { available, reason } = await isEmployeeAvailable(
@@ -593,7 +513,9 @@ export async function assignableEmployees(input: {
 				branch: s.branch,
 				available,
 				reason,
-				calendarConnected: connectedIds.has(s.id),
+				// The internal calendar is the sole source of truth and is always
+				// available — no external Google Calendar connection to check.
+				calendarConnected: true,
 			};
 		}),
 	);

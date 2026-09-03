@@ -863,6 +863,7 @@ type AppStateContextValue = {
 	chapterUnlocks: Record<PortalChapterId, boolean>;
 	journeyPhase: ReturnType<typeof getJourneyPhase>;
 	processStage: ProcessStageId;
+	stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> | null;
 	booking: BookingData;
 	updateBooking: (patch: Partial<BookingData>) => void;
 	updateAssessment: (patch: Partial<AssessmentData>) => void;
@@ -2207,11 +2208,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return Math.round((done / preDepartureTasks.length) * 100);
 	}, [preDepartureTasks]);
 
-	const processStage = useMemo(
+	const localProcessStage = useMemo(
 		() => getCurrentProcessStage(application, booking, schoolApplications),
 		[application, booking, schoolApplications],
 	);
-	const chapterUnlocks = useMemo(
+	const localChapterUnlocks = useMemo(
 		() => getChapterUnlocks(application, booking, schoolApplications),
 		[application, booking, schoolApplications],
 	);
@@ -2234,6 +2235,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		currentStage: string;
 		portalStage?: string;
 		chapterUnlocks: Record<string, boolean>;
+		stageStatuses?: Record<string, "done" | "current" | "locked" | "skipped">;
 		label: string;
 		nextUnlock: string | null;
 	};
@@ -2262,11 +2264,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 	const effectiveJourneyPhase = useMemo(() => {
 		if (serverJourney) {
-			// Prefer an explicit `portalStage` from the server; otherwise map
-			// the coarse `currentStage` (a `JourneyStage`) through the shared
-			// `JOURNEY_STAGE_TO_PORTAL` table. If `currentStage` isn't a known
-			// `JourneyStage` (older server still emitting a `ProcessStageId`),
-			// fall back to using it directly so the portal doesn't regress.
+			// The server is the single source of truth for the portal stage.
+			// Prefer an explicit `portalStage`; otherwise map the coarse
+			// `currentStage` (a `JourneyStage`) through JOURNEY_STAGE_TO_PORTAL.
 			let stageId: ProcessStageId;
 			if (serverJourney.portalStage) {
 				stageId = serverJourney.portalStage as ProcessStageId;
@@ -2290,6 +2290,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 		return journeyPhase;
 	}, [serverJourney, journeyPhase]);
+
+	// Single source of truth for chapter unlocks + process stage: the server
+	// /me/journey response. Local heuristic is the offline fallback only —
+	// this kills the two-competing-server-reads flaw (#1) where chapter
+	// unlocks (from meApi.application()) and the displayed phase (from
+	// meApi.journey()) could disagree.
+	const chapterUnlocks = useMemo(
+		() => serverJourney?.chapterUnlocks ?? localChapterUnlocks,
+		[serverJourney, localChapterUnlocks],
+	);
+	const processStage = useMemo(
+		() => serverJourney ? effectiveJourneyPhase.stage : localProcessStage,
+		[serverJourney, effectiveJourneyPhase, localProcessStage],
+	);
+	const stageStatuses = useMemo(
+		() => serverJourney?.stageStatuses ?? null,
+		[serverJourney],
+	);
 
 	const value = useMemo(
 		() => ({
@@ -2338,6 +2356,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			chapterUnlocks,
 			journeyPhase: effectiveJourneyPhase,
 			processStage,
+			stageStatuses,
 			booking,
 			updateBooking,
 			updateAssessment,
@@ -2405,6 +2424,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			chapterUnlocks,
 			effectiveJourneyPhase,
 			processStage,
+			stageStatuses,
 			booking,
 			updateBooking,
 			updateAssessment,

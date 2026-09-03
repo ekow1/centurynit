@@ -1392,6 +1392,7 @@ const journeySchema = z.object({
 		pre_departure: z.boolean(),
 		complete: z.boolean(),
 	}),
+	stageStatuses: z.record(z.enum(["done", "current", "locked", "skipped"])),
 	label: z.string(),
 	nextUnlock: z.string().nullable(),
 });
@@ -1427,6 +1428,12 @@ meRouter.openapi(
 					pre_departure: false,
 					complete: false,
 				},
+				stageStatuses: Object.fromEntries(
+					PORTAL_STAGE_ORDER.map((sid) => [
+						sid,
+						sid === "consultation" ? "current" : "locked",
+					]),
+				),
 				label: "Stage I · Consultation first",
 				nextUnlock: null,
 			});
@@ -1559,10 +1566,37 @@ meRouter.openapi(
 			complete: Boolean(isPreDepartureDone),
 		};
 
+		// ── Per-stage status (done|current|locked|skipped) ────────────────
+		// Computed from real signals, not index comparison — a stage advanced
+		// past without its signal met shows "skipped", not "done". The portal
+		// spine consumes this so "Done" never lies.
+		const stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> = {};
+		const currentIdx = PORTAL_STAGE_ORDER.indexOf(portalStage);
+		for (const sid of PORTAL_STAGE_ORDER) {
+			const si = PORTAL_STAGE_ORDER.indexOf(sid);
+			let done = false;
+			if (sid === "consultation") done = hasConsultation;
+			else if (sid === "eligibility") done = isEligible;
+			else if (sid === "school_package") done = hasPackage;
+			else if (sid === "school_select") done = hasSelection;
+			else if (sid === "application_invoice") done = isAppInvoicePaid;
+			else if (sid === "school_tracking") done = hasAdmitted;
+			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
+			else if (sid === "visa") done = isVisaDone;
+			else if (sid === "pre_departure") done = isPreDepartureDone;
+			else if (sid === "completed") done = isCompleted;
+
+			if (sid === portalStage) stageStatuses[sid] = "current";
+			else if (done) stageStatuses[sid] = "done";
+			else if (si < currentIdx) stageStatuses[sid] = "skipped";
+			else stageStatuses[sid] = "locked";
+		}
+
 		return c.json({
 			currentStage,
 			portalStage,
 			chapterUnlocks,
+			stageStatuses,
 			label: PORTAL_STAGE_LABELS[portalStage],
 			nextUnlock,
 		});

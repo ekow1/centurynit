@@ -44,6 +44,7 @@ const EnterprisePackages = lazyNamed(() => import("./pages/EnterprisePackages"),
 const EnterpriseReports = lazyNamed(() => import("./pages/EnterpriseReports"), "EnterpriseReports");
 const EnterpriseTeamAssignments = lazyNamed(() => import("./pages/EnterpriseTeamAssignments"), "EnterpriseTeamAssignments");
 const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppointments"), "EnterpriseAppointments");
+const LiveMeetings = lazyNamed(() => import("./pages/LiveMeetings"), "LiveMeetings");
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
 const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
 const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"), "EnterpriseAuditLogs");
@@ -136,6 +137,7 @@ export default function App() {
 									<Route path="payment-config" element={<Ops module="payment-config"><EnterprisePaymentConfig /></Ops>} />
 									<Route path="finance" element={<Ops module="finance"><EnterpriseFinance /></Ops>} />
 									<Route path="appointments" element={<Ops module="appointments"><EnterpriseAppointments /></Ops>} />
+								<Route path="live-meetings" element={<Ops module="appointments"><LiveMeetings /></Ops>} />
 									<Route path="universities" element={<Ops module="universities"><EnterpriseUniversities /></Ops>} />
 									<Route path="programs" element={<Ops module="programs"><EnterprisePrograms /></Ops>} />
 									<Route path="packages" element={<Ops module="packages"><EnterprisePackages /></Ops>} />

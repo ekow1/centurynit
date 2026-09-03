@@ -32,7 +32,7 @@ vi.mock("googleapis", () => ({
 	},
 }));
 
-import { createMeeting, getMeeting, endMeeting, meetConnected } from "./index.js";
+import { createMeeting, getMeeting, getMeetingStatus, endMeeting, meetConnected } from "./index.js";
 import { loadCompanyCredentials } from "../calendar/index.js";
 
 const account = {
@@ -107,6 +107,37 @@ describe("Google Meet service", () => {
 			const space = await getMeeting("spaces/abc123");
 			expect(space.spaceId).toBe("spaces/abc123");
 			expect(spacesMock.get).toHaveBeenCalledWith({ name: "spaces/abc123" });
+		});
+	});
+
+	describe("getMeetingStatus", () => {
+		it("reports inactive when no one has joined", async () => {
+			spacesMock.get.mockResolvedValue({
+				data: { name: "spaces/abc123", meetingUri: "https://meet.google.com/xxx-yyyy-zzz" },
+			});
+			const status = await getMeetingStatus("spaces/abc123");
+			expect(status.active).toBe(false);
+			expect(status.participantCount).toBe(0);
+			expect(status.startedAt).toBeNull();
+			expect(spacesMock.get).toHaveBeenCalledWith({ name: "spaces/abc123" });
+		});
+
+		it("reports active when activeConference is populated", async () => {
+			spacesMock.get.mockResolvedValue({
+				data: {
+					name: "spaces/abc123",
+					meetingUri: "https://meet.google.com/xxx-yyyy-zzz",
+					activeConference: { conferenceRecord: "conferenceRecords/xyz" },
+				},
+			});
+			const status = await getMeetingStatus("spaces/abc123");
+			expect(status.active).toBe(true);
+			expect(status.participantCount).toBe(1);
+		});
+
+		it("throws MeetNotConnectedError when no company account is configured", async () => {
+			vi.mocked(loadCompanyCredentials).mockResolvedValue(null);
+			await expect(getMeetingStatus("spaces/abc123")).rejects.toBeInstanceOf(MeetNotConnectedError);
 		});
 	});
 

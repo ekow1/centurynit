@@ -17,6 +17,22 @@ export interface MeetingSpace {
 	meetingCode: string | null;
 }
 
+/**
+ * Live status of a Meet space, from `spaces.get`.
+ *
+ * `active` is true when someone is currently in the meeting (Google populates
+ * `activeConference`). `participantCount` is the number of people in the call
+ * right now. `startedAt` is when the current conference became active.
+ */
+export interface MeetingStatus {
+	/** Whether anyone is currently in the meeting. */
+	active: boolean;
+	/** Number of participants currently in the call, or 0 if inactive. */
+	participantCount: number;
+	/** When the current conference started, or null if inactive. */
+	startedAt: Date | null;
+}
+
 /** Error thrown when the Google Meet integration is not connected. */
 export class MeetNotConnectedError extends Error {
 	constructor(message = "Google Meet is not connected") {

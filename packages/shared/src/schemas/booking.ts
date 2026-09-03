@@ -204,6 +204,11 @@ export const bookingSchema = z.object({
 	calendarEventId: z.string().nullable(),
 	calendarSyncStatus: calendarSyncStatusSchema,
 
+	/** Live meeting status — populated by the meetingStatusPoller worker. */
+	meetingActive: z.boolean(),
+	meetingParticipants: z.number().int(),
+	meetingCheckedAt: z.string().datetime().nullable(),
+
 	rescheduledAt: z.string().datetime().nullable(),
 	rescheduleRequestedAt: z.string().datetime().nullable(),
 	rescheduleRequestedStartsAt: z.string().datetime().nullable(),

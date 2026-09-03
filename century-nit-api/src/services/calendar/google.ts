@@ -24,6 +24,7 @@ import {
 /** Only what the Meet integration needs. Narrow scope, easy to justify. */
 export const GOOGLE_SCOPES = [
 	"https://www.googleapis.com/auth/meetings.space.created",
+	"https://www.googleapis.com/auth/meetings.space.readonly",
 	"https://www.googleapis.com/auth/userinfo.email",
 ];
 

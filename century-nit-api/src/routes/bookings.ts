@@ -118,6 +118,9 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 		meetingSpace: row.meetingSpace ?? null,
 		calendarEventId: row.calendarEventId ?? null,
 		calendarSyncStatus: row.calendarSyncStatus,
+		meetingActive: row.meetingActive ?? false,
+		meetingParticipants: row.meetingParticipants ?? 0,
+		meetingCheckedAt: row.meetingCheckedAt?.toISOString() ?? null,
 		rescheduledAt: row.rescheduledAt?.toISOString() ?? null,
 		rescheduleRequestedAt: row.rescheduleRequestedAt?.toISOString() ?? null,
 		rescheduleRequestedStartsAt: row.rescheduleRequestedStartsAt?.toISOString() ?? null,
@@ -492,6 +495,48 @@ bookingsRouter.openapi(
  * segment declared after a parameterised one is unreachable — `/employees`
  * was being matched as `/:id` with id="employees" and failing uuid validation.
  */
+/* ── GET /api/v1/bookings/meetings/live ─────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/meetings/live",
+		tags: ["Bookings"],
+		middleware: [requireAuth, requireMfa] as const,
+		responses: {
+			200: {
+				description: "Live (in-progress) online meetings",
+				content: { "application/json": { schema: bookingListSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) {
+			return c.json({ bookings: [], total: 0 });
+		}
+
+		const rows = await db
+			.select()
+			.from(bookingsTable)
+			.where(
+				and(
+					eq(bookingsTable.meetingActive, true),
+					inArray(bookingsTable.status, ["ASSIGNED", "CONFIRMED", "RESCHEDULED"]),
+				),
+			);
+
+		const employeeIds = Array.from(new Set(rows.map((r) => r.employeeId).filter(Boolean)));
+		const employees = employeeIds.length
+			? await db.select().from(opsUsers).where(inArray(opsUsers.id, employeeIds as string[]))
+			: [];
+		const byEmployee = new Map(employees.map((e) => [e.id, e]));
+
+		const list = rows.map((r) => toBookingResponse(r, r.employeeId ? byEmployee.get(r.employeeId) ?? null : null));
+		return c.json({ bookings: list, total: list.length });
+	},
+);
+
 /* ── GET /api/v1/bookings/employees ─────────────────────────────────────────── */
 
 bookingsRouter.openapi(

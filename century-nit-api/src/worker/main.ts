@@ -1,6 +1,14 @@
 import { emailWorker } from "./email.js";
 import { feedsWorker } from "./feeds.js";
-import { connection, emailQueue, calendarQueue, scheduleFeedSyncs } from "./queues.js";
+import { meetingStatusWorker } from "./meeting-status.js";
+import {
+	connection,
+	emailQueue,
+	calendarQueue,
+	meetingStatusQueue,
+	scheduleFeedSyncs,
+	scheduleMeetingStatusPolls,
+} from "./queues.js";
 
 /**
  * Background worker process.
@@ -26,6 +34,7 @@ import { connection, emailQueue, calendarQueue, scheduleFeedSyncs } from "./queu
 const workers = [
 	{ name: "email", worker: emailWorker },
 	{ name: "feeds", worker: feedsWorker },
+	{ name: "meetingStatus", worker: meetingStatusWorker },
 ];
 
 console.log(
@@ -39,6 +48,9 @@ for (const { name, worker } of workers) {
 
 // Schedule the recurring iCal feed mirror (idempotent — BullMQ dedupes by key).
 scheduleFeedSyncs().catch((err) => console.error("[feeds] schedule error:", err.message));
+
+// Schedule the recurring meeting-status poller (every 60s, idempotent).
+scheduleMeetingStatusPolls().catch((err) => console.error("[meetingStatus] schedule error:", err.message));
 
 /**
  * Graceful shutdown.
@@ -61,7 +73,7 @@ async function shutdown(signal: string) {
 
 	try {
 		await Promise.all(workers.map(({ worker }) => worker.close()));
-		await Promise.all([emailQueue.close(), calendarQueue.close()]);
+		await Promise.all([emailQueue.close(), calendarQueue.close(), meetingStatusQueue.close()]);
 		await connection.quit();
 		clearTimeout(timeout);
 		console.log("Workers stopped cleanly.");

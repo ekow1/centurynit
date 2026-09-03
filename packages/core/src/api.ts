@@ -348,6 +348,16 @@ export const bookingsApi = {
 			...json({ meetingUrl: meetingUrl && meetingUrl.trim() ? meetingUrl.trim() : null }),
 		});
 	},
+
+	/**
+	 * Live (in-progress) online meetings — bookings where `meetingActive` is
+	 * true, polled by the meeting-status worker. Returns the same shape as
+	 * `list()` so the dashboard widget and dedicated page can reuse the
+	 * Booking type.
+	 */
+	liveMeetings(): Promise<{ bookings: Booking[]; total: number }> {
+		return request(`${API_PREFIX}/bookings/meetings/live`);
+	},
 };
 
 /* ── Staff identity: invitations and MFA ─────────────────────────────────── */

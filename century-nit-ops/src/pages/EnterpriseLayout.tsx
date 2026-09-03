@@ -55,6 +55,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 		children: [
 			{ to: "/leads", module: "leads", label: "Leads", blurb: "Lead management", icon: "leads" },
 			{ to: "/appointments", module: "appointments", label: "Appointments", blurb: "Calendar", icon: "appointments" },
+		{ to: "/live-meetings", module: "appointments", label: "Live Meetings", blurb: "In-progress video calls", icon: "appointments" },
 			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Support tickets & requests", icon: "helpdesk" },
 			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
 		],

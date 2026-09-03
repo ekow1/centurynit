@@ -7,6 +7,7 @@ import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { API_PREFIX } from "century-nit-shared";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { UnassignedBookings } from "./UnassignedBookings";
+import { LiveMeetings } from "./LiveMeetings";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { apiFetch } from "../lib/api";
 
@@ -217,6 +218,10 @@ function ManagerView({
 
 			<div style={{ marginBottom: "2rem" }}>
 				<UnassignedBookings />
+			</div>
+
+			<div style={{ marginBottom: "2rem" }}>
+				<LiveMeetings compact />
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>

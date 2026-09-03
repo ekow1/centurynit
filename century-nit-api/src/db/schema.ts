@@ -381,6 +381,14 @@ export const bookings = pgTable(
 		calendarSyncError: text("calendar_sync_error"),
 		calendarSyncAttempts: integer("calendar_sync_attempts").notNull().default(0),
 
+		/* Live meeting status — populated by the meetingStatusPoller worker.
+		   `meetingActive` flips true when someone joins the Meet space, false
+		   when they leave. `meetingCheckedAt` is the last poll timestamp so
+		   the UI can show "checked N seconds ago". */
+		meetingActive: boolean("meeting_active").notNull().default(false),
+		meetingParticipants: integer("meeting_participants").notNull().default(0),
+		meetingCheckedAt: timestamp("meeting_checked_at", { withTimezone: true }),
+
 		rescheduledAt: timestamp("rescheduled_at", { withTimezone: true }),
 
 		rescheduleRequestedAt: timestamp("reschedule_requested_at", { withTimezone: true }),

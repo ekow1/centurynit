@@ -43,6 +43,7 @@ const RETRY: JobsOptions = {
 export const emailQueue = new Queue("email", { connection });
 export const calendarQueue = new Queue("calendar", { connection });
 export const pushQueue = new Queue("push", { connection });
+export const meetingStatusQueue = new Queue("meetingStatus", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -132,6 +133,19 @@ export async function scheduleFeedSyncs(): Promise<void> {
 		"syncFeeds",
 		{},
 		{ repeat: { every: 3 * 60 * 1000 }, jobId: undefined },
+	);
+}
+
+/**
+ * Schedule the recurring meeting-status poller. Runs every 60 seconds,
+ * polling `spaces.get` for online bookings whose slot is in the active
+ * window. Idempotent — BullMQ dedupes repeatables by key.
+ */
+export async function scheduleMeetingStatusPolls(): Promise<void> {
+	await meetingStatusQueue.add(
+		"poll",
+		{},
+		{ repeat: { every: 60 * 1000 }, jobId: undefined },
 	);
 }
 

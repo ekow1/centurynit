@@ -6,6 +6,7 @@ import {
 	MeetNotConnectedError,
 	MeetUnavailableError,
 	type MeetingSpace,
+	type MeetingStatus,
 } from "./types.js";
 
 /**
@@ -135,10 +136,51 @@ export async function endMeeting(spaceId: string): Promise<void> {
 	}
 }
 
+/**
+ * Get the live status of a Meet space — whether anyone is in the meeting.
+ *
+ * Used by the meeting status poller to populate `bookings.meetingActive` /
+ * `meetingParticipants` / `meetingCheckedAt` so the ops dashboard can show
+ * live meetings without each page view hitting Google.
+ *
+ * The Meet API's `activeConference` field only tells us *someone* is in the
+ * room — it doesn't expose a live participant count or start time. Those come
+ * from `conferenceRecords` after the meeting ends. For live display we just
+ * report active/inactive; the poller stamps `meetingCheckedAt` so the UI can
+ * show "checked N seconds ago".
+ *
+ * Returns `{ active: false, participantCount: 0, startedAt: null }` when the
+ * space exists but no one has joined yet.
+ */
+export async function getMeetingStatus(spaceId: string): Promise<MeetingStatus> {
+	const client = await meetClient();
+	try {
+		const res = await client.spaces.get({ name: spaceId });
+		const space = res.data;
+		const active = Boolean(space?.activeConference);
+		return {
+			active,
+			participantCount: active ? 1 : 0,
+			startedAt: null,
+		};
+	} catch (err) {
+		if (err instanceof MeetNotConnectedError || err instanceof MeetAuthError || err instanceof MeetUnavailableError) {
+			throw err;
+		}
+		classify(err);
+	}
+}
+
 /** Whether the company Google account is connected for Meet. */
 export async function meetConnected(): Promise<boolean> {
 	const account = await loadCompanyCredentials();
 	return Boolean(account);
 }
 
-export { MeetAuthError, MeetNotConnectedError, MeetUnavailableError, type MeetingSpace } from "./types.js";
+export {
+	MeetAuthError,
+	MeetNotConnectedError,
+	MeetUnavailableError,
+	type MeetingSpace,
+	type MeetingStatus,
+} from "./types.js";

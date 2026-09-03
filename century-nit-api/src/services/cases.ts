@@ -494,7 +494,7 @@ async function serializeApplicant(row: ApplicantRow): Promise<ApiApplicant> {
 				.orderBy(desc(consultations.createdAt))
 				.limit(1);
 
-	const currentStage = latestApp?.stage ?? (latestConsult ? "Consultation" : "New");
+	const currentStage = latestApp?.stage ?? "pre_application";
 	const status =
 		latestApp?.status === "ACCEPTED"
 			? "Enrolled"

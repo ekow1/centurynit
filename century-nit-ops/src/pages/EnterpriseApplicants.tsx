@@ -33,6 +33,7 @@ export function EnterpriseApplicants() {
 			a.assignedOfficer.toLowerCase().includes(searchQuery.toLowerCase());
 		if (!matchesSearch) return false;
 		if (statusFilter === "All") return true;
+		if (statusFilter === "Pre-application") return a.currentStage === "pre_application";
 		if (statusFilter === "Pre-Visa") return ["document_verification", "school_submission", "offer_letter_review"].includes(a.currentStage);
 		if (statusFilter === "Visa Processing") return a.currentStage === "visa_processing";
 		if (statusFilter === "Post-Visa") return ["payment_execution", "travel_assistance"].includes(a.currentStage);
@@ -92,7 +93,7 @@ export function EnterpriseApplicants() {
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Pre-Visa", "Visa Processing", "Post-Visa", "Completed"].map((tab) => (
+							{["All", "Pre-application", "Pre-Visa", "Visa Processing", "Post-Visa", "Completed"].map((tab) => (
 								<button
 									key={tab}
 									onClick={() => setStatusFilter(tab)}
@@ -162,7 +163,9 @@ export function EnterpriseApplicants() {
 													{applicant.university} · {applicant.country}
 												</p>
 												<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-													Stage {applicant.stageNumber}/{applicant.totalStages}: {applicant.currentStage}
+													{applicant.stageNumber > 0
+														? `Stage ${applicant.stageNumber}/${applicant.totalStages}: ${applicant.currentStage}`
+														: "Pre-application"}
 												</p>
 											</div>
 											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>

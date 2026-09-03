@@ -9,6 +9,7 @@ import {
 import {
 	APPLICATION_STATUS_TO_OPS,
 	CONSULTATION_STATUS_TO_OPS,
+	JOURNEY_STAGES,
 	type ApiApplicant,
 	type ApiApplication,
 	type ApiConsultation,
@@ -144,29 +145,11 @@ function toApplication(row: ApiApplication): MockApplication {
 	};
 }
 
-/** Map raw API stage strings to PROCESS_STAGES index (1-based). */
-function stageIndex(raw: string): number {
-	const map: Record<string, number> = {
-		Consultation: 1,
-		Eligibility: 2,
-		"School Package": 3,
-		"School Selection": 4,
-		"Application Invoice": 5,
-		"Application Tracking": 6,
-		"Visa Invoice": 7,
-		"Visa Tracking": 8,
-		"Pre-Departure": 9,
-		Completed: 10,
-		New: 0,
-	};
-	return map[raw] ?? 0;
-}
-
 function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplicant {
 	const app = allApps.filter((a) => a.applicantId === row.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 
-	const idx = stageIndex(row.currentStage);
-	const total = 10;
+	const idx = JOURNEY_STAGES.indexOf(row.currentStage as JourneyStage) + 1;
+	const total = JOURNEY_STAGES.length;
 
 	const financials = app
 		? {

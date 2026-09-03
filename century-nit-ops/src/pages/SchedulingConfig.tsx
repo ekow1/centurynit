@@ -168,6 +168,11 @@ export function SchedulingConfig() {
 		setSuccess(null);
 	}
 
+	function resetAllDays() {
+		setDays((prev) => prev.map((d) => updateDayPreview({ ...d, customEnabled: false }, general)));
+		setSuccess(null);
+	}
+
 	function updateDay(dayOfWeek: number, patch: Partial<SchedulingDay>) {
 		setDays((prev) =>
 			prev.map((d) => (d.dayOfWeek === dayOfWeek ? updateDayPreview({ ...d, ...patch }, general) : d)),
@@ -254,37 +259,41 @@ export function SchedulingConfig() {
 					<p className="ops-panel__muted">Loading configuration…</p>
 				) : (
 					<form onSubmit={handleSubmit}>
-						<div className="slotcfg__branch-hours">
-							<div className="slotcfg__branch-hours-field">
-								<label className="slotcfg__presets-label" htmlFor="timezone">
-									Timezone
-								</label>
-								<input
-									id="timezone"
-									type="text"
-									value={timezone}
-									onChange={(e) => {
-										setTimezone(e.target.value);
-										setSuccess(null);
-									}}
-									className="slotcfg__time"
-									style={{ width: "11rem" }}
-									required
-								/>
+						<div className="slotcfg__tz">
+							<div className="slotcfg__tz-head">
+								<span className="slotcfg__section-title">Timezone</span>
 							</div>
-							<p className="ops-panel__muted" style={{ margin: 0 }}>
-								All slot times are shown in this timezone.
-							</p>
+							<input
+								id="timezone"
+								type="text"
+								value={timezone}
+								onChange={(e) => {
+									setTimezone(e.target.value);
+									setSuccess(null);
+								}}
+								className="slotcfg__time"
+								style={{ width: "14rem" }}
+								required
+							/>
+							<p className="slotcfg__helper">All slot times are shown in this timezone.</p>
 						</div>
 
 						{/* ── General template ─────────────────────────────────────── */}
-						<div className="slotcfg__presets" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.5rem" }}>
-							<span className="slotcfg__presets-label" style={{ margin: 0 }}>
-								General — default values when a day is enabled
-							</span>
-							<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(7.5rem, 1fr))", gap: "0.5rem" }}>
-								<label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-									<span className="ops-panel__muted" style={{ fontSize: "var(--text-xs)" }}>Start</span>
+						<div className="slotcfg__general">
+							<div className="slotcfg__general-head">
+								<span className="slotcfg__section-title">General — applies to every open day</span>
+								<button
+									type="button"
+									className="btn btn--ghost btn--sm"
+									onClick={resetAllDays}
+									disabled={!customCount}
+								>
+									Reset all days
+								</button>
+							</div>
+							<div className="slotcfg__general-grid">
+								<label className="slotcfg__field">
+									<span className="slotcfg__field-label">Start</span>
 									<input
 										type="time"
 										className="slotcfg__time"
@@ -293,8 +302,8 @@ export function SchedulingConfig() {
 										required
 									/>
 								</label>
-								<label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-									<span className="ops-panel__muted" style={{ fontSize: "var(--text-xs)" }}>End</span>
+								<label className="slotcfg__field">
+									<span className="slotcfg__field-label">End</span>
 									<input
 										type="time"
 										className="slotcfg__time"
@@ -303,8 +312,8 @@ export function SchedulingConfig() {
 										required
 									/>
 								</label>
-								<label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-									<span className="ops-panel__muted" style={{ fontSize: "var(--text-xs)" }}>Every (min)</span>
+								<label className="slotcfg__field">
+									<span className="slotcfg__field-label">Every (min)</span>
 									<input
 										type="number"
 										min={5}
@@ -318,8 +327,8 @@ export function SchedulingConfig() {
 										required
 									/>
 								</label>
-								<label style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-									<span className="ops-panel__muted" style={{ fontSize: "var(--text-xs)" }}>Max slots/day (0 = no cap)</span>
+								<label className="slotcfg__field">
+									<span className="slotcfg__field-label">Max slots/day</span>
 									<input
 										type="number"
 										min={0}
@@ -332,15 +341,18 @@ export function SchedulingConfig() {
 											updateGeneral({ maxSlotsPerDay: !n || n <= 0 ? null : n });
 										}}
 									/>
+									<span className="slotcfg__helper" style={{ marginTop: "0.15rem" }}>0 = no cap</span>
 								</label>
 							</div>
-							<p className="ops-panel__muted" style={{ margin: 0, fontSize: "var(--text-xs)" }}>
+							<p className="slotcfg__preview">
 								Preview: {generalPreview.length} slots/day · {generalPreview.join(", ") || "—"}
 							</p>
 						</div>
 
-						{/* ── Per-day overrides ───────────────────────────────────── */}
-						<p className="ops-panel__muted" style={{ margin: "0.75rem 0", fontSize: "var(--text-xs)" }}>
+						<div className="slotcfg__section-title" style={{ marginTop: "0.75rem", marginBottom: "0.15rem" }}>
+							Daily Schedule
+						</div>
+						<p className="slotcfg__helper" style={{ margin: "0 0 0.4rem" }}>
 							Each day inherits the General settings unless Custom Schedule is turned on.
 						</p>
 

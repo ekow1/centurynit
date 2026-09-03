@@ -895,49 +895,97 @@
  * shape, which is exactly what makes a table the right control here.
  */
 
-.slotcfg__presets {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0.35rem;
-	padding-bottom: 0.5rem;
-	margin-bottom: 0.5rem;
-	border-bottom: var(--hairline);
-}
-
-.slotcfg__branch-hours {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: flex-end;
-	gap: 0.75rem 1rem;
-	padding: 0.75rem 1rem;
-	margin-bottom: 0.75rem;
-	background: var(--surface-raised, rgba(0, 0, 0, 0.02));
-	border: var(--hairline);
-	border-radius: 6px;
-}
-
-.slotcfg__branch-hours-field {
-	display: flex;
-	flex-direction: column;
-	gap: 0.35rem;
-}
-
-.slotcfg__branch-hours-field .slotcfg__time {
-	min-width: 7rem;
-}
-
-.slotcfg__branch-hours p {
-	flex-basis: 100%;
-}
-
-.slotcfg__presets-label {
+.slotcfg__section-title {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	color: var(--text-muted, #666);
-	margin-right: 0.25rem;
+}
+
+.slotcfg__helper {
+	color: var(--text-muted, #666);
+	font-size: var(--text-xs);
+	margin: 0;
+}
+
+.slotcfg__tz {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.35rem;
+	padding: 0.45rem 0;
+	margin-bottom: 0.75rem;
+	border-bottom: var(--hairline);
+}
+
+.slotcfg__tz-head {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.slotcfg__general {
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+	padding: 0.45rem 0;
+	margin-bottom: 0.75rem;
+	border-bottom: var(--hairline);
+}
+
+.slotcfg__general-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.slotcfg__general-head .slotcfg__section-title {
+	color: var(--foreground);
+}
+
+.slotcfg__general-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(6.5rem, max-content));
+	gap: 1rem;
+	align-items: end;
+}
+
+.slotcfg__field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	margin: 0;
+}
+
+.slotcfg__field-label {
+	font-size: var(--text-xs);
+	color: var(--text-muted, #666);
+}
+
+.slotcfg__preview {
+	margin: 0;
+	padding: 0.3rem 0;
+	font-size: var(--text-xs);
+	color: var(--text-muted, #666);
+	border-top: var(--hairline);
+	font-family: var(--font-mono);
+}
+
+@media (max-width: 760px) {
+	.slotcfg__general-grid {
+		grid-template-columns: repeat(2, minmax(6rem, 1fr));
+		gap: 0.75rem;
+	}
+}
+
+@media (max-width: 460px) {
+	.slotcfg__general-grid {
+		grid-template-columns: 1fr;
+		gap: 0.65rem;
+	}
 }
 
 .slotcfg-table {
@@ -954,13 +1002,13 @@
 	letter-spacing: 0.04em;
 	color: var(--text-muted, #666);
 	font-weight: 500;
-	padding: 0.4rem 0.3rem;
+	padding: 0.45rem 0.3rem 0.4rem;
 	border-bottom: var(--thin);
 	white-space: nowrap;
 }
 
 .slotcfg-table td {
-	padding: 0.3rem;
+	padding: 0.55rem 0.3rem;
 	border-bottom: var(--hairline);
 	vertical-align: middle;
 }

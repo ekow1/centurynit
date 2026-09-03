@@ -662,7 +662,7 @@ function docPill(status: string) {
 
 /** Journey - every stage with its status; the stage pages open below it. */
 export function PortalJourney() {
-	const { journeyPhase, application, schoolApplications } =
+	const { journeyPhase, application, schoolApplications, stageStatuses } =
 		useAppState();
 	const current = journeyPhase.stage;
 	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
@@ -745,10 +745,15 @@ export function PortalJourney() {
 						<p className="eyebrow mb-3">All stages</p>
 						<ol className="process-spine process-spine--compact">
 							{PROCESS_STAGES.map((s) => {
+								// Drive Done from real signals via stageStatuses
+								// (/me/journey), not index comparison — a stage
+								// advanced past without its signal met shows
+								// 'skipped', not 'done'.
+								const ss = stageStatuses?.[s.id];
 								const st =
-									s.index < (stageMeta?.index ?? 1)
+									ss === "done"
 										? "done"
-										: s.index === (stageMeta?.index ?? 1)
+										: ss === "current" || s.id === current
 											? "current"
 											: "locked";
 								return (

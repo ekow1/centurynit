@@ -34,6 +34,8 @@ import type {
 	PaystackVerify,
 	PaystackVerifyResponse,
 	UpdateMyProfile,
+	RequestEmailChange,
+	ConfirmEmailChange,
 	VisaStage,
 	SchoolApplication,
 	SchoolApplicationList,
@@ -962,6 +964,16 @@ export const meApi = {
 	 */
 	updateProfile(input: UpdateMyProfile): Promise<ApiApplicant> {
 		return request(`${API_PREFIX}/me/application`, { method: "PATCH", ...json(input) });
+	},
+
+	/** Request a 6-digit OTP to confirm a new email address. */
+	requestEmailChange(input: RequestEmailChange): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/me/change-email/request`, { method: "POST", ...json(input) });
+	},
+
+	/** Confirm the new email address with the OTP sent to it. */
+	confirmEmailChange(input: ConfirmEmailChange): Promise<{ ok: boolean; email: string }> {
+		return request(`${API_PREFIX}/me/change-email/confirm`, { method: "POST", ...json(input) });
 	},
 
 	/** Choose the school application package (funding track + degree level). */

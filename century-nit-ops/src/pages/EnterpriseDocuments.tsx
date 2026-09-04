@@ -249,6 +249,10 @@ export function EnterpriseDocuments() {
 				next.delete(key);
 			} else {
 				next.add(key);
+				const folder = folders.find((f) => f.key === key);
+				if (folder && folder.documents.length > 0 && !selectedDoc) {
+					setSelectedDoc(folder.documents[0]);
+				}
 			}
 			return next;
 		});
@@ -447,23 +451,20 @@ export function EnterpriseDocuments() {
 														{catDocs.map((doc) => {
 															const isSelected = selectedDoc?.id === doc.id;
 															const isBusy = busyDocId === doc.id;
+															const isSettled = doc.status === "VERIFIED" || doc.status === "REJECTED";
 
 															return (
 																<div
 																	key={doc.id}
 																	className={`vault-doc-item ${isSelected ? "vault-doc-item--selected" : ""}`}
+																	onClick={() => setSelectedDoc(doc)}
 																>
 																	<div className="vault-doc-item-left">
 																		<div className="vault-doc-file-icon">DOC</div>
 																		<div className="vault-doc-info">
-																			<button
-																				type="button"
-																				className="vault-doc-name"
-																				style={{ background: "none", border: "none", padding: 0, textAlign: "left" }}
-																				onClick={() => setSelectedDoc(doc)}
-																			>
+																			<span className="vault-doc-name">
 																				{doc.fileName}
-																			</button>
+																			</span>
 																			<div className="vault-doc-sub">
 																				<span>{doc.documentType}</span>
 																				<span>·</span>
@@ -488,31 +489,40 @@ export function EnterpriseDocuments() {
 																		<button
 																			type="button"
 																			className="btn btn--ghost btn--sm"
-																			onClick={() => setSelectedDoc(doc)}
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				setSelectedDoc(doc);
+																			}}
 																		>
 																			Preview
 																		</button>
 
-																		{doc.status !== "VERIFIED" && (
-																			<button
-																				type="button"
-																				className="btn btn--primary btn--sm"
-																				onClick={() => handleVerify(doc)}
-																				disabled={isBusy}
-																			>
-																				{isBusy ? "…" : "Verify"}
-																			</button>
-																		)}
+																		{!isSettled && (
+																			<>
+																				<button
+																					type="button"
+																					className="btn btn--primary btn--sm"
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						handleVerify(doc);
+																					}}
+																					disabled={isBusy}
+																				>
+																					{isBusy ? "…" : "Verify"}
+																				</button>
 
-																		{doc.status !== "REJECTED" && (
-																			<button
-																				type="button"
-																				className="btn btn--ghost btn--sm"
-																				onClick={() => setRejectingDoc(doc)}
-																				disabled={isBusy}
-																			>
-																				Reject
-																			</button>
+																				<button
+																					type="button"
+																					className="btn btn--ghost btn--sm"
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						setRejectingDoc(doc);
+																					}}
+																					disabled={isBusy}
+																				>
+																					Reject
+																				</button>
+																			</>
 																		)}
 																	</div>
 																</div>

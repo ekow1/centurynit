@@ -95,6 +95,8 @@ import {
 	setVisaStageSchema,
 	toggleChecklistSchema,
 	updateMyProfileSchema,
+	requestEmailChangeSchema,
+	confirmEmailChangeSchema,
 	portalStateSchema,
 	updatePortalStateSchema,
 	notificationSchema,
@@ -108,6 +110,8 @@ import {
 	type StaffContext,
 } from "../middleware/auth.js";
 import { env } from "../env.js";
+import { sendEmail } from "../lib/resend.js";
+import { renderOtpEmail } from "../lib/email-templates.js";
 
 /**
  * Notification `type` values addressed only to staff (managers, coordinators,

@@ -4336,18 +4336,30 @@
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 1.5rem;
+	align-items: start;
 }
 
 @media (min-width: 992px) {
 	.vault-layout--has-preview {
-		grid-template-columns: 1.1fr 0.9fr;
+		grid-template-columns: 1fr 1fr;
 	}
 }
 
 .vault-folder-list {
-	display: flex;
-	flex-direction: column;
-	gap: 0.75rem;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+	gap: 1.25rem;
+	align-items: start;
+}
+
+.vault-layout--has-preview .vault-folder-list {
+	grid-template-columns: 1fr;
+}
+
+@media (max-width: 768px) {
+	.vault-folder-list {
+		grid-template-columns: 1fr;
+	}
 }
 
 .vault-folder-card {
@@ -4488,6 +4500,7 @@
 	border: 1px solid var(--border-light);
 	background: var(--card);
 	gap: 1rem;
+	cursor: pointer;
 	transition: border-color 120ms ease, background 120ms ease;
 }
 

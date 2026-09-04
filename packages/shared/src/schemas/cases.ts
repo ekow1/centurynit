@@ -430,6 +430,17 @@ export const updateMyProfileSchema = z.object({
 });
 export type UpdateMyProfile = z.infer<typeof updateMyProfileSchema>;
 
+export const requestEmailChangeSchema = z.object({
+	newEmail: z.string().email().max(200),
+});
+export type RequestEmailChange = z.infer<typeof requestEmailChangeSchema>;
+
+export const confirmEmailChangeSchema = z.object({
+	newEmail: z.string().email().max(200),
+	otp: z.string().regex(/^\d{6}$/, "Enter the 6-digit code"),
+});
+export type ConfirmEmailChange = z.infer<typeof confirmEmailChangeSchema>;
+
 /** Choose the post-admission payment plan (full or installment). */
 export const choosePaymentPlanSchema = z.object({
 	paymentPlanId: z.enum(["full", "installment"]),

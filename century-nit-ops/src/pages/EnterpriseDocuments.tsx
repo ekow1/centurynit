@@ -405,37 +405,38 @@ export function EnterpriseDocuments() {
 										className="vault-folder-header"
 										onClick={() => toggleFolder(folder.key)}
 									>
-										<div className="vault-folder-title-wrap">
-											<div className="vault-folder-icon">📁</div>
-											<div>
+										<div className="vault-folder-header-top">
+											<div className="vault-folder-title-wrap">
+												<div className="vault-folder-icon">📁</div>
 												<div className="vault-folder-applicant-name">
 													{folder.applicantName}
 													{folder.caseReference !== "—" && (
 														<span className="vault-folder-case-ref">{folder.caseReference}</span>
 													)}
 												</div>
-												<div className="vault-folder-meta">
-													<span>{folder.ownerEmail}</span>
-													<span>·</span>
-													<span>{folder.branch}</span>
-													<span>·</span>
-													<span>Staff: {folder.assignedStaffName}</span>
-												</div>
+											</div>
+
+											<div className="vault-folder-counts">
+												<span className="vault-folder-badge">
+													{folder.documents.length} doc{folder.documents.length === 1 ? "" : "s"}
+												</span>
+												{folder.pendingCount > 0 && (
+													<span className="vault-folder-badge vault-folder-badge--pending">
+														{folder.pendingCount} pending
+													</span>
+												)}
+												<span style={{ fontSize: "0.85rem", opacity: 0.5, marginLeft: "0.4rem" }}>
+													{isOpen ? "▲" : "▼"}
+												</span>
 											</div>
 										</div>
 
-										<div className="vault-folder-counts">
-											<span className="vault-folder-badge">
-												{folder.documents.length} doc{folder.documents.length === 1 ? "" : "s"}
-											</span>
-											{folder.pendingCount > 0 && (
-												<span className="vault-folder-badge vault-folder-badge--pending">
-													{folder.pendingCount} pending
-												</span>
-											)}
-											<span style={{ fontSize: "0.85rem", opacity: 0.5, marginLeft: "0.5rem" }}>
-												{isOpen ? "▲" : "▼"}
-											</span>
+										<div className="vault-folder-meta">
+											<span>{folder.ownerEmail}</span>
+											<span>·</span>
+											<span>{folder.branch}</span>
+											<span>·</span>
+											<span>Staff: {folder.assignedStaffName}</span>
 										</div>
 									</div>
 
@@ -459,71 +460,70 @@ export function EnterpriseDocuments() {
 																	className={`vault-doc-item ${isSelected ? "vault-doc-item--selected" : ""}`}
 																	onClick={() => setSelectedDoc(doc)}
 																>
-																	<div className="vault-doc-item-left">
-																		<div className="vault-doc-file-icon">DOC</div>
-																		<div className="vault-doc-info">
-																			<span className="vault-doc-name">
-																				{doc.fileName}
-																			</span>
-																			<div className="vault-doc-sub">
-																				<span>{doc.documentType}</span>
-																				<span>·</span>
-																				<span>{formatBytes(doc.sizeBytes)}</span>
-																				<span>·</span>
-																				<span>{formatWhen(doc.uploadedAt ?? doc.createdAt)}</span>
+																	<div className="vault-doc-item-main">
+																		<div className="vault-doc-item-left">
+																			<div className="vault-doc-file-icon">DOC</div>
+																			<div className="vault-doc-info">
+																				<span className="vault-doc-name">
+																					{doc.fileName}
+																				</span>
 																			</div>
+																		</div>
+
+																		<div className="vault-doc-actions">
+																			<span
+																				className={`vault-doc-status vault-doc-status--${doc.status.toLowerCase()}`}
+																			>
+																				{STATUS_LABEL[doc.status] ?? doc.status}
+																			</span>
+
+																			<button
+																				type="button"
+																				className="btn btn--ghost btn--sm"
+																				onClick={(e) => {
+																					e.stopPropagation();
+																					setSelectedDoc(doc);
+																				}}
+																			>
+																				Preview
+																			</button>
+
+																			{!isSettled && (
+																				<>
+																					<button
+																						type="button"
+																						className="btn btn--primary btn--sm"
+																						onClick={(e) => {
+																							e.stopPropagation();
+																							handleVerify(doc);
+																						}}
+																						disabled={isBusy}
+																					>
+																						{isBusy ? "…" : "Verify"}
+																					</button>
+
+																					<button
+																						type="button"
+																						className="btn btn--ghost btn--sm"
+																						onClick={(e) => {
+																							e.stopPropagation();
+																							setRejectingDoc(doc);
+																						}}
+																						disabled={isBusy}
+																					>
+																						Reject
+																					</button>
+																				</>
+																			)}
 																		</div>
 																	</div>
 
-																	<div className="vault-doc-actions">
-																		<span
-																			className={`ops-status ${
-																				doc.status === "UPLOADED"
-																					? "ops-status--unassigned"
-																					: ""
-																			}`}
-																		>
-																			{STATUS_LABEL[doc.status] ?? doc.status}
-																		</span>
-
-																		<button
-																			type="button"
-																			className="btn btn--ghost btn--sm"
-																			onClick={(e) => {
-																				e.stopPropagation();
-																				setSelectedDoc(doc);
-																			}}
-																		>
-																			Preview
-																		</button>
-
-																		{!isSettled && (
-																			<>
-																				<button
-																					type="button"
-																					className="btn btn--primary btn--sm"
-																					onClick={(e) => {
-																						e.stopPropagation();
-																						handleVerify(doc);
-																					}}
-																					disabled={isBusy}
-																				>
-																					{isBusy ? "…" : "Verify"}
-																				</button>
-
-																				<button
-																					type="button"
-																					className="btn btn--ghost btn--sm"
-																					onClick={(e) => {
-																						e.stopPropagation();
-																						setRejectingDoc(doc);
-																					}}
-																					disabled={isBusy}
-																				>
-																					Reject
-																				</button>
-																			</>
-																		)}
+																	<div className="vault-doc-sub">
+																		<span>{doc.documentType}</span>
+																		<span>·</span>
+																		<span>{formatBytes(doc.sizeBytes)}</span>
+																		<span>·</span>
+																		<span>{formatWhen(doc.uploadedAt ?? doc.createdAt)}</span>
 																	</div>
 																</div>
 															);

@@ -1,0 +1,1 @@
+ALTER TABLE "applicant_documents" ADD COLUMN "expires_at" timestamp with time zone;

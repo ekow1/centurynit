@@ -1,0 +1,1 @@
+CREATE INDEX "applicant_documents_expiry_idx" ON "applicant_documents" USING btree ("status","expires_at");

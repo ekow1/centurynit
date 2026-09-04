@@ -309,6 +309,20 @@
       "when": 1788456521491,
       "tag": "0044_cheerful_leech",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1788504923231,
+      "tag": "0045_fresh_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788504969916,
+      "tag": "0046_chief_paper_doll",
+      "breakpoints": true
     }
   ]
 }

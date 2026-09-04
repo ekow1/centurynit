@@ -45,12 +45,21 @@ import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 
 /* ========== Profile ========== */
 
-function DataRow({ label, value }: { label: string; value: ReactNode }) {
+
+function DossierField({
+	label,
+	value,
+	className,
+}: {
+	label: string;
+	value?: ReactNode;
+	className?: string;
+}) {
 	if (value === "" || value == null) return null;
 	return (
-		<div className="data-row">
-			<span className="data-row__label muted">{label}</span>
-			<span className="data-row__value">{value}</span>
+		<div className={`dossier-field ${className || ""}`}>
+			<span className="dossier-field__label">{label}</span>
+			<span className="dossier-field__value">{value}</span>
 		</div>
 	);
 }
@@ -148,6 +157,9 @@ export function PortalProfile() {
 	}, []);
 
 	const [editing, setEditing] = useState<null | "account" | "assessment" | "preferences">(null);
+	const [dossierTab, setDossierTab] = useState<
+		"overview" | "assessment" | "preferences" | "consultation" | "security"
+	>("overview");
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState<null | "account" | "assessment" | "preferences">(null);
@@ -327,20 +339,27 @@ export function PortalProfile() {
 		? PAYMENT_PLANS.find((p) => p.id === a.paymentPlanId)?.name ?? a.paymentPlanId
 		: null;
 
+	const DOSSIER_TABS = [
+		{ key: "overview", label: "Overview" },
+		{ key: "assessment", label: "Assessment & Background" },
+		{ key: "preferences", label: "Study Preferences" },
+		{ key: "consultation", label: "Consultation & Target" },
+		{ key: "security", label: "Security & Credentials" },
+	] as const;
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Account</p>
-					<h1 className="page-title mt-1">Your profile</h1>
+					<p className="eyebrow">Dossier / Account Record</p>
+					<h1 className="page-title mt-1">Applicant Dossier</h1>
 					<p className="lead mt-2">
-						Everything we hold about you - account, consultation, application, and documents.
-						You can update your personal details yourself; application records stay managed by your consultant.
+						Comprehensive record holding your identity, assessment qualifications, study aspirations, and verified documents.
 					</p>
 				</div>
 			</header>
 
-			{/* Identity hero */}
+			{/* Dossier Cover */}
 			<section className="profile-hero-card mt-4">
 				<div className="profile-hero">
 					<div className="profile-hero__main">
@@ -355,7 +374,12 @@ export function PortalProfile() {
 							</button>
 						</div>
 						<div>
-							<p className="display profile-hero__name">{fullName}</p>
+							<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+								<p className="display profile-hero__name" style={{ margin: 0 }}>{fullName}</p>
+								<span className={`profile-eligibility profile-eligibility--${eligibilityVariant}`}>
+									{eligibility}
+								</span>
+							</div>
 							<p className="profile-hero__meta">{authUser?.email || a.email || "No email on file"}</p>
 							<p className="mono profile-hero__meta mt-1">
 								Signed in via {signInMethodLabel(authUser?.method)}
@@ -366,12 +390,9 @@ export function PortalProfile() {
 						</div>
 					</div>
 					<div className="profile-hero__side">
-						<span className={`profile-eligibility profile-eligibility--${eligibilityVariant}`}>
-							{eligibility}
-						</span>
 						<button
 							type="button"
-							className="profile-edit-btn profile-edit-btn--light"
+							className="profile-edit-btn"
 							onClick={() =>
 								editing === "account"
 									? setEditing(null)
@@ -384,33 +405,33 @@ export function PortalProfile() {
 					</div>
 				</div>
 
-					{editing === "account" ? (
-						<div className="profile-edit profile-edit--light">
-							<ProfileEditForm
-								fields={ACCOUNT_FIELDS}
-								draft={draft}
-								errors={errors}
-								saving={saving === "account"}
-								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-								onCancel={() => setEditing(null)}
-								onSave={saveAccount}
-							/>
-							<p className="profile-hero__note mt-2">
-								To change your email, use the{" "}
-								<button
-									type="button"
-									className="link-arrow"
-									onClick={() => {
-										setEditing(null);
-										setChangeEmailOpen(true);
-									}}
-								>
-									Change email flow
-								</button>
-								.
-							</p>
-						</div>
-					) : null}
+				{editing === "account" ? (
+					<div className="profile-edit mt-4 pt-3" style={{ borderTop: "1px solid var(--border-light)" }}>
+						<ProfileEditForm
+							fields={ACCOUNT_FIELDS}
+							draft={draft}
+							errors={errors}
+							saving={saving === "account"}
+							onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+							onCancel={() => setEditing(null)}
+							onSave={saveAccount}
+						/>
+						<p className="profile-hero__note mt-2">
+							To change your email, use the{" "}
+							<button
+								type="button"
+								className="link-arrow"
+								onClick={() => {
+									setEditing(null);
+									setChangeEmailOpen(true);
+								}}
+							>
+								Change email flow
+							</button>
+							.
+						</p>
+					</div>
+				) : null}
 
 				<div className="profile-refs">
 					<div className="profile-ref">
@@ -431,372 +452,456 @@ export function PortalProfile() {
 							{liveDocs ? `${uploadedDocs}/${totalDocs}` : <span className="profile-hero__empty">-</span>}
 						</p>
 					</div>
-				</div>
-			</section>
-
-			{/* Sections */}
-			<div className="profile-grid mt-6">
-				<section>
-					<h2 className="profile-section__title">Consultation</h2>
-					<div className="profile-block">
-						<DataRow label="Type" value={consultationTypeLabel(booking.consultationType)} />
-						<DataRow
-							label="Location"
-							value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ")}
-						/>
-						<DataRow label="Branch" value={getBranchName(booking.branchId)} />
-						<DataRow label="Date" value={booking.date} />
-						<DataRow label="Time" value={booking.time} />
-						<DataRow
-							label="Consultation fee"
-							value={
-								booking.paymentStatus === "success"
-									? `Paid · ${formatDualCurrency(CONSULTATION_FEE_AMOUNT)}`
-									: "Unpaid"
-							}
-						/>
-						<DataRow label="Eligibility" value={eligibility} />
-						<DataRow label="Eligibility note" value={booking.eligibilityNote} />
-					</div>
-				</section>
-
-				<section>
-					<div className="profile-section__head profile-section__head--editable">
-						<h2 className="profile-section__title">Assessment</h2>
-						<button
-							type="button"
-							className="profile-edit-btn"
-							onClick={() =>
-								editing === "assessment"
-									? setEditing(null)
-									: startEdit(
-											"assessment",
-											Object.fromEntries(
-												ASSESSMENT_FIELDS.map((f) => [
-													f.key,
-													(f.key === "phone"
-														? ass.phone || a.phone
-														: ass[f.key as keyof AssessmentData]) ?? "",
-												]),
-											),
-										)
-							}
-							aria-expanded={editing === "assessment"}
-						>
-							{editing === "assessment" ? "Cancel" : "Edit"}
-						</button>
-					</div>
-					{editing === "assessment" ? (
-						<div className="profile-block">
-							<ProfileEditForm
-								fields={ASSESSMENT_FIELDS}
-								draft={draft}
-								errors={errors}
-								saving={saving === "assessment"}
-								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-								onCancel={() => setEditing(null)}
-								onSave={saveAssessment}
-							/>
-						</div>
-					) : (
-						Boolean(
-							ass.firstName || ass.lastName || ass.dateOfBirth || ass.nationality ||
-							ass.highestEducation || ass.employmentStatus || ass.englishTest || ass.passportNumber || ass.phone || a.phone
-						) ? (
-							<div className="profile-block">
-								<DataRow
-									label="Full name"
-									value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ")}
-								/>
-								<DataRow label="Email" value={ass.email} />
-								<DataRow label="Phone" value={ass.phone || a.phone} />
-								<DataRow label="How did you hear about us?" value={a.referralSource} />
-								<DataRow label="Date of birth" value={ass.dateOfBirth} />
-								<DataRow label="Gender" value={ass.gender} />
-								<DataRow label="Nationality" value={ass.nationality} />
-								<DataRow label="Address" value={ass.address} />
-								<DataRow label="Passport number" value={ass.passportNumber} />
-								<DataRow label="Passport country" value={ass.passportCountry} />
-								<DataRow label="Passport issue date" value={ass.passportIssue} />
-								<DataRow label="Passport expiry date" value={ass.passportExpiry} />
-								<DataRow label="Education" value={ass.highestEducation} />
-								<DataRow label="Institution" value={ass.institution} />
-								<DataRow label="Field of study" value={ass.fieldOfStudy} />
-								<DataRow label="Graduation year" value={ass.graduationYear} />
-								<DataRow label="GPA" value={ass.gpa} />
-								<DataRow label="Employment status" value={ass.employmentStatus} />
-								<DataRow label="Employer / company" value={ass.employer} />
-								<DataRow label="Job title / role" value={ass.jobTitle} />
-								<DataRow label="Years of experience" value={ass.yearsExperience} />
-								<DataRow
-									label="English test"
-									value={
-										ass.englishTest
-											? `${ass.englishTest}${ass.englishScore ? ` · ${ass.englishScore}` : ""}`
-											: null
-									}
-								/>
-								<DataRow label="English test date" value={ass.englishDate} />
-							</div>
-						) : (
-							<div className="profile-empty-card">
-								<p className="profile-empty-title">No assessment details added yet</p>
-								<p className="profile-empty-desc">
-									Fill out your background and academic details to receive tailored university and program matches.
-								</p>
-								<button
-									type="button"
-									className="btn btn--secondary btn--sm"
-									onClick={() =>
-										startEdit(
-											"assessment",
-											Object.fromEntries(
-												ASSESSMENT_FIELDS.map((f) => [
-													f.key,
-													(f.key === "phone"
-														? ass.phone || a.phone
-														: ass[f.key as keyof AssessmentData]) ?? "",
-												]),
-											),
-										)
-									}
-								>
-									Fill Assessment Details
-								</button>
-							</div>
-						)
-					)}
-				</section>
-
-				<section>
-					<div className="profile-section__head profile-section__head--editable">
-						<h2 className="profile-section__title">Preferences</h2>
-						<button
-							type="button"
-							className="profile-edit-btn"
-							onClick={() =>
-								editing === "preferences"
-									? setEditing(null)
-									: startEdit(
-											"preferences",
-											Object.fromEntries(
-												PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
-											),
-										)
-							}
-							aria-expanded={editing === "preferences"}
-						>
-							{editing === "preferences" ? "Cancel" : "Edit"}
-						</button>
-					</div>
-					{editing === "preferences" ? (
-						<div className="profile-block">
-							<ProfileEditForm
-								fields={PREFERENCE_FIELDS}
-								draft={draft}
-								errors={errors}
-								saving={saving === "preferences"}
-								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-								onCancel={() => setEditing(null)}
-								onSave={savePreferences}
-							/>
-						</div>
-					) : (
-						Boolean(
-							ass.preferredCountries || ass.preferredLevel || ass.preferredField ||
-							ass.intakePreference || ass.fundingSource || ass.budgetRange || ass.sponsorName
-						) ? (
-							<div className="profile-block">
-								<DataRow label="Preferred countries" value={ass.preferredCountries} />
-								<DataRow label="Preferred level" value={getDegreeLevelName(ass.preferredLevel)} />
-								<DataRow label="Preferred field" value={ass.preferredField} />
-								<DataRow label="Intake" value={ass.intakePreference} />
-								<DataRow label="Funding source" value={ass.fundingSource} />
-								<DataRow label="Budget range" value={ass.budgetRange} />
-								<DataRow
-									label="Sponsor"
-									value={
-										ass.sponsorRelationship
-											? `${ass.sponsorName} · ${ass.sponsorRelationship}`
-											: null
-									}
-								/>
-							</div>
-						) : (
-							<div className="profile-empty-card">
-								<p className="profile-empty-title">No study preferences set yet</p>
-								<p className="profile-empty-desc">
-									Set your preferred study destinations, degree level, budget, and intake to guide your counselor.
-								</p>
-								<button
-									type="button"
-									className="btn btn--secondary btn--sm"
-									onClick={() =>
-										startEdit(
-											"preferences",
-											Object.fromEntries(
-												PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
-											),
-										)
-									}
-								>
-									Set Preferences
-								</button>
-							</div>
-						)
-					)}
-				</section>
-
-				<section>
-					<h2 className="profile-section__title">Application</h2>
-					<div className="profile-block">
-						<DataRow label="Destination" value={dest?.name} />
-						<DataRow label="University" value={uni?.name} />
-						<DataRow label="Programme" value={prog?.name} />
-						<DataRow label="Intake" value={a.intake} />
-						<DataRow label="Package" value={packageName} />
-						<DataRow label="Payment plan" value={planName} />
-						<DataRow
-							label="Schools selected"
-							value={a.schoolSelectionDoneAt ? "Confirmed" : "Not yet"}
-						/>
-					</div>
-				</section>
-			</div>
-
-			<section className="mt-6">
-				<h2 className="profile-section__title">Documents &amp; interview</h2>
-				<div className="profile-block">
-					<p className="profile-docs__summary mono">
-						{liveDocs ? `${uploadedDocs} of ${totalDocs} on file` : "-"}
-					</p>
-					<ul className="profile-docs">
-						{REQUIRED_DOCUMENTS.map((r) => {
-							const live = liveDocs?.get(r.id) ?? null;
-							const status = live
-								? live.status === "VERIFIED"
-									? "verified"
-									: live.status === "REJECTED"
-										? "rejected"
-										: "uploaded"
-								: "missing";
-							return (
-								<li key={r.id} className="profile-doc">
-									<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
-									<span className={`portal-pill portal-pill--${status}`}>
-										{status}
-									</span>
-									{live?.id ? (
-										<button
-											type="button"
-											className="profile-doc__action"
-											onClick={async () => {
-												try {
-													const { url } = await documentsApi.downloadUrl(live.id);
-													window.open(url, "_blank", "noopener,noreferrer");
-												} catch {
-													toast.error("Could not open the document. Please try again.");
-												}
-											}}
-										>
-											View
-										</button>
-									) : (
-										<Link to="/portal/documents" className="profile-doc__action">
-											Upload
-										</Link>
-									)}
-								</li>
-							);
-						})}
-					</ul>
-					<div className="profile-interview">
-						<DataRow
-							label="Interview"
-							value={
-								interview.confirmationCode
-									? `${interview.confirmationCode} · ${interview.mode || "video"}`
-									: null
-							}
-						/>
-						<DataRow label="Document review" value={a.docReviewStatus} />
+					<div className="profile-ref">
+						<p className="profile-ref__label">Target Intake</p>
+						<p className="profile-ref__value mono">
+							{a.intake || ass.intakePreference || <span className="profile-hero__empty">Not set</span>}
+						</p>
 					</div>
 				</div>
 			</section>
 
-			<section className="mt-6">
-				<div className="profile-section__head profile-section__head--editable">
-					<h2 className="profile-section__title">Security</h2>
-					{mfaStatus?.applicable === false ? null : (
-						<Link
-							to="/portal/security"
-							className="profile-edit-btn"
-							aria-label="Manage two-factor authentication"
-						>
-							{mfaStatus?.enrolled ? "Manage" : "Set up"}
-						</Link>
-					)}
-				</div>
-				<div className="profile-block">
-					<DataRow
-						label="Two-factor authentication"
-						value={
-							mfaStatus == null ? (
-								<span className="muted">-</span>
-							) : mfaStatus.enrolled ? (
-								<span>
-									Active
-									{mfaStatus.method
-										? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
-										: ""}
+			{/* Dossier Tabs */}
+			<nav className="dossier-tabs" aria-label="Applicant Dossier Navigation">
+				{DOSSIER_TABS.map((t) => (
+					<button
+						key={t.key}
+						type="button"
+						className={`dossier-tab-btn ${dossierTab === t.key ? "dossier-tab-btn--active" : ""}`}
+						onClick={() => setDossierTab(t.key)}
+					>
+						{t.label}
+					</button>
+				))}
+			</nav>
+
+			{/* Dossier Panels */}
+			<div className="dossier-panel">
+				{dossierTab === "overview" && (
+					<>
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Academic Path &amp; Target Application</h2>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+									STATUS: {(a.journeyStage || a.pipelineStatus || "ACTIVE").replace(/_/g, " ").toUpperCase()}
 								</span>
-							) : mfaStatus.applicable === false ? (
-								<span className="muted">Not applicable</span>
+							</div>
+							<div className="dossier-grid">
+								<DossierField label="Target Destination" value={dest?.name || "Pending allocation"} />
+								<DossierField label="Target Institution" value={uni?.name || "Pending matching"} />
+								<DossierField label="Academic Programme" value={prog?.name || "Under evaluation"} />
+								<DossierField label="Target Intake" value={a.intake || ass.intakePreference} />
+								<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
+								<DossierField label="Payment Plan" value={planName || "Direct / Unassigned"} />
+								<DossierField label="Schools Selection" value={a.schoolSelectionDoneAt ? "Confirmed" : "In Progress"} />
+							</div>
+						</div>
+
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Consultation &amp; Advisory Record</h2>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+									REF: {booking.confirmationId || "—"}
+								</span>
+							</div>
+							<div className="dossier-grid">
+								<DossierField label="Format" value={consultationTypeLabel(booking.consultationType) || "Scheduled Consultation"} />
+								<DossierField label="Scheduled Date" value={booking.date || "Pending schedule"} />
+								<DossierField label="Scheduled Time" value={booking.time || "Pending schedule"} />
+								<DossierField label="Century Office" value={getBranchName(booking.branchId)} />
+								<DossierField label="Location" value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ") || "Virtual / Remote"} />
+								<DossierField
+									label="Consultation Fee"
+									value={
+										booking.paymentStatus === "success"
+											? `Paid · ${formatDualCurrency(CONSULTATION_FEE_AMOUNT)}`
+											: "Unpaid / Pending"
+									}
+								/>
+								<DossierField label="Eligibility Assessment" value={eligibility} />
+								<DossierField label="Evaluator Notes" value={booking.eligibilityNote || "Initial profile submitted."} />
+							</div>
+						</div>
+
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Required Documents Status</h2>
+								<Link to="/portal/documents" className="profile-edit-btn">
+									Open Document Vault →
+								</Link>
+							</div>
+							<p className="mono muted mb-3" style={{ fontSize: "var(--text-xs)" }}>
+								{liveDocs ? `${uploadedDocs} of ${totalDocs} required documents uploaded or verified` : "Loading documents..."}
+							</p>
+							<ul className="profile-docs">
+								{REQUIRED_DOCUMENTS.map((r) => {
+									const live = liveDocs?.get(r.id) ?? null;
+									const status = live
+										? live.status === "VERIFIED"
+											? "verified"
+											: live.status === "REJECTED"
+												? "rejected"
+												: "uploaded"
+										: "missing";
+									return (
+										<li key={r.id} className="profile-doc">
+											<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
+											<span className={`portal-pill portal-pill--${status}`}>
+												{status}
+											</span>
+											{live?.id ? (
+												<button
+													type="button"
+													className="profile-doc__action"
+													onClick={async () => {
+														try {
+															const { url } = await documentsApi.downloadUrl(live.id);
+															window.open(url, "_blank", "noopener,noreferrer");
+														} catch {
+															toast.error("Could not open the document. Please try again.");
+														}
+													}}
+												>
+													View
+												</button>
+											) : (
+												<Link to="/portal/documents" className="profile-doc__action">
+													Upload
+												</Link>
+											)}
+										</li>
+									);
+								})}
+							</ul>
+						</div>
+					</>
+				)}
+
+				{dossierTab === "assessment" && (
+					<>
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Personal &amp; Contact Background</h2>
+								<button
+									type="button"
+									className="profile-edit-btn"
+									onClick={() =>
+										editing === "assessment"
+											? setEditing(null)
+											: startEdit(
+													"assessment",
+													Object.fromEntries(
+														ASSESSMENT_FIELDS.map((f) => [
+															f.key,
+															(f.key === "phone"
+																? ass.phone || a.phone
+																: ass[f.key as keyof AssessmentData]) ?? "",
+														]),
+													),
+												)
+									}
+									aria-expanded={editing === "assessment"}
+								>
+									{editing === "assessment" ? "Cancel" : "Edit Background"}
+								</button>
+							</div>
+
+							{editing === "assessment" ? (
+								<div className="mt-2">
+									<ProfileEditForm
+										fields={ASSESSMENT_FIELDS}
+										draft={draft}
+										errors={errors}
+										saving={saving === "assessment"}
+										onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+										onCancel={() => setEditing(null)}
+										onSave={saveAssessment}
+									/>
+								</div>
 							) : (
-								<span className="muted">Not set — recommended</span>
-							)
-						}
-					/>
-					{mfaStatus?.applicable === false ? null : (
-						<DataRow
-							label="Requirement"
-							value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
-						/>
-					)}
-					<DataRow
-						label="Sign-in method"
-						value={<span className="muted">{signInMethodLabel(authUser?.method)}</span>}
-					/>
-					<DataRow
-						label="Password"
-						value={
-							authUser?.method === "email" ? (
-								<span>
-									Password set ·{" "}
-									<button
-										type="button"
-										className="link-arrow"
-										onClick={() => setChangePasswordOpen(true)}
+								<div className="dossier-grid">
+									<DossierField
+										label="Full Legal Name"
+										value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ") || fullName}
+									/>
+									<DossierField label="Email Address" value={ass.email || authUser?.email || a.email} />
+									<DossierField label="Primary Phone" value={ass.phone || a.phone} />
+									<DossierField label="Date of Birth" value={ass.dateOfBirth} />
+									<DossierField label="Gender" value={ass.gender} />
+									<DossierField label="Nationality" value={ass.nationality} />
+									<DossierField label="Residential Address" value={ass.address} />
+									<DossierField label="Referral Source" value={a.referralSource} />
+								</div>
+							)}
+						</div>
+
+						{editing !== "assessment" && (
+							<>
+								<div className="dossier-card">
+									<div className="dossier-card__head">
+										<h2 className="dossier-card__title">Passport &amp; Travel Identification</h2>
+									</div>
+									<div className="dossier-grid">
+										<DossierField label="Passport Number" value={ass.passportNumber} />
+										<DossierField label="Issuing Country" value={ass.passportCountry} />
+										<DossierField label="Issue Date" value={ass.passportIssue} />
+										<DossierField label="Expiry Date" value={ass.passportExpiry} />
+									</div>
+								</div>
+
+								<div className="dossier-card">
+									<div className="dossier-card__head">
+										<h2 className="dossier-card__title">Academic Qualifications</h2>
+									</div>
+									<div className="dossier-grid">
+										<DossierField label="Highest Education" value={ass.highestEducation} />
+										<DossierField label="Institution Attended" value={ass.institution} />
+										<DossierField label="Field of Study" value={ass.fieldOfStudy} />
+										<DossierField label="Graduation Year" value={ass.graduationYear} />
+										<DossierField label="Grade Point Average (GPA)" value={ass.gpa} />
+									</div>
+								</div>
+
+								<div className="dossier-card">
+									<div className="dossier-card__head">
+										<h2 className="dossier-card__title">Professional Background</h2>
+									</div>
+									<div className="dossier-grid">
+										<DossierField label="Employment Status" value={ass.employmentStatus} />
+										<DossierField label="Employer / Organization" value={ass.employer} />
+										<DossierField label="Position / Title" value={ass.jobTitle} />
+										<DossierField label="Years of Experience" value={ass.yearsExperience} />
+									</div>
+								</div>
+
+								<div className="dossier-card">
+									<div className="dossier-card__head">
+										<h2 className="dossier-card__title">Language Proficiency</h2>
+									</div>
+									<div className="dossier-grid">
+										<DossierField label="English Examination" value={ass.englishTest} />
+										<DossierField label="Score / Band" value={ass.englishScore} />
+										<DossierField label="Examination Date" value={ass.englishDate} />
+									</div>
+								</div>
+							</>
+						)}
+					</>
+				)}
+
+				{dossierTab === "preferences" && (
+					<>
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Study Aspirations &amp; Goals</h2>
+								<button
+									type="button"
+									className="profile-edit-btn"
+									onClick={() =>
+										editing === "preferences"
+											? setEditing(null)
+											: startEdit(
+													"preferences",
+													Object.fromEntries(
+														PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
+													),
+												)
+									}
+									aria-expanded={editing === "preferences"}
+								>
+									{editing === "preferences" ? "Cancel" : "Edit Preferences"}
+								</button>
+							</div>
+
+							{editing === "preferences" ? (
+								<div className="mt-2">
+									<ProfileEditForm
+										fields={PREFERENCE_FIELDS}
+										draft={draft}
+										errors={errors}
+										saving={saving === "preferences"}
+										onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+										onCancel={() => setEditing(null)}
+										onSave={savePreferences}
+									/>
+								</div>
+							) : (
+								<div className="dossier-grid">
+									<DossierField label="Preferred Countries" value={ass.preferredCountries} />
+									<DossierField label="Target Degree Level" value={getDegreeLevelName(ass.preferredLevel)} />
+									<DossierField label="Preferred Major / Field" value={ass.preferredField} />
+								</div>
+							)}
+						</div>
+
+						{editing !== "preferences" && (
+							<div className="dossier-card">
+								<div className="dossier-card__head">
+									<h2 className="dossier-card__title">Funding &amp; Financial Planning</h2>
+								</div>
+								<div className="dossier-grid">
+									<DossierField label="Target Intake" value={ass.intakePreference} />
+									<DossierField label="Funding Source" value={ass.fundingSource} />
+									<DossierField label="Budget Range" value={ass.budgetRange} />
+									<DossierField label="Sponsor Name" value={ass.sponsorName} />
+									<DossierField label="Sponsor Relationship" value={ass.sponsorRelationship} />
+								</div>
+							</div>
+						)}
+					</>
+				)}
+
+				{dossierTab === "consultation" && (
+					<>
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Consultation Session</h2>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+									{booking.confirmationId ? `Ref: ${booking.confirmationId}` : "Unbooked"}
+								</span>
+							</div>
+							<div className="dossier-grid">
+								<DossierField label="Consultation Type" value={consultationTypeLabel(booking.consultationType)} />
+								<DossierField label="Location" value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ")} />
+								<DossierField label="Branch Office" value={getBranchName(booking.branchId)} />
+								<DossierField label="Date" value={booking.date} />
+								<DossierField label="Time" value={booking.time} />
+								<DossierField
+									label="Consultation Fee"
+									value={
+										booking.paymentStatus === "success"
+											? `Paid · ${formatDualCurrency(CONSULTATION_FEE_AMOUNT)}`
+											: "Unpaid"
+									}
+								/>
+								<DossierField label="Eligibility Outcome" value={eligibility} />
+								<DossierField label="Eligibility Note" value={booking.eligibilityNote} />
+							</div>
+						</div>
+
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Application Record</h2>
+							</div>
+							<div className="dossier-grid">
+								<DossierField label="Destination" value={dest?.name} />
+								<DossierField label="Target University" value={uni?.name} />
+								<DossierField label="Programme" value={prog?.name} />
+								<DossierField label="Intake" value={a.intake} />
+								<DossierField label="Package Track" value={packageName} />
+								<DossierField label="Payment Plan" value={planName} />
+								<DossierField label="Schools Selection Status" value={a.schoolSelectionDoneAt ? "Confirmed" : "Not yet finalized"} />
+							</div>
+						</div>
+
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Interview &amp; Verification Audit</h2>
+							</div>
+							<div className="dossier-grid">
+								<DossierField
+									label="Interview Confirmation"
+									value={
+										interview.confirmationCode
+											? `${interview.confirmationCode} (${interview.mode || "video"})`
+											: "Not scheduled"
+									}
+								/>
+								<DossierField label="Document Review Status" value={a.docReviewStatus} />
+								<DossierField label="Application Status" value={(a.journeyStage || a.pipelineStatus || "IN PROGRESS").replace(/_/g, " ").toUpperCase()} />
+							</div>
+						</div>
+					</>
+				)}
+
+				{dossierTab === "security" && (
+					<>
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Sign-in Identity &amp; Provider</h2>
+							</div>
+							<div className="dossier-grid">
+								<DossierField label="Sign-in Method" value={signInMethodLabel(authUser?.method)} />
+								<DossierField label="Primary Account Email" value={authUser?.email || a.email || "No email on file"} />
+								<DossierField
+									label="Session Authenticated"
+									value={authUser?.signedInAt ? new Date(authUser.signedInAt).toLocaleString() : "Active session"}
+								/>
+								<DossierField
+									label="Password Management"
+									value={
+										authUser?.method === "email" ? (
+											<span>
+												Password set ·{" "}
+												<button
+													type="button"
+													className="link-arrow"
+													onClick={() => setChangePasswordOpen(true)}
+												>
+													Change password
+												</button>
+											</span>
+										) : (
+											<span className="muted">
+												{authUser?.method === "google"
+													? "Managed by your Google account — password not required"
+													: "Managed by your sign-in provider — password not required"}
+											</span>
+										)
+									}
+								/>
+							</div>
+						</div>
+
+						<div className="dossier-card">
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title">Two-Factor Authentication (2FA)</h2>
+								{mfaStatus?.applicable !== false && (
+									<Link
+										to="/portal/security"
+										className="profile-edit-btn"
+										aria-label="Manage two-factor authentication"
 									>
-										Change password
-									</button>
-								</span>
-							) : (
-								<span className="muted">
-									{authUser?.method === "google"
-										? "Managed by your Google account — password not required"
-										: "Managed by your sign-in provider — password not required"}
-								</span>
-							)
-						}
-					/>
-					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem" }}>
-						{authUser?.method === "email"
-							? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
-							: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
-					</p>
-				</div>
-			</section>
+										{mfaStatus?.enrolled ? "Manage 2FA" : "Set up 2FA"}
+									</Link>
+								)}
+							</div>
+							<div className="dossier-grid">
+								<DossierField
+									label="2FA Status"
+									value={
+										mfaStatus == null ? (
+											<span className="muted">-</span>
+										) : mfaStatus.enrolled ? (
+											<span>
+												Active
+												{mfaStatus.method
+													? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
+													: ""}
+											</span>
+										) : mfaStatus.applicable === false ? (
+											<span className="muted">Not applicable</span>
+										) : (
+											<span className="muted">Not set — recommended</span>
+										)
+									}
+								/>
+								{mfaStatus?.applicable !== false && (
+									<DossierField
+										label="Policy Requirement"
+										value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
+									/>
+								)}
+							</div>
+							<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem" }}>
+								{authUser?.method === "email"
+									? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
+									: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
+							</p>
+						</div>
+					</>
+				)}
+			</div>
 
 			<AvatarCropModal
 				open={avatarOpen}

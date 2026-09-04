@@ -298,6 +298,7 @@ export const applicantDocuments = pgTable(
 	(t) => ({
 		byOwner: index("applicant_documents_owner_idx").on(t.ownerUserId, t.documentType),
 		byStatus: index("applicant_documents_status_idx").on(t.status, t.createdAt),
+		byExpiry: index("applicant_documents_expiry_idx").on(t.status, t.expiresAt),
 		/*
 		 * One live document per type per applicant. Re-uploading a passport should
 		 * replace the previous one rather than silently accumulating copies that

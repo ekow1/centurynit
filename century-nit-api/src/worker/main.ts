@@ -1,13 +1,16 @@
 import { emailWorker } from "./email.js";
 import { feedsWorker } from "./feeds.js";
 import { meetingStatusWorker } from "./meeting-status.js";
+import { documentCleanupWorker } from "./document-cleanup.js";
 import {
 	connection,
 	emailQueue,
 	calendarQueue,
 	meetingStatusQueue,
+	documentCleanupQueue,
 	scheduleFeedSyncs,
 	scheduleMeetingStatusPolls,
+	scheduleDocumentCleanup,
 } from "./queues.js";
 
 /**
@@ -35,6 +38,7 @@ const workers = [
 	{ name: "email", worker: emailWorker },
 	{ name: "feeds", worker: feedsWorker },
 	{ name: "meetingStatus", worker: meetingStatusWorker },
+	{ name: "documentCleanup", worker: documentCleanupWorker },
 ];
 
 console.log(
@@ -51,6 +55,9 @@ scheduleFeedSyncs().catch((err) => console.error("[feeds] schedule error:", err.
 
 // Schedule the recurring meeting-status poller (every 60s, idempotent).
 scheduleMeetingStatusPolls().catch((err) => console.error("[meetingStatus] schedule error:", err.message));
+
+// Schedule the rejected-document TTL cleanup (once per day, idempotent).
+scheduleDocumentCleanup().catch((err) => console.error("[document-cleanup] schedule error:", err.message));
 
 /**
  * Graceful shutdown.
@@ -73,7 +80,12 @@ async function shutdown(signal: string) {
 
 	try {
 		await Promise.all(workers.map(({ worker }) => worker.close()));
-		await Promise.all([emailQueue.close(), calendarQueue.close(), meetingStatusQueue.close()]);
+		await Promise.all([
+			emailQueue.close(),
+			calendarQueue.close(),
+			meetingStatusQueue.close(),
+			documentCleanupQueue.close(),
+		]);
 		await connection.quit();
 		clearTimeout(timeout);
 		console.log("Workers stopped cleanly.");

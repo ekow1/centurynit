@@ -50,6 +50,9 @@ import { env } from "../env.js";
 
 const documentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
+/** How long rejected/superseded documents are retained before hard deletion. */
+const REJECTED_DOC_TTL_MS = env.REJECTED_DOCUMENT_TTL_DAYS * 24 * 60 * 60 * 1000;
+
 type DocumentRow = typeof applicantDocuments.$inferSelect;
 
 /** Extra staff-only fields for the ops Document Vault folder view. */
@@ -224,7 +227,12 @@ documentsRouter.openapi(
 		// /complete. PENDING_UPLOAD, UPLOADED and VERIFIED all occupy that index.
 		await db
 			.update(applicantDocuments)
-			.set({ status: "REJECTED", reviewNote: "Replaced by a newer upload", updatedAt: new Date() })
+			.set({
+				status: "REJECTED",
+				reviewNote: "Replaced by a newer upload",
+				expiresAt: new Date(Date.now() + REJECTED_DOC_TTL_MS),
+				updatedAt: new Date(),
+			})
 			.where(
 				and(
 					eq(applicantDocuments.ownerUserId, user.id),
@@ -649,6 +657,7 @@ documentsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "That applicant is not on your caseload");
 		}
 
+		const rejected = body.status === "REJECTED";
 		const [updated] = await db
 			.update(applicantDocuments)
 			.set({
@@ -656,6 +665,7 @@ documentsRouter.openapi(
 				reviewNote: body.note ?? null,
 				reviewedBy: staff.opsUserId,
 				reviewedAt: new Date(),
+				expiresAt: rejected ? new Date(Date.now() + REJECTED_DOC_TTL_MS) : undefined,
 				updatedAt: new Date(),
 			})
 			.where(and(eq(applicantDocuments.id, id), ne(applicantDocuments.status, "PENDING_UPLOAD")))
@@ -671,7 +681,6 @@ documentsRouter.openapi(
 
 		// In-app + email: tell the document owner their document was approved or rejected.
 		const approved = body.status === "VERIFIED";
-		const rejected = body.status === "REJECTED";
 		if (approved || rejected) {
 			const status = approved ? "approved" : "rejected";
 			const [owner] = await db

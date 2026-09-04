@@ -44,6 +44,7 @@ export const emailQueue = new Queue("email", { connection });
 export const calendarQueue = new Queue("calendar", { connection });
 export const pushQueue = new Queue("push", { connection });
 export const meetingStatusQueue = new Queue("meetingStatus", { connection });
+export const documentCleanupQueue = new Queue("documentCleanup", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -146,6 +147,21 @@ export async function scheduleMeetingStatusPolls(): Promise<void> {
 		"poll",
 		{},
 		{ repeat: { every: 60 * 1000 }, jobId: undefined },
+	);
+}
+
+/**
+ * Schedule the rejected-document TTL cleanup.
+ *
+ * Runs once per day; duplicates collapse because BullMQ repeatables are keyed
+ * conservatively. Even if the worker misses a day, the query uses `expiresAt`
+ * so every expired document is purged on the next run.
+ */
+export async function scheduleDocumentCleanup(): Promise<void> {
+	await documentCleanupQueue.add(
+		"cleanup",
+		{},
+		{ repeat: { every: 24 * 60 * 60 * 1000 }, jobId: undefined },
 	);
 }
 

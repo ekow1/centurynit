@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui/Button";
-import { Field, Input } from "../../components/ui/Field";
+import { Field, Input, Select, Textarea } from "../../components/ui/Field";
 import {
 	hasAcceptedOffer,
 	hasPaymentPlan,
@@ -16,6 +16,7 @@ import {
 import {
 	AGENCY_STAGES,
 	AGENCY_DEPOSIT_PORTION,
+	APPLICANT_COUNTRIES,
 	POST_ARRIVAL_SCHEDULES,
 	APP_INVOICE_BASE,
 	APP_INVOICE_PER_SCHOOL,
@@ -27,6 +28,7 @@ import {
 	GHS_RATE,
 	PAYMENT_PLANS,
 	PROCESS_STAGES,
+	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_TRACK_STATUS_LABELS,
 	VISA_INVOICE_AMOUNT,
 	REQUIRED_DOCUMENTS,
@@ -61,6 +63,36 @@ const DOC_LABELS: Record<string, string> = {
 	recommendation: "Recommendation",
 	english: "English test",
 };
+
+const HIGHEST_EDUCATION_OPTIONS = ["High school / secondary", "Diploma / HND", "Bachelor's degree", "Master's degree", "PhD / Doctorate", "Professional qualification", "Other"];
+const EMPLOYMENT_STATUS_OPTIONS = ["Employed full-time", "Employed part-time", "Self-employed", "Unemployed", "Student", "Other"];
+const ENGLISH_TEST_OPTIONS = ["IELTS Academic", "IELTS General", "TOEFL iBT", "PTE Academic", "Duolingo English Test", "Cambridge C1 Advanced", "Cambridge C2 Proficiency", "None yet"];
+const INTAKE_OPTIONS = ["January 2026", "May 2026", "September 2026", "January 2027", "May 2027", "September 2027", "Flexible"];
+const FUNDING_SOURCE_OPTIONS = ["Self-funded", "Family / sponsor", "Scholarship", "Student loan", "Employer", "Government scholarship", "Other"];
+const BUDGET_RANGE_OPTIONS = ["Under $10,000", "$10,000 – $25,000", "$25,000 – $50,000", "$50,000 – $75,000", "$75,000 – $100,000", "Above $100,000"];
+const SPONSOR_RELATIONSHIP_OPTIONS = ["Parent", "Spouse", "Sibling", "Other relative", "Employer", "Friend / other"];
+const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"];
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+function getDegreeLevelName(id: string) {
+	return SCHOOL_DEGREE_LEVELS.find((l) => l.id === id)?.name ?? id;
+}
+
+function consultationTypeLabel(type?: string) {
+	if (type === "ONLINE") return "Online";
+	if (type === "IN_PERSON") return "In person";
+	return type ? type.replace(/_/g, " ") : null;
+}
+
+function signInMethodLabel(method?: string) {
+	if (!method) return "-";
+	if (method === "email") return "Email & password";
+	if (method === "google") return "Google";
+	if (method === "microsoft") return "Microsoft";
+	if (method === "apple") return "Apple";
+	return method.charAt(0).toUpperCase() + method.slice(1).replace(/_/g, " ");
+}
 
 /** Profile - the account and everything Century NIT holds about you. */
 export function PortalProfile() {
@@ -114,14 +146,10 @@ export function PortalProfile() {
 
 	const [editing, setEditing] = useState<null | "account" | "assessment" | "preferences">(null);
 	const [draft, setDraft] = useState<Record<string, string>>({});
-	const [justSaved, setJustSaved] = useState(false);
+	const [errors, setErrors] = useState<Record<string, string>>({});
+	const [saving, setSaving] = useState<null | "account" | "assessment" | "preferences">(null);
 	const [avatarOpen, setAvatarOpen] = useState(false);
-
-	useEffect(() => {
-		if (!justSaved) return;
-		const t = window.setTimeout(() => setJustSaved(false), 3000);
-		return () => window.clearTimeout(t);
-	}, [justSaved]);
+	const { toast } = useNotifier();
 
 	const dest = a.destinationId ? getDestination(a.destinationId) : null;
 	const uni = a.universityId ? getUniversity(a.universityId) : null;
@@ -131,6 +159,14 @@ export function PortalProfile() {
 		authUser?.name || [a.firstName, a.lastName].filter(Boolean).join(" ") || "Century Applicant";
 
 	const eligibility = booking.eligibilityOutcome.replace("_", " ");
+	const eligibilityVariant =
+		booking.eligibilityOutcome.toLowerCase().includes("eligible") && !booking.eligibilityOutcome.toLowerCase().includes("not")
+			? "eligible"
+			: booking.eligibilityOutcome.toLowerCase().includes("conditional")
+				? "conditional"
+					: booking.eligibilityOutcome.toLowerCase().includes("not_eligible")
+						? "not_eligible"
+						: "pending";
 	const uploadedDocs = liveDocs ? liveDocs.size : 0;
 	const totalDocs = REQUIRED_DOCUMENTS.length;
 
@@ -139,65 +175,151 @@ export function PortalProfile() {
 		values: Record<string, string>,
 	) {
 		setDraft(values);
+		setErrors({});
 		setEditing(section);
-		setJustSaved(false);
 	}
 
-	function done() {
-		setEditing(null);
-		setJustSaved(true);
+	function validateAccount(values: Record<string, string>) {
+		const next: Record<string, string> = {};
+		if (!values.name?.trim()) next.name = "Enter your full name";
+		return next;
+	}
+
+	function validateAssessment(values: Record<string, string>) {
+		const next: Record<string, string> = {};
+		if (!values.dateOfBirth) next.dateOfBirth = "Date of birth is required";
+		else {
+			const d = new Date(values.dateOfBirth);
+			if (isNaN(d.getTime())) next.dateOfBirth = "Enter a valid date";
+			else {
+				const age = CURRENT_YEAR - d.getFullYear();
+				if (age < 12 || age > 100) next.dateOfBirth = "Enter a realistic date of birth";
+			}
+		}
+		if (!values.nationality?.trim()) next.nationality = "Nationality is required";
+		if (!values.highestEducation?.trim()) next.highestEducation = "Highest education is required";
+		if (values.graduationYear && (Number(values.graduationYear) < 1950 || Number(values.graduationYear) > CURRENT_YEAR + 10)) {
+			next.graduationYear = "Enter a valid graduation year";
+		}
+		if (values.passportExpiry && new Date(values.passportExpiry) <= new Date()) {
+			next.passportExpiry = "Passport must not be expired";
+		}
+		if (values.englishDate && new Date(values.englishDate) > new Date()) {
+			next.englishDate = "Test date cannot be in the future";
+		}
+		return next;
+	}
+
+	function mapAssessmentDraftToProfile(values: Record<string, string>) {
+		return {
+			dob: values.dateOfBirth || undefined,
+			nationality: values.nationality || undefined,
+			address: values.address || undefined,
+			passportNumber: values.passportNumber || undefined,
+			passportCountry: values.passportCountry || undefined,
+			passportIssue: values.passportIssue || undefined,
+			passportExpiry: values.passportExpiry || undefined,
+			degree: values.highestEducation || undefined,
+			institution: values.institution || undefined,
+			fieldOfStudy: values.fieldOfStudy || undefined,
+			gradYear: values.graduationYear || undefined,
+			gpa: values.gpa || undefined,
+			employmentStatus: values.employmentStatus || undefined,
+			company: values.employer || undefined,
+			currentRole: values.jobTitle || undefined,
+			experienceYears: values.yearsExperience || undefined,
+			englishTest: values.englishTest || undefined,
+			englishScore: values.englishScore || undefined,
+			englishDate: values.englishDate || undefined,
+		};
+	}
+
+	function mapPreferencesDraftToProfile(values: Record<string, string>) {
+		return {
+			preferredCountries: values.preferredCountries || undefined,
+			degreeLevel: values.preferredLevel || undefined,
+			major: values.preferredField || undefined,
+			intake: values.intakePreference || undefined,
+			fundingSource: values.fundingSource || undefined,
+			budget: values.budgetRange || undefined,
+			sponsorName: values.sponsorName || undefined,
+			sponsorRelationship: values.sponsorRelationship || undefined,
+		};
 	}
 
 	async function saveAccount() {
-		const name = draft.name?.trim() || fullName;
-		const email = draft.email?.trim() || authUser?.email || "";
-		updateAccount({ name, email });
+		const validation = validateAccount(draft);
+		if (Object.keys(validation).length > 0) {
+			setErrors(validation);
+			return;
+		}
+		const name = draft.name.trim();
+		const currentEmail = authUser?.email || a.email || "";
+		setSaving("account");
 		try {
 			await meApi.updateProfile({ name });
-		} catch (e) {
-			console.warn("Could not sync profile to server", e);
+			updateAccount({ name, email: currentEmail });
+			toast.success("Account name updated");
+			setEditing(null);
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not update your name. Please try again.");
+		} finally {
+			setSaving(null);
 		}
-		done();
 	}
 
 	async function saveAssessment() {
+		const validation = validateAssessment(draft);
+		if (Object.keys(validation).length > 0) {
+			setErrors(validation);
+			return;
+		}
 		const patch: Record<string, string> = {};
 		for (const f of ASSESSMENT_FIELDS) patch[f.key] = draft[f.key] ?? "";
-		updateAssessment(patch);
+		setSaving("assessment");
 		try {
 			await meApi.updateProfile({
-				name: [patch.firstName || ass.firstName, patch.lastName || ass.lastName].filter(Boolean).join(" ") || undefined,
-				phone: patch.phone || ass.phone || undefined,
-				profile: {
-					nationality: patch.nationality || ass.nationality || undefined,
-					dob: patch.dateOfBirth || ass.dateOfBirth || undefined,
-					degree: patch.highestEducation || ass.highestEducation || undefined,
-					institution: patch.institution || ass.institution || undefined,
-					gpa: patch.gpa || ass.gpa || undefined,
-					gradYear: patch.graduationYear || ass.graduationYear || undefined,
-					currentRole: patch.jobTitle || ass.jobTitle || undefined,
-					experienceYears: patch.yearsExperience || ass.yearsExperience || undefined,
-				},
+				phone: patch.phone || undefined,
+				profile: mapAssessmentDraftToProfile(patch),
 			});
-		} catch (e) {
-			console.warn("Could not sync assessment to server", e);
+			updateAssessment(patch);
+			toast.success("Assessment details saved");
+			setEditing(null);
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not save assessment details.");
+		} finally {
+			setSaving(null);
 		}
-		done();
 	}
 
 	async function savePreferences() {
 		const patch: Record<string, string> = {};
 		for (const f of PREFERENCE_FIELDS) patch[f.key] = draft[f.key] ?? "";
-		updateAssessment(patch);
+		setSaving("preferences");
 		try {
 			await meApi.updateProfile({
-				targetCountry: patch.preferredCountries || undefined,
+				profile: mapPreferencesDraftToProfile(patch),
 			});
-		} catch (e) {
-			console.warn("Could not sync preferences to server", e);
+			updateAssessment(patch);
+			toast.success("Preferences saved");
+			setEditing(null);
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not save preferences.");
+		} finally {
+			setSaving(null);
 		}
-		done();
 	}
+
+	const packageName = (() => {
+		if (!a.schoolFundingTrack && !a.schoolDegreeLevel) return a.applicationPackageId || null;
+		const funding = a.schoolFundingTrack ? a.schoolFundingTrack.replace("_", " ") : "";
+		const level = a.schoolDegreeLevel ? getDegreeLevelName(a.schoolDegreeLevel) : "";
+		return [level, funding].filter(Boolean).join(" · ") || a.applicationPackageId || null;
+	})();
+
+	const planName = a.paymentPlanId
+		? PAYMENT_PLANS.find((p) => p.id === a.paymentPlanId)?.name ?? a.paymentPlanId
+		: null;
 
 	return (
 		<div className="portal-page">

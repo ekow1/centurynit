@@ -73,8 +73,20 @@ export const documentSchema = z.object({
 	reviewedAt: z.string().datetime().nullable(),
 	uploadedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),
+	/** Owner's user ID — staff-only. */
+	ownerUserId: z.string().optional(),
 	/** Owner's email — staff-only; omitted from an applicant's own listing. */
 	ownerEmail: z.string().email().optional(),
+	/** Owner's display name — staff-only, for the ops folder view. */
+	ownerName: z.string().optional(),
+	/** APP-xxxx or CNS-xxxx — staff-only, for folder headings. */
+	caseReference: z.string().optional(),
+	/** Applicant branch — staff-only, for branch filtering. */
+	branch: z.string().optional(),
+	/** Name of the assigned consultant — staff-only. */
+	assignedStaffName: z.string().optional(),
+	/** Display category (IDENTITY, ACADEMIC, LANGUAGE, etc.) — staff-only. */
+	documentCategory: z.string().optional(),
 });
 export type ApplicantDocument = z.infer<typeof documentSchema>;
 

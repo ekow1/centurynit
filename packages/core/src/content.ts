@@ -2301,6 +2301,33 @@ export const REQUIRED_DOCUMENTS = [
 	},
 ] as const;
 
+/**
+ * Maps a document‑type id (the `documentType` stored on the row) to a
+ * human‑readable category shown in the ops Document Vault.
+ *
+ * The vault groups and labels documents by this category so reviewers can
+ * scan at a glance rather than reading raw type slugs.
+ */
+export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
+	passport: "IDENTITY",
+	transcript: "ACADEMIC",
+	transcripts: "ACADEMIC",
+	diploma: "ACADEMIC",
+	certificates: "ACADEMIC",
+	cv: "PROFESSIONAL",
+	english: "LANGUAGE",
+	financial: "FINANCIAL",
+	statement: "FINANCIAL",
+	sponsorship: "FINANCIAL",
+	recommendation: "ACADEMIC",
+	additional: "OTHER",
+};
+
+/** Resolve a documentType to a display category, falling back gracefully. */
+export function documentCategory(documentType: string): string {
+	return DOCUMENT_TYPE_CATEGORIES[documentType] ?? "OTHER";
+}
+
 export const INTERVIEW_SLOTS = [
 	{ id: "mon-10", day: "Monday", date: "2026-09-08", time: "10:00", label: "Mon · 10:00 GMT" },
 	{ id: "mon-14", day: "Monday", date: "2026-09-08", time: "14:00", label: "Mon · 14:00 GMT" },

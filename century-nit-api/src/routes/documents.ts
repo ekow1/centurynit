@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
 	DOCUMENT_ERROR_CODES,
@@ -11,8 +11,17 @@ import {
 	reviewDocumentSchema,
 	uploadTicketSchema,
 } from "century-nit-shared";
+import { documentCategory } from "century-nit-core";
 import { db } from "../db/index.js";
-import { applicantDocuments, applicants, bookings, users } from "../db/schema.js";
+import {
+	applicantDocuments,
+	applicants,
+	applications,
+	bookings,
+	consultations,
+	opsUsers,
+	users,
+} from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
@@ -41,7 +50,16 @@ const documentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
 
 type DocumentRow = typeof applicantDocuments.$inferSelect;
 
-function toResponse(row: DocumentRow, ownerEmail?: string) {
+/** Extra staff-only fields for the ops Document Vault folder view. */
+type StaffEnrichment = {
+	ownerEmail?: string;
+	ownerName?: string;
+	caseReference?: string;
+	branch?: string;
+	assignedStaffName?: string;
+};
+
+function toResponse(row: DocumentRow, enrichment?: StaffEnrichment) {
 	return {
 		id: row.id,
 		documentType: row.documentType,
@@ -53,7 +71,13 @@ function toResponse(row: DocumentRow, ownerEmail?: string) {
 		reviewedAt: row.reviewedAt?.toISOString() ?? null,
 		uploadedAt: row.uploadedAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
-		...(ownerEmail ? { ownerEmail } : {}),
+		...(enrichment ? { ownerUserId: row.ownerUserId } : {}),
+		...(enrichment?.ownerEmail ? { ownerEmail: enrichment.ownerEmail } : {}),
+		...(enrichment?.ownerName ? { ownerName: enrichment.ownerName } : {}),
+		...(enrichment?.caseReference ? { caseReference: enrichment.caseReference } : {}),
+		...(enrichment?.branch ? { branch: enrichment.branch } : {}),
+		...(enrichment?.assignedStaffName ? { assignedStaffName: enrichment.assignedStaffName } : {}),
+		documentCategory: documentCategory(row.documentType),
 	};
 }
 
@@ -417,22 +441,99 @@ documentsRouter.openapi(
 			ownerScope = inArray(applicantDocuments.ownerUserId, reachable);
 		}
 
+		const isStaff = canReview(staff?.role);
+
+		if (!isStaff) {
+			// Applicants get the lean query — no joins needed.
+			const rows = await db
+				.select({ doc: applicantDocuments })
+				.from(applicantDocuments)
+				.where(
+					and(
+						ownerScope,
+						ne(applicantDocuments.status, "PENDING_UPLOAD"),
+					),
+				)
+				.orderBy(desc(applicantDocuments.createdAt));
+
+			return c.json({ documents: rows.map((r) => toResponse(r.doc)) });
+		}
+
+		/*
+		 * Staff listing — enriched for the ops Document Vault folder view.
+		 *
+		 * Joins applicants for the owner's name and branch; uses sub-queries
+		 * for the latest application (APP-xxxx) or consultation (CNS-xxxx)
+		 * reference. Documents from users who have no applicant profile, no
+		 * consultation and no application are excluded — they uploaded before
+		 * entering the pipeline and should not clutter the review queue.
+		 */
+		// Aliases for the assigned-officer lookup
+		const assignedOfficer = db
+			.select({
+				applicantId: applicants.id,
+				officerName: opsUsers.name,
+			})
+			.from(applicants)
+			.innerJoin(opsUsers, eq(opsUsers.id, applicants.assignedOfficerId))
+			.as("assigned_officer");
+
+		const latestApp = db
+			.selectDistinctOn([applications.applicantId], {
+				applicantId: applications.applicantId,
+				appNumber: applications.appNumber,
+			})
+			.from(applications)
+			.orderBy(applications.applicantId, desc(applications.createdAt))
+			.as("latest_app");
+
+		const latestConsult = db
+			.selectDistinctOn([consultations.applicantId], {
+				applicantId: consultations.applicantId,
+				reference: consultations.reference,
+			})
+			.from(consultations)
+			.orderBy(consultations.applicantId, desc(consultations.createdAt))
+			.as("latest_consult");
+
 		const rows = await db
-			.select({ doc: applicantDocuments, ownerEmail: users.email })
+			.select({
+				doc: applicantDocuments,
+				ownerEmail: users.email,
+				ownerName: applicants.name,
+				branch: applicants.branch,
+				appNumber: latestApp.appNumber,
+				consultRef: latestConsult.reference,
+				officerName: assignedOfficer.officerName,
+			})
 			.from(applicantDocuments)
-			.leftJoin(users, eq(users.id, applicantDocuments.ownerUserId))
+			.innerJoin(users, eq(users.id, applicantDocuments.ownerUserId))
+			.innerJoin(applicants, eq(applicants.userId, users.id))
+			.leftJoin(latestApp, eq(latestApp.applicantId, applicants.id))
+			.leftJoin(latestConsult, eq(latestConsult.applicantId, applicants.id))
+			.leftJoin(assignedOfficer, eq(assignedOfficer.applicantId, applicants.id))
 			.where(
 				and(
 					ownerScope,
-					// A pending row has no file behind it yet; it is bookkeeping.
 					ne(applicantDocuments.status, "PENDING_UPLOAD"),
+					// Only surface documents for applicants with at least one case
+					or(
+						isNotNull(latestApp.appNumber),
+						isNotNull(latestConsult.reference),
+					),
 				),
 			)
 			.orderBy(desc(applicantDocuments.createdAt));
 
 		return c.json({
 			documents: rows.map((r) =>
-				toResponse(r.doc, canReview(staff?.role) ? (r.ownerEmail ?? undefined) : undefined),
+				toResponse(r.doc, {
+					ownerEmail: r.ownerEmail ?? undefined,
+					ownerName: r.ownerName ?? undefined,
+					caseReference: r.appNumber ?? r.consultRef ?? undefined,
+					branch: r.branch ?? undefined,
+					assignedStaffName: r.officerName ?? undefined,
+				}),
 			),
 		});
 	},

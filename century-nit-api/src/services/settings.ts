@@ -63,7 +63,8 @@ export type SettingKey =
 	| "CONSULTATION_FEE_CENTS"
 	| "TRAVEL_COORDINATION_FEE_CENTS"
 	| "HOUSING_ASSISTANCE_FEE_CENTS"
-	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS";
+	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS"
+	| "PLATFORM_EXCHANGE_RATE";
 
 
 /** All keys this service manages, with metadata for the UI. */
@@ -225,6 +226,12 @@ export const SETTING_DEFS: Record<
 		secret: true,
 		description:
 			"Server-side Paystack key used to open and verify applicant invoice checkouts. Starts with sk_live_ or sk_test_.",
+	},
+	PLATFORM_EXCHANGE_RATE: {
+		label: "GHS → USD Exchange Rate",
+		group: "Payments",
+		secret: false,
+		description: "Rate used to convert GHS gateway amounts to USD for receipts. Default: 15.0.",
 	},
 	STRIPE_SECRET_KEY: {
 		label: "Stripe Secret Key",

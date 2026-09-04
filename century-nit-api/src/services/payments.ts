@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import type {
 	InitializePayment,
@@ -231,8 +231,22 @@ export async function verifyAndSettlePayment(
 			},
 		});
 
-		// Auto-advance application workflow stages if linked
-		if (invoice.type === "application" && invoice.clientUserId) {
+		// Auto-advance application workflow stages if linked.
+		// Resolve the user's latest application via applicant.userId, not by
+		// matching the invoice number to the application number.
+		let latestApplicationId: string | undefined;
+		if (invoice.clientUserId) {
+			const [appRow] = await db
+				.select({ id: applications.id })
+				.from(applications)
+				.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+				.where(eq(applicants.userId, invoice.clientUserId))
+				.orderBy(desc(applications.createdAt))
+				.limit(1);
+			latestApplicationId = appRow?.id;
+		}
+
+		if (latestApplicationId && invoice.type === "application") {
 			await db
 				.update(applications)
 				.set({
@@ -241,9 +255,9 @@ export async function verifyAndSettlePayment(
 					agencySettled: true,
 					updatedAt: now,
 				})
-				.where(eq(applications.appNumber, invoice.invoiceNumber))
+				.where(eq(applications.id, latestApplicationId))
 				.catch(() => {});
-		} else if (invoice.type === "visa" && invoice.clientUserId) {
+		} else if (latestApplicationId && invoice.type === "visa") {
 			await db
 				.update(applications)
 				.set({
@@ -251,6 +265,7 @@ export async function verifyAndSettlePayment(
 					visaStage: "pending",
 					updatedAt: now,
 				})
+				.where(eq(applications.id, latestApplicationId))
 				.catch(() => {});
 		}
 

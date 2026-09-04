@@ -6,9 +6,9 @@ import { verifyPaystackSignature } from "../services/paystack.js";
 import {
 	getInvoice,
 	paymentWithReferenceExists,
-	recordClientPayment,
 	serializeInvoice,
 } from "../services/invoice.js";
+import { getExchangeRate, settleInvoicePayment } from "../services/paymentSettlement.js";
 
 /**
  * Provider webhooks.
@@ -65,6 +65,8 @@ webhooksRouter.openapi(paystackWebhookRoute, async (c) => {
 	if (event.data.event !== "charge.success") return c.json({ received: true });
 	const reference = event.data.data?.reference;
 	const invoiceId = event.data.data?.metadata?.invoiceId;
+	const metadata = event.data.data?.metadata as Record<string, unknown> | undefined;
+	const invoiceAmountCents = typeof metadata?.invoiceAmountCents === "number" ? metadata.invoiceAmountCents : undefined;
 	const amountCents = event.data.data?.amount;
 	if (!reference || !invoiceId) return c.json({ received: true });
 
@@ -79,17 +81,25 @@ webhooksRouter.openapi(paystackWebhookRoute, async (c) => {
 	const serialized = await serializeInvoice(invoice);
 	if (serialized.balanceCents <= 0) return c.json({ received: true });
 
-	const paid = amountCents && amountCents > 0 ? amountCents : serialized.balanceCents;
-	await recordClientPayment({
-		invoiceId,
-		userId: invoice.clientUserId,
-		userName: invoice.applicantName,
-		userEmail: invoice.applicantEmail ?? "applicant@century-nit.com",
-		amountCents: paid,
-		method: "card",
-		gateway: "paystack",
-		reference,
-	});
+	const currency = event.data.data?.currency ?? "USD";
+	const rate = await getExchangeRate();
+	const amount = amountCents ?? serialized.balanceCents;
+	const rawAmountCents =
+		invoiceAmountCents ??
+		(currency === "GHS" ? Math.round(amount / rate) : amount);
+	const paid = Math.min(Math.max(rawAmountCents, 0), serialized.balanceCents);
+
+	if (paid > 0) {
+		await settleInvoicePayment({
+			invoiceId,
+			amountCents: paid,
+			method: "card",
+			gateway: "paystack",
+			reference,
+			currency,
+			actor: { name: "Paystack Webhook", email: "payments@centurynit.com" },
+		});
+	}
 
 	return c.json({ received: true });
 });

@@ -30,6 +30,7 @@ import {
 	voidInvoice,
 } from "../services/invoice.js";
 import { getApplicantByUserId } from "../services/cases.js";
+import { postPaymentSettlement } from "../services/paymentSettlement.js";
 
 
 /**
@@ -207,6 +208,16 @@ invoicesRouter.openapi(
 			gateway: body.gateway,
 			reference: body.reference,
 			actor: actorFrom(staff),
+		});
+		await postPaymentSettlement({
+			invoice: row,
+			payment: {
+				amountCents: body.amountCents,
+				method: body.method,
+				reference: body.reference,
+			},
+			actor: actorFrom(staff),
+			options: { recordGatewayTransaction: false },
 		});
 		return c.json(await serializeInvoice(row));
 	},

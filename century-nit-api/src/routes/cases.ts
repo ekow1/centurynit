@@ -54,6 +54,11 @@ import {
 	createPaystackCheckout,
 	verifyPaystackTransaction,
 } from "../services/paystack.js";
+import {
+	getExchangeRate,
+	postPaymentSettlement,
+	settleInvoicePayment,
+} from "../services/paymentSettlement.js";
 import { listSchoolsForApplicant } from "../services/schools.js";
 import {
 	getOrCreateApplicantConversation,
@@ -1362,6 +1367,16 @@ meRouter.openapi(
 			gateway: body.gateway,
 			reference: body.reference,
 		});
+		await postPaymentSettlement({
+			invoice: updated,
+			payment: {
+				amountCents: body.amountCents,
+				method: body.method,
+				reference: body.reference,
+			},
+			actor: { name: user.name ?? "Applicant", email: user.email },
+			options: { recordGatewayTransaction: false },
+		});
 		return c.json(await serializeInvoice(updated));
 	},
 );
@@ -1468,16 +1483,22 @@ meRouter.openapi(
 		if (txn.status === "success" && before.balanceCents > 0) {
 			const alreadyRecorded = await paymentWithReferenceExists(row.id, body.reference);
 			if (!alreadyRecorded) {
-				await recordClientPayment({
-					invoiceId: row.id,
-					userId: user.id,
-					userName: row.applicantName,
-					userEmail: user.email,
-					amountCents: txn.amountCents > 0 ? txn.amountCents : before.balanceCents,
-					method: "card",
-					gateway: "paystack",
-					reference: body.reference,
-				});
+				const rate = await getExchangeRate();
+				const rawAmountCents =
+					txn.invoiceAmountCents ??
+					(txn.currency === "GHS" ? Math.round(txn.amountCents / rate) : txn.amountCents);
+				const amountCents = Math.min(Math.max(rawAmountCents, 0), before.balanceCents);
+				if (amountCents > 0) {
+					await settleInvoicePayment({
+						invoiceId: row.id,
+						amountCents,
+						method: "card",
+						gateway: "paystack",
+						reference: body.reference,
+						currency: txn.currency ?? "USD",
+						actor: { name: "Paystack", email: "payments@centurynit.com" },
+					});
+				}
 			}
 		}
 		const invoice = await serializeInvoice(row);

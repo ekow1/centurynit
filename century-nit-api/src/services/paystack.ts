@@ -53,8 +53,9 @@ export async function createPaystackCheckout(input: {
 			currency: "USD",
 			reference,
 			callback_url: input.callbackUrl,
-			metadata: { 
+			metadata: {
 				...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
+				invoiceAmountCents: input.amountCents,
 				...input.customMetadata,
 			},
 		}),
@@ -88,7 +89,7 @@ export async function createPaystackCheckout(input: {
 				callback_url: input.callbackUrl,
 				metadata: {
 					...(input.invoiceId ? { invoiceId: input.invoiceId } : {}),
-					amountCents: input.amountCents,
+					invoiceAmountCents: input.amountCents,
 					...input.customMetadata,
 				},
 			}),
@@ -116,6 +117,7 @@ export type PaystackVerifiedTransaction = {
 	amountCents: number;
 	currency: string;
 	invoiceId?: string;
+	invoiceAmountCents?: number;
 	customerEmail?: string;
 	metadata?: Record<string, any>;
 };
@@ -150,6 +152,7 @@ export async function verifyPaystackTransaction(
 		amountCents: body.data.amount ?? 0,
 		currency: body.data.currency ?? "USD",
 		invoiceId: body.data.metadata?.invoiceId,
+		invoiceAmountCents: body.data.metadata?.invoiceAmountCents ?? body.data.metadata?.amountCents,
 		customerEmail: body.data.customer?.email,
 		metadata: body.data.metadata,
 	};

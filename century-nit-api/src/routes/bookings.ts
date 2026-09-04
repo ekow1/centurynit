@@ -30,6 +30,7 @@ import {
 } from "../services/booking.js";
 import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
 import { createConsultationInvoice, getFeeSchedule } from "../services/invoice.js";
+import { postPaymentSettlement } from "../services/paymentSettlement.js";
 import {
 	assignBookingSchema,
 	assignableEmployeeSchema,
@@ -359,6 +360,23 @@ bookingsRouter.openapi(
 						paidAt: new Date(),
 					})
 					.onConflictDoNothing({ target: paymentTransactions.reference });
+
+				// Send the branded receipt for the consultation payment without
+				// re-recording the gateway transaction (already inserted above).
+				await postPaymentSettlement({
+					invoice,
+					payment: {
+						amountCents: invoice.subtotalCents,
+						method: "Card Payment",
+						gateway: "paystack",
+						reference,
+						currency: txn.currency ?? "USD",
+					},
+					actor: { name: "Paystack", email: "payments@centurynit.com" },
+					options: { recordGatewayTransaction: false },
+				}).catch(() => {
+					// Receipt is non-fatal.
+				});
 			} catch {
 				// Non-fatal — booking still succeeds; ops can still find the booking
 			}

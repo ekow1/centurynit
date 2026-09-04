@@ -26,6 +26,8 @@ import {
 	markNoShow,
 	rescheduleBooking,
 	setBookingMeetingUrl,
+	generateMeetingForBooking,
+	resendMeetingLinkForBooking,
 	type BookingRow,
 } from "../services/booking.js";
 import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
@@ -870,6 +872,99 @@ bookingsRouter.openapi(
 
 		const updated = await setBookingMeetingUrl(id, url);
 		return c.json(toBookingResponse(updated), 200);
+	},
+);
+
+/* ── POST /api/v1/bookings/:id/generate-meet ───────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/generate-meet",
+		tags: ["Bookings"],
+		summary: "Generate a Google Meet link on-demand for a booking",
+		description:
+			"Creates a Google Meet room using the connected company Google Workspace account, " +
+			"attaches it to the booking, ensures type is set to online, and emails the client.",
+		middleware: [requireAuth, requireMfa] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Booking updated with Google Meet link",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+			400: { description: "Google Meet not connected or invalid state" },
+			403: { description: "Not allowed to modify this booking" },
+			404: { description: "Booking not found" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to update this booking");
+		}
+
+		const actor = {
+			name: staff?.name ?? user?.name ?? "Staff",
+			email: staff?.email ?? user?.email ?? "staff@century.com",
+		};
+
+		const updated = await generateMeetingForBooking(id, actor);
+		const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
+		return c.json(toBookingResponse(updated, employee), 200);
+	},
+);
+
+/* ── POST /api/v1/bookings/:id/resend-meeting-link ─────────────────────────── */
+
+const resendMeetingLinkResponseSchema = z.object({
+	success: z.boolean(),
+	clientEmail: z.string().email(),
+});
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/resend-meeting-link",
+		tags: ["Bookings"],
+		summary: "Resend the meeting link email to the client",
+		description:
+			"Re-emails the consultation video meeting link and reminder to the client.",
+		middleware: [requireAuth, requireMfa] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Email resent successfully",
+				content: { "application/json": { schema: resendMeetingLinkResponseSchema } },
+			},
+			400: { description: "No meeting link to send" },
+			403: { description: "Not allowed to modify this booking" },
+			404: { description: "Booking not found" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to update this booking");
+		}
+
+		const actor = {
+			name: staff?.name ?? user?.name ?? "Staff",
+			email: staff?.email ?? user?.email ?? "staff@century.com",
+		};
+
+		const result = await resendMeetingLinkForBooking(id, actor);
+		return c.json(result, 200);
 	},
 );
 

@@ -88,6 +88,8 @@ export function EnterpriseConsultations() {
 	const [meetingUrlDraft, setMeetingUrlDraft] = useState("");
 	const [editingMeetingUrl, setEditingMeetingUrl] = useState(false);
 	const [savingMeetingUrl, setSavingMeetingUrl] = useState(false);
+	const [generatingMeet, setGeneratingMeet] = useState(false);
+	const [resendingMeetLink, setResendingMeetLink] = useState(false);
 	/* Date, slot and reason now live inside ReschedulePanel */
 
 	const canSeeAll = canSeeAllBranches;
@@ -613,63 +615,150 @@ export function EnterpriseConsultations() {
 								) : null}
 							</div>
 						)}
-						{active.type === "online" && active.bookingId && (canAssignWork || active.assignedOfficerEmail === opsUser?.email) && active.status !== "Completed" && active.status !== "Cancelled" && (
-							<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
-								<p className="eyebrow">Meeting link</p>
-								{!editingMeetingUrl ? (
-									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
-										{active.meetingLink ? (
-											<>
-												<a href={active.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
-												<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{active.meetingLink}</span>
-												<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(active.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
-											</>
-										) : (
-											<button type="button" className="btn btn--primary btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>Add meeting link</button>
+						{active.bookingId && (canAssignWork || active.assignedOfficerEmail === opsUser?.email) && active.status !== "Completed" && active.status !== "Cancelled" && (
+							active.type === "online" || active.meetingLink ? (
+								<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+										<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
+										{active.meetingLink && (
+											<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
+												{active.meetingLink.includes("meet.google.com") ? "Google Meet" : "Video Link"}
+											</span>
 										)}
 									</div>
-								) : (
-									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
-										<input
-											type="url"
-											className="input input--sm"
-											style={{ flex: 1, minWidth: "240px" }}
-											placeholder="https://zoom.us/j/… or https://meet.google.com/…"
-											value={meetingUrlDraft}
-											onChange={(e) => setMeetingUrlDraft(e.target.value)}
-										/>
-										<button
-											type="button"
-											className="btn btn--primary btn--sm"
-											disabled={savingMeetingUrl}
-											onClick={async () => {
-												if (!active.bookingId) return;
-												const v = meetingUrlDraft.trim();
-												if (v && !/^https:\/\//i.test(v)) {
-													showToast("error", "Meeting link must start with https://");
-													return;
-												}
-												setSavingMeetingUrl(true);
-												try {
-													await bookingsApi.setMeetingUrl(active.bookingId, v || null);
-													setEditingMeetingUrl(false);
-													showToast("success", v ? "Meeting link saved." : "Meeting link cleared.");
-													void refresh();
-												} catch (err) {
-													showToast("error", err instanceof Error ? err.message : "Could not save the meeting link.");
-												} finally {
-													setSavingMeetingUrl(false);
-												}
-											}}
-										>
-											{savingMeetingUrl ? "Saving…" : "Save"}
-										</button>
-										<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
-											Cancel
-										</button>
-									</div>
-								)}
-							</div>
+									{!editingMeetingUrl ? (
+										<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+											{active.meetingLink ? (
+												<>
+													<a href={active.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
+													<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{active.meetingLink}</span>
+													<button
+														type="button"
+														className="btn btn--ghost btn--sm"
+														disabled={resendingMeetLink}
+														onClick={async () => {
+															if (!active.bookingId) return;
+															setResendingMeetLink(true);
+															try {
+																const res = await bookingsApi.resendMeetingLink(active.bookingId);
+																showToast("success", `Meeting link emailed to ${res.clientEmail || "client"}.`);
+															} catch (err) {
+																showToast("error", err instanceof Error ? err.message : "Could not resend email.");
+															} finally {
+																setResendingMeetLink(false);
+															}
+														}}
+														title="Re-send email with video meeting link to the client"
+													>
+														{resendingMeetLink ? "Sending email…" : "✉ Resend Link to Client"}
+													</button>
+													<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(active.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
+												</>
+											) : (
+												<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+													<button
+														type="button"
+														className="btn btn--primary btn--sm"
+														disabled={generatingMeet}
+														onClick={async () => {
+															if (!active.bookingId) return;
+															setGeneratingMeet(true);
+															try {
+																await bookingsApi.generateMeeting(active.bookingId);
+																showToast("success", "Google Meet link generated and emailed to client.");
+																void refresh();
+															} catch (err) {
+																showToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet. Add a manual link instead.");
+															} finally {
+																setGeneratingMeet(false);
+															}
+														}}
+													>
+														{generatingMeet ? "Generating Meet…" : "⚡ Generate Google Meet"}
+													</button>
+													<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
+														+ Add Custom Link
+													</button>
+												</div>
+											)}
+										</div>
+									) : (
+										<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+											<input
+												type="url"
+												className="input input--sm"
+												style={{ flex: 1, minWidth: "240px" }}
+												placeholder="https://meet.google.com/… or https://zoom.us/j/…"
+												value={meetingUrlDraft}
+												onChange={(e) => setMeetingUrlDraft(e.target.value)}
+											/>
+											<button
+												type="button"
+												className="btn btn--primary btn--sm"
+												disabled={savingMeetingUrl}
+												onClick={async () => {
+													if (!active.bookingId) return;
+													const v = meetingUrlDraft.trim();
+													if (v && !/^https:\/\//i.test(v)) {
+														showToast("error", "Meeting link must start with https://");
+														return;
+													}
+													setSavingMeetingUrl(true);
+													try {
+														await bookingsApi.setMeetingUrl(active.bookingId, v || null);
+														setEditingMeetingUrl(false);
+														showToast("success", v ? "Meeting link saved and emailed to client." : "Meeting link cleared.");
+														void refresh();
+													} catch (err) {
+														showToast("error", err instanceof Error ? err.message : "Could not save the meeting link.");
+													} finally {
+														setSavingMeetingUrl(false);
+													}
+												}}
+											>
+												{savingMeetingUrl ? "Saving…" : "Save & Email Client"}
+											</button>
+											{!active.meetingLink && (
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													disabled={generatingMeet}
+													onClick={async () => {
+														if (!active.bookingId) return;
+														setGeneratingMeet(true);
+														try {
+															await bookingsApi.generateMeeting(active.bookingId);
+															setEditingMeetingUrl(false);
+															showToast("success", "Google Meet link generated and emailed to client.");
+															void refresh();
+														} catch (err) {
+															showToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet link.");
+														} finally {
+															setGeneratingMeet(false);
+														}
+													}}
+												>
+													{generatingMeet ? "Generating…" : "⚡ Auto-generate Google Meet"}
+												</button>
+											)}
+											<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
+												Cancel
+											</button>
+										</div>
+									)}
+								</div>
+							) : (
+								<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+									<span className="muted" style={{ fontSize: "var(--text-xs)" }}>In-person appointment at branch. Need an online video meeting instead?</span>
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}
+									>
+										+ Set up online meeting
+									</button>
+								</div>
+							)
 						)}
 						{active.status === "In Assessment" && (
 								<div style={{ padding: "0.75rem 1.25rem", background: "#e0e7ff", borderBottom: "1px solid #c7d2fe", flexShrink: 0 }}>

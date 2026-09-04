@@ -540,6 +540,127 @@ export async function setBookingMeetingUrl(bookingId: string, meetingUrl: string
 	return row;
 }
 
+/**
+ * On-demand generation of a Google Meet link for a booking by staff/manager.
+ * Creates a Google Meet space using the company Google connection, saves it to the booking,
+ * sets the booking type to "online", and notifies the client via email and in-app notification.
+ */
+export async function generateMeetingForBooking(
+	bookingId: string,
+	actor: { name: string; email: string },
+): Promise<BookingRow> {
+	const booking = await getBooking(bookingId);
+	if (!booking) {
+		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+	}
+
+	if (!(await meetConnected())) {
+		throw new HttpError(
+			400,
+			"MEET_NOT_CONNECTED",
+			"Google Meet is not connected. Please connect the company Google account in Settings, or enter a meeting link manually.",
+		);
+	}
+
+	try {
+		const space = await createMeeting();
+
+		const [updated] = await db
+			.update(bookings)
+			.set({
+				meetingUrl: space.meetingUri,
+				meetingProvider: "google_meet",
+				meetingSpace: space.spaceId,
+				type: "online",
+				calendarSyncStatus: "SYNCED",
+				calendarSyncError: null,
+				updatedAt: new Date(),
+			})
+			.where(eq(bookings.id, booking.id))
+			.returning();
+
+		await audit(booking.id, "meet.generated", actor.email, {
+			spaceId: space.spaceId,
+			meetingUrl: space.meetingUri,
+		});
+
+		try {
+			const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
+			const ctx = await notificationContext(updated, employee);
+			await queueEmails([mail.bookingMeetingUrlSetForClient(ctx)]);
+			if (updated.clientUserId) {
+				notify({
+					recipientUserId: updated.clientUserId,
+					type: "booking.meeting_link",
+					title: "Meeting link ready",
+					body: `Your consultation video meeting link is ready. Ref: ${updated.reference}`,
+					link: "/portal/consultation",
+				}).catch(() => {});
+			}
+		} catch (err) {
+			console.error("[booking] could not send meeting url notification on generate:", err);
+		}
+
+		return updated;
+	} catch (err) {
+		if (err instanceof MeetAuthError) {
+			await markCompanyNeedsReconnect();
+			throw new HttpError(
+				401,
+				"MEET_AUTH_ERROR",
+				"Google Meet authorization expired. Please reconnect the company Google account in Settings.",
+			);
+		}
+		if (err instanceof MeetNotConnectedError) {
+			throw new HttpError(
+				400,
+				"MEET_NOT_CONNECTED",
+				"Google Meet is not connected. Please connect the company Google account in Settings.",
+			);
+		}
+		if (err instanceof HttpError) throw err;
+		const message = err instanceof Error ? err.message : "Google Meet creation failed";
+		throw new HttpError(500, "MEET_CREATION_FAILED", `Failed to generate Google Meet link: ${message}`);
+	}
+}
+
+/**
+ * Resend the existing meeting link to the client via email and in-app notification.
+ */
+export async function resendMeetingLinkForBooking(
+	bookingId: string,
+	actor: { name: string; email: string },
+): Promise<{ success: boolean; clientEmail: string }> {
+	const booking = await getBooking(bookingId);
+	if (!booking) {
+		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+	}
+	if (!booking.meetingUrl) {
+		throw new HttpError(400, "NO_MEETING_URL", "This consultation does not have a meeting link set yet.");
+	}
+
+	const employee = booking.employeeId ? await loadEmployee(booking.employeeId) : null;
+	const ctx = await notificationContext(booking, employee);
+	await queueEmails([mail.bookingMeetingUrlSetForClient(ctx)]);
+
+	if (booking.clientUserId) {
+		notify({
+			recipientUserId: booking.clientUserId,
+			type: "booking.meeting_link",
+			title: "Meeting link reminder",
+			body: `Your consultation video meeting link: ${booking.meetingUrl}. Ref: ${booking.reference}`,
+			link: "/portal/consultation",
+		}).catch(() => {});
+	}
+
+	await audit(booking.id, "meeting_url.resent", actor.email, {
+		meetingUrl: booking.meetingUrl,
+		clientEmail: booking.clientEmail,
+	});
+
+	return { success: true, clientEmail: booking.clientEmail };
+}
+
 /* ── Reschedule ──────────────────────────────────────────────────────────── */
 
 export async function rescheduleBooking(input: {

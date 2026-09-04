@@ -352,6 +352,25 @@ export const bookingsApi = {
 	},
 
 	/**
+	 * Generate a Google Meet link on-demand using the connected company
+	 * Google Workspace account and email the client automatically.
+	 */
+	generateMeeting(bookingId: string): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/generate-meet`, {
+			method: "POST",
+		});
+	},
+
+	/**
+	 * Resend the meeting link notification email to the client.
+	 */
+	resendMeetingLink(bookingId: string): Promise<{ success: boolean; clientEmail: string }> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/resend-meeting-link`, {
+			method: "POST",
+		});
+	},
+
+	/**
 	 * Live (in-progress) online meetings — bookings where `meetingActive` is
 	 * true, polled by the meeting-status worker. Returns the same shape as
 	 * `list()` so the dashboard widget and dedicated page can reuse the

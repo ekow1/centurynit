@@ -46,12 +46,11 @@ import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 /* ========== Profile ========== */
 
 function DataRow({ label, value }: { label: string; value: ReactNode }) {
+	if (value === "" || value == null) return null;
 	return (
 		<div className="data-row">
 			<span className="data-row__label muted">{label}</span>
-			<span className="data-row__value">
-				{value === "" || value == null ? <span className="muted">-</span> : value}
-			</span>
+			<span className="data-row__value">{value}</span>
 		</div>
 	);
 }
@@ -498,41 +497,72 @@ export function PortalProfile() {
 							/>
 						</div>
 					) : (
-						<div className="profile-block">
-							<DataRow
-								label="Full name"
-								value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ")}
-							/>
-							<DataRow label="Email" value={ass.email} />
-							<DataRow label="Phone" value={ass.phone || a.phone} />
-							<DataRow label="How did you hear about us?" value={a.referralSource} />
-							<DataRow label="Date of birth" value={ass.dateOfBirth} />
-							<DataRow label="Gender" value={ass.gender} />
-							<DataRow label="Nationality" value={ass.nationality} />
-							<DataRow label="Address" value={ass.address} />
-							<DataRow label="Passport number" value={ass.passportNumber} />
-							<DataRow label="Passport country" value={ass.passportCountry} />
-							<DataRow label="Passport issue date" value={ass.passportIssue} />
-							<DataRow label="Passport expiry date" value={ass.passportExpiry} />
-							<DataRow label="Education" value={ass.highestEducation} />
-							<DataRow label="Institution" value={ass.institution} />
-							<DataRow label="Field of study" value={ass.fieldOfStudy} />
-							<DataRow label="Graduation year" value={ass.graduationYear} />
-							<DataRow label="GPA" value={ass.gpa} />
-							<DataRow label="Employment status" value={ass.employmentStatus} />
-							<DataRow label="Employer / company" value={ass.employer} />
-							<DataRow label="Job title / role" value={ass.jobTitle} />
-							<DataRow label="Years of experience" value={ass.yearsExperience} />
-							<DataRow
-								label="English test"
-								value={
-									ass.englishTest
-										? `${ass.englishTest}${ass.englishScore ? ` · ${ass.englishScore}` : ""}`
-										: null
-								}
-							/>
-							<DataRow label="English test date" value={ass.englishDate} />
-						</div>
+						Boolean(
+							ass.firstName || ass.lastName || ass.dateOfBirth || ass.nationality ||
+							ass.highestEducation || ass.employmentStatus || ass.englishTest || ass.passportNumber || ass.phone || a.phone
+						) ? (
+							<div className="profile-block">
+								<DataRow
+									label="Full name"
+									value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ")}
+								/>
+								<DataRow label="Email" value={ass.email} />
+								<DataRow label="Phone" value={ass.phone || a.phone} />
+								<DataRow label="How did you hear about us?" value={a.referralSource} />
+								<DataRow label="Date of birth" value={ass.dateOfBirth} />
+								<DataRow label="Gender" value={ass.gender} />
+								<DataRow label="Nationality" value={ass.nationality} />
+								<DataRow label="Address" value={ass.address} />
+								<DataRow label="Passport number" value={ass.passportNumber} />
+								<DataRow label="Passport country" value={ass.passportCountry} />
+								<DataRow label="Passport issue date" value={ass.passportIssue} />
+								<DataRow label="Passport expiry date" value={ass.passportExpiry} />
+								<DataRow label="Education" value={ass.highestEducation} />
+								<DataRow label="Institution" value={ass.institution} />
+								<DataRow label="Field of study" value={ass.fieldOfStudy} />
+								<DataRow label="Graduation year" value={ass.graduationYear} />
+								<DataRow label="GPA" value={ass.gpa} />
+								<DataRow label="Employment status" value={ass.employmentStatus} />
+								<DataRow label="Employer / company" value={ass.employer} />
+								<DataRow label="Job title / role" value={ass.jobTitle} />
+								<DataRow label="Years of experience" value={ass.yearsExperience} />
+								<DataRow
+									label="English test"
+									value={
+										ass.englishTest
+											? `${ass.englishTest}${ass.englishScore ? ` · ${ass.englishScore}` : ""}`
+											: null
+									}
+								/>
+								<DataRow label="English test date" value={ass.englishDate} />
+							</div>
+						) : (
+							<div className="profile-empty-card">
+								<p className="profile-empty-title">No assessment details added yet</p>
+								<p className="profile-empty-desc">
+									Fill out your background and academic details to receive tailored university and program matches.
+								</p>
+								<button
+									type="button"
+									className="btn btn--secondary btn--sm"
+									onClick={() =>
+										startEdit(
+											"assessment",
+											Object.fromEntries(
+												ASSESSMENT_FIELDS.map((f) => [
+													f.key,
+													(f.key === "phone"
+														? ass.phone || a.phone
+														: ass[f.key as keyof AssessmentData]) ?? "",
+												]),
+											),
+										)
+									}
+								>
+									Fill Assessment Details
+								</button>
+							</div>
+						)
 					)}
 				</section>
 
@@ -570,22 +600,48 @@ export function PortalProfile() {
 							/>
 						</div>
 					) : (
-						<div className="profile-block">
-							<DataRow label="Preferred countries" value={ass.preferredCountries} />
-							<DataRow label="Preferred level" value={getDegreeLevelName(ass.preferredLevel)} />
-							<DataRow label="Preferred field" value={ass.preferredField} />
-							<DataRow label="Intake" value={ass.intakePreference} />
-							<DataRow label="Funding source" value={ass.fundingSource} />
-							<DataRow label="Budget range" value={ass.budgetRange} />
-							<DataRow
-								label="Sponsor"
-								value={
-									ass.sponsorRelationship
-										? `${ass.sponsorName} · ${ass.sponsorRelationship}`
-										: null
-								}
-							/>
-						</div>
+						Boolean(
+							ass.preferredCountries || ass.preferredLevel || ass.preferredField ||
+							ass.intakePreference || ass.fundingSource || ass.budgetRange || ass.sponsorName
+						) ? (
+							<div className="profile-block">
+								<DataRow label="Preferred countries" value={ass.preferredCountries} />
+								<DataRow label="Preferred level" value={getDegreeLevelName(ass.preferredLevel)} />
+								<DataRow label="Preferred field" value={ass.preferredField} />
+								<DataRow label="Intake" value={ass.intakePreference} />
+								<DataRow label="Funding source" value={ass.fundingSource} />
+								<DataRow label="Budget range" value={ass.budgetRange} />
+								<DataRow
+									label="Sponsor"
+									value={
+										ass.sponsorRelationship
+											? `${ass.sponsorName} · ${ass.sponsorRelationship}`
+											: null
+									}
+								/>
+							</div>
+						) : (
+							<div className="profile-empty-card">
+								<p className="profile-empty-title">No study preferences set yet</p>
+								<p className="profile-empty-desc">
+									Set your preferred study destinations, degree level, budget, and intake to guide your counselor.
+								</p>
+								<button
+									type="button"
+									className="btn btn--secondary btn--sm"
+									onClick={() =>
+										startEdit(
+											"preferences",
+											Object.fromEntries(
+												PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
+											),
+										)
+									}
+								>
+									Set Preferences
+								</button>
+							</div>
+						)
 					)}
 				</section>
 
@@ -625,7 +681,7 @@ export function PortalProfile() {
 							return (
 								<li key={r.id} className="profile-doc">
 									<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
-									<span className={`portal-pill portal-pill--${docPill(status)}`}>
+									<span className={`portal-pill portal-pill--${status}`}>
 										{status}
 									</span>
 									{live?.id ? (
@@ -733,8 +789,8 @@ export function PortalProfile() {
 						}
 					/>
 					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "40rem" }}>
-						{mfaStatus?.applicable === false
-							? "You sign in without a Century NIT password, so there is no password here for a second step to protect. Your account is secured by the provider you sign in with — manage security there."
+						{authUser?.method && authUser.method !== "email"
+							? "You sign in using a third-party authentication provider. Your account password and security settings are managed directly by that provider."
 							: "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."}
 					</p>
 				</div>
@@ -888,16 +944,6 @@ function ProfileEditForm({
 			</div>
 		</div>
 	);
-}
-
-function docPill(status: string) {
-	return status === "verified"
-		? "approved"
-		: status === "uploaded"
-			? "draft"
-			: status === "rejected"
-				? "needs_info"
-				: "";
 }
 
 /* ========== Journey hub ========== */

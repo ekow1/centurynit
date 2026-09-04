@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
+import { useOpsAuth } from "./OpsAuthContext";
+import { BranchScopeFilter } from "./BranchScopeFilter";
 
 /**
  * Live meetings widget — shows online consultations currently in progress.
@@ -14,6 +16,8 @@ import type { Booking } from "century-nit-shared";
  * page (full list). Pass `compact` to render just the count + top 3.
  */
 export function LiveMeetings({ compact = false }: { compact?: boolean }) {
+	const { canSeeAllBranches } = useOpsAuth();
+	const [branchFilter, setBranchFilter] = useState("all");
 	const [meetings, setMeetings] = useState<Booking[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -21,7 +25,9 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 
 	const refresh = useCallback(async () => {
 		try {
-			const res = await bookingsApi.liveMeetings();
+			const res = await bookingsApi.liveMeetings(
+				branchFilter !== "all" ? { branchId: branchFilter } : undefined,
+			);
 			setMeetings(res.bookings);
 			setLastChecked(new Date());
 			setError(null);
@@ -30,7 +36,7 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [branchFilter]);
 
 	useEffect(() => {
 		void refresh();
@@ -76,11 +82,16 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 						</span>
 					)}
 				</h2>
-				{lastChecked && (
-					<span className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
-						checked {formatRelative(lastChecked)}
-					</span>
-				)}
+				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+					{lastChecked && (
+						<span className="muted mono" style={{ fontSize: "var(--text-xs)" }}>
+							checked {formatRelative(lastChecked)}
+						</span>
+					)}
+					{canSeeAllBranches && (
+						<BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />
+					)}
+				</div>
 			</div>
 
 			{meetings.length === 0 ? (

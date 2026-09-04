@@ -523,6 +523,12 @@ bookingsRouter.openapi(
 		path: "/meetings/live",
 		tags: ["Bookings"],
 		middleware: [requireAuth, requireMfa] as const,
+		request: {
+			query: z.object({
+				branchId: z.string().min(1).optional(),
+				employeeId: z.string().uuid().optional(),
+			}),
+		},
 		responses: {
 			200: {
 				description: "Live (in-progress) online meetings",
@@ -536,15 +542,23 @@ bookingsRouter.openapi(
 			return c.json({ bookings: [], total: 0 });
 		}
 
+		const query = c.req.valid("query");
+		const conditions = [
+			eq(bookingsTable.meetingActive, true),
+			inArray(bookingsTable.status, ["ASSIGNED", "CONFIRMED", "RESCHEDULED"]),
+		];
+
+		if (canSeeAllBookings(staff)) {
+			if (query.branchId) conditions.push(eq(bookingsTable.branchId, query.branchId));
+			if (query.employeeId) conditions.push(eq(bookingsTable.employeeId, query.employeeId));
+		} else {
+			conditions.push(eq(bookingsTable.employeeId, staff.opsUserId));
+		}
+
 		const rows = await db
 			.select()
 			.from(bookingsTable)
-			.where(
-				and(
-					eq(bookingsTable.meetingActive, true),
-					inArray(bookingsTable.status, ["ASSIGNED", "CONFIRMED", "RESCHEDULED"]),
-				),
-			);
+			.where(and(...conditions));
 
 		const employeeIds = Array.from(new Set(rows.map((r) => r.employeeId).filter(Boolean)));
 		const employees = employeeIds.length

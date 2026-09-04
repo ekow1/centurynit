@@ -17,6 +17,7 @@ import {
 import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
+	applicantDocuments,
 	applicants,
 	applications,
 	bookings,
@@ -1075,6 +1076,78 @@ async function broadcastCaseUpdate(application: ApplicationRow, actor: Actor): P
 		await notifyMany(events);
 	} catch (err) {
 		console.warn("[cases] Failed to broadcast case update:", err);
+	}
+}
+
+/**
+ * After a document is verified, check whether every requested document type
+ * for this applicant has at least one VERIFIED document.  If so and the
+ * application is still at `document_verification`, auto-advance to
+ * `school_submission`.
+ *
+ * Fire-and-forget from the document review route — errors are logged but
+ * never thrown to the caller.
+ */
+export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise<void> {
+	try {
+		const [applicant] = await db
+			.select()
+			.from(applicants)
+			.where(eq(applicants.userId, ownerUserId))
+			.limit(1);
+		if (!applicant) return;
+
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application || application.stage !== "document_verification") return;
+
+		const requested = application.requestedDocuments ?? [];
+		if (requested.length === 0) return;
+
+		const docs = await db
+			.select({ documentType: applicantDocuments.documentType, status: applicantDocuments.status })
+			.from(applicantDocuments)
+			.where(eq(applicantDocuments.ownerUserId, ownerUserId));
+
+		const verifiedTypes = new Set(
+			docs.filter((d) => d.status === "VERIFIED").map((d) => d.documentType),
+		);
+		const allVerified = requested.every((t) => verifiedTypes.has(t));
+		if (!allVerified) return;
+
+		// Direct DB update (matching paymentSettlement.ts pattern) — no full
+		// setApplicationStage guard because the only prerequisite for
+		// school_submission is a package, and the system auto-advance is
+		// the intended path when all documents pass.
+		const [updated] = await db
+			.update(applications)
+			.set({ stage: "school_submission", updatedAt: new Date() })
+			.where(eq(applications.id, application.id))
+			.returning();
+		if (!updated) return;
+
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: application.id,
+			kind: "status",
+			text: "Stage → school_submission (all documents verified)",
+			authorName: "System",
+			authorOpsUserId: null,
+		});
+
+		const clientUserId = await applicantUserIdOfApplication(application.id);
+		if (clientUserId) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "stage.changed",
+				title: "Your case has moved to the next stage",
+				body: "Your application has advanced to: school_submission.",
+				link: "/portal/tracking",
+			}).catch(() => {});
+		}
+
+		await broadcastCaseUpdate(updated, { opsUserId: "", name: "System", email: "" });
+	} catch (err) {
+		console.warn("[cases] Failed to auto-advance document stage:", err);
 	}
 }
 

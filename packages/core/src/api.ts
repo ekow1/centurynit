@@ -376,8 +376,12 @@ export const bookingsApi = {
 	 * `list()` so the dashboard widget and dedicated page can reuse the
 	 * Booking type.
 	 */
-	liveMeetings(): Promise<{ bookings: Booking[]; total: number }> {
-		return request(`${API_PREFIX}/bookings/meetings/live`);
+	liveMeetings(params?: { branchId?: string; employeeId?: string }): Promise<{ bookings: Booking[]; total: number }> {
+		const qs = new URLSearchParams();
+		if (params?.branchId) qs.set("branchId", params.branchId);
+		if (params?.employeeId) qs.set("employeeId", params.employeeId);
+		const query = qs.toString();
+		return request(`${API_PREFIX}/bookings/meetings/live${query ? `?${query}` : ""}`);
 	},
 };
 

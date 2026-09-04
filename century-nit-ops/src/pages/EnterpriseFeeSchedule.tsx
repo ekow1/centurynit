@@ -3,6 +3,7 @@ import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { Toast } from "./OpsDialogs";
+import { GHS_PER_USD } from "./currency";
 
 interface SettingView {
 	key: string;
@@ -273,7 +274,9 @@ export function EnterpriseFeeSchedule() {
 				sessionStorage.setItem(STEP_UP_STORAGE_KEY, JSON.stringify(state));
 			}
 
-			setFlash(`Fee schedule for "${editingFee.title}" updated to $${editAmountDollars} USD.`);
+			const usdAmount = Number.parseFloat(editAmountDollars) || 0;
+			const ghsAmount = Math.round(usdAmount * GHS_PER_USD).toLocaleString();
+			setFlash(`Fee schedule for "${editingFee.title}" updated to GH₵ ${ghsAmount} ($${editAmountDollars} USD).`);
 			setEditingFee(null);
 			await loadSettings();
 		} catch (err) {

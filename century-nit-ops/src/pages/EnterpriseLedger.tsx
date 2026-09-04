@@ -3,7 +3,7 @@ import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import { fmtBoth, fmtUsd, money } from "./currency";
+import { fmtBoth, money } from "./currency";
 import {
 	invoiceBalance,
 	invoiceAgeDays,
@@ -216,7 +216,7 @@ export function EnterpriseLedger() {
 												background: bal > 0 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
 											}}
 										>
-											{fmtUsd(bal)}
+											{fmtBoth(bal)}
 										</span>
 									</button>
 								);
@@ -273,7 +273,7 @@ export function EnterpriseLedger() {
 										<div key={b.label} style={{ textAlign: "center" }}>
 											<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>{b.label}</p>
 											<p className="mono" style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.25rem", color: b.color }}>
-												{fmtUsd(b.value)}
+												{fmtBoth(b.value)}
 											</p>
 										</div>
 									))}
@@ -320,9 +320,9 @@ export function EnterpriseLedger() {
 													</td>
 													<td style={{ fontSize: "var(--text-sm)" }}>{e.description}</td>
 													<td style={{ color: "var(--muted-foreground)", fontSize: "var(--text-xs)" }}>{e.reference}</td>
-													<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)" }}>{e.debit > 0 ? fmtUsd(e.debit) : "—"}</td>
-													<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)", color: "#10b981" }}>{e.credit > 0 ? fmtUsd(e.credit) : "—"}</td>
-													<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)", fontWeight: 600 }}>{fmtUsd(e.balance)}</td>
+											<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)" }}>{e.debit > 0 ? fmtBoth(e.debit) : "—"}</td>
+											<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)", color: "#10b981" }}>{e.credit > 0 ? fmtBoth(e.credit) : "—"}</td>
+											<td className="mono" style={{ textAlign: "right", fontSize: "var(--text-xs)", fontWeight: 600 }}>{fmtBoth(e.balance)}</td>
 												</tr>
 											))}
 										</tbody>

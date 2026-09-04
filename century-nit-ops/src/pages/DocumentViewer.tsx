@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatBytes, getFile, isPreviewable } from "century-nit-core";
+import { documentsApi } from "century-nit-core/api";
 
 /**
  * Renders the document itself.
@@ -21,23 +22,72 @@ type Props = {
 	applicantName?: string;
 	reference?: string;
 	status?: string;
+	/** Real document UUID. When provided and no session file is found, a
+	 *  signed download URL is fetched from the server so the actual uploaded
+	 *  file is rendered instead of the metadata facsimile. */
+	documentId?: string;
 };
 
 const ZOOMS = [0.75, 1, 1.25, 1.5, 2];
 
-export function DocumentViewer({ name, category, applicantName, reference, status }: Props) {
+export function DocumentViewer({ name, category, applicantName, reference, status, documentId }: Props) {
 	const [zoomIdx, setZoomIdx] = useState(1);
 	const [rotation, setRotation] = useState(0);
+	const [signedUrl, setSignedUrl] = useState<string | null>(null);
+	const [signedType, setSignedType] = useState<string | null>(null);
+	const [fetchError, setFetchError] = useState<string | null>(null);
 
 	const file = getFile(name);
 	const kind = file ? isPreviewable(file.type) : null;
 	const zoom = ZOOMS[zoomIdx];
 
+	// When the applicant uploaded the file in a previous session (the normal
+	// case for ops review), getFile() returns nothing. Fetch a signed URL from
+	// the server so the actual document is rendered instead of the facsimile.
+	useEffect(() => {
+		if (file || !documentId) return;
+		let cancelled = false;
+		setSignedUrl(null);
+		setSignedType(null);
+		setFetchError(null);
+		(async () => {
+			try {
+				const ticket = await documentsApi.downloadUrl(documentId);
+				if (cancelled) return;
+				setSignedUrl(ticket.url);
+				// Infer the content type from the file extension — the signed URL
+				// ticket doesn't carry it, and the browser needs a hint to render
+				// PDFs in an iframe vs. images in an <img>.
+				const ext = name.split(".").pop()?.toLowerCase() ?? "";
+				if (ext === "pdf") setSignedType("application/pdf");
+				else if (["png", "jpg", "jpeg", "gif", "webp", "avif"].includes(ext))
+					setSignedType(`image/${ext === "jpg" ? "jpeg" : ext}`);
+				else setSignedType("application/octet-stream");
+			} catch (err) {
+				if (cancelled) return;
+				setFetchError(err instanceof Error ? err.message : "Could not load the document.");
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [file, documentId, name]);
+
+	const remoteKind = signedUrl && signedType ? isPreviewable(signedType) : null;
+	const displayUrl = file?.url ?? signedUrl;
+	const displayKind = file ? kind : remoteKind;
+
 	return (
 		<div className="docview">
 			<div className="docview__bar">
 				<span className="docview__source mono">
-					{file ? `${file.name} · ${formatBytes(file.size)}` : "Rendered preview · original not in this session"}
+					{file
+						? `${file.name} · ${formatBytes(file.size)}`
+						: signedUrl
+							? `${name} · signed preview`
+							: fetchError
+								? "Could not load the document"
+								: "Loading document…"}
 				</span>
 
 				<div className="docview__tools">
@@ -68,17 +118,17 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 					>
 						↻
 					</button>
-					{file ? (
+					{displayUrl ? (
 						<>
 							<a
 								className="docview__tool docview__tool--wide"
-								href={file.url}
+								href={displayUrl}
 								target="_blank"
 								rel="noreferrer"
 							>
 								Open
 							</a>
-							<a className="docview__tool docview__tool--wide" href={file.url} download={file.name}>
+							<a className="docview__tool docview__tool--wide" href={displayUrl} download={name}>
 								Download
 							</a>
 						</>
@@ -91,10 +141,22 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 					className="docview__canvas"
 					style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
 				>
-					{file && kind === "pdf" ? (
-						<iframe className="docview__pdf" src={file.url} title={name} />
-					) : file && kind === "image" ? (
-						<img className="docview__img" src={file.url} alt={name} />
+					{displayKind === "pdf" && displayUrl ? (
+						<iframe className="docview__pdf" src={displayUrl} title={name} />
+					) : displayKind === "image" && displayUrl ? (
+						<img className="docview__img" src={displayUrl} alt={name} />
+					) : fetchError ? (
+						<div className="docview__error">
+							<p className="mono">{fetchError}</p>
+							<p className="muted">
+								The signed link may have expired or storage is not configured. Try
+								reopening the document.
+							</p>
+						</div>
+					) : !displayUrl && documentId ? (
+						<div className="docview__loading">
+							<p className="mono">Loading document…</p>
+						</div>
 					) : (
 						<Facsimile
 							name={name}

@@ -151,6 +151,7 @@ export function DocPreviewInline({
 				applicantName={applicantName}
 				reference={reference}
 				status={status}
+				documentId={documentId ?? doc.documentId}
 			/>
 
 			{/* Reviewer guidance - kept, but below the document rather than instead of it */}

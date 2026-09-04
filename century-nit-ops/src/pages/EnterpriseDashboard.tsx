@@ -5,7 +5,7 @@ import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { API_PREFIX } from "century-nit-shared";
-import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
+import { fmtBoth, fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { UnassignedQueue } from "./UnassignedBookings";
 import { LiveMeetings } from "./LiveMeetings";
 import { StaffChatBadge } from "./StaffChatBadge";
@@ -214,7 +214,7 @@ function ManagerView({
 				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
 				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
 				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/applicants" />
-				<KPICard label="Collected Revenue" value={fmtUsd(stats.collected)} note={`Outstanding: ${fmtUsd(stats.outstanding)}`} to="/finance" />
+				<KPICard label="Collected Revenue" value={fmtBoth(stats.collected)} note={`Outstanding: ${fmtBoth(stats.outstanding)}`} to="/finance" />
 			</div>
 
 			<div style={{ marginBottom: "2rem" }}>

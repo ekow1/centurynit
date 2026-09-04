@@ -16,7 +16,7 @@ import {
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import { getSetting } from "./settings.js";
-import { formatUsd } from "./receiptEmail.js";
+import { formatGhs, formatUsd } from "./receiptEmail.js";
 import { invoiceRaisedForClient } from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 
@@ -316,6 +316,7 @@ export async function createInvoice(input: {
 					invoiceNumber: row.invoiceNumber,
 					invoiceType: row.type,
 					amountFormatted: formatUsd(row.subtotalCents / 100),
+					amountGhsFormatted: formatGhs(row.subtotalCents / 100),
 					dueAtFormatted,
 					payUrl,
 				}),

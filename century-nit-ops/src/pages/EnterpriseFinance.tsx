@@ -5,7 +5,7 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
+import { fmtBoth, fmtGhs, money } from "./currency";
 
 
 const RANGES = [
@@ -126,17 +126,17 @@ export function EnterpriseFinance() {
 				<div className="card" style={{ background: "var(--foreground)", color: "var(--background)" }}>
 					<p className="eyebrow" style={{ color: "var(--muted)" }}>Total Outstanding</p>
 					<p className="page-title mt-1" style={{ color: "var(--background)" }}>{fmtGhs(totals.outstanding)}</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>≈ {fmtUsd(totals.outstanding)} USD</p>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)", color: "var(--muted)" }}>{fmtBoth(totals.outstanding)}</p>
 				</div>
 				<div className="card">
 					<p className="eyebrow">Collected</p>
 					<p className="page-title mt-1">{fmtGhs(totals.collected)}</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>≈ {fmtUsd(totals.collected)} USD</p>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>{fmtBoth(totals.collected)}</p>
 				</div>
 				<div className="card">
 					<p className="eyebrow">Total Billed</p>
 					<p className="page-title mt-1">{fmtGhs(totals.billed)}</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>≈ {fmtUsd(totals.billed)} USD</p>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>{fmtBoth(totals.billed)}</p>
 				</div>
 			</div>
 
@@ -150,7 +150,7 @@ export function EnterpriseFinance() {
 				<div className="card">
 					<p className="eyebrow">Avg. Account Value</p>
 					<p className="page-title mt-1">{fmtGhs(analytics.avgAccount)}</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>≈ {fmtUsd(analytics.avgAccount)} USD · {scopedApplicants.length} active accounts</p>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>{fmtBoth(analytics.avgAccount)} · {scopedApplicants.length} active accounts</p>
 				</div>
 				<div className="card">
 					<p className="eyebrow">Outstanding Ratio</p>

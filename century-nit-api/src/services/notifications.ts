@@ -415,6 +415,7 @@ export function invoiceRaisedForClient(ctx: {
 	invoiceNumber: string;
 	invoiceType: string;
 	amountFormatted: string;
+	amountGhsFormatted: string;
 	dueAtFormatted?: string | null;
 	payUrl: string;
 }): QueuedEmail {
@@ -423,6 +424,7 @@ export function invoiceRaisedForClient(ctx: {
 		invoiceNumber: ctx.invoiceNumber,
 		invoiceType: ctx.invoiceType,
 		amountFormatted: ctx.amountFormatted,
+		amountGhsFormatted: ctx.amountGhsFormatted,
 		dueAtFormatted: ctx.dueAtFormatted,
 		payUrl: ctx.payUrl,
 	});

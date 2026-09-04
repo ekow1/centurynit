@@ -2249,6 +2249,27 @@
 	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
 }
 
+.docview__loading,
+.docview__error {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	min-height: 20rem;
+	padding: 2rem;
+	text-align: center;
+	background: #fff;
+	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
+	width: 30rem;
+	max-width: 100%;
+}
+
+.docview__error .mono {
+	color: #991b1b;
+	font-size: 0.85rem;
+}
+
 /* ---------- Facsimile page ---------- */
 
 .facsim {

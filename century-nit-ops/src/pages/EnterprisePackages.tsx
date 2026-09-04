@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { PACKAGE_CODE_LABELS, type PackageCode, type ServicePackage } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
+import { GHS_PER_USD } from "./currency";
 
 function formatCents(cents: number, currency = "USD") {
-	const symbol = currency === "GHS" ? "GH₵" : "$";
-	return `${symbol}${(cents / 100).toFixed(2)}`;
+	if (currency === "GHS") {
+		const ghs = (cents / 100).toFixed(2);
+		const usd = (cents / 100 / GHS_PER_USD).toFixed(2);
+		return `GH₵ ${ghs} (≈ $${usd} USD)`;
+	}
+	const usd = (cents / 100).toFixed(2);
+	const ghs = Math.round((cents / 100) * GHS_PER_USD).toLocaleString();
+	return `GH₵ ${ghs} ($${usd} USD)`;
 }
 
 function strToArr(s: string): string[] {

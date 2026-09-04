@@ -551,6 +551,7 @@ export function renderInvoiceRaisedEmail(data: {
 	invoiceNumber: string;
 	invoiceType: string;
 	amountFormatted: string;
+	amountGhsFormatted: string;
 	dueAtFormatted?: string | null;
 	payUrl: string;
 }): { html: string; text: string } {
@@ -581,7 +582,7 @@ export function renderInvoiceRaisedEmail(data: {
 						</tr>
 						<tr>
 							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Amount</td>
-							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${data.amountFormatted}</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${data.amountGhsFormatted} (${data.amountFormatted})</td>
 						</tr>
 						${data.dueAtFormatted ? `
 						<tr>
@@ -620,7 +621,7 @@ export function renderInvoiceRaisedEmail(data: {
 		``,
 		`Invoice: ${safeInvoice}`,
 		`Type: ${safeType}`,
-		`Amount: ${data.amountFormatted}`,
+		`Amount: ${data.amountGhsFormatted} (${data.amountFormatted})`,
 		...(data.dueAtFormatted ? [`Due: ${data.dueAtFormatted}`] : []),
 		``,
 		`Pay securely through your portal:`,
@@ -630,7 +631,7 @@ export function renderInvoiceRaisedEmail(data: {
 	return {
 		html: emailLayout({
 			title: "Invoice Ready for Payment",
-			preheader: `Invoice ${safeInvoice} · ${data.amountFormatted}`,
+			preheader: `Invoice ${safeInvoice} · ${data.amountGhsFormatted} (${data.amountFormatted})`,
 			bodyHtml,
 		}),
 		text,

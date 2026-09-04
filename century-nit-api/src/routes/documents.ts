@@ -39,6 +39,7 @@ import {
 	getStaffUserId,
 } from "../services/notify.js";
 import { env } from "../env.js";
+import { checkAndAdvanceDocumentStage } from "../services/cases.js";
 
 /**
  * Applicant documents.
@@ -89,16 +90,20 @@ function toResponse(row: DocumentRow, enrichment?: StaffEnrichment) {
 /** Staff who may review documents at all. Matches ROLE_PERMISSIONS.documents. */
 function canReview(role: string | undefined): boolean {
 	return (
-		role === "manager" || role === "coordinator" || role === "consultant" || role === "super_admin"
+		role === "manager" ||
+		role === "coordinator" ||
+		role === "consultant" ||
+		role === "super_admin" ||
+		role === "customer_service"
 	);
 }
 
 /**
  * Which applicants this caller may reach, beyond themselves.
  *
- * `null` means every applicant: managers, coordinators and super admins route
- * work across the whole operation and need the full queue to do it. A
- * consultant gets a list — the applicants actually assigned to them — which is
+ * `null` means every applicant: managers, coordinators, customer_service and
+ * super admins route work across the whole operation and need the full queue
+ * to do it. A consultant gets a list — the applicants actually assigned to them — which is
  * the same row-level rule `canViewBooking` applies to appointments. Anyone else
  * gets an empty list and can only ever see their own documents.
  *
@@ -714,6 +719,11 @@ documentsRouter.openapi(
 						})
 					: undefined,
 			}).catch(() => {});
+		}
+
+		// If all requested documents are now verified, auto-advance the case stage.
+		if (body.status === "VERIFIED") {
+			checkAndAdvanceDocumentStage(updated.ownerUserId).catch(() => {});
 		}
 
 		return c.json(toResponse(updated));

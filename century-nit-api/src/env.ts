@@ -145,6 +145,11 @@ const schema = z.object({
 	DEFAULT_TIMEZONE: z.string().default("Africa/Accra"),
 	/** Number of appointment slots offered per branch per day. */
 	SLOTS_PER_DAY: z.coerce.number().int().min(1).max(48).default(8),
+	/**
+	 * How many days rejected or superseded applicant documents are kept before
+	 * their storage objects and DB rows are hard-deleted by the cleanup worker.
+	 */
+	REJECTED_DOCUMENT_TTL_DAYS: devDefault(z.coerce.number().int().min(1).max(365).default(30), 30),
 	/** Branch opening time in HH:MM, used to compute slot times. */
 	BRANCH_OPEN_START: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).default("09:00"),
 	/** Branch closing time in HH:MM, used to compute slot times. */

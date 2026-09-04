@@ -292,6 +292,8 @@ export const applicantDocuments = pgTable(
 		uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+		/** When a rejected/superseded document should be purged by the cleanup worker. */
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
 	},
 	(t) => ({
 		byOwner: index("applicant_documents_owner_idx").on(t.ownerUserId, t.documentType),

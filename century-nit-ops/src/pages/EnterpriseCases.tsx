@@ -36,7 +36,6 @@ export function EnterpriseCases() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-	const [actionError, setActionError] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -138,12 +137,6 @@ export function EnterpriseCases() {
 			{actionSuccess && (
 				<div style={{ padding: "0.85rem 1.25rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1rem" }}>
 					✓ {actionSuccess}
-				</div>
-			)}
-
-			{actionError && (
-				<div role="alert" style={{ padding: "0.85rem 1.25rem", background: "#b91c1c", color: "#fff", marginBottom: "1rem" }}>
-					{actionError}
 				</div>
 			)}
 

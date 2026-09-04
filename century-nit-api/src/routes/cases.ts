@@ -42,6 +42,7 @@ import {
 	setApplicationVisaStage,
 	startConsultationAssessment,
 	toggleApplicationChecklist,
+	updateApplication,
 } from "../services/cases.js";
 import {
 	getInvoice,
@@ -92,6 +93,7 @@ import {
 	paystackVerifyResponseSchema,
 	paystackVerifySchema,
 	patchApplicantSchema,
+	patchApplicationSchema,
 	reassignCoordinatorSchema,
 	recordPaymentSchema,
 	requestDocumentsSchema,
@@ -455,6 +457,37 @@ applicationsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this application");
 		}
 		return c.json(await serializeApplication(row));
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: patchApplicationSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationSchema } },
+				description: "Application updated",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const row = await getApplication(id);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		const ownerUserId = await applicantUserIdOfApplication(id);
+		if (!canSeeApplication({ ...row, applicantUserId: ownerUserId }, c.get("user").id, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to update this application");
+		}
+		const updated = await updateApplication(id, c.req.valid("json"), actorFrom(staff));
+		return c.json(await serializeApplication(updated));
 	},
 );
 

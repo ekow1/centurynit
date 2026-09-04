@@ -6,6 +6,7 @@ import { sendPaymentReceiptEmail } from "./receiptEmail.js";
 import { getInvoice, recordPayment } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import type { InvoiceRow } from "./invoice.js";
+import { syncLeadFromApplicationStatus } from "./leads.js";
 
 const SYSTEM_ACTOR = {
 	opsUserId: "00000000-0000-0000-0000-000000000000",
@@ -101,6 +102,10 @@ async function advanceApplicationStage(invoice: InvoiceRow): Promise<void> {
 					updatedAt: now,
 				})
 				.where(eq(applications.id, application.id));
+
+			if (invoice.applicantEmail) {
+				await syncLeadFromApplicationStatus(application.id, invoice.applicantEmail, "ACCEPTED", "System");
+			}
 		} else if (invoice.type === "visa") {
 			await db
 				.update(applications)

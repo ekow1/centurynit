@@ -15,6 +15,7 @@ import { getInvoice, recordPayment } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
 import { sendPaymentReceiptEmail } from "./receiptEmail.js";
+import { syncLeadFromApplicationStatus } from "./leads.js";
 
 
 const GHS_USD_RATE = 15.0; // 1 USD = 15.00 GHS for presentation / MoMo charge in Ghana
@@ -257,6 +258,11 @@ export async function verifyAndSettlePayment(
 				})
 				.where(eq(applications.id, latestApplicationId))
 				.catch(() => {});
+			if (invoice.applicantEmail) {
+				await syncLeadFromApplicationStatus(latestApplicationId, invoice.applicantEmail, "ACCEPTED", "System").catch(
+					() => {},
+				);
+			}
 		} else if (latestApplicationId && invoice.type === "visa") {
 			await db
 				.update(applications)

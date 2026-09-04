@@ -1947,7 +1947,7 @@ export function PortalConsultation() {
 								className="btn btn--primary btn--sm"
 								style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
 							>
-								📹 Join Google Meet
+								📹 Join Video Meeting
 							</a>
 						)}
 					</div>
@@ -3348,7 +3348,9 @@ export function PortalPayCallback() {
 					if (cancelled) return;
 
 					// Force a sync to get the new booking into AppState
-					// or we can optimistically update booking here, but a reload is safer.
+					await syncFromServer();
+					if (cancelled) return;
+
 					nav("/portal/appointments", { replace: true });
 					toast.success("Payment confirmed. Your booking is now complete.");
 					return;

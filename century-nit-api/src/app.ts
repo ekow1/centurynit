@@ -272,6 +272,10 @@ app.route(`${API_PREFIX}/fees`, feesRouter);
 	{ name: "Marketing", description: "Campaigns, mailing lists and reusable templates." },
 	{ name: "Newsletter", description: "Public website newsletter subscription and opt-out." },
 	{ name: "Team", description: "Manager dashboard for staff case assignments." },
+	{
+		name: "Company Google Meet",
+		description: "Company Google account connection and status for automated Google Meet creation.",
+	},
 	],
 	};
 

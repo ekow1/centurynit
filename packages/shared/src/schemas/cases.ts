@@ -263,6 +263,25 @@ export const checklistItemSchema = z.object({
 	checked: z.boolean(),
 });
 
+export const preDepartureTaskSchema = z.object({
+	id: z.string(),
+	category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
+	label: z.string(),
+	detail: z.string().optional(),
+	done: z.boolean(),
+});
+
+export const patchApplicationSchema = z.object({
+	visaInvoicePaid: z.boolean().optional(),
+	visaCounselorNote: z.string().optional(),
+	paymentPlanId: z.string().optional(),
+	agencyStageIndex: z.number().int().min(0).max(2).optional(),
+	agencySettled: z.boolean().optional(),
+	travelClearance: z.enum(["pending", "cleared"]).optional(),
+	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
+	notes: z.string().optional(),
+}).partial();
+
 export const applicantSchema = z.object({
 	id: z.string().uuid(),
 	userId: z.string().nullable(),
@@ -352,6 +371,15 @@ export const applicationSchema = z.object({
 	agencySettled: z.boolean(),
 	travelClearance: z.enum(["pending", "cleared"]),
 	requestedDocuments: z.array(z.string()),
+	preDepartureTasks: z.array(
+		z.object({
+			id: z.string(),
+			category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
+			label: z.string(),
+			detail: z.string().optional(),
+			done: z.boolean(),
+		}),
+	),
 	comments: z.array(caseCommentSchema),
 	submittedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),

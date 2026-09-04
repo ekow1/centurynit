@@ -29,9 +29,9 @@ export const GOOGLE_SCOPES = [
 ];
 
 export async function googleConfigured(): Promise<boolean> {
-	const id = await getSetting("GOOGLE_CLIENT_ID");
-	const secret = await getSetting("GOOGLE_CLIENT_SECRET");
-	const redirect = await getSetting("GOOGLE_REDIRECT_URI");
+	const id = (await getSetting("GOOGLE_CLIENT_ID"))?.trim() || env.GOOGLE_CLIENT_ID?.trim();
+	const secret = (await getSetting("GOOGLE_CLIENT_SECRET"))?.trim() || env.GOOGLE_CLIENT_SECRET?.trim();
+	const redirect = (await getSetting("GOOGLE_REDIRECT_URI"))?.trim() || env.GOOGLE_REDIRECT_URI?.trim();
 	return Boolean(id && secret && redirect);
 }
 
@@ -44,13 +44,13 @@ export async function googleConfigured(): Promise<boolean> {
 export type OAuthClient = InstanceType<typeof google.auth.OAuth2>;
 
 export async function createOAuthClient(): Promise<OAuthClient> {
-	const clientId = await getSetting("GOOGLE_CLIENT_ID");
-	const clientSecret = await getSetting("GOOGLE_CLIENT_SECRET");
-	const redirectUri = await getSetting("GOOGLE_REDIRECT_URI");
+	const clientId = (await getSetting("GOOGLE_CLIENT_ID"))?.trim();
+	const clientSecret = (await getSetting("GOOGLE_CLIENT_SECRET"))?.trim();
+	const redirectUri = (await getSetting("GOOGLE_REDIRECT_URI"))?.trim();
 	return new google.auth.OAuth2(
-		clientId ?? env.GOOGLE_CLIENT_ID,
-		clientSecret ?? env.GOOGLE_CLIENT_SECRET,
-		redirectUri ?? env.GOOGLE_REDIRECT_URI,
+		clientId || env.GOOGLE_CLIENT_ID?.trim(),
+		clientSecret || env.GOOGLE_CLIENT_SECRET?.trim(),
+		redirectUri || env.GOOGLE_REDIRECT_URI?.trim(),
 	);
 }
 

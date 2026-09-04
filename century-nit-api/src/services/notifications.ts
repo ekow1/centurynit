@@ -131,6 +131,30 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 	};
 }
 
+/** Meeting URL added or updated by operations staff. */
+export function bookingMeetingUrlSetForClient(ctx: BookingNotificationContext): QueuedEmail {
+	const when = formatInZone(ctx.startsAt, ctx.clientTimezone);
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`The video meeting link for your consultation has been updated.`,
+		`<strong>Service:</strong> ${ctx.serviceName}`,
+		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
+		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		`Please use the link below to join the video session at your scheduled time.`,
+	];
+	const { html, text } = formatEmail("Your consultation meeting link is ready", lines, ctx.meetingUrl, ctx.reference);
+	return {
+		to: ctx.clientEmail,
+		subject: `Meeting link ready · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:meeting_url:${ctx.reference}:${Date.now()}`,
+		template: "Meeting link ready",
+		reference: ctx.reference,
+	};
+}
+
 export function bookingAssignedForEmployee(ctx: BookingNotificationContext): QueuedEmail {
 	const when = formatInZone(ctx.startsAt, ctx.employeeTimezone);
 	const lines = [

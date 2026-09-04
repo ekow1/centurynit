@@ -1,0 +1,1 @@
+ALTER TABLE "applications" ADD COLUMN "pre_departure_tasks" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -244,11 +244,23 @@ export async function createBooking(input: {
 
 	// The booking is already committed. A case-setup failure must not look like
 	// a lost slot race, and must not roll the appointment back.
+	let consultationId: string | undefined;
 	try {
 		const { ensureCaseForBooking } = await import("./cases.js");
-		await ensureCaseForBooking(booking);
+		const consultation = await ensureCaseForBooking(booking);
+		consultationId = consultation.id;
 	} catch (err) {
 		console.error("[booking] could not open the consultation case:", err);
+	}
+
+	// Link the new consultation to any existing lead and advance the lead stage.
+	if (consultationId && client.email) {
+		try {
+			const { linkConsultationToLead } = await import("./leads.js");
+			await linkConsultationToLead(consultationId, client.email, client.name);
+		} catch (err) {
+			console.error("[booking] could not link consultation to lead:", err);
+		}
 	}
 
 	// Queued, never inline: a failed email must not undo a real booking (§13).
@@ -467,8 +479,6 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 		}
 		const message = err instanceof Error ? err.message : "Google Meet creation failed";
 		const failed = await markSyncFailed(booking.id, message);
-		// Retry out of band; the booking itself is untouched and still valid.
-		await queueCalendar({ type: "sync", bookingId: booking.id });
 		return failed;
 	}
 }
@@ -506,6 +516,27 @@ export async function setBookingMeetingUrl(bookingId: string, meetingUrl: string
 		.where(eq(bookings.id, bookingId))
 		.returning();
 	await audit(bookingId, "meeting_url.set", "staff", { meetingUrl });
+
+	// When a meeting URL is set or changed, notify the client immediately so they have the link
+	if (meetingUrl && meetingUrl !== booking.meetingUrl) {
+		try {
+			const employee = row.employeeId ? await loadEmployee(row.employeeId) : null;
+			const ctx = await notificationContext(row, employee);
+			await queueEmails([mail.bookingMeetingUrlSetForClient(ctx)]);
+			if (row.clientUserId) {
+				notify({
+					recipientUserId: row.clientUserId,
+					type: "booking.meeting_link",
+					title: "Meeting link ready",
+					body: `Your consultation video meeting link is ready. Ref: ${row.reference}`,
+					link: "/portal/consultation",
+				}).catch(() => {});
+			}
+		} catch (err) {
+			console.error("[booking] could not send meeting url notification:", err);
+		}
+	}
+
 	return row;
 }
 
@@ -876,10 +907,15 @@ export async function cancelBooking(input: {
 	const { syncConsultationCancelled } = await import("./cases.js");
 	await syncConsultationCancelled(booking.id);
 
-	// Free the slot in Google too, and stop the reminders.
-	if (updated.calendarEventId && updated.employeeId) {
-		await queueCalendar({ type: "cancel", bookingId: updated.id });
+	if (booking.meetingSpace) {
+		try {
+			const { endMeeting } = await import("./meet/index.js");
+			await endMeeting(booking.meetingSpace);
+		} catch {
+			// Meeting space might already be expired or inactive
+		}
 	}
+
 	await cancelQueued(`notify:reminder:client:${booking.reference}`);
 	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
 

@@ -1670,10 +1670,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		const id = `CNT-CONS-${n}`;
 		const now = new Date().toISOString();
 		setBooking((prev) => {
-			const isOnline = prev.consultationType === "online";
-			const meetingLink = isOnline
-				? `https://meet.google.com/century-nit-${id.toLowerCase().replace(/[^a-z0-9]/g, "")}`
-				: null;
+			const meetingLink = null;
 			return {
 				...prev,
 				confirmationId: id,
@@ -1997,8 +1994,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
 					paymentStatus: "success",
 					paidAt: c.createdAt,
-					meetingLink: c.meetingUrl ?? prev.meetingLink,
-					date: c.startsAt ? c.startsAt.slice(0, 10) : prev.date,
+					meetingLink: c.meetingUrl ?? null,
+					date: c.startsAt
+						? new Intl.DateTimeFormat("en-CA", {
+								timeZone: c.timezone ?? undefined,
+								year: "numeric",
+								month: "2-digit",
+								day: "2-digit",
+							}).format(new Date(c.startsAt))
+						: prev.date,
+					time: c.startsAt
+						? new Intl.DateTimeFormat("en-GB", {
+								timeZone: c.timezone ?? undefined,
+								hour: "2-digit",
+								minute: "2-digit",
+								hourCycle: "h23",
+							}).format(new Date(c.startsAt))
+						: prev.time,
 				}));
 			} else if (res.application) {
 			// No consultation row, but an application exists — ops created it

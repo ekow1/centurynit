@@ -973,6 +973,10 @@ export const applications = pgTable(
 		agencySettled: boolean("agency_settled").notNull().default(false),
 		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),
 		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
+		preDepartureTasks: jsonb("pre_departure_tasks")
+			.$type<{ id: string; category?: "travel" | "accommodation" | "documents" | "health" | "finance" | "orientation"; label: string; detail?: string; done: boolean }[]>()
+			.notNull()
+			.default([]),
 		submittedAt: timestamp("submitted_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

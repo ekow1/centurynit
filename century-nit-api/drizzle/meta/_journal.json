@@ -323,6 +323,13 @@
       "when": 1788504969916,
       "tag": "0046_chief_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788522426198,
+      "tag": "0047_colossal_cloak",
+      "breakpoints": true
     }
   ]
 }

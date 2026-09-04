@@ -507,10 +507,10 @@ export function EnterpriseConsultations() {
 								</p>
 							</div>
 						)}
-						{active.status === "Assigned" && !canAssignWork && !active.slotConfirmed && (
+						{active.status === "Assigned" && !active.slotConfirmed && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#e0e7ff", borderBottom: "1px solid #c7d2fe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#4338ca" }}>
-									<strong>Assigned to you.</strong> Confirm the slot to accept the booking time, or reschedule if needed.
+									<strong>Assigned.</strong> Confirm the slot to accept the booking time, or reschedule if needed.
 								</p>
 								<div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
 									<button
@@ -529,7 +529,7 @@ export function EnterpriseConsultations() {
 								</div>
 							</div>
 						)}
-						{active.status === "Assigned" && !canAssignWork && active.slotConfirmed && (
+						{active.status === "Assigned" && active.slotConfirmed && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#d1fae5", borderBottom: "1px solid #6ee7b7", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#065f46" }}>
 									<strong>Slot confirmed.</strong> Review the documents and applicant background, then start the assessment when ready.
@@ -554,20 +554,31 @@ export function EnterpriseConsultations() {
 								</div>
 							</div>
 						)}
-						{showReschedule && (active.status === "Under Review" || active.status === "Assigned") && (
+						{showReschedule && (
 							<ReschedulePanel
 								currentWhen={active.dateTime}
 								branchLabel={active.branch}
+								duration="45"
 								onConfirm={(date, time, reason) => {
-									if (!active.bookingId) { setShowReschedule(false); return; }
-									rescheduleConsultation(active.id, active.bookingId, date, time, reason)
-										.then(() => setShowReschedule(false))
-										.catch(() => setShowReschedule(false));
+									if (active.bookingId) {
+										void rescheduleConsultation(
+											selectedConsultation.id,
+											active.bookingId,
+											date,
+											time,
+											reason,
+										).then(() => {
+											setShowReschedule(false);
+											void refresh();
+										});
+									} else {
+										setShowReschedule(false);
+									}
 								}}
 								onCancel={() => setShowReschedule(false)}
 							/>
 						)}
-						{active.slotConfirmed && (active.meetingLink || active.mapsUrl) && (
+						{(active.meetingLink || (active.slotConfirmed && active.mapsUrl)) && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<div>
 									<p style={{ fontSize: "var(--text-sm)", color: "#0c4a6e", fontWeight: 600 }}>
@@ -602,7 +613,7 @@ export function EnterpriseConsultations() {
 								) : null}
 							</div>
 						)}
-						{active.type === "online" && active.slotConfirmed && active.bookingId && canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
+						{active.type === "online" && active.bookingId && (canAssignWork || active.assignedOfficerEmail === opsUser?.email) && active.status !== "Completed" && active.status !== "Cancelled" && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
 								<p className="eyebrow">Meeting link</p>
 								{!editingMeetingUrl ? (

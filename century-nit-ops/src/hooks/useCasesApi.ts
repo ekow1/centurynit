@@ -266,6 +266,7 @@ export function useCasesApi() {
 			t === "consultation.assigned" ||
 			t === "assessment.complete" ||
 			t === "case.assigned" ||
+			t === "case.updated" ||
 			t === "stage.changed" ||
 			t === "visa.stage_changed" ||
 			t === "coordinator_delegated" ||

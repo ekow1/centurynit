@@ -71,14 +71,28 @@ async function meetClient() {
 export async function createMeeting(): Promise<MeetingSpace> {
 	const client = await meetClient();
 	try {
-		const res = await client.spaces.create({
-			requestBody: {
-				config: {
-					accessType: "TRUSTED",
+		let space;
+		try {
+			const res = await client.spaces.create({
+				requestBody: {
+					config: {
+						accessType: "TRUSTED",
+					},
 				},
-			},
-		});
-		const space = res.data;
+			});
+			space = res.data;
+		} catch (firstErr: unknown) {
+			const e = firstErr as { code?: number | string; response?: { status?: number } };
+			const status = typeof e.code === "number" ? e.code : e.response?.status;
+			if (status === 400) {
+				const fallbackRes = await client.spaces.create({
+					requestBody: {},
+				});
+				space = fallbackRes.data;
+			} else {
+				throw firstErr;
+			}
+		}
 		if (!space?.meetingUri) {
 			throw new MeetUnavailableError("Google returned a space with no meeting URI");
 		}

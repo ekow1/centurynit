@@ -57,12 +57,13 @@ export function ConsultationAppointmentCard() {
 	const durationLabel =
 		CONSULTATION_DURATIONS.find((d) => d.id === booking.duration)?.label ?? `${minutes} min`;
 
-	// A meeting is joinable from 15 minutes before it starts until an hour after
+	// A meeting is joinable from 15 minutes before it starts until an hour after (or if start is unparsed)
 	const now = useNow();
 	const joinable =
-		start !== null &&
-		now >= start.getTime() - 15 * MINUTE &&
-		now <= start.getTime() + (minutes + 60) * MINUTE;
+		start === null || (
+			now >= start.getTime() - 15 * MINUTE &&
+			now <= start.getTime() + (minutes + 60) * MINUTE
+		);
 
 	async function copyLink() {
 		if (!booking.meetingLink) return;

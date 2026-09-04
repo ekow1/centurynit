@@ -517,3 +517,61 @@ export async function linkApplicationToLead(
 		console.warn("[CRM] Failed to auto-link application to lead:", err);
 	}
 }
+
+/**
+ * Sync the lead stage from an application's current status.
+ * Called when an application is accepted or a payment settles.
+ */
+export async function syncLeadFromApplicationStatus(
+	applicationId: string,
+	email: string,
+	status: string,
+	actorName?: string | null,
+): Promise<void> {
+	try {
+		const lead = await findLeadByEmail(email);
+		if (!lead) return;
+
+		const patch: Record<string, unknown> = { applicationId };
+		if (status === "ACCEPTED" && lead.stage !== "Enrolled") {
+			patch.stage = "Enrolled";
+		} else if (status === "UNDER_REVIEW" && lead.stage === "Consultation Booked") {
+			patch.stage = "Assessment Complete";
+		} else {
+			// nothing to change
+			return;
+		}
+
+		await db.update(leads).set({ ...patch, updatedAt: new Date() }).where(eq(leads.id, lead.id));
+		await recordLeadEvent(lead.id, "stage_changed", actorName ?? null, {
+			applicationId,
+			newStage: patch.stage,
+		});
+	} catch (err) {
+		console.warn("[CRM] Failed to sync lead stage from application:", err);
+	}
+}
+
+/**
+ * Mirror a staff assignment onto a lead record.
+ * Called when a consultation or application is assigned to an employee.
+ */
+export async function syncLeadAssignment(
+	email: string,
+	staffId: string,
+	staffName: string,
+	actorName?: string | null,
+): Promise<void> {
+	try {
+		const lead = await findLeadByEmail(email);
+		if (!lead) return;
+
+		await db
+			.update(leads)
+			.set({ assignedStaffId: staffId, updatedAt: new Date() })
+			.where(eq(leads.id, lead.id));
+		await recordLeadEvent(lead.id, "assigned", actorName ?? null, { staffId, staffName });
+	} catch (err) {
+		console.warn("[CRM] Failed to sync lead assignment:", err);
+	}
+}

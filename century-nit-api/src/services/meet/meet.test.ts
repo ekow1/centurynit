@@ -74,6 +74,24 @@ describe("Google Meet service", () => {
 			});
 		});
 
+		it("falls back to default space creation if accessType TRUSTED is rejected with 400", async () => {
+			spacesMock.create
+				.mockRejectedValueOnce({ code: 400, message: "Invalid access type for consumer account" })
+				.mockResolvedValueOnce({
+					data: {
+						name: "spaces/fallback123",
+						meetingUri: "https://meet.google.com/aaa-bbbb-ccc",
+						meetingCode: "aaa-bbbb-ccc",
+					},
+				});
+
+			const space = await createMeeting();
+			expect(space.spaceId).toBe("spaces/fallback123");
+			expect(space.meetingUri).toBe("https://meet.google.com/aaa-bbbb-ccc");
+			expect(spacesMock.create).toHaveBeenCalledTimes(2);
+			expect(spacesMock.create).toHaveBeenLastCalledWith({ requestBody: {} });
+		});
+
 		it("throws MeetUnavailableError when Google returns no meeting URI", async () => {
 			spacesMock.create.mockResolvedValue({ data: {} });
 			await expect(createMeeting()).rejects.toBeInstanceOf(MeetUnavailableError);

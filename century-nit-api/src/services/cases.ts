@@ -12,7 +12,9 @@ import {
 	DEFAULT_FEE_CENTS,
 	JOURNEY_STAGES,
 	type JourneyStage,
+	patchApplicationSchema,
 } from "century-nit-shared";
+import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
 	applicants,
@@ -33,9 +35,14 @@ import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
-import { notify, getStaffUserId } from "./notify.js";
+import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { listSchoolsForApplicant } from "./schools.js";
 import { createInvoice } from "./invoice.js";
+import {
+	linkApplicationToLead,
+	syncLeadAssignment,
+	syncLeadFromApplicationStatus,
+} from "./leads.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -245,6 +252,14 @@ export async function syncConsultationAssignment(
 		.update(applicants)
 		.set({ assignedOfficerId: employeeId, updatedAt: new Date() })
 		.where(eq(applicants.id, row.applicantId));
+
+	const applicant = await getApplicant(row.applicantId);
+	if (applicant?.email) {
+		const staff = await loadStaff(employeeId);
+		if (staff) {
+			await syncLeadAssignment(applicant.email, employeeId, staff.name, actor.name);
+		}
+	}
 }
 
 /**
@@ -475,6 +490,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		agencySettled: row.agencySettled,
 		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
 		requestedDocuments: row.requestedDocuments ?? [],
+		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
 		comments: comments.map(toComment),
 		submittedAt: row.submittedAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
@@ -819,6 +835,10 @@ export async function completeConsultationAssessment(input: {
 		return app;
 	});
 
+	if (applicant?.email && created) {
+		await linkApplicationToLead(created.id, applicant.email, input.actor.name);
+	}
+
 	return { consultation: updated, application: created };
 }
 
@@ -953,6 +973,7 @@ export async function assignApplication(input: {
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 	const employee = await loadStaff(input.employeeId);
 	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
+	const applicant = await getApplicant(row.applicantId);
 
 	const [updated] = await db
 		.update(applications)
@@ -965,6 +986,10 @@ export async function assignApplication(input: {
 		.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
 		.where(eq(applicants.id, row.applicantId));
 
+	if (applicant?.email) {
+		await syncLeadAssignment(applicant.email, input.employeeId, employee.name, input.actor.name);
+	}
+
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: row.id,
@@ -975,7 +1000,6 @@ export async function assignApplication(input: {
 	});
 
 	// Notify the assigned staff member by email and in-app.
-	const applicant = await getApplicant(row.applicantId);
 	const staffUserId = await getStaffUserId(employee.id);
 	if (applicant) {
 		try {
@@ -1018,6 +1042,84 @@ export async function assignApplication(input: {
 		}).catch(() => {});
 	}
 
+	await broadcastCaseUpdate(updated, input.actor);
+	return updated;
+}
+
+export type PatchApplicationInput = z.infer<typeof patchApplicationSchema>;
+
+async function broadcastCaseUpdate(application: ApplicationRow, actor: Actor): Promise<void> {
+	try {
+		const [applicant, assignedStaffUserId, managers] = await Promise.all([
+			getApplicant(application.applicantId),
+			application.assignedStaffId ? getStaffUserId(application.assignedStaffId) : null,
+			getManagerAndCoordinatorUserIds(),
+		]);
+		const recipientIds = new Set<string>();
+		if (assignedStaffUserId) recipientIds.add(assignedStaffUserId);
+		for (const m of managers) {
+			if (m.userId) recipientIds.add(m.userId);
+		}
+		if (recipientIds.size === 0) return;
+
+		const events = Array.from(recipientIds).map((userId) => ({
+			recipientUserId: userId,
+			type: "case.updated",
+			title: "Case updated",
+			body: `${applicant?.name ?? "A client"}'s case ${application.appNumber} has been updated by ${actor.name}.`,
+			entityType: "case",
+			entityId: application.id,
+			caseId: application.id,
+			link: `/applications`,
+		}));
+		await notifyMany(events);
+	} catch (err) {
+		console.warn("[cases] Failed to broadcast case update:", err);
+	}
+}
+
+export async function updateApplication(
+	id: string,
+	input: PatchApplicationInput,
+	actor: Actor,
+): Promise<ApplicationRow> {
+	const row = await getApplication(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	const set: Partial<typeof applications.$inferInsert> & { updatedAt: Date } = {
+		updatedAt: new Date(),
+	};
+	if (input.visaInvoicePaid !== undefined) set.visaInvoicePaid = input.visaInvoicePaid;
+	if (input.visaCounselorNote !== undefined) set.visaCounselorNote = input.visaCounselorNote;
+	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
+	if (input.agencyStageIndex !== undefined) {
+		set.agencyStageIndex = input.agencyStageIndex;
+		set.agencySettled = input.agencyStageIndex >= 2;
+	}
+	if (input.agencySettled !== undefined) set.agencySettled = input.agencySettled;
+	if (input.travelClearance !== undefined) set.travelClearance = input.travelClearance;
+	if (input.preDepartureTasks !== undefined) set.preDepartureTasks = input.preDepartureTasks;
+	if (input.notes !== undefined) set.notes = input.notes;
+
+	if (Object.keys(set).length <= 1) return row;
+
+	const [updated] = await db
+		.update(applications)
+		.set(set)
+		.where(eq(applications.id, id))
+		.returning();
+
+	const changedFields = Object.keys(input).join(", ");
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: id,
+		kind: "comment",
+		text: `Updated: ${changedFields}`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 
@@ -1037,6 +1139,13 @@ export async function acceptApplication(id: string, actor: Actor): Promise<Appli
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	const applicant = await getApplicant(row.applicantId);
+	if (applicant?.email) {
+		await syncLeadFromApplicationStatus(updated.id, applicant.email, updated.status, actor.name);
+	}
+
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 
@@ -1209,6 +1318,7 @@ export async function setApplicationStage(
 		}).catch(() => {});
 	}
 
+	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
 

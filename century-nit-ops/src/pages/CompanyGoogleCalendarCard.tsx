@@ -24,6 +24,7 @@ function useCompanyStatus() {
 	const [status, setStatus] = useState<CompanyStatus | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		setError(null);
@@ -36,12 +37,22 @@ function useCompanyStatus() {
 	}, []);
 
 	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		if (params.get("google_connected") === "1") {
+			const email = params.get("email");
+			setSuccessMsg(email ? `Connected as ${email}` : "Company Google account connected successfully!");
+			params.delete("google_connected");
+			params.delete("email");
+			const cleanQuery = params.toString() ? `?${params.toString()}` : "";
+			window.history.replaceState({}, "", `${window.location.pathname}${cleanQuery}`);
+		}
 		void load();
 	}, [load]);
 
 	async function disconnect() {
 		setLoading(true);
 		setError(null);
+		setSuccessMsg(null);
 		try {
 			await apiFetch(`${API_PREFIX}/calendar/company/disconnect`, { method: "POST" });
 			await load();
@@ -57,7 +68,7 @@ function useCompanyStatus() {
 		window.location.href = `${API_PREFIX}/calendar/company/consent`;
 	}
 
-	return { status, loading, error, load, connect, disconnect };
+	return { status, loading, error, successMsg, load, connect, disconnect };
 }
 
 /**
@@ -66,7 +77,7 @@ function useCompanyStatus() {
  * buttons — no duplicate credentials, no separate card.
  */
 export function CompanyConnectRow() {
-	const { status, loading, error, load, connect, disconnect } = useCompanyStatus();
+	const { status, loading, error, successMsg, load, connect, disconnect } = useCompanyStatus();
 	const [confirming, setConfirming] = useState(false);
 
 	if (!status) {
@@ -173,6 +184,12 @@ export function CompanyConnectRow() {
 				</p>
 			)}
 
+			{successMsg && (
+				<p style={{ margin: 0, fontSize: "0.85rem", color: "var(--success-fg, #065f46)", fontWeight: 500 }}>
+					✓ {successMsg}
+				</p>
+			)}
+
 			{error && (
 				<p className="ops-modal__error" style={{ margin: 0, fontSize: "0.85rem" }}>
 					{error}
@@ -184,7 +201,7 @@ export function CompanyConnectRow() {
 
 /** Standalone full card. Kept for placements outside the settings group. */
 export function CompanyGoogleCalendarCard() {
-	const { status, loading, error, load, connect, disconnect } = useCompanyStatus();
+	const { status, loading, error, successMsg, load, connect, disconnect } = useCompanyStatus();
 	const [confirming, setConfirming] = useState(false);
 
 	if (!status) {
@@ -220,6 +237,23 @@ export function CompanyGoogleCalendarCard() {
 					{status.connected ? "Connected" : "Not connected"}
 				</span>
 			</div>
+
+			{successMsg && (
+				<div
+					style={{
+						marginTop: "1rem",
+						padding: "0.75rem 1rem",
+						background: "var(--success-bg, #ecfdf5)",
+						border: "1px solid var(--success-fg, #065f46)",
+						borderRadius: "6px",
+						fontSize: "0.85rem",
+						color: "var(--success-fg, #065f46)",
+						fontWeight: 500,
+					}}
+				>
+					✓ {successMsg}
+				</div>
+			)}
 
 			{error && (
 				<div className="ops-modal__error" style={{ marginTop: "1rem" }}>

@@ -226,6 +226,7 @@ export const applicantProfileSchema = z.object({
 	nationality: z.string().optional(),
 	residence: z.string().optional(),
 	dob: z.string().optional(),
+	gender: z.string().optional(),
 	address: z.string().optional(),
 	passportNumber: z.string().optional(),
 	passportCountry: z.string().optional(),

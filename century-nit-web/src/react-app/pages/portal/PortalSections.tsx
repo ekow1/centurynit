@@ -80,8 +80,9 @@ function getDegreeLevelName(id: string) {
 }
 
 function consultationTypeLabel(type?: string) {
-	if (type === "ONLINE") return "Online";
-	if (type === "IN_PERSON") return "In person";
+	const t = type?.toLowerCase();
+	if (t === "online") return "Online";
+	if (t === "in_person") return "In person";
 	return type ? type.replace(/_/g, " ") : null;
 }
 
@@ -214,6 +215,7 @@ export function PortalProfile() {
 		return {
 			dob: values.dateOfBirth || undefined,
 			nationality: values.nationality || undefined,
+			gender: values.gender || undefined,
 			address: values.address || undefined,
 			passportNumber: values.passportNumber || undefined,
 			passportCountry: values.passportCountry || undefined,
@@ -334,12 +336,6 @@ export function PortalProfile() {
 				</div>
 			</header>
 
-			{justSaved ? (
-				<div className="profile-saved mt-3" role="status">
-					<span aria-hidden>✓</span> Saved - your profile is up to date
-				</div>
-			) : null}
-
 			{/* Identity hero */}
 			<section className="profile-hero-card mt-4">
 				<div className="profile-hero">
@@ -358,7 +354,7 @@ export function PortalProfile() {
 							<p className="display profile-hero__name">{fullName}</p>
 							<p className="profile-hero__meta">{authUser?.email || a.email || "No email on file"}</p>
 							<p className="mono profile-hero__meta mt-1">
-								Signed in via {authUser?.method ?? "-"}
+								Signed in via {signInMethodLabel(authUser?.method)}
 								{authUser?.signedInAt
 									? ` · ${new Date(authUser.signedInAt).toLocaleString()}`
 									: ""}
@@ -366,17 +362,16 @@ export function PortalProfile() {
 						</div>
 					</div>
 					<div className="profile-hero__side">
-						<span className="profile-eligibility">Eligibility · {eligibility}</span>
+						<span className={`profile-eligibility profile-eligibility--${eligibilityVariant}`}>
+							{eligibility}
+						</span>
 						<button
 							type="button"
 							className="profile-edit-btn profile-edit-btn--light"
 							onClick={() =>
 								editing === "account"
 									? setEditing(null)
-									: startEdit("account", {
-											name: fullName,
-											email: authUser?.email || a.email || "",
-										})
+									: startEdit("account", { name: fullName })
 							}
 							aria-expanded={editing === "account"}
 						>
@@ -390,10 +385,15 @@ export function PortalProfile() {
 						<ProfileEditForm
 							fields={ACCOUNT_FIELDS}
 							draft={draft}
+							errors={errors}
+							saving={saving === "account"}
 							onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
 							onCancel={() => setEditing(null)}
 							onSave={saveAccount}
 						/>
+						<p className="profile-hero__note mt-2">
+							To change your email, contact support or use the Change email flow.
+						</p>
 					</div>
 				) : null}
 
@@ -422,15 +422,9 @@ export function PortalProfile() {
 			{/* Sections */}
 			<div className="profile-grid mt-6">
 				<section>
-					<div className="profile-section__head">
-						<span className="profile-section__num">01</span>
-						<h2 className="profile-section__title">Consultation</h2>
-					</div>
+					<h2 className="profile-section__title">Consultation</h2>
 					<div className="profile-block">
-						<DataRow
-							label="Type"
-							value={booking.consultationType ? booking.consultationType.replace("_", " ") : null}
-						/>
+						<DataRow label="Type" value={consultationTypeLabel(booking.consultationType)} />
 						<DataRow
 							label="Location"
 							value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ")}
@@ -453,7 +447,6 @@ export function PortalProfile() {
 
 				<section>
 					<div className="profile-section__head profile-section__head--editable">
-						<span className="profile-section__num">02</span>
 						<h2 className="profile-section__title">Assessment</h2>
 						<button
 							type="button"
@@ -461,17 +454,17 @@ export function PortalProfile() {
 							onClick={() =>
 								editing === "assessment"
 									? setEditing(null)
-							: startEdit(
-									"assessment",
-									Object.fromEntries(
-										ASSESSMENT_FIELDS.map((f) => [
-											f.key,
-											(f.key === "phone"
-												? ass.phone || a.phone
-												: ass[f.key as keyof AssessmentData]) ?? "",
-										]),
-									),
-								)
+									: startEdit(
+											"assessment",
+											Object.fromEntries(
+												ASSESSMENT_FIELDS.map((f) => [
+													f.key,
+													(f.key === "phone"
+														? ass.phone || a.phone
+														: ass[f.key as keyof AssessmentData]) ?? "",
+												]),
+											),
+										)
 							}
 							aria-expanded={editing === "assessment"}
 						>
@@ -483,6 +476,8 @@ export function PortalProfile() {
 							<ProfileEditForm
 								fields={ASSESSMENT_FIELDS}
 								draft={draft}
+								errors={errors}
+								saving={saving === "assessment"}
 								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
 								onCancel={() => setEditing(null)}
 								onSave={saveAssessment}
@@ -498,25 +493,37 @@ export function PortalProfile() {
 							<DataRow label="Phone" value={ass.phone || a.phone} />
 							<DataRow label="How did you hear about us?" value={a.referralSource} />
 							<DataRow label="Date of birth" value={ass.dateOfBirth} />
+							<DataRow label="Gender" value={ass.gender} />
 							<DataRow label="Nationality" value={ass.nationality} />
 							<DataRow label="Address" value={ass.address} />
-							<DataRow label="Passport" value={ass.passportNumber} />
+							<DataRow label="Passport number" value={ass.passportNumber} />
+							<DataRow label="Passport country" value={ass.passportCountry} />
+							<DataRow label="Passport issue date" value={ass.passportIssue} />
+							<DataRow label="Passport expiry date" value={ass.passportExpiry} />
 							<DataRow label="Education" value={ass.highestEducation} />
 							<DataRow label="Institution" value={ass.institution} />
 							<DataRow label="Field of study" value={ass.fieldOfStudy} />
 							<DataRow label="Graduation year" value={ass.graduationYear} />
 							<DataRow label="GPA" value={ass.gpa} />
+							<DataRow label="Employment status" value={ass.employmentStatus} />
+							<DataRow label="Employer / company" value={ass.employer} />
+							<DataRow label="Job title / role" value={ass.jobTitle} />
+							<DataRow label="Years of experience" value={ass.yearsExperience} />
 							<DataRow
 								label="English test"
-								value={ass.englishTest ? `${ass.englishTest} · ${ass.englishScore}` : null}
+								value={
+									ass.englishTest
+										? `${ass.englishTest}${ass.englishScore ? ` · ${ass.englishScore}` : ""}`
+										: null
+								}
 							/>
+							<DataRow label="English test date" value={ass.englishDate} />
 						</div>
 					)}
 				</section>
 
 				<section>
 					<div className="profile-section__head profile-section__head--editable">
-						<span className="profile-section__num">03</span>
 						<h2 className="profile-section__title">Preferences</h2>
 						<button
 							type="button"
@@ -524,12 +531,12 @@ export function PortalProfile() {
 							onClick={() =>
 								editing === "preferences"
 									? setEditing(null)
-							: startEdit(
-									"preferences",
-									Object.fromEntries(
-										PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
-									),
-								)
+									: startEdit(
+											"preferences",
+											Object.fromEntries(
+												PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
+											),
+										)
 							}
 							aria-expanded={editing === "preferences"}
 						>
@@ -541,6 +548,8 @@ export function PortalProfile() {
 							<ProfileEditForm
 								fields={PREFERENCE_FIELDS}
 								draft={draft}
+								errors={errors}
+								saving={saving === "preferences"}
 								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
 								onCancel={() => setEditing(null)}
 								onSave={savePreferences}
@@ -549,7 +558,7 @@ export function PortalProfile() {
 					) : (
 						<div className="profile-block">
 							<DataRow label="Preferred countries" value={ass.preferredCountries} />
-							<DataRow label="Preferred level" value={ass.preferredLevel} />
+							<DataRow label="Preferred level" value={getDegreeLevelName(ass.preferredLevel)} />
 							<DataRow label="Preferred field" value={ass.preferredField} />
 							<DataRow label="Intake" value={ass.intakePreference} />
 							<DataRow label="Funding source" value={ass.fundingSource} />
@@ -567,17 +576,14 @@ export function PortalProfile() {
 				</section>
 
 				<section>
-					<div className="profile-section__head">
-						<span className="profile-section__num">04</span>
-						<h2 className="profile-section__title">Application</h2>
-					</div>
+					<h2 className="profile-section__title">Application</h2>
 					<div className="profile-block">
 						<DataRow label="Destination" value={dest?.name} />
 						<DataRow label="University" value={uni?.name} />
 						<DataRow label="Programme" value={prog?.name} />
 						<DataRow label="Intake" value={a.intake} />
-						<DataRow label="Package" value={a.applicationPackageId} />
-						<DataRow label="Payment plan" value={a.paymentPlanId || null} />
+						<DataRow label="Package" value={packageName} />
+						<DataRow label="Payment plan" value={planName} />
 						<DataRow
 							label="Schools selected"
 							value={a.schoolSelectionDoneAt ? "Confirmed" : "Not yet"}
@@ -587,10 +593,7 @@ export function PortalProfile() {
 			</div>
 
 			<section className="mt-6">
-				<div className="profile-section__head">
-					<span className="profile-section__num">05</span>
-					<h2 className="profile-section__title">Documents & interview</h2>
-				</div>
+				<h2 className="profile-section__title">Documents &amp; interview</h2>
 				<div className="profile-block">
 					<p className="profile-docs__summary mono">
 						{liveDocs ? `${uploadedDocs} of ${totalDocs} on file` : "-"}
@@ -611,6 +614,26 @@ export function PortalProfile() {
 									<span className={`portal-pill portal-pill--${docPill(status)}`}>
 										{status}
 									</span>
+									{live?.id ? (
+										<button
+											type="button"
+											className="profile-doc__action"
+											onClick={async () => {
+												try {
+													const { url } = await documentsApi.downloadUrl(live.id);
+													window.open(url, "_blank", "noopener,noreferrer");
+												} catch {
+													toast.error("Could not open the document. Please try again.");
+												}
+											}}
+										>
+											View
+										</button>
+									) : (
+										<Link to="/portal/documents" className="profile-doc__action">
+											Upload
+										</Link>
+									)}
 								</li>
 							);
 						})}
@@ -631,7 +654,6 @@ export function PortalProfile() {
 
 			<section className="mt-6">
 				<div className="profile-section__head profile-section__head--editable">
-					<span className="profile-section__num">06</span>
 					<h2 className="profile-section__title">Security</h2>
 					{mfaStatus?.applicable === false ? null : (
 						<Link
@@ -669,15 +691,33 @@ export function PortalProfile() {
 							value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
 						/>
 					)}
-					{/*
-					 * An empty Security section reads as a missing feature. Users who
-					 * sign in without a password here are told why there is nothing to
-					 * do, rather than being left to wonder.
-					 */}
+					<DataRow
+						label="Sign-in method"
+						value={<span className="muted">{signInMethodLabel(authUser?.method)}</span>}
+					/>
+					<DataRow
+						label="Password"
+						value={
+							authUser?.method === "email" ? (
+								<span>
+									Password set ·{" "}
+									<a href="#" className="link-arrow">
+										Change password
+									</a>
+								</span>
+							) : authUser?.method ? (
+								<span>
+									Managed by your sign-in provider — {signInMethodLabel(authUser.method)}
+								</span>
+							) : (
+								<span className="muted">-</span>
+							)
+						}
+					/>
 					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "40rem" }}>
 						{mfaStatus?.applicable === false
 							? "You sign in without a Century NIT password, so there is no password here for a second step to protect. Your account is secured by the provider you sign in with — manage security there."
-							: "Add a second step at sign-in to keep your application documents and payment history safe. You can enable or manage it anytime from the Security page."}
+							: "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."}
 					</p>
 				</div>
 			</section>
@@ -693,52 +733,66 @@ export function PortalProfile() {
 	);
 }
 
-/** Fields the applicant may edit on their account. */
-type ProfileField = { key: string; label: string; type?: string };
+type FieldType = "text" | "email" | "tel" | "date" | "textarea" | "select";
 
-const ACCOUNT_FIELDS: ProfileField[] = [
-	{ key: "name", label: "Full name" },
-	{ key: "email", label: "Email", type: "email" },
-];
+type FieldDef = {
+	key: string;
+	label: string;
+	type?: FieldType;
+	options?: string[];
+	placeholder?: string;
+};
 
-/** Fields the applicant may edit under Assessment (system records stay read-only). */
-const ASSESSMENT_FIELDS: ProfileField[] = [
-	{ key: "phone", label: "Phone" },
+const ACCOUNT_FIELDS: FieldDef[] = [{ key: "name", label: "Full name", type: "text" }];
+
+const ASSESSMENT_FIELDS: FieldDef[] = [
+	{ key: "phone", label: "Phone", type: "tel" },
 	{ key: "dateOfBirth", label: "Date of birth", type: "date" },
-	{ key: "nationality", label: "Nationality" },
-	{ key: "address", label: "Address" },
-	{ key: "passportNumber", label: "Passport number" },
-	{ key: "passportCountry", label: "Passport country" },
-	{ key: "highestEducation", label: "Highest education" },
-	{ key: "institution", label: "Institution" },
-	{ key: "fieldOfStudy", label: "Field of study" },
-	{ key: "graduationYear", label: "Graduation year" },
-	{ key: "gpa", label: "GPA" },
-	{ key: "englishTest", label: "English test" },
-	{ key: "englishScore", label: "English score" },
+	{ key: "gender", label: "Gender", type: "select", options: GENDER_OPTIONS },
+	{ key: "nationality", label: "Nationality", type: "select", options: APPLICANT_COUNTRIES },
+	{ key: "address", label: "Address", type: "textarea" },
+	{ key: "passportNumber", label: "Passport number", type: "text" },
+	{ key: "passportCountry", label: "Passport country", type: "select", options: APPLICANT_COUNTRIES },
+	{ key: "passportIssue", label: "Passport issue date", type: "date" },
+	{ key: "passportExpiry", label: "Passport expiry date", type: "date" },
+	{ key: "highestEducation", label: "Highest education", type: "select", options: HIGHEST_EDUCATION_OPTIONS },
+	{ key: "institution", label: "Institution", type: "text" },
+	{ key: "fieldOfStudy", label: "Field of study", type: "text" },
+	{ key: "graduationYear", label: "Graduation year", type: "text" },
+	{ key: "gpa", label: "GPA", type: "text" },
+	{ key: "employmentStatus", label: "Employment status", type: "select", options: EMPLOYMENT_STATUS_OPTIONS },
+	{ key: "employer", label: "Employer / company", type: "text" },
+	{ key: "jobTitle", label: "Job title / role", type: "text" },
+	{ key: "yearsExperience", label: "Years of experience", type: "text" },
+	{ key: "englishTest", label: "English test", type: "select", options: ENGLISH_TEST_OPTIONS },
+	{ key: "englishScore", label: "English score", type: "text" },
+	{ key: "englishDate", label: "English test date", type: "date" },
 ];
 
-/** Fields the applicant may edit under Preferences. */
-const PREFERENCE_FIELDS: ProfileField[] = [
-	{ key: "preferredCountries", label: "Preferred countries" },
-	{ key: "preferredLevel", label: "Preferred level" },
-	{ key: "preferredField", label: "Preferred field" },
-	{ key: "intakePreference", label: "Intake" },
-	{ key: "fundingSource", label: "Funding source" },
-	{ key: "budgetRange", label: "Budget range" },
+const PREFERENCE_FIELDS: FieldDef[] = [
+	{ key: "preferredCountries", label: "Preferred countries", placeholder: "e.g. UK, Canada" },
+	{ key: "preferredLevel", label: "Preferred level", type: "select", options: SCHOOL_DEGREE_LEVELS.map((l) => l.id) },
+	{ key: "preferredField", label: "Preferred field / major" },
+	{ key: "intakePreference", label: "Intake", type: "select", options: INTAKE_OPTIONS },
+	{ key: "fundingSource", label: "Funding source", type: "select", options: FUNDING_SOURCE_OPTIONS },
+	{ key: "budgetRange", label: "Budget range", type: "select", options: BUDGET_RANGE_OPTIONS },
 	{ key: "sponsorName", label: "Sponsor name" },
-	{ key: "sponsorRelationship", label: "Sponsor relationship" },
+	{ key: "sponsorRelationship", label: "Sponsor relationship", type: "select", options: SPONSOR_RELATIONSHIP_OPTIONS },
 ];
 
 function ProfileEditForm({
 	fields,
 	draft,
+	errors,
+	saving,
 	onChange,
 	onCancel,
 	onSave,
 }: {
-	fields: ProfileField[];
+	fields: FieldDef[];
 	draft: Record<string, string>;
+	errors: Record<string, string>;
+	saving?: boolean;
 	onChange: (key: string, value: string) => void;
 	onCancel: () => void;
 	onSave: () => void;
@@ -746,23 +800,58 @@ function ProfileEditForm({
 	return (
 		<div className="profile-edit__form">
 			<div className="profile-edit__fields">
-				{fields.map((f) => (
-					<Field key={f.key} label={f.label} htmlFor={`edit-${f.key}`}>
-						<Input
-							id={`edit-${f.key}`}
-							type={f.type ?? "text"}
-							value={draft[f.key] ?? ""}
-							onChange={(e) => onChange(f.key, e.target.value)}
-							fullBorder
-						/>
-					</Field>
-				))}
+				{fields.map((f) => {
+					const id = `edit-${f.key}`;
+					const error = errors[f.key];
+					const value = draft[f.key] ?? "";
+					return (
+						<Field key={f.key} label={f.label} htmlFor={id} error={error}>
+							{f.type === "textarea" ? (
+								<Textarea
+									id={id}
+									value={value}
+									onChange={(e) => onChange(f.key, e.target.value)}
+									rows={3}
+									aria-invalid={Boolean(error)}
+									aria-describedby={error ? `${id}-error` : undefined}
+								/>
+							) : f.type === "select" ? (
+								<Select
+									id={id}
+									value={value}
+									onChange={(e) => onChange(f.key, e.target.value)}
+									fullBorder
+									aria-invalid={Boolean(error)}
+									aria-describedby={error ? `${id}-error` : undefined}
+								>
+									<option value="">{f.placeholder ?? `Select ${f.label.toLowerCase()}`}</option>
+									{f.options!.map((opt) => (
+										<option key={opt} value={opt}>
+											{f.key === "preferredLevel" ? getDegreeLevelName(opt) : opt}
+										</option>
+									))}
+								</Select>
+							) : (
+								<Input
+									id={id}
+									type={f.type ?? "text"}
+									value={value}
+									placeholder={f.placeholder}
+									onChange={(e) => onChange(f.key, e.target.value)}
+									fullBorder
+									aria-invalid={Boolean(error)}
+									aria-describedby={error ? `${id}-error` : undefined}
+								/>
+							)}
+						</Field>
+					);
+				})}
 			</div>
 			<div className="profile-edit__actions">
-				<Button size="sm" onClick={onSave}>
-					Save changes
+				<Button size="sm" onClick={onSave} disabled={saving}>
+					{saving ? "Saving…" : "Save changes"}
 				</Button>
-				<Button variant="ghost" size="sm" onClick={onCancel}>
+				<Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
 					Cancel
 				</Button>
 			</div>

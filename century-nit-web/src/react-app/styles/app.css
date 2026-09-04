@@ -2267,6 +2267,31 @@ img.tabbar__avatar {
 	white-space: nowrap;
 }
 
+.profile-eligibility--eligible {
+	background: var(--accent-foreground);
+	color: var(--foreground);
+	border-color: var(--accent-foreground);
+}
+
+.profile-eligibility--conditional {
+	background: transparent;
+	color: #f0e130;
+	border-color: #f0e130;
+}
+
+.profile-eligibility--not_eligible {
+	background: transparent;
+	color: #ff7b72;
+	border-color: #ff7b72;
+}
+
+.profile-hero__note {
+	font-size: var(--text-sm);
+	color: var(--accent-foreground);
+	opacity: 0.85;
+	max-width: 42rem;
+}
+
 .profile-refs {
 	display: flex;
 	flex-wrap: wrap;
@@ -2452,6 +2477,28 @@ img.tabbar__avatar {
 
 .profile-doc__name {
 	font-size: 0.95rem;
+	word-break: break-word;
+}
+
+.profile-doc__action {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 0.35rem 0.7rem;
+	border: 1px solid var(--border);
+	background: transparent;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	text-decoration: none;
+	transition:
+		color 0.15s ease,
+		border-color 0.15s ease;
+}
+
+.profile-doc__action:hover {
+	color: var(--foreground);
+	border-color: var(--foreground);
 }
 
 .profile-interview {

@@ -9,7 +9,7 @@ import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
-import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 export function EnterpriseCases() {
 	const [searchParams] = useSearchParams();
@@ -24,7 +24,6 @@ export function EnterpriseCases() {
 		commentOnApplication,
 		requestApplicationDocs,
 		addApplication,
-		setApplicationStage,
 	} = useCases();
 
 	/**
@@ -90,25 +89,6 @@ export function EnterpriseCases() {
 		if (!item) return;
 		const updated = await toggleApplicationChecklist(selectedApp.id, item.id, !item.checked);
 		setSelectedApp(updated);
-	}
-
-	async function handleAdvanceStage() {
-		if (!selectedApp) return;
-		const idx = JOURNEY_STAGES.indexOf(selectedApp.stage as JourneyStage);
-		if (idx < 0) return;
-		const next = JOURNEY_STAGES[idx + 1];
-		if (!next) return;
-		try {
-			await setApplicationStage(selectedApp.appId, next);
-			setSelectedApp({ ...selectedApp, stage: next });
-			setActionSuccess(`Advanced to "${JOURNEY_STAGE_LABELS[next]}"`);
-			setTimeout(() => setActionSuccess(null), 4000);
-		} catch (err: unknown) {
-			setActionSuccess(null);
-			const msg = err instanceof Error ? err.message : "Could not advance stage";
-			setActionError(msg);
-			setTimeout(() => setActionError(null), 6000);
-		}
 	}
 
 	return (
@@ -410,29 +390,10 @@ export function EnterpriseCases() {
 									)}
 								</div>
 
-								{/* Stage advance */}
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)", flexWrap: "wrap" }}>
-									<div>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-											Current stage: {JOURNEY_STAGE_LABELS[(liveSelected ?? selectedApp).stage as JourneyStage]}
-										</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-											{(liveSelected ?? selectedApp).stage === "completed"
-												? "This case has reached the final stage."
-												: `Next: ${JOURNEY_STAGE_LABELS[JOURNEY_STAGES[Math.min(JOURNEY_STAGES.indexOf((liveSelected ?? selectedApp).stage as JourneyStage) + 1, JOURNEY_STAGES.length - 1)]]}`}
-										</p>
-									</div>
-									<button
-										type="button"
-										onClick={handleAdvanceStage}
-										disabled={(liveSelected ?? selectedApp).stage === "completed"}
-										className="btn btn--outline"
-										style={{ whiteSpace: "nowrap" }}
-									>
-										{(liveSelected ?? selectedApp).stage === "completed"
-											? "✓ Completed"
-											: "Advance to next stage →"}
-									</button>
+								<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)" }}>
+									<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
+										Current stage: {JOURNEY_STAGE_LABELS[(liveSelected ?? selectedApp).stage as JourneyStage]}. Use the <a href="/workflow" style={{ textDecoration: "underline" }}>Workflow board</a> to advance the journey.
+									</p>
 								</div>
 							</div>
 

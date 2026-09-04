@@ -28,7 +28,6 @@ export function EnterpriseVisa() {
 		setVisaStage,
 		setVisaInvoicePaid,
 		setVisaCounselorNote,
-		setApplicationStage,
 	} = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -426,24 +425,16 @@ export function EnterpriseVisa() {
 									)}
 								</div>
 
-							{/* Advance to Payment Execution */}
-							{active.visaStage === "complete" && active.stage === "visa_processing" && (
-								<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-									<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved!</p>
-									<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-										Ready to advance to payment execution stage.
-									</p>
-									<button
-										onClick={() => setApplicationStage(active.appId, "payment_execution")}
-										className="btn btn--primary btn--sm"
-										style={{ marginTop: "0.5rem" }}
-									>
-										{"\u2192"} Advance to Payment Execution
-									</button>
-								</div>
-							)}
+						{active.visaStage === "complete" && active.stage === "visa_processing" && (
+							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved</p>
+								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+									Use the Workflow board to advance this case to Payment Execution.
+								</p>
+							</div>
+						)}
 
-								{/* Case Meta */}
+							{/* Case Meta */}
 								<div className="card">
 									<p className="eyebrow mb-2">Case Info</p>
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>

@@ -5,7 +5,7 @@ import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, canAdvanceToStage, type JourneyStage } from "century-nit-shared";
 
 /**
  * The pipeline every application moves through. Cards can be dragged between
@@ -65,6 +65,7 @@ export function EnterpriseWorkflow() {
 	const [dragOver, setDragOver] = useState<JourneyStage | null>(null);
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [actionError, setActionError] = useState<string | null>(null);
 
 	const canSeeAll = canSeeAllBranches;
 
@@ -101,14 +102,24 @@ export function EnterpriseWorkflow() {
 		return map;
 	}, [visible]);
 
-	function move(appId: string, to: JourneyStage) {
-		setApplicationStage(appId, to);
+	async function move(app: MockApplication, to: JourneyStage) {
+		const reason = canAdvanceToStage(normaliseStage(app.stage), to, app);
+		if (reason) {
+			setActionError(reason);
+			return;
+		}
+		try {
+			await setApplicationStage(app.appId, to);
+			setActionError(null);
+		} catch (err: unknown) {
+			setActionError(err instanceof Error ? err.message : "Could not move case");
+		}
 	}
 
 	function advance(app: MockApplication) {
 		const idx = JOURNEY_STAGES.indexOf(normaliseStage(app.stage));
 		const next = JOURNEY_STAGES[idx + 1];
-		if (next) move(app.appId, next);
+		if (next) void move(app, next);
 	}
 
 	return (
@@ -165,43 +176,19 @@ export function EnterpriseWorkflow() {
 				</span>
 			</div>
 
-			{/* Stage progress bar */}
-			<div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", alignItems: "center", overflowX: "auto", paddingBottom: "0.5rem" }}>
-				{JOURNEY_STAGES.map((stage, i) => {
-					const count = columns.get(stage)?.length ?? 0;
-					const color = STAGE_COLORS[stage];
-					return (
-						<div key={stage} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 0 auto" }}>
-							<div style={{
-								display: "flex",
-								alignItems: "center",
-								gap: "0.35rem",
-								padding: "0.4rem 0.7rem",
-								background: "var(--card)",
-								border: "1px solid var(--border-light)",
-								borderRadius: "4px",
-								flex: 1,
-							}}>
-								<span style={{
-									fontSize: "0.7rem",
-									fontWeight: 700,
-									fontFamily: "var(--font-mono)",
-									color,
-								}}>
-									{STAGE_NUMBERS[stage]}
-								</span>
-								<span className="muted" style={{ fontSize: "0.68rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-									{JOURNEY_STAGE_LABELS[stage]}
-								</span>
-								<span style={{ marginLeft: "auto", fontSize: "0.68rem", fontFamily: "var(--font-mono)", fontWeight: 600 }}>{count}</span>
-							</div>
-							{i < JOURNEY_STAGES.length - 1 && (
-								<span className="muted" style={{ fontSize: "0.6rem", flexShrink: 0 }}>→</span>
-							)}
-						</div>
-					);
-				})}
-			</div>
+			{actionError && (
+				<div
+					role="alert"
+					style={{
+						padding: "0.85rem 1.25rem",
+						background: "var(--danger-bg, #b91c1c)",
+						color: "var(--danger, #fff)",
+						marginBottom: "1rem",
+					}}
+				>
+					{actionError}
+				</div>
+			)}
 
 			<div className="ops-board" style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: "1.5rem", alignItems: "flex-start" }}>
 				{JOURNEY_STAGES.map((stage) => {
@@ -218,7 +205,8 @@ export function EnterpriseWorkflow() {
 							onDragLeave={() => setDragOver((s) => (s === stage ? null : s))}
 							onDrop={(e) => {
 								e.preventDefault();
-								if (dragging) move(dragging, stage);
+								const app = dragging ? visible.find((a) => a.appId === dragging) : undefined;
+								if (app) void move(app, stage);
 								setDragging(null);
 								setDragOver(null);
 							}}
@@ -287,17 +275,20 @@ export function EnterpriseWorkflow() {
 										</p>
 									</div>
 								) : (
-									cards.map((app) => {
-										const isLast = normaliseStage(app.stage) === JOURNEY_STAGES[JOURNEY_STAGES.length - 1];
-										const done = app.checklist.filter((c) => c.checked).length;
-										const progress = app.checklist.length > 0 ? Math.round((done / app.checklist.length) * 100) : 0;
-										const stage = normaliseStage(app.stage);
-										const pdProg = preDepartureProgress(app.preDepartureTasks);
-										return (
-											<div
-												key={app.id}
-												draggable={canMoveCase(app)}
-												onDragStart={() => canMoveCase(app) && setDragging(app.appId)}
+								cards.map((app) => {
+									const isLast = normaliseStage(app.stage) === JOURNEY_STAGES[JOURNEY_STAGES.length - 1];
+									const done = app.checklist.filter((c) => c.checked).length;
+									const progress = app.checklist.length > 0 ? Math.round((done / app.checklist.length) * 100) : 0;
+									const stage = normaliseStage(app.stage);
+									const pdProg = preDepartureProgress(app.preDepartureTasks);
+									const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(stage) + 1];
+									const advanceReason = nextStage ? canAdvanceToStage(stage, nextStage, app) : null;
+									const canDrag = canMoveCase(app) && !isLast && advanceReason === null;
+									return (
+										<div
+											key={app.id}
+											draggable={canDrag}
+											onDragStart={() => canDrag && setDragging(app.appId)}
 												onDragEnd={() => {
 													setDragging(null);
 													setDragOver(null);
@@ -411,17 +402,18 @@ export function EnterpriseWorkflow() {
 													</div>
 												</div>
 
-											{canMoveCase(app) && !isLast && (
-												<button
-													type="button"
-													onClick={(e) => { e.stopPropagation(); advance(app); }}
-													className="btn btn--ghost btn--sm"
-													style={{ padding: "0.15rem 0.5rem", fontSize: "0.72rem", marginTop: "0.5rem", width: "100%" }}
-													title="Advance to next stage"
-												>
-													{"\u2192"} {JOURNEY_STAGE_LABELS[JOURNEY_STAGES[JOURNEY_STAGES.indexOf(normaliseStage(app.stage)) + 1]]}
-												</button>
-											)}
+									{canMoveCase(app) && !isLast && (
+										<button
+											type="button"
+											onClick={(e) => { e.stopPropagation(); advance(app); }}
+											disabled={advanceReason !== null}
+											className="btn btn--ghost btn--sm"
+											style={{ padding: "0.15rem 0.5rem", fontSize: "0.72rem", marginTop: "0.5rem", width: "100%" }}
+											title={advanceReason ?? "Advance to next stage"}
+										>
+											{"\u2192"} {nextStage ? JOURNEY_STAGE_LABELS[nextStage] : "Completed"}
+										</button>
+									)}
 											</div>
 										);
 									})

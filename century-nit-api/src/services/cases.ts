@@ -8,6 +8,7 @@ import {
 	type ApplicantProfile,
 	type AssessmentResult,
 	type CaseApplicationStatus,
+	canAdvanceToStage,
 	DEFAULT_FEE_CENTS,
 	JOURNEY_STAGES,
 	type JourneyStage,
@@ -1135,7 +1136,18 @@ export async function setApplicationStage(
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
 
-	// ── Guard: refuse if prerequisites aren't met ───────────────────────
+	// ── Guard: adjacency + completion + per-stage prerequisites ────────
+	const adjacencyReason = canAdvanceToStage(row.stage, stage, {
+		visaStage: row.visaStage,
+		agencySettled: row.agencySettled,
+		travelClearance: row.travelClearance,
+		paymentPlanId: row.paymentPlanId,
+	});
+	if (adjacencyReason) {
+		throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", adjacencyReason);
+	}
+
+	// ── Guard: refuse if prerequisites aren't met (legacy signal checks) ─
 	const blockReason = canAdvanceTo(stage, {
 		hasPackage: Boolean(row.fundingTrack),
 		hasSelection,

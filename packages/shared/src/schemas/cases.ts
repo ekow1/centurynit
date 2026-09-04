@@ -63,6 +63,59 @@ export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
 };
 
 /**
+ * Guard a stage transition. Adjacency is enforced — a case can only move
+ * forward one column at a time. A few later stages require sub-step
+ * completion, matching the current ops UI buttons, so the server and the
+ * Workflow board share the same rule set.
+ */
+export function canAdvanceToStage(
+	current: JourneyStage,
+	target: JourneyStage,
+	app?: {
+		visaStage?: string;
+		agencySettled?: boolean;
+		travelClearance?: string;
+		preDepartureTasks?: { done: boolean }[];
+		paymentPlanId?: string | null;
+	},
+): string | null {
+	const currentIdx = JOURNEY_STAGES.indexOf(current);
+	const targetIdx = JOURNEY_STAGES.indexOf(target);
+
+	if (current === target) return "Application is already at this stage.";
+	if (current === "completed") return "Completed cases cannot be moved.";
+	if (targetIdx < 0 || currentIdx < 0) return "Unknown stage.";
+	if (targetIdx !== currentIdx + 1) {
+		const next = JOURNEY_STAGES[currentIdx + 1];
+		return `Can only advance one stage at a time. Next: ${next ? JOURNEY_STAGE_LABELS[next] : "completed"}.`;
+	}
+
+	const checks = app ?? {};
+
+	switch (target) {
+		case "payment_execution":
+			return checks.visaStage === "complete"
+				? null
+				: "Cannot advance to Payment Execution: visa processing must be complete.";
+		case "travel_assistance":
+			return checks.paymentPlanId
+				? null
+				: "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
+		case "completed": {
+			if (!checks.agencySettled) return "Cannot mark complete: agency settlement is not complete.";
+			if (checks.travelClearance !== "cleared") return "Cannot mark complete: travel clearance is not granted.";
+			if (checks.preDepartureTasks && checks.preDepartureTasks.length > 0) {
+				const allDone = checks.preDepartureTasks.every((t) => t.done);
+				if (!allDone) return "Cannot mark complete: pre-departure checklist is incomplete.";
+			}
+			return null;
+		}
+		default:
+			return null;
+	}
+}
+
+/**
  * Canonical portal stage labels — the single source of truth for the
  * fine-grained `ProcessStageId` display text. The ops UI uses
  * `JOURNEY_STAGE_LABELS` (coarse); the portal and the /me/journey route

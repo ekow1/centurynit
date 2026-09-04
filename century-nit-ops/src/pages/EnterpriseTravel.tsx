@@ -39,7 +39,6 @@ export function EnterpriseTravel() {
 		advanceAgencyStage,
 		setTravelClearance,
 		togglePreDepartureTask,
-		setApplicationStage,
 	} = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -295,27 +294,20 @@ export function EnterpriseTravel() {
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
 							{/* Payment Execution */}
-							{active.stage === "payment_execution" && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Payment Execution</p>
-									<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
-										The applicant chose their payment plan during package selection. Collect the outstanding balance below.
-									</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-										<div>
-											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Applicant's plan</p>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{paymentPlanLabel(active.paymentPlanId)}</p>
-										</div>
+						{active.stage === "payment_execution" && (
+							<div className="card" style={{ background: "var(--muted)" }}>
+								<p className="eyebrow mb-1">Payment Execution</p>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+									The applicant chose their payment plan during package selection. Collect the outstanding balance below, then use the Workflow board to advance the case to Travel Assistance.
+								</p>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+									<div>
+										<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Applicant's plan</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{paymentPlanLabel(active.paymentPlanId)}</p>
 									</div>
-									<button
-										onClick={() => setApplicationStage(active.appId, "travel_assistance")}
-										className="btn btn--primary btn--sm"
-										style={{ marginTop: "0.75rem" }}
-									>
-										{"\u2192"} Advance to Travel Assistance
-									</button>
 								</div>
-							)}
+							</div>
+						)}
 
 							{/* Agency Settlement */}
 							{(active.stage === "travel_assistance" || active.stage === "completed") && (
@@ -487,24 +479,16 @@ export function EnterpriseTravel() {
 									</div>
 								)}
 
-							{/* Complete case */}
-							{active.stage === "travel_assistance" && active.agencySettled && active.travelClearance === "cleared" && pdProg === 100 && (
-								<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-									<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear!</p>
-									<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-										All milestones complete. Ready to mark case as Completed.
-									</p>
-									<button
-										onClick={() => setApplicationStage(active.appId, "completed")}
-										className="btn btn--primary btn--sm"
-										style={{ marginTop: "0.5rem" }}
-									>
-										{"\u2192"} Mark case complete
-									</button>
-								</div>
-							)}
+						{active.stage === "travel_assistance" && active.agencySettled && active.travelClearance === "cleared" && pdProg === 100 && (
+							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear</p>
+								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+									All milestones complete. Use the Workflow board to mark the case as Completed.
+								</p>
+							</div>
+						)}
 
-								{/* Case Meta */}
+							{/* Case Meta */}
 								<div className="card">
 									<p className="eyebrow mb-2">Case Info</p>
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>

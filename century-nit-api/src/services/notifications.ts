@@ -1,5 +1,11 @@
 import { formatInZone } from "../lib/time.js";
-import { renderBookingEmail } from "../lib/email-templates.js";
+import {
+	renderBookingEmail,
+	renderConsultantAssignedEmail,
+	renderDocumentReviewedEmail,
+	renderInvoiceRaisedEmail,
+	renderWelcomeEmail,
+} from "../lib/email-templates.js";
 
 
 /**
@@ -354,5 +360,104 @@ export function leadCreatedForManager(
 		idempotencyKey: `notify:lead:new:${ctx.leadId}:${managerEmail}`,
 		template: "New lead received",
 		reference: ctx.leadId,
+	};
+}
+
+/* ── Client transactional emails ─────────────────────────────────────────── */
+
+export function welcomeEmail(ctx: {
+	name?: string;
+	email: string;
+	portalUrl: string;
+}): QueuedEmail {
+	const { html, text } = renderWelcomeEmail({ name: ctx.name, portalUrl: ctx.portalUrl });
+	return {
+		to: ctx.email,
+		subject: "Welcome to Century NIT",
+		html,
+		text,
+		idempotencyKey: `welcome:${ctx.email}`,
+		template: "Welcome",
+	};
+}
+
+export function consultantAssignedForClient(ctx: {
+	clientName: string;
+	clientEmail: string;
+	consultantName: string;
+	consultantEmail?: string | null;
+	appNumber?: string | null;
+	portalUrl: string;
+}): QueuedEmail {
+	const { html, text } = renderConsultantAssignedEmail({
+		clientName: ctx.clientName,
+		consultantName: ctx.consultantName,
+		consultantEmail: ctx.consultantEmail,
+		appNumber: ctx.appNumber,
+		portalUrl: ctx.portalUrl,
+	});
+	return {
+		to: ctx.clientEmail,
+		subject: ctx.appNumber
+			? `Your consultant · ${ctx.appNumber}`
+			: "Your Century NIT consultant",
+		html,
+		text,
+		idempotencyKey: `consultant:client:${ctx.clientEmail}:${ctx.appNumber ?? ctx.consultantName}`,
+		template: "Consultant assigned",
+		reference: ctx.appNumber ?? undefined,
+	};
+}
+
+export function invoiceRaisedForClient(ctx: {
+	clientName: string;
+	clientEmail: string;
+	invoiceNumber: string;
+	invoiceType: string;
+	amountFormatted: string;
+	dueAtFormatted?: string | null;
+	payUrl: string;
+}): QueuedEmail {
+	const { html, text } = renderInvoiceRaisedEmail({
+		clientName: ctx.clientName,
+		invoiceNumber: ctx.invoiceNumber,
+		invoiceType: ctx.invoiceType,
+		amountFormatted: ctx.amountFormatted,
+		dueAtFormatted: ctx.dueAtFormatted,
+		payUrl: ctx.payUrl,
+	});
+	return {
+		to: ctx.clientEmail,
+		subject: `Invoice ready · ${ctx.invoiceNumber}`,
+		html,
+		text,
+		idempotencyKey: `invoice:raised:${ctx.invoiceNumber}:${ctx.clientEmail}`,
+		template: "Invoice raised",
+		reference: ctx.invoiceNumber,
+	};
+}
+
+export function documentReviewedForClient(ctx: {
+	clientName: string;
+	clientEmail: string;
+	documentType: string;
+	status: "approved" | "rejected";
+	reviewNote?: string | null;
+	portalUrl: string;
+}): QueuedEmail {
+	const { html, text } = renderDocumentReviewedEmail({
+		clientName: ctx.clientName,
+		documentType: ctx.documentType,
+		status: ctx.status,
+		reviewNote: ctx.reviewNote,
+		portalUrl: ctx.portalUrl,
+	});
+	return {
+		to: ctx.clientEmail,
+		subject: `Document ${ctx.status === "approved" ? "approved" : "rejected"} · ${ctx.documentType}`,
+		html,
+		text,
+		idempotencyKey: `document:reviewed:${ctx.clientEmail}:${ctx.documentType}:${ctx.status}`,
+		template: "Document reviewed",
 	};
 }

@@ -31,12 +31,14 @@ import {
 	type StaffContext,
 } from "../middleware/auth.js";
 import { getDocumentStorage, StorageNotConfiguredError } from "../services/storage/index.js";
+import { documentReviewedForClient } from "../services/notifications.js";
 import {
 	notify,
 	notifyMany,
 	getManagerAndCoordinatorUserIds,
 	getStaffUserId,
 } from "../services/notify.js";
+import { env } from "../env.js";
 
 /**
  * Applicant documents.
@@ -667,16 +669,37 @@ documentsRouter.openapi(
 			);
 		}
 
-		// In-app: tell the document owner their document was approved or rejected.
+		// In-app + email: tell the document owner their document was approved or rejected.
 		const approved = body.status === "VERIFIED";
 		const rejected = body.status === "REJECTED";
 		if (approved || rejected) {
-			notify({
+			const status = approved ? "approved" : "rejected";
+			const [owner] = await db
+				.select({ email: users.email, applicantName: applicants.name })
+				.from(users)
+				.leftJoin(applicants, eq(applicants.userId, users.id))
+				.where(eq(users.id, updated.ownerUserId))
+				.limit(1);
+
+			const clientName = owner?.applicantName ?? "Applicant";
+			const email = owner?.email;
+
+			await notify({
 				recipientUserId: updated.ownerUserId,
 				type: approved ? "document.approved" : "document.rejected",
 				title: approved ? "Your document was approved" : "Your document was rejected",
-				body: `Your ${updated.documentType} was ${approved ? "approved" : "rejected"}.`,
+				body: `Your ${updated.documentType} was ${status}.`,
 				link: "/portal/documents",
+				email: email
+					? documentReviewedForClient({
+							clientName,
+							clientEmail: email,
+							documentType: updated.documentType,
+							status,
+							reviewNote: body.note ?? null,
+							portalUrl: env.FRONTEND_URL,
+						})
+					: undefined,
 			}).catch(() => {});
 		}
 

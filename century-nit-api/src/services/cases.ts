@@ -28,6 +28,7 @@ import {
 	opsUsers,
 	servicePackages,
 } from "../db/schema.js";
+import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
@@ -985,6 +986,22 @@ export async function assignApplication(input: {
 					clientEmail: applicant.email ?? "",
 					employeeName: employee.name,
 					employeeEmail: employee.email,
+				}),
+			]);
+		} catch {
+			// Email failure must not block the assignment.
+		}
+
+		// Also let the applicant know who is handling their case.
+		try {
+			await queueEmails([
+				mail.consultantAssignedForClient({
+					clientName: applicant.name ?? "Applicant",
+					clientEmail: applicant.email ?? "",
+					consultantName: employee.name,
+					consultantEmail: employee.email,
+					appNumber: updated.appNumber,
+					portalUrl: env.FRONTEND_URL,
 				}),
 			]);
 		} catch {

@@ -214,6 +214,10 @@ export function StartJourney() {
 		try {
 			setLoading(true);
 			setError("");
+			if (typeof window !== "undefined") {
+				sessionStorage.setItem("century_auth_provider", "google");
+				localStorage.setItem("century_auth_provider", "google");
+			}
 			await signInWithGoogle();
 		} catch (err) {
 			setLoading(false);

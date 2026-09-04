@@ -79,7 +79,7 @@ function isStaffOnlyNotification(type: string): boolean {
 	return (STAFF_ONLY_NOTIFICATION_TYPES as readonly string[]).includes(type);
 }
 
-export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone";
+export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone" | "single_sign_on";
 
 export type AuthUser = {
 	id?: string;
@@ -548,11 +548,16 @@ function loadJSON<T>(key: string, fallback: T): T {
 function loadAuthUser(): AuthUser | null {
 	const stored = safeGetJSON<Partial<AuthUser>>(AUTH_STORAGE_KEY);
 	if (!stored?.email || !stored.name) return null;
+	const isGoogle = Boolean(
+		stored.method === "google" ||
+		(stored.image && stored.image.includes("googleusercontent.com"))
+	);
 	return {
 		id: typeof stored.id === "string" ? stored.id : undefined,
 		name: stored.name,
 		email: stored.email,
-		method: (stored.method ?? "email") as AuthMethod,
+		image: stored.image ?? null,
+		method: (stored.method ?? (isGoogle ? "google" : "single_sign_on")) as AuthMethod,
 		signedInAt: stored.signedInAt ?? new Date().toISOString(),
 	};
 }
@@ -1772,9 +1777,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		try {
 			const data = await getCurrentSession();
 			if (data?.user) {
+				const recentProvider =
+					typeof window !== "undefined"
+						? (sessionStorage.getItem("century_auth_provider") || localStorage.getItem("century_auth_provider"))
+						: null;
+				if (typeof window !== "undefined") {
+					sessionStorage.removeItem("century_auth_provider");
+					localStorage.removeItem("century_auth_provider");
+				}
+
+				const prev = safeGetJSON<Partial<AuthUser>>(AUTH_STORAGE_KEY);
+				const isGoogle = Boolean(
+					recentProvider === "google" ||
+					prev?.method === "google" ||
+					(data.user.image && data.user.image.includes("googleusercontent.com"))
+				);
+
+				const method: AuthMethod = isGoogle
+					? "google"
+					: prev?.method && prev.method !== "email"
+						? (prev.method as AuthMethod)
+						: recentProvider
+							? (recentProvider as AuthMethod)
+							: "single_sign_on";
+
 				signIn({
 					id: data.user.id,
-					method: "email",
+					method,
 					name: data.user.name || data.user.email.split("@")[0] || "Applicant",
 					email: data.user.email,
 					image: data.user.image ?? null,

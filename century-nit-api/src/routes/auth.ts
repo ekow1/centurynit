@@ -16,6 +16,7 @@ import { renderPasswordResetEmail, renderOtpEmail } from "../lib/email-templates
 import { getSmsSender } from "../lib/sms.js";
 import { getSetting } from "../services/settings.js";
 import { captureLeadFromUser } from "../services/leads.js";
+import { welcomeEmail } from "../services/notifications.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 
 /**
@@ -103,6 +104,26 @@ function createAuth(config: GoogleSocialConfig) {
 						},
 						"Account Registration",
 					);
+
+					// Fire-and-forget welcome email for real email addresses.
+					try {
+						if (
+							u.email &&
+							u.email.includes("@") &&
+							!u.email.toLowerCase().endsWith("@phone.centurynit.local")
+						) {
+							const { queueEmails } = await import("../worker/queues.js");
+							await queueEmails([
+								welcomeEmail({
+									name: u.name ?? undefined,
+									email: u.email,
+									portalUrl: env.FRONTEND_URL,
+								}),
+							]);
+						}
+					} catch (err) {
+						console.error("[auth] welcome email failed:", err);
+					}
 				},
 			},
 		},

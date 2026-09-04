@@ -394,3 +394,324 @@ export function renderBookingEmail(data: {
 		text,
 	};
 }
+
+/* ── 5. Client Welcome Email Template ────────────────────────────────────── */
+
+export function renderWelcomeEmail(data: {
+	name?: string;
+	portalUrl: string;
+}): { html: string; text: string } {
+	const safeName = data.name ? escapeHtml(data.name.trim()) : null;
+	const greeting = safeName ? `Hello <strong>${safeName}</strong>,` : `Hello,`;
+	const portalLink = `${data.portalUrl}/portal/tracking`;
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			${greeting}
+		</p>
+
+		<p style="margin:0 0 18px 0;color:#000000;">
+			Welcome to <strong>Century NIT</strong>. Your account has been created and we are ready to help you move forward with your study-abroad plans.
+		</p>
+
+		<p style="margin:0 0 24px 0;color:#000000;">
+			You can log in to your applicant portal at any time to track your application, upload documents, view invoices, and message your consultant.
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${portalLink}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Log In to Your Portal
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Button not working? Paste this link into your browser:</p>
+			<a href="${portalLink}" style="color:#000000;text-decoration:underline;">${portalLink}</a>
+		</div>
+	`;
+
+	const text = [
+		safeName ? `Hello ${data.name!.trim()},` : `Hello,`,
+		``,
+		`Welcome to Century NIT. Your account has been created and we are ready to help you move forward with your study-abroad plans.`,
+		``,
+		`Log in to your applicant portal to track your application, upload documents, view invoices, and message your consultant:`,
+		portalLink,
+		``,
+		`If you have any questions, reply to this email or contact support@centurynit.com.`,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: "Welcome to Century NIT",
+			preheader: "Your Century NIT account is ready — log in to get started",
+			bodyHtml,
+		}),
+		text,
+	};
+}
+
+/* ── 6. Consultant Assigned Email Template (client) ─────────────────────── */
+
+export function renderConsultantAssignedEmail(data: {
+	clientName: string;
+	consultantName: string;
+	consultantEmail?: string | null;
+	appNumber?: string | null;
+	portalUrl: string;
+}): { html: string; text: string } {
+	const safeClient = escapeHtml(data.clientName.trim());
+	const safeConsultant = escapeHtml(data.consultantName.trim());
+	const safeConsultantEmail = data.consultantEmail ? escapeHtml(data.consultantEmail.trim()) : null;
+	const portalLink = `${data.portalUrl}/portal/tracking`;
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			Hello <strong>${safeClient}</strong>,
+		</p>
+
+		<p style="margin:0 0 20px 0;color:#000000;">
+			<strong>${safeConsultant}</strong> has been assigned as your consultant at Century NIT.
+		</p>
+
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:2px solid #000000;padding:16px 20px;">
+			<tr>
+				<td>
+					<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;width:110px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Consultant</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:700;color:#000000;">${safeConsultant}</td>
+						</tr>
+						${safeConsultantEmail ? `
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Email</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${safeConsultantEmail}</td>
+						</tr>` : ""}
+						${data.appNumber ? `
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Reference</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${escapeHtml(data.appNumber)}</td>
+						</tr>` : ""}
+					</table>
+				</td>
+			</tr>
+		</table>
+
+		<p style="margin:0 0 24px 0;color:#000000;">
+			Your consultant will guide you through the next steps. You can follow progress and upload documents in your portal.
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${portalLink}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Go to Portal
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Portal link:</p>
+			<a href="${portalLink}" style="color:#000000;text-decoration:underline;">${portalLink}</a>
+		</div>
+	`;
+
+	const text = [
+		`Hello ${data.clientName.trim()},`,
+		``,
+		`${safeConsultant} has been assigned as your consultant at Century NIT.`,
+		``,
+		`Consultant: ${safeConsultant}`,
+		...(safeConsultantEmail ? [`Email: ${safeConsultantEmail}`] : []),
+		...(data.appNumber ? [`Reference: ${data.appNumber}`] : []),
+		``,
+		`Your consultant will guide you through the next steps. View your case in the portal:`,
+		portalLink,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: "Your Century NIT Consultant",
+			preheader: `${safeConsultant} is now handling your case`,
+			bodyHtml,
+		}),
+		text,
+	};
+}
+
+/* ── 7. Invoice Raised Email Template (client) ──────────────────────────── */
+
+export function renderInvoiceRaisedEmail(data: {
+	clientName: string;
+	invoiceNumber: string;
+	invoiceType: string;
+	amountFormatted: string;
+	dueAtFormatted?: string | null;
+	payUrl: string;
+}): { html: string; text: string } {
+	const safeClient = escapeHtml(data.clientName.trim());
+	const safeInvoice = escapeHtml(data.invoiceNumber.trim());
+	const safeType = escapeHtml(data.invoiceType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			Hello <strong>${safeClient}</strong>,
+		</p>
+
+		<p style="margin:0 0 20px 0;color:#000000;">
+			An invoice is ready for payment in your Century NIT portal.
+		</p>
+
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:2px solid #000000;padding:16px 20px;">
+			<tr>
+				<td>
+					<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;width:110px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Invoice</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:700;color:#000000;">${safeInvoice}</td>
+						</tr>
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Type</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${safeType}</td>
+						</tr>
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Amount</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${data.amountFormatted}</td>
+						</tr>
+						${data.dueAtFormatted ? `
+						<tr>
+							<td style="padding:4px 0;font-size:13px;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Due</td>
+							<td style="padding:4px 0;font-size:14px;font-weight:600;color:#000000;">${escapeHtml(data.dueAtFormatted)}</td>
+						</tr>` : ""}
+					</table>
+				</td>
+			</tr>
+		</table>
+
+		<p style="margin:0 0 24px 0;color:#000000;">
+			Please review the invoice and pay securely through your portal. If you have any questions, your consultant can help.
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${data.payUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						Pay Now
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Direct link:</p>
+			<a href="${data.payUrl}" style="color:#000000;text-decoration:underline;">${data.payUrl}</a>
+		</div>
+	`;
+
+	const text = [
+		`Hello ${data.clientName.trim()},`,
+		``,
+		`An invoice is ready for payment in your Century NIT portal.`,
+		``,
+		`Invoice: ${safeInvoice}`,
+		`Type: ${safeType}`,
+		`Amount: ${data.amountFormatted}`,
+		...(data.dueAtFormatted ? [`Due: ${data.dueAtFormatted}`] : []),
+		``,
+		`Pay securely through your portal:`,
+		data.payUrl,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: "Invoice Ready for Payment",
+			preheader: `Invoice ${safeInvoice} · ${data.amountFormatted}`,
+			bodyHtml,
+		}),
+		text,
+	};
+}
+
+/* ── 8. Document Reviewed Email Template (client) ───────────────────────── */
+
+export function renderDocumentReviewedEmail(data: {
+	clientName: string;
+	documentType: string;
+	status: "approved" | "rejected";
+	reviewNote?: string | null;
+	portalUrl: string;
+}): { html: string; text: string } {
+	const safeClient = escapeHtml(data.clientName.trim());
+	const safeDoc = escapeHtml(data.documentType.trim());
+	const approved = data.status === "approved";
+	const statusLabel = approved ? "approved" : "rejected";
+	const title = approved ? "Document Approved" : "Document Rejected";
+	const portalLink = `${data.portalUrl}/portal/documents`;
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			Hello <strong>${safeClient}</strong>,
+		</p>
+
+		<p style="margin:0 0 20px 0;color:#000000;">
+			Your <strong>${safeDoc}</strong> has been <strong>${statusLabel}</strong> by our team.
+		</p>
+
+		${data.reviewNote ? `
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:2px solid #000000;padding:16px 20px;">
+			<tr>
+				<td>
+					<p style="margin:0 0 6px 0;font-size:12px;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Reviewer note</p>
+					<p style="margin:0;font-size:14px;color:#000000;">${escapeHtml(data.reviewNote)}</p>
+				</td>
+			</tr>
+		</table>
+		` : ""}
+
+		<p style="margin:0 0 24px 0;color:#000000;">
+			${approved
+				? "No further action is needed for this document. You can view it in your document vault at any time."
+				: "Please log in to your portal to upload a replacement or corrected version."}
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${portalLink}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						${approved ? "View Documents" : "Upload Replacement"}
+					</a>
+				</td>
+			</tr>
+		</table>
+
+		<div style="padding:14px 18px;background-color:#f5f5f5;border:1px dashed #999999;font-size:12px;color:#666666;word-break:break-all;">
+			<p style="margin:0 0 6px 0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.3px;">Documents link:</p>
+			<a href="${portalLink}" style="color:#000000;text-decoration:underline;">${portalLink}</a>
+		</div>
+	`;
+
+	const text = [
+		`Hello ${data.clientName.trim()},`,
+		``,
+		`Your ${safeDoc} has been ${statusLabel} by our team.`,
+		``,
+		...(data.reviewNote ? [`Reviewer note: ${data.reviewNote}`, ``] : []),
+		approved
+			? `No further action is needed. View your documents: ${portalLink}`
+			: `Please upload a replacement or corrected version: ${portalLink}`,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title,
+			preheader: `Your ${safeDoc} was ${statusLabel}`,
+			bodyHtml,
+		}),
+		text,
+	};
+}

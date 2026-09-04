@@ -13,8 +13,12 @@ import {
 	invoicePayments,
 	invoices,
 } from "../db/schema.js";
+import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
 import { getSetting } from "./settings.js";
+import { formatUsd } from "./receiptEmail.js";
+import { invoiceRaisedForClient } from "./notifications.js";
+import { queueEmails } from "../worker/queues.js";
 
 /**
  * Invoice lifecycle — commands, not CRUD (API_MIGRATION_PLAN.md §4).
@@ -292,6 +296,34 @@ export async function createInvoice(input: {
 		await audit(created.id, "issued", actor.email, `Issued by ${actor.name}`, txDb);
 		return created;
 	});
+
+	// Notify the client that an invoice is outstanding.
+	if (row.status === "issued" && row.applicantEmail) {
+		try {
+			const clientName = row.applicantName || "Valued Client";
+			const payUrl = `${env.FRONTEND_URL}/portal/financial`;
+			const dueAtFormatted = row.dueAt
+				? row.dueAt.toLocaleDateString("en-GB", {
+						day: "numeric",
+						month: "long",
+						year: "numeric",
+					})
+				: null;
+			await queueEmails([
+				invoiceRaisedForClient({
+					clientName,
+					clientEmail: row.applicantEmail,
+					invoiceNumber: row.invoiceNumber,
+					invoiceType: row.type,
+					amountFormatted: formatUsd(row.subtotalCents / 100),
+					dueAtFormatted,
+					payUrl,
+				}),
+			]);
+		} catch {
+			// Email failure must not block the invoice creation.
+		}
+	}
 
 	return row;
 }

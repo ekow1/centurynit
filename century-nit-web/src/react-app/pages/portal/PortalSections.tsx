@@ -87,11 +87,13 @@ function consultationTypeLabel(type?: string) {
 }
 
 function signInMethodLabel(method?: string) {
-	if (!method) return "-";
+	if (!method || method === "single_sign_on") return "Single Sign-On";
+	if (method === "google") return "Google Account";
+	if (method === "microsoft") return "Microsoft Account";
+	if (method === "apple") return "Apple ID";
+	if (method === "otp" || method === "magic_link") return "Passwordless (OTP / Magic Link)";
+	if (method === "phone") return "Phone verification";
 	if (method === "email") return "Email & password";
-	if (method === "google") return "Google";
-	if (method === "microsoft") return "Microsoft";
-	if (method === "apple") return "Apple";
 	return method.charAt(0).toUpperCase() + method.slice(1).replace(/_/g, " ");
 }
 
@@ -779,19 +781,19 @@ export function PortalProfile() {
 										Change password
 									</button>
 								</span>
-							) : authUser?.method ? (
-								<span>
-									Managed by your sign-in provider — {signInMethodLabel(authUser.method)}
-								</span>
 							) : (
-								<span className="muted">-</span>
+								<span className="muted">
+									{authUser?.method === "google"
+										? "Managed by your Google account — password not required"
+										: "Managed by your sign-in provider — password not required"}
+								</span>
 							)
 						}
 					/>
-					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "40rem" }}>
-						{authUser?.method && authUser.method !== "email"
-							? "You sign in using a third-party authentication provider. Your account password and security settings are managed directly by that provider."
-							: "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."}
+					<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem" }}>
+						{authUser?.method === "email"
+							? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
+							: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
 					</p>
 				</div>
 			</section>

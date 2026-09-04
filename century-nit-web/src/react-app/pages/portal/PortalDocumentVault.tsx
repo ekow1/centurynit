@@ -24,10 +24,10 @@ import { prepareDocumentForUpload } from "../../lib/upload";
  */
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
-	missing: { label: "Required", pill: "portal-pill--needs_info" },
-	uploaded: { label: "Uploaded", pill: "portal-pill--draft" },
-	verified: { label: "Verified ✓", pill: "portal-pill--approved" },
-	rejected: { label: "Resubmit", pill: "portal-pill--under_review" },
+	missing: { label: "Action Required", pill: "portal-pill--missing" },
+	uploaded: { label: "In Review", pill: "portal-pill--uploaded" },
+	verified: { label: "Verified ✓", pill: "portal-pill--verified" },
+	rejected: { label: "Resubmit", pill: "portal-pill--rejected" },
 };
 
 /** API vocabulary → the vault's. PENDING_UPLOAD never reaches a listing. */
@@ -274,31 +274,68 @@ export function PortalDocumentVault() {
 				</div>
 			</header>
 
-			<div className="vault-summary mt-4">
-				<span className="vault-summary__item">
-					<strong>{uploadedCount}/{rows.length}</strong> uploaded
-				</span>
-				<span className="vault-summary__item">
-					<strong>{verifiedCount}</strong> verified
-				</span>
-				<span
-					className={`vault-summary__item vault-summary__status${allVerified ? " vault-summary__status--done" : ""}`}
-				>
-					{allVerified ? "All verified" : "Pending review"}
-				</span>
+			<div className="vault-hero mt-4">
+				<div className="vault-hero__stats">
+					<div className="vault-stat-card">
+						<span className="vault-stat-card__label">Uploaded</span>
+						<div className="vault-stat-card__val-row">
+							<span className="vault-stat-card__val">{uploadedCount}</span>
+							<span className="vault-stat-card__total">/ {rows.length}</span>
+						</div>
+						<span className="vault-stat-card__hint">Documents on file</span>
+					</div>
+					<div className="vault-stat-card">
+						<span className="vault-stat-card__label">Verified</span>
+						<div className="vault-stat-card__val-row">
+							<span className="vault-stat-card__val vault-stat-card__val--green">{verifiedCount}</span>
+							<span className="vault-stat-card__total">/ {rows.length}</span>
+						</div>
+						<span className="vault-stat-card__hint">Approved by consultant</span>
+					</div>
+					<div className="vault-stat-card">
+						<span className="vault-stat-card__label">Review Status</span>
+						<div className="vault-stat-card__status">
+							<span
+								className={`vault-status-chip vault-status-chip--${allVerified ? "verified" : allUploaded ? "review" : "action"}`}
+							>
+								{allVerified ? "✓ Complete" : allUploaded ? "● In Review" : "○ Action Needed"}
+							</span>
+						</div>
+						<span className="vault-stat-card__hint">
+							{allVerified
+								? "All documents approved"
+								: `${rows.length - uploadedCount} required document(s) remaining`}
+						</span>
+					</div>
+				</div>
+				<div className="vault-progress">
+					<div className="vault-progress__bar">
+						<div
+							className="vault-progress__fill"
+							style={{ width: `${Math.round((uploadedCount / (rows.length || 1)) * 100)}%` }}
+						/>
+					</div>
+					<div className="vault-progress__meta">
+						<span>{Math.round((uploadedCount / (rows.length || 1)) * 100)}% uploaded</span>
+						<span>{Math.round((verifiedCount / (rows.length || 1)) * 100)}% verified</span>
+					</div>
+				</div>
 			</div>
 
-			<div className="vault-rules mt-3">
-				<span className="vault-rules__mark" aria-hidden>
-					i
-				</span>
-				<p className="vault-rules__text">
-					Accepted formats: <strong>PDF, JPG, PNG, DOC, DOCX</strong>
-					<span className="vault-rules__sep" aria-hidden>·</span>
-					Max <strong>15 MB</strong> per file
-					<span className="vault-rules__sep" aria-hidden>·</span>
-					Large images are compressed automatically before upload.
-				</p>
+			<div className="vault-guidelines mt-3">
+				<div className="vault-guidelines__icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+						<circle cx="12" cy="12" r="10" />
+						<line x1="12" y1="16" x2="12" y2="12" />
+						<line x1="12" y1="8" x2="12.01" y2="8" />
+					</svg>
+				</div>
+				<div className="vault-guidelines__content">
+					<p className="vault-guidelines__title">Accepted Formats & Guidelines</p>
+					<p className="vault-guidelines__desc">
+						Upload clear, readable copies in <strong>PDF, JPG, PNG, DOC, or DOCX</strong> (max <strong>15 MB</strong> per file). Large images are compressed automatically before upload.
+					</p>
+				</div>
 			</div>
 
 			<input
@@ -308,8 +345,6 @@ export function PortalDocumentVault() {
 				hidden
 				onChange={(e) => {
 					const file = e.target.files?.[0];
-					// Reset first: choosing the same file twice must fire again, and it
-					// will not if the value still matches.
 					e.target.value = "";
 					if (file) void onFileChosen(file);
 				}}
@@ -338,62 +373,79 @@ export function PortalDocumentVault() {
 						const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
 						const busy = busyId === doc.id;
 						return (
-							<div key={doc.id} className="doc-item">
-								<span className="doc-item__icon" aria-hidden>
-									<IconDoc size={20} />
-								</span>
+							<div key={doc.id} className={`doc-card doc-card--${doc.status}`}>
+								<div className="doc-card__main">
+									<span className="doc-card__icon" aria-hidden="true">
+										<IconDoc size={22} />
+									</span>
 
-								<div className="doc-item__body">
-									<div className="doc-item__top">
-										<span className="doc-item__title">{doc.name}</span>
-										<span className="doc-item__hint muted">{doc.hint}</span>
+									<div className="doc-card__info">
+										<div className="doc-card__heading">
+											<h3 className="doc-card__title">{doc.name}</h3>
+											<p className="doc-card__hint">{doc.hint}</p>
+										</div>
+
+										{doc.live?.reviewNote ? (
+											<div className="doc-card__review-note">
+												<strong>Consultant Feedback:</strong> {doc.live.reviewNote}
+											</div>
+										) : null}
+
+										{doc.fileName ? (
+											<div className="doc-card__attachment">
+												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+													<polyline points="14 2 14 8 20 8" />
+												</svg>
+												<span className="doc-card__filename mono">{doc.fileName}</span>
+												{doc.uploadedAt ? (
+													<>
+														<span className="doc-card__sep" aria-hidden="true">·</span>
+														<span className="doc-card__date">
+															Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+														</span>
+													</>
+												) : null}
+											</div>
+										) : null}
 									</div>
-									{doc.live?.reviewNote ? (
-										<p className="doc-item__note">{doc.live.reviewNote}</p>
-									) : null}
-									{doc.fileName ? (
-										<p className="doc-item__file">
-											<span className="doc-item__filename mono">{doc.fileName}</span>
-											{doc.uploadedAt ? (
-												<span className="muted">
-													{new Date(doc.uploadedAt).toLocaleDateString()}
-												</span>
-											) : null}
-										</p>
-									) : null}
 								</div>
 
-								<div className="doc-item__side">
+								<div className="doc-card__side">
 									<span className={`portal-pill ${statusMeta.pill}`}>
 										{statusMeta.label}
 									</span>
-									<div className="doc-item__actions">
+									<div className="doc-card__actions">
 										{doc.fileName ? (
 											<>
 												<button
 													type="button"
-													className="btn btn--ghost btn--sm"
+													className="btn btn--secondary btn--sm"
 													onClick={() => void handlePreview(doc)}
 													disabled={busy}
 												>
 													Preview
 												</button>
-												<button
-													type="button"
-													className="btn btn--ghost btn--sm"
-													onClick={() => handleUpload(doc.id)}
-													disabled={busy}
-												>
-													{busy ? "Uploading…" : "Replace"}
-												</button>
-												<button
-													type="button"
-													className="btn btn--ghost btn--sm"
-													onClick={() => void handleRemove(doc)}
-													disabled={busy}
-												>
-													Remove
-												</button>
+												{doc.status !== "verified" ? (
+													<button
+														type="button"
+														className="btn btn--secondary btn--sm"
+														onClick={() => handleUpload(doc.id)}
+														disabled={busy}
+													>
+														{busy ? "Uploading…" : "Replace"}
+													</button>
+												) : null}
+												{doc.status !== "verified" ? (
+													<button
+														type="button"
+														className="btn btn--ghost btn--sm btn--danger-hover"
+														onClick={() => void handleRemove(doc)}
+														disabled={busy}
+													>
+														Remove
+													</button>
+												) : null}
 											</>
 										) : (
 											<Button

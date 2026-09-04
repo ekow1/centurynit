@@ -38,6 +38,7 @@ import { documentsApi, meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
+import { ChangePasswordModal, ChangeEmailModal } from "../../components/portal/SecurityModals";
 import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
@@ -150,6 +151,8 @@ export function PortalProfile() {
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState<null | "account" | "assessment" | "preferences">(null);
 	const [avatarOpen, setAvatarOpen] = useState(false);
+	const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+	const [changeEmailOpen, setChangeEmailOpen] = useState(false);
 	const { toast } = useNotifier();
 
 	const dest = a.destinationId ? getDestination(a.destinationId) : null;
@@ -380,22 +383,33 @@ export function PortalProfile() {
 					</div>
 				</div>
 
-				{editing === "account" ? (
-					<div className="profile-edit profile-edit--light">
-						<ProfileEditForm
-							fields={ACCOUNT_FIELDS}
-							draft={draft}
-							errors={errors}
-							saving={saving === "account"}
-							onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-							onCancel={() => setEditing(null)}
-							onSave={saveAccount}
-						/>
-						<p className="profile-hero__note mt-2">
-							To change your email, contact support or use the Change email flow.
-						</p>
-					</div>
-				) : null}
+					{editing === "account" ? (
+						<div className="profile-edit profile-edit--light">
+							<ProfileEditForm
+								fields={ACCOUNT_FIELDS}
+								draft={draft}
+								errors={errors}
+								saving={saving === "account"}
+								onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+								onCancel={() => setEditing(null)}
+								onSave={saveAccount}
+							/>
+							<p className="profile-hero__note mt-2">
+								To change your email, use the{" "}
+								<button
+									type="button"
+									className="link-arrow"
+									onClick={() => {
+										setEditing(null);
+										setChangeEmailOpen(true);
+									}}
+								>
+									Change email flow
+								</button>
+								.
+							</p>
+						</div>
+					) : null}
 
 				<div className="profile-refs">
 					<div className="profile-ref">
@@ -701,9 +715,13 @@ export function PortalProfile() {
 							authUser?.method === "email" ? (
 								<span>
 									Password set ·{" "}
-									<a href="#" className="link-arrow">
+									<button
+										type="button"
+										className="link-arrow"
+										onClick={() => setChangePasswordOpen(true)}
+									>
 										Change password
-									</a>
+									</button>
 								</span>
 							) : authUser?.method ? (
 								<span>
@@ -728,6 +746,19 @@ export function PortalProfile() {
 				onSaved={() => {
 					setAvatarImage("set");
 				}}
+			/>
+			<ChangePasswordModal
+				open={changePasswordOpen}
+				currentEmail={authUser?.email || a.email || ""}
+				onClose={() => setChangePasswordOpen(false)}
+			/>
+			<ChangeEmailModal
+				open={changeEmailOpen}
+				currentEmail={authUser?.email || a.email || ""}
+				onSaved={(newEmail) => {
+					updateAccount({ name: authUser?.name || fullName, email: newEmail });
+				}}
+				onClose={() => setChangeEmailOpen(false)}
 			/>
 		</div>
 	);

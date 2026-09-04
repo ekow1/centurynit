@@ -101,6 +101,7 @@ import {
 	updatePortalStateSchema,
 	notificationSchema,
 } from "century-nit-shared";
+import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
@@ -1059,6 +1060,170 @@ meRouter.openapi(
 		}
 
 		return c.json(await serializeApplicant(updated));
+	},
+);
+
+const CHANGE_OTP_EXPIRES_MINUTES = 10;
+const CHANGE_OTP_IDENTIFIER = (email: string) => `change-email-${email}`;
+
+/**
+ * Applicant self-service: request an OTP to confirm a new email address.
+ *
+ * The code is sent to the *new* address. Confirming it updates both the Better
+ * Auth users row and the applicant record, so the portal and ops stay in sync.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/change-email/request",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: requestEmailChangeSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ ok: z.boolean() }) } },
+				description: "OTP sent (or silently skipped if address is taken)",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const newEmail = body.newEmail.trim().toLowerCase();
+
+		if (newEmail === user.email?.toLowerCase()) {
+			return c.json({ ok: true });
+		}
+
+		// Enumeration protection: don't reveal whether the address is taken.
+		const [existingUser] = await db
+			.select({ id: schema.users.id })
+			.from(schema.users)
+			.where(eq(schema.users.email, newEmail))
+			.limit(1);
+		const [existingStaff] = await db
+			.select({ id: schema.opsUsers.id })
+			.from(schema.opsUsers)
+			.where(eq(schema.opsUsers.email, newEmail))
+			.limit(1);
+		if (existingUser || existingStaff) {
+			return c.json({ ok: true });
+		}
+
+		const otp = String(Math.floor(100000 + Math.random() * 900000));
+		const identifier = CHANGE_OTP_IDENTIFIER(newEmail);
+		const expiresAt = new Date(Date.now() + CHANGE_OTP_EXPIRES_MINUTES * 60 * 1000);
+
+		// Consume any previous code for this address.
+		await db.delete(schema.verifications).where(eq(schema.verifications.identifier, identifier));
+		await db.insert(schema.verifications).values({
+			id: randomUUID(),
+			identifier,
+			value: `${otp}:0`,
+			expiresAt,
+		});
+
+		const { html, text } = renderOtpEmail({
+			otp,
+			purpose: "verify your new Century NIT email address",
+			expiresMinutes: CHANGE_OTP_EXPIRES_MINUTES,
+		});
+		await sendEmail({
+			to: body.newEmail,
+			subject: `Your Century NIT Code: ${otp}`,
+			text,
+			html,
+		});
+
+		return c.json({ ok: true });
+	},
+);
+
+/**
+ * Applicant self-service: confirm a new email address with the OTP.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/change-email/confirm",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: confirmEmailChangeSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ ok: z.boolean(), email: z.string() }) } },
+				description: "Email updated",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const newEmail = body.newEmail.trim().toLowerCase();
+		const otp = body.otp.trim();
+
+		const [existingUser] = await db
+			.select({ id: schema.users.id })
+			.from(schema.users)
+			.where(eq(schema.users.email, newEmail))
+			.limit(1);
+		const [existingStaff] = await db
+			.select({ id: schema.opsUsers.id })
+			.from(schema.opsUsers)
+			.where(eq(schema.opsUsers.email, newEmail))
+			.limit(1);
+		if (existingUser || existingStaff) {
+			throw new HttpError(409, "EMAIL_IN_USE", "That email address is already in use.");
+		}
+
+		const identifier = CHANGE_OTP_IDENTIFIER(newEmail);
+		const [record] = await db
+			.select()
+			.from(schema.verifications)
+			.where(eq(schema.verifications.identifier, identifier))
+			.limit(1);
+
+		if (!record || record.expiresAt < new Date()) {
+			if (record) await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+			throw new HttpError(400, "INVALID_CODE", "The code has expired. Please request a new one.");
+		}
+
+		const colonIdx = record.value.lastIndexOf(":");
+		const storedOtp = colonIdx === -1 ? record.value : record.value.slice(0, colonIdx);
+		const attempts = colonIdx === -1 ? 0 : Number.parseInt(record.value.slice(colonIdx + 1) || "0", 10);
+		const allowedAttempts = 3;
+
+		if (Number.isNaN(attempts) || attempts >= allowedAttempts) {
+			await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+			throw new HttpError(400, "INVALID_CODE", "Too many attempts. Please request a new code.");
+		}
+
+		if (storedOtp !== otp) {
+			await db
+				.update(schema.verifications)
+				.set({ value: `${storedOtp}:${attempts + 1}` })
+				.where(eq(schema.verifications.id, record.id));
+			throw new HttpError(400, "INVALID_CODE", "The code was not accepted. Please try again.");
+		}
+
+		await db.transaction(async (tx) => {
+			await tx
+				.update(schema.users)
+				.set({ email: newEmail, updatedAt: new Date() })
+				.where(eq(schema.users.id, user.id));
+			await tx
+				.update(schema.applicants)
+				.set({ email: newEmail, updatedAt: new Date() })
+				.where(eq(schema.applicants.userId, user.id));
+		});
+
+		await db.delete(schema.verifications).where(eq(schema.verifications.id, record.id));
+
+		return c.json({ ok: true, email: newEmail });
 	},
 );
 

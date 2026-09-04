@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createAuthClient } from "better-auth/client";
-import { twoFactorClient } from "better-auth/client/plugins";
 import QRCode from "qrcode";
 import {
 	getMfaEnrollment,
@@ -9,20 +7,7 @@ import {
 	confirmMfaOtp,
 	type MfaEnrollmentStatus,
 } from "../../lib/api";
-
-/**
- * Two-factor setup for portal clients — optional, recommended.
- *
- * Mirrors the ops MfaSetup flow but lives behind /portal/security so clients
- * can enrol at their own pace. The backend endpoints are shared
- * (/auth-settings/mfa/*), so the same TOTP and Email OTP methods work here.
- */
-
-const authClient = createAuthClient({
-	baseURL: typeof window === "undefined" ? "" : window.location.origin,
-	basePath: "/api/auth",
-	plugins: [twoFactorClient()],
-});
+import { authClient } from "../../lib/auth-client";
 
 type Step =
 	| "loading"

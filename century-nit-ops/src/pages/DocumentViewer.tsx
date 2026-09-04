@@ -52,7 +52,7 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 		setFetchError(null);
 		(async () => {
 			try {
-				const ticket = await documentsApi.downloadUrl(documentId);
+				const ticket = await documentsApi.downloadUrl(documentId, { inline: true });
 				if (cancelled) return;
 				setSignedUrl(ticket.url);
 				// Infer the content type from the file extension — the signed URL

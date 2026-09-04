@@ -558,7 +558,10 @@ documentsRouter.openapi(
 		tags: ["Documents"],
 		summary: "Get a short-lived download URL",
 		middleware: [requireAuth, requireMfa] as const,
-		request: { params: z.object({ id: z.string().uuid() }) },
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+			query: z.object({ inline: z.string().optional() }),
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: downloadTicketSchema } },
@@ -570,6 +573,7 @@ documentsRouter.openapi(
 		const user = c.get("user");
 		const staff = c.get("staff");
 		const { id } = c.req.valid("param");
+		const inline = c.req.valid("query").inline === "true";
 
 		const [row] = await db
 			.select()
@@ -605,7 +609,7 @@ documentsRouter.openapi(
 
 		const ticket = await storage.createDownloadUrl({
 			key: row.storageKey,
-			downloadAs: row.fileName,
+			downloadAs: inline ? undefined : row.fileName,
 		});
 
 		return c.json({ url: ticket.url, expiresAt: ticket.expiresAt.toISOString() });

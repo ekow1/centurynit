@@ -697,9 +697,12 @@ export const documentsApi = {
 		return request(`${API_PREFIX}/documents/${documentId}/complete`, { method: "POST" });
 	},
 
-	/** A signed, expiring link. Fetch it at the moment of use; do not store it. */
-	downloadUrl(documentId: string): Promise<DownloadTicket> {
-		return request(`${API_PREFIX}/documents/${documentId}/download`);
+	/** A signed, expiring link. Fetch it at the moment of use; do not store it.
+	 *  Pass `inline: true` for in-browser preview (no Content-Disposition:
+	 *  attachment); omit it for a download that saves to disk. */
+	downloadUrl(documentId: string, options?: { inline?: boolean }): Promise<DownloadTicket> {
+		const query = options?.inline ? "?inline=true" : "";
+		return request(`${API_PREFIX}/documents/${documentId}/download${query}`);
 	},
 
 	review(documentId: string, input: ReviewDocument): Promise<ApplicantDocument> {

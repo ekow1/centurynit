@@ -64,12 +64,13 @@ export type SettingKey =
 	| "TRAVEL_COORDINATION_FEE_CENTS"
 	| "HOUSING_ASSISTANCE_FEE_CENTS"
 	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS"
-	| "PLATFORM_EXCHANGE_RATE";
+	| "PLATFORM_EXCHANGE_RATE"
+	| string;
 
 
 /** All keys this service manages, with metadata for the UI. */
 export const SETTING_DEFS: Record<
-	SettingKey,
+	string,
 	{ label: string; group: string; secret: boolean; description: string; hidden?: boolean }
 > = {
 	RESEND_API_KEY: {
@@ -306,6 +307,21 @@ export const SETTING_DEFS: Record<
 		secret: false,
 		description: "Pre-departure and airport arrival support fee in USD cents. Default: 4000 ($40).",
 	},
+
+	FEE_ISSUANCE_MODES: {
+		label: "Fee Issuance Modes",
+		group: "Finance",
+		secret: false,
+		description: "JSON array of per-fee issuance mode preferences.",
+		hidden: true,
+	},
+	CUSTOM_FEE_ITEMS: {
+		label: "Custom Fee Items",
+		group: "Finance",
+		secret: false,
+		description: "JSON array of dynamically created fee objects.",
+		hidden: true,
+	}
 };
 
 

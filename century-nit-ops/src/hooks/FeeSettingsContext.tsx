@@ -22,9 +22,20 @@ const DEFAULT_FEE_MODES: FeeIssuanceModes = {
 	PRE_DEPARTURE_BRIEFING_FEE_CENTS: "proforma",
 };
 
+export interface FeeItem {
+	key: string;
+	title: string;
+	category: string;
+	description: string;
+	defaultCents: number;
+	billingStage: string;
+	badge: string;
+}
+
 export interface FeeSettingsState {
 	feeCents: typeof DEFAULT_FEE_CENTS;
 	feeModes: FeeIssuanceModes;
+	customFees: FeeItem[];
 	loading: boolean;
 	refresh: () => Promise<void>;
 }
@@ -51,6 +62,7 @@ export function useFeeSettings() {
 export function FeeSettingsProvider({ children }: { children: ReactNode }) {
 	const [feeCents, setFeeCents] = useState<typeof DEFAULT_FEE_CENTS>(DEFAULT_FEE_CENTS);
 	const [feeModes, setFeeModes] = useState<FeeIssuanceModes>(DEFAULT_FEE_MODES);
+	const [customFees, setCustomFees] = useState<FeeItem[]>([]);
 	const [loading, setLoading] = useState(true);
 
 	const refresh = async () => {
@@ -78,6 +90,19 @@ export function FeeSettingsProvider({ children }: { children: ReactNode }) {
 					console.error("Failed to parse FEE_ISSUANCE_MODES", e);
 				}
 			}
+
+			// --- custom fees ---
+			const customFeesSetting = res.settings.find((s) => s.key === "CUSTOM_FEE_ITEMS");
+			if (customFeesSetting && customFeesSetting.valueMasked) {
+				try {
+					const parsed = JSON.parse(customFeesSetting.valueMasked);
+					if (Array.isArray(parsed)) {
+						setCustomFees(parsed);
+					}
+				} catch (e) {
+					console.error("Failed to parse CUSTOM_FEE_ITEMS", e);
+				}
+			}
 		} catch (e) {
 			console.error("Failed to fetch fee settings", e);
 		} finally {
@@ -90,7 +115,7 @@ export function FeeSettingsProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	return (
-		<FeeSettingsContext.Provider value={{ feeCents, feeModes, loading, refresh }}>
+		<FeeSettingsContext.Provider value={{ feeCents, feeModes, customFees, loading, refresh }}>
 			{children}
 		</FeeSettingsContext.Provider>
 	);

@@ -233,7 +233,10 @@ settingsRouter.openapi(
 
 		let refreshedStepUp: { stepUpToken: string; expiresAt: string } | null = null;
 
-		if (!activeStepUp) {
+		// Skip step-up requirement for fee-schedule configuration which is managed via ops portal dynamically.
+		const isSensitiveSetting = !body.key.endsWith("_FEE_CENTS") && body.key !== "FEE_ISSUANCE_MODES" && body.key !== "CUSTOM_FEE_ITEMS";
+
+		if (isSensitiveSetting && !activeStepUp) {
 			if (!body.totpCode) {
 				throw new HttpError(
 					403,

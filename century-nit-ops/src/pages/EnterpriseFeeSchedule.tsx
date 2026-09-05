@@ -167,7 +167,15 @@ export function EnterpriseFeeSchedule() {
 	const [editMode, setEditMode] = useState<InvoiceMode>("issued");
 	const [saving, setSaving] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
-	const { refresh: refreshGlobalSettings, feeModes } = useFeeSettings();
+	const { refresh: refreshGlobalSettings, feeModes, customFees } = useFeeSettings();
+
+	const [addingFee, setAddingFee] = useState(false);
+	const [newFee, setNewFee] = useState({
+		title: "",
+		category: "Admissions & Processing",
+		amountDollars: "1.00",
+		mode: "proforma" as InvoiceMode
+	});
 
 	// Toast
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
@@ -254,6 +262,53 @@ export function EnterpriseFeeSchedule() {
 		}
 	}
 
+	async function handleAddFee(e: React.FormEvent) {
+		e.preventDefault();
+		const nextCents = dollarsToCents(newFee.amountDollars);
+		if (nextCents < 0 || !newFee.title) {
+			setError("Invalid fee details.");
+			return;
+		}
+
+		setSaving(true);
+		setError(null);
+
+		try {
+			const feeKey = `CUSTOM_FEE_${Date.now()}`;
+			const feeItem: FeeItem = {
+				key: feeKey,
+				title: newFee.title,
+				category: newFee.category,
+				description: "Custom dynamically added fee.",
+				defaultCents: nextCents,
+				billingStage: "As Requested",
+				badge: "Custom",
+			};
+
+			const nextCustomFees = [...customFees, feeItem];
+			await apiFetch(
+				`${API_PREFIX}/settings`,
+				{ method: "PUT", body: JSON.stringify({ key: "CUSTOM_FEE_ITEMS", value: JSON.stringify(nextCustomFees) }) },
+			);
+
+			const nextModes = { ...feeModes, [feeKey]: newFee.mode };
+			await apiFetch(
+				`${API_PREFIX}/settings`,
+				{ method: "PUT", body: JSON.stringify({ key: "FEE_ISSUANCE_MODES", value: JSON.stringify(nextModes) }) },
+			);
+
+			setFlash(`Added custom fee "${newFee.title}".`);
+			setAddingFee(false);
+			setNewFee({ title: "", category: "Admissions & Processing", amountDollars: "1.00", mode: "proforma" });
+			await loadSettings();
+			void refreshGlobalSettings();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to add custom fee");
+		} finally {
+			setSaving(false);
+		}
+	}
+
 	const categories = [
 		"all",
 		"Consultations",
@@ -263,7 +318,7 @@ export function EnterpriseFeeSchedule() {
 		"Supplementary Services",
 	];
 
-	const allFees = useMemo(() => FEE_DEFINITIONS, []);
+	const allFees = useMemo(() => [...FEE_DEFINITIONS, ...customFees], [customFees]);
 
 	const filteredFees = allFees.filter(
 		(f) => selectedCategory === "all" || f.category === selectedCategory,
@@ -291,6 +346,11 @@ export function EnterpriseFeeSchedule() {
 					>
 						USD ($) MASTER BASE
 					</span>
+					{isSuperAdmin && (
+						<button type="button" className="btn btn--primary btn--sm" onClick={() => setAddingFee(true)}>
+							+ Add Custom Fee
+						</button>
+					)}
 				</div>
 			</div>
 
@@ -414,6 +474,102 @@ export function EnterpriseFeeSchedule() {
 						})}
 					</tbody>
 				</table>
+			)}
+
+		{/* Add Custom Fee Modal */}
+			{addingFee && (
+				<div className="ops-modal-backdrop" onClick={() => setAddingFee(false)} role="dialog" aria-modal="true">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "30rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Fee Schedule Configuration</p>
+								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Add Custom Fee</h2>
+								<p className="ops-modal__sub">Create a new fee item to apply to invoices.</p>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setAddingFee(false)}>
+								✕ Close
+							</button>
+						</header>
+
+						<form onSubmit={handleAddFee} className="invite-form" style={{ marginTop: "1rem" }}>
+							<div className="field">
+								<label htmlFor="new-fee-title">Fee Title</label>
+								<input
+									id="new-fee-title"
+									type="text"
+									className="input input--full-border"
+									value={newFee.title}
+									onChange={(e) => setNewFee({ ...newFee, title: e.target.value })}
+									required
+									autoFocus
+								/>
+							</div>
+
+							<div className="field">
+								<label htmlFor="new-fee-category">Category</label>
+								<select
+									id="new-fee-category"
+									className="input input--full-border"
+									value={newFee.category}
+									onChange={(e) => setNewFee({ ...newFee, category: e.target.value })}
+									required
+								>
+									{categories.filter(c => c !== "all").map(c => (
+										<option key={c} value={c}>{c}</option>
+									))}
+								</select>
+							</div>
+
+							<div className="field">
+								<label htmlFor="new-fee-amount">Official Rate (USD $)</label>
+								<input
+									id="new-fee-amount"
+									type="number"
+									step="0.01"
+									min="0"
+									className="input input--full-border mono"
+									style={{ fontSize: "1.1rem", fontWeight: 700 }}
+									value={newFee.amountDollars}
+									onChange={(e) => setNewFee({ ...newFee, amountDollars: e.target.value })}
+									required
+								/>
+							</div>
+
+							<div className="field">
+								<label>Issuance Mode</label>
+								<div style={{ display: "flex", gap: "0.5rem" }}>
+									<button
+										type="button"
+										onClick={() => setNewFee({ ...newFee, mode: "issued" })}
+										className={`btn btn--sm ${newFee.mode === "issued" ? "btn--primary" : "btn--ghost"}`}
+									>
+										◉ Actual Invoice
+									</button>
+									<button
+										type="button"
+										onClick={() => setNewFee({ ...newFee, mode: "proforma" })}
+										className={`btn btn--sm ${newFee.mode === "proforma" ? "btn--primary" : "btn--ghost"}`}
+									>
+										◯ Estimated Quote
+									</button>
+								</div>
+							</div>
+
+							{error && (
+								<p className="ops-modal__error" role="alert">{error}</p>
+							)}
+
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setAddingFee(false)} disabled={saving}>
+									Cancel
+								</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>
+									{saving ? "Saving…" : "Add Fee"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
 			)}
 
 		{/* Edit Fee Modal */}

@@ -89,7 +89,7 @@ export function InvoiceBuilder({
 	onIssue: (lines: OpsInvoiceLine[], note: string, type: InvoiceType, status: "issued" | "proforma") => void;
 	onCancel: () => void;
 }) {
-	const { feeCents, feeModes } = useFeeSettings();
+	const { feeCents, feeModes, customFees } = useFeeSettings();
 
 	/** Derive the default invoice status from the per-fee modes.
 	 *  If ANY constituent fee is proforma, the invoice defaults to proforma. */
@@ -162,6 +162,17 @@ export function InvoiceBuilder({
 
 	function addLine() {
 		setLines((prev) => [...prev, { id: `line-${Date.now().toString(36)}`, label: "", detail: "", amount: 0 }]);
+	}
+
+	function addCustomFeeLine(feeKey: string) {
+		const fee = customFees.find(f => f.key === feeKey);
+		if (!fee) return;
+		setLines(prev => [...prev, {
+			id: `custom-${Date.now().toString(36)}`,
+			label: fee.title,
+			detail: fee.category,
+			amount: usdFromCents(fee.defaultCents)
+		}]);
 	}
 
 	function removeLine(id: string) {
@@ -252,7 +263,24 @@ export function InvoiceBuilder({
 				<div style={{ marginBottom: "1.25rem" }}>
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
 						<span className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Line Items</span>
-						<button type="button" className="btn btn--ghost btn--sm" onClick={addLine}>+ Add Line</button>
+						<div style={{ display: "flex", gap: "0.5rem" }}>
+							{customFees.length > 0 && (
+								<select 
+									className="input input--sm" 
+									onChange={(e) => {
+										if (e.target.value) addCustomFeeLine(e.target.value);
+										e.target.value = "";
+									}}
+									defaultValue=""
+								>
+									<option value="" disabled>+ Add Custom Fee...</option>
+									{customFees.map(f => (
+										<option key={f.key} value={f.key}>{f.title} (${usdFromCents(f.defaultCents)})</option>
+									))}
+								</select>
+							)}
+							<button type="button" className="btn btn--ghost btn--sm" onClick={addLine}>+ Add Line</button>
+						</div>
 					</div>
 					<div className="ops-table-wrap">
 						<table style={{ width: "100%", borderCollapse: "collapse" }}>

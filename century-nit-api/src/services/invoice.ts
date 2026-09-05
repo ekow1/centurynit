@@ -12,6 +12,7 @@ import {
 	invoiceLines,
 	invoicePayments,
 	invoices,
+	applications,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -63,7 +64,7 @@ export async function nextProformaNumber(tx: typeof db): Promise<string> {
 	return `PRO-${year}-${String((row?.max ?? 0) + 1).padStart(4, "0")}`;
 }
 
-async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promise<number> {
+export async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promise<number> {
 	const [row] = await tx
 		.select({ total: sql<number>`coalesce(sum(amount_cents), 0)::int` })
 		.from(invoicePayments)
@@ -71,7 +72,7 @@ async function paidCentsOf(invoiceId: string, tx: typeof db = db): Promise<numbe
 	return row?.total ?? 0;
 }
 
-function balanceOf(row: InvoiceRow, paidCents: number): number {
+export function balanceOf(row: InvoiceRow, paidCents: number): number {
 	if (row.status === "void") return 0;
 	return Math.max(0, row.subtotalCents - paidCents - row.creditedCents);
 }
@@ -142,6 +143,7 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 		applicantName: row.applicantName,
 		applicantEmail: row.applicantEmail ?? null,
 		clientUserId: row.clientUserId ?? null,
+		applicationId: row.applicationId ?? null,
 		lines: lines.map((l) => ({
 			id: l.id,
 			label: l.label,
@@ -271,6 +273,7 @@ export async function createInvoice(input: {
 			.values({
 				invoiceNumber,
 				clientUserId: data.clientUserId ?? null,
+				applicationId: data.applicationId ?? null,
 				applicantName: data.applicantName,
 				applicantEmail: data.applicantEmail ?? null,
 				type: data.type,
@@ -490,6 +493,17 @@ export async function recordPayment(input: {
 			`${input.amountCents} cents via ${input.method}`,
 			txDb,
 		);
+
+		if (status === "paid" && updated.applicationId) {
+			if (updated.type === "application") {
+				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "visa") {
+				await txDb.update(applications).set({ visaInvoicePaid: true }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "agency") {
+				await txDb.update(applications).set({ agencySettled: true }).where(eq(applications.id, updated.applicationId));
+			}
+		}
+
 		return updated;
 	});
 }
@@ -532,7 +546,18 @@ export async function voidInvoice(input: {
 			.where(eq(invoices.id, row.id))
 			.returning();
 
-		await audit(row.id, "void", input.actor.email, input.reason, txDb);
+		await audit(row.id, "voided", input.actor.email, input.reason, txDb);
+
+		if (updated.applicationId) {
+			if (updated.type === "application") {
+				await txDb.update(applications).set({ appFeePaid: false }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "visa") {
+				await txDb.update(applications).set({ visaInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "agency") {
+				await txDb.update(applications).set({ agencySettled: false }).where(eq(applications.id, updated.applicationId));
+			}
+		}
+
 		return updated;
 	});
 }
@@ -638,6 +663,7 @@ export async function createProforma(input: {
 			.values({
 				invoiceNumber,
 				clientUserId: data.clientUserId ?? null,
+				applicationId: data.applicationId ?? null,
 				applicantName: data.applicantName,
 				applicantEmail: data.applicantEmail ?? null,
 				type: data.type,

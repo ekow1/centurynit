@@ -211,7 +211,7 @@ export type ApiInvoice = {
 	id: string;
 	invoiceNumber: string;
 	status: "proforma" | "issued" | "partial" | "paid" | "overdue" | "void";
-	type: "application" | "visa" | "consultation" | "custom";
+	type: "application" | "visa" | "consultation" | "agency" | "custom";
 	applicantName: string;
 	applicantEmail: string | null;
 	clientUserId: string | null;
@@ -277,7 +277,7 @@ export function createInvoice(body: {
 	applicantName: string;
 	applicantEmail?: string;
 	clientUserId?: string;
-	type: "application" | "visa" | "consultation" | "custom";
+	type: "application" | "visa" | "consultation" | "agency" | "custom";
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;
 	dueAt?: string;

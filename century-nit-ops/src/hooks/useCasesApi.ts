@@ -35,6 +35,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 	return {
 		id: row.id,
 		applicantId: row.applicantId,
+		applicantUserId: row.applicantUserId ?? null,
 		ref: row.reference,
 		bookingId: row.bookingId,
 		applicantName: row.applicantName,

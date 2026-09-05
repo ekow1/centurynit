@@ -30,6 +30,7 @@ const TYPE_MAP: Record<ApiInvoice["type"], InvoiceType> = {
 	application: "Application",
 	visa: "Visa",
 	consultation: "Consultation",
+	agency: "Agency",
 	custom: "Custom",
 };
 
@@ -118,7 +119,7 @@ export function useInvoiceApi() {
 			dueAt?: string;
 		}) => {
 			const apiType = (
-				{ Application: "application", Visa: "visa", Consultation: "consultation", Custom: "custom" } as const
+				{ Application: "application", Visa: "visa", Consultation: "consultation", Agency: "agency", Custom: "custom" } as const
 			)[input.type];
 			const created = await apiCreateInvoice({
 				applicantName: input.applicantName,

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import type {
 	InitializePayment,
@@ -6,19 +6,11 @@ import type {
 	PaymentVerificationResult,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import {
-	applications,
-	applicants,
-	paymentTransactions,
-} from "../db/schema.js";
-import { getInvoice, recordPayment } from "./invoice.js";
+import { paymentTransactions } from "../db/schema.js";
+import { getInvoice, recordPayment, paidCentsOf } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
-import { sendPaymentReceiptEmail } from "./receiptEmail.js";
-import { syncLeadFromApplicationStatus } from "./leads.js";
-
-
-const GHS_USD_RATE = 15.0; // 1 USD = 15.00 GHS for presentation / MoMo charge in Ghana
+import { getExchangeRate, postPaymentSettlement } from "./paymentSettlement.js";
 
 export async function initializePayment(
 	user: { id: string; email: string; name?: string | null },
@@ -43,7 +35,12 @@ export async function initializePayment(
 	}
 
 
-	const balanceCents = invoice.subtotalCents - invoice.creditedCents;
+	if (invoice.clientUserId && invoice.clientUserId !== user.id) {
+		throw new HttpError(403, "FORBIDDEN", "You do not have permission to pay this invoice");
+	}
+
+	const paidCents = await paidCentsOf(invoice.id);
+	const balanceCents = invoice.subtotalCents - invoice.creditedCents - paidCents;
 	const reference = `PAY-${Date.now()}-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
 	const callback = input.callbackUrl || `${frontendUrl}/portal/invoices?verify=${reference}`;
 
@@ -72,7 +69,8 @@ export async function initializePayment(
 		}
 
 		// Real Paystack API call
-		const amountInGhsSubunits = Math.round((balanceCents / 100) * GHS_USD_RATE * 100);
+		const rate = await getExchangeRate();
+		const amountInGhsSubunits = Math.round((balanceCents / 100) * rate * 100);
 		const res = await fetch("https://api.paystack.co/transaction/initialize", {
 			method: "POST",
 			headers: {
@@ -219,7 +217,7 @@ export async function verifyAndSettlePayment(
 	// Record payment on invoice
 	const invoice = await getInvoice(tx.invoiceId);
 	if (invoice && invoice.status !== "paid") {
-		await recordPayment({
+		const updated = await recordPayment({
 			invoiceId: tx.invoiceId,
 			amountCents: tx.amountCents,
 			method: gateway === "paystack" ? "Paystack / Mobile Money" : "Stripe Card",
@@ -232,80 +230,22 @@ export async function verifyAndSettlePayment(
 			},
 		});
 
-		// Auto-advance application workflow stages if linked.
-		// Resolve the user's latest application via applicant.userId, not by
-		// matching the invoice number to the application number.
-		let latestApplicationId: string | undefined;
-		if (invoice.clientUserId) {
-			const [appRow] = await db
-				.select({ id: applications.id })
-				.from(applications)
-				.innerJoin(applicants, eq(applications.applicantId, applicants.id))
-				.where(eq(applicants.userId, invoice.clientUserId))
-				.orderBy(desc(applications.createdAt))
-				.limit(1);
-			latestApplicationId = appRow?.id;
-		}
-
-		if (latestApplicationId && invoice.type === "application") {
-			await db
-				.update(applications)
-				.set({
-					status: "ACCEPTED",
-					stage: "school_submission",
-					agencySettled: true,
-					updatedAt: now,
-				})
-				.where(eq(applications.id, latestApplicationId))
-				.catch(() => {});
-			if (invoice.applicantEmail) {
-				await syncLeadFromApplicationStatus(latestApplicationId, invoice.applicantEmail, "ACCEPTED", "System").catch(
-					() => {},
-				);
-			}
-		} else if (latestApplicationId && invoice.type === "visa") {
-			await db
-				.update(applications)
-				.set({
-					visaInvoicePaid: true,
-					visaStage: "pending",
-					updatedAt: now,
-				})
-				.where(eq(applications.id, latestApplicationId))
-				.catch(() => {});
-		}
-
-		// Send official Century NIT Consult electronic receipt email
-		if (invoice.applicantEmail) {
-			let phone: string | null = null;
-			try {
-				const [appRow] = await db
-					.select({ phone: applicants.phone })
-					.from(applicants)
-					.where(eq(applicants.email, invoice.applicantEmail))
-					.limit(1);
-				phone = appRow?.phone ?? null;
-			} catch {}
-
-			const isGhs = tx.currency === "GHS";
-			const amountUsd = isGhs ? (tx.amountCents / 100) / GHS_USD_RATE : tx.amountCents / 100;
-			const amountGhs = isGhs ? tx.amountCents / 100 : (tx.amountCents / 100) * GHS_USD_RATE;
-			void sendPaymentReceiptEmail({
-				recipientEmail: invoice.applicantEmail,
-				recipientName: invoice.applicantName || "Valued Client",
-				recipientPhone: phone,
-				receiptNumber: `REC-#${tx.reference.replace(/^pstk_/i, "").toUpperCase()}`,
-				invoiceNumber: invoice.invoiceNumber,
-				amountGhs,
-				amountUsd,
-				paymentDate: now.toLocaleDateString("en-US"),
-				paymentChannel: gateway === "paystack" ? "MOMO / Paystack" : "Stripe Card",
+		await postPaymentSettlement({
+			invoice: updated,
+			payment: {
+				amountCents: tx.amountCents,
+				method: gateway === "paystack" ? "Paystack / Mobile Money" : "Stripe Card",
+				gateway,
 				reference: tx.reference,
-				description: `Settlement for Invoice ${invoice.invoiceNumber}`,
-			}).catch((err) => {
-				console.error("[payments] Receipt delivery failed:", err);
-			});
-		}
+				currency: tx.currency,
+			},
+			actor: {
+				opsUserId: "00000000-0000-0000-0000-000000000000",
+				name: `${gateway.toUpperCase()} Gateway Settlement`,
+				email: "payments@centurynit.com",
+			},
+			options: { sendReceipt: true, recordGatewayTransaction: false },
+		});
 	}
 
 	return {

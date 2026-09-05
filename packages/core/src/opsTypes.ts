@@ -209,6 +209,8 @@ export interface MockApplication {
 	visaStage?: VisaStage;
 	/** Visa invoice has been paid */
 	visaInvoicePaid?: boolean;
+	/** App fee has been paid */
+	appFeePaid?: boolean;
 	/** Counselor note shown in visa tracking */
 	visaCounselorNote?: string;
 	/** Payment plan selection (after visa invoice paid) */
@@ -294,7 +296,7 @@ export type OpsInvoiceLine = {
 	amount: number;
 };
 
-export type InvoiceType = "Application" | "Visa" | "Consultation" | "Custom";
+export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Custom";
 
 export type Invoice = {
 	id: string;

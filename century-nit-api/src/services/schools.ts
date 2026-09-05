@@ -126,6 +126,7 @@ export async function lockSchoolsForApplicant(
 				applicantName: applicantRow?.name ?? user.name ?? "Applicant",
 				applicantEmail: applicantRow?.email ?? user.email,
 				clientUserId: user.id,
+				applicationId: app?.id ?? null,
 				type: "application",
 				lines: [
 					{
@@ -150,11 +151,12 @@ export async function lockSchoolsForApplicant(
 		invoiceId = proforma.id;
 	}
 
-	if (app) {
+	if (app && app.stage === "document_verification") {
+		// Just in case it hasn't advanced to school_submission automatically yet
 		await db
 			.update(applications)
 			.set({
-				stage: "offer_letter_review",
+				stage: "school_submission",
 				updatedAt: new Date(),
 			})
 			.where(eq(applications.id, app.id));

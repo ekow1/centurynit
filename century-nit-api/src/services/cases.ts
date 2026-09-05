@@ -490,6 +490,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		packageSelectedAt: row.packageSelectedAt?.toISOString() ?? null,
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
+		appFeePaid: row.appFeePaid,
 		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
 		requestedDocuments: row.requestedDocuments ?? [],
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],

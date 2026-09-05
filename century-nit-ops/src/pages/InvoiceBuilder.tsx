@@ -44,6 +44,10 @@ function defaultLines(pkg: string, packages: ServicePackage[], type: InvoiceType
 		lines.push({ id: "translation", label: "Document translation", detail: "Certified translations", amount: VISA_TRANSLATION_FEE });
 	} else if (type === "Consultation") {
 		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: CONSULTATION_FEE_AMOUNT });
+	} else if (type === "Agency") {
+		lines.push({ id: "agency-deposit", label: "Service fee - deposit", detail: "Required before choosing your payment plan", amount: 0 });
+		lines.push({ id: "agency-predeparture", label: "Service fee - pre departure", detail: "Due before you travel to your destination", amount: 0 });
+		lines.push({ id: "agency-postarrival", label: "Service fee - post-arrival", detail: "Settle after you've arrived — no deadline pressure", amount: 0 });
 	} else {
 		lines.push({ id: "custom", label: "Custom service", detail: "", amount: 0 });
 	}
@@ -152,7 +156,7 @@ export function InvoiceBuilder({
 				<div style={{ marginBottom: "1.25rem" }}>
 					<span className="eyebrow" style={{ display: "block", marginBottom: "0.4rem", fontSize: "var(--text-xs)" }}>Invoice Type</span>
 					<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-						{(["Application", "Visa", "Consultation", "Custom"] as InvoiceType[]).map((t) => (
+						{(["Application", "Visa", "Consultation", "Agency", "Custom"] as InvoiceType[]).map((t) => (
 							<button
 								key={t}
 								type="button"

@@ -594,6 +594,10 @@ export const invoices = pgTable(
 		applicantName: text("applicant_name").notNull(),
 		applicantEmail: varchar("applicant_email", { length: 255 }),
 
+		applicationId: uuid("application_id").references(() => applications.id, {
+			onDelete: "set null",
+		}),
+
 		type: invoiceTypeEnum("type").notNull().default("custom"),
 		/** Sum of lines at issue time, integer cents. Immutable after creation. */
 		subtotalCents: integer("subtotal_cents").notNull(),
@@ -971,6 +975,7 @@ export const applications = pgTable(
 		paymentPlanId: varchar("payment_plan_id", { length: 32 }),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
+		appFeePaid: boolean("app_fee_paid").notNull().default(false),
 		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),
 		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
 		preDepartureTasks: jsonb("pre_departure_tasks")

@@ -39,6 +39,7 @@ export const createInvoiceSchema = z.object({
 	applicantEmail: z.string().email().optional(),
 	/** The applicant's login id, when known — lets the portal show it later. */
 	clientUserId: z.string().min(1).optional(),
+	applicationId: z.string().uuid().optional(),
 	type: invoiceTypeSchema.default("custom"),
 	lines: z.array(invoiceLineInputSchema).min(1).max(50),
 	note: z.string().max(2000).optional(),
@@ -147,6 +148,7 @@ export const invoiceSchema = z.object({
 	applicantName: z.string(),
 	applicantEmail: z.string().nullable(),
 	clientUserId: z.string().nullable(),
+	applicationId: z.string().uuid().nullable(),
 	lines: z.array(invoiceLineSchema),
 	subtotalCents: z.number().int(),
 	paidCents: z.number().int(),

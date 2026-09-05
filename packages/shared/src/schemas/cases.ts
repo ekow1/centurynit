@@ -74,6 +74,7 @@ export function canAdvanceToStage(
 	app?: {
 		visaStage?: string;
 		agencySettled?: boolean;
+		appFeePaid?: boolean;
 		travelClearance?: string;
 		preDepartureTasks?: { done: boolean }[];
 		paymentPlanId?: string | null;
@@ -93,6 +94,10 @@ export function canAdvanceToStage(
 	const checks = app ?? {};
 
 	switch (target) {
+		case "offer_letter_review":
+			return checks.appFeePaid
+				? null
+				: "Cannot advance: application fee must be paid before reviewing offers.";
 		case "payment_execution":
 			return checks.visaStage === "complete"
 				? null
@@ -277,6 +282,7 @@ export const patchApplicationSchema = z.object({
 	paymentPlanId: z.string().optional(),
 	agencyStageIndex: z.number().int().min(0).max(2).optional(),
 	agencySettled: z.boolean().optional(),
+	appFeePaid: z.boolean().optional(),
 	travelClearance: z.enum(["pending", "cleared"]).optional(),
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
 	notes: z.string().optional(),
@@ -370,6 +376,7 @@ export const applicationSchema = z.object({
 	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),
 	agencySettled: z.boolean(),
+	appFeePaid: z.boolean(),
 	travelClearance: z.enum(["pending", "cleared"]),
 	requestedDocuments: z.array(z.string()),
 	preDepartureTasks: z.array(

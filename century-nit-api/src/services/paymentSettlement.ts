@@ -1,12 +1,11 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { invoicePayments, paymentTransactions, applications, applicants } from "../db/schema.js";
+import { invoicePayments, paymentTransactions, applicants } from "../db/schema.js";
 import { getSetting } from "./settings.js";
 import { sendPaymentReceiptEmail } from "./receiptEmail.js";
 import { getInvoice, recordPayment } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import type { InvoiceRow } from "./invoice.js";
-import { syncLeadFromApplicationStatus } from "./leads.js";
 
 const SYSTEM_ACTOR = {
 	opsUserId: "00000000-0000-0000-0000-000000000000",
@@ -18,11 +17,8 @@ const DEFAULT_GHS_USD_RATE = 15.0;
 export type SettlementActor = { opsUserId?: string; name: string; email: string };
 export type PaymentSettlementOptions = {
 	sendReceipt?: boolean;
-	advanceStage?: boolean;
 	recordGatewayTransaction?: boolean;
 };
-
-type ApplicationRow = typeof applications.$inferSelect;
 
 export async function getExchangeRate(): Promise<number> {
 	const raw = await getSetting("PLATFORM_EXCHANGE_RATE");
@@ -36,17 +32,6 @@ export async function paidCentsOfInvoice(invoiceId: string): Promise<number> {
 		.from(invoicePayments)
 		.where(eq(invoicePayments.invoiceId, invoiceId));
 	return row?.total ?? 0;
-}
-
-async function latestApplicationForUser(userId: string): Promise<ApplicationRow | null> {
-	const rows = await db
-		.select({ application: applications })
-		.from(applications)
-		.innerJoin(applicants, eq(applications.applicantId, applicants.id))
-		.where(eq(applicants.userId, userId))
-		.orderBy(desc(applications.createdAt))
-		.limit(1);
-	return rows[0]?.application ?? null;
 }
 
 async function recordGatewayTransaction(input: {
@@ -83,51 +68,6 @@ async function recordGatewayTransaction(input: {
 	}
 }
 
-async function advanceApplicationStage(invoice: InvoiceRow): Promise<void> {
-	if (invoice.status !== "paid" || !invoice.clientUserId) return;
-	if (!["application", "visa", "agency"].includes(invoice.type)) return;
-
-	try {
-		const application = await latestApplicationForUser(invoice.clientUserId);
-		if (!application) return;
-
-		const now = new Date();
-		if (invoice.type === "application") {
-			await db
-				.update(applications)
-				.set({
-					status: "ACCEPTED",
-					stage: "school_submission",
-					agencySettled: true,
-					updatedAt: now,
-				})
-				.where(eq(applications.id, application.id));
-
-			if (invoice.applicantEmail) {
-				await syncLeadFromApplicationStatus(application.id, invoice.applicantEmail, "ACCEPTED", "System");
-			}
-		} else if (invoice.type === "visa") {
-			await db
-				.update(applications)
-				.set({
-					visaInvoicePaid: true,
-					visaStage: "pending",
-					updatedAt: now,
-				})
-				.where(eq(applications.id, application.id));
-		} else if (invoice.type === "agency") {
-			await db
-				.update(applications)
-				.set({
-					agencySettled: true,
-					updatedAt: now,
-				})
-				.where(eq(applications.id, application.id));
-		}
-	} catch (err) {
-		console.error("[paymentSettlement] Failed to advance application stage:", err);
-	}
-}
 
 async function sendReceipt(input: {
 	invoice: InvoiceRow;
@@ -196,10 +136,6 @@ export async function postPaymentSettlement(input: {
 				reference: input.payment.reference,
 			},
 		});
-	}
-
-	if (options.advanceStage) {
-		await advanceApplicationStage(input.invoice);
 	}
 
 	if (options.sendReceipt) {

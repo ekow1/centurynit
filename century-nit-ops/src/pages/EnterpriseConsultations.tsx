@@ -131,6 +131,16 @@ export function EnterpriseConsultations() {
 		return () => { cancelled = true; };
 	}, [liveSelected?.applicantUserId]);
 
+	// Close the document preview overlay with Escape.
+	useEffect(() => {
+		if (!previewingDoc) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") setPreviewingDoc(null);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [previewingDoc]);
+
 	function openDetail(c: MockConsultation) {
 		setSelectedConsultation(c);
 		setOutcome(c.assessmentResult?.outcome || "Eligible");
@@ -1070,8 +1080,18 @@ export function EnterpriseConsultations() {
 
 							{detailTab === "documents" && (
 								previewingDoc ? (
-									<div style={{ marginTop: "1rem" }}>
-									<DocPreviewInline
+									<div className="ops-modal-backdrop" onClick={() => setPreviewingDoc(null)} role="dialog" aria-modal="true" aria-label={`Preview ${previewingDoc.name}`}>
+										<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "46rem" }}>
+											<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1rem" }}>
+												<div>
+													<h3 style={{ margin: 0, fontSize: "var(--text-lg)", lineHeight: 1.2 }}>{previewingDoc.name}</h3>
+													<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-sm)" }}>
+														{previewingDoc.category} · {active.applicantName} · {active.ref}
+													</p>
+												</div>
+												<button type="button" onClick={() => setPreviewingDoc(null)} aria-label="Close preview" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", lineHeight: 1, color: "var(--muted-foreground)", padding: "0.25rem" }}>×</button>
+											</div>
+										<DocPreviewInline
 										doc={previewingDoc}
 										isMine={isMine}
 										applicantName={active.applicantName}
@@ -1080,6 +1100,7 @@ export function EnterpriseConsultations() {
 										onVerdict={(status) => void handleReviewDoc(previewingDoc.documentId!, status)}
 										onBack={() => setPreviewingDoc(null)}
 									/>
+										</div>
 									</div>
 								) : (
 									<div className="card" style={{ marginTop: "1rem" }}>
@@ -1141,9 +1162,8 @@ export function EnterpriseConsultations() {
 																className="btn btn--ghost btn--sm"
 																style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}
 															>
-																✕ Reject
-															</button>
-															<a href="/documents" className="btn btn--ghost btn--sm" style={{ padding: "0.25rem 0.6rem", fontSize: "0.72rem" }}>Review queue</a>
+✕ Reject
+														</button>
 														</div>
 													)}
 														{!settled && !isMine && (

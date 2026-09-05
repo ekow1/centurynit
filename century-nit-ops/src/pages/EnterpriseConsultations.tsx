@@ -122,14 +122,14 @@ export function EnterpriseConsultations() {
 		: null;
 
 	useEffect(() => {
-		if (!liveSelected?.applicantId) { setRealDocs([]); return; }
+		if (!liveSelected?.applicantUserId) { setRealDocs([]); return; }
 		let cancelled = false;
 		documentsApi
-			.list({ ownerUserId: liveSelected.applicantId })
+			.list({ ownerUserId: liveSelected.applicantUserId })
 			.then((res) => { if (!cancelled) setRealDocs(res.documents); })
 			.catch(() => { if (!cancelled) setRealDocs([]); });
 		return () => { cancelled = true; };
-	}, [liveSelected?.applicantId]);
+	}, [liveSelected?.applicantUserId]);
 
 	function openDetail(c: MockConsultation) {
 		setSelectedConsultation(c);
@@ -616,7 +616,7 @@ export function EnterpriseConsultations() {
 							</div>
 						)}
 						{active.bookingId && (canAssignWork || active.assignedOfficerEmail === opsUser?.email) && active.status !== "Completed" && active.status !== "Cancelled" && (
-							active.type === "online" || active.meetingLink ? (
+							active.type === "online" || active.meetingLink || editingMeetingUrl ? (
 								<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
 									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
 										<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>

@@ -421,6 +421,7 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		reference: row.reference,
 		bookingId: row.bookingId,
 		applicantId: row.applicantId,
+		applicantUserId: applicant?.userId ?? null,
 		applicantName: applicant?.name ?? "",
 		email: applicant?.email ?? "",
 		phone: applicant?.phone ?? null,

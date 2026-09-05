@@ -116,7 +116,7 @@ export function signOut(): Promise<unknown> {
  * reset page to consume.
  */
 export function requestPasswordReset(email: string, redirectTo: string): Promise<{ status?: boolean }> {
-	return apiFetch<{ status?: boolean }>("/api/auth/forget-password", {
+	return apiFetch<{ status?: boolean }>("/api/auth/request-password-reset", {
 		method: "POST",
 		body: JSON.stringify({ email, redirectTo }),
 	});

@@ -31,7 +31,7 @@ export async function rateLimit(c: Context, next: Next) {
 		limit = 5;
 	} else if (routePath.includes("/phone-number/send-otp") || routePath.includes("/email-otp/send-verification-otp")) {
 		limit = 3;
-	} else if (routePath.includes("/forget-password")) {
+	} else if (routePath.includes("/request-password-reset")) {
 		limit = 3;
 	} else if (routePath.includes("/reset-password")) {
 		limit = 5;

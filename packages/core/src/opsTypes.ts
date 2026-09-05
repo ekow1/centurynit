@@ -98,6 +98,7 @@ export type AssessmentResult = {
 export interface MockConsultation {
 	id: string; // The consultation ID
 	applicantId: string;
+	applicantUserId?: string | null;
 	ref: string;
 	bookingId: string | null;
 	applicantName: string;

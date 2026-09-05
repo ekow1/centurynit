@@ -307,6 +307,7 @@ export const consultationSchema = z.object({
 	reference: z.string(),
 	bookingId: z.string().uuid().nullable(),
 	applicantId: z.string().uuid(),
+	applicantUserId: z.string().nullable(),
 	applicantName: z.string(),
 	email: z.string().email(),
 	phone: z.string().nullable(),

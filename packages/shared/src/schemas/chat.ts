@@ -411,6 +411,8 @@ export const createStageAssignmentSchema = z.object({
 	stage: z.string().min(1).max(80),
 	opsUserId: z.string().uuid(),
 	reason: z.string().max(500).optional(),
+	/** `stage` = per-stage specialist (writes stage_assignments); `all` = whole-case owner (writes case_assignments). */
+	scope: z.enum(["stage", "all"]).optional().default("stage"),
 });
 export type CreateStageAssignment = z.infer<typeof createStageAssignmentSchema>;
 

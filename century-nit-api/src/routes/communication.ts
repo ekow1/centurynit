@@ -288,6 +288,7 @@ communicationRouter.openapi(
 			opsUserId: body.opsUserId,
 			assignedBy: staff.opsUserId,
 			reason: body.reason,
+			scope: body.scope,
 		});
 		return c.json(assignment, 201);
 	},

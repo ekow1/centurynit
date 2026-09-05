@@ -1051,7 +1051,38 @@ export async function assignStageOfficer(input: {
 	opsUserId: string;
 	assignedBy: string;
 	reason?: string;
+	scope?: "stage" | "all";
 }): Promise<StageAssignment> {
+	// "All stages" — a whole-case owner. Writes case_assignments (single active
+	// row per target), which access control treats as covering every stage.
+	if (input.scope === "all") {
+		const { startAssignment } = await import("./caseAssignments.js");
+		const created = await startAssignment({
+			targetType: "application",
+			targetId: input.applicationId,
+			opsUserId: input.opsUserId,
+			assignedBy: input.assignedBy,
+			note: input.reason,
+		});
+		await recordEvent({
+			action: "staff_assigned",
+			actorOpsUserId: input.assignedBy,
+			applicationId: input.applicationId,
+			metadata: { assignmentId: created.id, officer: input.opsUserId, scope: "all", reason: input.reason },
+		});
+		return {
+			id: created.id,
+			applicationId: input.applicationId,
+			stage: "all",
+			opsUserId: input.opsUserId,
+			status: "active",
+			assignedAt: created.createdAt.toISOString(),
+			assignedBy: input.assignedBy,
+			endedAt: null,
+			endedReason: null,
+		};
+	}
+
 	// End any existing active assignment for this (case, stage) — reassignment.
 	const existing = await db
 		.select()
@@ -1169,6 +1200,83 @@ export async function assignStageOfficer(input: {
 		endedAt: null,
 		endedReason: null,
 	};
+}
+
+/**
+ * Auto-end the active per-stage officer assignment for a stage that has
+ * finished (`ended_reason = 'stage_completed'`). Idempotent no-op when the
+ * stage was never staffed or is already ended. Releases the specialist from
+ * the stage conversation (participant → `former`, history retained) and
+ * records a `stage_completed` event so the assignment feed shows the reason.
+ */
+export async function onStageCompleted(input: {
+	applicationId: string;
+	stage: string;
+	completedBy?: string | null;
+	reason?: string;
+}): Promise<void> {
+	const active = await db
+		.select({
+			id: stageAssignments.id,
+			opsUserId: stageAssignments.opsUserId,
+		})
+		.from(stageAssignments)
+		.where(
+			and(
+				eq(stageAssignments.applicationId, input.applicationId),
+				eq(stageAssignments.stage, input.stage),
+				eq(stageAssignments.status, "active"),
+			),
+		);
+	if (active.length === 0) return;
+
+	const reason = input.reason ?? "stage_completed";
+	const now = new Date();
+	const label = STAGE_LABEL(input.stage) ?? input.stage;
+
+	for (const row of active) {
+		await db
+			.update(stageAssignments)
+			.set({ status: "completed", endedAt: now, endedReason: reason })
+			.where(eq(stageAssignments.id, row.id));
+
+		const [stageConv] = await db
+			.select({ id: conversations.id })
+			.from(conversations)
+			.where(
+				and(
+					eq(conversations.linkedEntityType, "application"),
+					eq(conversations.linkedEntityId, input.applicationId),
+					eq(conversations.stageKey, input.stage),
+					eq(conversations.type, "stage"),
+				),
+			)
+			.limit(1);
+		if (stageConv) {
+			await db
+				.update(conversationParticipants)
+				.set({ role: "former" })
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, stageConv.id),
+						eq(conversationParticipants.opsUserId, row.opsUserId),
+					),
+				);
+			await appendSystemMessage(
+				stageConv.id,
+				`The ${label} stage is complete — thanks for handling it.`,
+				{ assignmentId: row.id, reason, stage: input.stage },
+			);
+		}
+	}
+
+	await recordEvent({
+		action: "stage_completed",
+		actorOpsUserId: input.completedBy ?? undefined,
+		applicationId: input.applicationId,
+		stageKey: input.stage,
+		metadata: { reason },
+	});
 }
 
 export async function listStageAssignments(applicationId: string): Promise<StageAssignment[]> {

@@ -1440,6 +1440,23 @@ async function broadcastCaseUpdate(application: ApplicationRow, actor: Actor): P
  * Fire-and-forget from the document review route — errors are logged but
  * never thrown to the caller.
  */
+/**
+ * Auto-end the active per-stage officer assignment once a stage concludes
+ * (`stage_completed`). Fire-and-forget — a feed/notification failure must
+ * never abort the stage transition it follows.
+ */
+function markStageCompleted(
+	applicationId: string,
+	stage: string,
+	completedBy: string | null | undefined,
+): void {
+	void import("./communication.js")
+		.then(({ onStageCompleted }) =>
+			onStageCompleted({ applicationId, stage, completedBy: completedBy ?? null }),
+		)
+		.catch((err) => console.warn("[cases] Failed to complete stage assignment:", err));
+}
+
 export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise<void> {
 	try {
 		const [applicant] = await db
@@ -1476,6 +1493,8 @@ export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise
 			.where(eq(applications.id, application.id))
 			.returning();
 		if (!updated) return;
+
+		markStageCompleted(application.id, "document_verification", null);
 
 		await db.insert(caseComments).values({
 			targetType: "application",
@@ -1564,6 +1583,10 @@ export async function acceptApplication(id: string, actor: Actor): Promise<Appli
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	// Accepting the application concludes whatever stage it was being
+	// processed in.
+	markStageCompleted(id, row.stage, actor.opsUserId);
 
 	const applicant = await getApplicant(row.applicantId);
 	if (applicant?.email) {
@@ -1748,6 +1771,9 @@ export async function setApplicationStage(
 		}).catch(() => {});
 	}
 
+	// Leaving a stage the case was in concludes that stage's assignment.
+	if (stage !== row.stage) markStageCompleted(id, row.stage, actor.opsUserId);
+
 	await broadcastCaseUpdate(updated, actor);
 	return updated;
 }
@@ -1808,6 +1834,8 @@ export async function setApplicationVisaStage(
 		}).catch(() => {});
 	}
 
+	if (stage === "complete") markStageCompleted(id, "visa_processing", actor.opsUserId);
+
 	return updated;
 }
 
@@ -1834,6 +1862,9 @@ export async function setApplicationTravelClearance(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	if (cleared) markStageCompleted(id, "travel_assistance", actor.opsUserId);
+
 	return updated;
 }
 

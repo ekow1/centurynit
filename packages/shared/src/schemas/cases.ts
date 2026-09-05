@@ -80,6 +80,7 @@ export function canAdvanceToStage(
 		travelClearance?: string;
 		preDepartureTasks?: { done: boolean }[];
 		paymentPlanId?: string | null;
+		proceedStatus?: string;
 	},
 ): string | null {
 	const currentIdx = JOURNEY_STAGES.indexOf(current);
@@ -94,6 +95,17 @@ export function canAdvanceToStage(
 	}
 
 	const checks = app ?? {};
+
+	// Consent gate: the application is locked until the applicant accepts to
+	// proceed (or ops overrides on their behalf after a phone confirmation).
+	if (current === "document_verification") {
+		if (checks.proceedStatus === "declined") {
+			return "Stopped: this applicant declined to proceed with the application.";
+		}
+		if (checks.proceedStatus !== "accepted") {
+			return "Cannot advance: the applicant has not yet accepted to start the application.";
+		}
+	}
 
 	switch (target) {
 		case "school_submission":
@@ -207,6 +219,18 @@ export const APPLICATION_STATUS_TO_OPS: Record<CaseApplicationStatus, string> = 
 
 export const visaStageSchema = z.enum(["locked", "pending", "biometrics", "decision", "complete"]);
 export type VisaStage = z.infer<typeof visaStageSchema>;
+
+/**
+ * The explicit "start your application?" gate that sits in front of
+ * `document_verification`. Every eligible applicant gets a consultation
+ * outcome; before the application actually opens they must consent.
+ *
+ *   invited  → application created, locked until the applicant decides
+ *   accepted → application unlocked (school selection + quotation)
+ *   declined → stopped; reversible (re-invite reopens the gate)
+ */
+export const proceedStatusSchema = z.enum(["invited", "accepted", "declined"]);
+export type ProceedStatus = z.infer<typeof proceedStatusSchema>;
 
 export const commentKindSchema = z.enum([
 	"comment",
@@ -374,6 +398,9 @@ export const applicationSchema = z.object({
 	assignedStaffEmail: z.string().email().nullable(),
 	stage: journeyStageSchema,
 	status: applicationStatusSchema,
+	proceedStatus: proceedStatusSchema,
+	proceededAt: z.string().datetime().nullable(),
+	declinedReason: z.string().nullable(),
 	fundingTrack: z.string().nullable(),
 	notes: z.string().nullable(),
 	checklist: z.array(checklistItemSchema),
@@ -448,6 +475,52 @@ export const setVisaStageSchema = z.object({
 export const setTravelClearanceSchema = z.object({
 	cleared: z.boolean(),
 });
+
+/**
+ * Applicant acceptance of the post-consultation "start your application?"
+ * gate. Country + at least one school pair are required — the selection is
+ * what drives the quotation. `acceptQuotation` distinguishes a preview
+ * (`false`/omitted = draft, nothing is persisted as final) from the actual
+ * opt-in (`true`), so the applicant can review pricing before committing.
+ */
+export const proceedApplicationSchema = z.object({
+	/** Explicit opt-in: must be `true`, otherwise the call is a preview. */
+	acceptQuotation: z.literal(true),
+	country: z.string().min(1).max(80).optional(),
+	degreeLevel: z.string().min(1).max(64).optional(),
+	fundingTrack: z.string().min(1).max(64).nullable().optional(),
+});
+export type ProceedApplication = z.infer<typeof proceedApplicationSchema>;
+
+export const declineProceedSchema = z.object({
+	reason: z.string().max(1000).optional(),
+});
+export type DeclineProceed = z.infer<typeof declineProceedSchema>;
+
+/**
+ * The pre-commit advisory quotation for this applicant. Computed on read from
+ * the current draft school selection + funding track — never cached on the
+ * application row. `advisory` reminds the client the amount is an estimate
+ * until the consultant issues the proforma.
+ */
+export const proceedQuotationSchema = z.object({
+	schoolCount: z.number().int().min(0),
+	appBaseCents: z.number().int().min(0),
+	perSchoolCents: z.number().int().min(0),
+	appSubtotalCents: z.number().int().min(0),
+	agencyFeeCents: z.number().int().min(0),
+	visaFeeCents: z.number().int().min(0),
+	totalCents: z.number().int().min(0),
+	currency: z.literal("USD"),
+	advisory: z.string(),
+});
+export type ProceedQuotation = z.infer<typeof proceedQuotationSchema>;
+
+export const acceptProceedResponseSchema = z.object({
+	quotation: proceedQuotationSchema,
+	schoolCount: z.number().int().min(0),
+});
+export type AcceptProceedResponse = z.infer<typeof acceptProceedResponseSchema>;
 export const patchApplicantSchema = z.object({
 	name: z.string().min(1).max(200).optional(),
 	phone: z.string().max(40).optional(),

@@ -18,6 +18,9 @@ import {
 	schoolTrackEvents,
 	studentScholarships,
 	catalogScholarships,
+	catalogUniversities,
+	catalogPrograms,
+	destinations,
 } from "../db/schema.js";
 import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
@@ -128,6 +131,7 @@ export async function lockSchoolsForApplicant(
 				clientUserId: user.id,
 				applicationId: app?.id ?? null,
 				type: "application",
+				status: "proforma",
 				lines: [
 					{
 						label: "Application Processing Base Fee",
@@ -229,6 +233,26 @@ export async function addSchoolForApplicant(
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
 
+	// Freeze snapshots of the catalog rows so the applicant's choice survives
+	// later catalog edits/deletions and keeps the quotation stable.
+	const [university] = await db
+		.select()
+		.from(catalogUniversities)
+		.where(eq(catalogUniversities.id, input.universityId))
+		.limit(1);
+	const [program] = await db
+		.select()
+		.from(catalogPrograms)
+		.where(eq(catalogPrograms.id, input.programId))
+		.limit(1);
+	const [destination] = input.destinationId
+		? await db
+				.select()
+				.from(destinations)
+				.where(eq(destinations.id, input.destinationId))
+				.limit(1)
+		: [];
+
 	const [created] = await db
 		.insert(schoolApplications)
 		.values({
@@ -237,6 +261,10 @@ export async function addSchoolForApplicant(
 			destinationId: input.destinationId,
 			universityId: input.universityId,
 			programId: input.programId,
+			universityName: university?.name ?? null,
+			programName: program?.name ?? null,
+			countryName: destination?.name ?? university?.name ?? null,
+			tuitionUsd: program?.tuitionUsd ?? null,
 			intake: input.intake,
 			status: "Draft",
 		})

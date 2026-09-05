@@ -8,11 +8,14 @@ import {
 	type ApplicantProfile,
 	type AssessmentResult,
 	type CaseApplicationStatus,
+	type AcceptProceedResponse,
 	canAdvanceToStage,
 	JOURNEY_STAGES,
 	type JourneyStage,
 	patchApplicationSchema,
+	type ProceedQuotation,
 } from "century-nit-shared";
+import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
@@ -28,6 +31,7 @@ import {
 	invoiceLines,
 	notifications,
 	opsUsers,
+	schoolApplications,
 	servicePackages,
 } from "../db/schema.js";
 import { env } from "../env.js";
@@ -504,6 +508,9 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		assignedStaffEmail: staff?.email ?? null,
 		stage: row.stage as JourneyStage,
 		status: row.status,
+		proceedStatus: row.proceedStatus,
+		proceededAt: row.proceededAt?.toISOString() ?? null,
+		declinedReason: row.declinedReason,
 		fundingTrack: row.fundingTrack,
 		notes: row.notes,
 		checklist: row.checklist ?? [],
@@ -957,6 +964,8 @@ export async function completeConsultationAssessment(input: {
 				assignedStaffId: row.assignedOfficerId,
 				stage: "document_verification",
 				status: "UNDER_REVIEW",
+				// The application is locked until the client consents to start it.
+				proceedStatus: "invited",
 				fundingTrack: input.result.recPackage || null,
 				notes: input.result.notes || "Opened from a completed consultation assessment.",
 				checklist,
@@ -971,6 +980,210 @@ export async function completeConsultationAssessment(input: {
 	}
 
 	return { consultation: updated, application: created };
+}
+
+/** ── Consent gate: "start your application?" (post-consultation) ─────────── */
+
+/**
+ * Compute the pre-commit advisory quotation for the application's current
+ * DRAFT school selection. Pure function — nothing is cached; the final,
+ * payable figure is raised separately as a proforma by a consultant.
+ */
+export async function quotationForApplication(applicationId: string): Promise<ProceedQuotation> {
+	const [app] = await db
+		.select()
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const draftRows = await db
+		.select()
+		.from(schoolApplications)
+		.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")));
+
+	const fees = await getFeeSchedule();
+	const schoolCount = draftRows.length;
+	const appSubtotalCents =
+		fees.appBaseCents + schoolCount * fees.appPerSchoolCents + fees.appDocVerifyCents;
+	const agencyFeeCents = Math.round(serviceFeeFor((app.fundingTrack ?? "") as SchoolFundingTrack | "") * 100);
+	const visaFeeCents = fees.visaBaseCents;
+
+	return {
+		schoolCount,
+		appBaseCents: fees.appBaseCents,
+		perSchoolCents: fees.appPerSchoolCents,
+		appSubtotalCents,
+		agencyFeeCents,
+		visaFeeCents,
+		totalCents: agencyFeeCents + appSubtotalCents + visaFeeCents,
+		currency: "USD",
+		advisory:
+			"An estimate. This is not an invoice — your consultant will raise the payable proforma once your application is opened.",
+	};
+}
+
+async function lockApplicationRow(
+	tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+	applicationId: string,
+): Promise<ApplicationRow | undefined> {
+	const txDb = tx as unknown as typeof db;
+	const [row] = await txDb
+		.select()
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.for("update")
+		.limit(1);
+	return row;
+}
+
+/**
+ * Applicant (or ops override on the applicant's behalf) accepts to start the
+ * application. State machine: `invited → accepted` (applicant), and additionally
+ * `declined → accepted` for an ops override after a phone re-confirmation.
+ */
+export async function acceptProceedForApplication(input: {
+	applicationId: string;
+	fundingTrack?: string | null;
+	degreeLevel?: string;
+	country?: string;
+	actor: { opsUserId?: string; name: string };
+}): Promise<AcceptProceedResponse> {
+	const { applicationId, actor } = input;
+
+	return db.transaction(async (tx) => {
+		const row = await lockApplicationRow(tx, applicationId);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+		const isOverride = typeof actor.opsUserId === "string";
+		const allowed = isOverride
+			? row.proceedStatus === "invited" || row.proceedStatus === "declined"
+			: row.proceedStatus === "invited";
+		if (!allowed) {
+			throw new HttpError(
+				409,
+				"PROCEED_ALREADY_DECIDED",
+				row.proceedStatus === "accepted"
+					? "This application has already been accepted to proceed."
+					: "This application was declined. A member of our team must re-invite you before you can proceed.",
+			);
+		}
+
+		const draftRows = await tx
+			.select()
+			.from(schoolApplications)
+			.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")));
+		if (draftRows.length === 0) {
+			throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Select at least one university before confirming.");
+		}
+
+		const txDb = tx as unknown as typeof db;
+		await txDb
+			.update(applications)
+			.set({
+				proceedStatus: "accepted",
+				proceededAt: new Date(),
+				declinedReason: null,
+				fundingTrack: input.fundingTrack ?? row.fundingTrack,
+				degreeLevel: input.degreeLevel ?? row.degreeLevel,
+				country: input.country ?? row.country,
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, applicationId));
+
+		await txDb.insert(caseComments).values({
+			targetType: "application",
+			targetId: applicationId,
+			kind: "recommendation",
+			text: `${isOverride ? "Ops" : "Applicant"} confirmed to proceed with the application and accepted the pricing shown.`,
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId ?? null,
+		});
+
+		return { quotation: await quotationForApplication(applicationId), schoolCount: draftRows.length };
+	});
+}
+
+/**
+ * Applicant declines to proceed. Reversible: staff can re-invite
+ * (`reinviteProceedForApplication`) so the gate reopens on `invited`.
+ */
+export async function declineProceedForApplication(input: {
+	applicationId: string;
+	reason?: string;
+	actor: { opsUserId?: string; name: string };
+}): Promise<void> {
+	const { applicationId, actor } = input;
+
+	return db.transaction(async (tx) => {
+		const row = await lockApplicationRow(tx, applicationId);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		if (row.proceedStatus === "accepted") {
+			throw new HttpError(409, "PROCEED_ALREADY_DECIDED", "This application is already open and cannot be declined.");
+		}
+		if (row.proceedStatus === "declined") return;
+
+		const txDb = tx as unknown as typeof db;
+		await txDb
+			.update(applications)
+			.set({
+				proceedStatus: "declined",
+				proceededAt: new Date(),
+				declinedReason: input.reason ?? null,
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, applicationId));
+
+		await txDb.insert(caseComments).values({
+			targetType: "application",
+			targetId: applicationId,
+			kind: "recommendation",
+			text: `Applicant declined to proceed${input.reason ? `: ${input.reason}` : "."}`,
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId ?? null,
+		});
+	});
+}
+
+/**
+ * Ops re-invite after a decline — reverses the gate back to `invited` so the
+ * applicant can reconsider. Old declined selection rows are pruned.
+ */
+export async function reinviteProceedForApplication(input: {
+	applicationId: string;
+	actor: { opsUserId: string; name: string };
+}): Promise<void> {
+	const { applicationId, actor } = input;
+
+	return db.transaction(async (tx) => {
+		const row = await lockApplicationRow(tx, applicationId);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		if (row.proceedStatus !== "declined") {
+			throw new HttpError(409, "PROCEED_NOT_DECLINED", "Only a declined application can be re-invited.");
+		}
+
+		const txDb = tx as unknown as typeof db;
+		await txDb
+			.update(applications)
+			.set({
+				proceedStatus: "invited",
+				proceededAt: null,
+				declinedReason: null,
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, applicationId));
+		await txDb.delete(schoolApplications).where(
+			and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")),
+		);
+
+		await txDb.insert(caseComments).values({
+			targetType: "application",
+			targetId: applicationId,
+			kind: "recommendation",
+			text: "Applicant re-invited after declining to proceed.",
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId,
+		});
+	});
 }
 
 export async function respondToOutcome(input: {
@@ -1439,6 +1652,7 @@ async function raiseVisaInvoiceForApplication(
 			applicantEmail: applicant.email ?? undefined,
 			clientUserId,
 			type: "visa",
+			status: "proforma",
 			lines: [
 				{
 					label: "Visa processing fee",

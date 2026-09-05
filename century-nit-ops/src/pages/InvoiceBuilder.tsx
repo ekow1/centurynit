@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { fmtBoth, fmtGhs, fmtUsd } from "./currency";
 import type { InvoiceType, OpsInvoiceLine, ServicePackage } from "century-nit-core/ops";
-import { DEFAULT_FEE_CENTS, usdFromCents, type SchoolApplication } from "century-nit-shared";
+import { usdFromCents, type SchoolApplication, DEFAULT_FEE_CENTS } from "century-nit-shared";
 import { schoolsApi, universities, programs } from "century-nit-core";
+import { useFeeSettings } from "../hooks/FeeSettingsContext";
 
 /**
  * Invoice builder dialog.
@@ -21,7 +22,8 @@ function defaultLines(
 	packages: ServicePackage[],
 	type: InvoiceType,
 	schools: SchoolApplication[] | null,
-	targetCountry: string
+	targetCountry: string,
+	feeCents: typeof DEFAULT_FEE_CENTS
 ): OpsInvoiceLine[] {
 	const match = packages.find((p) => p.name === pkg);
 	const lines: OpsInvoiceLine[] = [];
@@ -30,7 +32,7 @@ function defaultLines(
 		if (match) {
 			lines.push({ id: "package", label: match.name, detail: match.description, amount: match.price });
 		} else {
-			lines.push({ id: "processing", label: "Application processing", detail: "Case preparation & filing", amount: usdFromCents(DEFAULT_FEE_CENTS.appBase) });
+			lines.push({ id: "processing", label: "Application processing", detail: "Case preparation & filing", amount: usdFromCents(feeCents.appBase) });
 		}
 		
 		if (schools && schools.length > 0) {
@@ -41,21 +43,21 @@ function defaultLines(
 					id: `school-${s.id}`,
 					label: uName,
 					detail: pName,
-					amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)
+					amount: usdFromCents(feeCents.appPerSchool)
 				});
 			});
 		} else {
 			// Fallback if no schools are locked yet
-			lines.push({ id: "per-school", label: `School submissions`, detail: `$${usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)} per institution`, amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool) });
+			lines.push({ id: "per-school", label: `School submissions`, detail: `$${usdFromCents(feeCents.appPerSchool)} per institution`, amount: usdFromCents(feeCents.appPerSchool) });
 		}
 	} else if (type === "Visa") {
 		const countryLabel = targetCountry ? `${targetCountry} Visa application fee` : "Visa application fee";
-		lines.push({ id: "visa-fee", label: countryLabel, detail: "Government/Embassy fee", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBase) });
-		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking fee", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics) });
+		lines.push({ id: "visa-fee", label: countryLabel, detail: "Government/Embassy fee", amount: usdFromCents(feeCents.visaBase) });
+		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking fee", amount: usdFromCents(feeCents.visaBiometrics) });
 	} else if (type === "Travel") {
 		lines.push({ id: "airport-pickup", label: "Airport pickup & transfer", detail: "Ground transportation at destination", amount: 0 });
 	} else if (type === "Consultation") {
-		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: usdFromCents(DEFAULT_FEE_CENTS.consultation) });
+		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: usdFromCents(feeCents.consultation) });
 	} else if (type === "Agency") {
 		lines.push({ id: "agency-deposit", label: "Service fee - deposit", detail: "Required before choosing your payment plan", amount: 0 });
 		lines.push({ id: "agency-predeparture", label: "Service fee - pre departure", detail: "Due before you travel to your destination", amount: 0 });
@@ -87,8 +89,12 @@ export function InvoiceBuilder({
 	onIssue: (lines: OpsInvoiceLine[], note: string, type: InvoiceType, status: "issued" | "proforma") => void;
 	onCancel: () => void;
 }) {
+	const { feeCents, issuanceDefaults } = useFeeSettings();
+
 	const [type, setType] = useState<InvoiceType>(initialType);
-	const [status, setStatus] = useState<"issued" | "proforma">("issued");
+	const [status, setStatus] = useState<"issued" | "proforma">(
+		() => (issuanceDefaults[initialType] as "issued" | "proforma") || "issued"
+	);
 	const [lines, setLines] = useState<OpsInvoiceLine[]>([]);
 	const [note, setNote] = useState("");
 	const [schoolsLoaded, setSchoolsLoaded] = useState(false);
@@ -102,16 +108,16 @@ export function InvoiceBuilder({
 				if (!active) return;
 				setSchools(res.schools);
 				setSchoolsLoaded(true);
-				setLines(defaultLines(applicantPackage, packages, type, res.schools, targetCountry || ""));
+				setLines(defaultLines(applicantPackage, packages, type, res.schools, targetCountry || "", feeCents));
 			})
 			.catch(() => {
 				if (active) {
 					setSchoolsLoaded(true);
-					setLines(defaultLines(applicantPackage, packages, type, null, targetCountry || ""));
+					setLines(defaultLines(applicantPackage, packages, type, null, targetCountry || "", feeCents));
 				}
 			});
 		return () => { active = false; };
-	}, [applicantId, applicantPackage, packages, type, targetCountry]);
+	}, [applicantId, applicantPackage, packages, type, targetCountry, feeCents]);
 
 	const total = sum(lines);
 
@@ -148,7 +154,11 @@ export function InvoiceBuilder({
 
 	function changeType(t: InvoiceType) {
 		setType(t);
-		setLines(defaultLines(applicantPackage, packages, t, schoolsLoaded ? schools : null, targetCountry || ""));
+		const def = issuanceDefaults[t];
+		if (def === "issued" || def === "proforma") {
+			setStatus(def);
+		}
+		setLines(defaultLines(applicantPackage, packages, t, schoolsLoaded ? schools : null, targetCountry || "", feeCents));
 	}
 
 	/* Portalled to <body>: a dialog must not inherit an ancestor's containing

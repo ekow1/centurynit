@@ -813,11 +813,11 @@ export async function acceptProformaClient(input: {
 		if (row.clientUserId !== input.userId) {
 			throw new HttpError(403, "FORBIDDEN", "You do not have access to this invoice");
 		}
-		if (row.status !== "proforma") {
+if (row.status !== "proforma") {
 			throw new HttpError(
 				409,
 				"NOT_PROFORMA",
-				Only estimates can be accepted. This invoice is "\".,
+				"Only estimates can be accepted. This invoice is already issued.",
 			);
 		}
 
@@ -836,7 +836,7 @@ export async function acceptProformaClient(input: {
 			.where(eq(invoices.id, row.id))
 			.returning();
 
-		await audit(row.id, "issued", input.userEmail ?? input.userName, Estimate accepted by \, txDb);
+		await audit(row.id, "issued", input.userEmail ?? input.userName, "Estimate accepted - moving to issued invoice", txDb);
 		return updated;
 	});
 }

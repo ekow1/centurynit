@@ -962,6 +962,17 @@ export const applications = pgTable(
 		}),
 		stage: journeyStageEnum("stage").notNull().default("document_verification"),
 		status: applicationStatusEnum("status").notNull().default("UNDER_REVIEW"),
+		/**
+		 * Consent gate: invited (awaiting decision, locked) → accepted
+		 * (unlocked) → declined (stopped, reversible). New applications start
+		 * `invited`; backfilled existing ones are `accepted`.
+		 */
+		proceedStatus: varchar("proceed_status", { length: 16 })
+			.$type<"invited" | "accepted" | "declined">()
+			.notNull()
+			.default("invited"),
+		proceededAt: timestamp("proceeded_at", { withTimezone: true }),
+		declinedReason: text("declined_reason"),
 		fundingTrack: text("funding_track"),
 		packageId: uuid("package_id").references(() => servicePackages.id, { onDelete: "set null" }),
 		packageSelectedAt: timestamp("package_selected_at", { withTimezone: true }),
@@ -1045,6 +1056,15 @@ export const schoolApplications = pgTable(
 		destinationId: varchar("destination_id", { length: 64 }).notNull().references(() => destinations.id),
 		universityId: text("university_id").notNull().references(() => catalogUniversities.id),
 		programId: text("program_id").notNull().references(() => catalogPrograms.id),
+		/**
+		 * Snapshots of the catalog rows at selection time. The applicant's
+		 * choice must survive catalog edits/deletions and keep the quotation
+		 * stable — these are frozen copies, not live joins.
+		 */
+		universityName: text("university_name"),
+		programName: text("program_name"),
+		countryName: text("country_name"),
+		tuitionUsd: integer("tuition_usd"),
 		intake: varchar("intake", { length: 64 }).notNull(),
 		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
 		handlerNote: text("handler_note"),

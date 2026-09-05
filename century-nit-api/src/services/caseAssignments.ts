@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { caseAssignments, caseAssignmentTypeEnum } from "../db/schema.js";
+import { caseAssignments, caseAssignmentTypeEnum, stageAssignments } from "../db/schema.js";
 
 /* ── Case assignment history ────────────────────────────────────────────────
  *
@@ -116,6 +116,10 @@ export async function activeAssigneesFor(
  * `assignedApplicantUserIds` with a single query against case_assignments.
  * Bookings are not included here because the booking's client is already
  * covered by the linked consultation — including bookings would double-count.
+ *
+ * Per-stage officers (stage_assignments) are unioned in as well: a specialist
+ * on the visa stage must still see the applicant's documents, even though
+ * their work is narrower than whole-case ownership.
  */
 export async function activeApplicantUserIdsForOfficer(opsUserId: string): Promise<string[]> {
 	const rows = await db.execute<{
@@ -132,6 +136,12 @@ export async function activeApplicantUserIdsForOfficer(opsUserId: string): Promi
 		JOIN applications ap ON ca.target_type = 'application' AND ca.target_id = ap.id
 		JOIN applicants a ON a.id = ap.applicant_id
 		WHERE ca.ops_user_id = ${opsUserId} AND ca.status = 'active'
+		UNION
+		SELECT DISTINCT a.user_id AS "userId"
+		FROM ${stageAssignments} sa
+		JOIN applications ap ON ap.id = sa.application_id
+		JOIN applicants a ON a.id = ap.applicant_id
+		WHERE sa.ops_user_id = ${opsUserId} AND sa.status = 'active'
 	`);
 	return rows.rows
 		.map((r) => r.userId)

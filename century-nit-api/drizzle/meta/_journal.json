@@ -365,6 +365,20 @@
       "when": 1788580000000,
       "tag": "0052_marketing_and_ticket_retirement",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1788586000000,
+      "tag": "0053_case_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1788609515855,
+      "tag": "0054_proceed_gate_and_snapshots",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,7 @@ import {
 	meRouter,
 } from "./routes/cases.js";
 import { meSchoolsRouter, opsSchoolsRouter } from "./routes/schools.js";
+import { meProceedRouter, opsProceedRouter } from "./routes/proceed.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { rolesRouter } from "./routes/roles.js";
 import { leadsRouter } from "./routes/leads.js";
@@ -147,6 +148,8 @@ export function createApp() {
 	app.route(`${API_PREFIX}/applicants`, applicantsRouter);
 	app.route(`${API_PREFIX}/me/schools`, meSchoolsRouter);
 	app.route(`${API_PREFIX}/schools`, opsSchoolsRouter);
+	app.route(`${API_PREFIX}/me/application`, meProceedRouter);
+	app.route(`${API_PREFIX}/cases`, opsProceedRouter);
 	app.route(`${API_PREFIX}/payments`, paymentsRouter);
 	app.route(`${API_PREFIX}/roles`, rolesRouter);
 	app.route(`${API_PREFIX}/leads`, leadsRouter);

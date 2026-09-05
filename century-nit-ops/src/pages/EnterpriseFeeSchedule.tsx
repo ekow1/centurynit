@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { Toast } from "./OpsDialogs";
 import { GHS_PER_USD } from "./currency";
+import { useFeeSettings, type InvoiceMode } from "../hooks/FeeSettingsContext";
 
 interface SettingView {
 	key: string;
@@ -168,6 +169,10 @@ export function EnterpriseFeeSchedule() {
 	const [totpCode, setTotpCode] = useState<string>("");
 	const [saving, setSaving] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+	const { refresh: refreshGlobalSettings, issuanceDefaults } = useFeeSettings();
+
+	const [editingDefaults, setEditingDefaults] = useState(false);
+	const [editDefaultsState, setEditDefaultsState] = useState<Record<string, InvoiceMode>>({});
 
 	// Toast
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
@@ -279,8 +284,60 @@ export function EnterpriseFeeSchedule() {
 			setFlash(`Fee schedule for "${editingFee.title}" updated to GH₵ ${ghsAmount} ($${editAmountDollars} USD).`);
 			setEditingFee(null);
 			await loadSettings();
+			void refreshGlobalSettings();
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to update fee schedule");
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	function handleOpenEditDefaults() {
+		setEditDefaultsState({ ...issuanceDefaults });
+		setTotpCode("");
+		setError(null);
+		setEditingDefaults(true);
+	}
+
+	async function handleSaveDefaults(e: React.FormEvent) {
+		e.preventDefault();
+		setSaving(true);
+		setError(null);
+
+		try {
+			const payload: { key: string; value: string; stepUpToken?: string; totpCode?: string } = {
+				key: "INVOICE_ISSUANCE_DEFAULTS",
+				value: JSON.stringify(editDefaultsState),
+			};
+
+			if (isUnlocked && stepUp?.token) {
+				payload.stepUpToken = stepUp.token;
+			} else if (totpCode.trim()) {
+				payload.totpCode = totpCode.trim();
+			} else {
+				setError("Authenticator code required to modify settings.");
+				setSaving(false);
+				return;
+			}
+
+			const res = await apiFetch<{ success: boolean; stepUpToken?: string; stepUpExpiresAt?: string }>(
+				`${API_PREFIX}/settings`,
+				{ method: "PUT", body: JSON.stringify(payload) },
+			);
+
+			if (res.stepUpToken && res.stepUpExpiresAt) {
+				const expiresAt = new Date(res.stepUpExpiresAt).getTime();
+				const state = { token: res.stepUpToken, expiresAt };
+				setStepUp(state);
+				sessionStorage.setItem(STEP_UP_STORAGE_KEY, JSON.stringify(state));
+			}
+
+			setFlash("Invoice Issuance Defaults updated successfully.");
+			setEditingDefaults(false);
+			await loadSettings();
+			void refreshGlobalSettings();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to update settings");
 		} finally {
 			setSaving(false);
 		}
@@ -433,6 +490,33 @@ export function EnterpriseFeeSchedule() {
 				</table>
 			)}
 
+			{/* Invoice Issuance Defaults */}
+			<div style={{ marginTop: "3rem", padding: "1.5rem", background: "var(--surface-subtle, #f6f6f6)", border: "var(--thin)" }}>
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
+					<div>
+						<h3 style={{ margin: 0, fontSize: "1rem" }}>Invoice Issuance Defaults</h3>
+						<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "0.8rem" }}>
+							Configure the default mode (Estimate vs Actual) pre-selected when generating invoices.
+						</p>
+					</div>
+					{isSuperAdmin && (
+						<button type="button" className="btn btn--ghost btn--sm" onClick={handleOpenEditDefaults}>
+							Edit Defaults
+						</button>
+					)}
+				</div>
+				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "1rem" }}>
+					{Object.entries(issuanceDefaults).map(([type, mode]) => (
+						<div key={type} style={{ background: "var(--background)", padding: "1rem", border: "var(--thin)" }}>
+							<p style={{ margin: 0, fontWeight: 600, fontSize: "0.85rem", textTransform: "capitalize" }}>{type}</p>
+							<p style={{ margin: "0.25rem 0 0", fontSize: "0.75rem", color: mode === "proforma" ? "var(--primary)" : "#000" }}>
+								{mode === "proforma" ? "◯ Estimated Quote" : "◉ Actual Invoice"}
+							</p>
+						</div>
+					))}
+				</div>
+			</div>
+
 		{/* Edit Fee Modal */}
 			{editingFee && (
 				<div className="ops-modal-backdrop" onClick={() => setEditingFee(null)} role="dialog" aria-modal="true">
@@ -507,6 +591,85 @@ export function EnterpriseFeeSchedule() {
 								</button>
 								<button type="submit" className="btn btn--primary" disabled={saving}>
 									{saving ? "Saving…" : "Update Fee Rate"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			)}
+
+			{/* Edit Defaults Modal */}
+			{editingDefaults && (
+				<div className="ops-modal-backdrop" onClick={() => setEditingDefaults(false)} role="dialog" aria-modal="true">
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "30rem" }}>
+						<header className="ops-modal__head">
+							<div>
+								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Fee Schedule Configuration</p>
+								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Edit Issuance Defaults</h2>
+								<p className="ops-modal__sub">Pre-selected status for new invoices</p>
+							</div>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingDefaults(false)}>
+								✕ Close
+							</button>
+						</header>
+
+						<form onSubmit={handleSaveDefaults} className="invite-form" style={{ marginTop: "1rem" }}>
+							{Object.entries(editDefaultsState).map(([type, mode]) => (
+								<div key={type} className="field" style={{ marginBottom: "1rem" }}>
+									<label style={{ textTransform: "capitalize" }}>{type} Invoice</label>
+									<select
+										className="input input--full-border"
+										value={mode}
+										onChange={(e) => setEditDefaultsState({ ...editDefaultsState, [type]: e.target.value as InvoiceMode })}
+										required
+									>
+										<option value="issued">◉ Actual Invoice</option>
+										<option value="proforma">◯ Estimated Quote</option>
+									</select>
+								</div>
+							))}
+
+							{!isUnlocked && (
+								<div className="field">
+									<label htmlFor="defaults-totp">
+										Authenticator Code (MFA) <span style={{ color: "#b00020" }}>*</span>
+									</label>
+									<input
+										id="defaults-totp"
+										type="text"
+										inputMode="numeric"
+										pattern="[0-9]{6}"
+										maxLength={6}
+										placeholder="6-digit code"
+										className="input input--full-border mono"
+										value={totpCode}
+										onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+										required
+									/>
+									<p className="field__hint">6-digit code from your authenticator app.</p>
+								</div>
+							)}
+
+							{isUnlocked && (
+								<div
+									style={{
+										padding: "0.5rem 0.75rem",
+										background: "var(--surface-subtle, #f6f6f6)",
+										border: "var(--thin)",
+										fontSize: "var(--text-xs)",
+										marginBottom: "1rem",
+									}}
+								>
+									✓ Session Unlocked · MFA step-up active
+								</div>
+							)}
+
+							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingDefaults(false)} disabled={saving}>
+									Cancel
+								</button>
+								<button type="submit" className="btn btn--primary" disabled={saving}>
+									{saving ? "Saving…" : "Save Defaults"}
 								</button>
 							</div>
 						</form>

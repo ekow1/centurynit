@@ -235,7 +235,7 @@ export function Workspace() {
 					linkTo: `/consultations?id=${c.id}`,
 					priority: PRIORITY.assign_consultation,
 				});
-			} else if (c.status === "Assigned" || c.status === "In Assessment") {
+			} else if (c.status === "Assigned" || c.status === "Confirmed" || c.status === "In Assessment") {
 				q.push({
 					id: `c-assess-${c.id}`,
 					category: "needs_action",

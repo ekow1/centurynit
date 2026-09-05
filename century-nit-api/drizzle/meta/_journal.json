@@ -330,6 +330,13 @@
       "when": 1788522426198,
       "tag": "0047_colossal_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788576188806,
+      "tag": "0048_right_vance_astro",
+      "breakpoints": true
     }
   ]
 }

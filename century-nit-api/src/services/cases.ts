@@ -244,7 +244,10 @@ export async function syncConsultationAssignment(
 			assignedOfficerId: employeeId,
 			assignedAt: new Date(),
 			assignedBy: actor.opsUserId,
-			status: row.status === "IN_ASSESSMENT" ? "IN_ASSESSMENT" : "ASSIGNED",
+			status:
+				row.status === "CONFIRMED" || row.status === "IN_ASSESSMENT"
+					? row.status
+					: "ASSIGNED",
 			updatedAt: new Date(),
 		})
 		.where(eq(consultations.id, row.id));
@@ -299,6 +302,20 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 		.update(applicants)
 		.set({ assignedOfficerId: null, updatedAt: new Date() })
 		.where(eq(applicants.id, row.applicantId));
+}
+
+/**
+ * Roll a confirmed consultation back to ASSIGNED when its booking slot moves.
+ *
+ * A new time means the old confirmation is void: the consultant must confirm
+ * the rescheduled slot again before starting the assessment. Only CONFIRMED
+ * consultations are affected — IN_ASSESSMENT/COMPLETED outcomes stay put.
+ */
+export async function syncConsultationRescheduled(bookingId: string): Promise<void> {
+	await db
+		.update(consultations)
+		.set({ status: "ASSIGNED", updatedAt: new Date() })
+		.where(and(eq(consultations.bookingId, bookingId), eq(consultations.status, "CONFIRMED")));
 }
 
 /**
@@ -438,7 +455,7 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		coordinatorAssignedAt: row.coordinatorAssignedAt?.toISOString() ?? null,
 		coordinatorAssignedByName: coordinatorAssigner?.name ?? null,
 		delegationNote: row.delegationNote ?? null,
-		slotConfirmed: row.slotConfirmed,
+		slotConfirmed: row.status === "CONFIRMED" || row.status === "IN_ASSESSMENT",
 		startsAt: booking?.startsAt.toISOString() ?? null,
 		timezone: booking?.timezone ?? null,
 		meetingUrl: isBookingCancelled ? null : (booking?.meetingUrl ?? null),
@@ -698,22 +715,88 @@ export async function assignConsultation(input: {
 	return updated;
 }
 
+/**
+ * Confirm the meeting slot for an assigned consultation.
+ *
+ * The slot is only ever confirmed once a consultant is assigned AND the time is
+ * still ahead of us. Confirmation is a real state transition: the consultation
+ * moves ASSIGNED → CONFIRMED and the linked booking is marked CONFIRMED so both
+ * records agree. The applicant is told (email + in-app) that the slot is locked
+ * and gets the meeting link if one is set. Idempotent — re-confirming a
+ * CONFIRMED consultation is a no-op.
+ */
 export async function confirmConsultationSlot(id: string, actor: Actor): Promise<ConsultationRow> {
 	const row = await getConsultation(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
+	}
+	if (row.status === "CONFIRMED") return row;
+
+	if (row.status !== "ASSIGNED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Assign a consultant before confirming the slot");
+	}
+
+	if (row.bookingId) {
+		const [booking] = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+		if (booking) {
+			if (booking.startsAt.getTime() <= Date.now()) {
+				throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "That slot is already in the past");
+			}
+			await db
+				.update(bookings)
+				.set({ status: "CONFIRMED", updatedAt: new Date() })
+				.where(eq(bookings.id, row.bookingId));
+		}
+	}
+
 	const [updated] = await db
 		.update(consultations)
-		.set({ slotConfirmed: true, updatedAt: new Date() })
+		.set({ status: "CONFIRMED", updatedAt: new Date() })
 		.where(eq(consultations.id, id))
 		.returning();
+
 	await db.insert(caseComments).values({
 		targetType: "consultation",
 		targetId: id,
 		kind: "status",
-		text: "Slot confirmed",
+		text: "Slot confirmed — booking locked",
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	// Tell the applicant the slot is locked (email that carries the link + in-app).
+	try {
+		const applicant = await getApplicant(row.applicantId);
+		if (row.bookingId && applicant?.email) {
+			const { notificationContext } = await import("./booking.js");
+			const [booking] = await db
+				.select()
+				.from(bookings)
+				.where(eq(bookings.id, row.bookingId))
+				.limit(1);
+			if (booking) {
+				const employee = booking.employeeId ? await loadStaff(booking.employeeId) : null;
+				const ctx = await notificationContext(
+					booking,
+					employee ? { name: employee.name, email: employee.email, id: employee.id } : null,
+				);
+				await queueEmails([mail.bookingSlotConfirmedForClient(ctx)]);
+			}
+		}
+		if (applicant?.userId) {
+			notify({
+				recipientUserId: applicant.userId,
+				type: "booking.slot_confirmed",
+				title: "Your consultation slot is confirmed",
+				body: `Your consultation slot has been locked in. Ref: ${row.reference}`,
+				link: "/portal/consultation",
+			}).catch(() => {});
+		}
+	} catch {
+		// Notification failure must not roll back the confirmation.
+	}
+
 	return updated;
 }
 
@@ -723,8 +806,9 @@ export async function startConsultationAssessment(id: string, actor: Actor): Pro
 	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
 	}
-	if (!row.slotConfirmed) {
-		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Confirm the meeting slot before starting assessment");
+	if (row.status === "IN_ASSESSMENT") return row; // idempotent
+	if (row.status !== "CONFIRMED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Confirm the meeting slot before starting the assessment");
 	}
 	const [updated] = await db
 		.update(consultations)
@@ -751,6 +835,23 @@ export async function completeConsultationAssessment(input: {
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
 	if (row.status === "CANCELLED") {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
+	}
+	if (row.status === "COMPLETED") {
+		// Idempotent resubmission — return the locked result and any application
+		// that the original completion already created.
+		const [existing] = await db
+			.select()
+			.from(applications)
+			.where(eq(applications.consultationId, row.id))
+			.limit(1);
+		return { consultation: row, application: existing ?? null };
+	}
+	if (row.status !== "IN_ASSESSMENT") {
+		throw new HttpError(
+			409,
+			CASE_ERROR_CODES.CASE_CLOSED,
+			"Start the assessment before completing it",
+		);
 	}
 
 	const [updated] = await db
@@ -1905,7 +2006,7 @@ export async function reassignCoordinator(input: {
 const DEFAULT_MAX_CAPACITY = 10;
 
 /** Active statuses that count towards a coordinator's workload. */
-const ACTIVE_CONSULTATION_STATUSES = ["UNDER_REVIEW", "ASSIGNED", "IN_ASSESSMENT"] as const;
+const ACTIVE_CONSULTATION_STATUSES = ["UNDER_REVIEW", "ASSIGNED", "CONFIRMED", "IN_ASSESSMENT"] as const;
 
 /**
  * Get per-staff workload across the platform.

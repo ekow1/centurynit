@@ -74,6 +74,7 @@ function getStageProgress(type: "case" | "consultation" | "ticket", stageOrStatu
 		const map: Record<string, { step: number; label: string }> = {
 			"Under Review": { step: 1, label: "Under Review" },
 			"Assigned": { step: 2, label: "Assigned" },
+			"Confirmed": { step: 2, label: "Confirmed" },
 			"In Assessment": { step: 3, label: "In Assessment" },
 			"Completed": { step: 4, label: "Completed" },
 			"Cancelled": { step: 0, label: "Cancelled" },

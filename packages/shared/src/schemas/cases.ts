@@ -167,6 +167,7 @@ export type ConsultationWorkflow = z.infer<typeof consultationWorkflowSchema>;
 export const consultationStatusSchema = z.enum([
 	"UNDER_REVIEW",
 	"ASSIGNED",
+	"CONFIRMED",
 	"IN_ASSESSMENT",
 	"COMPLETED",
 	"CANCELLED",
@@ -176,6 +177,7 @@ export type ConsultationStatus = z.infer<typeof consultationStatusSchema>;
 export const CONSULTATION_STATUS_TO_OPS: Record<ConsultationStatus, string> = {
 	UNDER_REVIEW: "Under Review",
 	ASSIGNED: "Assigned",
+	CONFIRMED: "Confirmed",
 	IN_ASSESSMENT: "In Assessment",
 	COMPLETED: "Completed",
 	CANCELLED: "Cancelled",

@@ -105,7 +105,7 @@ async function loadEmployee(employeeId: string) {
 	return row ?? null;
 }
 
-async function notificationContext(
+export async function notificationContext(
   booking: BookingRow,
   employee?: { name: string; email: string; id?: string } | null,
 ) {
@@ -784,6 +784,15 @@ export async function rescheduleBooking(input: {
 	]);
 	if (employee) await scheduleReminders(updated, employee);
 
+	// The slot moved — the old confirmation is void. The consultant must confirm
+	// the new time again before the assessment can start.
+	try {
+		const { syncConsultationRescheduled } = await import("./cases.js");
+		await syncConsultationRescheduled(updated.id);
+	} catch (err) {
+		console.error("[booking] could not reset consultation confirmation after reschedule:", err);
+	}
+
 	// In-app: tell the client and (if assigned) the employee the slot moved.
 	notify({
 		recipientUserId: updated.clientUserId,
@@ -954,6 +963,14 @@ export async function decideRescheduleBooking(
 			...(employee ? [mail.bookingRescheduled(ctx, "employee")] : []),
 		]);
 		if (employee) await scheduleReminders(updated, employee);
+
+		// The approved move voids the previous confirmation; require a re-confirm.
+		try {
+			const { syncConsultationRescheduled } = await import("./cases.js");
+			await syncConsultationRescheduled(updated.id);
+		} catch (err) {
+			console.error("[booking] could not reset consultation confirmation after approved reschedule:", err);
+		}
 
 		// In-app: the approved reschedule is communicated to client + employee.
 		notify({

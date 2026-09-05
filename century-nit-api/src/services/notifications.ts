@@ -155,6 +155,32 @@ export function bookingMeetingUrlSetForClient(ctx: BookingNotificationContext): 
 	};
 }
 
+/** Landed at slot confirmation — the moment the time is actually locked in. */
+export function bookingSlotConfirmedForClient(ctx: BookingNotificationContext): QueuedEmail {
+	const when = formatInZone(ctx.startsAt, ctx.clientTimezone);
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`Your consultation slot has been confirmed.`,
+		`<strong>Service:</strong> ${ctx.serviceName}`,
+		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
+		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		...(ctx.meetingUrl
+			? [`Use the link below to join the video session at your scheduled time.`]
+			: ["We will share the meeting link closer to the time."]),
+	];
+	const { html, text } = formatEmail("Consultation slot confirmed", lines, ctx.meetingUrl, ctx.reference);
+	return {
+		to: ctx.clientEmail,
+		subject: `Consultation slot confirmed · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:confirmed:client:${ctx.reference}`,
+		template: "Consultation slot confirmed",
+		reference: ctx.reference,
+	};
+}
+
 export function bookingAssignedForEmployee(ctx: BookingNotificationContext): QueuedEmail {
 	const when = formatInZone(ctx.startsAt, ctx.employeeTimezone);
 	const lines = [

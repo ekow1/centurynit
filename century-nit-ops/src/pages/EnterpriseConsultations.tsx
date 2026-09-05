@@ -243,8 +243,8 @@ export function EnterpriseConsultations() {
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
 							{(canAssignWork
-								? ["All", "Under Review", "Assigned", "In Assessment", "Completed", "Cancelled"]
-								: ["All", "Assigned", "In Assessment", "Completed", "Cancelled"]
+								? ["All", "Under Review", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
+								: ["All", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
 							).map((tab) => (
 								<button
 									key={tab}
@@ -519,7 +519,7 @@ export function EnterpriseConsultations() {
 								</p>
 							</div>
 						)}
-						{active.status === "Assigned" && !active.slotConfirmed && (
+						{active.status === "Assigned" && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#e0e7ff", borderBottom: "1px solid #c7d2fe", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#4338ca" }}>
 									<strong>Assigned.</strong> Confirm the slot to accept the booking time, or reschedule if needed.
@@ -541,7 +541,7 @@ export function EnterpriseConsultations() {
 								</div>
 							</div>
 						)}
-						{active.status === "Assigned" && active.slotConfirmed && (
+						{active.status === "Confirmed" && (
 							<div style={{ padding: "0.75rem 1.25rem", background: "#d1fae5", borderBottom: "1px solid #6ee7b7", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 								<p style={{ fontSize: "var(--text-sm)", color: "#065f46" }}>
 									<strong>Slot confirmed.</strong> Review the documents and applicant background, then start the assessment when ready.

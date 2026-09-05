@@ -794,6 +794,7 @@ export const settingsAudit = pgTable(
 export const consultationStatusEnum = pgEnum("consultation_status", [
 	"UNDER_REVIEW",
 	"ASSIGNED",
+	"CONFIRMED",
 	"IN_ASSESSMENT",
 	"COMPLETED",
 	"CANCELLED",
@@ -880,7 +881,6 @@ export const consultations = pgTable(
 			onDelete: "set null",
 		}),
 		delegationNote: text("delegation_note"),
-		slotConfirmed: boolean("slot_confirmed").notNull().default(false),
 		assessmentResult: jsonb("assessment_result").$type<{
 			outcome: string;
 			notes: string;

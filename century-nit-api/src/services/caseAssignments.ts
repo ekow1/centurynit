@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { caseAssignments, type caseAssignmentTypeEnum } from "../db/schema.js";
+import { caseAssignments, caseAssignmentTypeEnum } from "../db/schema.js";
 
 /* ── Case assignment history ────────────────────────────────────────────────
  *

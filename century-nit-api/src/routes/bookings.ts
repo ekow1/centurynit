@@ -25,6 +25,8 @@ import {
 	listBookingsForClient,
 	markNoShow,
 	rescheduleBooking,
+	requestRescheduleBooking,
+	decideRescheduleBooking,
 	setBookingMeetingUrl,
 	generateMeetingForBooking,
 	resendMeetingLinkForBooking,
@@ -44,6 +46,7 @@ import {
 	cancelBookingSchema,
 	createBookingSchema,
 	rescheduleBookingSchema,
+	rescheduleDecisionSchema,
 } from "century-nit-shared";
 import type { Booking, CreateBooking } from "century-nit-shared";
 import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
@@ -1083,6 +1086,88 @@ bookingsRouter.openapi(
 		}
 		return c.json({ message: `Reset ${cancelledConsultations.length} consultations.` }, 200);
 	}
+);
+
+/* ── PATCH /api/v1/bookings/:id/reschedule-request ──────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/reschedule-request",
+		tags: ["Bookings"],
+		middleware: requireAuth,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: rescheduleBookingSchema } },
+				description: "Reschedule request details",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Reschedule requested",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (row.clientUserId !== user.id) {
+			throw new HttpError(403, "FORBIDDEN", "Not your booking");
+		}
+
+		const updated = await requestRescheduleBooking(id, {
+			...body,
+			actor: { id: user.id, email: user.email },
+		});
+		return c.json(toResponse(updated), 200);
+	},
+);
+
+/* ── PATCH /api/v1/bookings/:id/reschedule-decision ─────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/reschedule-decision",
+		tags: ["Bookings"],
+		middleware: [requireAuth, requireMfa] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: rescheduleDecisionSchema } },
+				description: "Approve or reject a reschedule request",
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				description: "Booking after decision",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const staff = c.get("staff");
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (!canModifyBooking(row, user, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to process this reschedule");
+		}
+
+		const updated = await decideRescheduleBooking(id, body.decision, { id: user.id, email: user.email });
+		return c.json(toResponse(updated), 200);
+	},
 );
 
 export { bookingsRouter };

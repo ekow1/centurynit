@@ -19,6 +19,33 @@
 	color: inherit;
 }
 
+.queue-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0.85rem 1.25rem;
+	border-bottom: 1px solid var(--border-light);
+	cursor: pointer;
+	background: transparent;
+	color: var(--foreground);
+	border-left: 4px solid transparent;
+	transition: background-color 0.15s ease;
+}
+
+.queue-row:hover {
+	background: var(--muted);
+}
+
+.queue-row--selected, .queue-row--selected:hover {
+	background: var(--foreground);
+	color: var(--background);
+	border-left-color: var(--accent, #6366f1);
+}
+
+.queue-row--selected .muted {
+	color: rgba(255, 255, 255, 0.7);
+}
+
 .badge--solid {
 	background: var(--foreground);
 	color: var(--accent-foreground);

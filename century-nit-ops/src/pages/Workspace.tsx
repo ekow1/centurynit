@@ -443,7 +443,7 @@ export function Workspace() {
 	const loading = casesLoading || invoicesLoading || leadsLoading;
 
 	return (
-		<div className="page-content fade-in">
+		<div className="page-content fade-in" style={{ backgroundColor: "#f8fafc", minHeight: "100%" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
 				<div>
 					<h1 className="page-title">Workspace</h1>
@@ -457,87 +457,91 @@ export function Workspace() {
 			</div>
 
 			{/* KPI strip — first horizontal scan */}
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} />
-				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} />
-				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} />
-				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("needs_invoice")} urgent={stats.overdue > 0} />
-				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} />
-				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} />
+			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon="👥" accent="#3b82f6" />
+				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon="⚡" accent="#f59e0b" />
+				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon="📝" accent="#8b5cf6" />
+				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} urgent={stats.overdue > 0} icon="⚠️" accent="#ef4444" />
+				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon="📞" accent="#0ea5e9" />
+				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon="💰" accent="#10b981" />
 			</div>
 
-			<div style={{ marginBottom: "1.5rem" }}>
-				<LiveMeetings compact />
-			</div>
-
-			{/* Toolbar */}
-			<div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap" }}>
-				<input
-					type="search"
-					placeholder="Search queue..."
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					className="input"
-					style={{ maxWidth: "360px" }}
-				/>
-				{filter !== "all" && (
-					<button className="btn btn--ghost btn--sm" onClick={() => setFilter("all")}>
-						Clear filter
-					</button>
-				)}
-				{loading && <span className="muted">Loading…</span>}
-				{casesError && <span className="ops-modal__error">{casesError}</span>}
-			</div>
-
-			{/* Main F-body: list on the left, preview on the right */}
-			<div
-				style={{
-					display: "grid",
-					gridTemplateColumns: "1.2fr 1fr",
-					gap: "1.5rem",
-					alignItems: "start",
-				}}
-			>
-				{/* LEFT: work queue */}
-				<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 320px)", overflow: "hidden" }}>
-					<div style={{ padding: "1rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-						<h2 className="section-title" style={{ margin: 0 }}>Work Queue</h2>
-						<span className="portal-pill">{filtered.length} of {items.length}</span>
+			<div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem", alignItems: "start" }}>
+				{/* LEFT: Work Queue & Preview */}
+				<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+					
+					{/* Toolbar & Search integrated into Queue Header */}
+					<div className="card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
+						<h2 className="section-title" style={{ margin: 0, marginRight: "auto", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+							Work Queue
+							<span className="portal-pill" style={{ fontSize: "var(--text-sm)", fontWeight: "normal" }}>{filtered.length} items</span>
+						</h2>
+						
+						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+							{loading && <span className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</span>}
+							{casesError && <span className="ops-modal__error">{casesError}</span>}
+							{filter !== "all" && (
+								<button className="btn btn--ghost btn--sm" onClick={() => setFilter("all")}>
+									Clear filter
+								</button>
+							)}
+							<input
+								type="search"
+								placeholder="Search queue..."
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+								className="input"
+								style={{ width: "240px" }}
+							/>
+						</div>
 					</div>
-					<div style={{ flex: 1, overflowY: "auto" }}>
-						{filtered.length === 0 ? (
-							<div style={{ padding: "2rem", textAlign: "center" }} className="muted">
-								{loading ? "Loading queue…" : "Nothing on your desk right now."}
+
+					<div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem", alignItems: "start" }}>
+						{/* LEFT: queue list */}
+						<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
+							<div style={{ flex: 1, overflowY: "auto" }}>
+								{filtered.length === 0 ? (
+									<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
+										<span style={{ fontSize: "3rem", opacity: 0.2 }}>📥</span>
+										{loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
+									</div>
+								) : (
+									filtered.map((item) => (
+										<QueueRow
+											key={item.id}
+											item={item}
+											selected={selected?.id === item.id}
+											onSelect={() => setSelected(item)}
+										/>
+									))
+								)}
 							</div>
-						) : (
-							filtered.map((item) => (
-								<QueueRow
-									key={item.id}
-									item={item}
-									selected={selected?.id === item.id}
-									onSelect={() => setSelected(item)}
+						</div>
+
+						{/* RIGHT: preview pane */}
+						<div className="card" style={{ position: "sticky", top: "1rem", minHeight: "60vh" }}>
+							{selected ? (
+								<PreviewPane
+									item={selected}
+									assignees={assignees}
+									canAssignWork={canAssignWork}
+									onAssigned={refresh}
+									onAssignConsultation={assignConsultation}
+									onAssignApplication={assignApplication}
 								/>
-							))
-						)}
+							) : (
+								<div style={{ padding: "4rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
+									<span style={{ fontSize: "3rem", opacity: 0.2 }}>👈</span>
+									<p style={{ margin: 0, maxWidth: "200px" }}>Select an item from the queue to see details and next steps.</p>
+								</div>
+							)}
+						</div>
 					</div>
 				</div>
 
-				{/* RIGHT: preview pane */}
-				<div className="card" style={{ position: "sticky", top: "1rem" }}>
-					{selected ? (
-						<PreviewPane
-							item={selected}
-							assignees={assignees}
-							canAssignWork={canAssignWork}
-							onAssigned={refresh}
-							onAssignConsultation={assignConsultation}
-							onAssignApplication={assignApplication}
-						/>
-					) : (
-						<div style={{ padding: "2rem", textAlign: "center" }} className="muted">
-							Select an item from the queue to see details and next steps.
-						</div>
-					)}
+				{/* RIGHT: Sidebar (Meetings & Widgets) */}
+				<div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", position: "sticky", top: "1rem" }}>
+					<LiveMeetings compact />
 				</div>
 			</div>
 		</div>
@@ -551,6 +555,8 @@ function KPICard({
 	active,
 	urgent,
 	onClick,
+	icon,
+	accent,
 }: {
 	label: string;
 	value: string;
@@ -558,7 +564,11 @@ function KPICard({
 	active?: boolean;
 	urgent?: boolean;
 	onClick?: () => void;
+	icon?: string;
+	accent?: string;
 }) {
+	const baseColor = urgent ? "var(--danger, #b91c1c)" : accent || "var(--accent, #6366f1)";
+	
 	return (
 		<button
 			className="card"
@@ -567,14 +577,22 @@ function KPICard({
 				textAlign: "left",
 				width: "100%",
 				cursor: "pointer",
-				background: active ? "var(--foreground)" : urgent ? "var(--danger-bg, #fee)" : "var(--card)",
-				color: active ? "var(--background)" : urgent ? "var(--danger, #b91c1c)" : "var(--foreground)",
-				border: `1px solid var(--border-light)`,
+				background: active ? baseColor : "var(--card)",
+				color: active ? "#ffffff" : "var(--foreground)",
+				border: active ? `1px solid ${baseColor}` : `1px solid var(--border-light)`,
+				borderTop: active ? undefined : `3px solid ${baseColor}`,
+				display: "flex",
+				flexDirection: "column",
+				transition: "all 0.2s ease",
+				boxShadow: active ? `0 4px 12px ${baseColor}40` : undefined,
 			}}
 		>
-			<p className="eyebrow" style={{ opacity: active ? 0.7 : 1, marginBottom: "0.25rem" }}>{label}</p>
-			<p className="page-title" style={{ fontSize: "1.35rem", marginBottom: "0.25rem" }}>{value}</p>
-			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.7 : 1 }}>{sub}</p>}
+			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
+				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "#fff" : "var(--foreground)" }}>{label}</p>
+				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "#fff" : baseColor, fontSize: "1.1rem" }}>{icon}</span>}
+			</div>
+			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "#fff" : "inherit" }}>{value}</p>
+			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "#fff" : "var(--muted-fg)" }}>{sub}</p>}
 		</button>
 	);
 }
@@ -594,32 +612,45 @@ function actionLabel(item: WorkItem): string {
 }
 
 function QueueRow({ item, selected, onSelect }: { item: WorkItem; selected: boolean; onSelect: () => void }) {
+	const actionColors: Record<string, string> = {
+		assign: "#3b82f6",
+		assess: "#6366f1",
+		reschedule: "#f59e0b",
+		review: "#8b5cf6",
+		checklist: "#10b981",
+		docs: "#0ea5e9",
+		invoice: "#8b5cf6",
+		issue: "#ec4899",
+		chase: "#ef4444",
+		followup: "#0ea5e9",
+	};
+	const pillBg = actionColors[item.action] || "var(--foreground)";
+
 	return (
 		<div
 			onClick={onSelect}
-			style={{
-				display: "flex",
-				justifyContent: "space-between",
-				alignItems: "center",
-				padding: "0.85rem 1rem",
-				borderBottom: "1px solid var(--border-light)",
-				cursor: "pointer",
-				background: selected ? "var(--foreground)" : "transparent",
-				color: selected ? "var(--background)" : "var(--foreground)",
-				borderLeft: selected ? "4px solid var(--accent, #6366f1)" : "4px solid transparent",
-			}}
+			className={`queue-row ${selected ? "queue-row--selected" : ""}`}
 		>
 			<div style={{ minWidth: 0, flex: 1 }}>
 				<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem", flexWrap: "wrap" }}>
-					<span className="portal-pill" style={{ fontSize: "var(--text-xs)", padding: "0.1rem 0.35rem" }}>
+					<span
+						className="portal-pill"
+						style={{
+							fontSize: "var(--text-xs)",
+							padding: "0.1rem 0.45rem",
+							background: selected ? "#ffffff" : pillBg,
+							color: selected ? "var(--foreground)" : "#ffffff",
+							border: "none",
+						}}
+					>
 						{actionLabel(item)}
 					</span>
 					<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{item.title}</span>
 				</div>
-				<p className="muted" style={{ fontSize: "var(--text-xs)", opacity: selected ? 0.7 : 1, margin: 0 }}>
+				<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
 					{item.subtitle}
 				</p>
-				<p className="muted" style={{ fontSize: "var(--text-xs)", opacity: selected ? 0.7 : 1, margin: "0.15rem 0 0" }}>
+				<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.15rem 0 0" }}>
 					{item.meta} · {item.owner}
 				</p>
 			</div>

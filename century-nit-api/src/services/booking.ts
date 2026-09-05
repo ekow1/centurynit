@@ -706,6 +706,7 @@ export async function rescheduleBooking(input: {
 		durationMinutes: booking.durationMinutes,
 		timezone,
 		excludeBookingId: booking.id,
+		employeeId: booking.employeeId ?? undefined,
 	});
 	const slot = availability.slots.find((s) => s.time === input.time);
 	if (!slot?.available) {
@@ -817,8 +818,8 @@ export async function requestRescheduleBooking(
 	const booking = await getBooking(id);
 	if (!booking) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
 
-	if (booking.status === "CANCELLED" || booking.status === "COMPLETED") {
-		throw new HttpError(400, "INVALID_STATE", "Cannot reschedule a closed booking.");
+	if (!occupiesSlot(booking.status)) {
+		throw new HttpError(400, "INVALID_STATE", `Cannot reschedule a booking that is ${booking.status}.`);
 	}
 
 	const timezone = input.timezone ?? booking.timezone;
@@ -831,6 +832,26 @@ export async function requestRescheduleBooking(
 
 	if (startsAt.getTime() <= Date.now()) {
 		throw new HttpError(400, SCHEDULING_ERROR_CODES.PAST_SLOT, "That time is in the past");
+	}
+	if (startsAt.getTime() === booking.startsAt.getTime()) {
+		throw new HttpError(400, "VALIDATION_ERROR", "The requested time is the same as the current time.");
+	}
+
+	const availability = await branchAvailability({
+		branchId: booking.branchId,
+		date: input.date,
+		durationMinutes: booking.durationMinutes,
+		timezone,
+		excludeBookingId: booking.id,
+		employeeId: booking.employeeId ?? undefined,
+	});
+	const slot = availability.slots.find((s) => s.time === input.time);
+	if (!slot?.available) {
+		throw new HttpError(
+			409,
+			SCHEDULING_ERROR_CODES.SLOT_TAKEN,
+			"That time is not available. Please choose another.",
+		);
 	}
 
 	const [updated] = await db
@@ -868,7 +889,32 @@ export async function decideRescheduleBooking(
 		throw new HttpError(400, "INVALID_STATE", "No pending reschedule request.");
 	}
 
+	if (!occupiesSlot(booking.status)) {
+		throw new HttpError(400, "INVALID_STATE", `Cannot process reschedule for a booking that is ${booking.status}.`);
+	}
+
 	if (decision === "approve") {
+		const { dateKeyInZone, timeKeyInZone } = await import("../lib/time.js");
+		const dateStr = dateKeyInZone(booking.rescheduleRequestedStartsAt!, booking.rescheduleRequestedTimezone!);
+		const timeStr = timeKeyInZone(booking.rescheduleRequestedStartsAt!, booking.rescheduleRequestedTimezone!);
+
+		const availability = await branchAvailability({
+			branchId: booking.branchId,
+			date: dateStr,
+			durationMinutes: booking.durationMinutes,
+			timezone: booking.rescheduleRequestedTimezone!,
+			excludeBookingId: booking.id,
+			employeeId: booking.employeeId ?? undefined,
+		});
+		const slot = availability.slots.find((s) => s.time === timeStr);
+		if (!slot?.available) {
+			throw new HttpError(
+				409,
+				SCHEDULING_ERROR_CODES.SLOT_TAKEN,
+				"That time is no longer available. Please reject the request or coordinate with the client.",
+			);
+		}
+
 		// Update the actual booking fields to the requested slot and clear the request
 		let [updated] = await db
 			.update(bookings)

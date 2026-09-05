@@ -98,6 +98,14 @@ export function PortalLayout() {
 	const currentRef =
 		application.applicationId ?? booking.confirmationId ?? null;
 
+	let pageTitle = "Dashboard";
+	const activeNav = MAIN_NAV.find((n) => pathname.startsWith(n.to));
+	if (activeNav) {
+		pageTitle = activeNav.label;
+	} else if (inJourney) {
+		pageTitle = "Journey";
+	}
+
 	return (
 		<div className="portal">
 			<aside className="portal__aside">
@@ -183,7 +191,7 @@ export function PortalLayout() {
 					<div>
 						<p className="eyebrow">Applicant dashboard</p>
 						<p className="portal__welcome">
-							{authUser ? `Welcome, ${authUser.name.split(" ")[0]}` : "Welcome"}
+							{pageTitle}
 						</p>
 					</div>
 					<div className="portal__topbar-status" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>

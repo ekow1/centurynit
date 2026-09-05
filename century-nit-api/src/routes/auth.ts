@@ -440,6 +440,29 @@ auth.post("/check-email", async (c) => {
 auth.use("*", rateLimit);
 
 /**
+ * Real-time staff check for the console forgot-password form.
+ *
+ * The console only resets passwords for staff (see `sendResetPassword`), so
+ * this lets the form flag a non-staff address before the user submits. It
+ * deliberately mirrors that gate — an `opsUsers` row that is active — and does
+ * not consult `users`, so a portal applicant's email never reads as staff. It
+ * is a UX aid only; the reset callback remains the authoritative check.
+ */
+auth.post("/check-staff-email", async (c) => {
+	const body = await c.req.json().catch(() => null);
+	if (!body?.email || typeof body.email !== "string") {
+		return c.json({ isStaff: false }, 400);
+	}
+	const email = body.email.trim().toLowerCase();
+	const [staff] = await db
+		.select({ id: schema.opsUsers.id, active: schema.opsUsers.active })
+		.from(schema.opsUsers)
+		.where(eq(schema.opsUsers.email, email))
+		.limit(1);
+	return c.json({ isStaff: Boolean(staff && staff.active) });
+});
+
+/**
  * Complete an email/password sign-up after the user has entered the OTP.
  *
  * The portal sends a "sign-in" type OTP to the email *before* any account

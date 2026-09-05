@@ -35,6 +35,8 @@ export async function rateLimit(c: Context, next: Next) {
 		limit = 3;
 	} else if (routePath.includes("/reset-password")) {
 		limit = 5;
+	} else if (routePath.includes("/check-staff-email")) {
+		limit = 20;
 	}
 
 	// If no limit is defined for this route, allow it without rate limiting

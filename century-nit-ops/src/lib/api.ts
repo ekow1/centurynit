@@ -122,6 +122,14 @@ export function requestPasswordReset(email: string, redirectTo: string): Promise
 	});
 }
 
+/** Real-time check whether an email belongs to an active staff account. */
+export function checkStaffEmail(email: string): Promise<{ isStaff: boolean }> {
+	return apiFetch<{ isStaff: boolean }>("/api/auth/check-staff-email", {
+		method: "POST",
+		body: JSON.stringify({ email }),
+	});
+}
+
 /** Set a new password using the token from the reset email. */
 export function resetPassword(token: string, newPassword: string): Promise<{ status?: boolean }> {
 	return apiFetch<{ status?: boolean }>("/api/auth/reset-password", {
@@ -211,7 +219,7 @@ export type ApiInvoice = {
 	id: string;
 	invoiceNumber: string;
 	status: "proforma" | "issued" | "partial" | "paid" | "overdue" | "void";
-	type: "application" | "visa" | "consultation" | "agency" | "custom";
+	type: "application" | "visa" | "consultation" | "agency" | "travel" | "custom";
 	applicantName: string;
 	applicantEmail: string | null;
 	clientUserId: string | null;
@@ -277,7 +285,7 @@ export function createInvoice(body: {
 	applicantName: string;
 	applicantEmail?: string;
 	clientUserId?: string;
-	type: "application" | "visa" | "consultation" | "agency" | "custom";
+	type: "application" | "visa" | "consultation" | "agency" | "travel" | "custom";
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;
 	dueAt?: string;

@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiError, requestPasswordReset } from "../lib/api";
+import { ApiError, checkStaffEmail, requestPasswordReset } from "../lib/api";
 import { publicSiteUrl } from "../lib/publicSite";
 
 const MAIL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>';
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
+type EmailCheck = "idle" | "checking" | "ok" | "not-staff" | "error";
+
+const NOT_STAFF_MESSAGE =
+	"That email isn't linked to a Century NIT staff account. Check for typos, or ask your administrator to invite you.";
 
 /**
  * Staff forgot-password — request a reset email.
@@ -13,6 +18,10 @@ const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
  * one-time link. The link resolves through the API, which verifies the token
  * and redirects to `/reset-password?token=...` on this same console origin, so
  * the reset page can collect a new password.
+ *
+ * The email field is checked against `/api/auth/check-staff-email` as the user
+ * types (debounced) so a non-staff address is flagged before submit. The check
+ * is a UX aid; the API's `sendResetPassword` callback remains the authority.
  */
 export function OpsForgotPassword() {
 	const navigate = useNavigate();
@@ -20,12 +29,42 @@ export function OpsForgotPassword() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [sent, setSent] = useState(false);
+	const [emailCheck, setEmailCheck] = useState<EmailCheck>("idle");
+
+	// The check is debounced per keystroke and late responses are dropped so a
+	// fast typist never has a stale verdict overwrite a newer one.
+	const queryIdRef = useRef(0);
+	useEffect(() => {
+		const id = ++queryIdRef.current;
+		const value = email.trim().toLowerCase();
+		if (!/^[^@\s]+@[^@\s]+$/.test(value)) {
+			setEmailCheck("idle");
+			return;
+		}
+		setEmailCheck("checking");
+		const timer = setTimeout(() => {
+			checkStaffEmail(value)
+				.then((res) => {
+					if (queryIdRef.current !== id) return;
+					setEmailCheck(res.isStaff ? "ok" : "not-staff");
+				})
+				.catch(() => {
+					if (queryIdRef.current !== id) return;
+					setEmailCheck("error");
+				});
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [email]);
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
 		const trimmed = email.trim().toLowerCase();
 		if (!trimmed.includes("@")) {
 			setError("Enter a valid email address.");
+			return;
+		}
+		if (emailCheck === "not-staff") {
+			setError(NOT_STAFF_MESSAGE);
 			return;
 		}
 		setError(null);
@@ -99,6 +138,11 @@ export function OpsForgotPassword() {
 									required
 									autoFocus
 								/>
+								{emailCheck === "checking" ? (
+									<p className="ops-login__hint">Checking…</p>
+								) : emailCheck === "not-staff" ? (
+									<p className="ops-login__error" role="alert">{NOT_STAFF_MESSAGE}</p>
+								) : null}
 							</div>
 
 							{error ? (

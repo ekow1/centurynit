@@ -907,6 +907,12 @@
 	margin: 0.25rem 0;
 }
 
+.ops-login__hint {
+	color: var(--text-muted, #667085);
+	font-size: var(--text-sm);
+	margin: 0.25rem 0;
+}
+
 .ops-login__submit {
 	display: flex;
 	align-items: center;

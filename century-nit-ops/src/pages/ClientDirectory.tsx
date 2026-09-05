@@ -184,11 +184,11 @@ export function ClientDirectory() {
 	const handleDeleteClient = (c: ClientUser) => {
 		confirm(
 			"Delete Client Permanently",
-			`This will permanently delete ${c.name} (${c.email}) and all their data. This action cannot be undone.`,
+			`This will permanently delete ${c.name} (${c.email}), their applicant profile, applications, uploaded documents, conversation history, and active sessions. Invoices and payment records are kept for accounting. This action cannot be undone.`,
 			async () => {
 				try {
 					await apiFetch(`${API_PREFIX}/client-users/${c.id}`, { method: "DELETE" });
-					say(`${c.name} has been permanently deleted.`);
+					say(`${c.name} has been permanently deleted. Account and case data were removed; invoices remain for accounting.`);
 					await fetchClients();
 				} catch (err) {
 					setError(err instanceof Error ? err.message : "Failed to delete client");
@@ -426,7 +426,7 @@ export function ClientDirectory() {
 															type="button"
 															className="btn btn--xs btn--danger"
 															onClick={() => handleDeleteClient(c)}
-															title="Permanently delete this client and all their data"
+															title="Permanently delete this client, their profile, applications, files, and chat history. Invoices and payment records are retained for accounting."
 															style={{ background: "#7f1d1d", borderColor: "#7f1d1d", color: "#ffffff" }}
 														>
 															Delete

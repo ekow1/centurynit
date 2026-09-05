@@ -1,6 +1,19 @@
-import { desc, eq, gt, ilike, or } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { sessions, users } from "../db/schema.js";
+import {
+	applicants,
+	applicantDocuments,
+	applications,
+	caseComments,
+	communicationEvents,
+	conversations,
+	consultations,
+	messageAttachments,
+	messages,
+	sessions,
+	users,
+} from "../db/schema.js";
+import { getDocumentStorage } from "./storage/index.js";
 
 export interface ClientUserView {
 	id: string;
@@ -276,20 +289,207 @@ export async function unbanClientUser(
 }
 
 /**
- * Permanently delete a client user and all their auth-related data.
+ * Permanently erase a client user and the personal data tied to them.
  *
- * The `users` table has `ON DELETE CASCADE` on sessions, accounts,
- * verifications, documents, and two-factor rows, so removing the user row
- * cleans those up automatically. Rows that should survive (bookings,
- * applicants, conversations) have `ON DELETE SET NULL` on their
- * `user_id` / `client_user_id` FKs and persist with a null reference.
+ * What is removed:
+ *   - The Better Auth `users` row and its cascades (sessions, accounts,
+ *     two-factors, notification preferences, in-app notifications, reactions).
+ *   - The `applicants` row and its cascades (applications, school applications,
+ *     consultations, case/stage assignments, applicant document DB rows).
+ *   - `bookings` for this client (the FK is CASCADE, not SET NULL).
+ *   - Case comments and communication events linked to the applicant's records.
+ *   - Conversations owned by the client or linked to their applications /
+ *     consultations, plus the messages and attachments inside them.
+ *   - Uploaded files in R2 / Supabase Storage: documents, message attachments,
+ *     and the avatar object if it lives in our bucket.
+ *
+ * What is intentionally retained:
+ *   - Invoices and payment transactions (accounting/legal requirement). The
+ *     client-user link is nulled and the name/email snapshots stay as-is.
+ *   - Notification delivery log and broad audit trails that do not depend on
+ *     the user row.
  */
-export async function deleteClientUser(userId: string): Promise<{ success: boolean }> {
-	const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
-	if (!existing) return { success: false };
+export async function deleteClientUser(
+	userId: string,
+	actorName?: string,
+): Promise<{ success: boolean; storageErrors?: string[] }> {
+	// Load the user + every entity whose storage key we must collect before
+	// the DB rows disappear.
+	const [user] = await db
+		.select({ id: users.id, image: users.image })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	if (!user) return { success: false };
 
-	await db.delete(users).where(eq(users.id, userId));
+	const applicantRows = await db
+		.select({ id: applicants.id })
+		.from(applicants)
+		.where(eq(applicants.userId, userId));
+	const applicantIds = applicantRows.map((a) => a.id);
 
-	console.log(`[Auth/Security] Client user ${userId} permanently deleted`);
-	return { success: true };
+	const applicationRows = applicantIds.length
+		? await db
+				.select({ id: applications.id })
+				.from(applications)
+				.where(inArray(applications.applicantId, applicantIds))
+		: [];
+	const applicationIds = applicationRows.map((a) => a.id);
+
+	const consultationRows = applicantIds.length
+		? await db
+				.select({ id: consultations.id })
+				.from(consultations)
+				.where(inArray(consultations.applicantId, applicantIds))
+		: [];
+	const consultationIds = consultationRows.map((c) => c.id);
+
+	const conversationConditions = [eq(conversations.userId, userId)];
+	if (applicationIds.length) {
+		conversationConditions.push(
+			and(
+				eq(conversations.linkedEntityType, "application"),
+				inArray(conversations.linkedEntityId, applicationIds),
+			)!,
+		);
+	}
+	if (consultationIds.length) {
+		conversationConditions.push(
+			and(
+				eq(conversations.linkedEntityType, "consultation"),
+				inArray(conversations.linkedEntityId, consultationIds),
+			)!,
+		);
+	}
+	const conversationRows = await db
+		.select({ id: conversations.id })
+		.from(conversations)
+		.where(or(...conversationConditions));
+	const conversationIds = conversationRows.map((c) => c.id);
+
+	// Collect every storage key that must be deleted after the DB transaction.
+	const storageKeySet = new Set<string>();
+
+	// Avatar stored in our bucket (Better Auth itself may hold a public URL).
+	if (user.image && !/^https?:\/\//i.test(user.image)) {
+		storageKeySet.add(user.image);
+	}
+
+	// Applicant documents.
+	const documentRows = await db
+		.select({ storageKey: applicantDocuments.storageKey })
+		.from(applicantDocuments)
+		.where(eq(applicantDocuments.ownerUserId, userId));
+	for (const d of documentRows) storageKeySet.add(d.storageKey);
+
+	// Message attachments in conversations we are about to delete.
+	const attachmentsInDeletedConversations = conversationIds.length
+		? await db
+				.select({ storageKey: messageAttachments.storageKey })
+				.from(messageAttachments)
+				.innerJoin(messages, eq(messageAttachments.messageId, messages.id))
+				.where(inArray(messages.conversationId, conversationIds))
+		: [];
+	for (const a of attachmentsInDeletedConversations) storageKeySet.add(a.storageKey);
+
+	// Message attachments uploaded by the user in group conversations that
+	// survive the user deletion (their row is SET NULL, so we delete explicitly).
+	const attachmentsUploadedByUser = await db
+		.select({ id: messageAttachments.id, storageKey: messageAttachments.storageKey })
+		.from(messageAttachments)
+		.where(eq(messageAttachments.uploadedByUserId, userId));
+	for (const a of attachmentsUploadedByUser) storageKeySet.add(a.storageKey);
+
+	const storageKeys = Array.from(storageKeySet).filter(Boolean);
+	const attachmentIdsToDelete = attachmentsUploadedByUser.map((a) => a.id);
+
+	// Database transaction: delete child records that have no FK cascade or
+	// that we want gone before the user/applicant cascades fire.
+	await db.transaction(async (tx) => {
+		if (consultationIds.length) {
+			await tx
+				.delete(caseComments)
+				.where(
+					and(
+						eq(caseComments.targetType, "consultation"),
+						inArray(caseComments.targetId, consultationIds),
+					),
+				);
+		}
+		if (applicationIds.length) {
+			await tx
+				.delete(caseComments)
+				.where(
+					and(
+						eq(caseComments.targetType, "application"),
+						inArray(caseComments.targetId, applicationIds),
+					),
+				);
+		}
+
+		// Communication events: remove those tied to the user as actor or to
+		// applications we are deleting.
+		const eventConditions = [eq(communicationEvents.actorUserId, userId)];
+		if (applicationIds.length) {
+			eventConditions.push(inArray(communicationEvents.applicationId, applicationIds));
+		}
+		await tx.delete(communicationEvents).where(or(...eventConditions));
+
+		// Remove any message attachments the user uploaded outside their own
+		// conversations; this prevents broken attachment rows after the user FK
+		// is nulled.
+		if (attachmentIdsToDelete.length) {
+			await tx
+				.delete(messageAttachments)
+				.where(inArray(messageAttachments.id, attachmentIdsToDelete));
+		}
+
+		// Delete conversations owned by or linked to this client. This cascades
+		// to messages, message reactions, conversation participants, and
+		// communication events linked by conversation_id.
+		if (conversationIds.length) {
+			await tx
+				.delete(conversations)
+				.where(inArray(conversations.id, conversationIds));
+		}
+
+		// Delete the applicant (cascades applications → stage/case assignments
+		// → school applications, and consultations → consultation_activities).
+		if (applicantIds.length) {
+			await tx.delete(applicants).where(inArray(applicants.id, applicantIds));
+		}
+
+		// Finally delete the auth user. Cascades: sessions, accounts, two_factors,
+		// notification_preferences, notifications, bookings, applicant_documents,
+		// message_reactions, conversation_participants, and conversations.userId.
+		await tx.delete(users).where(eq(users.id, userId));
+	});
+
+	// Best-effort file cleanup after the DB transaction commits.
+	const storageErrors: string[] = [];
+	const storage = await getDocumentStorage();
+	if (storage.enabled) {
+		for (const key of storageKeys) {
+			try {
+				await storage.remove(key);
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				storageErrors.push(`${key}: ${message}`);
+				console.warn(
+					`[eraseClientUser] Failed to remove storage object ${key} for user ${userId}:`,
+					message,
+				);
+			}
+		}
+	}
+
+	console.log(
+		`[Auth/Security] Client user ${userId} permanently erased by ${actorName ?? "system"} ` +
+			`(${storageKeys.length} storage object(s); ${storageErrors.length} removal error(s))`,
+	);
+
+	return {
+		success: true,
+		...(storageErrors.length ? { storageErrors } : {}),
+	};
 }

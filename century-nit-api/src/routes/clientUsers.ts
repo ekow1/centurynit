@@ -208,19 +208,22 @@ clientUsersRouter.openapi(
 					"application/json": {
 						schema: z.object({
 							success: z.boolean(),
+							storageErrors: z.array(z.string()).optional(),
 						}),
 					},
 				},
-				description: "Client user permanently deleted",
+				description: "Client user permanently deleted. Storage cleanup errors, if any, are returned but do not fail the request.",
 			},
 		},
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
-		const result = await deleteClientUser(id);
+		const staff = c.get("staff");
+		const actorName = staff?.name || "Operations Staff";
+		const result = await deleteClientUser(id, actorName);
 		if (!result.success) {
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}
-		return c.json({ success: true });
+		return c.json(result);
 	},
 );

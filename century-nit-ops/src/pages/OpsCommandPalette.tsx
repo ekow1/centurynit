@@ -60,7 +60,7 @@ export function OpsCommandPalette() {
 		{ type: "Module", title: "Finance & Invoices", subtitle: "Revenue Analytics & Ledger", path: "/finance", module: "finance" },
 		{ type: "Module", title: "Universities", subtitle: "Institutions & Programs", path: "/universities", module: "universities" },
 		{ type: "Module", title: "Service Packages", subtitle: "Pricing & Tiers", path: "/packages", module: "packages" },
-		{ type: "Module", title: "Helpdesk", subtitle: "Support tickets & inquiries", path: "/helpdesk", module: "helpdesk" },
+		{ type: "Module", title: "Helpdesk", subtitle: "Client conversation queue", path: "/helpdesk", module: "helpdesk" },
 		{ type: "Module", title: "Marketing", subtitle: "Email & SMS campaigns", path: "/marketing", module: "marketing" },
 		{ type: "Module", title: "Notifications", subtitle: "Templates & Delivery Logs", path: "/notifications", module: "notifications" },
 		{ type: "Module", title: "System Settings", subtitle: "Configuration & Preferences", path: "/settings", module: "settings" },

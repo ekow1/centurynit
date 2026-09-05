@@ -1873,23 +1873,9 @@ export const PROCESS_STAGES: {
 ];
 
 /** Fee simulation amounts (USD) - GHS equivalents derived via GHS_RATE */
-import { DEFAULT_FEE_CENTS, usdFromCents } from "century-nit-shared";
+import { usdFromCents, type FeeSchedule } from "century-nit-shared";
 
-/** Stage fees in USD — derived from the shared cent schedule so portal and API cannot drift. */
-export const APP_INVOICE_BASE = usdFromCents(DEFAULT_FEE_CENTS.appBase);
-export const APP_INVOICE_PER_SCHOOL = usdFromCents(DEFAULT_FEE_CENTS.appPerSchool);
-export const VISA_INVOICE_AMOUNT = usdFromCents(DEFAULT_FEE_CENTS.visaBase);
-export const CONSULTATION_FEE_AMOUNT = usdFromCents(DEFAULT_FEE_CENTS.consultation);
-/** Suggested extras — handler/finance confirm these on the proforma. */
-export const APP_DOC_VERIFY_FEE = usdFromCents(DEFAULT_FEE_CENTS.appDocVerify);
-export const APP_MATCH_REVIEW_FEE = usdFromCents(DEFAULT_FEE_CENTS.appMatchReview);
-export const VISA_BIOMETRICS_FEE = usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics);
-export const VISA_TRANSLATION_FEE = usdFromCents(DEFAULT_FEE_CENTS.visaTranslation);
-/** GHS equivalents (auto-calculated at GHS_RATE = 15) */
-export const APP_INVOICE_BASE_GHS = APP_INVOICE_BASE * GHS_RATE;
-export const APP_INVOICE_PER_SCHOOL_GHS = APP_INVOICE_PER_SCHOOL * GHS_RATE;
-export const VISA_INVOICE_AMOUNT_GHS = VISA_INVOICE_AMOUNT * GHS_RATE;
-export const CONSULTATION_FEE_GHS = CONSULTATION_FEE_AMOUNT * GHS_RATE;
+/** Legacy apply wizard fee (kept for old routes) */
 export const APPLICATION_FEE_GHS = APPLICATION_FEE * GHS_RATE;
 export const APPLICATION_STAGE_FEE_GHS = APPLICATION_STAGE_FEE * GHS_RATE;
 export const VISA_STAGE_FEE_GHS = VISA_STAGE_FEE * GHS_RATE;
@@ -1901,76 +1887,84 @@ export type InvoiceLine = {
 	amount: number;
 };
 
-export function appInvoiceEstimateLines(schoolCount: number): InvoiceLine[] {
+export function appInvoiceEstimateLines(schoolCount: number, fees: FeeSchedule): InvoiceLine[] {
 	const count = Math.max(0, schoolCount);
+	const base = usdFromCents(fees.appBaseCents);
+	const perSchool = usdFromCents(fees.appPerSchoolCents);
 	return [
 		{
 			id: "app-base",
 			label: "Application processing",
 			detail: "Century desk setup, document handling & case opening",
-			amount: APP_INVOICE_BASE,
+			amount: base,
 		},
 		...(count > 0
 			? [
 					{
 						id: "app-per-school",
-						label: `University applications (${count} × $${APP_INVOICE_PER_SCHOOL})`,
+						label: `University applications (${count} × $${perSchool})`,
 						detail: "Per-institution submission & liaison fee",
-						amount: count * APP_INVOICE_PER_SCHOOL,
+						amount: count * perSchool,
 					},
 				]
 			: []),
 	];
 }
 
-export function appInvoiceActualLines(schoolCount: number): InvoiceLine[] {
+export function appInvoiceActualLines(schoolCount: number, fees: FeeSchedule): InvoiceLine[] {
+	const docVerify = usdFromCents(fees.appDocVerifyCents);
+	const matchReview = usdFromCents(fees.appMatchReviewCents);
 	return [
-		...appInvoiceEstimateLines(schoolCount),
+		...appInvoiceEstimateLines(schoolCount, fees),
 		{
 			id: "app-docs",
 			label: "Document verification & courier",
 			detail: "Transcripts and certificates verified and shipped",
-			amount: APP_DOC_VERIFY_FEE,
+			amount: docVerify,
 		},
 		{
 			id: "app-review",
 			label: "Course matching review",
 			detail: "Programme fit, credit mapping & offer comparison",
-			amount: APP_MATCH_REVIEW_FEE,
+			amount: matchReview,
 		},
 	];
 }
 
-export function visaInvoiceEstimateLines(): InvoiceLine[] {
+export function visaInvoiceEstimateLines(fees: FeeSchedule): InvoiceLine[] {
+	const visaBase = usdFromCents(fees.visaBaseCents);
 	return [
 		{
 			id: "visa-case",
 			label: "Visa case processing",
 			detail: "Visa desk opens your case and prepares the file",
-			amount: VISA_INVOICE_AMOUNT,
+			amount: visaBase,
 		},
 	];
 }
 
-export function visaInvoiceActualLines(): InvoiceLine[] {
+export function visaInvoiceActualLines(fees: FeeSchedule): InvoiceLine[] {
+	const visaBase = usdFromCents(fees.visaBaseCents);
+	const bio = usdFromCents(fees.visaBiometricsCents);
+	const trans = usdFromCents(fees.visaTranslationCents);
 	return [
 		{
 			id: "visa-case",
 			label: "Visa case processing",
 			detail: "Visa desk prepares your file and application pack",
-			amount: VISA_INVOICE_AMOUNT,
+			amount: visaBase,
 		},
 		{
 			id: "visa-bio",
 			label: "Biometrics appointment",
 			detail: "Embassy biometrics slot booking & guidance",
-			amount: VISA_BIOMETRICS_FEE,
+			amount: bio,
 		},
 		{
 			id: "visa-trans",
 			label: "Translation & courier",
 			detail: "Document translation and embassy courier",
-			amount: VISA_TRANSLATION_FEE,
+			amount: trans,
 		},
 	];
 }

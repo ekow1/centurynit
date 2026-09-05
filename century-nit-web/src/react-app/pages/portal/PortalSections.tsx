@@ -13,14 +13,13 @@ import {
 	type AssessmentData,
 	type StageInvoice,
 } from "../../context/AppState";
+import { FALLBACK_FEE_SCHEDULE } from "../../context/AppState";
+import { usdFromCents } from "century-nit-shared";
 import {
 	AGENCY_STAGES,
 	AGENCY_DEPOSIT_PORTION,
 	APPLICANT_COUNTRIES,
 	POST_ARRIVAL_SCHEDULES,
-	APP_INVOICE_BASE,
-	APP_INVOICE_PER_SCHOOL,
-	CONSULTATION_FEE_AMOUNT,
 	formatDualCurrency,
 	getDestination,
 	getProgram,
@@ -30,7 +29,6 @@ import {
 	PROCESS_STAGES,
 	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_TRACK_STATUS_LABELS,
-	VISA_INVOICE_AMOUNT,
 	REQUIRED_DOCUMENTS,
 	getBranchName,
 } from "century-nit-core";
@@ -115,6 +113,7 @@ export function PortalProfile() {
 		interview,
 		updateAssessment,
 		updateAccount,
+		fees,
 		setAvatarImage,
 	} = useAppState();
 	const a = application;
@@ -514,7 +513,7 @@ export function PortalProfile() {
 									label="Consultation Fee"
 									value={
 										booking.paymentStatus === "success"
-											? `Paid · ${formatDualCurrency(CONSULTATION_FEE_AMOUNT)}`
+											? `Paid · ${formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents))}`
 											: "Unpaid / Pending"
 									}
 								/>
@@ -770,7 +769,7 @@ export function PortalProfile() {
 									label="Consultation Fee"
 									value={
 										booking.paymentStatus === "success"
-											? `Paid · ${formatDualCurrency(CONSULTATION_FEE_AMOUNT)}`
+											? `Paid · ${formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents))}`
 											: "Unpaid"
 									}
 								/>
@@ -1057,8 +1056,7 @@ function ProfileEditForm({
 
 /** Journey - every stage with its status; the stage pages open below it. */
 export function PortalJourney() {
-	const { journeyPhase, application, schoolApplications, stageStatuses } =
-		useAppState();
+	const { journeyPhase, application, schoolApplications, stageStatuses } = useAppState();
 	const current = journeyPhase.stage;
 	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
 
@@ -1302,7 +1300,7 @@ function invoiceDetail(inv: StageInvoice) {
 
 /** Financial - every payment, settlement, and what's still outstanding. */
 export function PortalFinancial() {
-	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules } = useAppState();
+	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees } = useAppState();
 	const { toast } = useNotifier();
 	const a = application;
 
@@ -1370,7 +1368,7 @@ export function PortalFinancial() {
 	const visaInvoiceAmount = visaInvoiceType?.subtotalCents ?? a.visaInvoice.amount;
 
 	const totalPaid =
-		(consultationPaid ? CONSULTATION_FEE_AMOUNT : 0) +
+		(consultationPaid ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents) : 0) +
 		(appPaid ? appInvoiceAmount : 0) +
 		(visaPaid ? visaInvoiceAmount : 0) +
 		a.agencyPaid;
@@ -1397,9 +1395,9 @@ export function PortalFinancial() {
 
 	// Fees the applicant will owe but that have not been raised yet — without
 	// these the top band reads GH₵0 / GH₵0 for most of the journey
-	const appNotRaised = a.applicationInvoice.status === "none" ? APP_INVOICE_BASE : 0;
-	const visaNotRaised = a.visaInvoice.status === "none" ? VISA_INVOICE_AMOUNT : 0;
-	const notYetRaised = (consultationPaid ? 0 : CONSULTATION_FEE_AMOUNT) + appNotRaised + visaNotRaised;
+	const appNotRaised = a.applicationInvoice.status === "none" ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents) : 0;
+	const visaNotRaised = a.visaInvoice.status === "none" ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents) : 0;
+	const notYetRaised = (consultationPaid ? 0 : usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)) + appNotRaised + visaNotRaised;
 
 	// Every recorded payment across all invoices, newest first — shown as the
 	// "Payment receipts" section so the applicant can see what they've paid.
@@ -1484,7 +1482,7 @@ export function PortalFinancial() {
 					<LedgerRow
 						title={`Consultation fee · Stage I · ${booking.consultationType.replace("_", " ") || "-"}`}
 						status={consultationPaid ? "paid" : "none"}
-						amount={<Money usd={CONSULTATION_FEE_AMOUNT} negative={consultationPaid} />}
+						amount={<Money usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)} negative={consultationPaid} />}
 						detail={consultationPaid ? "Paid at booking" : "Pay when booking the consultation"}
 					/>
 					<LedgerRow
@@ -1503,6 +1501,20 @@ export function PortalFinancial() {
 						amount={invoiceAmount(a.visaInvoice)}
 						detail={invoiceDetail(a.visaInvoice)}
 					/>
+					{(() => {
+						const travelInvoice = invoicesLoaded ? invoices.find((i) => i.type === "travel") : null;
+						if (!travelInvoice) return null;
+						const travelStatus = travelInvoice.status === "paid" ? "paid" : travelInvoice.status === "partial" ? "raised" : "raised";
+						const travelAmount = travelInvoice.subtotalCents;
+						return (
+							<LedgerRow
+								title="Travel invoice · flights &amp; transfers"
+								status={travelStatus}
+								amount={<Money usd={travelAmount / 100} negative={travelStatus === "paid"} />}
+								detail={travelInvoice.status === "paid" ? "Paid" : travelInvoice.status === "partial" ? "Partially paid — balance outstanding" : "Awaiting payment"}
+							/>
+						);
+					})()}
 				</div>
 			</section>
 
@@ -1845,7 +1857,7 @@ export function PortalFinancial() {
 				<p className="muted" style={{ maxWidth: "36rem" }}>
 					Each invoice is itemised by your consultant and may add handling fees, so the
 					amounts above are the base figures. The application invoice grows by{" "}
-					<MoneyInline usd={APP_INVOICE_PER_SCHOOL} /> for each school you add. Cedi amounts
+					<MoneyInline usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents)} /> for each school you add. Cedi amounts
 					convert at GH₵{GHS_RATE} to $1. University tuition is never billed here — it is paid
 					directly to the institution.
 				</p>

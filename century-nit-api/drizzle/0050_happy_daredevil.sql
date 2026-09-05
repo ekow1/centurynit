@@ -1,0 +1,1 @@
+ALTER TABLE "applications" ADD COLUMN "travel_invoice_paid" boolean DEFAULT false NOT NULL;

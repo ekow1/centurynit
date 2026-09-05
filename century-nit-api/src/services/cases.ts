@@ -294,6 +294,15 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 		})
 		.where(eq(consultations.id, row.id));
 
+	// End the assignment history row.
+	const { endAssignment: endConsultAssignmentCancel } = await import("./caseAssignments.js");
+	await endConsultAssignmentCancel({
+		targetType: "consultation",
+		targetId: row.id,
+		endedBy: null,
+		endReason: "cancelled",
+	});
+
 	// Release the officer on the applicant record too; the assignment is tied
 	// to the live consultation/appointment, and once the appointment is gone
 	// the officer should no longer appear in the portal header.
@@ -652,6 +661,15 @@ export async function assignConsultation(input: {
 		.where(eq(consultations.id, row.id))
 		.returning();
 
+	// Record the assignment in the append-only history table.
+	const { startAssignment } = await import("./caseAssignments.js");
+	await startAssignment({
+		targetType: "consultation",
+		targetId: row.id,
+		opsUserId: input.employeeId,
+		assignedBy: input.actor.opsUserId,
+	});
+
 	await db
 		.update(applicants)
 		.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
@@ -863,6 +881,15 @@ export async function completeConsultationAssessment(input: {
 		})
 		.where(eq(consultations.id, row.id))
 		.returning();
+
+	// End the assignment history row — the consultation is closed.
+	const { endAssignment: endConsultAssignmentComplete } = await import("./caseAssignments.js");
+	await endConsultAssignmentComplete({
+		targetType: "consultation",
+		targetId: row.id,
+		endedBy: input.actor.opsUserId,
+		endReason: "completed",
+	});
 
 	await db.insert(caseComments).values({
 		targetType: "consultation",
@@ -1084,6 +1111,15 @@ export async function assignApplication(input: {
 		.set({ assignedStaffId: input.employeeId, updatedAt: new Date() })
 		.where(eq(applications.id, row.id))
 		.returning();
+
+	// Record the assignment in the append-only history table.
+	const { startAssignment: startAppAssignment } = await import("./caseAssignments.js");
+	await startAppAssignment({
+		targetType: "application",
+		targetId: row.id,
+		opsUserId: input.employeeId,
+		assignedBy: input.actor.opsUserId,
+	});
 
 	await db
 		.update(applicants)

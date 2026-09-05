@@ -45,6 +45,7 @@ export const calendarQueue = new Queue("calendar", { connection });
 export const pushQueue = new Queue("push", { connection });
 export const meetingStatusQueue = new Queue("meetingStatus", { connection });
 export const documentCleanupQueue = new Queue("documentCleanup", { connection });
+export const campaignQueue = new Queue("campaign", { connection });
 
 /* ── Email ───────────────────────────────────────────────────────────────── */
 
@@ -192,4 +193,42 @@ export type PushJob = {
 export async function queuePush(job: PushJob): Promise<void> {
 	const id = `push:${job.notification.id}:${job.userId}`;
 	await pushQueue.add("send", job, { ...RETRY, jobId: toJobId(id) });
+}
+
+/* ── Campaign ────────────────────────────────────────────────────────────── */
+
+/**
+ * Queue a marketing campaign send.
+ *
+ * `delayMs` moves the job to the future, which is how scheduled campaigns are
+ * fired — no separate timer is needed. A stable job id collapses double-clicks
+ * into one enqueue, and the completed job is removed so a re-send after a
+ * partial failure can reuse the id. The worker reads the campaign + its
+ * recipient ledger from the DB, so edits made while scheduled apply.
+ */
+export async function queueCampaignSend(campaignId: string, delayMs = 0): Promise<void> {
+	const id = `campaign:send:${campaignId}`;
+	await campaignQueue.add(
+		"send",
+		{ campaignId },
+		{
+			attempts: 3,
+			backoff: { type: "exponential", delay: 10_000 },
+			jobId: toJobId(id),
+			...(delayMs > 0 ? { delay: delayMs } : {}),
+			removeOnComplete: true,
+			removeOnFail: 500,
+		},
+	);
+}
+
+/** Remove a queued (delayed) campaign send that has not started yet. */
+export async function cancelQueuedCampaignSend(campaignId: string): Promise<void> {
+	const id = toJobId(`campaign:send:${campaignId}`);
+	const job = await campaignQueue.getJob(id);
+	if (job && !(await job.isActive())) {
+		await job.remove().catch(() => {
+			/* already gone or running — nothing to do */
+		});
+	}
 }

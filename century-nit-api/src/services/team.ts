@@ -1,11 +1,11 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { applications, consultations, tickets, opsUsers, applicants } from "../db/schema.js";
+import { applications, consultations, opsUsers, applicants } from "../db/schema.js";
 import type { StaffContext } from "../middleware/auth.js";
 
 export type TeamAssignment = {
 	id: string;
-	type: "case" | "consultation" | "ticket";
+	type: "case" | "consultation";
 	reference: string;
 	clientName: string;
 	clientEmail: string | null;
@@ -45,11 +45,8 @@ export async function getTeamAssignments(
 	const consultWhere = staffIds
 		? and(isNotNull(consultations.assignedOfficerId), inArray(consultations.assignedOfficerId, staffIds))
 		: isNotNull(consultations.assignedOfficerId);
-	const ticketWhere = staffIds
-		? and(isNotNull(tickets.assignedStaffId), inArray(tickets.assignedStaffId, staffIds))
-		: isNotNull(tickets.assignedStaffId);
 
-	const [caseRows, consultationRows, ticketRows] = await Promise.all([
+	const [caseRows, consultationRows] = await Promise.all([
 		db
 			.select({
 				id: applications.id,
@@ -84,23 +81,6 @@ export async function getTeamAssignments(
 			.innerJoin(applicants, eq(consultations.applicantId, applicants.id))
 			.leftJoin(opsUsers, eq(consultations.assignedOfficerId, opsUsers.id))
 			.where(consultWhere),
-
-		db
-			.select({
-				id: tickets.id,
-				reference: tickets.subject,
-				clientName: tickets.applicantName,
-				clientEmail: sql<string | null>`NULL`,
-				assignedStaffId: tickets.assignedStaffId,
-				assignedStaffName: opsUsers.name,
-				assignedStaffEmail: opsUsers.email,
-				status: tickets.status,
-				priority: tickets.priority,
-				updatedAt: tickets.updatedAt,
-			})
-			.from(tickets)
-			.leftJoin(opsUsers, eq(tickets.assignedStaffId, opsUsers.id))
-			.where(ticketWhere),
 	]);
 
 	const out: TeamAssignment[] = [
@@ -135,21 +115,6 @@ export async function getTeamAssignments(
 			priority: null,
 			updatedAt: toIso(r.updatedAt),
 			link: `/consultations`,
-		})),
-		...ticketRows.map((r) => ({
-			id: r.id,
-			type: "ticket" as const,
-			reference: r.reference ?? r.id,
-			clientName: r.clientName ?? "Client",
-			clientEmail: r.clientEmail ?? null,
-			assignedStaffId: r.assignedStaffId,
-			assignedStaffName: r.assignedStaffName,
-			assignedStaffEmail: r.assignedStaffEmail,
-			stageOrStatus: r.status ?? "open",
-			stageOrStatusLabel: r.status ? r.status.replace(/\b\w/g, (c) => c.toUpperCase()) : "Open",
-			priority: r.priority ?? null,
-			updatedAt: toIso(r.updatedAt),
-			link: `/helpdesk`,
 		})),
 	];
 

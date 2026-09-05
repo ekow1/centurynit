@@ -275,9 +275,7 @@ export function useCasesApi() {
 			t === "status_changed" ||
 			t === "consultant_assigned" ||
 			t === "auto_escalated" ||
-			t === "document.uploaded" ||
-			t === "ticket.new" ||
-			t === "ticket.assigned"
+			t === "document.uploaded"
 		) {
 			if (refreshTimer.current) clearTimeout(refreshTimer.current);
 			refreshTimer.current = setTimeout(() => void refreshRef.current(), 1500);

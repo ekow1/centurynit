@@ -346,6 +346,12 @@ export function EnterpriseWorkflow() {
 												</p>
 
 											{/* Stage-specific mini indicators */}
+											{stage === "document_verification" && !app.agencySettled && app.agencyStageIndex === 0 && (
+												<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
+													<span className="wf-badge wf-badge--warn">Deposit Unpaid</span>
+												</div>
+											)}
+
 											{stage === "school_submission" && !app.appFeePaid && (
 												<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
 													<span className="wf-badge wf-badge--warn">App Fee Unpaid</span>

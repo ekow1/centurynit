@@ -12,9 +12,13 @@ import {
 } from "../db/schema.js";
 import { requireAuth, requireStaff, type AuthVariables } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
-import { sendEmail } from "../lib/resend.js";
 import { env } from "../env.js";
 import { NEWSLETTER_LIST_NAME, sendConfirmationEmail } from "./newsletter.js";
+import {
+	enqueueCampaignSend,
+	cancelCampaignSend,
+} from "../services/marketing.js";
+import { campaignRecipients } from "../db/schema.js";
 
 /* ── Schemas ─────────────────────────────────────────────────────────────── */
 
@@ -31,6 +35,7 @@ const campaignSchema = z.object({
 	mailingListId: z.string().uuid().nullable(),
 	sentBy: z.string().nullable(),
 	sentAt: z.string().nullable(),
+	scheduledAt: z.string().nullable(),
 	recipientCount: z.number(),
 	deliveredCount: z.number(),
 	failedCount: z.number(),
@@ -97,24 +102,6 @@ function serializeContact(r: typeof mailingListContacts.$inferSelect) {
 	};
 }
 
-/**
- * Give a contact an unsubscribe token if it somehow lacks one.
- *
- * Every campaign email must carry a working opt-out link, and that link is
- * keyed on this token. Rows created before tokens were mandatory have NULL
- * here — rather than shipping those recipients unsubscription-less mail, mint
- * a token at send time and persist it.
- */
-async function ensureConfirmToken(contactId: string, current: string | null): Promise<string> {
-	if (current) return current;
-	const token = randomUUID();
-	await db
-		.update(mailingListContacts)
-		.set({ confirmToken: token })
-		.where(eq(mailingListContacts.id, contactId));
-	return token;
-}
-
 const campaignIdParams = z.object({
 	id: z.string().uuid(),
 });
@@ -168,78 +155,6 @@ const updateTemplateBodySchema = z.object({
 	footer: z.string().optional().nullable(),
 });
 
-/* ── Email layout helper ─────────────────────────────────────────────────── */
-
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
-}
-
-function emailLayout({
-	title,
-	bodyHtml,
-	footerNote,
-}: {
-	title: string;
-	bodyHtml: string;
-	footerNote?: string;
-}): string {
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>${escapeHtml(title)}</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Georgia,'Times New Roman',Times,serif;-webkit-font-smoothing:antialiased;color:#000000;">
-	<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f5f5f5;padding:32px 16px;">
-		<tr>
-			<td align="center">
-				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width:580px;background-color:#ffffff;border:4px solid #000000;">
-					<tr>
-						<td style="background-color:#000000;padding:28px 36px;text-align:left;border-bottom:4px solid #000000;">
-							<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
-								<tr>
-									<td>
-										<div style="display:inline-block;padding:3px 8px;border:1px solid #ffffff;margin-bottom:8px;">
-											<span style="color:#ffffff;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">Century NIT</span>
-										</div>
-										<h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;font-family:Georgia,'Times New Roman',Times,serif;">
-											${escapeHtml(title)}
-										</h1>
-									</td>
-								</tr>
-							</table>
-						</td>
-					</tr>
-					<tr>
-						<td style="padding:36px 36px 28px 36px;font-size:15px;line-height:1.65;color:#000000;">
-							${bodyHtml}
-						</td>
-					</tr>
-					<tr>
-						<td style="background-color:#f5f5f5;padding:24px 36px;border-top:2px solid #000000;text-align:center;font-size:12px;line-height:1.6;color:#666666;">
-							${footerNote ? `<p style="margin:0 0 8px 0;color:#999999;">${footerNote}</p>` : ""}
-							<p style="margin:0;font-weight:600;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:11px;letter-spacing:0.5px;">
-								Century NIT Consult
-							</p>
-							<p style="margin:4px 0 0 0;color:#999999;">
-								Accra, Ghana &bull; London, UK &bull; support@centurynit.com
-							</p>
-						</td>
-					</tr>
-				</table>
-			</td>
-		</tr>
-	</table>
-</body>
-</html>`;
-}
-
 /* ── Router ──────────────────────────────────────────────────────────────── */
 
 export const marketingRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
@@ -277,6 +192,7 @@ marketingRouter.openapi(
 			const campaigns = rows.map((r) => ({
 				...r,
 				sentAt: r.sentAt?.toISOString() ?? null,
+				scheduledAt: r.scheduledAt?.toISOString() ?? null,
 				createdAt: r.createdAt.toISOString(),
 				updatedAt: r.updatedAt.toISOString(),
 			}));
@@ -337,6 +253,7 @@ marketingRouter.openapi(
 			const campaign = {
 				...inserted,
 				sentAt: inserted.sentAt?.toISOString() ?? null,
+				scheduledAt: inserted.scheduledAt?.toISOString() ?? null,
 				createdAt: inserted.createdAt.toISOString(),
 				updatedAt: inserted.updatedAt.toISOString(),
 			};
@@ -350,6 +267,12 @@ marketingRouter.openapi(
 );
 
 /* ── POST /campaigns/:id/send ────────────────────────────────────────────── */
+/* Queue the send. An optional `scheduleFor` moves the job to that instant;   */
+/* without it the campaign fires as soon as the worker picks the job up.      */
+
+const sendCampaignBodySchema = z.object({
+	scheduleFor: z.string().datetime().optional().nullable(),
+});
 
 marketingRouter.openapi(
 	createRoute({
@@ -359,6 +282,10 @@ marketingRouter.openapi(
 		middleware: [requireAuth, requireStaff] as const,
 		request: {
 			params: campaignIdParams,
+			body: {
+				content: { "application/json": { schema: sendCampaignBodySchema } },
+				required: true,
+			},
 		},
 		responses: {
 			200: {
@@ -366,18 +293,19 @@ marketingRouter.openapi(
 					"application/json": {
 						schema: z.object({
 							campaign: campaignSchema,
-							delivered: z.number(),
-							failed: z.number(),
+							enqueued: z.number(),
+							scheduledFor: z.string().nullable(),
 						}),
 					},
 				},
-				description: "Campaign sent",
+				description: "Campaign send queued",
 			},
 		},
 	}),
 	async (c) => {
 		try {
 			const { id } = c.req.valid("param");
+			const body = c.req.valid("json");
 			const staff = c.get("staff");
 
 			const [campaign] = await db
@@ -398,7 +326,7 @@ marketingRouter.openapi(
 				throw new HttpError(
 					400,
 					"NO_MAILING_LIST",
-					" Campaign has no mailing list assigned",
+					"Campaign has no mailing list assigned",
 				);
 			}
 
@@ -406,81 +334,297 @@ marketingRouter.openapi(
 				throw new HttpError(400, "NO_SUBJECT", "Campaign has no subject line");
 			}
 
-			const contacts = await db
-				.select()
-				.from(mailingListContacts)
-				.where(
-					and(
-						eq(mailingListContacts.mailingListId, campaign.mailingListId),
-						eq(mailingListContacts.status, "confirmed"),
-					),
-				);
-
-			if (contacts.length === 0) {
-				throw new HttpError(400, "EMPTY_LIST", "Mailing list has no confirmed subscribers");
-			}
-
-			let delivered = 0;
-			let failed = 0;
-
-			for (const contact of contacts) {
-				const contactName = contact.name ?? "there";
-				const personalizedSubject = campaign.subject
-					.replace(/\{\{name\}\}/g, contactName)
-					.replace(/\{\{Name\}\}/g, contactName);
-				const personalizedBody = campaign.body
-					.replace(/\{\{name\}\}/g, contactName)
-					.replace(/\{\{Name\}\}/g, contactName);
-
-				const unsubscribeToken = await ensureConfirmToken(contact.id, contact.confirmToken);
-				const unsubscribeUrl = `${env.FRONTEND_URL}/newsletter/unsubscribe?token=${unsubscribeToken}`;
-				const footerNote = `You're receiving this because you subscribed to Century NIT updates. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`;
-
-				const html = emailLayout({
-					title: personalizedSubject,
-					bodyHtml: personalizedBody,
-					footerNote,
-				});
-
-				try {
-					await sendEmail({
-						to: contact.email,
-						subject: personalizedSubject,
-						html,
-					});
-					delivered++;
-				} catch (err) {
-					console.error(`[marketing] Failed to send to ${contact.email}:`, err);
-					failed++;
+			let scheduleFor: Date | null = null;
+			if (body.scheduleFor) {
+				scheduleFor = new Date(body.scheduleFor);
+				if (Number.isNaN(scheduleFor.getTime())) {
+					throw new HttpError(400, "INVALID_SCHEDULE", "scheduleFor is not a valid date");
 				}
 			}
 
-			const [updated] = await db
+			const enqueued = await enqueueCampaignSend(
+				id,
+				scheduleFor && scheduleFor.getTime() > Date.now() ? scheduleFor : undefined,
+			);
+
+			if (enqueued === 0) {
+				throw new HttpError(400, "EMPTY_LIST", "Mailing list has no confirmed subscribers");
+			}
+
+			await db
 				.update(marketingCampaigns)
-				.set({
-					status: "sent",
-					sentAt: new Date(),
-					sentBy: staff?.opsUserId ?? null,
-					recipientCount: contacts.length,
-					deliveredCount: delivered,
-					failedCount: failed,
-					updatedAt: new Date(),
-				})
+				.set({ sentBy: staff?.opsUserId ?? null, updatedAt: new Date() })
+				.where(eq(marketingCampaigns.id, id));
+
+			const [updated] = await db
+				.select()
+				.from(marketingCampaigns)
 				.where(eq(marketingCampaigns.id, id))
-				.returning();
+				.limit(1);
 
 			const result = {
 				...updated,
 				sentAt: updated.sentAt?.toISOString() ?? null,
+				scheduledAt: updated.scheduledAt?.toISOString() ?? null,
 				createdAt: updated.createdAt.toISOString(),
 				updatedAt: updated.updatedAt.toISOString(),
 			};
 
-			return c.json({ campaign: result, delivered, failed });
+			return c.json({
+				campaign: result,
+				enqueued,
+				scheduledFor: result.scheduledAt,
+			});
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
 			console.error("[marketing] POST /campaigns/:id/send error:", err);
-			throw new HttpError(500, "INTERNAL", "Failed to send campaign");
+			throw new HttpError(500, "INTERNAL", "Failed to queue campaign send");
+		}
+	},
+);
+
+/* ── PUT /campaigns/:id ──────────────────────────────────────────────────── */
+/* Edit a draft/scheduled campaign. A scheduled campaign's queued job reads   */
+/* the campaign from the DB at run time, so subject/body edits apply.         */
+
+const updateCampaignBodySchema = z.object({
+	name: z.string().min(1).optional(),
+	channel: z.string().optional(),
+	audience: z.string().optional().nullable(),
+	subject: z.string().optional().nullable(),
+	body: z.string().min(1).optional(),
+	templateId: z.string().uuid().optional().nullable(),
+	mailingListId: z.string().uuid().optional().nullable(),
+});
+
+marketingRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/campaigns/{id}",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: {
+			params: campaignIdParams,
+			body: {
+				content: { "application/json": { schema: updateCampaignBodySchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ campaign: campaignSchema }),
+					},
+				},
+				description: "Campaign updated",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id } = c.req.valid("param");
+			const body = c.req.valid("json");
+
+			const [existing] = await db
+				.select()
+				.from(marketingCampaigns)
+				.where(eq(marketingCampaigns.id, id))
+				.limit(1);
+
+			if (!existing) {
+				throw new HttpError(404, "NOT_FOUND", "Campaign not found");
+			}
+
+			if (existing.status === "sent") {
+				throw new HttpError(
+					400,
+					"ALREADY_SENT",
+					"Sent campaigns are immutable — clone it to edit",
+				);
+			}
+
+			const updateData: Record<string, unknown> = { updatedAt: new Date() };
+			if (body.name !== undefined) updateData.name = body.name;
+			if (body.channel !== undefined) updateData.channel = body.channel;
+			if (body.audience !== undefined) updateData.audience = body.audience;
+			if (body.subject !== undefined) updateData.subject = body.subject;
+			if (body.body !== undefined) updateData.body = body.body;
+			if (body.templateId !== undefined) updateData.templateId = body.templateId;
+			if (body.mailingListId !== undefined) updateData.mailingListId = body.mailingListId;
+
+			const [updated] = await db
+				.update(marketingCampaigns)
+				.set(updateData)
+				.where(eq(marketingCampaigns.id, id))
+				.returning();
+
+			const campaign = {
+				...updated,
+				sentAt: updated.sentAt?.toISOString() ?? null,
+				scheduledAt: updated.scheduledAt?.toISOString() ?? null,
+				createdAt: updated.createdAt.toISOString(),
+				updatedAt: updated.updatedAt.toISOString(),
+			};
+
+			return c.json({ campaign });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] PUT /campaigns/:id error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to update campaign");
+		}
+	},
+);
+
+/* ── DELETE /campaigns/:id ───────────────────────────────────────────────── */
+/* Removes any queued send job and the recipient ledger, then the campaign.   */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/campaigns/{id}",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: campaignIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": { schema: z.object({ success: z.boolean() }) },
+				},
+				description: "Campaign deleted",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id } = c.req.valid("param");
+
+			const [existing] = await db
+				.select()
+				.from(marketingCampaigns)
+				.where(eq(marketingCampaigns.id, id))
+				.limit(1);
+
+			if (!existing) {
+				throw new HttpError(404, "NOT_FOUND", "Campaign not found");
+			}
+
+			if (existing.status === "scheduled") {
+				await cancelCampaignSend(id);
+			}
+
+			await db.delete(marketingCampaigns).where(eq(marketingCampaigns.id, id));
+
+			return c.json({ success: true });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] DELETE /campaigns/:id error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to delete campaign");
+		}
+	},
+);
+
+/* ── GET /campaigns/:id/recipients ───────────────────────────────────────── */
+/* Per-recipient delivery ledger for the campaign.                            */
+
+const recipientListQuery = z.object({
+	status: z.enum(["pending", "sent", "failed", "skipped"]).optional(),
+	q: z.string().optional(),
+	limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+	offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
+const recipientSchema = z.object({
+	id: z.string().uuid(),
+	campaignId: z.string().uuid(),
+	contactId: z.string().uuid().nullable(),
+	email: z.string(),
+	name: z.string().nullable(),
+	status: z.string(),
+	sentAt: z.string().nullable(),
+	error: z.string().nullable(),
+	createdAt: z.string(),
+});
+
+marketingRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/campaigns/{id}/recipients",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: {
+			params: campaignIdParams,
+			query: recipientListQuery,
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							recipients: z.array(recipientSchema),
+							total: z.number(),
+						}),
+					},
+				},
+				description: "Per-recipient delivery ledger",
+			},
+		},
+	}),
+	async (c) => {
+		try {
+			const { id } = c.req.valid("param");
+			const { status, q, limit, offset } = c.req.valid("query");
+
+			const [campaign] = await db
+				.select({ id: marketingCampaigns.id })
+				.from(marketingCampaigns)
+				.where(eq(marketingCampaigns.id, id))
+				.limit(1);
+
+			if (!campaign) {
+				throw new HttpError(404, "NOT_FOUND", "Campaign not found");
+			}
+
+			const conditions = [eq(campaignRecipients.campaignId, id)];
+			if (status) conditions.push(eq(campaignRecipients.status, status));
+			if (q) {
+				const like = `%${q.toLowerCase()}%`;
+				conditions.push(
+					sql`(lower(${campaignRecipients.email}) like ${like} or lower(coalesce(${campaignRecipients.name}, '')) like ${like})`,
+				);
+			}
+			const where = and(...conditions);
+
+			const [countRow] = await db
+				.select({ total: sql<number>`count(*)::int` })
+				.from(campaignRecipients)
+				.where(where);
+
+			const rows = await db
+				.select()
+				.from(campaignRecipients)
+				.where(where)
+				.orderBy(sql`${campaignRecipients.createdAt} desc`)
+				.limit(limit)
+				.offset(offset);
+
+			const recipients = rows.map((r) => ({
+				id: r.id,
+				campaignId: r.campaignId,
+				contactId: r.contactId,
+				email: r.email,
+				name: r.name,
+				status: r.status,
+				sentAt: r.sentAt?.toISOString() ?? null,
+				error: r.error,
+				createdAt: r.createdAt.toISOString(),
+			}));
+
+			return c.json({ recipients, total: countRow?.total ?? 0 });
+		} catch (err) {
+			if (err instanceof HttpError) throw err;
+			console.error("[marketing] GET /campaigns/:id/recipients error:", err);
+			throw new HttpError(500, "INTERNAL", "Failed to list recipients");
 		}
 	},
 );

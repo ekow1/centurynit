@@ -18,10 +18,10 @@ import {
 	type InvoiceLine,
 	type SchoolApplicationTrack,
 	type StageInvoice,
+	FALLBACK_FEE_SCHEDULE,
 } from "../../context/AppState";
+import { usdFromCents } from "century-nit-shared";
 import {
-	APP_INVOICE_BASE,
-	APP_INVOICE_PER_SCHOOL,
 	destinations,
 	formatDualCurrency,
 	getDestination,
@@ -34,8 +34,6 @@ import {
 	SCHOOL_FUNDING_TRACKS,
 	serviceFeeFor,
 	SCHOOL_TRACK_STATUS_LABELS,
-	VISA_INVOICE_AMOUNT,
-	CONSULTATION_FEE_AMOUNT,
 	type SchoolDegreeLevel,
 	type PaymentPlanId,
 	type SchoolFundingTrack,
@@ -1459,8 +1457,11 @@ export function PortalConsultationBookingFlow() {
 	const [selectedTab, setSelectedTab] = useState(0);
 
 	// Live consultation fee (USD) from platform_settings — what ops configured,
-	// not the hardcoded default. Falls back to CONSULTATION_FEE_AMOUNT on error.
-	const [consultationFeeUsd, setConsultationFeeUsd] = useState<number>(CONSULTATION_FEE_AMOUNT);
+	// not the hardcoded default. Falls back to FALLBACK_FEE_SCHEDULE on error.
+	const { fees } = useAppState();
+	const [consultationFeeUsd, setConsultationFeeUsd] = useState<number>(
+		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)
+	);
 	useEffect(() => {
 		let active = true;
 		(async () => {
@@ -2177,6 +2178,7 @@ function ApplicationHubInner() {
 		removeSchoolApplication,
 		lockSchoolSelection,
 		booking,
+		fees,
 	} = useAppState();
 	const nav = useNavigate();
 
@@ -2257,7 +2259,7 @@ function ApplicationHubInner() {
 	const program = getProgram(progId);
 	const intakes = program?.intake ?? ["September 2026", "January 2027"];
 	const previewAmount =
-		APP_INVOICE_BASE + Math.max(0, schoolApplications.length) * APP_INVOICE_PER_SCHOOL;
+		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents) + Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
 
 	async function payInvoice() {
 		setPayPhase("loading");
@@ -2551,11 +2553,11 @@ function ApplicationHubInner() {
 							</li>
 							<li>
 								<span>Base</span>
-								<strong>{formatDualCurrency(APP_INVOICE_BASE)}</strong>
+								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents))}</strong>
 							</li>
 							<li>
 								<span>Per school</span>
-								<strong>{formatDualCurrency(APP_INVOICE_PER_SCHOOL)}</strong>
+								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))}</strong>
 							</li>
 						</ul>
 					}
@@ -3039,13 +3041,13 @@ export function PortalVisa() {
 }
 
 function VisaHubInner() {
-	const { application, schoolApplications } = useAppState();
+	const { application, schoolApplications, fees } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.status === "accepted" || s.status === "offer");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	const paid = inv.status === "paid";
-	const amount = inv.amount || VISA_INVOICE_AMOUNT;
+	const amount = inv.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
 
 	const nav = useNavigate();
 	const { toast } = useNotifier();

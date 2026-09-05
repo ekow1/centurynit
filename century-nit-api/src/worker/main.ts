@@ -2,12 +2,14 @@ import { emailWorker } from "./email.js";
 import { feedsWorker } from "./feeds.js";
 import { meetingStatusWorker } from "./meeting-status.js";
 import { documentCleanupWorker } from "./document-cleanup.js";
+import { campaignWorker } from "./campaign.js";
 import {
 	connection,
 	emailQueue,
 	calendarQueue,
 	meetingStatusQueue,
 	documentCleanupQueue,
+	campaignQueue,
 	scheduleFeedSyncs,
 	scheduleMeetingStatusPolls,
 	scheduleDocumentCleanup,
@@ -39,6 +41,7 @@ const workers = [
 	{ name: "feeds", worker: feedsWorker },
 	{ name: "meetingStatus", worker: meetingStatusWorker },
 	{ name: "documentCleanup", worker: documentCleanupWorker },
+	{ name: "campaign", worker: campaignWorker },
 ];
 
 console.log(
@@ -85,6 +88,7 @@ async function shutdown(signal: string) {
 			calendarQueue.close(),
 			meetingStatusQueue.close(),
 			documentCleanupQueue.close(),
+			campaignQueue.close(),
 		]);
 		await connection.quit();
 		clearTimeout(timeout);

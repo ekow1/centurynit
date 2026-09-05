@@ -4,6 +4,7 @@ import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
 import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContacts } from "./notify.js";
 import { queueEmails } from "../worker/queues.js";
 import { leadCreatedForManager } from "./notifications.js";
+import { HttpError } from "../middleware/error.js";
 
 export interface LeadView {
 	id: string;
@@ -321,6 +322,19 @@ export async function createManualLead(input: {
 	notes?: string | null;
 }): Promise<LeadView> {
 	const normalizedEmail = input.email.toLowerCase().trim();
+
+	// `leads.email` is unique — a second row for the same address is a
+	// duplicate, not a new lead.
+	const duplicate = await db.query.leads.findFirst({
+		where: eq(leads.email, normalizedEmail),
+	});
+	if (duplicate) {
+		throw new HttpError(
+			409,
+			"DUPLICATE",
+			"A lead with this email already exists",
+		);
+	}
 
 	const [created] = await db
 		.insert(leads)

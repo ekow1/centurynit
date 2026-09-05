@@ -1,25 +1,23 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCases } from "../hooks/useCases";
-import { useTicketsApi } from "../hooks/useTicketsApi";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useChatHub } from "./ChatHubContext";
 import { UnassignedQueue } from "./UnassignedBookings";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 /**
- * Unified row shape built from the shared cases store + tickets hook.
+ * Unified row shape built from the shared cases store.
  *
  * Previously this page called `GET /team/assignments` — a bespoke endpoint
  * that duplicated the data already in `useCases()` (applications +
- * consultations) and `useTicketsApi()` (tickets). That endpoint is now
- * retired; the rows below are derived from the same single source of
- * truth every other page uses, so there is no second API to keep in
- * sync and no heuristic stage mapping.
+ * consultations). That endpoint is now retired; the rows below are derived
+ * from the same single source of truth every other page uses, so there is no
+ * second API to keep in sync and no heuristic stage mapping.
  */
 type AssignmentRow = {
 	id: string;
-	type: "case" | "consultation" | "ticket";
+	type: "case" | "consultation";
 	reference: string;
 	clientName: string;
 	clientEmail: string | null;
@@ -33,12 +31,11 @@ type AssignmentRow = {
 	link: string;
 };
 
-const TYPES = ["all", "case", "consultation", "ticket", "unassigned"] as const;
+const TYPES = ["all", "case", "consultation", "unassigned"] as const;
 const TYPE_LABELS: Record<string, string> = {
 	all: "All Records",
 	case: "Cases",
 	consultation: "Consultations",
-	ticket: "Tickets",
 	unassigned: "Unassigned Queue",
 };
 
@@ -60,48 +57,38 @@ function relativeTime(iso: string) {
  * Stage progress derived from the real enum values, not string
  * `includes()` heuristics. Cases use `JOURNEY_STAGES` — the same array
  * the Workflow board and Applications page use — so a case is always on
- * the same step here as it is there. Consultations and tickets map their
- * status enum directly to a step.
+ * the same step here as it is there. Consultations map their status enum
+ * directly to a step.
  */
-function getStageProgress(type: "case" | "consultation" | "ticket", stageOrStatus: string): { step: number; total: number; label: string } {
+function getStageProgress(type: "case" | "consultation", stageOrStatus: string): { step: number; total: number; label: string } {
 	if (type === "case") {
 		const idx = JOURNEY_STAGES.indexOf(stageOrStatus as JourneyStage);
 		const step = idx >= 0 ? idx + 1 : 1;
 		const label = JOURNEY_STAGE_LABELS[stageOrStatus as JourneyStage] ?? stageOrStatus;
 		return { step, total: JOURNEY_STAGES.length, label };
 	}
-	if (type === "consultation") {
-		const map: Record<string, { step: number; label: string }> = {
-			"Under Review": { step: 1, label: "Under Review" },
-			"Assigned": { step: 2, label: "Assigned" },
-			"Confirmed": { step: 2, label: "Confirmed" },
-			"In Assessment": { step: 3, label: "In Assessment" },
-			"Completed": { step: 4, label: "Completed" },
-			"Cancelled": { step: 0, label: "Cancelled" },
-		};
-		return { step: map[stageOrStatus]?.step ?? 1, total: 4, label: map[stageOrStatus]?.label ?? stageOrStatus };
-	}
 	const map: Record<string, { step: number; label: string }> = {
-		"Open": { step: 1, label: "Open" },
-		"In Progress": { step: 2, label: "In Progress" },
-		"Waiting": { step: 2, label: "Waiting" },
-		"Resolved": { step: 3, label: "Resolved" },
+		"Under Review": { step: 1, label: "Under Review" },
+		"Assigned": { step: 2, label: "Assigned" },
+		"Confirmed": { step: 2, label: "Confirmed" },
+		"In Assessment": { step: 3, label: "In Assessment" },
+		"Completed": { step: 4, label: "Completed" },
+		"Cancelled": { step: 0, label: "Cancelled" },
 	};
-	return { step: map[stageOrStatus]?.step ?? 1, total: 3, label: map[stageOrStatus]?.label ?? stageOrStatus };
+	return { step: map[stageOrStatus]?.step ?? 1, total: 4, label: map[stageOrStatus]?.label ?? stageOrStatus };
 }
 
 export function EnterpriseTeamAssignments() {
 	const { scopeRecords } = useOpsAuth();
 	const { applications, consultations, assignees, loading: casesLoading, error: casesError, refresh: refreshCases } = useCases();
-	const { tickets, loading: ticketsLoading, error: ticketsError, refreshTickets } = useTicketsApi();
 	const [type, setType] = useState<(typeof TYPES)[number]>("all");
 	const [selectedStaff, setSelectedStaff] = useState<string>("all");
 	const [search, setSearch] = useState("");
 
 	const { openDM } = useChatHub();
 
-	const loading = casesLoading || ticketsLoading;
-	const error = casesError ?? ticketsError;
+	const loading = casesLoading;
+	const error = casesError;
 
 	const staffIdByEmail = (email: string) => assignees.find((a) => a.email === email)?.opsUserId ?? null;
 
@@ -148,30 +135,11 @@ export function EnterpriseTeamAssignments() {
 			});
 		}
 
-		for (const t of tickets) {
-			rows.push({
-				id: t.id,
-				type: "ticket",
-				reference: t.ref,
-				clientName: t.createdBy,
-				clientEmail: t.createdByEmail ?? null,
-				assignedStaffId: null,
-				assignedStaffName: t.assignedTo || null,
-				assignedStaffEmail: t.assignedToEmail || null,
-				stageOrStatus: t.status,
-				stageOrStatusLabel: t.status,
-				priority: t.priority,
-				updatedAt: t.updatedAt,
-				link: "/helpdesk",
-			});
-		}
-
 		return rows;
-	}, [applications, consultations, tickets, scopeRecords, assignees]);
+	}, [applications, consultations, scopeRecords, assignees]);
 
 	const loadData = () => {
 		void refreshCases();
-		void refreshTickets();
 	 };
 
 	// Roster of staff members and their respective breakdown
@@ -184,7 +152,6 @@ export function EnterpriseTeamAssignments() {
 				email: string | null;
 				cases: number;
 				consultations: number;
-				tickets: number;
 				total: number;
 			}
 		>();
@@ -197,12 +164,10 @@ export function EnterpriseTeamAssignments() {
 					email: i.assignedStaffEmail,
 					cases: 0,
 					consultations: 0,
-					tickets: 0,
 					total: 0,
 				};
 				if (i.type === "case") existing.cases++;
 				else if (i.type === "consultation") existing.consultations++;
-				else if (i.type === "ticket") existing.tickets++;
 				existing.total++;
 				map.set(i.assignedStaffId, existing);
 			}
@@ -242,7 +207,6 @@ export function EnterpriseTeamAssignments() {
 	const stats = useMemo(() => ({
 		cases: items.filter((i) => i.type === "case").length,
 		consultations: items.filter((i) => i.type === "consultation").length,
-		tickets: items.filter((i) => i.type === "ticket").length,
 		staff: staffList.length,
 		unassigned: unassignedCount,
 	}), [items, staffList, unassignedCount]);
@@ -259,7 +223,7 @@ export function EnterpriseTeamAssignments() {
 						Team Assignments &amp; Progress
 					</h1>
 					<p style={{ fontSize: "0.85rem", color: "#52525b", margin: 0 }}>
-						Real-time dispatch board. Track case progress, consultation assignments, tickets, and message staff directly.
+						Real-time dispatch board. Track case progress, consultation assignments, and message staff directly.
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem" }}>
@@ -311,7 +275,6 @@ export function EnterpriseTeamAssignments() {
 				{[
 					{ label: "Active Cases", value: stats.cases, sub: "Pipeline files", highlight: false },
 					{ label: "Consultations", value: stats.consultations, sub: "Bookings & intakes", highlight: false },
-					{ label: "Helpdesk Tickets", value: stats.tickets, sub: "Support threads", highlight: false },
 					{ label: "Active Staff", value: stats.staff, sub: "Assigned officers", highlight: false },
 					{ label: "Unassigned Queue", value: stats.unassigned, sub: stats.unassigned > 0 ? "Requires action" : "All dispatched", highlight: stats.unassigned > 0 },
 				].map((s, idx, arr) => (
@@ -742,7 +705,6 @@ export function EnterpriseTeamAssignments() {
 										<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
 											<span style={pillStyle}>Cases: {s.cases}</span>
 											<span style={pillStyle}>Consultations: {s.consultations}</span>
-											<span style={pillStyle}>Tickets: {s.tickets}</span>
 										</div>
 
 										{/* Capacity Gauge */}

@@ -1,20 +1,4 @@
 import { useCallback, useContext, createContext, useState, type ReactNode } from "react";
-import type {
-	TicketSource,
-	TicketStatus,
-	TicketPriority,
-	TicketCategory,
-	TicketMessage,
-	InternalTicket,
-} from "century-nit-core/ops";
-export type {
-	TicketSource,
-	TicketStatus,
-	TicketPriority,
-	TicketCategory,
-	TicketMessage,
-	InternalTicket,
-};
 
 type PreviewDoc = {
 	name: string;

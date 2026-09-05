@@ -42,11 +42,6 @@ import type {
 	AddSchoolApplication, OpsAddSchoolApplication,
 	UpdateSchoolStatus,
 	LockSchools,
-	Ticket,
-	TicketList,
-	CreateTicket,
-	ReplyTicket,
-	UpdateTicketStatus,
 	InitializePayment,
 	InitializePaymentResponse,
 	PaymentVerificationResult,
@@ -60,7 +55,7 @@ import type {
 	ContactCard,
 	PreviousContact,
 } from "century-nit-shared";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 
 
 
@@ -960,6 +955,10 @@ export const meApi = {
 		return request(`${API_PREFIX}/me/identity`);
 	},
 
+	fees(): Promise<FeeSchedule> {
+		return request(`${API_PREFIX}/fees`);
+	},
+
 	application(): Promise<{
 		applicant: ApiApplicant | null;
 		consultation: ApiConsultation | null;
@@ -1337,55 +1336,6 @@ export const schoolsApi = {
 	updateStatus(id: string, input: UpdateSchoolStatus): Promise<SchoolApplication> {
 		return request(`${API_PREFIX}/schools/${id}/status`, { method: "PATCH", ...json(input) });
 	}
-};
-
-/* ── Support & In-App Messaging ─────────────────────────────────────────── */
-
-export const ticketsApi = {
-	/** List the signed-in applicant's tickets. */
-	listMy(): Promise<TicketList> {
-		return request(`${API_PREFIX}/me/tickets`);
-	},
-
-	/** Create a new support ticket. */
-	create(input: CreateTicket): Promise<Ticket> {
-		return request(`${API_PREFIX}/me/tickets`, { method: "POST", ...json(input) });
-	},
-
-	/** Reply to a ticket message thread. */
-	reply(ticketId: string, input: ReplyTicket): Promise<Ticket> {
-		return request(`${API_PREFIX}/me/tickets/${ticketId}/messages`, {
-			method: "POST",
-			...json(input),
-		});
-	},
-
-	/** Staff: list tickets across all applicants. */
-	listAll(filter: { status?: string; source?: string } = {}): Promise<TicketList> {
-		const query = new URLSearchParams(
-			Object.entries(filter).filter(([, v]) => v != null) as [string, string][],
-		);
-		const suffix = query.toString() ? `?${query}` : "";
-		return request(`${API_PREFIX}/tickets${suffix}`);
-	},
-
-	/** Staff: create an internal (staff-to-staff) ticket. */
-	createInternal(input: CreateTicket): Promise<Ticket> {
-		return request(`${API_PREFIX}/tickets`, { method: "POST", ...json(input) });
-	},
-
-	/** Staff: update ticket status, priority, or assign staff. */
-	updateStatus(ticketId: string, input: UpdateTicketStatus): Promise<Ticket> {
-		return request(`${API_PREFIX}/tickets/${ticketId}`, { method: "PATCH", ...json(input) });
-	},
-
-	/** Staff: reply to a ticket message thread. */
-	replyAsStaff(ticketId: string, input: ReplyTicket): Promise<Ticket> {
-		return request(`${API_PREFIX}/tickets/${ticketId}/messages`, {
-			method: "POST",
-			...json(input),
-		});
-	},
 };
 
 /* ── CRM Leads ─────────────────────────────────────────────────────────── */

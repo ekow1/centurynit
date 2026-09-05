@@ -494,13 +494,29 @@ export async function recordPayment(input: {
 			txDb,
 		);
 
-		if (status === "paid" && updated.applicationId) {
-			if (updated.type === "application") {
+		if (updated.applicationId) {
+			if (updated.type === "application" && status === "paid") {
 				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, updated.applicationId));
-			} else if (updated.type === "visa") {
+			} else if (updated.type === "visa" && status === "paid") {
 				await txDb.update(applications).set({ visaInvoicePaid: true }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "travel" && status === "paid") {
+				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, updated.applicationId));
 			} else if (updated.type === "agency") {
-				await txDb.update(applications).set({ agencySettled: true }).where(eq(applications.id, updated.applicationId));
+				const lines = await txDb.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id)).orderBy(invoiceLines.position);
+				let totalPaid = paidCents + input.amountCents;
+				let agencyStageIndex = 0;
+				for (const line of lines) {
+					if (totalPaid >= line.amountCents) {
+						agencyStageIndex++;
+						totalPaid -= line.amountCents;
+					} else {
+						break;
+					}
+				}
+				await txDb.update(applications).set({ 
+					agencyStageIndex, 
+					agencySettled: agencyStageIndex >= lines.length 
+				}).where(eq(applications.id, updated.applicationId));
 			}
 		}
 
@@ -553,8 +569,10 @@ export async function voidInvoice(input: {
 				await txDb.update(applications).set({ appFeePaid: false }).where(eq(applications.id, updated.applicationId));
 			} else if (updated.type === "visa") {
 				await txDb.update(applications).set({ visaInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
+			} else if (updated.type === "travel") {
+				await txDb.update(applications).set({ travelInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
 			} else if (updated.type === "agency") {
-				await txDb.update(applications).set({ agencySettled: false }).where(eq(applications.id, updated.applicationId));
+				await txDb.update(applications).set({ agencySettled: false, agencyStageIndex: 0 }).where(eq(applications.id, updated.applicationId));
 			}
 		}
 

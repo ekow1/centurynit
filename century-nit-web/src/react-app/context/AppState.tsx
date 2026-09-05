@@ -20,10 +20,12 @@ import {
 	JOURNEY_STAGE_TO_PORTAL,
 	PORTAL_STAGE_LABELS,
 	type JourneyStage,
+	type FeeSchedule,
+	DEFAULT_FEE_CENTS,
+	usdFromCents,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
-	APP_INVOICE_BASE,
 	AUTH_STORAGE_KEY,
 	BOOKING_STORAGE_KEY,
 	formatDualCurrency,
@@ -38,7 +40,6 @@ import {
 	AGENCY_DEPOSIT_PORTION,
 	serviceFeeFor,
 	STORAGE_KEY,
-	VISA_INVOICE_AMOUNT,
 	VISA_STAGE_FEE,
 	appInvoiceActualLines,
 	appInvoiceEstimateLines,
@@ -63,7 +64,6 @@ import {
  * so the portal build does not depend on a freshly-built shared `dist/`.
  *
  * `chat.message` is staff-to-staff chat — applicants get `chat.reply` instead.
- * `ticket.assigned` is also staff-only.
  */
 const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"lead.new",
@@ -71,8 +71,6 @@ const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"booking.assigned",
 	"consultation.assigned",
 	"document.uploaded",
-	"ticket.new",
-	"ticket.assigned",
 	"chat.message",
 ] as const;
 function isStaffOnlyNotification(type: string): boolean {
@@ -216,6 +214,8 @@ export type ApplicationData = {
 	postArrivalPaymentIndex: number;
 	visaStatus: VisaStatus;
 	visaUpdatedAt: string | null;
+	/** Set to true once the Travel invoice (flights/ticketing) is fully paid */
+	travelInvoicePaid: boolean;
 	completedAt: string | null;
 	/** Set once every pre-departure task is ticked — the travel stage's done signal */
 	preDepartureCompletedAt: string | null;
@@ -352,6 +352,17 @@ export type InterviewBooking = {
 	confirmationCode: string | null;
 };
 
+export const FALLBACK_FEE_SCHEDULE: FeeSchedule = {
+	appBaseCents: DEFAULT_FEE_CENTS.appBase,
+	appPerSchoolCents: DEFAULT_FEE_CENTS.appPerSchool,
+	appDocVerifyCents: DEFAULT_FEE_CENTS.appDocVerify,
+	appMatchReviewCents: DEFAULT_FEE_CENTS.appMatchReview,
+	visaBaseCents: DEFAULT_FEE_CENTS.visaBase,
+	visaBiometricsCents: DEFAULT_FEE_CENTS.visaBiometrics,
+	visaTranslationCents: DEFAULT_FEE_CENTS.visaTranslation,
+	consultationCents: DEFAULT_FEE_CENTS.consultation,
+};
+
 const defaultApplication: ApplicationData = {
 	firstName: "",
 	middleName: "",
@@ -384,12 +395,12 @@ const defaultApplication: ApplicationData = {
 	schoolSubmittedAt: null,
 	applicationInvoice: {
 		id: null,
-		amount: APP_INVOICE_BASE,
+		amount: usdFromCents(FALLBACK_FEE_SCHEDULE.appBaseCents),
 		status: "none",
 		raisedAt: null,
 		paidAt: null,
 		description: "Stage II - school selection & admission tracking",
-		estimatedAmount: APP_INVOICE_BASE,
+		estimatedAmount: usdFromCents(FALLBACK_FEE_SCHEDULE.appBaseCents),
 		estimateLines: [],
 		actualAmount: null,
 		actualLines: [],
@@ -397,7 +408,7 @@ const defaultApplication: ApplicationData = {
 	},
 	visaInvoice: {
 		id: null,
-		amount: VISA_STAGE_FEE,
+		amount: usdFromCents(FALLBACK_FEE_SCHEDULE.visaBaseCents),
 		status: "none",
 		raisedAt: null,
 		paidAt: null,
@@ -424,6 +435,7 @@ const defaultApplication: ApplicationData = {
 	postArrivalPaymentIndex: 0,
 	visaStatus: "locked",
 	visaUpdatedAt: null,
+	travelInvoicePaid: false,
 	completedAt: null,
 	preDepartureCompletedAt: null,
 	counselorNote: null,
@@ -910,6 +922,7 @@ type AppStateContextValue = {
 	preDepartureTasks: PreDepartureTask[];
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
+	fees: FeeSchedule | null;
 };
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
@@ -937,15 +950,15 @@ function migrateApplication(loaded: ApplicationData): ApplicationData {
 	};
 	base.applicationInvoice = migrateInvoice(
 		base.applicationInvoice,
-		APP_INVOICE_BASE,
-		appInvoiceEstimateLines(1),
-		appInvoiceActualLines(1),
+		usdFromCents(FALLBACK_FEE_SCHEDULE.appBaseCents),
+		appInvoiceEstimateLines(1, FALLBACK_FEE_SCHEDULE),
+		appInvoiceActualLines(1, FALLBACK_FEE_SCHEDULE),
 	);
 	base.visaInvoice = migrateInvoice(
 		base.visaInvoice,
-		VISA_STAGE_FEE,
-		visaInvoiceEstimateLines(),
-		visaInvoiceActualLines(),
+		usdFromCents(FALLBACK_FEE_SCHEDULE.visaBaseCents),
+		visaInvoiceEstimateLines(FALLBACK_FEE_SCHEDULE),
+		visaInvoiceActualLines(FALLBACK_FEE_SCHEDULE),
 	);
 	if (!base.profileCompletedAt && isProfileComplete(base) && isPaid(base)) {
 		base.profileCompletedAt = base.submittedAt ?? new Date().toISOString();
@@ -1036,16 +1049,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * can be demoed on its own. Switch it off for the two-window demo, where the
 	 * Operations Center issues these decisions for real.
 	 */
-	const [messages, setMessages] = useState<ChatMessage[]>(() => {
-		try {
-			const raw = localStorage.getItem(MESSAGES_KEY);
-			if (!raw) return [];
-			const parsed = JSON.parse(raw) as ChatMessage[];
-			return Array.isArray(parsed) && parsed.length > 0 ? parsed : [];
-		} catch {
-			return [];
-		}
-	});
+	const [messages, setMessages] = useState<ChatMessage[]>(() => safeGetJSON<ChatMessage[]>(MESSAGES_KEY) ?? []);
 
 	/**
 	 * Notifications are now server-driven (polling + SSE). The server is the
@@ -1054,6 +1058,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * prepends new notifications in real time.
 	 */
 	const [notifications, setNotifications] = useState<AppNotification[]>([]);
+	const [fees, setFees] = useState<FeeSchedule | null>(null);
+	// unreadCount is already declared above
 
 	const [preDepartureTasks, setPreDepartureTasks] = useState<PreDepartureTask[]>(() => {
 		try {
@@ -1166,7 +1172,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		if (application.applicationInvoice.status === "paid") return;
 
 		const t = window.setTimeout(() => {
-			const estimateLines = appInvoiceEstimateLines(schoolApplications.length);
+			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
+			const estimateLines = appInvoiceEstimateLines(schoolApplications.length, activeFees);
 			const estimated = sumInvoiceLines(estimateLines);
 			const now = new Date().toISOString();
 			setApplication((prev) => {
@@ -1216,7 +1223,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		if (application.visaInvoice.status === "paid") return;
 
 		const t = window.setTimeout(() => {
-			const estimateLines = visaInvoiceEstimateLines();
+			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
+			const estimateLines = visaInvoiceEstimateLines(activeFees);
 			const estimated = sumInvoiceLines(estimateLines);
 			const now = new Date().toISOString();
 			setApplication((prev) => {
@@ -1281,7 +1289,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			...defaultApplication,
 			applicationInvoice: {
 				...defaultApplication.applicationInvoice,
-				amount: APP_INVOICE_BASE,
+				amount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents),
 			},
 			visaInvoice: {
 				...defaultApplication.visaInvoice,
@@ -1341,7 +1349,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const submitSchoolApplication = useCallback(() => {
 		const now = new Date().toISOString();
 		setSchoolApplications((list) => {
-			const estimateLines = appInvoiceEstimateLines(list.length);
+			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
+			const estimateLines = appInvoiceEstimateLines(list.length, activeFees);
 			const estimated = sumInvoiceLines(estimateLines);
 			setApplication((prev) => ({
 				...prev,
@@ -1369,7 +1378,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const raiseApplicationInvoice = useCallback(() => {
 		setApplication((prev) => {
 			const count = schoolApplications.length || 1;
-			const actualLines = appInvoiceActualLines(count);
+			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
+			const actualLines = appInvoiceActualLines(count, activeFees);
 			const actual = sumInvoiceLines(actualLines);
 			const now = new Date().toISOString();
 			return {
@@ -1394,7 +1404,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			const amount =
 				prev.applicationInvoice.actualAmount ??
 				prev.applicationInvoice.amount ??
-				APP_INVOICE_BASE;
+				usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents);
 			return {
 				...prev,
 				applicationInvoice: {
@@ -1443,7 +1453,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const raiseVisaInvoice = useCallback(() => {
 		const now = new Date().toISOString();
 		setApplication((prev) => {
-			const actualLines = visaInvoiceActualLines();
+			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
+			const actualLines = visaInvoiceActualLines(activeFees);
 			const actual = sumInvoiceLines(actualLines);
 			return {
 				...prev,
@@ -1464,7 +1475,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const payVisaInvoice = useCallback(() => {
 		const now = new Date().toISOString();
 		setApplication((prev) => {
-			const amount = prev.visaInvoice.actualAmount ?? prev.visaInvoice.amount ?? VISA_INVOICE_AMOUNT;
+			const amount = prev.visaInvoice.actualAmount ?? prev.visaInvoice.amount ?? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
 			return {
 				...prev,
 				visaInvoice: {
@@ -1561,6 +1572,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				agencyDepositPaid: false,
 				agencyStageIndex: 0,
 				agencySettledAt: null,
+				travelInvoicePaid: false,
 				postArrivalSchedule: null,
 				postArrivalPaymentIndex: 0,
 				counselorNote: `School package set: ${fund?.name ?? funding} · ${deg?.name ?? level}. You may pay the application invoice and select schools.`,
@@ -1952,7 +1964,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const syncFromServer = useCallback(async () => {
 		if (!authUser) return;
 		try {
-			const res = await meApi.application();
+			const [res, fetchedFees] = await Promise.all([
+				meApi.application(),
+				meApi.fees().catch(() => null)
+			]);
+			if (fetchedFees) {
+				setFees(fetchedFees);
+			}
 			if (res.consultation) {
 				const c = res.consultation;
 			const phase: BookingData["consultationPhase"] =
@@ -2067,6 +2085,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
 					journeyStage: a.stage ?? prev.journeyStage,
+					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 				}));
 			}
 		} catch {
@@ -2393,7 +2412,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			lockSchoolSelection,
 			updateSchoolTrack,
 			applicationFee: APPLICATION_FEE,
-			applicationStageFee: APP_INVOICE_BASE,
+			applicationStageFee: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents),
 			visaStageFee: VISA_STAGE_FEE,
 			autosaveLabel,
 			chapterUnlocks,
@@ -2435,6 +2454,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			togglePreDepartureTask,
 			preDepartureProgress,
 			syncFromServer,
+			fees,
 		}),
 		[
 			application,
@@ -2502,6 +2522,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			togglePreDepartureTask,
 			preDepartureProgress,
 			syncFromServer,
+			fees,
 		],
 	);
 

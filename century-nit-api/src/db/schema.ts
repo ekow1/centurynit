@@ -578,6 +578,7 @@ export const invoiceTypeEnum = pgEnum("invoice_type", [
 	"visa",
 	"consultation",
 	"agency",
+	"travel",
 	"custom",
 ]);
 
@@ -976,6 +977,7 @@ export const applications = pgTable(
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
 		appFeePaid: boolean("app_fee_paid").notNull().default(false),
+		travelInvoicePaid: boolean("travel_invoice_paid").notNull().default(false),
 		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),
 		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
 		preDepartureTasks: jsonb("pre_departure_tasks")
@@ -1075,78 +1077,6 @@ export const schoolTrackEvents = pgTable(
 );
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Support & Helpdesk Tickets (Phase 1)
- * ══════════════════════════════════════════════════════════════════════════ */
-
-export const ticketStatusEnum = pgEnum("ticket_status", [
-	"open",
-	"pending",
-	"resolved",
-	"closed",
-]);
-
-export const ticketPriorityEnum = pgEnum("ticket_priority", [
-	"low",
-	"medium",
-	"high",
-	"urgent",
-]);
-
-export const ticketSenderTypeEnum = pgEnum("ticket_sender_type", [
-	"applicant",
-	"staff",
-	"system",
-]);
-
-export const tickets = pgTable(
-	"tickets",
-	{
-		id: uuid("id").primaryKey().defaultRandom(),
-		clientUserId: text("client_user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		applicantId: uuid("applicant_id").references(() => applicants.id, {
-			onDelete: "set null",
-		}),
-		applicantName: text("applicant_name").notNull(),
-		source: varchar("source", { length: 16 }).notNull().default("external"),
-		subject: varchar("subject", { length: 255 }).notNull(),
-		category: varchar("category", { length: 64 }).notNull().default("General Inquiry"),
-		status: ticketStatusEnum("status").notNull().default("open"),
-		priority: ticketPriorityEnum("priority").notNull().default("medium"),
-		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
-			onDelete: "set null",
-		}),
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(t) => ({
-		byClient: index("tickets_client_idx").on(t.clientUserId, t.status),
-		byStaff: index("tickets_staff_idx").on(t.assignedStaffId, t.status),
-		byStatus: index("tickets_status_idx").on(t.status, t.createdAt),
-		bySource: index("tickets_source_idx").on(t.source, t.status),
-	}),
-);
-
-export const ticketMessages = pgTable(
-	"ticket_messages",
-	{
-		id: uuid("id").primaryKey().defaultRandom(),
-		ticketId: uuid("ticket_id")
-			.notNull()
-			.references(() => tickets.id, { onDelete: "cascade" }),
-		senderType: ticketSenderTypeEnum("sender_type").notNull().default("applicant"),
-		senderId: text("sender_id"),
-		senderName: text("sender_name").notNull(),
-		message: text("message").notNull(),
-		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-	},
-	(t) => ({
-		byTicket: index("ticket_messages_ticket_idx").on(t.ticketId, t.createdAt),
-	}),
-);
-
-/* ══════════════════════════════════════════════════════════════════════════
  * CRM Leads (Phase 1)
  * ══════════════════════════════════════════════════════════════════════════ */
 
@@ -1184,7 +1114,7 @@ export const leads = pgTable(
 	},
 	(t) => ({
 		byStage: index("leads_stage_idx").on(t.stage, t.createdAt),
-		byEmail: index("leads_email_idx").on(t.email),
+		byEmail: uniqueIndex("leads_email_uniq").on(t.email),
 		byStaff: index("leads_staff_idx").on(t.assignedStaffId),
 		byConsultation: index("leads_consultation_idx").on(t.consultationId),
 		byApplication: index("leads_application_idx").on(t.applicationId),
@@ -1781,6 +1711,9 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
 	mailingListId: uuid("mailing_list_id"),
 	sentBy: text("sent_by"),
 	sentAt: timestamp("sent_at", { withTimezone: true }),
+	// When set, the campaign is queued to fire at this instant instead of
+	// immediately. Null means "send as soon as the send job runs".
+	scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
 	recipientCount: integer("recipient_count").notNull().default(0),
 	deliveredCount: integer("delivered_count").notNull().default(0),
 	failedCount: integer("failed_count").notNull().default(0),
@@ -1790,6 +1723,36 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
 }, (t) => ({
 	byStatus: index("campaigns_status_idx").on(t.status),
 	byType: index("campaigns_type_idx").on(t.type),
+}));
+
+/**
+ * Per-recipient campaign delivery ledger.
+ *
+ * Each campaign send snapshots the selected mailing list's confirmed contacts
+ * here before the job runs, so the worker can attribute every email to a row —
+ * delivered/failed per contact — instead of just aggregate counters. Rows are
+ * written when the send is enqueued and mutated as the worker sends each email.
+ * A campaign that is re-sent after a partial failure re-snapshots the list.
+ */
+export const campaignRecipients = pgTable("campaign_recipients", {
+	id: uuid("id").defaultRandom().primaryKey(),
+	campaignId: uuid("campaign_id")
+		.notNull()
+		.references(() => marketingCampaigns.id, { onDelete: "cascade" }),
+	contactId: uuid("contact_id").references(() => mailingListContacts.id, {
+		onDelete: "set null",
+	}),
+	email: varchar("email", { length: 255 }).notNull(),
+	name: varchar("name", { length: 255 }),
+	// pending → sent | failed. `skipped` is unused today but reserved for e.g.
+	// contacts that opt out between enqueue and delivery.
+	status: varchar("status", { length: 16 }).notNull().default("pending"),
+	sentAt: timestamp("sent_at", { withTimezone: true }),
+	error: text("error"),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+	byCampaign: index("campaign_recipients_campaign_idx").on(t.campaignId),
+	byStatus: index("campaign_recipients_status_idx").on(t.campaignId, t.status),
 }));
 
 export const mailingLists = pgTable("mailing_lists", {
@@ -1914,3 +1877,76 @@ export const studentScholarships = pgTable("student_scholarships", {
 	byApplicant: index("student_scholarships_applicant_idx").on(t.applicantId),
 	uniqueAward: uniqueIndex("student_scholarships_unique_idx").on(t.applicantId, t.scholarshipId)
 }));
+
+/* ── Case assignments ──────────────────────────────────────────────────────
+ *
+ * Append-only history of every staff assignment on a case (consultation,
+ * application, or booking). Reassignment ends the old row and inserts a new
+ * one instead of overwriting a column, so the full tenure history is
+ * preserved for audit, offboarding, and "previously assigned" UI.
+ *
+ * `status = 'active'` is the single source of truth for who currently owns
+ * the case; the denormalized `assignedOfficerId`/`assignedStaffId`/`employeeId`
+ * columns on the parent tables are display cache only.
+ *
+ * The unique index on (target_type, target_id, role) WHERE status = 'active'
+ * enforces that only one active officer per role exists at a time — the
+ * application layer ends the previous row before inserting the next.
+ */
+export const caseAssignmentTypeEnum = pgEnum("case_assignment_type", [
+	"consultation",
+	"application",
+	"booking",
+]);
+
+export const caseAssignmentStatusEnum = pgEnum("case_assignment_status", [
+	"active",
+	"ended",
+]);
+
+export const caseAssignmentRoleEnum = pgEnum("case_assignment_role", [
+	"primary",
+	"secondary",
+	"reviewer",
+]);
+
+export const caseAssignmentEndReasonEnum = pgEnum("case_assignment_end_reason", [
+	"reassigned",
+	"completed",
+	"cancelled",
+	"offboarded",
+	"unassigned",
+]);
+
+export const caseAssignments = pgTable(
+	"case_assignments",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		targetType: caseAssignmentTypeEnum("target_type").notNull(),
+		targetId: uuid("target_id").notNull(),
+		opsUserId: uuid("ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		role: caseAssignmentRoleEnum("role").notNull().default("primary"),
+		status: caseAssignmentStatusEnum("status").notNull().default("active"),
+		assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+		assignedBy: uuid("assigned_by").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		endedAt: timestamp("ended_at", { withTimezone: true }),
+		endedBy: uuid("ended_by").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
+		endReason: caseAssignmentEndReasonEnum("end_reason"),
+		note: text("note"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		targetIdx: index("case_assignments_target_idx").on(t.targetType, t.targetId, t.status),
+		officerIdx: index("case_assignments_officer_idx").on(t.opsUserId, t.status),
+		uniqueActive: uniqueIndex("case_assignments_unique_active")
+			.on(t.targetType, t.targetId, t.role)
+			.where(sql`status = 'active'`),
+	}),
+);

@@ -1,2 +1,0 @@
-UPDATE "public"."consultations" SET "status" = 'CONFIRMED' WHERE "slot_confirmed" = true AND "status" IN ('ASSIGNED');--> statement-breakpoint
-ALTER TABLE "public"."consultations" DROP COLUMN "slot_confirmed";

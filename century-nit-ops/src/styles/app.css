@@ -2768,6 +2768,15 @@
 	gap: 0.5rem;
 }
 
+.hd-row__unread {
+	background: var(--foreground);
+	color: var(--background);
+	font-size: 0.62rem;
+	font-weight: 800;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+}
+
 .hd-row__ref {
 	font-size: 0.62rem;
 	letter-spacing: 0.08em;

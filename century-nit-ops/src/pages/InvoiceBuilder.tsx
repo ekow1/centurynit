@@ -2,16 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { fmtBoth, fmtGhs, fmtUsd } from "./currency";
 import type { InvoiceType, OpsInvoiceLine, ServicePackage } from "century-nit-core/ops";
-import {
-	APP_INVOICE_BASE,
-	APP_INVOICE_PER_SCHOOL,
-	APP_DOC_VERIFY_FEE,
-	APP_MATCH_REVIEW_FEE,
-	VISA_INVOICE_AMOUNT,
-	VISA_BIOMETRICS_FEE,
-	VISA_TRANSLATION_FEE,
-	CONSULTATION_FEE_AMOUNT,
-} from "century-nit-core";
+import { DEFAULT_FEE_CENTS, usdFromCents } from "century-nit-shared";
 
 /**
  * Invoice builder dialog.
@@ -32,18 +23,21 @@ function defaultLines(pkg: string, packages: ServicePackage[], type: InvoiceType
 		if (match) {
 			lines.push({ id: "package", label: match.name, detail: match.description, amount: match.price });
 		} else {
-			lines.push({ id: "processing", label: "Application processing", detail: "Case preparation & filing", amount: APP_INVOICE_BASE });
+			lines.push({ id: "processing", label: "Application processing", detail: "Case preparation & filing", amount: usdFromCents(DEFAULT_FEE_CENTS.appBase) });
 		}
 		const n = Math.max(1, schoolCount);
-		lines.push({ id: "per-school", label: `School submissions (${n})`, detail: `$${APP_INVOICE_PER_SCHOOL} per institution`, amount: APP_INVOICE_PER_SCHOOL * n });
-		lines.push({ id: "verification", label: "Document verification", detail: "Credential authentication", amount: APP_DOC_VERIFY_FEE });
-		lines.push({ id: "match-review", label: "Match review", detail: "Programme fit assessment", amount: APP_MATCH_REVIEW_FEE });
+		lines.push({ id: "per-school", label: `School submissions (${n})`, detail: `$${usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)} per institution`, amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool) * n });
+		lines.push({ id: "verification", label: "Document verification", detail: "Credential authentication", amount: usdFromCents(DEFAULT_FEE_CENTS.appDocVerify) });
+		lines.push({ id: "match-review", label: "Match review", detail: "Programme fit assessment", amount: usdFromCents(DEFAULT_FEE_CENTS.appMatchReview) });
 	} else if (type === "Visa") {
-		lines.push({ id: "visa-prep", label: "Visa file preparation", detail: "Forms, evidence pack & review", amount: VISA_INVOICE_AMOUNT });
-		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking and support", amount: VISA_BIOMETRICS_FEE });
-		lines.push({ id: "translation", label: "Document translation", detail: "Certified translations", amount: VISA_TRANSLATION_FEE });
+		lines.push({ id: "visa-prep", label: "Visa file preparation", detail: "Forms, evidence pack & review", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBase) });
+		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking and support", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics) });
+		lines.push({ id: "translation", label: "Document translation", detail: "Certified translations", amount: usdFromCents(DEFAULT_FEE_CENTS.visaTranslation) });
+	} else if (type === "Travel") {
+		lines.push({ id: "flight-booking", label: "Flight ticketing", detail: "Airline booking and reservation", amount: 0 });
+		lines.push({ id: "airport-pickup", label: "Airport pickup & transfer", detail: "Ground transportation at destination", amount: 0 });
 	} else if (type === "Consultation") {
-		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: CONSULTATION_FEE_AMOUNT });
+		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: usdFromCents(DEFAULT_FEE_CENTS.consultation) });
 	} else if (type === "Agency") {
 		lines.push({ id: "agency-deposit", label: "Service fee - deposit", detail: "Required before choosing your payment plan", amount: 0 });
 		lines.push({ id: "agency-predeparture", label: "Service fee - pre departure", detail: "Due before you travel to your destination", amount: 0 });
@@ -156,7 +150,7 @@ export function InvoiceBuilder({
 				<div style={{ marginBottom: "1.25rem" }}>
 					<span className="eyebrow" style={{ display: "block", marginBottom: "0.4rem", fontSize: "var(--text-xs)" }}>Invoice Type</span>
 					<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-						{(["Application", "Visa", "Consultation", "Agency", "Custom"] as InvoiceType[]).map((t) => (
+						{(["Application", "Visa", "Travel", "Consultation", "Agency", "Custom"] as InvoiceType[]).map((t) => (
 							<button
 								key={t}
 								type="button"

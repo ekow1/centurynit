@@ -41,7 +41,7 @@ export type NotifyEvent = {
 	/** Deep link to the relevant record in the portal or ops console */
 	link?: string;
 	priority?: NotificationPriority;
-	/** Entity type for filtering — "case" | "document" | "booking" | "chat" | "ticket" | "lead" */
+	/** Entity type for filtering — "case" | "document" | "booking" | "chat" | "lead" */
 	entityType?: string;
 	/** Entity ID for deep linking and dedup */
 	entityId?: string;
@@ -153,7 +153,7 @@ export async function notifyMany(events: NotifyEvent[]): Promise<void> {
 
 /**
  * Roles that receive broadcast notifications for new work landing in the
- * operations queue (leads, cases, tickets, bookings, documents, etc.).
+ * operations queue (leads, cases, bookings, documents, etc.).
  */
 const TRIAGE_ROLES = ["manager", "admin", "super_admin", "coordinator"] as const;
 
@@ -236,7 +236,7 @@ export async function getStaffUserIdByEmail(
 
 /**
  * Get the user.id for an ops_user by their ops_user.id.
- * Used to notify a specific staff member when a case/ticket is assigned to them.
+ * Used to notify a specific staff member when a case is assigned to them.
  */
 export async function getStaffUserId(
 	opsUserId: string,

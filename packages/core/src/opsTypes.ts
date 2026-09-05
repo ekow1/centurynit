@@ -297,7 +297,7 @@ export type OpsInvoiceLine = {
 	amount: number;
 };
 
-export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Custom";
+export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Travel" | "Custom";
 
 export type Invoice = {
 	id: string;
@@ -534,63 +534,3 @@ export function methodGateway(method: string): string {
 	if (m.includes("direct debit")) return "SEPA Direct Debit";
 	return "Internal";
 }
-
-/* ─── Support tickets ───
- *
- * Shared vocabulary: ops triages every ticket, and the applicant portal
- * raises and replies to the `external` ones. Moved here when the two apps
- * were split — previously it lived inside the ops store, which the portal
- * imported directly.
- */
-
-export type TicketSource = "internal" | "external";
-export type TicketStatus = "Open" | "In Progress" | "Waiting" | "Resolved";
-export type TicketPriority = "Low" | "Medium" | "High" | "Urgent";
-export type TicketCategory =
-	| "Technical"
-	| "Application"
-	| "Documents"
-	| "Billing"
-	| "Visa"
-	| "Other";
-
-export type TicketMessage = {
-	id: string;
-	author: string;
-	/** Who is speaking — drives which side of the thread the bubble sits on */
-	role: "applicant" | "staff";
-	body: string;
-	at: string;
-};
-
-/**
- * One support ticket.
- *
- * `source` is the important distinction: `external` tickets are raised by an
- * applicant from the client portal and are customer-facing — the applicant sees
- * every staff reply. `internal` tickets are staff-to-staff and never leave ops.
- * Manager and coordinator triage both; only external ones carry applicant
- * identity and a visible thread.
- */
-export type InternalTicket = {
-	id: string;
-	ref: string;
-	source: TicketSource;
-	title: string;
-	description: string;
-	category: TicketCategory;
-	status: TicketStatus;
-	priority: TicketPriority;
-	createdBy: string;
-	/** External only — the applicant's email and case reference */
-	createdByEmail?: string;
-	applicantRef?: string;
-	createdAt: string;
-	updatedAt: string;
-	/** Empty string means unassigned and awaiting triage */
-	assignedTo: string;
-	assignedToEmail: string;
-	/** Routed to platform administration rather than an ops colleague */
-	escalatedToAdmin: boolean;
-	messages: TicketMessage[];
-};

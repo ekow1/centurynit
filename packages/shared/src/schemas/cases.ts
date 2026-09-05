@@ -73,8 +73,10 @@ export function canAdvanceToStage(
 	target: JourneyStage,
 	app?: {
 		visaStage?: string;
+		agencyStageIndex?: number;
 		agencySettled?: boolean;
 		appFeePaid?: boolean;
+		travelInvoicePaid?: boolean;
 		travelClearance?: string;
 		preDepartureTasks?: { done: boolean }[];
 		paymentPlanId?: string | null;
@@ -94,6 +96,10 @@ export function canAdvanceToStage(
 	const checks = app ?? {};
 
 	switch (target) {
+		case "school_submission":
+			return (checks.agencyStageIndex ?? 0) >= 1
+				? null
+				: "Cannot advance: Agency Service Fee Deposit must be paid before school submission.";
 		case "offer_letter_review":
 			return checks.appFeePaid
 				? null
@@ -108,6 +114,7 @@ export function canAdvanceToStage(
 				: "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
 		case "completed": {
 			if (!checks.agencySettled) return "Cannot mark complete: agency settlement is not complete.";
+			if (!checks.travelInvoicePaid) return "Cannot mark complete: travel invoices are not fully settled.";
 			if (checks.travelClearance !== "cleared") return "Cannot mark complete: travel clearance is not granted.";
 			if (checks.preDepartureTasks && checks.preDepartureTasks.length > 0) {
 				const allDone = checks.preDepartureTasks.every((t) => t.done);
@@ -379,6 +386,7 @@ export const applicationSchema = z.object({
 	agencyStageIndex: z.number().int(),
 	agencySettled: z.boolean(),
 	appFeePaid: z.boolean(),
+	travelInvoicePaid: z.boolean(),
 	travelClearance: z.enum(["pending", "cleared"]),
 	requestedDocuments: z.array(z.string()),
 	preDepartureTasks: z.array(

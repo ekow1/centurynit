@@ -385,6 +385,15 @@ export async function assignBooking(input: {
 		throw err;
 	}
 
+	// Record the assignment in the append-only history table.
+	const { startAssignment: startBookingAssignment } = await import("./caseAssignments.js");
+	await startBookingAssignment({
+		targetType: "booking",
+		targetId: bookingId,
+		opsUserId: employeeId,
+		assignedBy: actor.opsUserId,
+	});
+
 	// In-person meetings need no conference.
 	if (updated.type === "online") {
 		updated = await syncCalendarForBooking(updated.id);
@@ -1091,6 +1100,15 @@ export async function cancelBooking(input: {
 
 	await audit(booking.id, "cancelled", input.actor.email, { reason: input.reason ?? null });
 
+	// End the assignment history row.
+	const { endAssignment: endBookingAssignment } = await import("./caseAssignments.js");
+	await endBookingAssignment({
+		targetType: "booking",
+		targetId: booking.id,
+		endedBy: null,
+		endReason: "cancelled",
+	});
+
 	const { syncConsultationCancelled } = await import("./cases.js");
 	await syncConsultationCancelled(booking.id);
 
@@ -1177,6 +1195,16 @@ export async function completeBooking(input: {
 		.returning();
 
 	await audit(booking.id, "completed", input.actor.email);
+
+	// End the assignment history row.
+	const { endAssignment: endBookingAssignmentComplete } = await import("./caseAssignments.js");
+	await endBookingAssignmentComplete({
+		targetType: "booking",
+		targetId: booking.id,
+		endedBy: null,
+		endReason: "completed",
+	});
+
 	await cancelQueued(`notify:reminder:client:${booking.reference}`);
 	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
 	return updated;

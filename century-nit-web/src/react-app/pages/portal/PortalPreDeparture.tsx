@@ -34,7 +34,9 @@ function PreDepartureInner() {
 
 	const finished =
 		Boolean(application.completedAt) ||
-		(Boolean(application.agencySettledAt) && application.visaStatus === "complete");
+		(Boolean(application.agencySettledAt) &&
+			application.visaStatus === "complete" &&
+			application.travelInvoicePaid);
 
 	if (!finished) {
 		return (
@@ -44,7 +46,7 @@ function PreDepartureInner() {
 						<p className="eyebrow">Pre-departure</p>
 						<h1 className="page-title mt-1">Almost ready to fly</h1>
 						<p className="lead mt-2">
-							Complete your visa, payment plan, and agency settlement first - then your
+							Complete your visa, pay your travel invoice, and settle the agency service fee first — then your
 							pre-departure checklist unlocks here.
 						</p>
 					</div>

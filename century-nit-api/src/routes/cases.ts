@@ -130,7 +130,7 @@ import { renderOtpEmail } from "../lib/email-templates.js";
  *
  * `chat.message` is staff-to-staff chat — the applicant-facing equivalent is
  * `chat.reply`, which is intentionally NOT listed here so applicants still see
- * their own consultant replies. `ticket.assigned` is also staff-only.
+ * their own consultant replies.
  */
 const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"lead.new",
@@ -138,8 +138,6 @@ const STAFF_ONLY_NOTIFICATION_TYPES = [
 	"booking.assigned",
 	"consultation.assigned",
 	"document.uploaded",
-	"ticket.new",
-	"ticket.assigned",
 	"chat.message",
 ] as const;
 

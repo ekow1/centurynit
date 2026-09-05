@@ -18,6 +18,7 @@ import {
 	applicants,
 	applications,
 	bookings,
+	caseAssignments,
 	consultations,
 	opsUsers,
 	users,
@@ -120,19 +121,37 @@ async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] |
 	if (!staff || !canReview(staff.role)) return [];
 	if (staff.role !== "consultant") return null;
 
-	const rows = await db
+	// Single source of truth: case_assignments with status = 'active'.
+	// This replaces the three-table union (bookings + consultations +
+	// applications) with status filters — one query, one place to update
+	// when assignment semantics change.
+	const { activeApplicantUserIdsForOfficer } = await import("../services/caseAssignments.js");
+	const fromAssignments = await activeApplicantUserIdsForOfficer(staff.opsUserId);
+
+	// Also include applicants the consultant is assigned to via an active
+	// booking (the booking's client). case_assignments records booking
+	// assignments too, but activeApplicantUserIdsForOfficer only joins
+	// through consultations/applications to avoid double-counting — so
+	// pick up booking clients here.
+	const fromBookings = await db
 		.selectDistinct({ ownerUserId: bookings.clientUserId })
 		.from(bookings)
-		.where(
+		.innerJoin(
+			caseAssignments,
 			and(
-				eq(bookings.employeeId, staff.opsUserId),
-				not(inArray(bookings.status, ["CANCELLED", "COMPLETED"])),
+				eq(caseAssignments.targetType, "booking"),
+				eq(caseAssignments.targetId, bookings.id),
+				eq(caseAssignments.status, "active"),
 			),
-		);
+		)
+		.where(eq(caseAssignments.opsUserId, staff.opsUserId));
 
-	const { assignedApplicantUserIds } = await import("../services/cases.js");
-	const fromCases = await assignedApplicantUserIds(staff.opsUserId);
-	return Array.from(new Set([...rows.map((r) => r.ownerUserId), ...fromCases]));
+	return Array.from(
+		new Set([
+			...fromAssignments,
+			...fromBookings.map((r) => r.ownerUserId),
+		]),
+	);
 }
 
 /** Whether this caller may act on a document owned by `ownerUserId`. */

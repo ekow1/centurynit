@@ -360,37 +360,7 @@ export function caseAssigned(ctx: {
 	};
 }
 
-/** Helpdesk ticket assigned to a staff member. */
-export function ticketAssigned(ctx: {
-	ticketId: string;
-	subject: string;
-	category: string;
-	priority: string;
-	clientName: string;
-	employeeName: string;
-	employeeEmail: string;
-}): QueuedEmail {
-	const lines = [
-		`Hi <strong>${ctx.employeeName}</strong>,`,
-		`A support ticket has been assigned to you.`,
-		`<strong>Client:</strong> ${ctx.clientName}`,
-		`<strong>Category:</strong> ${ctx.category}`,
-		`<strong>Priority:</strong> ${ctx.priority}`,
-		`<strong>Subject:</strong> ${ctx.subject}`,
-		`Log in to the Operations Center to review and respond.`,
-	];
-	const { html, text } = formatEmail("A support ticket has been assigned to you", lines, null, ctx.ticketId);
-	return {
-		to: ctx.employeeEmail,
-		subject: `New ticket assigned · ${ctx.subject}`,
-		html,
-		text,
-		idempotencyKey: `notify:ticket:assigned:${ctx.ticketId}:${ctx.employeeEmail}`,
-		template: "Ticket assigned",
-		reference: ctx.ticketId,
-	};
-}
-
+/** A new lead has been captured — sent to the manager for triage. */
 export function leadCreatedForManager(
 	ctx: { name: string; source: string; leadId: string },
 	managerEmail: string,

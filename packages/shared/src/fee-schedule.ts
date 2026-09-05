@@ -19,6 +19,17 @@ export const DEFAULT_FEE_CENTS = {
 	consultation: 7,
 } as const;
 
+export type FeeSchedule = {
+	appBaseCents: number;
+	appPerSchoolCents: number;
+	appDocVerifyCents: number;
+	appMatchReviewCents: number;
+	visaBaseCents: number;
+	visaBiometricsCents: number;
+	visaTranslationCents: number;
+	consultationCents: number;
+};
+
 export function usdFromCents(cents: number): number {
 	return cents / 100;
 }

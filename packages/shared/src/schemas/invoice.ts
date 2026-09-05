@@ -18,6 +18,7 @@ export const invoiceTypeSchema = z.enum([
 	"visa",
 	"consultation",
 	"agency",
+	"travel",
 	"custom",
 ]);
 

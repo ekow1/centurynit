@@ -53,13 +53,13 @@ const OPERATIONS_NAV: NavEntry[] = [
 	{
 		group: "Customer Service",
 		icon: "crm",
-		blurb: "Leads, internal tickets & marketing",
+		blurb: "Leads, applicant requests & marketing",
 		children: [
 			{ to: "/crm", module: "crm", label: "Leads", blurb: "Lead management", icon: "leads" },
 			{ to: "/appointments", module: "appointments", label: "Appointments", blurb: "Calendar", icon: "appointments" },
 			{ to: "/live-meetings", module: "appointments", label: "Live Meetings", blurb: "In-progress video calls", icon: "appointments" },
 			{ to: "/inbox", module: "dashboard", label: "Inbox", blurb: "Notifications & messages", icon: "inbox" },
-			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Support tickets & requests", icon: "helpdesk" },
+			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Client conversation queue", icon: "helpdesk" },
 			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
 		],
 	},

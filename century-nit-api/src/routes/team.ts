@@ -5,7 +5,7 @@ import { getTeamAssignments } from "../services/team.js";
 
 const teamAssignmentSchema = z.object({
 	id: z.string().uuid(),
-	type: z.enum(["case", "consultation", "ticket"]),
+	type: z.enum(["case", "consultation"]),
 	reference: z.string(),
 	clientName: z.string(),
 	clientEmail: z.string().nullable(),

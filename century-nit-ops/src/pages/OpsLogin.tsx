@@ -1,6 +1,7 @@
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_HOME } from "./OpsAuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { checkStaffEmail } from "../lib/api";
 import { publicSiteUrl } from "../lib/publicSite";
 
 const LOCK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -8,6 +9,11 @@ const MAIL_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" st
 const ARROW_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
 const SEARCH_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
 const SHIELD_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+
+const NOT_STAFF_MESSAGE =
+	"That email isn't linked to a Century NIT staff account. Check for typos, or ask your administrator to invite you.";
+
+type EmailCheck = "idle" | "checking" | "ok" | "not-staff" | "error";
 
 export function OpsLogin() {
 	const { opsSignInWithCredentials, opsVerifyTwoFactor, opsVerifyEmailOtp, opsSendMfaOtp, opsUser, authInitializing } = useOpsAuth();
@@ -22,6 +28,33 @@ export function OpsLogin() {
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [resendCooldown, setResendCooldown] = useState(0);
+	const [emailCheck, setEmailCheck] = useState<EmailCheck>("idle");
+
+	// Debounced real-time check that the entered email belongs to an active
+	// staff account, mirroring the forgot-password form. Late responses are
+	// dropped so a fast typist never sees a stale verdict.
+	const queryIdRef = useRef(0);
+	useEffect(() => {
+		const id = ++queryIdRef.current;
+		const value = email.trim().toLowerCase();
+		if (!/^[^@\s]+@[^@\s]+$/.test(value)) {
+			setEmailCheck("idle");
+			return;
+		}
+		setEmailCheck("checking");
+		const timer = setTimeout(() => {
+			checkStaffEmail(value)
+				.then((res) => {
+					if (queryIdRef.current !== id) return;
+					setEmailCheck(res.isStaff ? "ok" : "not-staff");
+				})
+				.catch(() => {
+					if (queryIdRef.current !== id) return;
+					setEmailCheck("error");
+				});
+		}, 600);
+		return () => clearTimeout(timer);
+	}, [email]);
 
 	// #35: auto-submit the MFA form once the user types the full 6 digits.
 	useEffect(() => {
@@ -53,6 +86,10 @@ export function OpsLogin() {
 
 	async function handleFormSubmit(e: React.FormEvent) {
 		e.preventDefault();
+		if (emailCheck === "not-staff") {
+			setError(NOT_STAFF_MESSAGE);
+			return;
+		}
 		setError(null);
 		setLoading(true);
 		try {
@@ -280,6 +317,11 @@ export function OpsLogin() {
 										required
 										autoFocus
 									/>
+									{emailCheck === "checking" ? (
+										<p className="ops-login__hint">Checking…</p>
+									) : emailCheck === "not-staff" ? (
+										<p className="ops-login__error" role="alert">{NOT_STAFF_MESSAGE}</p>
+									) : null}
 								</div>
 								<div className="ops-login__field">
 									<label className="ops-login__label">

@@ -286,6 +286,7 @@ export function createInvoice(body: {
 	applicantEmail?: string;
 	clientUserId?: string;
 	type: "application" | "visa" | "consultation" | "agency" | "travel" | "custom";
+	status?: "proforma" | "issued";
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;
 	dueAt?: string;

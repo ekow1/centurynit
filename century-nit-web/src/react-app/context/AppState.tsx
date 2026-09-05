@@ -232,6 +232,11 @@ export type ApplicationData = {
 	 * `ProcessStageId` using invoice / school signals.
 	 */
 	journeyStage: JourneyStage | "";
+	/**
+	 * Consent gate: "invited" (gated, awaiting decision), "accepted" (open),
+	 * or "declined" (stopped, reversible). Drives the portal `proceed` stage.
+	 */
+	proceedStatus: "invited" | "accepted" | "declined";
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -444,6 +449,7 @@ const defaultApplication: ApplicationData = {
 	onboardingCompleted: false,
 	referralSource: "",
 	journeyStage: "",
+	proceedStatus: "invited",
 };
 
 const defaultAssessment: AssessmentData = {
@@ -692,6 +698,7 @@ function computeHeuristicProcessStage(
 	const consulted = Boolean(booking.confirmationId && booking.paymentStatus === "success");
 	const admitted = hasAcceptedOffer(schools);
 	const pkg = hasSchoolPackage(app);
+	const proceeded = app.proceedStatus === "accepted";
 	const hasSchools = schools.length > 0;
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const appPaid = isAppInvoicePaid(app);
@@ -710,6 +717,7 @@ function computeHeuristicProcessStage(
 	if (selectionConfirmed && !appPaid) return "application_invoice";
 	if (pkg && (hasSchools || selectionConfirmed)) return "school_select";
 	if (pkg) return "school_select";
+	if (eligible && !pkg && !proceeded) return "proceed";
 	if (eligible && !pkg) return "school_package";
 	if (consulted) return "eligibility";
 	return "consultation";
@@ -732,6 +740,9 @@ export function getStageStatus(
 
 	if (stageId === "consultation" && consulted) return si === ci ? "current" : "done";
 	if (stageId === "eligibility" && eligible) return si === ci ? "current" : "done";
+	if (stageId === "proceed" && app.proceedStatus === "accepted") {
+		return si === ci ? "current" : "done";
+	}
 	if (stageId === "school_package" && hasSchoolPackage(app)) {
 		return si === ci ? "current" : "done";
 	}
@@ -770,7 +781,6 @@ export function getChapterUnlocks(
 	schools: SchoolApplicationTrack[],
 ): Record<PortalChapterId, boolean> {
 	const eligible = isConsultationEligible(booking);
-	const pkg = hasSchoolPackage(app);
 	const appPaid = isAppInvoicePaid(app);
 	const admitted = hasAcceptedOffer(schools);
 	const visaPaid = isVisaInvoicePaid(app);
@@ -786,7 +796,7 @@ export function getChapterUnlocks(
 		journey: true,
 		consultation: true,
 		package: eligible || atOrBeyond("school_package"),
-		application: (eligible && pkg) || atOrBeyond("school_select"),
+		application: eligible || atOrBeyond("school_select"),
 		// Tracking is its own page - only after application invoice paid
 		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
 		visa: admitted || atOrBeyond("visa"),
@@ -2084,8 +2094,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// Authoritative coarse journey stage from `applications.stage`.
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
-					journeyStage: a.stage ?? prev.journeyStage,
-					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
+journeyStage: a.stage ?? prev.journeyStage,
+				proceedStatus: a.proceedStatus ?? prev.proceedStatus,
+				travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 				}));
 			}
 		} catch {

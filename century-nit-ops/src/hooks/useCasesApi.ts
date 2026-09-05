@@ -143,6 +143,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
 		travelClearance: row.travelClearance,
+		proceedStatus: row.proceedStatus ?? "invited",
 	};
 }
 
@@ -334,6 +335,32 @@ export function useCasesApi() {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			replaceApplication(await applicationsApi.setStage(app.id, stage));
+			await refresh();
+		},
+		recordProceed: async (appId: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) throw new Error("Application not found");
+			await apiFetch(`${API_PREFIX}/cases/${app.id}/proceed`, {
+				method: "POST",
+				body: JSON.stringify({}),
+			});
+			await refresh();
+		},
+		declineProceed: async (appId: string, reason: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) throw new Error("Application not found");
+			await apiFetch(`${API_PREFIX}/cases/${app.id}/proceed/decline`, {
+				method: "POST",
+				body: JSON.stringify({ reason }),
+			});
+			await refresh();
+		},
+		reinviteProceed: async (appId: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) throw new Error("Application not found");
+			await apiFetch(`${API_PREFIX}/cases/${app.id}/proceed/reinvite`, {
+				method: "POST",
+			});
 			await refresh();
 		},
 		setVisaStage: async (appId: string, stage: VisaStage, note?: string) => {

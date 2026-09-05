@@ -54,6 +54,10 @@ import type {
 	CommunicationContext,
 	ContactCard,
 	PreviousContact,
+	ProceedQuotation,
+	ProceedApplication,
+	DeclineProceed,
+	AcceptProceedResponse,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 
@@ -1135,6 +1139,27 @@ export const meApi = {
 		nextUnlock: string | null;
 	}> {
 		return request(`${API_PREFIX}/me/journey`);
+	},
+
+	/** Advisory pre-commit quotation from the current draft school selection. */
+	proceedQuotation(): Promise<ProceedQuotation> {
+		return request(`${API_PREFIX}/me/application/quotation`);
+	},
+
+	/** Applicant consent: accept the advisory quotation and open the application. */
+	proceed(input: ProceedApplication): Promise<AcceptProceedResponse> {
+		return request(`${API_PREFIX}/me/application/proceed`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Applicant consent: decline to proceed (reversible by an ops re-invite). */
+	declineProceed(input?: DeclineProceed): Promise<{ ok: true }> {
+		return request(`${API_PREFIX}/me/application/proceed/decline`, {
+			method: "POST",
+			...json(input ?? {}),
+		});
 	},
 
 	/** Fetch the signed-in applicant's persisted portal state. */

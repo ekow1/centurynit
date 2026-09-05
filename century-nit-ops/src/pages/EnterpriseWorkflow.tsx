@@ -346,6 +346,14 @@ export function EnterpriseWorkflow() {
 												</p>
 
 											{/* Stage-specific mini indicators */}
+											{app.proceedStatus && app.proceedStatus !== "accepted" && (
+												<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
+													<span className="wf-badge wf-badge--warn">
+														{app.proceedStatus === "declined" ? "Consent declined · re-invite" : "Awaiting consent"}
+													</span>
+												</div>
+											)}
+
 											{stage === "document_verification" && !app.agencySettled && app.agencyStageIndex === 0 && (
 												<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
 													<span className="wf-badge wf-badge--warn">Deposit Unpaid</span>

@@ -89,11 +89,27 @@ export function InvoiceBuilder({
 	onIssue: (lines: OpsInvoiceLine[], note: string, type: InvoiceType, status: "issued" | "proforma") => void;
 	onCancel: () => void;
 }) {
-	const { feeCents, issuanceDefaults } = useFeeSettings();
+	const { feeCents, feeModes } = useFeeSettings();
+
+	/** Derive the default invoice status from the per-fee modes.
+	 *  If ANY constituent fee is proforma, the invoice defaults to proforma. */
+	function deriveStatus(invoiceType: InvoiceType): "issued" | "proforma" {
+		const feeKeysForType: Record<string, string[]> = {
+			Application: ["APP_BASE_FEE_CENTS", "APP_PER_SCHOOL_FEE_CENTS"],
+			Visa: ["VISA_BASE_FEE_CENTS", "VISA_BIOMETRICS_FEE_CENTS"],
+			Consultation: ["CONSULTATION_FEE_CENTS"],
+			Travel: ["TRAVEL_COORDINATION_FEE_CENTS"],
+			Agency: [],
+			Custom: [],
+		};
+		const keys = feeKeysForType[invoiceType] || [];
+		const hasEstimate = keys.some((k) => feeModes[k] === "proforma");
+		return hasEstimate ? "proforma" : "issued";
+	}
 
 	const [type, setType] = useState<InvoiceType>(initialType);
 	const [status, setStatus] = useState<"issued" | "proforma">(
-		() => (issuanceDefaults[initialType] as "issued" | "proforma") || "issued"
+		() => deriveStatus(initialType)
 	);
 	const [lines, setLines] = useState<OpsInvoiceLine[]>([]);
 	const [note, setNote] = useState("");
@@ -154,10 +170,7 @@ export function InvoiceBuilder({
 
 	function changeType(t: InvoiceType) {
 		setType(t);
-		const def = issuanceDefaults[t];
-		if (def === "issued" || def === "proforma") {
-			setStatus(def);
-		}
+		setStatus(deriveStatus(t));
 		setLines(defaultLines(applicantPackage, packages, t, schoolsLoaded ? schools : null, targetCountry || "", feeCents));
 	}
 

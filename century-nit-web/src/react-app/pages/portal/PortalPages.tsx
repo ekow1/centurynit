@@ -44,7 +44,7 @@ import {
 	getBranchName,
 } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
-import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication } from "century-nit-shared";
+import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ProceedQuotation } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { UploadPickModal } from "../../components/portal/UploadPickModal";
@@ -2177,6 +2177,7 @@ function ApplicationHubInner() {
 		addSchoolApplication,
 		removeSchoolApplication,
 		lockSchoolSelection,
+		updateApplication,
 		booking,
 		fees,
 	} = useAppState();
@@ -2252,7 +2253,68 @@ function ApplicationHubInner() {
 	const [progId, setProgId] = useState("");
 	const [intake, setIntake] = useState("");
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+	const [quotation, setQuotation] = useState<ProceedQuotation | null>(null);
+	const [consentBusy, setConsentBusy] = useState<"idle" | "accepting" | "declining">("idle");
 	const { toast } = useNotifier();
+
+	/** Consent gate: while the applicant has not accepted, the page leads with
+	 *  the consent step; the existing school-selection UI below builds the
+	 *  draft shortlist the quotation is computed from. */
+	const consentOpen = application.proceedStatus !== "accepted";
+
+	useEffect(() => {
+		if (!consentOpen) {
+			setQuotation(null);
+			return;
+		}
+		let active = true;
+		meApi
+			.proceedQuotation()
+			.then((q) => {
+				if (active) setQuotation(q);
+			})
+			.catch(() => {
+				if (active) setQuotation(null);
+			});
+		return () => {
+			active = false;
+		};
+	}, [consentOpen, schoolApplications.length]);
+
+	async function handleAcceptProceed() {
+		setConsentBusy("accepting");
+		try {
+			await meApi.proceed({
+				acceptQuotation: true,
+				fundingTrack: application.schoolFundingTrack || undefined,
+				degreeLevel: application.schoolDegreeLevel || undefined,
+				country: application.destinationId || undefined,
+			});
+			updateApplication({ proceedStatus: "accepted" });
+			toast.success("Confirmed — you can now finalise your school list and invoice.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Could not confirm. Please try again.",
+			);
+		} finally {
+			setConsentBusy("idle");
+		}
+	}
+
+	async function handleDeclineProceed() {
+		setConsentBusy("declining");
+		try {
+			await meApi.declineProceed({});
+			updateApplication({ proceedStatus: "declined" });
+			toast.success("Your application is paused. Our team can re-open it if you change your mind.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Could not pause your application. Please try again.",
+			);
+		} finally {
+			setConsentBusy("idle");
+		}
+	}
 
 	const uniList = destId ? universitiesForDestination(destId) : universities;
 	const progList = uniId ? programsForUniversity(uniId) : programs;
@@ -2377,6 +2439,88 @@ function ApplicationHubInner() {
 					</p>
 				</div>
 			</header>
+
+			{consentOpen ? (
+				<section className="card card--pad mb-4">
+					<p className="eyebrow">Almost there — do you want to start your application?</p>
+					<h2 className="page-title mt-1" style={{ fontSize: "1.45rem" }}>
+						{application.proceedStatus === "declined"
+							? "You paused your application"
+							: "Confirm you want to proceed"}
+					</h2>
+					<p className="lead mt-2" style={{ maxWidth: "44rem" }}>
+						{application.proceedStatus === "declined"
+							? "Everything stays on hold. We can re-open your application whenever you are ready — just reach out to your consultant."
+							: "Your assessment is complete. Confirming shows you an estimate of the Century NIT service fee from your shortlist and unlocks school selection. You only pay tuition directly to the one university you take up."}
+					</p>
+
+					{application.proceedStatus !== "declined" && quotation ? (
+						<div className="mt-3" style={{ maxWidth: "40rem" }}>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+								<span className="mono">Base application fee</span>
+								<Money usd={usdFromCents(quotation.appBaseCents)} />
+							</div>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+								<span className="mono">Per school × {quotation.schoolCount}</span>
+								<Money usd={usdFromCents(quotation.perSchoolCents * quotation.schoolCount)} />
+							</div>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+								<span className="mono">Application subtotal</span>
+								<Money usd={usdFromCents(quotation.appSubtotalCents)} />
+							</div>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+								<span className="mono">Century NIT service fee</span>
+								<Money usd={usdFromCents(quotation.agencyFeeCents)} />
+							</div>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+								<span className="mono">Visa processing (later)</span>
+								<Money usd={usdFromCents(quotation.visaFeeCents)} />
+							</div>
+							<div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0", fontWeight: 700 }}>
+								<span>Estimated total</span>
+								<Money usd={usdFromCents(quotation.totalCents)} />
+							</div>
+							<p className="mono muted mt-2">{quotation.advisory}</p>
+						</div>
+					) : null}
+
+					{application.proceedStatus !== "declined" && !quotation ? (
+						<p className="mono muted mt-3">Loading your estimate…</p>
+					) : null}
+
+					{application.proceedStatus === "declined" ? (
+						<div className="row mt-4">
+							<Button to="/portal/home" variant="ghost">
+								Back to dashboard
+							</Button>
+						</div>
+					) : (
+						<div className="row mt-4">
+							<Button
+								type="button"
+								onClick={handleAcceptProceed}
+								disabled={consentBusy !== "idle" || schoolApplications.length === 0}
+							>
+								{consentBusy === "accepting" ? "Confirming…" : "Yes — I want to proceed"}
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								onClick={handleDeclineProceed}
+								disabled={consentBusy !== "idle"}
+							>
+								{consentBusy === "declining" ? "Pausing…" : "Not now"}
+							</Button>
+						</div>
+					)}
+
+					{application.proceedStatus !== "declined" && schoolApplications.length === 0 ? (
+						<p className="mono muted mt-2">
+							Add at least one school below to see your full estimate and confirm.
+						</p>
+					) : null}
+				</section>
+			) : null}
 
 			<ol className="mini-steps mb-4">
 				<li className={schoolApplications.length || selectionDone ? "is-done" : "is-current"}>
@@ -2543,11 +2687,18 @@ function ApplicationHubInner() {
 					</div>
 
 					{schoolApplications.length > 0 ? (
-						<div className="row mt-4">
-							<Button type="button" onClick={handleLockSelection}>
-								Confirm school list & raise invoice
-							</Button>
-						</div>
+						consentOpen ? (
+							<p className="mono muted mt-3">
+								Added {schoolApplications.length} school
+								{schoolApplications.length === 1 ? "" : "s"}. Confirm your choice in the box above.
+							</p>
+						) : (
+							<div className="row mt-4">
+								<Button type="button" onClick={handleLockSelection}>
+									Confirm school list & raise invoice
+								</Button>
+							</div>
+						)
 					) : (
 						<p className="mono muted mt-3">Add at least one school to continue.</p>
 					)}
@@ -2556,14 +2707,16 @@ function ApplicationHubInner() {
 			) : null}
 
 			{/* 2 · Invoice only on this page */}
-			{selectionDone ? (
+			{consentOpen ? (
+				<p className="mono muted mb-4">Confirm your consent above to raise the invoice.</p>
+			) : selectionDone ? (
 				<StageInvoiceCard
 					invoice={effectiveInv}
 					title="Application invoice"
 					onPay={payInvoice}
-					paying={payPhase === "loading"}
+					paying={false}
 					onAccept={acceptInvoice}
-					accepting={payPhase === "loading"}
+					accepting={false}
 					meta={
 						<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
 							<li>
@@ -3194,9 +3347,9 @@ function VisaHubInner() {
 					invoice={inv}
 					title="Visa invoice · pay before process starts"
 					onPay={pay}
-					paying={payPhase === "loading"}
+					paying={false}
 					onAccept={accept}
-					accepting={payPhase === "loading"}
+					accepting={false}
 				/>
 			</div>
 

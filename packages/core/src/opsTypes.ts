@@ -224,6 +224,8 @@ export interface MockApplication {
 	preDepartureTasks?: PreDepartureTask[];
 	/** Travel clearance status */
 	travelClearance?: TravelClearance;
+	/** Consent gate: "invited" (awaiting applicant), "accepted", "declined" */
+	proceedStatus?: "invited" | "accepted" | "declined";
 }
 
 /**

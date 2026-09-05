@@ -24,6 +24,9 @@ export function EnterpriseCases() {
 		commentOnApplication,
 		requestApplicationDocs,
 		addApplication,
+		recordProceed,
+		declineProceed,
+		reinviteProceed,
 	} = useCases();
 
 	/**
@@ -36,6 +39,7 @@ export function EnterpriseCases() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+	const [actionError, setActionError] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -90,6 +94,44 @@ export function EnterpriseCases() {
 		setSelectedApp(updated);
 	}
 
+	async function handleRecordProceed() {
+		if (!selectedApp) return;
+		try {
+			await recordProceed(selectedApp.appId);
+			setActionSuccess("Applicant consent recorded — the gate is now open.");
+			setTimeout(() => setActionSuccess(null), 4000);
+		} catch (err) {
+			setActionSuccess(null);
+			setActionError(err instanceof Error ? err.message : "Could not record consent");
+		}
+	}
+
+	async function handleReinviteProceed() {
+		if (!selectedApp) return;
+		try {
+			await reinviteProceed(selectedApp.appId);
+			setActionSuccess("Consent gate re-opened for the applicant.");
+			setTimeout(() => setActionSuccess(null), 4000);
+		} catch (err) {
+			setActionSuccess(null);
+			setActionError(err instanceof Error ? err.message : "Could not re-invite");
+		}
+	}
+
+	async function handleDeclineProceed() {
+		if (!selectedApp) return;
+		const reason = window.prompt("Record why the applicant is pausing (optional):", "");
+		if (reason === null) return;
+		try {
+			await declineProceed(selectedApp.appId, reason);
+			setActionSuccess("Applicant declined to proceed — the case is paused.");
+			setTimeout(() => setActionSuccess(null), 4000);
+		} catch (err) {
+			setActionSuccess(null);
+			setActionError(err instanceof Error ? err.message : "Could not record decline");
+		}
+	}
+
 	return (
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -137,6 +179,12 @@ export function EnterpriseCases() {
 			{actionSuccess && (
 				<div style={{ padding: "0.85rem 1.25rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1rem" }}>
 					✓ {actionSuccess}
+				</div>
+			)}
+
+			{actionError && (
+				<div style={{ padding: "0.85rem 1.25rem", background: "var(--danger-bg, #b91c1c)", color: "#fff", marginBottom: "1rem" }} role="alert">
+					{actionError}
 				</div>
 			)}
 
@@ -387,6 +435,46 @@ export function EnterpriseCases() {
 									<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
 										Current stage: {JOURNEY_STAGE_LABELS[(liveSelected ?? selectedApp).stage as JourneyStage]}. Use the <a href="/workflow" style={{ textDecoration: "underline" }}>Workflow board</a> to advance the journey.
 									</p>
+								</div>
+							</div>
+
+							{/* Consent Gate */}
+							<div className="card" style={{ background: "var(--muted)" }}>
+								<p className="eyebrow mb-1">Consent Gate</p>
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+									<div>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+											{selectedApp.proceedStatus === "accepted"
+												? "Consent recorded ✓"
+												: selectedApp.proceedStatus === "declined"
+													? "Applicant paused the application"
+													: "Awaiting the applicant's consent to proceed"}
+										</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+											{selectedApp.proceedStatus === "accepted"
+												? "The consent gate is open — school selection, invoices and tracking are unlocked."
+												: selectedApp.proceedStatus === "declined"
+													? "The case is on hold. Re-invite to let the applicant reopen it, or record consent on their behalf."
+													: "The applicant must confirm in the portal before document verification can advance."}
+										</p>
+									</div>
+									<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+										{selectedApp.proceedStatus !== "accepted" && (
+											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
+												Record consent (override)
+											</button>
+										)}
+										{selectedApp.proceedStatus === "invited" && (
+											<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+												Record decline
+											</button>
+										)}
+										{selectedApp.proceedStatus === "declined" && (
+											<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+												Re-invite applicant
+											</button>
+										)}
+									</div>
 								</div>
 							</div>
 

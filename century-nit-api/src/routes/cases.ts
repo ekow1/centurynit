@@ -1710,6 +1710,9 @@ meRouter.openapi(
 			consultation?.assessmentResult?.outcome === "Conditionally Eligible";
 
 		const hasPackage = Boolean(application?.fundingTrack);
+		// Consent gate: before the application truly opens, the applicant must
+		// accept to proceed. invited/declined = still gated; accepted = open.
+		const hasProceeded = application?.proceedStatus === "accepted";
 		const hasSelection = schoolTracks.schools.some(
 			(s) => s.status !== "Draft",
 		);
@@ -1733,6 +1736,7 @@ meRouter.openapi(
 		type PortalStage =
 			| "consultation"
 			| "eligibility"
+			| "proceed"
 			| "school_package"
 			| "school_select"
 			| "application_invoice"
@@ -1758,8 +1762,11 @@ meRouter.openapi(
 			derivedPortalStage = "application_invoice";
 		} else if (hasPackage) {
 			derivedPortalStage = "school_select";
-		} else if (isEligible && !hasPackage) {
+		} else if (isEligible && hasProceeded && !hasPackage) {
 			derivedPortalStage = "school_package";
+		} else if (isEligible && !hasProceeded) {
+			// Assessment complete but the consent gate is still open.
+			derivedPortalStage = "proceed";
 		} else if (hasConsultation) {
 			derivedPortalStage = "eligibility";
 		}
@@ -1780,7 +1787,8 @@ meRouter.openapi(
 			portalStage = base;
 			if (coarseStage === "document_verification") {
 				if (hasPackage && !hasSelection) portalStage = "school_select";
-				else if (!hasPackage && isEligible) portalStage = "school_package";
+				else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
+				else if (isEligible && !hasProceeded) portalStage = "proceed";
 				else if (!isEligible && hasConsultation) portalStage = "eligibility";
 				else if (!hasConsultation) portalStage = "consultation";
 			} else if (coarseStage === "school_submission") {
@@ -1816,7 +1824,7 @@ meRouter.openapi(
 			journey: true,
 			consultation: true,
 			package: isEligible,
-			application: isEligible && hasPackage,
+			application: isEligible,
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
 			pre_departure: hasAdmitted && isVisaInvoicePaid && isVisaDone,
@@ -1834,6 +1842,7 @@ meRouter.openapi(
 			let done = false;
 			if (sid === "consultation") done = hasConsultation;
 			else if (sid === "eligibility") done = isEligible;
+			else if (sid === "proceed") done = hasProceeded;
 			else if (sid === "school_package") done = hasPackage;
 			else if (sid === "school_select") done = hasSelection;
 			else if (sid === "application_invoice") done = isAppInvoicePaid;

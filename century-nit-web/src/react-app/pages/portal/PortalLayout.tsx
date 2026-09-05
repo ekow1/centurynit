@@ -221,6 +221,7 @@ function stagePill(s: ProcessStageId) {
 		new: "New",
 		consultation: "Consultation",
 		eligibility: "Eligibility review",
+		proceed: "Start your application",
 		school_package: "School package",
 		school_select: "School selection",
 		application_invoice: "Application invoice",

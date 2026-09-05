@@ -1753,6 +1753,7 @@ export type ProcessStageId =
 	| "new"
 	| "consultation"
 	| "eligibility"
+	| "proceed"
 	| "school_package"
 	| "school_select"
 	| "application_invoice"
@@ -1799,8 +1800,17 @@ export const PROCESS_STAGES: {
 		band: "consultation",
 	},
 	{
-		id: "school_package",
+		id: "proceed",
 		index: 3,
+		label: "Start your application",
+		detail: "Confirm you want to proceed after your eligibility result",
+		owner: "you",
+		path: "/portal/application",
+		band: "application",
+	},
+	{
+		id: "school_package",
+		index: 4,
 		label: "School application package",
 		detail: "Scholarship / non-scholarship · degree level",
 		owner: "you",
@@ -1809,7 +1819,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "school_select",
-		index: 4,
+		index: 5,
 		label: "Select schools",
 		detail: "Choose schools & programmes first",
 		owner: "you",
@@ -1818,7 +1828,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "application_invoice",
-		index: 5,
+		index: 6,
 		label: "Application invoice",
 		detail: "Raised after selection - pay before tracking starts",
 		owner: "you",
@@ -1827,7 +1837,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "school_tracking",
-		index: 6,
+		index: 7,
 		label: "Application tracking",
 		detail: "Process begins only after invoice is paid",
 		owner: "counselor",
@@ -1836,7 +1846,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "visa_invoice",
-		index: 7,
+		index: 8,
 		label: "Visa invoice",
 		detail: "Raised on admission - pay before visa process starts",
 		owner: "you",
@@ -1845,7 +1855,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "visa",
-		index: 8,
+		index: 9,
 		label: "Visa tracking",
 		detail: "Simulated visa processing after payment",
 		owner: "counselor",
@@ -1854,7 +1864,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "pre_departure",
-		index: 9,
+		index: 10,
 		label: "Travel & pre-departure",
 		detail: "Flights, accommodation, insurance & arrival briefing",
 		owner: "you",
@@ -1863,7 +1873,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "completed",
-		index: 10,
+		index: 11,
 		label: "Complete",
 		detail: "Journey finished - last step",
 		owner: "system",

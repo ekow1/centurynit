@@ -94,7 +94,7 @@ export function EnterpriseVisa() {
 	const active = liveSelected ?? selectedApp;
 
 	return (
-		<div className="page-content fade-in">
+		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Visa Processing</h1>
@@ -131,7 +131,7 @@ export function EnterpriseVisa() {
 			</div>
 
 			{/* Split Pane Layout */}
-			<div className="ops-split" style={{ display: "flex", gap: "1rem", height: "var(--ops-pane-h)", minHeight: "var(--ops-pane-min)" }}>
+			<div className="ops-split" style={{ display: "flex", flex: 1, gap: "1rem", minHeight: "var(--ops-pane-min)" }}>
 				{/* LEFT: List Pane */}
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>

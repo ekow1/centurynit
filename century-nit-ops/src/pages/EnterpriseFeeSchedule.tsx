@@ -160,8 +160,7 @@ export function EnterpriseFeeSchedule() {
 	const { opsRole } = useOpsAuth();
 	const [settings, setSettings] = useState<SettingView[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-	const [flash, setFlash] = useState<string | null>(null);
+	const [modalError, setModalError] = useState<string | null>(null);
 	const [editingFee, setEditingFee] = useState<FeeItem | null>(null);
 	const [editAmountDollars, setEditAmountDollars] = useState<string>("");
 	const [editMode, setEditMode] = useState<InvoiceMode>("issued");
@@ -180,21 +179,20 @@ export function EnterpriseFeeSchedule() {
 	// Toast
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
 
-	function _showToast(type: "error" | "success" | "info", message: string) {
+	function showToast(type: "error" | "success" | "info", message: string) {
 		setToast({ type, message });
 	}
-	void _showToast;
 
 	const isSuperAdmin = opsRole === "super_admin";
 
 	const loadSettings = useCallback(async () => {
 		setLoading(true);
-		setError(null);
+		setModalError(null);
 		try {
 			const res = await apiFetch<{ settings: SettingView[] }>(`${API_PREFIX}/settings?include_hidden=true`);
 			setSettings(res.settings);
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to load fee configuration");
+			showToast("error", err instanceof ApiError ? err.message : "Failed to load fee configuration");
 		} finally {
 			setLoading(false);
 		}
@@ -218,7 +216,7 @@ export function EnterpriseFeeSchedule() {
 		setEditingFee(item);
 		setEditAmountDollars(centsToDollars(currentCents));
 		setEditMode(feeModes[item.key] || "issued");
-		setError(null);
+		setModalError(null);
 	}
 
 	async function handleSaveFee(e: React.FormEvent) {
@@ -227,12 +225,12 @@ export function EnterpriseFeeSchedule() {
 
 		const nextCents = dollarsToCents(editAmountDollars);
 		if (nextCents < 0) {
-			setError("Fee amount must be greater than or equal to zero.");
+			setModalError("Fee amount must be greater than or equal to zero.");
 			return;
 		}
 
 		setSaving(true);
-		setError(null);
+		setModalError(null);
 
 		try {
 			// 1. Save fee amount
@@ -261,12 +259,12 @@ export function EnterpriseFeeSchedule() {
 			const usdAmount = Number.parseFloat(editAmountDollars) || 0;
 			const ghsAmount = Math.round(usdAmount * GHS_PER_USD).toLocaleString();
 			const modeLabel = editMode === "proforma" ? "Estimate" : "Actual";
-			setFlash(`"${editingFee.title}" updated — GH₵ ${ghsAmount} ($${editAmountDollars} USD), ${modeLabel}.`);
+			showToast("success", `"${editingFee.title}" updated — GH₵ ${ghsAmount} ($${editAmountDollars} USD), ${modeLabel}.`);
 			setEditingFee(null);
 			await loadSettings();
 			void refreshGlobalSettings();
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to update fee schedule");
+			setModalError(err instanceof ApiError ? err.message : "Failed to update fee schedule");
 		} finally {
 			setSaving(false);
 		}
@@ -276,12 +274,12 @@ export function EnterpriseFeeSchedule() {
 		e.preventDefault();
 		const nextCents = dollarsToCents(newFee.amountDollars);
 		if (nextCents < 0 || !newFee.title) {
-			setError("Invalid fee details.");
+			setModalError("Invalid fee details.");
 			return;
 		}
 
 		setSaving(true);
-		setError(null);
+		setModalError(null);
 
 		try {
 			const feeKey = `CUSTOM_FEE_${Date.now()}`;
@@ -307,13 +305,13 @@ export function EnterpriseFeeSchedule() {
 				{ method: "PUT", body: JSON.stringify({ key: "FEE_ISSUANCE_MODES", value: JSON.stringify(nextModes) }) },
 			);
 
-			setFlash(`Added custom fee "${newFee.title}".`);
+			showToast("success", `Added custom fee "${newFee.title}".`);
 			setAddingFee(false);
 			setNewFee({ title: "", category: "Admissions & Processing", amountDollars: "1.00", mode: "proforma" });
 			await loadSettings();
 			void refreshGlobalSettings();
 		} catch (err) {
-			setError(err instanceof ApiError ? err.message : "Failed to add custom fee");
+			setModalError(err instanceof ApiError ? err.message : "Failed to add custom fee");
 		} finally {
 			setSaving(false);
 		}
@@ -363,17 +361,6 @@ export function EnterpriseFeeSchedule() {
 					)}
 				</div>
 			</div>
-
-			{flash && (
-				<div className="inv-flash" style={{ marginBottom: "1.5rem" }}>
-					✓ {flash}
-				</div>
-			)}
-			{error && (
-				<p className="ops-modal__error" role="alert" style={{ marginBottom: "1.5rem" }}>
-					{error}
-				</p>
-			)}
 
 			{/* Category Filter Tabs */}
 			<div style={{ display: "flex", gap: "1rem", borderBottom: "1px solid #000", marginBottom: "1.5rem" }}>
@@ -565,8 +552,8 @@ export function EnterpriseFeeSchedule() {
 								</div>
 							</div>
 
-							{error && (
-								<p className="ops-modal__error" role="alert">{error}</p>
+							{modalError && (
+								<p className="ops-modal__error" role="alert">{modalError}</p>
 							)}
 
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
@@ -640,8 +627,8 @@ export function EnterpriseFeeSchedule() {
 								</p>
 							</div>
 
-							{error && (
-								<p className="ops-modal__error" role="alert">{error}</p>
+							{modalError && (
+								<p className="ops-modal__error" role="alert">{modalError}</p>
 							)}
 
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>

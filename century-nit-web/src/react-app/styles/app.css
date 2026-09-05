@@ -2745,6 +2745,30 @@ img.profile-monogram {
 	font-size: 1.5rem;
 }
 
+/* Stat cells as navigation shortcuts - link cells tint on hover, and the
+   cell belonging to a pending action is outlined so its fix is one click. */
+
+.stat-cell--link {
+	display: block;
+	color: inherit;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.stat-cell--link:hover {
+	background: var(--muted);
+}
+
+.stat-cell--cta {
+	background: var(--muted);
+	border-color: var(--foreground);
+}
+
+.stat-cell--cta .stat-cell__label {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
 .stat-cell__value--cap {
 	text-transform: capitalize;
 }
@@ -2973,6 +2997,31 @@ img.profile-monogram {
 .journey-now__detail {
 	margin-top: 0.5rem;
 	color: #ffffff;
+	max-width: 38rem;
+}
+
+/* Home dashboard — "what must I do now" band, above the journey band */
+
+.action-now {
+	border: 2px solid var(--foreground);
+	background: var(--muted);
+	padding: 1.75rem clamp(1.25rem, 3vw, 2.5rem);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1.5rem;
+	justify-content: space-between;
+	align-items: flex-start;
+}
+
+.action-now__title {
+	font-size: 1.7rem;
+	font-weight: 500;
+	margin-top: 0.4rem;
+}
+
+.action-now__detail {
+	margin-top: 0.5rem;
+	color: var(--muted-foreground);
 	max-width: 38rem;
 }
 

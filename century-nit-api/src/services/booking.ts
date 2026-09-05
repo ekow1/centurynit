@@ -1078,6 +1078,9 @@ export async function cancelBooking(input: {
 		.update(bookings)
 		.set({
 			status: "CANCELLED",
+			employeeId: null,
+			assignedAt: null,
+			assignedBy: null,
 			cancelledAt: new Date(),
 			cancelledBy: input.actor.email,
 			cancellationReason: input.reason ?? null,
@@ -1163,7 +1166,13 @@ export async function completeBooking(input: {
 
 	const [updated] = await db
 		.update(bookings)
-		.set({ status: "COMPLETED", updatedAt: new Date() })
+		.set({
+			status: "COMPLETED",
+			employeeId: null,
+			assignedAt: null,
+			assignedBy: null,
+			updatedAt: new Date(),
+		})
 		.where(eq(bookings.id, booking.id))
 		.returning();
 

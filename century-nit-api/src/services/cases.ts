@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, not, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -9,7 +9,6 @@ import {
 	type AssessmentResult,
 	type CaseApplicationStatus,
 	canAdvanceToStage,
-	DEFAULT_FEE_CENTS,
 	JOURNEY_STAGES,
 	type JourneyStage,
 	patchApplicationSchema,
@@ -38,7 +37,7 @@ import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { listSchoolsForApplicant } from "./schools.js";
-import { createInvoice } from "./invoice.js";
+import { createInvoice, getFeeSchedule } from "./invoice.js";
 import {
 	linkApplicationToLead,
 	syncLeadAssignment,
@@ -508,6 +507,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
 		appFeePaid: row.appFeePaid,
+		travelInvoicePaid: row.travelInvoicePaid,
 		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
 		requestedDocuments: row.requestedDocuments ?? [],
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
@@ -1396,6 +1396,7 @@ async function raiseVisaInvoiceForApplication(
 	actor: Actor,
 ): Promise<void> {
 	const clientUserId = applicant.userId ?? undefined;
+	const fees = await getFeeSchedule();
 	await createInvoice({
 		data: {
 			applicantName: applicant.name,
@@ -1405,7 +1406,7 @@ async function raiseVisaInvoiceForApplication(
 			lines: [
 				{
 					label: "Visa processing fee",
-					amountCents: DEFAULT_FEE_CENTS.visaBase,
+					amountCents: fees.visaBaseCents,
 				},
 			],
 			note: `Auto-raised when stage advanced to visa_processing (application ${app.appNumber}).`,
@@ -1442,6 +1443,9 @@ export async function setApplicationStage(
 	const adjacencyReason = canAdvanceToStage(row.stage, stage, {
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
+		agencyStageIndex: row.agencyStageIndex,
+		appFeePaid: row.appFeePaid,
+		travelInvoicePaid: row.travelInvoicePaid,
 		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 	});
@@ -1818,7 +1822,12 @@ export async function assignedApplicantUserIds(opsUserId: string): Promise<strin
 		.select({ userId: applicants.userId })
 		.from(consultations)
 		.innerJoin(applicants, eq(applicants.id, consultations.applicantId))
-		.where(eq(consultations.assignedOfficerId, opsUserId));
+		.where(
+			and(
+				eq(consultations.assignedOfficerId, opsUserId),
+				not(inArray(consultations.status, ["COMPLETED", "CANCELLED"])),
+			),
+		);
 	const fromApps = await db
 		.select({ userId: applicants.userId })
 		.from(applications)

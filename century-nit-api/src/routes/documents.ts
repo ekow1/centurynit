@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, not, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import {
 	DOCUMENT_ERROR_CODES,
@@ -123,7 +123,12 @@ async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] |
 	const rows = await db
 		.selectDistinct({ ownerUserId: bookings.clientUserId })
 		.from(bookings)
-		.where(eq(bookings.employeeId, staff.opsUserId));
+		.where(
+			and(
+				eq(bookings.employeeId, staff.opsUserId),
+				not(inArray(bookings.status, ["CANCELLED", "COMPLETED"])),
+			),
+		);
 
 	const { assignedApplicantUserIds } = await import("../services/cases.js");
 	const fromCases = await assignedApplicantUserIds(staff.opsUserId);

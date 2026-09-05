@@ -71,7 +71,7 @@ export function OpsForgotPassword() {
 					{sent ? (
 						<div className="ops-login__form">
 							<p className="ops-login__subtitle" style={{ marginBottom: "1rem" }}>
-								If an account exists for <strong>{email}</strong>, a reset link is on its way.
+								A reset link is on its way to <strong>{email}</strong>.
 								The link expires shortly, and only works once.
 							</p>
 							<button

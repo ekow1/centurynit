@@ -44,8 +44,8 @@ export async function apiFetch<T>(
 		let message = res.statusText;
 		try {
 			const body = await res.json();
-			code = body?.error?.code ?? code;
-			message = body?.error?.message ?? message;
+			code = body?.error?.code ?? body?.code ?? code;
+			message = body?.error?.message ?? body?.message ?? message;
 		} catch {
 			// non-JSON error body
 		}

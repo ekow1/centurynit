@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { phoneNumber } from "better-auth/plugins/phone-number";
@@ -162,6 +163,20 @@ function createAuth(config: GoogleSocialConfig) {
 		 */
 		minPasswordLength: 12,
 		sendResetPassword: async ({ user, url }) => {
+			// The console must only reset passwords for staff, not portal
+			// applicants. Staff identity lives in opsUsers; a reset email for
+			// any other user would confuse applicants and confirm their
+			// account exists to us, so block non-staff before sending.
+			const staff = await db.query.opsUsers.findFirst({
+				where: eq(schema.opsUsers.email, user.email),
+			});
+			if (!staff || !staff.active) {
+				throw APIError.from("BAD_REQUEST", {
+					code: "NOT_STAFF_ACCOUNT",
+					message:
+						"That email isn't linked to a Century NIT staff account, so no reset link was sent. Check for typos, or ask your administrator to invite you.",
+				});
+			}
 			const { html, text } = renderPasswordResetEmail({
 				name: user.name,
 				resetUrl: url,

@@ -529,7 +529,9 @@ export async function weeklySlotSchedule(): Promise<WeeklySlotSchedule> {
 }
 
 /** Read all settings with masked values, for the UI. */
-export async function listSettingsForDisplay(): Promise<
+export async function listSettingsForDisplay(
+	includeHidden: boolean = false
+): Promise<
 	Array<{
 		key: SettingKey;
 		label: string;
@@ -547,7 +549,7 @@ export async function listSettingsForDisplay(): Promise<
 		.from(platformSettings);
 	const updatedAtByKey = new Map(rows.map((r) => [r.key as SettingKey, r.updatedAt]));
 
-	return ALL_KEYS.filter((key) => !SETTING_DEFS[key].hidden).map((key) => {
+	return ALL_KEYS.filter((key) => includeHidden || !SETTING_DEFS[key].hidden).map((key) => {
 		const def = SETTING_DEFS[key];
 		const dbValue = cache.get(key);
 		const envValue = env[key as keyof typeof env] as string | undefined;

@@ -191,7 +191,7 @@ export function EnterpriseFeeSchedule() {
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await apiFetch<{ settings: SettingView[] }>(`${API_PREFIX}/settings`);
+			const res = await apiFetch<{ settings: SettingView[] }>(`${API_PREFIX}/settings?include_hidden=true`);
 			setSettings(res.settings);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load fee configuration");
@@ -236,10 +236,20 @@ export function EnterpriseFeeSchedule() {
 
 		try {
 			// 1. Save fee amount
-			await apiFetch(
-				`${API_PREFIX}/settings`,
-				{ method: "PUT", body: JSON.stringify({ key: editingFee.key, value: String(nextCents) }) },
-			);
+			if (editingFee.key.startsWith("CUSTOM_FEE_")) {
+				const nextCustomFees = customFees.map(f =>
+					f.key === editingFee.key ? { ...f, defaultCents: nextCents } : f
+				);
+				await apiFetch(
+					`${API_PREFIX}/settings`,
+					{ method: "PUT", body: JSON.stringify({ key: "CUSTOM_FEE_ITEMS", value: JSON.stringify(nextCustomFees) }) },
+				);
+			} else {
+				await apiFetch(
+					`${API_PREFIX}/settings`,
+					{ method: "PUT", body: JSON.stringify({ key: editingFee.key, value: String(nextCents) }) },
+				);
+			}
 
 			// 2. Save updated per-fee mode
 			const nextModes = { ...feeModes, [editingFee.key]: editMode };

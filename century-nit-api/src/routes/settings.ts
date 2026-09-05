@@ -190,7 +190,8 @@ settingsRouter.openapi(
 		},
 	}),
 	async (c) => {
-		const settings = await listSettingsForDisplay();
+		const includeHidden = c.req.query("include_hidden") === "true";
+		const settings = await listSettingsForDisplay(includeHidden);
 		return c.json({ settings });
 	},
 );

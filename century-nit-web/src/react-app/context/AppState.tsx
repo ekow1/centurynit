@@ -827,6 +827,133 @@ export function getJourneyPhase(
 	};
 }
 
+export type PendingAction = {
+	kind:
+		| "consent"
+		| "documents"
+		| "app_invoice"
+		| "visa_invoice"
+		| "package"
+		| "schools"
+		| "appointment";
+	/** Short imperative name - the button label the applicant sees. */
+	label: string;
+	/** The one-line "what is being asked" title. */
+	title: string;
+	detail: string;
+	/** Portal route the action resolves at. */
+	to: string;
+};
+
+/**
+ * The single most urgent thing the applicant must do right now - or null when
+ * the journey is waiting on us (Ops/consular) rather than on them.
+ *
+ * One action at a time, in funnel order: a later gate never surfaces while an
+ * earlier one is still open. Derived purely from local state signals (the same
+ * ones `getCurrentProcessStage` reads), so the band can never disagree with
+ * the journey band or the chapter unlocks it points into. All target routes
+ * are chapters the applicant has already reached.
+ */
+export function getPendingAction(
+	app: ApplicationData,
+	booking: BookingData,
+	schools: SchoolApplicationTrack[],
+): PendingAction | null {
+	const stage = getCurrentProcessStage(app, booking, schools);
+	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
+
+	// Consent gate - the applicant has an explicit decision to make.
+	if (app.proceedStatus === "invited") {
+		return {
+			kind: "consent",
+			label: "Start",
+			title: "Start your application",
+			detail:
+				"Your eligibility check is complete. Review your recommended route and confirm you want to proceed.",
+			to: "/portal/application",
+		};
+	}
+
+	// A rejected document blocks the file until the applicant re-uploads.
+	if (app.docReviewStatus === "rejected") {
+		return {
+			kind: "documents",
+			label: "View documents",
+			title: "Resubmit your documents",
+			detail:
+				"One or more documents need corrections. Upload the corrected versions to continue.",
+			to: "/portal/documents",
+		};
+	}
+
+	// Unpaid application invoice - tracking is blocked until this settles.
+	if (
+		app.applicationInvoice.status === "raised" &&
+		!isAppInvoicePaid(app) &&
+		selectionConfirmed
+	) {
+		return {
+			kind: "app_invoice",
+			label: "Pay now",
+			title: "Pay your application invoice",
+			detail:
+				"Settle your Stage II invoice so Century NIT can start tracking your applications.",
+			to: "/portal/financial",
+		};
+	}
+
+	if (stage === "school_package" && !hasSchoolPackage(app)) {
+		return {
+			kind: "package",
+			label: "Choose package",
+			title: "Choose your school package",
+			detail:
+				"Pick a funding track and degree level to shape where Century NIT targets your applications.",
+			to: "/portal/package",
+		};
+	}
+
+	// Schools selected on the client but never locked in - the page says the
+	// applicant must still submit. If they already locked, `stage` moves on.
+	if (stage === "school_select" && !selectionConfirmed) {
+		return {
+			kind: "schools",
+			label: "Select schools",
+			title: "Select your schools",
+			detail:
+				"Choose the schools and programmes you want Century NIT to apply to for you.",
+			to: "/portal/application",
+		};
+	}
+
+	// Unpaid visa invoice - admission is in, visa is blocked until this settles.
+	if (app.visaInvoice.status === "raised" && !isVisaInvoicePaid(app)) {
+		return {
+			kind: "visa_invoice",
+			label: "Pay now",
+			title: "Pay your visa invoice",
+			detail:
+				"You have an admission. Settle your Stage III invoice so visa processing can begin.",
+			to: "/portal/financial",
+		};
+	}
+
+	// Server-backed appointment awaiting the applicant's confirmation.
+	if (booking.consultationPhase === "awaiting_confirmation") {
+		return {
+			kind: "appointment",
+			label: "Confirm",
+			title: "Confirm your consultation",
+			detail:
+				"We proposed a time for your consultation. Confirm it or pick another slot.",
+			to: "/portal/appointments",
+		};
+	}
+
+	return null;
+}
+
 type AppStateContextValue = {
 	application: ApplicationData;
 	updateApplication: (patch: Partial<ApplicationData>) => void;
@@ -889,6 +1016,7 @@ type AppStateContextValue = {
 	autosaveLabel: string;
 	chapterUnlocks: Record<PortalChapterId, boolean>;
 	journeyPhase: ReturnType<typeof getJourneyPhase>;
+	pendingAction: PendingAction | null;
 	processStage: ProcessStageId;
 	stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> | null;
 	booking: BookingData;
@@ -2382,6 +2510,11 @@ journeyStage: a.stage ?? prev.journeyStage,
 		[serverJourney],
 	);
 
+	const pendingAction = useMemo(
+		() => getPendingAction(application, booking, schoolApplications),
+		[application, booking, schoolApplications],
+	);
+
 	const value = useMemo(
 		() => ({
 			application,
@@ -2428,6 +2561,7 @@ journeyStage: a.stage ?? prev.journeyStage,
 			autosaveLabel,
 			chapterUnlocks,
 			journeyPhase: effectiveJourneyPhase,
+			pendingAction,
 			processStage,
 			stageStatuses,
 			booking,
@@ -2497,6 +2631,7 @@ journeyStage: a.stage ?? prev.journeyStage,
 			autosaveLabel,
 			chapterUnlocks,
 			effectiveJourneyPhase,
+			pendingAction,
 			processStage,
 			stageStatuses,
 			booking,

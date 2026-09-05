@@ -67,7 +67,7 @@ export function FeeSettingsProvider({ children }: { children: ReactNode }) {
 
 	const refresh = async () => {
 		try {
-			const res = await apiFetch<{ settings: { key: string; valueMasked: string | null }[] }>(`${API_PREFIX}/settings`);
+			const res = await apiFetch<{ settings: { key: string; valueMasked: string | null }[] }>(`${API_PREFIX}/settings?include_hidden=true`);
 			
 			// --- fee amounts ---
 			const nextFees = { ...DEFAULT_FEE_CENTS } as Record<keyof typeof DEFAULT_FEE_CENTS, number>;

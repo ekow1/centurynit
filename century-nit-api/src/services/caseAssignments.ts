@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { caseAssignments, caseAssignmentTypeEnum } from "../db/schema.js";
 
@@ -283,6 +283,3 @@ export const ASSIGNMENT_END_REASONS = [
 	"offboarded",
 	"unassigned",
 ] as const;
-
-// Silence unused import warning for inArray (kept for future filter use)
-void inArray;

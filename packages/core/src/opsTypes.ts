@@ -8,6 +8,7 @@
 export type ConsultationStatus =
 	| "Under Review"
 	| "Assigned"
+	| "Confirmed"
 	| "In Assessment"
 	| "Completed"
 	| "Cancelled";

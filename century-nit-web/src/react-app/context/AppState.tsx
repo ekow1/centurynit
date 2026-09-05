@@ -1962,13 +1962,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						? "outcome"
 						: c.status === "IN_ASSESSMENT"
 							? "assessment"
-							: c.status === "ASSIGNED" || c.assignedOfficerId
-								? c.slotConfirmed
-									? "awaiting_assignment_confirmation"
-									: "assigned"
-								: c.slotConfirmed
-									? "awaiting_assignment"
-									: "awaiting_confirmation";
+							: c.status === "CONFIRMED"
+								? "awaiting_assignment_confirmation"
+								: c.status === "ASSIGNED" || c.assignedOfficerId
+									? c.slotConfirmed
+										? "awaiting_assignment_confirmation"
+										: "assigned"
+									: c.slotConfirmed
+										? "awaiting_assignment"
+										: "awaiting_confirmation";
 			const outcome: EligibilityOutcome =
 				c.assessmentResult?.outcome?.toLowerCase() === "eligible"
 					? "eligible"

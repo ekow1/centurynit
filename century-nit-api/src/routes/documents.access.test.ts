@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { applicantDocuments, bookings, opsUsers, users } from "../db/schema.js";
+import { applicantDocuments, bookings, caseAssignments, opsUsers, users } from "../db/schema.js";
 
 /**
  * Who may read whose documents.
@@ -107,6 +107,7 @@ async function seedDocument(ownerUserId: string): Promise<string> {
 }
 
 async function wipe() {
+	await db.execute(sql`DELETE FROM case_assignments WHERE target_id IN (SELECT id FROM bookings WHERE client_email LIKE ${"%" + SUFFIX})`);
 	await db.execute(sql`DELETE FROM bookings WHERE client_email LIKE ${"%" + SUFFIX}`);
 	await db.execute(
 		sql`DELETE FROM applicant_documents WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE ${"%" + SUFFIX})`,
@@ -156,20 +157,35 @@ beforeEach(async () => {
 
 	// Applicant A is on the consultant's caseload. Applicant B is not.
 	const start = new Date(Date.now() + 86_400_000);
-	await db.insert(bookings).values({
-		reference: "CNS-DOCACCESS-1",
-		clientUserId: ids.applicantA,
-		clientName: "Applicant A",
-		clientEmail: `${ids.applicantA}${SUFFIX}`,
-		serviceId: "consultation",
-		serviceName: "Consultation",
-		branchId: "accra-hq",
-		startsAt: start,
-		endsAt: new Date(start.getTime() + 45 * 60_000),
-		timezone: "Africa/Accra",
-		durationMinutes: 45,
-		status: "ASSIGNED",
-		employeeId: ids.consultantOpsId,
+	const [seededBooking] = await db
+		.insert(bookings)
+		.values({
+			reference: "CNS-DOCACCESS-1",
+			clientUserId: ids.applicantA,
+			clientName: "Applicant A",
+			clientEmail: `${ids.applicantA}${SUFFIX}`,
+			serviceId: "consultation",
+			serviceName: "Consultation",
+			branchId: "accra-hq",
+			startsAt: start,
+			endsAt: new Date(start.getTime() + 45 * 60_000),
+			timezone: "Africa/Accra",
+			durationMinutes: 45,
+			status: "ASSIGNED",
+			employeeId: ids.consultantOpsId,
+			assignedAt: new Date(),
+		})
+		.returning();
+
+	// reachableOwnerIds now derives caseload from case_assignments, not the
+	// denormalized bookings.employeeId column — seed the history row to match
+	// what assignBooking would create in production.
+	await db.insert(caseAssignments).values({
+		targetType: "booking",
+		targetId: seededBooking.id,
+		opsUserId: ids.consultantOpsId,
+		role: "primary",
+		status: "active",
 		assignedAt: new Date(),
 	});
 });

@@ -864,7 +864,7 @@ export function getPendingAction(
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 
 	// Consent gate - the applicant has an explicit decision to make.
-	if (app.proceedStatus === "invited") {
+	if (app.proceedStatus === "invited" && !selectionConfirmed && !hasSchoolPackage(app)) {
 		return {
 			kind: "consent",
 			label: "Start",

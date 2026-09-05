@@ -116,7 +116,7 @@ export function DashboardHome() {
 				</div>
 			</header>
 
-			{/* Action required - only shows when the applicant must do something */}
+			{/* Action required OR You are here - unified block to prevent duplicate competing banners */}
 			{pendingAction ? (
 				<div className="action-now mt-5">
 					<div>
@@ -128,24 +128,23 @@ export function DashboardHome() {
 						{pendingAction.label}
 					</Button>
 				</div>
-			) : null}
-
-			{/* You are here - dark accent band */}
-			<div className="journey-now mt-5">
-				<div>
-					<p className="eyebrow">You are here</p>
-					<p className="display journey-now__title">
-						{STAGE_SHORT[current] ?? stageMeta?.label ?? journeyPhase.label}
-					</p>
-					<p className="journey-now__detail">{meta.desc}</p>
-					{journeyPhase.nextUnlock ? (
-						<p className="journey-now__detail">{journeyPhase.nextUnlock}</p>
-					) : null}
+			) : (
+				<div className="journey-now mt-5">
+					<div>
+						<p className="eyebrow">You are here</p>
+						<p className="display journey-now__title">
+							{STAGE_SHORT[current] ?? stageMeta?.label ?? journeyPhase.label}
+						</p>
+						<p className="journey-now__detail">{meta.desc}</p>
+						{journeyPhase.nextUnlock ? (
+							<p className="journey-now__detail">{journeyPhase.nextUnlock}</p>
+						) : null}
+					</div>
+					<Button to={cta.to} variant="inverted" arrow>
+						{cta.label}
+					</Button>
 				</div>
-				<Button to={cta.to} variant="inverted" arrow>
-					{cta.label}
-				</Button>
-			</div>
+			)}
 
 			{/* Snapshot - stat cells double as shortcuts; the cell belonging to a
 			    pending action is highlighted so the way to resolve it is one click. */}

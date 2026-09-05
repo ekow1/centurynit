@@ -1126,7 +1126,7 @@ bookingsRouter.openapi(
 			...body,
 			actor: { id: user.id, email: user.email },
 		});
-		return c.json(toResponse(updated), 200);
+		return c.json(toBookingResponse(updated), 200);
 	},
 );
 
@@ -1166,7 +1166,7 @@ bookingsRouter.openapi(
 		}
 
 		const updated = await decideRescheduleBooking(id, body.decision, { id: user.id, email: user.email });
-		return c.json(toResponse(updated), 200);
+		return c.json(toBookingResponse(updated), 200);
 	},
 );
 

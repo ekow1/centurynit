@@ -2356,22 +2356,6 @@ function ApplicationHubInner() {
 		}
 	}
 
-	async function acceptInvoice() {
-		if (!serverInvoice) return;
-		setPayPhase("loading");
-		try {
-			await meApi.acceptInvoice(serverInvoice.id);
-			toast.success("Estimate accepted! The official invoice has been issued.");
-			fetchInvoice();
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Failed to accept the estimate. Please try again.",
-			);
-		} finally {
-			setPayPhase("idle");
-		}
-	}
-
 	function addSchool(e: FormEvent) {
 		e.preventDefault();
 		const d = destId || destinations[0]?.id || "uk";
@@ -3243,27 +3227,6 @@ function VisaHubInner() {
 		} catch (err) {
 			toast.error(
 				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
-			);
-		} finally {
-			setPayPhase("idle");
-		}
-	}
-
-	async function accept() {
-		setPayPhase("loading");
-		try {
-			const { invoices } = await meApi.invoices();
-			const backend = invoices.find((i) => i.type === "visa" && (i.status === "proforma" || i.balanceCents > 0));
-			if (!backend) {
-				toast.error("Your visa invoice has not been issued yet.");
-				return;
-			}
-			await meApi.acceptInvoice(backend.id);
-			toast.success("Estimate accepted! The official visa invoice has been issued.");
-			window.location.reload();
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Failed to accept the estimate. Please try again.",
 			);
 		} finally {
 			setPayPhase("idle");

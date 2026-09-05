@@ -287,20 +287,24 @@ export async function verifyAndSettlePayment(
 				phone = appRow?.phone ?? null;
 			} catch {}
 
-			const grossAmountGhs = tx.amountCents / 100;
+			const isGhs = tx.currency === "GHS";
+			const amountUsd = isGhs ? (tx.amountCents / 100) / GHS_USD_RATE : tx.amountCents / 100;
+			const amountGhs = isGhs ? tx.amountCents / 100 : (tx.amountCents / 100) * GHS_USD_RATE;
 			void sendPaymentReceiptEmail({
 				recipientEmail: invoice.applicantEmail,
 				recipientName: invoice.applicantName || "Valued Client",
 				recipientPhone: phone,
 				receiptNumber: `REC-#${tx.reference.replace(/^pstk_/i, "").toUpperCase()}`,
 				invoiceNumber: invoice.invoiceNumber,
-				amountGhs: grossAmountGhs,
-				amountUsd: grossAmountGhs / GHS_USD_RATE,
+				amountGhs,
+				amountUsd,
 				paymentDate: now.toLocaleDateString("en-US"),
 				paymentChannel: gateway === "paystack" ? "MOMO / Paystack" : "Stripe Card",
 				reference: tx.reference,
 				description: `Settlement for Invoice ${invoice.invoiceNumber}`,
-			}).catch(() => {});
+			}).catch((err) => {
+				console.error("[payments] Receipt delivery failed:", err);
+			});
 		}
 	}
 

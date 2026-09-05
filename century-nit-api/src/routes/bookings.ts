@@ -379,8 +379,8 @@ bookingsRouter.openapi(
 					},
 					actor: { name: "Paystack", email: "payments@centurynit.com" },
 					options: { recordGatewayTransaction: false },
-				}).catch(() => {
-					// Receipt is non-fatal.
+				}).catch((err) => {
+					console.error("[bookings] Receipt delivery failed:", err);
 				});
 			} catch {
 				// Non-fatal — booking still succeeds; ops can still find the booking

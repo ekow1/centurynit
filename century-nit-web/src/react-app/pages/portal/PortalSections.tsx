@@ -1401,6 +1401,24 @@ export function PortalFinancial() {
 	const visaNotRaised = a.visaInvoice.status === "none" ? VISA_INVOICE_AMOUNT : 0;
 	const notYetRaised = (consultationPaid ? 0 : CONSULTATION_FEE_AMOUNT) + appNotRaised + visaNotRaised;
 
+	// Every recorded payment across all invoices, newest first — shown as the
+	// "Payment receipts" section so the applicant can see what they've paid.
+	const receipts = invoicesLoaded
+		? invoices
+				.flatMap((inv) =>
+					(inv.payments ?? []).map((p) => ({
+						id: p.id,
+						invoiceNumber: inv.invoiceNumber,
+						amountCents: p.amountCents,
+						method: p.method,
+						reference: p.reference,
+						recordedByName: p.recordedByName,
+						at: p.at,
+					})),
+				)
+				.sort((a, b) => (a.at < b.at ? 1 : -1))
+		: [];
+
 	/** Schools that have made an offer carry real institutional figures */
 	const offers = schoolApplications
 		.filter((t) => t.offerTuitionUsd)
@@ -1832,6 +1850,39 @@ export function PortalFinancial() {
 					directly to the institution.
 				</p>
 			</section>
+
+			{/* Payment receipts — every recorded payment across all invoices */}
+			{receipts.length > 0 ? (
+				<section className="mt-6">
+					<p className="eyebrow mb-3">Payment receipts</p>
+					<div className="ledger">
+						{receipts.map((r) => (
+							<div key={r.id} className="ledger-item">
+								<div className="ledger-item__head">
+									<span className="ledger-item__title">
+										{r.invoiceNumber} · {r.method}
+									</span>
+									<span className="ledger-item__amount mono">
+										<Money usd={r.amountCents / 100} negative />
+									</span>
+								</div>
+								<div className="ledger-item__sub">
+									<span className="ledger-status ledger-status--paid">Paid</span>
+									<span className="ledger-item__detail muted">
+										{new Date(r.at).toLocaleDateString(undefined, {
+											year: "numeric",
+											month: "short",
+											day: "numeric",
+										})}
+										{r.reference ? ` · Ref ${r.reference}` : ""}
+										{r.recordedByName ? ` · by ${r.recordedByName}` : ""}
+									</span>
+								</div>
+							</div>
+						))}
+					</div>
+				</section>
+			) : null}
 		</div>
 	);
 }

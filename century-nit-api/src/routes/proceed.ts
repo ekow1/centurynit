@@ -146,7 +146,7 @@ opsProceedRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/{id}/proceed",
-		tags: ["Cases", "Ops"],
+		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
 		request: {
 			params: applicationParams,
@@ -191,7 +191,7 @@ opsProceedRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/{id}/proceed/decline",
-		tags: ["Cases", "Ops"],
+		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
 		request: {
 			params: applicationParams,
@@ -223,7 +223,7 @@ opsProceedRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/{id}/proceed/reinvite",
-		tags: ["Cases", "Ops"],
+		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
 		request: {
 			params: applicationParams,

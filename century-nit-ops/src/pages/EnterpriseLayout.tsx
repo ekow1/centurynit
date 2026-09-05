@@ -406,7 +406,7 @@ export function EnterpriseLayout() {
 						)}
 					</div>
 				</header>
-				<div className="portal__content" id="main-content" tabIndex={-1}>
+				<div className="portal__content" id="main-content" tabIndex={-1} style={{ display: "flex", flexDirection: "column" }}>
 					<Outlet />
 				</div>
 			</div>

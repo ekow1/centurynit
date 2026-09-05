@@ -189,7 +189,7 @@ export function EnterpriseConsultations() {
 	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 
 	return (
-		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", flex: 1 }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem" }}>
 				<div>
 					<h1 className="page-title">Consultations</h1>

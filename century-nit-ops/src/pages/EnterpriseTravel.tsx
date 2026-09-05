@@ -87,7 +87,7 @@ export function EnterpriseTravel() {
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 
 	return (
-		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", flex: 1 }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Travel Assistance</h1>

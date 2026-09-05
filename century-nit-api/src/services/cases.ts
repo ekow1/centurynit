@@ -491,6 +491,10 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		commentsFor("application", row.id),
 	]);
 
+	const schoolList = applicant
+		? await listSchoolsForApplicant(applicant.id)
+		: { schools: [] as SchoolApplication[], total: 0 };
+
 	return {
 		id: row.id,
 		appNumber: row.appNumber,
@@ -528,6 +532,9 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		requestedDocuments: row.requestedDocuments ?? [],
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
 		comments: comments.map(toComment),
+		consultationId: row.consultationId ?? null,
+		consultationNumber: null,
+		schoolApplications: schoolList.schools,
 		submittedAt: row.submittedAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),

@@ -1,3 +1,4 @@
+import { schoolApplicationSchema } from "./school.js";
 import { z } from "zod";
 
 /**
@@ -377,7 +378,11 @@ export const consultationSchema = z.object({
 	requestedDocuments: z.array(z.string()),
 	comments: z.array(caseCommentSchema),
 	profile: applicantProfileSchema,
-	workflow: consultationWorkflowSchema,
+	workflow,
+	/** Application opened from this consultation, if any. */
+	applicationId: z.string().uuid().nullable().optional(),
+	applicationNumber: z.string().nullable().optional(),
+	applicationStage: z.string().nullable().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 });
@@ -428,6 +433,11 @@ export const applicationSchema = z.object({
 		}),
 	),
 	comments: z.array(caseCommentSchema),
+	/** Parent consultation, if this application was opened from an assessment. */
+	consultationId: z.string().uuid().nullable(),
+	consultationNumber: z.string().nullable().optional(),
+	/** The actual schools the applicant selected, with their per-school statuses. */
+	schoolApplications: z.array(schoolApplicationSchema).default([]),
 	submittedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),

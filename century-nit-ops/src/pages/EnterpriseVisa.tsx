@@ -94,7 +94,7 @@ export function EnterpriseVisa() {
 	const active = liveSelected ?? selectedApp;
 
 	return (
-		<div className="page-content fade-in" style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Visa Processing</h1>
@@ -131,9 +131,9 @@ export function EnterpriseVisa() {
 			</div>
 
 			{/* Split Pane Layout */}
-			<div className="ops-split" style={{ display: "flex", flex: 1, gap: "1rem", minHeight: "var(--ops-pane-min)" }}>
+			<div className="ops-split" style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
 				{/* LEFT: List Pane */}
-				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)" }}>
+				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
 							{["All", "Unpaid", "In Progress", "Complete"].map((tab) => (
@@ -226,8 +226,9 @@ export function EnterpriseVisa() {
 					display: "flex",
 					flexDirection: "column",
 					overflow: "hidden",
-					border: "1px solid var(--border)",
+					border: "1px solid var(--border-light)",
 					background: "var(--background)",
+					height: "calc(100dvh - 11rem)",
 				}}>
 					{!active ? (
 						<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>

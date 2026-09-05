@@ -44,6 +44,14 @@ export const schoolApplicationSchema = z.object({
 	destinationId: z.string(),
 	universityId: z.string(),
 	programId: z.string(),
+	/** Snapshot of the catalog name at selection time. */
+	universityName: z.string().nullable().optional(),
+	/** Snapshot of the catalog name at selection time. */
+	programName: z.string().nullable().optional(),
+	/** Snapshot of the destination country name at selection time. */
+	countryName: z.string().nullable().optional(),
+	/** Snapshot of the catalog tuition in USD at selection time. */
+	tuitionUsd: z.number().int().nullable().optional(),
 	intake: z.string(),
 	status: schoolTrackStatusSchema,
 	handlerNote: z.string().nullable(),

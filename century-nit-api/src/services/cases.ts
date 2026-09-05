@@ -14,6 +14,7 @@ import {
 	type JourneyStage,
 	patchApplicationSchema,
 	type ProceedQuotation,
+	type SchoolApplication,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import type { z } from "zod";
@@ -400,7 +401,7 @@ export async function cancelConsultation(
 /* ── Serialise ───────────────────────────────────────────────────────────── */
 
 async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultation> {
-	const [applicant, coordinator, coordinatorAssigner, booking, comments] = await Promise.all([
+	const [applicant, coordinator, coordinatorAssigner, booking, comments, linkedApplication] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.coordinatorId),
 		loadStaff(row.coordinatorAssignedBy),
@@ -408,6 +409,12 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 			? db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1).then((r) => r[0] ?? null)
 			: Promise.resolve(null),
 		commentsFor("consultation", row.id),
+		db
+			.select({ id: applications.id, appNumber: applications.appNumber, stage: applications.stage })
+			.from(applications)
+			.where(eq(applications.consultationId, row.id))
+			.limit(1)
+			.then((r) => r[0] ?? null),
 	]);
 
 	// If the linked appointment has been cancelled, the public view of the
@@ -479,6 +486,9 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		comments: comments.map(toComment),
 		profile: (applicant?.profile as ApplicantProfile) ?? emptyProfile(),
 		workflow,
+		applicationId: linkedApplication?.id ?? null,
+		applicationNumber: linkedApplication?.appNumber ?? null,
+		applicationStage: linkedApplication?.stage ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};

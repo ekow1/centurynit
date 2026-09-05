@@ -378,7 +378,7 @@ export const consultationSchema = z.object({
 	requestedDocuments: z.array(z.string()),
 	comments: z.array(caseCommentSchema),
 	profile: applicantProfileSchema,
-	workflow,
+	workflow: consultationWorkflowSchema,
 	/** Application opened from this consultation, if any. */
 	applicationId: z.string().uuid().nullable().optional(),
 	applicationNumber: z.string().nullable().optional(),

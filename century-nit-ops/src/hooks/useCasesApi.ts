@@ -106,10 +106,13 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		rescheduleRequestReason: row.rescheduleRequestReason,
 		coordinatorName: row.coordinatorName ?? null,
 		coordinatorEmail: row.coordinatorEmail ?? null,
-		coordinatorAssignedAt: row.coordinatorAssignedAt ?? null,
+		coordinatorAssignedAt: row.coordinatorAssignedAt,
 		coordinatorAssignedByName: row.coordinatorAssignedByName ?? null,
 		delegationNote: row.delegationNote ?? null,
 		workflow: row.workflow,
+		applicationId: row.applicationId ?? null,
+		applicationNumber: row.applicationNumber ?? null,
+		applicationStage: row.applicationStage ?? null,
 	};
 }
 
@@ -144,6 +147,9 @@ function toApplication(row: ApiApplication): MockApplication {
 		agencySettled: row.agencySettled,
 		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
+		consultationId: row.consultationId ?? null,
+		consultationNumber: row.consultationNumber ?? null,
+		schoolApplications: row.schoolApplications ?? [],
 	};
 }
 

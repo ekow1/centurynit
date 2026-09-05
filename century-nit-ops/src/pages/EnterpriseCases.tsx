@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -13,6 +14,7 @@ import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 export function EnterpriseCases() {
 	const [searchParams] = useSearchParams();
+	const navigate = useNavigate();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
@@ -486,8 +488,8 @@ export function EnterpriseCases() {
 										<button className="btn btn--outline btn--sm" onClick={() => setIsScholarshipModalOpen(true)}>Manage Scholarships</button>
 									</div>
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{selectedApp.university}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{selectedApp.program}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended Institution</p><p>{selectedApp.university}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended Program</p><p>{selectedApp.program}</p></div>
 										<div>
 											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
 											<p>
@@ -502,6 +504,69 @@ export function EnterpriseCases() {
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{selectedApp.fundingTrack}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{selectedApp.submittedDate}</p></div>
 									</div>
+									{selectedApp.consultationId ? (
+										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+											<button
+												type="button"
+												className="link-arrow"
+												onClick={() => navigate(`/consultations?id=${selectedApp.consultationId}`)}
+											>
+												← Opened from consultation {selectedApp.consultationNumber || selectedApp.consultationId.slice(0, 8).toUpperCase()}
+											</button>
+										</p>
+									) : null}
+								</div>
+
+								{/* School Applications */}
+								<div className="card">
+									<p className="eyebrow mb-3">School Applications</p>
+									{(() => {
+										const schools = selectedApp.schoolApplications ?? [];
+										const total = schools.length;
+										const admitted = schools.filter((s) => s.status === "Offer Accepted").length;
+										const pending = schools.filter((s) => !["Offer Accepted", "Offer Declined", "Application Rejected", "Withdrawn"].includes(s.status)).length;
+										const rejected = schools.filter((s) => s.status === "Application Rejected" || s.status === "Offer Declined").length;
+										return (
+											<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+												<span>{total} school{total !== 1 ? "s" : ""}</span>
+												{admitted > 0 ? <span style={{ color: "#16a34a", fontWeight: 600 }}>{admitted} admitted</span> : null}
+												{pending > 0 ? <span>{pending} pending</span> : null}
+												{rejected > 0 ? <span style={{ color: "#dc2626" }}>{rejected} rejected/declined</span> : null}
+											</div>
+										);
+									})()}
+									{selectedApp.schoolApplications && selectedApp.schoolApplications.length > 0 ? (
+										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+											{selectedApp.schoolApplications.map((s) => {
+												const latest = s.events?.[0];
+												const displayName = s.universityName || s.universityId;
+												const displayProgram = s.programName || s.programId;
+												const displayCountry = s.countryName || s.destinationId;
+												const admitted = s.status === "Offer Accepted";
+												return (
+													<div
+														key={s.id}
+														style={{
+															padding: "0.6rem 0.75rem",
+															border: admitted ? "2px solid #16a34a" : "1px solid var(--border-light)",
+															background: admitted ? "#f0fdf4" : "transparent",
+														}}
+													>
+														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+															<div>
+																<p style={{ fontWeight: 500 }}>{displayName}</p>
+																<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
+																{latest ? <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>{latest.status}{latest.note ? ` — ${latest.note}` : ""}</p> : null}
+															</div>
+															<span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: admitted ? "#16a34a" : "var(--foreground)", whiteSpace: "nowrap" }}>{s.status}</span>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									) : (
+										<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No schools have been selected yet.</p>
+									)}
 								</div>
 
 								{/* Document Checklist */}

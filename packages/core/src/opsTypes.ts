@@ -5,6 +5,8 @@
  * Enterprise* pages can both import them without a circular reference.
  */
 
+import type { SchoolApplication } from "century-nit-shared";
+
 export type ConsultationStatus =
 	| "Under Review"
 	| "Assigned"
@@ -158,6 +160,10 @@ export interface MockConsultation {
 	coordinatorAssignedByName?: string | null;
 	delegationNote?: string | null;
 	workflow: ConsultationWorkflow;
+	/** Application opened from this completed consultation, if any. */
+	applicationId?: string | null;
+	applicationNumber?: string | null;
+	applicationStage?: string | null;
 }
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";
@@ -226,6 +232,11 @@ export interface MockApplication {
 	travelClearance?: TravelClearance;
 	/** Consent gate: "invited" (awaiting applicant), "accepted", "declined" */
 	proceedStatus?: "invited" | "accepted" | "declined";
+	/** Parent consultation that opened this application, if any. */
+	consultationId?: string | null;
+	consultationNumber?: string | null;
+	/** Actual schools selected by the applicant, with their per-school statuses. */
+	schoolApplications?: SchoolApplication[];
 }
 
 /**

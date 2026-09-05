@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -36,6 +36,7 @@ const DOC_STATUS_MAP: Record<string, string> = {
 
 export function EnterpriseConsultations() {
 	const [searchParams] = useSearchParams();
+	const navigate = useNavigate();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		consultations,
@@ -400,24 +401,43 @@ export function EnterpriseConsultations() {
 									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
 										{active.applicantName}
 									</h2>
-									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-										{isKnown(active.targetCountry) ? <span>Targeting {active.targetCountry}</span> : <span>Target not set</span>}
-										<span>·</span>
-										{active.assignedOfficer ? (
-											<StaffChatBadge
-												opsUserId={opsUserIdByEmail(active.assignedOfficerEmail)}
-												name={active.assignedOfficer}
-												email={active.assignedOfficerEmail}
-											/>
-										) : (
-											<span>Unassigned</span>
-										)}
-										<span>·</span>
-										<span>{active.branch}</span>
-									</p>
-									<p style={{ opacity: 0.6, fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-										{active.dateTime} · {active.type} · {docs.verified}/{docs.total} documents verified
-									</p>
+										<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem", display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
+											{(() => {
+												const rec = active.assessmentResult;
+												if (active.status === "Completed" && rec && (rec.recCountry || rec.recUniversity || rec.recProgram)) {
+													const country = rec.recCountry || active.targetCountry || "Unknown";
+													const uni = rec.recUniversity || "University";
+													const prog = rec.recProgram || "Program";
+													return <span>Targeting {country}: {uni} · {prog}</span>;
+												}
+												return isKnown(active.targetCountry) ? <span>Targeting {active.targetCountry}</span> : <span>Target not set</span>;
+											})()}
+											<span>·</span>
+											{active.assignedOfficer ? (
+												<StaffChatBadge
+													opsUserId={opsUserIdByEmail(active.assignedOfficerEmail)}
+													name={active.assignedOfficer}
+													email={active.assignedOfficerEmail}
+												/>
+											) : (
+												<span>Unassigned</span>
+											)}
+											<span>·</span>
+											<span>{active.branch}</span>
+										</p>
+										<p style={{ opacity: 0.6, fontSize: "var(--text-xs)", marginTop: "0.15rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+											<span>{active.dateTime} · {active.type} · {docs.verified}/{docs.total} documents verified</span>
+											{active.applicationId ? (
+												<button
+													type="button"
+													className="link-arrow"
+													style={{ color: "var(--background)", textDecoration: "underline" }}
+													onClick={() => navigate(`/applications?id=${active.applicationId}`)}
+												>
+													→ Application {active.applicationNumber || active.applicationId.slice(0, 8).toUpperCase()} · {active.applicationStage}
+												</button>
+											) : null}
+										</p>
 								</div>
 								<button
 									type="button"

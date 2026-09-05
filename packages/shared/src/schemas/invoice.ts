@@ -42,6 +42,7 @@ export const createInvoiceSchema = z.object({
 	clientUserId: z.string().min(1).optional(),
 	applicationId: z.string().uuid().optional(),
 	type: invoiceTypeSchema.default("custom"),
+	status: invoiceStoredStatusSchema.default("issued"),
 	lines: z.array(invoiceLineInputSchema).min(1).max(50),
 	note: z.string().max(2000).optional(),
 	dueAt: z.string().datetime().optional(),

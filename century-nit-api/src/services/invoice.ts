@@ -268,6 +268,7 @@ export async function createInvoice(input: {
 	const row = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
 		const invoiceNumber = await nextInvoiceNumber(txDb);
+		const status = data.status ?? "issued";
 		const [created] = await tx
 			.insert(invoices)
 			.values({
@@ -279,7 +280,7 @@ export async function createInvoice(input: {
 				type: data.type,
 				subtotalCents,
 				note: data.note ?? null,
-				status: "issued",
+				status,
 				issuedBy: actor.opsUserId,
 				issuedByName: actor.name,
 				dueAt: data.dueAt ? new Date(data.dueAt) : null,
@@ -296,7 +297,9 @@ export async function createInvoice(input: {
 			})),
 		);
 
-		await audit(created.id, "issued", actor.email, `Issued by ${actor.name}`, txDb);
+		const auditAction = status === "proforma" ? "proforma" : "issued";
+		const auditDetail = status === "proforma" ? `Estimate created by ${actor.name}` : `Issued by ${actor.name}`;
+		await audit(created.id, auditAction, actor.email, auditDetail, txDb);
 		return created;
 	});
 
@@ -788,3 +791,52 @@ export async function issueProforma(input: {
 	});
 }
 
+/**
+ * Applicant action: accept a proforma estimate sent by Ops, turning it into a payable invoice.
+ */
+export async function acceptProformaClient(input: {
+	invoiceId: string;
+	userId: string;
+	userName: string;
+	userEmail?: string;
+}): Promise<InvoiceRow> {
+	return db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [row] = await tx
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, input.invoiceId))
+			.limit(1)
+			.for("update");
+
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.clientUserId !== input.userId) {
+			throw new HttpError(403, "FORBIDDEN", "You do not have access to this invoice");
+		}
+		if (row.status !== "proforma") {
+			throw new HttpError(
+				409,
+				"NOT_PROFORMA",
+				Only estimates can be accepted. This invoice is "\".,
+			);
+		}
+
+		let officialInvoiceNumber = row.invoiceNumber;
+		if (row.invoiceNumber.startsWith("PRO-")) {
+			officialInvoiceNumber = await nextInvoiceNumber(txDb);
+		}
+
+		const [updated] = await tx
+			.update(invoices)
+			.set({
+				invoiceNumber: officialInvoiceNumber,
+				status: "issued",
+				updatedAt: new Date(),
+			})
+			.where(eq(invoices.id, row.id))
+			.returning();
+
+		await audit(row.id, "issued", input.userEmail ?? input.userName, Estimate accepted by \, txDb);
+		return updated;
+	});
+}

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { fmtBoth, fmtGhs, fmtUsd } from "./currency";
 import type { InvoiceType, OpsInvoiceLine, ServicePackage } from "century-nit-core/ops";
-import { DEFAULT_FEE_CENTS, usdFromCents } from "century-nit-shared";
+import { DEFAULT_FEE_CENTS, usdFromCents, type SchoolApplication } from "century-nit-shared";
+import { schoolsApi, universities, programs } from "century-nit-core";
 
 /**
  * Invoice builder dialog.
@@ -15,7 +16,13 @@ import { DEFAULT_FEE_CENTS, usdFromCents } from "century-nit-shared";
 const sum = (lines: OpsInvoiceLine[]) => lines.reduce((n, l) => n + l.amount, 0);
 
 /** Auto-generate line items based on the applicant's package and invoice type. */
-function defaultLines(pkg: string, packages: ServicePackage[], type: InvoiceType, schoolCount: number): OpsInvoiceLine[] {
+function defaultLines(
+	pkg: string,
+	packages: ServicePackage[],
+	type: InvoiceType,
+	schools: SchoolApplication[] | null,
+	targetCountry: string
+): OpsInvoiceLine[] {
 	const match = packages.find((p) => p.name === pkg);
 	const lines: OpsInvoiceLine[] = [];
 
@@ -25,16 +32,27 @@ function defaultLines(pkg: string, packages: ServicePackage[], type: InvoiceType
 		} else {
 			lines.push({ id: "processing", label: "Application processing", detail: "Case preparation & filing", amount: usdFromCents(DEFAULT_FEE_CENTS.appBase) });
 		}
-		const n = Math.max(1, schoolCount);
-		lines.push({ id: "per-school", label: `School submissions (${n})`, detail: `$${usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)} per institution`, amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool) * n });
-		lines.push({ id: "verification", label: "Document verification", detail: "Credential authentication", amount: usdFromCents(DEFAULT_FEE_CENTS.appDocVerify) });
-		lines.push({ id: "match-review", label: "Match review", detail: "Programme fit assessment", amount: usdFromCents(DEFAULT_FEE_CENTS.appMatchReview) });
+		
+		if (schools && schools.length > 0) {
+			schools.forEach((s) => {
+				const uName = universities.find(u => u.id === s.universityId)?.name || s.universityId;
+				const pName = programs.find(p => p.id === s.programId)?.name || s.programId;
+				lines.push({
+					id: `school-${s.id}`,
+					label: uName,
+					detail: pName,
+					amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)
+				});
+			});
+		} else {
+			// Fallback if no schools are locked yet
+			lines.push({ id: "per-school", label: `School submissions`, detail: `$${usdFromCents(DEFAULT_FEE_CENTS.appPerSchool)} per institution`, amount: usdFromCents(DEFAULT_FEE_CENTS.appPerSchool) });
+		}
 	} else if (type === "Visa") {
-		lines.push({ id: "visa-prep", label: "Visa file preparation", detail: "Forms, evidence pack & review", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBase) });
-		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking and support", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics) });
-		lines.push({ id: "translation", label: "Document translation", detail: "Certified translations", amount: usdFromCents(DEFAULT_FEE_CENTS.visaTranslation) });
+		const countryLabel = targetCountry ? `${targetCountry} Visa application fee` : "Visa application fee";
+		lines.push({ id: "visa-fee", label: countryLabel, detail: "Government/Embassy fee", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBase) });
+		lines.push({ id: "biometrics", label: "Biometrics & appointment", detail: "Booking fee", amount: usdFromCents(DEFAULT_FEE_CENTS.visaBiometrics) });
 	} else if (type === "Travel") {
-		lines.push({ id: "flight-booking", label: "Flight ticketing", detail: "Airline booking and reservation", amount: 0 });
 		lines.push({ id: "airport-pickup", label: "Airport pickup & transfer", detail: "Ground transportation at destination", amount: 0 });
 	} else if (type === "Consultation") {
 		lines.push({ id: "consultation", label: "Initial consultation", detail: "1-on-1 assessment session", amount: usdFromCents(DEFAULT_FEE_CENTS.consultation) });
@@ -55,7 +73,7 @@ export function InvoiceBuilder({
 	type: initialType,
 	packages,
 	applicantPackage,
-	schoolCount,
+	targetCountry,
 	onIssue,
 	onCancel,
 }: {
@@ -64,13 +82,36 @@ export function InvoiceBuilder({
 	type: InvoiceType;
 	packages: ServicePackage[];
 	applicantPackage: string;
-	schoolCount: number;
-	onIssue: (lines: OpsInvoiceLine[], note: string, type: InvoiceType) => void;
+	schoolCount?: number;
+	targetCountry?: string;
+	onIssue: (lines: OpsInvoiceLine[], note: string, type: InvoiceType, status: "issued" | "proforma") => void;
 	onCancel: () => void;
 }) {
 	const [type, setType] = useState<InvoiceType>(initialType);
-	const [lines, setLines] = useState<OpsInvoiceLine[]>(() => defaultLines(applicantPackage, packages, initialType, schoolCount));
+	const [status, setStatus] = useState<"issued" | "proforma">("issued");
+	const [lines, setLines] = useState<OpsInvoiceLine[]>([]);
 	const [note, setNote] = useState("");
+	const [schoolsLoaded, setSchoolsLoaded] = useState(false);
+	const [schools, setSchools] = useState<SchoolApplication[]>([]);
+
+	// Initial load of exact school applications for accurate line items
+	useEffect(() => {
+		let active = true;
+		schoolsApi.listForApplicant(applicantId)
+			.then((res) => {
+				if (!active) return;
+				setSchools(res.schools);
+				setSchoolsLoaded(true);
+				setLines(defaultLines(applicantPackage, packages, type, res.schools, targetCountry || ""));
+			})
+			.catch(() => {
+				if (active) {
+					setSchoolsLoaded(true);
+					setLines(defaultLines(applicantPackage, packages, type, null, targetCountry || ""));
+				}
+			});
+		return () => { active = false; };
+	}, [applicantId, applicantPackage, packages, type, targetCountry]);
 
 	const total = sum(lines);
 
@@ -107,7 +148,7 @@ export function InvoiceBuilder({
 
 	function changeType(t: InvoiceType) {
 		setType(t);
-		setLines(defaultLines(applicantPackage, packages, t, schoolCount));
+		setLines(defaultLines(applicantPackage, packages, t, schoolsLoaded ? schools : null, targetCountry || ""));
 	}
 
 	/* Portalled to <body>: a dialog must not inherit an ancestor's containing
@@ -160,6 +201,27 @@ export function InvoiceBuilder({
 								{t}
 							</button>
 						))}
+					</div>
+				</div>
+
+				{/* Invoice status selector */}
+				<div style={{ marginBottom: "1.25rem" }}>
+					<span className="eyebrow" style={{ display: "block", marginBottom: "0.4rem", fontSize: "var(--text-xs)" }}>Status</span>
+					<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+						<button
+							type="button"
+							onClick={() => setStatus("issued")}
+							className={`btn btn--sm ${status === "issued" ? "btn--primary" : "btn--ghost"}`}
+						>
+							◉ Actual Invoice
+						</button>
+						<button
+							type="button"
+							onClick={() => setStatus("proforma")}
+							className={`btn btn--sm ${status === "proforma" ? "btn--primary" : "btn--ghost"}`}
+						>
+							◯ Estimated Quote
+						</button>
 					</div>
 				</div>
 
@@ -271,9 +333,9 @@ export function InvoiceBuilder({
 						className="btn btn--primary"
 						style={{ flex: 1 }}
 						disabled={total === 0 || lines.length === 0}
-						onClick={() => onIssue(lines, note, type)}
+						onClick={() => onIssue(lines, note, type, status)}
 					>
-						Issue Invoice - {fmtBoth(total)}
+						{status === "issued" ? "Issue Invoice" : "Send Estimate"} - {fmtBoth(total)}
 					</button>
 					<button type="button" className="btn btn--ghost" onClick={onCancel}>Cancel</button>
 				</div>

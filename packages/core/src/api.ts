@@ -1033,6 +1033,13 @@ export const meApi = {
 		});
 	},
 
+	/** Accept a proforma estimate, converting it into a payable invoice. */
+	acceptInvoice(invoiceId: string): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/me/invoices/${invoiceId}/accept`, {
+			method: "POST",
+		});
+	},
+
 	/** Open a Paystack hosted checkout for an invoice's outstanding balance. */
 	paystackCheckout(invoiceId: string): Promise<PaystackCheckout> {
 		return request(`${API_PREFIX}/me/invoices/${invoiceId}/paystack/checkout`, {
@@ -1315,6 +1322,11 @@ export const schoolsApi = {
 	/** List the signed-in applicant's school applications. */
 	list(): Promise<SchoolApplicationList> {
 		return request(`${API_PREFIX}/me/schools`);
+	},
+
+	/** List an applicant's school applications (Ops). */
+	listForApplicant(applicantId: string): Promise<SchoolApplicationList> {
+		return request(`${API_PREFIX}/schools/${applicantId}`);
 	},
 
 	/** Add a target school application before locking. */

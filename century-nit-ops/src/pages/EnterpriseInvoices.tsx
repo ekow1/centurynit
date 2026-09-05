@@ -312,16 +312,18 @@ export function EnterpriseInvoices() {
 				</div>
 			)}
 
-			{building ? (
+			{building ? (() => {
+				const match = applicants.find((a) => a.id === building.applicantId);
+				return (
 				<InvoiceBuilder
 					applicantId={building.applicantId}
 					applicantName={building.applicantName}
 					type={building.type}
 					packages={[]}
 					applicantPackage=""
-					schoolCount={1}
+					targetCountry={match?.country}
 					onCancel={() => setBuilding(null)}
-					onIssue={async (lines: OpsInvoiceLine[], note: string, type: InvoiceType) => {
+					onIssue={async (lines: OpsInvoiceLine[], note: string, type: InvoiceType, status: "issued" | "proforma") => {
 						const subtotal = lines.reduce((n, l) => n + l.amount, 0);
 						try {
 							const match = applicants.find((a) => a.id === building.applicantId);
@@ -330,17 +332,20 @@ export function EnterpriseInvoices() {
 								applicantName: building.applicantName,
 								applicantEmail,
 								type,
+								status,
 								lines,
 								note,
 							});
-							say(`${type} invoice issued — ${fmtBoth(subtotal)} to ${building.applicantName}.`);
+							const action = status === "proforma" ? "estimate sent" : "invoice issued";
+							say(`${type} ${action} — ${fmtBoth(subtotal)} to ${building.applicantName}.`);
 							setBuilding(null);
 						} catch (e) {
 							say(e instanceof Error ? e.message : "Failed to create invoice");
 						}
 					}}
 				/>
-			) : null}
+				);
+			})() : null}
 		</div>
 	);
 }

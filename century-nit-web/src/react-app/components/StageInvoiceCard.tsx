@@ -40,10 +40,12 @@ type Props = {
 	onPay?: () => void;
 	paying?: boolean;
 	payCta?: string;
+	onAccept?: () => void;
+	accepting?: boolean;
 };
 
 /** Shows the estimated vs actual invoice with itemized line details. */
-export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta }: Props) {
+export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta, onAccept, accepting }: Props) {
 	const { status } = invoice;
 	const payable = invoice.actualAmount ?? invoice.amount;
 	const hasActual = invoice.actualAmount != null;
@@ -137,11 +139,18 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta }
 								{paying ? "Processing…" : payCta ?? `Pay with Paystack · ${formatDualCurrency(payable)}`}
 							</Button>
 						</div>
+					) : status === "estimated" && onAccept ? (
+						<div className="invoice-card__actions">
+							<p className="mono muted mb-2">Review and accept estimate</p>
+							<Button type="button" onClick={onAccept} arrow disabled={accepting}>
+								{accepting ? "Processing…" : `Accept Estimate · ${formatDualCurrency(payable)}`}
+							</Button>
+						</div>
 					) : null}
 				</div>
 			</div>
 
-			{status === "estimated" ? (
+			{status === "estimated" && !onAccept ? (
 				<div className="invoice-card__note">
 					<p className="mono">
 						This is an <strong>estimate</strong> - no payment yet

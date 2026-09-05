@@ -50,6 +50,7 @@ import {
 	paymentWithReferenceExists,
 	recordClientPayment,
 	serializeInvoice,
+	acceptProformaClient,
 } from "../services/invoice.js";
 import {
 	createPaystackCheckout,
@@ -1407,6 +1408,36 @@ meRouter.openapi(
 			},
 			actor: { name: user.name ?? "Applicant", email: user.email },
 			options: { recordGatewayTransaction: false },
+		});
+		return c.json(await serializeInvoice(updated));
+	},
+);
+
+/**
+ * Applicant self-service: accept a proforma estimate to turn it into an issued invoice.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/invoices/{id}/accept",
+		tags: ["Invoices"],
+		middleware: [requireAuth] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: invoiceSchema } },
+				description: "The accepted invoice",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const { id } = c.req.valid("param");
+		const updated = await acceptProformaClient({
+			invoiceId: id,
+			userId: user.id,
+			userName: user.name ?? "Applicant",
+			userEmail: user.email,
 		});
 		return c.json(await serializeInvoice(updated));
 	},

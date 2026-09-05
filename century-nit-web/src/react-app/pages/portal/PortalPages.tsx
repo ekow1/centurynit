@@ -2715,8 +2715,6 @@ function ApplicationHubInner() {
 					title="Application invoice"
 					onPay={payInvoice}
 					paying={false}
-					onAccept={acceptInvoice}
-					accepting={false}
 					meta={
 						<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
 							<li>
@@ -3348,8 +3346,6 @@ function VisaHubInner() {
 					title="Visa invoice · pay before process starts"
 					onPay={pay}
 					paying={false}
-					onAccept={accept}
-					accepting={false}
 				/>
 			</div>
 

@@ -154,97 +154,104 @@ export function DocPreviewInline({
 				documentId={documentId ?? doc.documentId}
 			/>
 
-			{/* Reviewer guidance - kept, but below the document rather than instead of it */}
-			<div className="docnote">
-				{status === "Verified" ? (
-					<>
-						<p className="docnote__title">Compliance statement</p>
-						<p className="docnote__body">
-							Verified against institutional archives and authenticated by the Century NIT
-							Assessment Office.
-						</p>
-					</>
-				) : status === "Rejected" ? (
-					<>
-						<p className="docnote__title docnote__title--bad">Verification rejected</p>
-						<p className="docnote__body">
-							This document did not pass verification. The applicant may need to resubmit an
-							updated copy.
-						</p>
-					</>
-				) : (
-					<>
-						<p className="docnote__title">Awaiting verification</p>
-						<p className="docnote__body">
-							{isMine
-								? "Check the document above, then verify or reject it below."
-								: "Only the assigned consultant can verify this document."}
-						</p>
-					</>
-				)}
-			</div>
+			{/* Bottom Action Area: Guidance on left, Actions on right */}
+			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", alignItems: "stretch" }}>
+				{/* Reviewer guidance - kept, but below the document rather than instead of it */}
+				<div className="docnote" style={{ margin: 0, height: "100%" }}>
+					{status === "Verified" ? (
+						<>
+							<p className="docnote__title">Compliance statement</p>
+							<p className="docnote__body">
+								Verified against institutional archives and authenticated by the Century NIT
+								Assessment Office.
+							</p>
+						</>
+					) : status === "Rejected" ? (
+						<>
+							<p className="docnote__title docnote__title--bad">Verification rejected</p>
+							<p className="docnote__body">
+								This document did not pass verification. The applicant may need to resubmit an
+								updated copy.
+							</p>
+						</>
+					) : (
+						<>
+							<p className="docnote__title">Awaiting verification</p>
+							<p className="docnote__body">
+								{isMine
+									? "Check the document above, then verify or reject it below."
+									: "Only the assigned consultant can verify this document."}
+							</p>
+						</>
+					)}
+				</div>
 
-	{/* Action bar */}
-	{!settled && isMine && documentId && (
-		<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-				{error && (
-					<p className="ops-modal__error" role="alert" style={{ fontSize: "0.78rem" }}>{error}</p>
-				)}
-				<div style={{ display: "flex", gap: "0.75rem" }}>
-					<button
-						onClick={() => void handleVerdict("Verified")}
-						disabled={saving}
-						className="btn btn--sm"
-						style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
-					>
-						<CheckIcon />
-						{saving ? "Saving…" : "Verify Document"}
-					</button>
-					<button
-						onClick={() => void handleVerdict("Rejected")}
-						disabled={saving}
-						className="btn btn--ghost btn--sm"
-						style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
-					>
-						<XIcon />
-						{saving ? "Saving…" : "Reject Document"}
-					</button>
+				{/* Action bar */}
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", height: "100%" }}>
+					{!settled && isMine && documentId && (
+						<>
+							{error && (
+								<p className="ops-modal__error" role="alert" style={{ fontSize: "0.78rem" }}>{error}</p>
+							)}
+							<div style={{ display: "flex", gap: "0.75rem", height: "100%" }}>
+								<button
+									onClick={() => void handleVerdict("Verified")}
+									disabled={saving}
+									className="btn btn--sm"
+									style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", height: "100%", fontSize: "0.9rem" }}
+								>
+									<CheckIcon />
+									{saving ? "Saving…" : "Verify Document"}
+								</button>
+								<button
+									onClick={() => void handleVerdict("Rejected")}
+									disabled={saving}
+									className="btn btn--ghost btn--sm"
+									style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", height: "100%", fontSize: "0.9rem" }}
+								>
+									<XIcon />
+									{saving ? "Saving…" : "Reject Document"}
+								</button>
+							</div>
+						</>
+					)}
+
+					{!settled && !isMine && documentId && (
+						<div style={{
+							display: "flex",
+							alignItems: "center",
+							gap: "0.5rem",
+							padding: "0.85rem 1rem",
+							border: "1px solid var(--border-light)",
+							background: "var(--muted)",
+							height: "100%",
+						}}>
+							<span className="muted" style={{ fontSize: "0.8rem" }}>
+								Read-only - only the assigned consultant can verify documents.
+							</span>
+						</div>
+					)}
+
+					{settled && (
+						<div style={{
+							display: "flex",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: "0.5rem",
+							padding: "0.85rem 1rem",
+							border: `1px solid ${status === "Verified" ? "var(--foreground)" : "#fecaca"}`,
+							background: status === "Verified" ? "var(--foreground)" : "#fee2e2",
+							color: status === "Verified" ? "var(--background)" : "#991b1b",
+							height: "100%",
+						}}>
+							<CheckIcon />
+							<span style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+								Decision recorded - {status}
+							</span>
+						</div>
+					)}
 				</div>
 			</div>
-		)}
-
-		{!settled && !isMine && documentId && (
-			<div style={{
-					display: "flex",
-					alignItems: "center",
-					gap: "0.5rem",
-					padding: "0.85rem 1rem",
-					border: "1px solid var(--border-light)",
-					background: "var(--muted)",
-				}}>
-					<span className="muted" style={{ fontSize: "0.8rem" }}>
-						Read-only - only the assigned consultant can verify documents.
-					</span>
-				</div>
-			)}
-
-			{settled && (
-				<div style={{
-					display: "flex",
-					alignItems: "center",
-					justifyContent: "center",
-					gap: "0.5rem",
-					padding: "0.85rem 1rem",
-					border: `1px solid ${status === "Verified" ? "var(--foreground)" : "#fecaca"}`,
-					background: status === "Verified" ? "var(--foreground)" : "#fee2e2",
-					color: status === "Verified" ? "var(--background)" : "#991b1b",
-				}}>
-					<CheckIcon />
-					<span style={{ fontSize: "0.8rem", fontWeight: 600 }}>
-						Decision recorded - {status}
-					</span>
-				</div>
-			)}
 		</div>
 	);
 }

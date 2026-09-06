@@ -4413,7 +4413,7 @@
 @media (min-width: 992px) {
 	.vault-layout--has-preview {
 		display: grid;
-		grid-template-columns: 1.05fr 0.95fr;
+		grid-template-columns: 0.8fr 1.2fr;
 		gap: 1.5rem;
 		align-items: start;
 	}

@@ -2176,6 +2176,10 @@
 .docview {
 	border: 1px solid var(--border-light);
 	background: var(--muted);
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
 }
 
 .docview__bar {
@@ -2251,7 +2255,7 @@
 /* The stage clips; the canvas is what scales, so zoom never widens the pane */
 
 .docview__stage {
-	max-height: 50rem;
+	flex: 1;
 	overflow: auto;
 	padding: 1.25rem;
 	display: flex;
@@ -2261,15 +2265,20 @@
 }
 
 .docview__canvas {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	justify-content: center;
 	transform-origin: top center;
 	transition: transform 120ms ease-out;
 	flex-shrink: 0;
 }
 
 .docview__pdf {
-	width: 30rem;
-	height: 38rem;
-	max-width: 100%;
+	width: 100%;
+	height: 100%;
+	min-height: 45rem;
+	min-width: 32rem;
 	border: none;
 	background: #fff;
 	box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
@@ -4681,8 +4690,8 @@
 	display: flex;
 	flex-direction: column;
 	gap: 1.25rem;
-	max-height: calc(100vh - 3rem);
-	overflow-y: auto;
+	height: calc(100vh - 3rem);
+	overflow: hidden;
 }
 
 .vault-preview-head {

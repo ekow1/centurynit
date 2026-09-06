@@ -93,7 +93,7 @@ export function DocPreviewInline({
 	}
 
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+		<div style={{ display: "flex", flexDirection: "column", gap: "1rem", flex: 1, minHeight: 0 }}>
 			{/* Back link */}
 			<button
 				type="button"

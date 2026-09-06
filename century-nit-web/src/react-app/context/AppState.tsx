@@ -2306,11 +2306,7 @@ journeyStage: a.stage ?? prev.journeyStage,
 					agencyTotal: totalUsd > 0 ? totalUsd : prev.agencyTotal,
 					agencyPaid: paidUsd,
 					agencyDepositPaid: depositPaid,
-					agencyStageIndex: settled
-						? (prev.paymentPlanId === "full" ? 3 : 1)
-						: preDepDone
-							? 1
-							: 0,
+					agencyStageIndex: settled ? 2 : preDepDone ? 1 : 0,
 					agencySettledAt: settled ? agencyInvoice.updatedAt : null,
 					completedAt:
 						settled && prev.visaStatus === "complete"

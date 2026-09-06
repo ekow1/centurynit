@@ -1364,8 +1364,8 @@ export function PortalFinancial() {
 	const depositPaid = isAgencyDepositPaid(a);
 	const plan = hasPaymentPlan(a);
 
-	const appInvoiceAmount = appInvoiceType?.subtotalCents ?? a.applicationInvoice.amount;
-	const visaInvoiceAmount = visaInvoiceType?.subtotalCents ?? a.visaInvoice.amount;
+	const appInvoiceAmount = (appInvoiceType ? usdFromCents(appInvoiceType.subtotalCents) : null) ?? a.applicationInvoice.amount;
+	const visaInvoiceAmount = (visaInvoiceType ? usdFromCents(visaInvoiceType.subtotalCents) : null) ?? a.visaInvoice.amount;
 
 	const totalPaid =
 		(consultationPaid ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents) : 0) +

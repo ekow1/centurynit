@@ -4,13 +4,8 @@ import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
+import { AGENCY_STAGES } from "century-nit-core/content";
 import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
-
-const AGENCY_STAGES = [
-	{ id: "agency_deposit", label: "Agency deposit", detail: "Secure agency file & coordinator", portion: "30%" },
-	{ id: "agency_balance", label: "Agency balance", detail: "Remaining service fees before travel", portion: "50%" },
-	{ id: "agency_clearance", label: "Travel clearance", detail: "Final clearance for departure", portion: "20%" },
-];
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -350,7 +345,7 @@ export function EnterpriseTravel() {
 														</span>
 														<div style={{ flex: 1 }}>
 															<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
-															<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.1rem" }}>{s.detail} {"\u00b7"} {s.portion}</p>
+															<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.1rem" }}>{s.detail} {"\u00b7"} {Math.round(s.portion * 100)}%</p>
 														</div>
 														{current && !active.agencySettled && active.stage === "travel_assistance" && (
 															<button

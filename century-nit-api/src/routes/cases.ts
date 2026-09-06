@@ -1725,12 +1725,17 @@ meRouter.openapi(
 				s.status === "Offer Accepted",
 		);
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
+		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
 		const isPreDepartureDone = Boolean(
 			(application?.checklist?.length ?? 0) > 0 &&
-				application?.checklist?.every((item) => item.checked)
+				application?.checklist?.every((item) => item.checked),
 		);
-		const isCompleted = application?.travelClearance === "cleared";
+		const isCompleted =
+			application?.travelClearance === "cleared" &&
+			application?.agencySettled &&
+			isTravelInvoicePaid &&
+			isPreDepartureDone;
 
 		// ── Determine stage ────────────────────────────────────────────────
 		type PortalStage =
@@ -1778,33 +1783,40 @@ meRouter.openapi(
 				? (dbStage as JourneyStage)
 				: null;
 
-		// ── Portal stage: refine the coarse stage via JOURNEY_STAGE_TO_PORTAL ──
-		// with invoice signals. Falls back to the heuristic derivation when no
-		// coarse stage is available (e.g. before an application row exists).
+		// ── Portal stage: signal-derived floor, refined by coarse stage ─────
+		// The heuristic `derivedPortalStage` is computed from live signals (invoice
+		// paid, offer accepted, visa complete, etc.). Use it as the floor so a
+		// stale DB stage cannot regress the applicant past what they have
+		// actually completed. The coarse DB stage may only push them forward.
 		let portalStage: PortalStage = derivedPortalStage;
 		if (coarseStage) {
 			const base = JOURNEY_STAGE_TO_PORTAL[coarseStage] as PortalStage;
-			portalStage = base;
-			if (coarseStage === "document_verification") {
-				if (hasPackage && !hasSelection) portalStage = "school_select";
-				else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
-				else if (isEligible && !hasProceeded) portalStage = "proceed";
-				else if (!isEligible && hasConsultation) portalStage = "eligibility";
-				else if (!hasConsultation) portalStage = "consultation";
-			} else if (coarseStage === "school_submission") {
-				if (hasSelection && !isAppInvoicePaid) portalStage = "application_invoice";
-				else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
-			} else if (coarseStage === "offer_letter_review") {
-				portalStage = "school_tracking";
-			} else if (coarseStage === "visa_processing" || coarseStage === "payment_execution") {
-				if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
-				else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
-				else portalStage = "visa";
-			} else if (coarseStage === "travel_assistance") {
-				if (isCompleted || (isVisaDone && isPreDepartureDone)) portalStage = "completed";
-				else portalStage = "pre_departure";
-			} else if (coarseStage === "completed") {
-				portalStage = "completed";
+			if (base) {
+				const derivedIdx = PORTAL_STAGE_ORDER.indexOf(derivedPortalStage);
+				const baseIdx = PORTAL_STAGE_ORDER.indexOf(base);
+				portalStage = baseIdx >= derivedIdx ? base : derivedPortalStage;
+				if (portalStage === base) {
+					if (coarseStage === "document_verification") {
+						if (hasPackage && !hasSelection) portalStage = "school_select";
+						else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
+						else if (isEligible && !hasProceeded) portalStage = "proceed";
+						else if (!isEligible && hasConsultation) portalStage = "eligibility";
+						else if (!hasConsultation) portalStage = "consultation";
+					} else if (coarseStage === "school_submission") {
+						if (hasSelection && !isAppInvoicePaid) portalStage = "application_invoice";
+						else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
+					} else if (coarseStage === "offer_letter_review") {
+						portalStage = "school_tracking";
+					} else if (coarseStage === "visa_processing" || coarseStage === "payment_execution") {
+						if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
+						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
+					} else if (coarseStage === "travel_assistance") {
+						if (isCompleted || (isVisaDone && isPreDepartureDone)) portalStage = "completed";
+						else portalStage = "pre_departure";
+					} else if (coarseStage === "completed") {
+						portalStage = "completed";
+					}
+				}
 			}
 		}
 
@@ -1827,8 +1839,8 @@ meRouter.openapi(
 			application: isEligible,
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
-			pre_departure: hasAdmitted && isVisaInvoicePaid && isVisaDone,
-			complete: Boolean(isPreDepartureDone),
+			pre_departure: hasAdmitted && isVisaInvoicePaid && isVisaDone && application?.agencySettled && isTravelInvoicePaid,
+			complete: isCompleted,
 		};
 
 		// ── Per-stage status (done|current|locked|skipped) ────────────────

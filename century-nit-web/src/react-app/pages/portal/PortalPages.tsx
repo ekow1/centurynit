@@ -2792,11 +2792,11 @@ function TrackingPageInner() {
 					createdAt: s.createdAt,
 					updatedAt: s.updatedAt,
 					trackStartedAt: null,
-					offerTuitionUsd: null,
-					offerTuitionLabel: null,
-					offerDepositUsd: null,
-					offerDepositDueAt: null,
-					offerDepositPaidAt: null,
+					offerTuitionUsd: s.offerTuitionUsd ?? null,
+					offerTuitionLabel: s.offerTuitionLabel ?? null,
+					offerDepositUsd: s.offerDepositUsd ?? null,
+					offerDepositDueAt: s.offerDepositDueAt ?? null,
+					offerDepositPaidAt: s.offerDepositPaidAt ?? null,
 				}));
 				setSchoolApplications(mapped);
 			} catch {

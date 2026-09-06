@@ -374,10 +374,10 @@
       "breakpoints": true
     },
     {
-      "idx": 54,
+      "idx": 55,
       "version": "7",
-      "when": 1788609515855,
-      "tag": "0054_proceed_gate_and_snapshots",
+      "when": 1788700000000,
+      "tag": "0055_school_offer_terms",
       "breakpoints": true
     }
   ]

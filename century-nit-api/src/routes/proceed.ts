@@ -157,6 +157,7 @@ opsProceedRouter.openapi(
 							fundingTrack: z.string().min(1).max(64).nullable().optional(),
 							degreeLevel: z.string().min(1).max(64).optional(),
 							country: z.string().min(1).max(80).optional(),
+							overrideReason: z.string().min(1).max(500),
 						}),
 					},
 				},
@@ -179,6 +180,7 @@ opsProceedRouter.openapi(
 			fundingTrack: body.fundingTrack,
 			degreeLevel: body.degreeLevel,
 			country: body.country,
+			reason: body.overrideReason,
 			actor: { opsUserId: staff.opsUserId, name: staff.name },
 		});
 		return c.json(result);

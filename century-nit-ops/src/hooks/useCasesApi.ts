@@ -5,6 +5,7 @@ import {
 	consultationsApi,
 	staffApi,
 	bookingsApi,
+	schoolsApi,
 } from "century-nit-core/api";
 import {
 	APPLICATION_STATUS_TO_OPS,
@@ -19,6 +20,7 @@ import {
 	type StudentScholarship,
 	type VisaStage,
 	type JourneyStage,
+	type SchoolApplication,
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -343,12 +345,12 @@ export function useCasesApi() {
 			replaceApplication(await applicationsApi.setStage(app.id, stage));
 			await refresh();
 		},
-		recordProceed: async (appId: string) => {
+		recordProceed: async (appId: string, reason: string) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) throw new Error("Application not found");
 			await apiFetch(`${API_PREFIX}/cases/${app.id}/proceed`, {
 				method: "POST",
-				body: JSON.stringify({}),
+				body: JSON.stringify({ overrideReason: reason }),
 			});
 			await refresh();
 		},
@@ -373,6 +375,19 @@ export function useCasesApi() {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note));
+			await refresh();
+		},
+		updateSchoolApplication: async (
+			appId: string,
+			schoolId: string,
+			patch: Partial<Pick<SchoolApplication, "offerTuitionUsd" | "offerTuitionLabel" | "offerDepositUsd" | "offerDepositDueAt" | "offerDepositPaidAt">>,
+		) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await schoolsApi.updateStatus(schoolId, {
+				status: app.schoolApplications?.find((s) => s.id === schoolId)?.status ?? "Preparing Application",
+				...patch,
+			});
 			await refresh();
 		},
 		setVisaInvoicePaid: async (appId: string) => {

@@ -24,7 +24,8 @@ function docSummary(c: MockConsultation, realDocs: ApplicantDocument[]) {
 	const uploaded = realDocs.filter((d) => d.status === "UPLOADED" || d.status === "VERIFIED").length;
 	const verified = realDocs.filter((d) => d.status === "VERIFIED").length;
 	const pending = realDocs.filter((d) => d.status === "UPLOADED").length;
-	return { total: Math.max(requested, realDocs.length), verified, pending, uploaded };
+	const rejected = realDocs.filter((d) => d.status === "REJECTED").length;
+	return { total: Math.max(requested, realDocs.length), verified, pending, uploaded, rejected };
 }
 
 const DOC_STATUS_MAP: Record<string, string> = {
@@ -184,7 +185,7 @@ export function EnterpriseConsultations() {
 	}
 
 	const active = liveSelected ?? selectedConsultation;
-	const docs = active ? docSummary(active, realDocs) : { total: 0, verified: 0, pending: 0, uploaded: 0 };
+	const docs = active ? docSummary(active, realDocs) : { total: 0, verified: 0, pending: 0, uploaded: 0, rejected: 0 };
 	const isMine = Boolean(active && active.assignedOfficerEmail === opsUser?.email);
 	const canAssess = isMine || opsRole === "manager" || opsRole === "coordinator";
 	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
@@ -336,7 +337,7 @@ export function EnterpriseConsultations() {
 														</>
 													)}
 													<span>·</span>
-													<span>{d.verified}/{d.total} docs verified{d.pending > 0 ? ` · ${d.pending} pending` : ""}</span>
+													<span>{d.verified}/{d.total} docs verified{d.pending > 0 ? ` · ${d.pending} pending` : ""}{d.rejected > 0 ? ` · ${d.rejected} rejected` : ""}</span>
 												</div>
 											</div>
 											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
@@ -426,7 +427,7 @@ export function EnterpriseConsultations() {
 											<span>{active.branch}</span>
 										</p>
 										<p style={{ opacity: 0.6, fontSize: "var(--text-xs)", marginTop: "0.15rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-											<span>{active.dateTime} · {active.type} · {docs.verified}/{docs.total} documents verified</span>
+												<span>{active.dateTime} · {active.type} · {docs.verified}/{docs.total} verified · {docs.pending} pending{docs.rejected > 0 ? ` · ${docs.rejected} rejected` : ""}</span>
 											{active.applicationId ? (
 												<button
 													type="button"
@@ -778,208 +779,172 @@ export function EnterpriseConsultations() {
 										</div>
 									)}
 								</div>
-							) : (
-								<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
-									<span className="muted" style={{ fontSize: "var(--text-xs)" }}>In-person appointment at branch. Need an online video meeting instead?</span>
-									<button
-										type="button"
-										className="btn btn--ghost btn--sm"
-										onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}
-									>
-										+ Set up online meeting
+						)}
+
+						{/* --- ACTION TOOLBAR --- */}
+						{(!editingMeetingUrl && !showCancelForm && !showCoordinatorPicker) && (
+							<div style={{ display: "flex", gap: "0.5rem", padding: "0.5rem 1.25rem", borderBottom: "1px solid var(--border-light)", background: "var(--card)", flexWrap: "wrap", alignItems: "center" }}>
+								{!active.meetingLink && (
+									<button className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
+										+ Online Meeting
 									</button>
-								</div>
-							)
-						)}
-						{active.status === "In Assessment" && (
-								<div style={{ padding: "0.75rem 1.25rem", background: "#e0e7ff", borderBottom: "1px solid #c7d2fe", flexShrink: 0 }}>
-									<p style={{ fontSize: "var(--text-sm)", color: "#4338ca" }}>
-										<strong>Assessment in progress.</strong> Review documents and complete the assessment decision below.
-										{docs.pending > 0 && ` ⚠ ${docs.pending} document(s) still pending verification.`}
-									</p>
-								</div>
-							)}
-						{active.status === "Completed" && (
-							<div style={{ padding: "0.75rem 1.25rem", background: "#d1fae5", borderBottom: "1px solid #6ee7b7", flexShrink: 0 }}>
-								<p style={{ fontSize: "var(--text-sm)", color: "#065f46" }}>
-									<strong>Assessment completed.</strong>
-									{active.assessmentResult ? ` Outcome: ${active.assessmentResult.outcome} - ${active.assessmentResult.recProgram} at ${active.assessmentResult.recUniversity} (${active.assessmentResult.recCountry}).` : ""}
-								</p>
-							</div>
-						)}
-						{active.workflow?.status === "CLOSED" && (
-							<div style={{ padding: "0.75rem 1.25rem", background: "#fee2e2", borderBottom: "1px solid #fca5a5", flexShrink: 0 }}>
-								<p style={{ fontSize: "var(--text-sm)", color: "#991b1b" }}>
-									<strong>
-										{active.workflow.closureReason === "APPOINTMENT_CANCELLED"
-											? "Appointment Cancelled"
-											: "Consultation Cancelled"}
-									</strong>
-									{active.workflow.nextAction === "REBOOK_APPOINTMENT" && " — client can rebook a new appointment."}
-								</p>
-							</div>
-						)}
-						{false && (
-							<div style={{ padding: "0.75rem 1.25rem", background: "#fee2e2", borderBottom: "1px solid #fca5a5", flexShrink: 0 }}>
-								<p style={{ fontSize: "var(--text-sm)", color: "#991b1b" }}>
-									<strong>This consultation has been cancelled.</strong> The linked appointment was released and the applicant has been notified.
-								</p>
-							</div>
-						)}
-						{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
-							<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "flex-end" }}>
-								{showCancelForm ? (
-									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", width: "100%", justifyContent: "flex-end" }}>
-										<input
-											type="text"
-											value={cancelReason}
-											onChange={(e) => setCancelReason(e.target.value)}
-											placeholder="Cancellation reason (optional)"
-											style={{ flex: 1, maxWidth: "320px", padding: "0.4rem 0.6rem", border: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}
-										/>
-										<button
-											type="button"
-											className="btn btn--sm"
-											style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
-											onClick={() => {
-												void cancelConsultation(active.id, cancelReason.trim() || undefined)
-													.then(() => {
-														setShowCancelForm(false);
-														setCancelReason("");
-														setSelectedConsultation(null);
-														void refresh();
-													})
-													.catch((err: unknown) => {
-														const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
-														showToast("error", msg);
-													});
-											}}
-										>
-											Confirm Cancel
-										</button>
-										<button
-											type="button"
-											className="btn btn--sm"
-											onClick={() => { setShowCancelForm(false); setCancelReason(""); }}
-										>
-											Keep Case
-										</button>
-									</div>
-								) : (
-									<button
-										type="button"
-										onClick={() => setShowCancelForm(true)}
-										className="btn btn--sm"
-										style={{ color: "#991b1b", borderColor: "#fca5a5", whiteSpace: "nowrap" }}
-									>
-										✕ Cancel Case
+								)}
+								{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
+									<button className="btn btn--ghost btn--sm" onClick={async () => {
+										setShowCoordinatorPicker(true);
+										if (!workloadData) {
+											try { setWorkloadData(await getWorkload()); } catch { /* ignore */ }
+										}
+									}}>
+										{active.coordinatorName ? "Reassign Coordinator" : "+ Delegate"}
+									</button>
+								)}
+								{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && (
+									<button className="btn btn--ghost btn--sm" style={{ color: "var(--danger)", marginLeft: "auto" }} onClick={() => setShowCancelForm(true)}>
+										Cancel Case
 									</button>
 								)}
 							</div>
 						)}
 
-						{/* Coordinator section — managers/owners can delegate */}
-						{canAssignWork && active.status !== "Completed" && active.status !== "Cancelled" && !active.coordinatorName && (
-							<div style={{ padding: "0.75rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0 }}>
-								{showCoordinatorPicker ? (
-									<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-										<p style={{ fontSize: "var(--text-sm)", color: "#0c4a6e", fontWeight: 600 }}>
-											Select a coordinator:
-										</p>
-										{workloadData ? (
-											<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-												{workloadData.coordinators.map((c) => (
-													<button
-														key={c.opsUserId}
-														onClick={async () => {
-															try {
-																await delegateCoordinator(active.id, c.opsUserId, coordinatorNote || undefined);
-																setShowCoordinatorPicker(false);
-																setCoordinatorNote("");
-																void refresh();
-															} catch (err: unknown) {
-																showToast("error", err instanceof Error ? err.message : "Failed to delegate");
-															}
-														}}
-														className="btn btn--sm btn--ghost"
-														style={{
-															display: "flex",
-															flexDirection: "column",
-															alignItems: "flex-start",
-															padding: "0.4rem 0.75rem",
-															border: "1px solid var(--border)",
-															borderRadius: "6px",
-														}}
-													>
-														<span style={{ fontWeight: 500 }}>{c.name}</span>
-														<span style={{ fontSize: "10px", opacity: 0.7 }}>
-															{c.activeCases}/{c.maxCapacity} cases
-															{c.overdueCases > 0 && <span style={{ color: "#dc2626" }}> · {c.overdueCases} overdue</span>}
-														</span>
-													</button>
-												))}
-											</div>
-										) : (
-											<p style={{ fontSize: "var(--text-xs)", opacity: 0.6 }}>Loading workload…</p>
-										)}
-										<input
-											value={coordinatorNote}
-											onChange={(e) => setCoordinatorNote(e.target.value)}
-											placeholder="Delegation note (optional)"
-											style={{ fontSize: "var(--text-xs)", padding: "0.3rem 0.5rem", border: "1px solid var(--border)", borderRadius: "4px" }}
-										/>
-										<button
-											onClick={() => { setShowCoordinatorPicker(false); setCoordinatorNote(""); }}
-											className="btn btn--sm btn--ghost"
-											style={{ alignSelf: "flex-start" }}
-										>
-											Cancel
-										</button>
-									</div>
-								) : (
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-										<p style={{ fontSize: "var(--text-sm)", color: "#0c4a6e" }}>
-											No coordinator assigned. Delegate to a coordinator for case management.
-										</p>
-										<button
-											onClick={async () => {
-												setShowCoordinatorPicker(true);
-												if (!workloadData) {
-													try {
-														setWorkloadData(await getWorkload());
-													} catch { /* ignore */ }
-												}
-											}}
-											className="btn btn--primary btn--sm"
-											style={{ whiteSpace: "nowrap" }}
-										>
-											Delegate to Coordinator →
-										</button>
-									</div>
-								)}
+						{/* --- INLINE FORMS --- */}
+						{showCancelForm && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "var(--card)", borderBottom: "1px solid var(--border-light)" }}>
+								<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", width: "100%", justifyContent: "flex-end" }}>
+									<input
+										type="text"
+										value={cancelReason}
+										onChange={(e) => setCancelReason(e.target.value)}
+										placeholder="Cancellation reason (optional)"
+										style={{ flex: 1, maxWidth: "320px", padding: "0.4rem 0.6rem", border: "1px solid var(--border-light)", fontSize: "var(--text-sm)" }}
+									/>
+									<button
+										type="button"
+										className="btn btn--sm"
+										style={{ color: "var(--danger)", borderColor: "var(--danger)", whiteSpace: "nowrap" }}
+										onClick={() => {
+											void cancelConsultation(active.id, cancelReason.trim() || undefined)
+												.then(() => {
+													setShowCancelForm(false);
+													setCancelReason("");
+													setSelectedConsultation(null);
+													void refresh();
+												})
+												.catch((err: unknown) => {
+													const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
+													showToast("error", msg);
+												});
+										}}
+									>
+										Confirm Cancel
+									</button>
+									<button
+										type="button"
+										className="btn btn--sm"
+										onClick={() => { setShowCancelForm(false); setCancelReason(""); }}
+									>
+										Keep Case
+									</button>
+								</div>
 							</div>
 						)}
-						{active.coordinatorName && (
-							<div style={{ padding: "0.5rem 1.25rem", background: "#f0f9ff", borderBottom: "1px solid #bae6fd", flexShrink: 0, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-								<p style={{ fontSize: "var(--text-xs)", color: "#0c4a6e", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-									<strong>Coordinator:</strong> <StaffChatBadge opsUserId={active.coordinatorEmail} name={active.coordinatorName} email={active.coordinatorEmail} />
-									{active.coordinatorAssignedByName && <span style={{ opacity: 0.7 }}> (assigned by {active.coordinatorAssignedByName})</span>}
-									{active.delegationNote && <span style={{ opacity: 0.7 }}> — {active.delegationNote}</span>}
-								</p>
-								<button
-									onClick={async () => {
-										setShowCoordinatorPicker(true);
-										if (!workloadData) {
-											try { setWorkloadData(await getWorkload()); } catch { /* ignore */ }
-										}
-									}}
-									className="btn btn--sm btn--ghost"
-									style={{ whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}
-								>
-									Reassign
-								</button>
+
+						{showCoordinatorPicker && (
+							<div style={{ padding: "0.75rem 1.25rem", background: "var(--card)", borderBottom: "1px solid var(--border-light)" }}>
+								<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+									<p style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+										Select a coordinator:
+									</p>
+									{workloadData ? (
+										<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+											{workloadData.coordinators.map((c) => (
+												<button
+													key={c.opsUserId}
+													onClick={async () => {
+														try {
+															await delegateCoordinator(active.id, c.opsUserId, coordinatorNote || undefined);
+															setShowCoordinatorPicker(false);
+															setCoordinatorNote("");
+															void refresh();
+														} catch (err: unknown) {
+															showToast("error", err instanceof Error ? err.message : "Failed to delegate");
+														}
+													}}
+													className="btn btn--sm btn--ghost"
+													style={{
+														display: "flex",
+														flexDirection: "column",
+														alignItems: "flex-start",
+														padding: "0.4rem 0.75rem",
+														border: "1px solid var(--border)",
+														borderRadius: "0",
+													}}
+												>
+													<span style={{ fontWeight: 500 }}>{c.name}</span>
+													<span style={{ fontSize: "10px", opacity: 0.7 }}>
+														{c.activeCases}/{c.maxCapacity} cases
+														{c.overdueCases > 0 && <span style={{ color: "var(--danger)" }}> · {c.overdueCases} overdue</span>}
+													</span>
+												</button>
+											))}
+										</div>
+									) : (
+										<p style={{ fontSize: "var(--text-xs)", opacity: 0.6 }}>Loading workload…</p>
+									)}
+									<input
+										value={coordinatorNote}
+										onChange={(e) => setCoordinatorNote(e.target.value)}
+										placeholder="Delegation note (optional)"
+										style={{ fontSize: "var(--text-xs)", padding: "0.3rem 0.5rem", border: "1px solid var(--border)" }}
+									/>
+									<button
+										onClick={() => { setShowCoordinatorPicker(false); setCoordinatorNote(""); }}
+										className="btn btn--sm btn--ghost"
+										style={{ alignSelf: "flex-start" }}
+									>
+										Cancel
+									</button>
+								</div>
 							</div>
 						)}
+
+						{/* --- CONSOLIDATED STATUS STRIP --- */}
+						{(() => {
+							const alerts = [];
+							if (active.status === "In Assessment") {
+								alerts.push(<strong>Assessment in progress.</strong>);
+								if (docs.pending > 0) alerts.push(`⚠ ${docs.pending} document(s) pending.`);
+							}
+							if (active.status === "Completed") {
+								alerts.push(<strong>Assessment completed.</strong>);
+								if (active.assessmentResult) alerts.push(`Outcome: ${active.assessmentResult.outcome} - ${active.assessmentResult.recProgram} at ${active.assessmentResult.recUniversity} (${active.assessmentResult.recCountry}).`);
+							}
+							if (active.workflow?.status === "CLOSED") {
+								alerts.push(<strong style={{ color: "var(--danger)" }}>Cancelled.</strong>);
+							}
+							if (active.coordinatorName && !showCoordinatorPicker) {
+								alerts.push(
+									<span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+										Coordinator: <StaffChatBadge opsUserId={active.coordinatorEmail} name={active.coordinatorName} email={active.coordinatorEmail} />
+									</span>
+								);
+							} else if (!active.coordinatorName && canAssignWork && active.status !== "Completed" && active.status !== "Cancelled") {
+								alerts.push("No coordinator assigned.");
+							}
+
+							if (alerts.length === 0) return null;
+
+							return (
+								<div style={{ padding: "0.5rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-xs)", display: "flex", flexWrap: "wrap", gap: "0.75rem", alignItems: "center" }}>
+									{alerts.map((alert, i) => (
+										<span key={i} style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
+											{i > 0 && <span style={{ opacity: 0.3 }}>|</span>}
+											{alert}
+										</span>
+									))}
+								</div>
+							);
+						})()}
 
 							{/* Detail Tabs */}
 							<div style={{ display: "flex", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>

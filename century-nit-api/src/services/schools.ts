@@ -208,6 +208,11 @@ export async function serializeSchool(
 		})),
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
+		offerTuitionUsd: row.offerTuitionUsd,
+		offerTuitionLabel: row.offerTuitionLabel,
+		offerDepositUsd: row.offerDepositUsd,
+		offerDepositDueAt: row.offerDepositDueAt?.toISOString() ?? null,
+		offerDepositPaidAt: row.offerDepositPaidAt?.toISOString() ?? null,
 	};
 }
 
@@ -330,6 +335,21 @@ export async function updateSchoolStatus(
 			status: input.status,
 			handlerNote: input.handlerNote ?? target.handlerNote,
 			financialNote: input.financialNote ?? target.financialNote,
+			offerTuitionUsd: input.offerTuitionUsd !== undefined ? input.offerTuitionUsd : target.offerTuitionUsd,
+			offerTuitionLabel: input.offerTuitionLabel !== undefined ? input.offerTuitionLabel : target.offerTuitionLabel,
+			offerDepositUsd: input.offerDepositUsd !== undefined ? input.offerDepositUsd : target.offerDepositUsd,
+			offerDepositDueAt:
+				input.offerDepositDueAt !== undefined
+					? input.offerDepositDueAt
+						? new Date(input.offerDepositDueAt)
+						: null
+					: target.offerDepositDueAt,
+			offerDepositPaidAt:
+				input.offerDepositPaidAt !== undefined
+					? input.offerDepositPaidAt
+						? new Date(input.offerDepositPaidAt)
+						: null
+					: target.offerDepositPaidAt,
 			updatedAt: new Date(),
 		})
 		.where(eq(schoolApplications.id, schoolId))

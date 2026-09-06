@@ -10,7 +10,102 @@ import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, type JourneyStage, type SchoolApplication } from "century-nit-shared";
+
+function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: SchoolApplication }) {
+	const { updateSchoolApplication } = useCases();
+	const [editing, setEditing] = useState(false);
+	const [tuitionUsd, setTuitionUsd] = useState(school.offerTuitionUsd?.toString() ?? "");
+	const [tuitionLabel, setTuitionLabel] = useState(school.offerTuitionLabel ?? "");
+	const [depositUsd, setDepositUsd] = useState(school.offerDepositUsd?.toString() ?? "");
+	const [dueAt, setDueAt] = useState(school.offerDepositDueAt ? school.offerDepositDueAt.slice(0, 10) : "");
+	const [paidAt, setPaidAt] = useState(school.offerDepositPaidAt ? school.offerDepositPaidAt.slice(0, 10) : "");
+
+	const toIso = (date: string) => (date ? `${date}T00:00:00Z` : null);
+	const toNumber = (value: string) => {
+		const n = Number(value);
+		return Number.isFinite(n) && value.trim() !== "" ? n : null;
+	};
+
+	if (!editing) {
+		const hasTerms = school.offerTuitionUsd != null || school.offerDepositUsd != null || school.offerTuitionLabel;
+		return (
+			<div style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}>
+				{hasTerms ? (
+					<div className="muted">
+						{school.offerTuitionUsd != null ? <span>Tuition: ${school.offerTuitionUsd.toLocaleString()}</span> : null}
+						{school.offerDepositUsd != null ? <span> · Deposit: ${school.offerDepositUsd.toLocaleString()}</span> : null}
+						{school.offerDepositDueAt ? <span> · Due: {new Date(school.offerDepositDueAt).toLocaleDateString()}</span> : null}
+						{school.offerDepositPaidAt ? <span> (paid)</span> : null}
+					</div>
+				) : (
+					<span className="muted">Offer terms not set</span>
+				)}
+				<div>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						style={{ marginTop: "0.25rem" }}
+						onClick={() => setEditing(true)}
+					>
+						Edit offer terms
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
+			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+				<div>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition USD</p>
+					<input className="input input--sm" type="number" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} />
+				</div>
+				<div>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition label</p>
+					<input className="input input--sm" type="text" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} />
+				</div>
+				<div>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit USD</p>
+					<input className="input input--sm" type="number" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} />
+				</div>
+				<div>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit due</p>
+					<input className="input input--sm" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+				</div>
+				<div>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit paid</p>
+					<input className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+				</div>
+			</div>
+			<div style={{ display: "flex", gap: "0.5rem" }}>
+				<button
+					type="button"
+					className="btn btn--primary btn--sm"
+					onClick={async () => {
+						try {
+							await updateSchoolApplication(appId, school.id, {
+								offerTuitionUsd: toNumber(tuitionUsd),
+								offerTuitionLabel: tuitionLabel.trim() || null,
+								offerDepositUsd: toNumber(depositUsd),
+								offerDepositDueAt: toIso(dueAt),
+								offerDepositPaidAt: toIso(paidAt),
+							});
+							setEditing(false);
+						} catch {
+							/* error handled by hook */}
+					}}
+				>
+					Save
+				</button>
+				<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(false)}>
+					Cancel
+				</button>
+			</div>
+		</div>
+	);
+}
 
 export function EnterpriseCases() {
 	const [searchParams] = useSearchParams();
@@ -98,8 +193,10 @@ export function EnterpriseCases() {
 
 	async function handleRecordProceed() {
 		if (!selectedApp) return;
+		const reason = window.prompt("Why are you recording consent on the applicant's behalf?", "");
+		if (reason === null || reason.trim() === "") return;
 		try {
-			await recordProceed(selectedApp.appId);
+			await recordProceed(selectedApp.appId, reason.trim());
 			setActionSuccess("Applicant consent recorded — the gate is now open.");
 			setTimeout(() => setActionSuccess(null), 4000);
 		} catch (err) {
@@ -553,11 +650,12 @@ export function EnterpriseCases() {
 														}}
 													>
 														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
-															<div>
-																<p style={{ fontWeight: 500 }}>{displayName}</p>
-																<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
-																{latest ? <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>{latest.status}{latest.note ? ` — ${latest.note}` : ""}</p> : null}
-															</div>
+							<div>
+								<p style={{ fontWeight: 500 }}>{displayName}</p>
+								<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
+								{latest ? <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>{latest.status}{latest.note ? ` — ${latest.note}` : ""}</p> : null}
+								<InlineSchoolOfferEditor appId={selectedApp.appId} school={s} />
+							</div>
 															<span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: admitted ? "#16a34a" : "var(--foreground)", whiteSpace: "nowrap" }}>{s.status}</span>
 														</div>
 													</div>

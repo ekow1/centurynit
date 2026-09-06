@@ -25,6 +25,7 @@ import {
  */
 
 const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "proforma", "issued", "partial", "overdue", "paid", "void"];
+const INVOICE_TYPES: InvoiceType[] = ["Application", "Visa", "Agency", "Travel"];
 
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
@@ -46,6 +47,9 @@ export function EnterpriseInvoices() {
 	const [search, setSearch] = useState("");
 	const [openId, setOpenId] = useState<string | null>(null);
 	const [building, setBuilding] = useState<{ applicantId: string; applicantName: string; type: InvoiceType } | null>(null);
+	const [pickerOpen, setPickerOpen] = useState(false);
+	const [pickedApplicantId, setPickedApplicantId] = useState<string>("");
+	const [pickedType, setPickedType] = useState<InvoiceType>("Application");
 	const [flash, setFlash] = useState<string | null>(null);
 
 	const by = opsUser?.name ?? "Finance";
@@ -128,8 +132,9 @@ export function EnterpriseInvoices() {
 					className="btn btn--primary"
 					disabled={applicants.length === 0}
 					onClick={() => {
-						const target = { id: applicants[0].id, name: applicants[0].name };
-						setBuilding({ applicantId: target.id, applicantName: target.name, type: "Application" });
+						setPickedApplicantId(applicants[0]?.id ?? "");
+						setPickedType("Application");
+						setPickerOpen(true);
 					}}
 				>
 					+ New invoice
@@ -304,11 +309,73 @@ export function EnterpriseInvoices() {
 										>
 											View invoices
 										</button>
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											onClick={() => setBuilding({ applicantId: a.id, applicantName: a.name, type: "Application" })}
+										>
+											+ Invoice
+										</button>
 									</td>
 								</tr>
 							))}
 						</tbody>
 					</table>
+				</div>
+			)}
+
+			{pickerOpen && (
+				<div className="ops-modal-backdrop" onClick={() => setPickerOpen(false)}>
+					<div className="ops-modal" onClick={(e) => e.stopPropagation()}>
+						<div className="ops-modal__head">
+							<div>
+								<h2 className="ops-modal__title">New invoice</h2>
+								<p className="ops-modal__sub">Choose the applicant and invoice type.</p>
+							</div>
+						</div>
+						<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+							<div>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.25rem" }}>Applicant</p>
+								<select
+									className="input"
+									value={pickedApplicantId}
+									onChange={(e) => setPickedApplicantId(e.target.value)}
+								>
+									{applicants.map((a) => (
+										<option key={a.id} value={a.id}>{a.name}</option>
+									))}
+								</select>
+							</div>
+							<div>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.25rem" }}>Invoice type</p>
+								<select
+									className="input"
+									value={pickedType}
+									onChange={(e) => setPickedType(e.target.value as InvoiceType)}
+								>
+									{INVOICE_TYPES.map((t) => (
+										<option key={t} value={t}>{t}</option>
+									))}
+								</select>
+							</div>
+						</div>
+						<div className="ops-modal__foot" style={{ marginTop: "1.25rem" }}>
+							<button type="button" className="btn btn--ghost" onClick={() => setPickerOpen(false)}>Cancel</button>
+							<button
+								type="button"
+								className="btn btn--primary"
+								disabled={!pickedApplicantId}
+								onClick={() => {
+									const match = applicants.find((a) => a.id === pickedApplicantId);
+									if (!match) return;
+									setBuilding({ applicantId: match.id, applicantName: match.name, type: pickedType });
+									setPickerOpen(false);
+								}}
+							>
+								Continue
+							</button>
+						</div>
+					</div>
 				</div>
 			)}
 

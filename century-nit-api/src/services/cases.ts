@@ -1063,6 +1063,7 @@ export async function acceptProceedForApplication(input: {
 	fundingTrack?: string | null;
 	degreeLevel?: string;
 	country?: string;
+	reason?: string;
 	actor: { opsUserId?: string; name: string };
 }): Promise<AcceptProceedResponse> {
 	const { applicationId, actor } = input;
@@ -1111,7 +1112,13 @@ export async function acceptProceedForApplication(input: {
 			targetType: "application",
 			targetId: applicationId,
 			kind: "recommendation",
-			text: `${isOverride ? "Ops" : "Applicant"} confirmed to proceed with the application and accepted the pricing shown.`,
+			text: (() => {
+				const base = `${isOverride ? "Ops" : "Applicant"} confirmed to proceed with the application and accepted the pricing shown.`;
+				if (isOverride && input.reason) {
+					return `${base} Reason for override: ${input.reason}`;
+				}
+				return base;
+			})(),
 			authorName: actor.name,
 			authorOpsUserId: actor.opsUserId ?? null,
 		});

@@ -1065,6 +1065,12 @@ export const schoolApplications = pgTable(
 		programName: text("program_name"),
 		countryName: text("country_name"),
 		tuitionUsd: integer("tuition_usd"),
+		/** Offer terms set when an institution makes an offer. */
+		offerTuitionUsd: integer("offer_tuition_usd"),
+		offerTuitionLabel: text("offer_tuition_label"),
+		offerDepositUsd: integer("offer_deposit_usd"),
+		offerDepositDueAt: timestamp("offer_deposit_due_at", { withTimezone: true }),
+		offerDepositPaidAt: timestamp("offer_deposit_paid_at", { withTimezone: true }),
 		intake: varchar("intake", { length: 64 }).notNull(),
 		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
 		handlerNote: text("handler_note"),

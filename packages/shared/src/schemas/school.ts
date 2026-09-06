@@ -59,6 +59,12 @@ export const schoolApplicationSchema = z.object({
 	events: z.array(schoolTrackEventSchema),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
+	/** Offer terms set when the institution makes an offer. */
+	offerTuitionUsd: z.number().int().nullable().optional(),
+	offerTuitionLabel: z.string().nullable().optional(),
+	offerDepositUsd: z.number().int().nullable().optional(),
+	offerDepositDueAt: z.string().datetime().nullable().optional(),
+	offerDepositPaidAt: z.string().datetime().nullable().optional(),
 });
 export type SchoolApplication = z.infer<typeof schoolApplicationSchema>;
 
@@ -75,6 +81,11 @@ export const updateSchoolStatusSchema = z.object({
 	handlerNote: z.string().max(2000).optional(),
 	financialNote: z.string().max(2000).optional(),
 	note: z.string().max(2000).optional(),
+	offerTuitionUsd: z.number().int().nullable().optional(),
+	offerTuitionLabel: z.string().max(200).nullable().optional(),
+	offerDepositUsd: z.number().int().nullable().optional(),
+	offerDepositDueAt: z.string().datetime().nullable().optional(),
+	offerDepositPaidAt: z.string().datetime().nullable().optional(),
 });
 export type UpdateSchoolStatus = z.infer<typeof updateSchoolStatusSchema>;
 

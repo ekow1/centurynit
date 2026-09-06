@@ -36,6 +36,7 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 	const [signedUrl, setSignedUrl] = useState<string | null>(null);
 	const [signedType, setSignedType] = useState<string | null>(null);
 	const [fetchError, setFetchError] = useState<string | null>(null);
+	const [isModalOpen, setIsModalOpen] = useState(false);
 
 	const file = getFile(name);
 	const kind = file ? isPreviewable(file.type) : null;
@@ -124,14 +125,13 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 					)}
 					{displayUrl ? (
 						<>
-							<a
+							<button
+								type="button"
 								className="docview__tool docview__tool--wide"
-								href={displayUrl}
-								target="_blank"
-								rel="noreferrer"
+								onClick={() => setIsModalOpen(true)}
 							>
 								Open
-							</a>
+							</button>
 							<a className="docview__tool docview__tool--wide" href={displayUrl} download={name}>
 								Download
 							</a>
@@ -174,6 +174,81 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 					)}
 				</div>
 			</div>
+
+			{isModalOpen && displayUrl && (
+				<div style={{
+					position: "fixed",
+					inset: 0,
+					zIndex: 9999,
+					background: "rgba(0,0,0,0.85)",
+					backdropFilter: "blur(4px)",
+					display: "flex",
+					flexDirection: "column",
+					animation: "ops-fade-in 0.15s ease-out"
+				}}>
+					<div style={{
+						padding: "1rem 2rem",
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "center",
+						background: "rgba(0,0,0,0.5)",
+						color: "white"
+					}}>
+						<div style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", opacity: 0.8 }}>
+							{name}
+						</div>
+						<div style={{ display: "flex", gap: "1rem" }}>
+							<a
+								href={displayUrl}
+								target="_blank"
+								rel="noreferrer"
+								style={{
+									color: "white",
+									textDecoration: "underline",
+									fontSize: "0.85rem",
+									display: "flex",
+									alignItems: "center"
+								}}
+							>
+								Open in new tab ↗
+							</a>
+							<button
+								type="button"
+								onClick={() => setIsModalOpen(false)}
+								style={{
+									background: "white",
+									color: "black",
+									border: "none",
+									padding: "0.4rem 1rem",
+									borderRadius: "4px",
+									fontWeight: 600,
+									cursor: "pointer",
+									fontSize: "0.85rem"
+								}}
+							>
+								Close Viewer
+							</button>
+						</div>
+					</div>
+					<div style={{ flex: 1, padding: "2rem", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
+						{displayKind === "pdf" ? (
+							<iframe
+								src={displayUrl}
+								style={{ width: "100%", height: "100%", border: "none", background: "white", borderRadius: "8px", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}
+								title={name}
+							/>
+						) : displayKind === "image" ? (
+							<img
+								src={displayUrl}
+								alt={name}
+								style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}
+							/>
+						) : (
+							<div style={{ color: "white" }}>Unsupported document type for modal preview.</div>
+						)}
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

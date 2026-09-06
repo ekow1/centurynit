@@ -573,7 +573,6 @@ export function EnterpriseDocuments() {
 								documentId={selectedDoc.id}
 								applicantName={selectedDoc.ownerName || selectedDoc.ownerEmail}
 								reference={selectedDoc.caseReference}
-								onBack={() => setSelectedDoc(null)}
 								onVerdict={(status) => {
 									const updated = { ...selectedDoc, status };
 									updateDocInList(updated);

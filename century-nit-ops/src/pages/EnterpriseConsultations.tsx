@@ -1119,7 +1119,6 @@ export function EnterpriseConsultations() {
 										reference={active.ref}
 										documentId={previewingDoc.documentId}
 										onVerdict={(status) => void handleReviewDoc(previewingDoc.documentId!, status)}
-										onBack={() => setPreviewingDoc(null)}
 									/>
 										</div>
 									</div>

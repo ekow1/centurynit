@@ -343,7 +343,6 @@ export function EnterpriseApplicants() {
 									isMine={selectedApplicant.assignedOfficerEmail === opsUser?.email}
 									applicantName={selectedApplicant.name}
 									reference={selectedApplicant.id}
-									onBack={() => setPreviewingDoc(null)}
 								/>
 								) : (
 									<div className="card">

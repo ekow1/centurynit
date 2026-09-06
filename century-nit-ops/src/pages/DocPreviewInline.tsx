@@ -52,7 +52,6 @@ export function DocPreviewInline({
 	isMine = true,
 	applicantName,
 	reference,
-	onBack,
 	documentId,
 	onVerdict,
 }: {
@@ -61,7 +60,6 @@ export function DocPreviewInline({
 	/** Shown on the rendered page when the original file isn't in this session */
 	applicantName?: string;
 	reference?: string;
-	onBack: () => void;
 	/** Real document UUID. When provided, verdicts go to documentsApi.review
 	 *  instead of the demo useOpsState store. */
 	documentId?: string;

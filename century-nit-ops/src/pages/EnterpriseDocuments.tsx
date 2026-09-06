@@ -538,48 +538,56 @@ export function EnterpriseDocuments() {
 						})}
 					</div>
 
-					{/* Inline Right Document Preview Panel */}
-					{selectedDoc && (
-						<div className="vault-preview-panel">
-							<div className="vault-preview-head">
-								<div>
-									<div className="vault-preview-title">
-										{selectedDoc.ownerName || selectedDoc.ownerEmail || "Applicant"}
+					{/* Right Document Preview Panel */}
+					<div className="vault-preview-panel">
+						{selectedDoc ? (
+							<>
+								<div className="vault-preview-head">
+									<div>
+										<div className="vault-preview-title">
+											{selectedDoc.ownerName || selectedDoc.ownerEmail || "Applicant"}
+										</div>
+										<div className="vault-preview-sub">
+											Ref: {selectedDoc.caseReference || "—"} · {selectedDoc.branch || "Global"}
+										</div>
 									</div>
-									<div className="vault-preview-sub">
-										Ref: {selectedDoc.caseReference || "—"} · {selectedDoc.branch || "Global"}
-									</div>
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={() => setSelectedDoc(null)}
+									>
+										Close
+									</button>
 								</div>
-								<button
-									type="button"
-									className="btn btn--ghost btn--sm"
-									onClick={() => setSelectedDoc(null)}
-								>
-									Close
-								</button>
-							</div>
 
-							<DocPreviewInline
-								doc={{
-									name: selectedDoc.fileName,
-									category: selectedDoc.documentCategory,
-									status:
-										selectedDoc.status === "UPLOADED"
-											? "Pending Review"
-											: selectedDoc.status === "VERIFIED"
-												? "Verified"
-												: "Rejected",
-								}}
-								documentId={selectedDoc.id}
-								applicantName={selectedDoc.ownerName || selectedDoc.ownerEmail}
-								reference={selectedDoc.caseReference}
-								onVerdict={(status) => {
-									const updated = { ...selectedDoc, status };
-									updateDocInList(updated);
-								}}
-							/>
-						</div>
-					)}
+								<DocPreviewInline
+									doc={{
+										name: selectedDoc.fileName,
+										category: selectedDoc.documentCategory,
+										status:
+											selectedDoc.status === "UPLOADED"
+												? "Pending Review"
+												: selectedDoc.status === "VERIFIED"
+													? "Verified"
+													: "Rejected",
+									}}
+									documentId={selectedDoc.id}
+									applicantName={selectedDoc.ownerName || selectedDoc.ownerEmail}
+									reference={selectedDoc.caseReference}
+									onVerdict={(status) => {
+										const updated = { ...selectedDoc, status };
+										updateDocInList(updated);
+									}}
+								/>
+							</>
+						) : (
+							<div className="vault-preview-empty">
+								<span style={{ fontSize: "2rem", marginBottom: "1rem", opacity: 0.5 }}>📄</span>
+								<h3 style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "var(--foreground)" }}>No Document Selected</h3>
+								<p>Select a document from the list to preview it here.</p>
+							</div>
+						)}
+					</div>
 				</div>
 			)}
 

@@ -471,7 +471,7 @@ export function Workspace() {
 				<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 					
 					{/* Toolbar & Search integrated into Queue Header */}
-					<div className="card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
+					<div className="workspace-card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
 						<h2 className="section-title" style={{ margin: 0, marginRight: "auto", display: "flex", alignItems: "center", gap: "0.75rem" }}>
 							Work Queue
 							<span className="portal-pill" style={{ fontSize: "var(--text-sm)", fontWeight: "normal" }}>{filtered.length} items</span>
@@ -498,7 +498,7 @@ export function Workspace() {
 
 					<div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem", alignItems: "start" }}>
 						{/* LEFT: queue list */}
-						<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
+						<div className="workspace-card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
 							<div style={{ flex: 1, overflowY: "auto" }}>
 								{filtered.length === 0 ? (
 									<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
@@ -519,7 +519,7 @@ export function Workspace() {
 						</div>
 
 						{/* RIGHT: preview pane */}
-						<div className="card" style={{ position: "sticky", top: "1rem", minHeight: "60vh" }}>
+						<div className="workspace-card" style={{ position: "sticky", top: "1rem", minHeight: "60vh" }}>
 							{selected ? (
 								<PreviewPane
 									item={selected}
@@ -571,27 +571,28 @@ function KPICard({
 	
 	return (
 		<button
-			className="card"
+			className={`workspace-card kpi-card ${active ? 'active' : ''}`}
 			onClick={onClick}
 			style={{
 				textAlign: "left",
 				width: "100%",
-				cursor: "pointer",
 				background: active ? baseColor : "var(--card)",
 				color: active ? "#ffffff" : "var(--foreground)",
 				border: active ? `1px solid ${baseColor}` : `1px solid var(--border-light)`,
-				borderTop: active ? undefined : `3px solid ${baseColor}`,
+				borderTop: active ? undefined : `4px solid ${baseColor}`,
 				display: "flex",
 				flexDirection: "column",
-				transition: "all 0.2s ease",
-				boxShadow: active ? `0 4px 12px ${baseColor}40` : undefined,
 			}}
 		>
 			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
 				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "#fff" : "var(--foreground)" }}>{label}</p>
-				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "#fff" : baseColor, fontSize: "1.1rem" }}>{icon}</span>}
+				{icon && (
+					<div className="kpi-icon-wrapper" style={{ background: active ? "rgba(255,255,255,0.2)" : `${baseColor}15`, color: active ? "#fff" : baseColor }}>
+						{icon}
+					</div>
+				)}
 			</div>
-			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "#fff" : "inherit" }}>{value}</p>
+			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.5rem 0 0", color: active ? "#fff" : "inherit" }}>{value}</p>
 			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "#fff" : "var(--muted-fg)" }}>{sub}</p>}
 		</button>
 	);

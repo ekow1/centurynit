@@ -10,6 +10,17 @@
 	--cn-chat-radius-sm: 0;
 }
 
+/* Enforce absolute brutalism in Ops - NO rounded corners anywhere */
+.card,
+.btn,
+.input,
+.portal-pill,
+.badge,
+.ops-modal__content,
+.ops-modal__box {
+	border-radius: 0 !important;
+}
+
 .card-link {
 	color: inherit;
 	text-decoration: none;

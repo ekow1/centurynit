@@ -20,6 +20,7 @@ import type {
 } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
+import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 /**
@@ -458,12 +459,12 @@ export function Workspace() {
 
 			{/* KPI strip — first horizontal scan */}
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon="👥" />
-				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon="⚡" />
-				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon="📝" />
-				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} icon="⚠️" />
-				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon="📞" />
-				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon="💰" />
+				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon={<Users size={18} strokeWidth={1.5} />} />
+				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon={<Zap size={18} strokeWidth={1.5} />} />
+				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon={<FileText size={18} strokeWidth={1.5} />} />
+				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} icon={<AlertTriangle size={18} strokeWidth={1.5} />} />
+				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon={<PhoneCall size={18} strokeWidth={1.5} />} />
+				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon={<DollarSign size={18} strokeWidth={1.5} />} />
 			</div>
 
 			{/* Main Content Grid: 2 Columns */}
@@ -560,7 +561,7 @@ function KPICard({
 	sub?: string;
 	active?: boolean;
 	onClick?: () => void;
-	icon?: string;
+	icon?: React.ReactNode;
 }) {
 	return (
 		<button
@@ -579,7 +580,7 @@ function KPICard({
 		>
 			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
 				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "var(--background)" : "var(--foreground)" }}>{label}</p>
-				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "var(--background)" : "var(--foreground)", fontSize: "1.1rem" }}>{icon}</span>}
+				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "var(--background)" : "var(--foreground)", display: "flex", alignItems: "center" }}>{icon}</span>}
 			</div>
 			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "var(--background)" : "inherit" }}>{value}</p>
 			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "var(--background)" : "var(--muted-fg)" }}>{sub}</p>}

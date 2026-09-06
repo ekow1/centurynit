@@ -14,10 +14,11 @@
 		"deploy": "wrangler deploy"
 	},
 	"dependencies": {
+		"century-nit-chat-ui": "*",
 		"century-nit-core": "*",
 		"century-nit-shared": "*",
-		"century-nit-chat-ui": "*",
 		"hono": "4.11.1",
+		"lucide-react": "^1.41.0",
 		"qrcode": "^1.5.4",
 		"react": "19.2.1",
 		"react-dom": "19.2.1",

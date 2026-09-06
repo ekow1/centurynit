@@ -91,33 +91,37 @@ export function DocumentViewer({ name, category, applicantName, reference, statu
 				</span>
 
 				<div className="docview__tools">
-					<button
-						type="button"
-						className="docview__tool"
-						onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
-						disabled={zoomIdx === 0}
-						aria-label="Zoom out"
-					>
-						−
-					</button>
-					<span className="docview__zoom mono">{Math.round(zoom * 100)}%</span>
-					<button
-						type="button"
-						className="docview__tool"
-						onClick={() => setZoomIdx((i) => Math.min(ZOOMS.length - 1, i + 1))}
-						disabled={zoomIdx === ZOOMS.length - 1}
-						aria-label="Zoom in"
-					>
-						+
-					</button>
-					<button
-						type="button"
-						className="docview__tool"
-						onClick={() => setRotation((r) => (r + 90) % 360)}
-						aria-label="Rotate"
-					>
-						↻
-					</button>
+					{displayKind !== "pdf" && (
+						<>
+							<button
+								type="button"
+								className="docview__tool"
+								onClick={() => setZoomIdx((i) => Math.max(0, i - 1))}
+								disabled={zoomIdx === 0}
+								aria-label="Zoom out"
+							>
+								−
+							</button>
+							<span className="docview__zoom mono">{Math.round(zoom * 100)}%</span>
+							<button
+								type="button"
+								className="docview__tool"
+								onClick={() => setZoomIdx((i) => Math.min(ZOOMS.length - 1, i + 1))}
+								disabled={zoomIdx === ZOOMS.length - 1}
+								aria-label="Zoom in"
+							>
+								+
+							</button>
+							<button
+								type="button"
+								className="docview__tool"
+								onClick={() => setRotation((r) => (r + 90) % 360)}
+								aria-label="Rotate"
+							>
+								↻
+							</button>
+						</>
+					)}
 					{displayUrl ? (
 						<>
 							<a

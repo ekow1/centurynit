@@ -94,26 +94,7 @@ export function DocPreviewInline({
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "1rem", flex: 1, minHeight: 0 }}>
-			{/* Back link */}
-			<button
-				type="button"
-				onClick={onBack}
-				style={{
-					background: "none",
-					border: "none",
-					cursor: "pointer",
-					color: "var(--muted-foreground)",
-					fontSize: "var(--text-xs)",
-					fontFamily: "var(--font-mono)",
-					textTransform: "uppercase",
-					letterSpacing: "0.05em",
-					padding: 0,
-					textAlign: "left",
-					width: "fit-content",
-				}}
-			>
-				← Back to document list
-			</button>
+			{/* Back link removed: handled by outer Close button */}
 
 			{/* Status + ref bar */}
 			<div style={{

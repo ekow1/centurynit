@@ -458,12 +458,12 @@ export function Workspace() {
 
 			{/* KPI strip — first horizontal scan */}
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon="👥" accent="#3b82f6" />
-				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon="⚡" accent="#f59e0b" />
-				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon="📝" accent="#8b5cf6" />
-				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} urgent={stats.overdue > 0} icon="⚠️" accent="#ef4444" />
-				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon="📞" accent="#0ea5e9" />
-				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon="💰" accent="#10b981" />
+				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon="👥" />
+				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon="⚡" />
+				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon="📝" />
+				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} icon="⚠️" />
+				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon="📞" />
+				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon="💰" />
 			</div>
 
 			{/* Main Content Grid: 2 Columns */}
@@ -552,22 +552,16 @@ function KPICard({
 	value,
 	sub,
 	active,
-	urgent,
 	onClick,
 	icon,
-	accent,
 }: {
 	label: string;
 	value: string;
 	sub?: string;
 	active?: boolean;
-	urgent?: boolean;
 	onClick?: () => void;
 	icon?: string;
-	accent?: string;
 }) {
-	const baseColor = urgent ? "var(--danger, #b91c1c)" : accent || "var(--accent, #6366f1)";
-	
 	return (
 		<button
 			className="card"
@@ -576,20 +570,19 @@ function KPICard({
 				textAlign: "left",
 				width: "100%",
 				cursor: "pointer",
-				background: active ? baseColor : "var(--card)",
-				color: active ? "#ffffff" : "var(--foreground)",
-				border: active ? `1px solid ${baseColor}` : `1px solid var(--border-light)`,
-				borderTop: active ? undefined : `3px solid ${baseColor}`,
+				background: active ? "var(--foreground)" : "var(--card)",
+				color: active ? "var(--background)" : "var(--foreground)",
+				border: active ? `1px solid var(--foreground)` : `1px solid var(--border-light)`,
 				display: "flex",
 				flexDirection: "column",
 			}}
 		>
 			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
-				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "#fff" : "var(--foreground)" }}>{label}</p>
-				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "#fff" : baseColor, fontSize: "1.1rem" }}>{icon}</span>}
+				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "var(--background)" : "var(--foreground)" }}>{label}</p>
+				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "var(--background)" : "var(--foreground)", fontSize: "1.1rem" }}>{icon}</span>}
 			</div>
-			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "#fff" : "inherit" }}>{value}</p>
-			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "#fff" : "var(--muted-fg)" }}>{sub}</p>}
+			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "var(--background)" : "inherit" }}>{value}</p>
+			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "var(--background)" : "var(--muted-fg)" }}>{sub}</p>}
 		</button>
 	);
 }
@@ -609,20 +602,6 @@ function actionLabel(item: WorkItem): string {
 }
 
 function QueueRow({ item, selected, onSelect }: { item: WorkItem; selected: boolean; onSelect: () => void }) {
-	const actionColors: Record<string, string> = {
-		assign: "#3b82f6",
-		assess: "#6366f1",
-		reschedule: "#f59e0b",
-		review: "#8b5cf6",
-		checklist: "#10b981",
-		docs: "#0ea5e9",
-		invoice: "#8b5cf6",
-		issue: "#ec4899",
-		chase: "#ef4444",
-		followup: "#0ea5e9",
-	};
-	const pillBg = actionColors[item.action] || "var(--foreground)";
-
 	return (
 		<div
 			onClick={onSelect}
@@ -635,9 +614,10 @@ function QueueRow({ item, selected, onSelect }: { item: WorkItem; selected: bool
 						style={{
 							fontSize: "var(--text-xs)",
 							padding: "0.1rem 0.45rem",
-							background: selected ? "#ffffff" : pillBg,
-							color: selected ? "var(--foreground)" : "#ffffff",
-							border: "none",
+							background: selected ? "var(--background)" : "var(--foreground)",
+							color: selected ? "var(--foreground)" : "var(--background)",
+							border: "1px solid",
+							borderColor: selected ? "transparent" : "var(--foreground)",
 						}}
 					>
 						{actionLabel(item)}

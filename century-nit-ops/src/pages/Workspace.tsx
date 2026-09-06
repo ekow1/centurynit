@@ -466,12 +466,13 @@ export function Workspace() {
 				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon="💰" accent="#10b981" />
 			</div>
 
-			<div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem", alignItems: "start" }}>
-				{/* LEFT: Work Queue & Preview */}
+			{/* Main Content Grid: 2 Columns */}
+			<div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1.5rem", alignItems: "start" }}>
+				
+				{/* LEFT COLUMN: Work Queue */}
 				<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-					
-					{/* Toolbar & Search integrated into Queue Header */}
-					<div className="workspace-card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
+					{/* Toolbar & Search */}
+					<div className="card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
 						<h2 className="section-title" style={{ margin: 0, marginRight: "auto", display: "flex", alignItems: "center", gap: "0.75rem" }}>
 							Work Queue
 							<span className="portal-pill" style={{ fontSize: "var(--text-sm)", fontWeight: "normal" }}>{filtered.length} items</span>
@@ -496,52 +497,50 @@ export function Workspace() {
 						</div>
 					</div>
 
-					<div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1rem", alignItems: "start" }}>
-						{/* LEFT: queue list */}
-						<div className="workspace-card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
-							<div style={{ flex: 1, overflowY: "auto" }}>
-								{filtered.length === 0 ? (
-									<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
-										<span style={{ fontSize: "3rem", opacity: 0.2 }}>📥</span>
-										{loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
-									</div>
-								) : (
-									filtered.map((item) => (
-										<QueueRow
-											key={item.id}
-											item={item}
-											selected={selected?.id === item.id}
-											onSelect={() => setSelected(item)}
-										/>
-									))
-								)}
-							</div>
-						</div>
-
-						{/* RIGHT: preview pane */}
-						<div className="workspace-card" style={{ position: "sticky", top: "1rem", minHeight: "60vh" }}>
-							{selected ? (
-								<PreviewPane
-									item={selected}
-									assignees={assignees}
-									canAssignWork={canAssignWork}
-									onAssigned={refresh}
-									onAssignConsultation={assignConsultation}
-									onAssignApplication={assignApplication}
-								/>
-							) : (
-								<div style={{ padding: "4rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
-									<span style={{ fontSize: "3rem", opacity: 0.2 }}>👈</span>
-									<p style={{ margin: 0, maxWidth: "200px" }}>Select an item from the queue to see details and next steps.</p>
+					{/* Queue List */}
+					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 220px)", overflow: "hidden", padding: 0 }}>
+						<div style={{ flex: 1, overflowY: "auto" }}>
+							{filtered.length === 0 ? (
+								<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
+									<span style={{ fontSize: "3rem", opacity: 0.2 }}>📥</span>
+									{loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
 								</div>
+							) : (
+								filtered.map((item) => (
+									<QueueRow
+										key={item.id}
+										item={item}
+										selected={selected?.id === item.id}
+										onSelect={() => setSelected(item)}
+									/>
+								))
 							)}
 						</div>
 					</div>
 				</div>
 
-				{/* RIGHT: Sidebar (Meetings & Widgets) */}
-				<div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", position: "sticky", top: "1rem" }}>
+				{/* RIGHT COLUMN: Live Meetings & Preview Pane */}
+				<div style={{ display: "flex", flexDirection: "column", gap: "1rem", position: "sticky", top: "1rem" }}>
 					<LiveMeetings compact />
+					
+					{/* Preview Pane */}
+					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "50vh", maxHeight: "calc(100vh - 120px)", overflowY: "auto" }}>
+						{selected ? (
+							<PreviewPane
+								item={selected}
+								assignees={assignees}
+								canAssignWork={canAssignWork}
+								onAssigned={refresh}
+								onAssignConsultation={assignConsultation}
+								onAssignApplication={assignApplication}
+							/>
+						) : (
+							<div style={{ padding: "4rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
+								<span style={{ fontSize: "3rem", opacity: 0.2 }}>👈</span>
+								<p style={{ margin: 0, maxWidth: "200px" }}>Select an item from the queue to see details and next steps.</p>
+							</div>
+						)}
+					</div>
 				</div>
 			</div>
 		</div>
@@ -571,28 +570,25 @@ function KPICard({
 	
 	return (
 		<button
-			className={`workspace-card kpi-card ${active ? 'active' : ''}`}
+			className="card"
 			onClick={onClick}
 			style={{
 				textAlign: "left",
 				width: "100%",
+				cursor: "pointer",
 				background: active ? baseColor : "var(--card)",
 				color: active ? "#ffffff" : "var(--foreground)",
 				border: active ? `1px solid ${baseColor}` : `1px solid var(--border-light)`,
-				borderTop: active ? undefined : `4px solid ${baseColor}`,
+				borderTop: active ? undefined : `3px solid ${baseColor}`,
 				display: "flex",
 				flexDirection: "column",
 			}}
 		>
 			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
 				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "#fff" : "var(--foreground)" }}>{label}</p>
-				{icon && (
-					<div className="kpi-icon-wrapper" style={{ background: active ? "rgba(255,255,255,0.2)" : `${baseColor}15`, color: active ? "#fff" : baseColor }}>
-						{icon}
-					</div>
-				)}
+				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "#fff" : baseColor, fontSize: "1.1rem" }}>{icon}</span>}
 			</div>
-			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.5rem 0 0", color: active ? "#fff" : "inherit" }}>{value}</p>
+			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "#fff" : "inherit" }}>{value}</p>
 			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "#fff" : "var(--muted-fg)" }}>{sub}</p>}
 		</button>
 	);

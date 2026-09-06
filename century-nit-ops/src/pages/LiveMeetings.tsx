@@ -46,7 +46,7 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 
 	if (loading && meetings.length === 0) {
 		return (
-			<div className="workspace-card">
+			<div className="card">
 				<h2 className="section-title mb-3">Live Meetings</h2>
 				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</p>
 			</div>
@@ -55,7 +55,7 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 
 	if (error) {
 		return (
-			<div className="workspace-card">
+			<div className="card">
 				<h2 className="section-title mb-3">Live Meetings</h2>
 				<p className="muted" style={{ fontSize: "var(--text-sm)", color: "var(--danger)" }}>{error}</p>
 			</div>
@@ -65,7 +65,7 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 	const shown = compact ? meetings.slice(0, 3) : meetings;
 
 	return (
-		<div className="workspace-card">
+		<div className="card">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
 				<h2 className="section-title" style={{ margin: 0 }}>
 					Live Meetings

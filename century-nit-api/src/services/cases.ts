@@ -2078,8 +2078,10 @@ export async function setApplicationPackage(input: {
 		}
 
 		// Raise the agency proforma pre-split into deposit / pre-departure / post-arrival milestones.
-		const dynamicPriceUsd = serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools);
-		const price = Math.round(dynamicPriceUsd * 100);
+		// Package price matches the price configured in Ops Center (pkg.priceCents).
+		const price = (pkg.priceCents && pkg.priceCents > 0)
+			? pkg.priceCents
+			: Math.round(serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools));
 		const milestoneLines = AGENCY_STAGES.map((stage, i) => ({
 			position: i,
 			label: stage.label,

@@ -45,8 +45,8 @@ import {
 	CONSULTATION_DURATIONS,
 	getBranchName,
 } from "century-nit-core";
-import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, ApiError } from "century-nit-core/api";
-import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ProceedQuotation } from "century-nit-shared";
+import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError } from "century-nit-core/api";
+import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ProceedQuotation, ServicePackage } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { UploadPickModal } from "../../components/portal/UploadPickModal";
@@ -77,6 +77,7 @@ function SchoolPackageInner() {
 	const { application, chooseSchoolPackage, choosePaymentPlan, payAgencyInstallment } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
+	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
 	const [plan, setPlan] = useState<PaymentPlanId>(application.paymentPlanId || "full");
 	const [funding, setFunding] = useState<SchoolFundingTrack | "">(
 		application.schoolFundingTrack || "scholarship",
@@ -90,16 +91,52 @@ function SchoolPackageInner() {
 	const [saving, setSaving] = useState(false);
 	const [payingDeposit, setPayingDeposit] = useState(false);
 	const chosen = hasSchoolPackage(application);
-	const fundMeta = SCHOOL_FUNDING_TRACKS.find((f) => f.id === (funding || application.schoolFundingTrack));
-	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === (level || application.schoolDegreeLevel));
+
+	useEffect(() => {
+		packagesApi.list()
+			.then((res) => {
+				if (res?.packages && Array.isArray(res.packages) && res.packages.length > 0) {
+					setDbPackages(res.packages.filter((p) => p.active));
+				}
+			})
+			.catch(console.error);
+	}, []);
 
 	const activeFunding = (funding || application.schoolFundingTrack || "scholarship") as SchoolFundingTrack;
 	const activeLevel = (level || application.schoolDegreeLevel || "masters") as SchoolDegreeLevel;
-	const totalServiceFeeCents = serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
+
+	const selectedPkg = dbPackages.find((p) => p.code === activeFunding);
+	const fundMeta = selectedPkg
+		? { id: selectedPkg.code as SchoolFundingTrack, name: selectedPkg.name, tagline: selectedPkg.tagline || "", blurb: selectedPkg.features?.[0] || "" }
+		: SCHOOL_FUNDING_TRACKS.find((f) => f.id === activeFunding);
+	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === activeLevel);
+
+	const totalServiceFeeCents = (selectedPkg && selectedPkg.priceCents > 0)
+		? selectedPkg.priceCents
+		: serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
 	const serviceFee = totalServiceFeeCents / 100;
-	const depositCents = Math.round(totalServiceFeeCents * 0.1);
+	const depositCents = Math.max(1, Math.round(totalServiceFeeCents * 0.1));
 	const depositUsd = depositCents / 100;
 	const remainingUsd = serviceFee - depositUsd;
+
+	const packageCards = dbPackages.length > 0
+		? dbPackages.map((p) => ({
+				id: p.code as SchoolFundingTrack,
+				name: p.name,
+				tagline: p.tagline || (p.code === "scholarship" ? "Funded / award-led path" : p.code === "hybrid" ? "Partial award + self-fund" : "Self-funded / family-funded"),
+				blurb: p.tagline || p.features?.[0] || "",
+				priceCents: p.priceCents,
+				features: p.features,
+				exclusions: p.exclusions,
+				maxSchools: p.maxSchools,
+		  }))
+		: SCHOOL_FUNDING_TRACKS.map((f) => ({
+				...f,
+				priceCents: serviceFeeForPackage(activeLevel, f.id, 1),
+				features: [],
+				exclusions: [],
+				maxSchools: 3,
+		  }));
 
 	async function confirm(andPayDeposit = false) {
 		if (!funding || !level || saving || payingDeposit) return;
@@ -111,7 +148,7 @@ function SchoolPackageInner() {
 				targetSchoolCount,
 			});
 			await meApi.choosePaymentPlan({ paymentPlanId: plan });
-			chooseSchoolPackage(funding, level, targetSchoolCount);
+			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents);
 			choosePaymentPlan(plan);
 
 			if (andPayDeposit) {
@@ -151,7 +188,7 @@ function SchoolPackageInner() {
 				<div className="alert alert--success mb-4" role="status">
 					Package locked:{" "}
 					<strong>
-						{SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name} ·{" "}
+						{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name)} ·{" "}
 						{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name} ·{" "}
 						{application.targetSchoolCount ?? targetSchoolCount} Target Schools
 					</strong>
@@ -167,7 +204,7 @@ function SchoolPackageInner() {
 			<section className="mb-5">
 				<p className="eyebrow mb-2">1 · Funding track</p>
 				<div className="card-grid card-grid--3">
-					{SCHOOL_FUNDING_TRACKS.map((f) => (
+					{packageCards.map((f) => (
 						<button
 							key={f.id}
 							type="button"
@@ -182,6 +219,11 @@ function SchoolPackageInner() {
 							<span className="eyebrow">{f.tagline}</span>
 							<span className="school-pkg-card__name display">{f.name}</span>
 							<p className="school-pkg-card__blurb muted">{f.blurb}</p>
+							{f.priceCents > 0 && (
+								<div className="mt-2" style={{ fontWeight: 700, fontSize: "1.05rem" }}>
+									<Money usd={f.priceCents / 100} />
+								</div>
+							)}
 						</button>
 					))}
 				</div>
@@ -300,14 +342,29 @@ function SchoolPackageInner() {
 							The following are 100% covered by Century NIT — never charged as hidden desk fees:
 						</p>
 						<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
-							<li>✓ Academic Credential Evaluation</li>
-							<li>✓ Document Verification & Notarization</li>
-							<li>✓ Direct University Portal Submissions</li>
-							<li>✓ Statement of Purpose (SOP) Polishing</li>
-							<li>✓ Courier & International Postal Dispatch</li>
-							<li>✓ Dedicated Visa Mock Interview Coaching</li>
+							{((selectedPkg?.features && selectedPkg.features.length > 0) ? selectedPkg.features : [
+								"Academic Credential Evaluation",
+								"Document Verification & Notarization",
+								"Direct University Portal Submissions",
+								"Statement of Purpose (SOP) Polishing",
+								"Courier & International Postal Dispatch",
+								"Dedicated Visa Mock Interview Coaching",
+							]).map((feat, idx) => (
+								<li key={idx}>✓ {feat}</li>
+							))}
 						</ul>
 					</div>
+
+					{selectedPkg?.exclusions && selectedPkg.exclusions.length > 0 && (
+						<div className="card card--pad mt-3" style={{ background: "rgba(239, 68, 68, 0.04)", border: "1px solid rgba(239, 68, 68, 0.15)" }}>
+							<p className="eyebrow" style={{ color: "var(--danger, #ef4444)" }}>Package Exclusions</p>
+							<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
+								{selectedPkg.exclusions.map((excl, idx) => (
+									<li key={idx}>✗ {excl}</li>
+								))}
+							</ul>
+						</div>
+					)}
 
 					<p className="pkg-cost__excl mt-3">
 						Institutional university application fees and tuition are <strong>not</strong> agency fees. Application fees are billed per school selected, and tuition is paid directly to whichever university issues your offer.

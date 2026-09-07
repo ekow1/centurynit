@@ -74,7 +74,8 @@ export async function createPaystackCheckout(input: {
 			!response.ok
 		) {
 			const GHS_USD_RATE = 15.0;
-			const amountInPesewas = Math.round((input.amountCents / 100) * GHS_USD_RATE * 100);
+			// Paystack GHS minimum transaction amount is 100 pesewas (GH₵ 1.00)
+			const amountInPesewas = Math.max(100, Math.round((input.amountCents / 100) * GHS_USD_RATE * 100));
 			const retryRes = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
 				method: "POST",
 				headers: {

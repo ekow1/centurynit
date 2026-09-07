@@ -37,7 +37,6 @@ packagesRouter.openapi(
 		path: "/",
 		tags: ["Packages"],
 		summary: "List active service packages",
-		middleware: [requireAuth] as const,
 		responses: {
 			200: {
 				content: {
@@ -82,7 +81,6 @@ packagesRouter.openapi(
 		path: "/:code",
 		tags: ["Packages"],
 		summary: "Get a single package",
-		middleware: [requireAuth] as const,
 		request: {
 			params: packageParamsSchema,
 		},

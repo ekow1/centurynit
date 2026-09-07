@@ -59,6 +59,7 @@ import type {
 	DeclineProceed,
 	PauseProceed,
 	AcceptProceedResponse,
+	ServicePackage,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 
@@ -1479,5 +1480,18 @@ export const paymentsApi = {
 	verify(reference: string, gateway: "paystack" | "stripe" = "paystack"): Promise<PaymentVerificationResult> {
 		return request(`${API_PREFIX}/payments/verify/${encodeURIComponent(reference)}?gateway=${gateway}`);
 	}
+};
+
+/* ── Service Packages API ─────────────────────────────────────────────────── */
+
+export const packagesApi = {
+	/** List all active service packages. */
+	list(): Promise<{ packages: ServicePackage[] }> {
+		return request(`${API_PREFIX}/packages`, { method: "GET" });
+	},
+	/** Get a single service package by code. */
+	get(code: string): Promise<{ package: ServicePackage }> {
+		return request(`${API_PREFIX}/packages/${code}`, { method: "GET" });
+	},
 };
 

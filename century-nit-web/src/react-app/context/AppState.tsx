@@ -983,7 +983,7 @@ type AppStateContextValue = {
 	payApplicationInvoice: () => void;
 	raiseVisaInvoice: () => void;
 	payVisaInvoice: () => void;
-	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number) => void;
+	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number) => void;
 	choosePaymentPlan: (planId: PaymentPlanId) => void;
 	choosePostArrivalSchedule: (scheduleId: string) => void;
 	/** Post-arrival schedule options enabled by ops (null = all enabled) */
@@ -1706,13 +1706,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	);
 
 	const chooseSchoolPackage = useCallback(
-		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3) => {
+		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3, explicitPriceCents?: number) => {
 			const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === funding);
 			const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === level);
 			const now = new Date().toISOString();
 			const id = `${funding}-${level}`;
-			// Agency estimate comes from the shared service package catalogue
-			const agencyBase = serviceFeeForPackage(level, funding, targetSchoolCount) / 100;
+			// Agency estimate comes from the package price or shared catalogue
+			const totalCents = explicitPriceCents && explicitPriceCents > 0
+				? explicitPriceCents
+				: serviceFeeForPackage(level, funding, targetSchoolCount);
+			const agencyBase = totalCents / 100;
 			setApplication((prev) => ({
 				...prev,
 				applicationPackageId: id,

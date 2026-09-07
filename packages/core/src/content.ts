@@ -2067,21 +2067,21 @@ export const SCHOOL_FUNDING_TRACKS: {
 }[] = [
 	{
 		id: "scholarship",
-		name: "Scholarship package",
+		name: "Scholarship Pathway",
 		tagline: "Funded / award-led path",
-		blurb: "Prioritise institutions and programmes with scholarships, waivers, and funding windows.",
+		blurb: "Full scholarship search, application, and negotiation support.",
 	},
 	{
 		id: "non_scholarship",
-		name: "Non-scholarship package",
+		name: "Non-Scholarship Pathway",
 		tagline: "Self-funded / family-funded",
-		blurb: "Focus on programme fit and clear self-funding capacity - no scholarship dependency.",
+		blurb: "Streamlined admission & visa support for self-funded students.",
 	},
 	{
 		id: "hybrid",
-		name: "Hybrid package",
+		name: "Hybrid Pathway",
 		tagline: "Partial award + self-fund",
-		blurb: "Mix of scholarship targets and self-funded backups on the same tracking board.",
+		blurb: "Start non-scholarship; upgrade to scholarship search after consultation.",
 	},
 ];
 
@@ -2145,7 +2145,7 @@ export const PAYMENT_PLANS = [
  * Century NIT's own consultancy service fee, calculated dynamically across
  * degree level, funding track, and target number of schools.
  *
- * Derived from the configurable constants in `century-nit-shared`.
+ * Returns the total fee in integer USD cents.
  */
 export function serviceFeeForPackage(
 	level: SchoolDegreeLevel | string | undefined,
@@ -2166,7 +2166,7 @@ export function serviceFeeForPackage(
 	const count = Math.max(1, schoolCount);
 	const additionalSchoolCents = Math.max(0, count - 1) * DEFAULT_PER_SCHOOL_ADVISORY_CENTS;
 
-	return usdFromCents(baseCents + trackCents + additionalSchoolCents);
+	return baseCents + trackCents + additionalSchoolCents;
 }
 
 /**
@@ -2174,7 +2174,7 @@ export function serviceFeeForPackage(
  */
 export function serviceFeeFor(track: SchoolFundingTrack | ""): number {
 	if (!track) return 0;
-	return serviceFeeForPackage("masters", track, 1);
+	return usdFromCents(serviceFeeForPackage("masters", track, 1));
 }
 
 /**

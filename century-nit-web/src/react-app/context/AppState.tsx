@@ -2227,16 +2227,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			localStorage.removeItem(SCHOOL_APPS_KEY);
 			setInterview(defaultInterview);
 			localStorage.removeItem(PORTAL_INTERVIEW_KEY);
-			if (booking.paymentStatus === "success" || booking.confirmationId) {
-				// Local booking claims a paid/confirmed consultation that the
-				// server knows nothing about — wipe it.
-				setBooking({
+			// Use an updater so we do not need booking in the dependency list.
+			// A local booking that claims a paid/confirmed consultation while
+			// the server has no record is stale, but an in-progress unpaid form
+			// is preserved.
+			setBooking((prev) => {
+				if (prev.paymentStatus !== "success" && !prev.confirmationId) return prev;
+				return {
 					...defaultBooking,
 					assessment: { ...defaultAssessment },
 					assessmentDocs: { ...defaultAssessmentDocs },
-				});
-				localStorage.removeItem(BOOKING_STORAGE_KEY);
-			}
+				};
+			});
 		}
 		syncCountRef.current += 1;
 			if (res.applicant) {
@@ -2360,7 +2362,7 @@ journeyStage: a.stage ?? prev.journeyStage,
 		} catch {
 			/* keep local values — server may be unreachable */
 		}
-	}, [authUser, resetJourney, booking]);
+	}, [authUser, resetJourney]);
 
 	/** Run on mount */
 	useEffect(() => {

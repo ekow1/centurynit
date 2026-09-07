@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
 import { API_PREFIX, LookupValue } from "century-nit-shared";
@@ -3487,8 +3487,11 @@ export function PortalPayCallback() {
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [failed, setFailed] = useState(false);
+	const startedRef = useRef(false);
 
 	useEffect(() => {
+		if (startedRef.current) return;
+		startedRef.current = true;
 		const params = new URLSearchParams(window.location.search);
 		const invoiceId = params.get("invoice");
 		const reference = params.get("reference");

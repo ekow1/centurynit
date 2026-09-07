@@ -9,11 +9,11 @@
  */
 
 export const DEFAULT_FEE_CENTS = {
-	appBase: 13,
+	appBase: 7,
 	appPerSchool: 7,
 	appDocVerify: 7,
 	appMatchReview: 7,
-	visaBase: 13,
+	visaBase: 7,
 	visaBiometrics: 7,
 	visaTranslation: 7,
 	consultation: 7,

@@ -862,9 +862,18 @@ export function getPendingAction(
 ): PendingAction | null {
 	const stage = getCurrentProcessStage(app, booking, schools);
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
+	const eligible = isConsultationEligible(booking);
 
-	// Consent gate - the applicant has an explicit decision to make.
-	if (app.proceedStatus === "invited" && !selectionConfirmed && !hasSchoolPackage(app)) {
+	// Consent gate - the applicant has an explicit decision to make. Only
+	// surface it once the eligibility check is actually complete; the default
+	// proceedStatus is "invited", so without this guard every fresh user
+	// (including after a DB wipe) would see "Start your application".
+	if (
+		eligible &&
+		app.proceedStatus === "invited" &&
+		!selectionConfirmed &&
+		!hasSchoolPackage(app)
+	) {
 		return {
 			kind: "consent",
 			label: "Start",
@@ -1884,6 +1893,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		};
 		setAuthUser(next);
 		setSessionStatus("authenticated");
+		// Reset the sync counter so the first syncFromServer after login can
+		// reset stale journey state if the server has no data for this user.
+		syncCountRef.current = 0;
 		setApplication((prev) => {
 			const isPhoneAuth = user.method === "phone";
 			return {
@@ -1909,8 +1921,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			setAuthUser(null);
 			safeRemoveItem(AUTH_STORAGE_KEY);
 			setSessionStatus("unauthenticated");
+			// Clear journey state too — stale localStorage from a previous session
+			// (or a wiped DB) must not survive sign-out.
+			resetJourney();
+			syncCountRef.current = 0;
 		}
-	}, []);
+	}, [resetJourney]);
 
 	/**
 	 * Re-validate the session against the server. Runs on mount and on every
@@ -2187,13 +2203,40 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							eligibilityOutcome: "eligible",
 						},
 			);
-		} else if (syncCountRef.current === 0) {
-			// Server has no active case for this signed-in user. Wipe any stale
-			// local journey state so a deleted/completed case doesn't linger in
-			// the dashboard after we truncated the production database. Only do
-			// this on the first sync — the 30s poll must not erase in-progress
-			// booking selections before the user can pay.
-			resetJourney();
+		} else {
+			// Server has no active case for this signed-in user. The
+			// application state (proceedStatus, eligibilityOutcome, etc.) is
+			// purely server-derived, so clear it on every sync — a stale
+			// "invited" proceedStatus must not survive a server that has no
+			// data. The booking form is preserved only while it's unpaid and
+			// in-progress; a booking that claims paymentStatus "success" with
+			// no server consultation is stale and gets reset.
+			setApplication({
+				...defaultApplication,
+				applicationInvoice: {
+					...defaultApplication.applicationInvoice,
+					amount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents),
+				},
+				visaInvoice: {
+					...defaultApplication.visaInvoice,
+					amount: VISA_STAGE_FEE,
+				},
+			});
+			localStorage.removeItem(STORAGE_KEY);
+			setSchoolApplications([]);
+			localStorage.removeItem(SCHOOL_APPS_KEY);
+			setInterview(defaultInterview);
+			localStorage.removeItem(PORTAL_INTERVIEW_KEY);
+			if (booking.paymentStatus === "success" || booking.confirmationId) {
+				// Local booking claims a paid/confirmed consultation that the
+				// server knows nothing about — wipe it.
+				setBooking({
+					...defaultBooking,
+					assessment: { ...defaultAssessment },
+					assessmentDocs: { ...defaultAssessmentDocs },
+				});
+				localStorage.removeItem(BOOKING_STORAGE_KEY);
+			}
 		}
 		syncCountRef.current += 1;
 			if (res.applicant) {
@@ -2317,7 +2360,7 @@ journeyStage: a.stage ?? prev.journeyStage,
 		} catch {
 			/* keep local values — server may be unreachable */
 		}
-	}, [authUser, resetJourney]);
+	}, [authUser, resetJourney, booking]);
 
 	/** Run on mount */
 	useEffect(() => {

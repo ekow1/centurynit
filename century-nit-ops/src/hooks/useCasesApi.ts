@@ -20,7 +20,7 @@ import {
 	type StudentScholarship,
 	type VisaStage,
 	type JourneyStage,
-	type SchoolApplication,
+	type UpdateSchoolStatus,
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -149,6 +149,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		agencySettled: row.agencySettled,
 		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
+		targetSchoolCount: row.targetSchoolCount ?? null,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: row.consultationNumber ?? null,
 		schoolApplications: row.schoolApplications ?? [],
@@ -380,12 +381,12 @@ export function useCasesApi() {
 		updateSchoolApplication: async (
 			appId: string,
 			schoolId: string,
-			patch: Partial<Pick<SchoolApplication, "offerTuitionUsd" | "offerTuitionLabel" | "offerDepositUsd" | "offerDepositDueAt" | "offerDepositPaidAt">>,
+			patch: Partial<UpdateSchoolStatus>,
 		) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			await schoolsApi.updateStatus(schoolId, {
-				status: app.schoolApplications?.find((s) => s.id === schoolId)?.status ?? "Preparing Application",
+				status: (app.schoolApplications?.find((s) => s.id === schoolId)?.status ?? "Preparing Application") as any,
 				...patch,
 			});
 			await refresh();

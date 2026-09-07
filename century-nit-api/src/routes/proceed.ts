@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
 	proceedApplicationSchema,
 	declineProceedSchema,
+	pauseProceedSchema,
 	proceedQuotationSchema,
 	acceptProceedResponseSchema,
 } from "century-nit-shared";
@@ -18,6 +19,7 @@ import {
 	latestApplicationForApplicant,
 	acceptProceedForApplication,
 	declineProceedForApplication,
+	pauseProceedForApplication,
 	reinviteProceedForApplication,
 	quotationForApplication,
 } from "../services/cases.js";
@@ -132,6 +134,37 @@ meProceedRouter.openapi(
 		const applicationId = await applicantApplicationFor(c);
 		const body = c.req.valid("json");
 		await declineProceedForApplication({
+			applicationId,
+			reason: body.reason,
+			actor: { name: user.name ?? user.email },
+		});
+		return c.json({ ok: true });
+	},
+);
+
+/* ── POST /api/v1/me/application/proceed/hold ────────────────────────────── */
+
+meProceedRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/proceed/hold",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: pauseProceedSchema } },
+				required: false,
+			},
+		},
+		responses: {
+			200: { description: "Applicant put application on hold" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const applicationId = await applicantApplicationFor(c);
+		const body = c.req.valid("json") || {};
+		await pauseProceedForApplication({
 			applicationId,
 			reason: body.reason,
 			actor: { name: user.name ?? user.email },

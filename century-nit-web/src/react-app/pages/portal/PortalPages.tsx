@@ -32,7 +32,9 @@ import {
 	SCHOOL_DEGREE_LEVELS,
 	PAYMENT_PLANS,
 	SCHOOL_FUNDING_TRACKS,
-	serviceFeeFor,
+	serviceFeeForPackage,
+	filterProgramsForPackage,
+	universitiesForPrograms,
 	SCHOOL_TRACK_STATUS_LABELS,
 	type SchoolDegreeLevel,
 	type PaymentPlanId,
@@ -72,7 +74,7 @@ export function PortalPackage() {
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, choosePaymentPlan } = useAppState();
+	const { application, chooseSchoolPackage, choosePaymentPlan, payAgencyInstallment } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [plan, setPlan] = useState<PaymentPlanId>(application.paymentPlanId || "full");
@@ -82,29 +84,42 @@ function SchoolPackageInner() {
 	const [level, setLevel] = useState<SchoolDegreeLevel | "">(
 		application.schoolDegreeLevel || "masters",
 	);
+	const [targetSchoolCount, setTargetSchoolCount] = useState<number>(
+		application.targetSchoolCount || 3,
+	);
 	const [saving, setSaving] = useState(false);
+	const [payingDeposit, setPayingDeposit] = useState(false);
 	const chosen = hasSchoolPackage(application);
 	const fundMeta = SCHOOL_FUNDING_TRACKS.find((f) => f.id === (funding || application.schoolFundingTrack));
 	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === (level || application.schoolDegreeLevel));
 
-	// The service fee is derived from the funding track, so it is knowable here —
-	// this is the honest moment to show it, not after the visa is granted.
-	const serviceFee = serviceFeeFor(funding || application.schoolFundingTrack);
+	const activeFunding = (funding || application.schoolFundingTrack || "scholarship") as SchoolFundingTrack;
+	const activeLevel = (level || application.schoolDegreeLevel || "masters") as SchoolDegreeLevel;
+	const totalServiceFeeCents = serviceFeeForPackage(activeLevel, activeFunding, targetSchoolCount);
+	const serviceFee = totalServiceFeeCents / 100;
+	const depositCents = Math.round(totalServiceFeeCents * 0.1);
+	const depositUsd = depositCents / 100;
+	const remainingUsd = serviceFee - depositUsd;
 
-	async function confirm() {
-		if (!funding || !level || saving) return;
+	async function confirm(andPayDeposit = false) {
+		if (!funding || !level || saving || payingDeposit) return;
 		setSaving(true);
 		try {
-			// Two commands in sequence: package first, then the payment plan
-			// that depends on it. Both target the applicant's latest application,
-			// resolved server-side from the session.
-			await meApi.choosePackage({ packageCode: funding, degreeLevel: level });
+			await meApi.choosePackage({
+				packageCode: funding,
+				degreeLevel: level,
+				targetSchoolCount,
+			});
 			await meApi.choosePaymentPlan({ paymentPlanId: plan });
-			// Optimistic local update so the UI reflects the choice immediately;
-			// refreshSession re-syncs from the authority in the background.
-			chooseSchoolPackage(funding, level);
+			chooseSchoolPackage(funding, level, targetSchoolCount);
 			choosePaymentPlan(plan);
-			toast.success("Package locked. Continue to schools & invoice.");
+
+			if (andPayDeposit) {
+				setPayingDeposit(true);
+				await payAgencyInstallment();
+				return;
+			}
+			toast.success("Package locked. Pay deposit to begin school selection.");
 			nav("/portal/application", { replace: true });
 		} catch (err) {
 			const msg =
@@ -114,6 +129,7 @@ function SchoolPackageInner() {
 			toast.error(msg);
 		} finally {
 			setSaving(false);
+			setPayingDeposit(false);
 		}
 	}
 
@@ -124,9 +140,9 @@ function SchoolPackageInner() {
 					<p className="eyebrow">After eligibility · School package</p>
 					<h1 className="page-title mt-1">Your school application package</h1>
 					<p className="lead mt-2">
-						Not a service tier - this is your <strong>academic path package</strong>: how you fund
-						study (scholarship / non-scholarship / hybrid) and at which level (BSc, Master&apos;s,
-						PhD…). It shapes school targeting on the next screen.
+						Configure your <strong>academic path package</strong>: funding track (scholarship / non-scholarship / hybrid),
+						degree level (BSc, Master&apos;s, PhD), and target school count. This sets your comprehensive advisory fee and
+						tailors your institution catalog on the next screen.
 					</p>
 				</div>
 			</header>
@@ -136,13 +152,18 @@ function SchoolPackageInner() {
 					Package locked:{" "}
 					<strong>
 						{SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name} ·{" "}
-						{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name}
+						{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name} ·{" "}
+						{application.targetSchoolCount ?? targetSchoolCount} Target Schools
 					</strong>
-					. Continue to schools & invoice.
+					{application.agencyDepositPaid ? (
+						<span> · Deposit paid. You can now select schools.</span>
+					) : (
+						<span> · Please pay the 10% commitment deposit to unlock school selection.</span>
+					)}
 				</div>
 			) : null}
 
-			{/* Creative two-axis picker */}
+			{/* 1 · Funding track */}
 			<section className="mb-5">
 				<p className="eyebrow mb-2">1 · Funding track</p>
 				<div className="card-grid card-grid--3">
@@ -166,6 +187,7 @@ function SchoolPackageInner() {
 				</div>
 			</section>
 
+			{/* 2 · Degree level */}
 			<section className="mb-5">
 				<p className="eyebrow mb-2">2 · Degree level</p>
 				<div className="degree-chip-grid">
@@ -188,20 +210,45 @@ function SchoolPackageInner() {
 				</div>
 			</section>
 
+			{/* 3 · Target school count */}
+			<section className="mb-5">
+				<p className="eyebrow mb-2">3 · Number of target schools</p>
+				<p className="muted mb-3" style={{ fontSize: "0.9rem" }}>
+					How many institutions do you plan to apply to? We prepare, review, and lodge submissions across your full target list.
+				</p>
+				<div className="degree-chip-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))" }}>
+					{[1, 2, 3, 4, 5, 6].map((count) => (
+						<button
+							key={count}
+							type="button"
+							className={`degree-chip${targetSchoolCount === count ? " degree-chip--selected" : ""}`}
+							onClick={() => !chosen && setTargetSchoolCount(count)}
+							disabled={chosen}
+							aria-pressed={targetSchoolCount === count}
+						>
+							<span className="degree-chip__check" aria-hidden>
+								✓
+							</span>
+							<strong>{count} {count === 1 ? "School" : "Schools"}</strong>
+							<span className="muted">{count === 3 ? "Recommended" : count === 5 ? "Comprehensive" : ""}</span>
+						</button>
+					))}
+				</div>
+			</section>
+
 			{funding && level ? (
 				<div className="card card--pad mb-5 package-compose">
 					<div>
 						<p className="eyebrow">Your composed package</p>
 						<p className="display mt-2" style={{ fontSize: "1.5rem" }}>
-							{fundMeta?.name} × {levelMeta?.short}
+							{fundMeta?.name} × {levelMeta?.short} ({targetSchoolCount} {targetSchoolCount === 1 ? "School" : "Schools"})
 						</p>
 					</div>
 					<span className="package-compose__badge mono">
 						{chosen ? "Locked" : "Ready to lock"}
 					</span>
 					<p className="muted package-compose__note">
-						Handlers will prioritise schools that match this track and level. You can still add
-						multiple institutions on the schools board.
+						Only institutions and programs matching this track and degree level will be shown during school selection.
 					</p>
 				</div>
 			) : null}
@@ -209,40 +256,65 @@ function SchoolPackageInner() {
 			{funding && level ? (
 				<section className="pkg-cost mb-5">
 					<header className="pkg-cost__head">
-						<p className="eyebrow">What this package costs</p>
+						<p className="eyebrow">Century NIT Service Package & Scope</p>
 						<p className="pkg-cost__note">
-							Shown in full now so nothing appears later as a surprise.
+							Transparent all-inclusive pricing covering full advisory, credential evaluation, and filing.
 						</p>
 					</header>
 
 					<ul className="pkg-cost__lines">
 						<li className="pkg-cost__line pkg-cost__line--total">
 							<span className="pkg-cost__label">
-								Century NIT service fee
+								Century NIT Consultancy Service Fee
 								<span className="pkg-cost__when">
-									{plan === "full" ? "One payment after visa" : "Three milestones after visa"}
+									Full advisory, verification, portal setup & visa coaching for {targetSchoolCount} school{targetSchoolCount === 1 ? "" : "s"}
 								</span>
 							</span>
 							<Money usd={serviceFee} className="pkg-cost__amt" />
 						</li>
+						<li className="pkg-cost__line" style={{ borderTop: "1px dashed var(--border, #e5e7eb)", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
+							<span className="pkg-cost__label">
+								<strong>10% Commitment Deposit (Due Now)</strong>
+								<span className="pkg-cost__when">
+									Required upfront to unlock School Selection (Stage 3) and begin filing
+								</span>
+							</span>
+							<span style={{ color: "var(--accent, #3b82f6)", fontWeight: 700 }}>
+								<Money usd={depositUsd} className="pkg-cost__amt" />
+							</span>
+						</li>
+						<li className="pkg-cost__line">
+							<span className="pkg-cost__label">
+								Remaining 90% balance
+								<span className="pkg-cost__when">
+									{plan === "full" ? "Settled as one payment upon admission" : "Split across pre-departure & post-arrival milestones"}
+								</span>
+							</span>
+							<Money usd={remainingUsd} className="pkg-cost__amt" />
+						</li>
 					</ul>
 
-					<div className="pkg-cost__later">
-						<p className="pkg-cost__later-item">
-							<strong>Application invoice</strong> — raised after you select schools
+					<div className="card card--pad mt-4" style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+						<p className="eyebrow" style={{ color: "var(--success, #10b981)" }}>All-Inclusive Consultancy Scope</p>
+						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
+							The following are 100% covered by Century NIT — never charged as hidden desk fees:
 						</p>
-						<p className="pkg-cost__later-item">
-							<strong>Visa invoice</strong> — raised on admission
-						</p>
+						<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
+							<li>✓ Academic Credential Evaluation</li>
+							<li>✓ Document Verification & Notarization</li>
+							<li>✓ Direct University Portal Submissions</li>
+							<li>✓ Statement of Purpose (SOP) Polishing</li>
+							<li>✓ Courier & International Postal Dispatch</li>
+							<li>✓ Dedicated Visa Mock Interview Coaching</li>
+						</ul>
 					</div>
 
-					<p className="pkg-cost__excl">
-						University tuition is <strong>not</strong> included — it is paid to the institution,
-						and each school&apos;s figure is shown on the schools board before you apply.
+					<p className="pkg-cost__excl mt-3">
+						Institutional university application fees and tuition are <strong>not</strong> agency fees. Application fees are billed per school selected, and tuition is paid directly to whichever university issues your offer.
 					</p>
 
-					<div className="pkg-plan">
-						<p className="eyebrow pkg-plan__q">How would you like to pay the service fee?</p>
+					<div className="pkg-plan mt-4">
+						<p className="eyebrow pkg-plan__q">How would you like to pay the remaining 90% service fee?</p>
 						<div className="pkg-plan__opts">
 							{PAYMENT_PLANS.map((pl) => (
 								<button
@@ -259,27 +331,50 @@ function SchoolPackageInner() {
 								</button>
 							))}
 						</div>
-						<p className="pkg-cost__note pkg-plan__foot">
-							You can change this later on the Financial page.
-						</p>
 					</div>
 				</section>
 			) : null}
 
-			<div className="row mt-4">
+			<div className="row mt-4" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
 				{chosen ? (
-					<Button type="button" arrow onClick={() => nav("/portal/application")}>
-						Next · Schools & pay
-					</Button>
+					application.agencyDepositPaid ? (
+						<Button type="button" arrow onClick={() => nav("/portal/application")}>
+							Next · Schools & Applications →
+						</Button>
+					) : (
+						<>
+							<Button
+								type="button"
+								onClick={() => void confirm(true)}
+								arrow
+								disabled={payingDeposit}
+							>
+								{payingDeposit ? "Connecting to Paystack…" : <>Pay 10% Deposit (<MoneyInline usd={depositUsd} />) →</>}
+							</Button>
+							<Button type="button" variant="secondary" onClick={() => nav("/portal/application")}>
+								View School Catalog
+							</Button>
+						</>
+					)
 				) : (
-					<Button
-						type="button"
-						onClick={() => void confirm()}
-						arrow
-						disabled={!funding || !level || saving}
-					>
-						{saving ? "Locking…" : "Lock package"}
-					</Button>
+					<>
+						<Button
+							type="button"
+							onClick={() => void confirm(true)}
+							arrow
+							disabled={!funding || !level || saving || payingDeposit}
+						>
+							{payingDeposit ? "Connecting to Paystack…" : <>Lock Package & Pay 10% Deposit (<MoneyInline usd={depositUsd} />)</>}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => void confirm(false)}
+							disabled={!funding || !level || saving || payingDeposit}
+						>
+							{saving ? "Saving…" : "Save Package & Pay Later"}
+						</Button>
+					</>
 				)}
 				<Button to="/portal/consultation" variant="ghost">
 					← Consultation
@@ -882,6 +977,8 @@ function ConsultationOutcome({
 	onRevealOutcome: () => void;
 	autopilot: boolean;
 }) {
+	const { application, updateApplication } = useAppState();
+	const nav = useNavigate();
 	const outcome = booking.eligibilityOutcome;
 	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete" && booking.consultationPhase !== "cancelled");
 	const { toast } = useNotifier();
@@ -935,6 +1032,46 @@ function ConsultationOutcome({
 					? err.message
 					: "Could not submit your response. Please try again.",
 			);
+		}
+	}
+
+	async function handleHold() {
+		setRespondState("loading");
+		try {
+			await meApi.holdProceed({ reason: "Applicant requested time after consultation" });
+			updateApplication({ proceedStatus: "paused" });
+			toast.success("Application placed on hold. Take all the time you need.");
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not place application on hold.");
+		} finally {
+			setRespondState("idle");
+		}
+	}
+
+	async function handleOptOut() {
+		setRespondState("loading");
+		try {
+			await meApi.declineProceed({ reason: "Applicant opted out after consultation" });
+			updateApplication({ proceedStatus: "declined" });
+			toast.success("You have opted out of this application cycle.");
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not opt out.");
+		} finally {
+			setRespondState("idle");
+		}
+	}
+
+	async function handleResume() {
+		setRespondState("loading");
+		try {
+			await meApi.proceed({ acceptQuotation: true });
+			updateApplication({ proceedStatus: "accepted" });
+			toast.success("Application resumed! Head to your school package.");
+			nav("/portal/package");
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not resume application.");
+		} finally {
+			setRespondState("idle");
 		}
 	}
 
@@ -1093,41 +1230,150 @@ function ConsultationOutcome({
 			) : null}
 
 			{(outcome === "eligible" || outcome === "conditional") ? (
-				<div className="card card--pad mt-4 next-action">
-					<p className="eyebrow">Next step</p>
-					{respondState === "done" ? (
-						<>
-							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-								{respondAction === "accept"
-									? "Outcome accepted. You can now choose your school application package."
-									: "Your request has been sent. Your consultant will follow up with additional information."}
-							</p>
-							{respondAction === "accept" ? (
-								<div className="row mt-3">
-									<Button to="/portal/package" arrow>
-										Next · School package
-									</Button>
+				application.proceedStatus === "paused" ? (
+					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--accent, #f59e0b)" }}>
+						<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+							<span className="portal-pill portal-pill--needs_info">Application on Hold</span>
+						</div>
+						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Take Your Time</h3>
+						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+							You have placed your application on hold. Review your recommendations, discuss with family, or message your consultant.
+							Whenever you are ready to continue with school selection, click resume below.
+						</p>
+						<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+							<Button type="button" onClick={() => void handleResume()} arrow disabled={respondState === "loading"}>
+								{respondState === "loading" ? "Resuming…" : "Resume Application →"}
+							</Button>
+							<Button type="button" variant="ghost" onClick={() => void handleOptOut()} disabled={respondState === "loading"}>
+								Opt Out Instead
+							</Button>
+						</div>
+					</div>
+				) : application.proceedStatus === "declined" ? (
+					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--border-light, #9ca3af)" }}>
+						<span className="portal-pill">Opted Out</span>
+						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Application Closed for This Cycle</h3>
+						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+							You chose to opt out of the application stage for this cycle. If your plans change, you can resume at any time.
+						</p>
+						<div className="row mt-3">
+							<Button type="button" variant="secondary" onClick={() => void handleResume()} disabled={respondState === "loading"}>
+								{respondState === "loading" ? "Resuming…" : "Change Mind & Resume"}
+							</Button>
+						</div>
+					</div>
+				) : application.proceedStatus === "accepted" || (respondState === "done" && respondAction === "accept") ? (
+					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--success, #10b981)" }}>
+						<span className="portal-pill portal-pill--verified">Ready for Package Selection</span>
+						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Continuing to Application Stage</h3>
+						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+							Your consultation outcome has been accepted. Head to the School Package step to configure your degree level, funding track, and target institutions.
+						</p>
+						<div className="row mt-3">
+							<Button to="/portal/package" arrow>
+								Next · School Package →
+							</Button>
+						</div>
+					</div>
+				) : (
+					<div className="card card--pad mt-4 next-action">
+						<p className="eyebrow">Next step · Post-Consultation Path</p>
+						<h3 className="display mt-2" style={{ fontSize: "1.25rem" }}>
+							How would you like to proceed with your application?
+						</h3>
+						<p className="mt-2 muted" style={{ fontSize: "0.95rem" }}>
+							{outcome === "eligible"
+								? "You are cleared to proceed! Choose whether you want to continue directly to choose your package, hold on for now, or opt out."
+								: "Address the recommendations from your consultation. Choose whether to continue, pause, or opt out:"}
+						</p>
+
+						<div className="card-grid card-grid--3 mt-4" style={{ gap: "1rem" }}>
+							{/* Option 1: Continue */}
+							<div
+								className="card card--pad"
+								style={{
+									display: "flex",
+									flexDirection: "column",
+									justifyContent: "space-between",
+									border: "1px solid var(--accent, #3b82f6)",
+									background: "rgba(59, 130, 246, 0.03)",
+								}}
+							>
+								<div>
+									<span className="portal-pill portal-pill--verified mb-2" style={{ fontSize: "0.75rem" }}>
+										Recommended
+									</span>
+									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>1. Continue to Application</h4>
+									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
+										Select your degree level (BSc, Master&apos;s, PhD), funding track, and number of target schools.
+									</p>
 								</div>
-							) : null}
-						</>
-					) : (
-						<>
-							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-								{outcome === "eligible"
-									? "You're cleared to proceed. Choose your school application package to begin applying."
-									: "Address the recommendations above, then proceed to choose your school application package."}
-							</p>
-							<div className="row mt-3" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-								<Button type="button" onClick={() => handleRespond("accept")} arrow disabled={respondState === "loading"}>
-									Accept & proceed →
-								</Button>
-								<Button type="button" variant="secondary" onClick={() => handleRespond("request_info")} disabled={respondState === "loading"}>
-									I need more information
+								<Button
+									type="button"
+									className="mt-3"
+									onClick={async () => {
+										await handleRespond("accept");
+										try {
+											await meApi.proceed({ acceptQuotation: true });
+											updateApplication({ proceedStatus: "accepted" });
+										} catch {
+											/* proceed fallback */
+										}
+										nav("/portal/package");
+									}}
+									arrow
+									disabled={respondState === "loading"}
+								>
+									Continue →
 								</Button>
 							</div>
-						</>
-					)}
-				</div>
+
+							{/* Option 2: Hold On */}
+							<div className="card card--pad" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+								<div>
+									<span className="portal-pill portal-pill--needs_info mb-2" style={{ fontSize: "0.75rem" }}>
+										Need time?
+									</span>
+									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>2. Hold On</h4>
+									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
+										Need time to check finances or talk to family? Pause your file without losing progress.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="secondary"
+									className="mt-3"
+									onClick={() => void handleHold()}
+									disabled={respondState === "loading"}
+								>
+									Put On Hold
+								</Button>
+							</div>
+
+							{/* Option 3: Opt Out */}
+							<div className="card card--pad" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+								<div>
+									<span className="portal-pill mb-2" style={{ fontSize: "0.75rem" }}>
+										No obligations
+									</span>
+									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>3. Opt Out</h4>
+									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
+										Decide not to pursue an application this cycle. You can re-open anytime.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									className="mt-3"
+									onClick={() => void handleOptOut()}
+									disabled={respondState === "loading"}
+								>
+									Opt Out
+								</Button>
+							</div>
+						</div>
+					</div>
+				)
 			) : null}
 
 			{outcome === "not_eligible" ? (
@@ -1145,6 +1391,9 @@ function ConsultationOutcome({
 							<div className="row mt-3" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
 								<Button type="button" variant="secondary" onClick={() => handleRespond("request_info")} disabled={respondState === "loading"}>
 									Request more information
+								</Button>
+								<Button type="button" variant="ghost" onClick={() => void handleOptOut()} disabled={respondState === "loading"}>
+									Opt out
 								</Button>
 							</div>
 						</>
@@ -2180,8 +2429,12 @@ function ApplicationHubInner() {
 		updateApplication,
 		booking,
 		fees,
+		payAgencyInstallment,
 	} = useAppState();
 	const nav = useNavigate();
+	const [depositPaying, setDepositPaying] = useState(false);
+	const hasPkg = hasSchoolPackage(application);
+	const depositPaid = application.agencyDepositPaid;
 
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 
@@ -2241,11 +2494,6 @@ function ApplicationHubInner() {
 		};
 	}, [serverInvoice, inv]);
 
-	// Sum in USD — `tuition` is a display string in each university's own currency
-	const tuitionTotal = schoolApplications.reduce(
-		(n, s) => n + (getProgram(s.programId)?.tuitionUsd ?? 0),
-		0,
-	);
 	const selectionDone = Boolean(application.schoolSelectionDoneAt) || Boolean(serverInvoice);
 	const paid = effectiveInv.status === "paid" || inv.status === "paid";
 	const [destId, setDestId] = useState("");
@@ -2316,12 +2564,27 @@ function ApplicationHubInner() {
 		}
 	}
 
-	const uniList = destId ? universitiesForDestination(destId) : universities;
-	const progList = uniId ? programsForUniversity(uniId) : programs;
+	const selectedLevel = application.schoolDegreeLevel || undefined;
+	const selectedTrack = application.schoolFundingTrack || undefined;
+
+	const packagePrograms = useMemo(() => {
+		return filterProgramsForPackage(programs, selectedLevel, selectedTrack);
+	}, [selectedLevel, selectedTrack]);
+
+	const packageUniversities = useMemo(() => {
+		return universitiesForPrograms(packagePrograms, universities);
+	}, [packagePrograms]);
+
+	const uniList = destId
+		? packageUniversities.filter((u) => u.destinationId === destId)
+		: packageUniversities;
+	const progList = uniId
+		? packagePrograms.filter((p) => p.universityId === uniId)
+		: packagePrograms;
 	const program = getProgram(progId);
 	const intakes = program?.intake ?? ["September 2026", "January 2027"];
 	const previewAmount =
-		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents) + Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
+		Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
 
 	async function payInvoice() {
 		setPayPhase("loading");
@@ -2520,8 +2783,53 @@ function ApplicationHubInner() {
 			{!selectionDone ? (
 				<section className="mb-5">
 					<p className="eyebrow mb-2">Select schools & programmes</p>
+					{!hasPkg ? (
+						<div className="card card--pad mb-4">
+							<p className="eyebrow">Academic Package Required</p>
+							<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Please Select Your School Package First</h3>
+							<p className="muted mt-2" style={{ maxWidth: "42rem" }}>
+								Your study level (BSc, Master&apos;s, PhD) and funding track (Scholarship, Hybrid, Non-Scholarship) filter the institutions and courses available for targeting.
+							</p>
+							<div className="row mt-3">
+								<Button to="/portal/package" arrow>
+									Choose School Package →
+								</Button>
+							</div>
+						</div>
+					) : !depositPaid ? (
+						<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--accent, #3b82f6)" }}>
+							<p className="eyebrow" style={{ color: "var(--accent, #3b82f6)" }}>10% Commitment Deposit Required</p>
+							<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Activate Your File to Unlock School Selection</h3>
+							<p className="muted mt-2" style={{ maxWidth: "44rem", lineHeight: 1.6 }}>
+								A 10% commitment deposit is required to begin preparing and submitting your university applications. This covers your comprehensive credential review, document verification, and portal account setup.
+							</p>
+							<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+								<Button
+									type="button"
+									onClick={async () => {
+										setDepositPaying(true);
+										try {
+											await payAgencyInstallment();
+										} catch (err) {
+											toast.error(err instanceof Error ? err.message : "Could not initiate deposit payment");
+											setDepositPaying(false);
+										}
+									}}
+									disabled={depositPaying}
+									arrow
+								>
+									{depositPaying ? "Connecting to Paystack…" : "Pay 10% Deposit via Paystack →"}
+								</Button>
+								<Button to="/portal/package" variant="ghost">
+									Review Package Details
+								</Button>
+							</div>
+						</div>
+					) : null}
+
 					<div className="application-select">
 						<form className="form-shell card card--pad" onSubmit={addSchool}>
+							<fieldset disabled={!hasPkg || !depositPaid} style={{ border: "none", padding: 0, margin: 0, opacity: (!hasPkg || !depositPaid) ? 0.6 : 1 }}>
 							<div className="form-grid form-grid--2">
 								<Field label="Destination" htmlFor="s-dest">
 									<Select
@@ -2644,29 +2952,10 @@ function ApplicationHubInner() {
 											);
 										})}
 									</ul>
-
-									{/* Makes the shortlist a financial decision, not only an academic one */}
-									<div className="tuition-tally mt-3">
-										<div className="tuition-tally__row">
-											<span className="tuition-tally__label">
-												Estimated tuition across {schoolApplications.length} school
-												{schoolApplications.length === 1 ? "" : "s"}
-												<span className="tuition-tally__sub">
-													Indicative first-year figures, converted from each
-													university&apos;s own currency
-												</span>
-											</span>
-											<Money usd={tuitionTotal} className="tuition-tally__amt" />
-										</div>
-										<p className="tuition-tally__note">
-											You will not be charged this by Century NIT — it is paid to whichever
-											institution you accept. You only pay tuition for the{" "}
-											<strong>one</strong> school you take up.
-										</p>
-									</div>
 								</>
 							) : null}
 						</div>
+						</fieldset>
 					</form>
 					</div>
 
@@ -2706,12 +2995,8 @@ function ApplicationHubInner() {
 								<strong>{schoolApplications.length}</strong>
 							</li>
 							<li>
-								<span>Base</span>
-								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents))}</strong>
-							</li>
-							<li>
-								<span>Per school</span>
-								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))}</strong>
+								<span>University Filing Fee</span>
+								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
 							</li>
 						</ul>
 					}
@@ -3050,8 +3335,26 @@ function SchoolTrackCard({
 					</span>
 				</div>
 
-				{/* Offer terms — the institution's money, and the date that matters most */}
-				{row.offerTuitionUsd ? <OfferTerms row={row} /> : null}
+				{/* Offer terms — only displayed for schools that have made an offer */}
+				{row.offerTuitionUsd && (row.status === "accepted" || row.status === "offer") ? (
+					<OfferTerms row={row} />
+				) : null}
+
+				{/* Official Offer Document attachment download */}
+				{row.offerLetterUrl ? (
+					<div className="mt-3">
+						<a
+							href={row.offerLetterUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="btn btn--secondary btn--sm"
+							style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+						>
+							<span aria-hidden>📄</span>
+							<span>Download Official Offer Letter (PDF)</span>
+						</a>
+					</div>
+				) : null}
 
 				{/* Compact progress bar */}
 				<div style={{ marginTop: "1.25rem" }}>

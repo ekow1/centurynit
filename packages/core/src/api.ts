@@ -57,6 +57,7 @@ import type {
 	ProceedQuotation,
 	ProceedApplication,
 	DeclineProceed,
+	PauseProceed,
 	AcceptProceedResponse,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
@@ -1162,6 +1163,14 @@ export const meApi = {
 	/** Applicant consent: decline to proceed (reversible by an ops re-invite). */
 	declineProceed(input?: DeclineProceed): Promise<{ ok: true }> {
 		return request(`${API_PREFIX}/me/application/proceed/decline`, {
+			method: "POST",
+			...json(input ?? {}),
+		});
+	},
+
+	/** Applicant consent: place application on hold / pause. */
+	holdProceed(input?: PauseProceed): Promise<{ ok: true }> {
+		return request(`${API_PREFIX}/me/application/proceed/hold`, {
 			method: "POST",
 			...json(input ?? {}),
 		});

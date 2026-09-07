@@ -526,6 +526,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		proceededAt: row.proceededAt?.toISOString() ?? null,
 		declinedReason: row.declinedReason,
 		fundingTrack: row.fundingTrack,
+		targetSchoolCount: row.targetSchoolCount ?? null,
 		notes: row.notes,
 		checklist: row.checklist ?? [],
 		visaStage: row.visaStage,
@@ -1162,6 +1163,45 @@ export async function declineProceedForApplication(input: {
 			targetId: applicationId,
 			kind: "recommendation",
 			text: `Applicant declined to proceed${input.reason ? `: ${input.reason}` : "."}`,
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId ?? null,
+		});
+	});
+}
+
+/**
+ * Applicant places application on hold / paused. Reversible at any time.
+ */
+export async function pauseProceedForApplication(input: {
+	applicationId: string;
+	reason?: string;
+	actor: { opsUserId?: string; name: string };
+}): Promise<void> {
+	const { applicationId, actor } = input;
+
+	return db.transaction(async (tx) => {
+		const row = await lockApplicationRow(tx, applicationId);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		if (row.proceedStatus === "accepted") {
+			throw new HttpError(409, "PROCEED_ALREADY_DECIDED", "This application is already open and cannot be paused.");
+		}
+		if (row.proceedStatus === "paused") return;
+
+		const txDb = tx as unknown as typeof db;
+		await txDb
+			.update(applications)
+			.set({
+				proceedStatus: "paused",
+				declinedReason: input.reason ?? "Applicant put application on hold",
+				updatedAt: new Date(),
+			})
+			.where(eq(applications.id, applicationId));
+
+		await txDb.insert(caseComments).values({
+			targetType: "application",
+			targetId: applicationId,
+			kind: "recommendation",
+			text: `Applicant put application on hold${input.reason ? `: ${input.reason}` : "."}`,
 			authorName: actor.name,
 			authorOpsUserId: actor.opsUserId ?? null,
 		});
@@ -1949,13 +1989,14 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
  * applicant's own actions, not just staff's.
  */
 
-import { AGENCY_STAGES } from "century-nit-core/content";
+import { AGENCY_STAGES, serviceFeeForPackage } from "century-nit-core/content";
 import { nextProformaNumber } from "./invoice.js";
 
 export async function setApplicationPackage(input: {
 	id: string;
 	packageCode: string;
 	degreeLevel: string;
+	targetSchoolCount?: number;
 }): Promise<{ application: ApplicationRow; proformaInvoice: typeof invoices.$inferSelect | null }> {
 	return db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
@@ -1997,6 +2038,8 @@ export async function setApplicationPackage(input: {
 		if (!pkg) throw new HttpError(404, "PACKAGE_NOT_FOUND", "Package not found");
 		if (!pkg.active) throw new HttpError(400, "PACKAGE_INACTIVE", "Package is no longer available");
 
+		const targetSchools = input.targetSchoolCount ?? app.targetSchoolCount ?? 3;
+
 		const [updated] = await tx
 			.update(applications)
 			.set({
@@ -2004,6 +2047,7 @@ export async function setApplicationPackage(input: {
 				packageSelectedAt: new Date(),
 				fundingTrack: input.packageCode,
 				degreeLevel: input.degreeLevel,
+				targetSchoolCount: targetSchools,
 				updatedAt: new Date(),
 			})
 			.where(eq(applications.id, app.id))
@@ -2034,7 +2078,8 @@ export async function setApplicationPackage(input: {
 		}
 
 		// Raise the agency proforma pre-split into deposit / pre-departure / post-arrival milestones.
-		const price = pkg.priceCents;
+		const dynamicPriceUsd = serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools);
+		const price = Math.round(dynamicPriceUsd * 100);
 		const milestoneLines = AGENCY_STAGES.map((stage, i) => ({
 			position: i,
 			label: stage.label,
@@ -2058,7 +2103,7 @@ export async function setApplicationPackage(input: {
 					applicantEmail: applicant.email ?? null,
 					type: "agency",
 					subtotalCents,
-					status: "proforma",
+					status: "issued",
 					issuedBy: null,
 					issuedByName: "Century NIT",
 					note: `Service package: ${pkg.name}`,
@@ -2077,9 +2122,9 @@ export async function setApplicationPackage(input: {
 
 			await tx.insert(invoiceEvents).values({
 				invoiceId: created.id,
-				action: "proforma",
+				action: "issued",
 				actor: "system",
-				detail: `Raised from package ${pkg.code}`,
+				detail: `Issued from package ${pkg.code}`,
 			});
 
 			proformaInvoice = created;

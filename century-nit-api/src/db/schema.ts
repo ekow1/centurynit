@@ -969,7 +969,7 @@ export const applications = pgTable(
 		 * `invited`; backfilled existing ones are `accepted`.
 		 */
 		proceedStatus: varchar("proceed_status", { length: 16 })
-			.$type<"invited" | "accepted" | "declined">()
+			.$type<"invited" | "accepted" | "paused" | "declined">()
 			.notNull()
 			.default("invited"),
 		proceededAt: timestamp("proceeded_at", { withTimezone: true }),
@@ -977,6 +977,7 @@ export const applications = pgTable(
 		fundingTrack: text("funding_track"),
 		packageId: uuid("package_id").references(() => servicePackages.id, { onDelete: "set null" }),
 		packageSelectedAt: timestamp("package_selected_at", { withTimezone: true }),
+		targetSchoolCount: integer("target_school_count").default(3),
 		notes: text("notes"),
 		checklist: jsonb("checklist")
 			.$type<{ id: string; label: string; checked: boolean }[]>()
@@ -1072,6 +1073,7 @@ export const schoolApplications = pgTable(
 		offerDepositUsd: integer("offer_deposit_usd"),
 		offerDepositDueAt: timestamp("offer_deposit_due_at", { withTimezone: true }),
 		offerDepositPaidAt: timestamp("offer_deposit_paid_at", { withTimezone: true }),
+		offerLetterUrl: text("offer_letter_url"),
 		intake: varchar("intake", { length: 64 }).notNull(),
 		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
 		handlerNote: text("handler_note"),

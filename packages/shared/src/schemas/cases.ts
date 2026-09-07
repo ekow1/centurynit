@@ -103,8 +103,11 @@ export function canAdvanceToStage(
 		if (checks.proceedStatus === "declined") {
 			return "Stopped: this applicant declined to proceed with the application.";
 		}
+		if (checks.proceedStatus === "paused") {
+			return "Paused: this applicant is on hold and has not yet confirmed they want to proceed.";
+		}
 		if (checks.proceedStatus !== "accepted") {
-			return "Cannot advance: the applicant has not yet accepted to start the application.";
+			return "Locked: this applicant has not yet confirmed they want to proceed with their application.";
 		}
 	}
 
@@ -232,7 +235,7 @@ export type VisaStage = z.infer<typeof visaStageSchema>;
  *   accepted → application unlocked (school selection + quotation)
  *   declined → stopped; reversible (re-invite reopens the gate)
  */
-export const proceedStatusSchema = z.enum(["invited", "accepted", "declined"]);
+export const proceedStatusSchema = z.enum(["invited", "accepted", "paused", "declined"]);
 export type ProceedStatus = z.infer<typeof proceedStatusSchema>;
 
 export const commentKindSchema = z.enum([
@@ -409,6 +412,7 @@ export const applicationSchema = z.object({
 	proceededAt: z.string().datetime().nullable(),
 	declinedReason: z.string().nullable(),
 	fundingTrack: z.string().nullable(),
+	targetSchoolCount: z.number().int().nullable().optional(),
 	notes: z.string().nullable(),
 	checklist: z.array(checklistItemSchema),
 	visaStage: visaStageSchema,
@@ -508,6 +512,11 @@ export const declineProceedSchema = z.object({
 	reason: z.string().max(1000).optional(),
 });
 export type DeclineProceed = z.infer<typeof declineProceedSchema>;
+
+export const pauseProceedSchema = z.object({
+	reason: z.string().max(1000).optional(),
+});
+export type PauseProceed = z.infer<typeof pauseProceedSchema>;
 
 /**
  * The pre-commit advisory quotation for this applicant. Computed on read from

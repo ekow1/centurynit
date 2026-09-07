@@ -20,6 +20,9 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 	const [depositUsd, setDepositUsd] = useState(school.offerDepositUsd?.toString() ?? "");
 	const [dueAt, setDueAt] = useState(school.offerDepositDueAt ? school.offerDepositDueAt.slice(0, 10) : "");
 	const [paidAt, setPaidAt] = useState(school.offerDepositPaidAt ? school.offerDepositPaidAt.slice(0, 10) : "");
+	const [offerLetterUrl, setOfferLetterUrl] = useState(school.offerLetterUrl ?? "");
+	const [sendOfferEmail, setSendOfferEmail] = useState(true);
+	const [consultantNote, setConsultantNote] = useState("");
 
 	const toIso = (date: string) => (date ? `${date}T00:00:00Z` : null);
 	const toNumber = (value: string) => {
@@ -28,7 +31,7 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 	};
 
 	if (!editing) {
-		const hasTerms = school.offerTuitionUsd != null || school.offerDepositUsd != null || school.offerTuitionLabel;
+		const hasTerms = school.offerTuitionUsd != null || school.offerDepositUsd != null || school.offerTuitionLabel || school.offerLetterUrl;
 		return (
 			<div style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}>
 				{hasTerms ? (
@@ -37,6 +40,13 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 						{school.offerDepositUsd != null ? <span> · Deposit: ${school.offerDepositUsd.toLocaleString()}</span> : null}
 						{school.offerDepositDueAt ? <span> · Due: {new Date(school.offerDepositDueAt).toLocaleDateString()}</span> : null}
 						{school.offerDepositPaidAt ? <span> (paid)</span> : null}
+						{school.offerLetterUrl ? (
+							<div style={{ marginTop: "0.25rem" }}>
+								<a href={school.offerLetterUrl} target="_blank" rel="noopener noreferrer" className="link" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+									📄 View Official Offer Letter (PDF)
+								</a>
+							</div>
+						) : null}
 					</div>
 				) : (
 					<span className="muted">Offer terms not set</span>
@@ -78,8 +88,38 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit paid</p>
 					<input className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
 				</div>
+				<div style={{ gridColumn: "1 / -1" }}>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Official Offer Letter / Document URL (PDF)</p>
+					<input
+						className="input input--sm"
+						type="url"
+						placeholder="https://.../offer-letter.pdf"
+						value={offerLetterUrl}
+						onChange={(e) => setOfferLetterUrl(e.target.value)}
+					/>
+				</div>
+				<div style={{ gridColumn: "1 / -1" }}>
+					<p className="muted" style={{ marginBottom: "0.15rem" }}>Consultant Note to Applicant (included in email)</p>
+					<textarea
+						className="input input--sm"
+						placeholder="e.g. Congratulations! Your official offer has arrived with a scholarship award..."
+						value={consultantNote}
+						onChange={(e) => setConsultantNote(e.target.value)}
+						rows={2}
+					/>
+				</div>
+				<div style={{ gridColumn: "1 / -1" }}>
+					<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+						<input
+							type="checkbox"
+							checked={sendOfferEmail}
+							onChange={(e) => setSendOfferEmail(e.target.checked)}
+						/>
+						<span>Send official acceptance email with PDF attachment to applicant</span>
+					</label>
+				</div>
 			</div>
-			<div style={{ display: "flex", gap: "0.5rem" }}>
+			<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
 				<button
 					type="button"
 					className="btn btn--primary btn--sm"
@@ -91,10 +131,14 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 								offerDepositUsd: toNumber(depositUsd),
 								offerDepositDueAt: toIso(dueAt),
 								offerDepositPaidAt: toIso(paidAt),
+								offerLetterUrl: offerLetterUrl.trim() || null,
+								sendOfferEmail: sendOfferEmail && Boolean(offerLetterUrl.trim()),
+								consultantNote: consultantNote.trim() || undefined,
 							});
 							setEditing(false);
 						} catch {
-							/* error handled by hook */}
+							/* error handled by hook */
+						}
 					}}
 				>
 					Save
@@ -546,16 +590,20 @@ export function EnterpriseCases() {
 										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
 											{selectedApp.proceedStatus === "accepted"
 												? "Consent recorded ✓"
-												: selectedApp.proceedStatus === "declined"
-													? "Applicant paused the application"
-													: "Awaiting the applicant's consent to proceed"}
+												: selectedApp.proceedStatus === "paused"
+													? "Applicant placed application on hold (Paused)"
+													: selectedApp.proceedStatus === "declined"
+														? "Applicant opted out (Declined)"
+														: "Awaiting the applicant's consent to proceed"}
 										</p>
 										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
 											{selectedApp.proceedStatus === "accepted"
 												? "The consent gate is open — school selection, invoices and tracking are unlocked."
-												: selectedApp.proceedStatus === "declined"
-													? "The case is on hold. Re-invite to let the applicant reopen it, or record consent on their behalf."
-													: "The applicant must confirm in the portal before document verification can advance."}
+												: selectedApp.proceedStatus === "paused"
+													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
+													: selectedApp.proceedStatus === "declined"
+														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
+														: "The applicant must confirm in the portal before document verification can advance."}
 										</p>
 									</div>
 									<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -569,7 +617,7 @@ export function EnterpriseCases() {
 												Record decline
 											</button>
 										)}
-										{selectedApp.proceedStatus === "declined" && (
+										{(selectedApp.proceedStatus === "declined" || selectedApp.proceedStatus === "paused") && (
 											<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
 												Re-invite applicant
 											</button>
@@ -599,6 +647,7 @@ export function EnterpriseCases() {
 										</div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(selectedApp.branch)}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{selectedApp.fundingTrack}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{selectedApp.targetSchoolCount ? `${selectedApp.targetSchoolCount} institution${selectedApp.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{selectedApp.submittedDate}</p></div>
 									</div>
 									{selectedApp.consultationId ? (

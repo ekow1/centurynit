@@ -16,11 +16,13 @@ export async function sendEmail({
 	subject,
 	html,
 	text,
+	attachments,
 }: {
 	to: string;
 	subject: string;
 	html?: string;
 	text?: string;
+	attachments?: Array<{ filename: string; content?: Buffer | string; path?: string }>;
 }) {
 	const apiKey = await getSetting("RESEND_API_KEY");
 	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
@@ -42,6 +44,7 @@ export async function sendEmail({
 		subject,
 		...(html ? { html } : {}),
 		...(text ? { text } : {}),
+		...(attachments ? { attachments } : {}),
 	} as never);
 
 	if (res.error) {

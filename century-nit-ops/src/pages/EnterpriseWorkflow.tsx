@@ -349,7 +349,11 @@ export function EnterpriseWorkflow() {
 											{app.proceedStatus && app.proceedStatus !== "accepted" && (
 												<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
 													<span className="wf-badge wf-badge--warn">
-														{app.proceedStatus === "declined" ? "Consent declined · re-invite" : "Awaiting consent"}
+														{app.proceedStatus === "paused"
+															? "On hold (Paused)"
+															: app.proceedStatus === "declined"
+																? "Consent declined · re-invite"
+																: "Awaiting consent"}
 													</span>
 												</div>
 											)}

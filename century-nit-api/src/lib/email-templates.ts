@@ -716,3 +716,101 @@ export function renderDocumentReviewedEmail(data: {
 		text,
 	};
 }
+
+/* ── 9. School Admission Offer Email Template (client) ──────────────────── */
+
+export function renderSchoolOfferEmail(data: {
+	clientName: string;
+	universityName: string;
+	programName: string;
+	tuitionFormatted?: string | null;
+	depositFormatted?: string | null;
+	depositDeadlineFormatted?: string | null;
+	consultantNote?: string | null;
+	portalUrl: string;
+	hasAttachment?: boolean;
+}): { html: string; text: string } {
+	const safeClient = escapeHtml(data.clientName.trim());
+	const safeUni = escapeHtml(data.universityName.trim());
+	const safeProg = escapeHtml(data.programName.trim());
+	const portalLink = `${data.portalUrl}/portal/tracking`;
+
+	const bodyHtml = `
+		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
+			Hello <strong>${safeClient}</strong>,
+		</p>
+
+		<p style="margin:0 0 20px 0;font-size:15px;line-height:1.5;color:#000000;">
+			Congratulations! <strong>${safeUni}</strong> has issued an official admission offer for the <strong>${safeProg}</strong> programme.
+		</p>
+
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f9f9f9;border:2px solid #000000;padding:16px 20px;">
+			<tr>
+				<td>
+					<p style="margin:0 0 8px 0;font-size:11px;font-weight:700;color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">Official Offer Summary</p>
+					<p style="margin:0 0 6px 0;font-size:14px;color:#000000;"><strong>Institution:</strong> ${safeUni}</p>
+					<p style="margin:0 0 6px 0;font-size:14px;color:#000000;"><strong>Programme:</strong> ${safeProg}</p>
+					${data.tuitionFormatted ? `<p style="margin:0 0 6px 0;font-size:14px;color:#000000;"><strong>Tuition:</strong> ${escapeHtml(data.tuitionFormatted)}</p>` : ""}
+					${data.depositFormatted ? `<p style="margin:0 0 6px 0;font-size:14px;color:#000000;"><strong>Seat Deposit:</strong> ${escapeHtml(data.depositFormatted)}</p>` : ""}
+					${data.depositDeadlineFormatted ? `<p style="margin:0 0 6px 0;font-size:14px;color:#b91c1c;font-weight:600;"><strong>Deposit Deadline:</strong> ${escapeHtml(data.depositDeadlineFormatted)}</p>` : ""}
+				</td>
+			</tr>
+		</table>
+
+		${data.hasAttachment ? `
+		<div style="margin:0 0 20px 0;padding:12px 16px;background-color:#eff6ff;border:1px solid #93c5fd;font-size:13px;color:#1e40af;">
+			📎 <strong>Official School Document Attached:</strong> Your university offer letter / acceptance pack has been attached to this email. You can also view it anytime in your Century NIT document vault.
+		</div>
+		` : ""}
+
+		${data.consultantNote ? `
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f5f5f5;border:1px solid #000000;padding:14px 18px;">
+			<tr>
+				<td>
+					<p style="margin:0 0 4px 0;font-size:11px;font-weight:700;color:#666666;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.3px;">Note from your Consultant</p>
+					<p style="margin:0;font-size:14px;color:#000000;">${escapeHtml(data.consultantNote)}</p>
+				</td>
+			</tr>
+		</table>
+		` : ""}
+
+		<p style="margin:0 0 24px 0;color:#000000;line-height:1.5;">
+			Log in to your portal to review your offer terms, download documents, and proceed with next steps:
+		</p>
+
+		<table role="presentation" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;">
+			<tr>
+				<td align="center" style="background-color:#000000;">
+					<a href="${portalLink}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;background-color:#000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:0.5px;text-transform:uppercase;">
+						View Offer in Portal
+					</a>
+				</td>
+			</tr>
+		</table>
+	`;
+
+	const text = [
+		`Hello ${data.clientName.trim()},`,
+		``,
+		`Congratulations! ${data.universityName.trim()} has issued an official admission offer for ${data.programName.trim()}.`,
+		``,
+		`Institution: ${data.universityName.trim()}`,
+		`Programme: ${data.programName.trim()}`,
+		...(data.tuitionFormatted ? [`Tuition: ${data.tuitionFormatted}`] : []),
+		...(data.depositFormatted ? [`Deposit: ${data.depositFormatted}`] : []),
+		...(data.depositDeadlineFormatted ? [`Deposit Deadline: ${data.depositDeadlineFormatted}`] : []),
+		``,
+		...(data.consultantNote ? [`Consultant Note: ${data.consultantNote}`, ``] : []),
+		`View your offer and download documents in your portal:`,
+		portalLink,
+	].join("\n");
+
+	return {
+		html: emailLayout({
+			title: `Admission Offer: ${safeUni}`,
+			preheader: `Congratulations! ${safeUni} has issued an admission offer for ${safeProg}`,
+			bodyHtml,
+		}),
+		text,
+	};
+}

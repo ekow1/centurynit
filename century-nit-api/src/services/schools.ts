@@ -24,6 +24,8 @@ import {
 } from "../db/schema.js";
 import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
+import { sendEmail } from "../lib/resend.js";
+import { renderSchoolOfferEmail } from "../lib/email-templates.js";
 
 export async function lockSchoolsForApplicant(
 	applicantId: string,
@@ -83,47 +85,50 @@ export async function lockSchoolsForApplicant(
 
 	if (activeInvoice) {
 		invoiceId = activeInvoice.id;
-		// If it is still a proforma, update lines to reflect current selected schools count & current pricing
+		// If it is still a proforma, update lines to reflect current selected schools count & direct university fees
 		if (activeInvoice.status === "proforma") {
-			const subtotalCents =
-				fees.appBaseCents + rows.length * fees.appPerSchoolCents + fees.appDocVerifyCents;
+			const subtotalCents = rows.length * fees.appPerSchoolCents;
+			const schoolLines = rows.map((r, idx) => ({
+				invoiceId: activeInvoice.id,
+				position: idx,
+				label: `${r.universityName || "University"} - ${r.programName || "Programme"} Application Fee`,
+				detail: `Direct institutional submission & processing (${r.intake})`,
+				amountCents: fees.appPerSchoolCents,
+			}));
+
 			await db.transaction(async (tx) => {
 				await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, activeInvoice.id));
-				await tx.insert(invoiceLines).values([
-					{
-						invoiceId: activeInvoice.id,
-						position: 0,
-						label: "Application Processing Base Fee",
-						detail: "Document verification, portal account creation, credential review",
-						amountCents: fees.appBaseCents,
-					},
-					{
-						invoiceId: activeInvoice.id,
-						position: 1,
-						label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
-						detail: `Per-institution submission & liaison fee`,
-						amountCents: rows.length * fees.appPerSchoolCents,
-					},
-					{
-						invoiceId: activeInvoice.id,
-						position: 2,
-						label: "Document Verification & Courier",
-						detail: "Transcripts and certificates verified and shipped",
-						amountCents: fees.appDocVerifyCents,
-					},
-				]);
+				await tx.insert(invoiceLines).values(
+					schoolLines.length > 0
+						? schoolLines
+						: [
+								{
+									invoiceId: activeInvoice.id,
+									position: 0,
+									label: "University Application Fee",
+									detail: "Per-institution submission fee",
+									amountCents: fees.appPerSchoolCents,
+								},
+							],
+				);
 				await tx
 					.update(invoices)
 					.set({
 						subtotalCents,
-						note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
+						note: `Proforma estimate for ${rows.length} university application(s). Consultant will confirm exact institutional fees.`,
 						updatedAt: new Date(),
 					})
 					.where(eq(invoices.id, activeInvoice.id));
 			});
 		}
 	} else {
-		// Create a new PROFORMA estimate — not payable until a staff member reviews and issues it
+		// Create a new PROFORMA estimate — consultant reviews & issues exact university fees
+		const schoolLines = rows.map((r) => ({
+			label: `${r.universityName || "University"} - ${r.programName || "Programme"} Application Fee`,
+			detail: `Direct institutional submission & processing (${r.intake})`,
+			amountCents: fees.appPerSchoolCents,
+		}));
+
 		const proforma = await createProforma({
 			data: {
 				applicantName: applicantRow?.name ?? user.name ?? "Applicant",
@@ -132,24 +137,17 @@ export async function lockSchoolsForApplicant(
 				applicationId: app?.id ?? null,
 				type: "application",
 				status: "proforma",
-				lines: [
-					{
-						label: "Application Processing Base Fee",
-						detail: "Document verification, portal account creation, credential review",
-						amountCents: fees.appBaseCents,
-					},
-					{
-						label: `University Application Fee (${rows.length} Institution${rows.length > 1 ? "s" : ""})`,
-						detail: `Per-institution submission & liaison fee`,
-						amountCents: rows.length * fees.appPerSchoolCents,
-					},
-					{
-						label: "Document Verification & Courier",
-						detail: "Transcripts and certificates verified and shipped",
-						amountCents: fees.appDocVerifyCents,
-					},
-				],
-				note: `Proforma estimate for ${rows.length} school application(s). Your consultant will review and confirm the final amount.`,
+				lines:
+					schoolLines.length > 0
+						? schoolLines
+						: [
+								{
+									label: "University Application Fee",
+									detail: "Per-institution submission fee",
+									amountCents: fees.appPerSchoolCents,
+								},
+							],
+				note: `Proforma estimate for ${rows.length} university application(s). Consultant will confirm exact institutional fees.`,
 			},
 		});
 		invoiceId = proforma.id;
@@ -213,6 +211,7 @@ export async function serializeSchool(
 		offerDepositUsd: row.offerDepositUsd,
 		offerDepositDueAt: row.offerDepositDueAt?.toISOString() ?? null,
 		offerDepositPaidAt: row.offerDepositPaidAt?.toISOString() ?? null,
+		offerLetterUrl: row.offerLetterUrl ?? null,
 	};
 }
 
@@ -350,6 +349,7 @@ export async function updateSchoolStatus(
 						? new Date(input.offerDepositPaidAt)
 						: null
 					: target.offerDepositPaidAt,
+			offerLetterUrl: input.offerLetterUrl !== undefined ? input.offerLetterUrl : target.offerLetterUrl,
 			updatedAt: new Date(),
 		})
 		.where(eq(schoolApplications.id, schoolId))
@@ -361,6 +361,51 @@ export async function updateSchoolStatus(
 		note: input.note || input.handlerNote || `Status updated to ${input.status} by ${actorName}`,
 		financialNote: input.financialNote,
 	});
+
+	if (input.sendOfferEmail) {
+		try {
+			const [appRow] = await db
+				.select()
+				.from(applicants)
+				.where(eq(applicants.id, target.applicantId))
+				.limit(1);
+			if (appRow?.email) {
+				const frontendUrl = process.env.APP_URL || "https://centurynit.com";
+				const emailContent = renderSchoolOfferEmail({
+					clientName: appRow.name || "Applicant",
+					universityName: target.universityName || "University",
+					programName: target.programName || "Programme",
+					tuitionFormatted:
+						input.offerTuitionLabel ||
+						(input.offerTuitionUsd ? `$${input.offerTuitionUsd.toLocaleString()}` : null),
+					depositFormatted: input.offerDepositUsd ? `$${input.offerDepositUsd.toLocaleString()}` : null,
+					depositDeadlineFormatted: input.offerDepositDueAt
+						? new Date(input.offerDepositDueAt).toLocaleDateString()
+						: null,
+					consultantNote: input.consultantNote,
+					portalUrl: frontendUrl,
+					hasAttachment: Boolean(input.offerLetterUrl),
+				});
+
+				await sendEmail({
+					to: appRow.email,
+					subject: `🎉 Admission Offer: ${target.universityName || "University"} has accepted your application!`,
+					html: emailContent.html,
+					text: emailContent.text,
+					...(input.offerLetterUrl
+						? [
+								{
+									filename: `Offer_Letter_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
+									path: input.offerLetterUrl,
+								},
+							]
+						: []),
+				});
+			}
+		} catch (err) {
+			console.warn("[schools] Failed to send offer email to applicant:", err);
+		}
+	}
 
 	return serializeSchool(updated);
 }

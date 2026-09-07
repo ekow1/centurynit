@@ -1883,7 +1883,13 @@ export const PROCESS_STAGES: {
 ];
 
 /** Fee simulation amounts (USD) - GHS equivalents derived via GHS_RATE */
-import { usdFromCents, type FeeSchedule } from "century-nit-shared";
+import {
+	usdFromCents,
+	type FeeSchedule,
+	DEFAULT_SERVICE_FEE_CENTS_BY_LEVEL,
+	DEFAULT_TRACK_ADVISORY_CENTS,
+	DEFAULT_PER_SCHOOL_ADVISORY_CENTS,
+} from "century-nit-shared";
 
 /** Legacy apply wizard fee (kept for old routes) */
 export const APPLICATION_FEE_GHS = APPLICATION_FEE * GHS_RATE;
@@ -1898,47 +1904,20 @@ export type InvoiceLine = {
 };
 
 export function appInvoiceEstimateLines(schoolCount: number, fees: FeeSchedule): InvoiceLine[] {
-	const count = Math.max(0, schoolCount);
-	const base = usdFromCents(fees.appBaseCents);
+	const count = Math.max(1, schoolCount);
 	const perSchool = usdFromCents(fees.appPerSchoolCents);
 	return [
 		{
-			id: "app-base",
-			label: "Application processing",
-			detail: "Century desk setup, document handling & case opening",
-			amount: base,
+			id: "app-per-school",
+			label: `University application submissions (${count} × $${perSchool})`,
+			detail: "Direct institutional application & submission liaison fee",
+			amount: count * perSchool,
 		},
-		...(count > 0
-			? [
-					{
-						id: "app-per-school",
-						label: `University applications (${count} × $${perSchool})`,
-						detail: "Per-institution submission & liaison fee",
-						amount: count * perSchool,
-					},
-				]
-			: []),
 	];
 }
 
 export function appInvoiceActualLines(schoolCount: number, fees: FeeSchedule): InvoiceLine[] {
-	const docVerify = usdFromCents(fees.appDocVerifyCents);
-	const matchReview = usdFromCents(fees.appMatchReviewCents);
-	return [
-		...appInvoiceEstimateLines(schoolCount, fees),
-		{
-			id: "app-docs",
-			label: "Document verification & courier",
-			detail: "Transcripts and certificates verified and shipped",
-			amount: docVerify,
-		},
-		{
-			id: "app-review",
-			label: "Course matching review",
-			detail: "Programme fit, credit mapping & offer comparison",
-			amount: matchReview,
-		},
-	];
+	return appInvoiceEstimateLines(schoolCount, fees);
 }
 
 export function visaInvoiceEstimateLines(fees: FeeSchedule): InvoiceLine[] {
@@ -2163,16 +2142,89 @@ export const PAYMENT_PLANS = [
 
 /** Agency settlement milestones (Stage IV) */
 /**
- * Century NIT's own service fee, by funding track.
+ * Century NIT's own consultancy service fee, calculated dynamically across
+ * degree level, funding track, and target number of schools.
  *
- * Separate from the three stage invoices (consultation, application, visa) and
- * known the moment a package is chosen — which is why the package step now
- * discloses it up front rather than surfacing it after the visa is granted.
+ * Derived from the configurable constants in `century-nit-shared`.
+ */
+export function serviceFeeForPackage(
+	level: SchoolDegreeLevel | string | undefined,
+	track: SchoolFundingTrack | string | undefined,
+	schoolCount: number = 1,
+): number {
+	const lvlKey = (level?.toLowerCase() || "masters") as string;
+	const trkKey = (track?.toLowerCase() || "non_scholarship") as string;
+
+	const baseCents =
+		DEFAULT_SERVICE_FEE_CENTS_BY_LEVEL[lvlKey] ??
+		DEFAULT_SERVICE_FEE_CENTS_BY_LEVEL.masters ??
+		150_000;
+
+	const trackCents = DEFAULT_TRACK_ADVISORY_CENTS[trkKey] ?? 0;
+
+	// Base package covers up to 1 school; additional schools add incremental advisory fee
+	const count = Math.max(1, schoolCount);
+	const additionalSchoolCents = Math.max(0, count - 1) * DEFAULT_PER_SCHOOL_ADVISORY_CENTS;
+
+	return usdFromCents(baseCents + trackCents + additionalSchoolCents);
+}
+
+/**
+ * Legacy wrapper for backward compatibility across web and ops callers.
  */
 export function serviceFeeFor(track: SchoolFundingTrack | ""): number {
 	if (!track) return 0;
-	const id = track === "scholarship" ? "standard" : "premium";
-	return servicePackages.find((p) => p.id === id)?.price ?? 0;
+	return serviceFeeForPackage("masters", track, 1);
+}
+
+/**
+ * Filter the academic catalog based on the applicant's chosen package:
+ * - Level: matches Bachelor's / Undergraduate, Master's / Postgraduate, PhD, or Diploma.
+ * - Funding Track: if scholarship, restricts to programs offering scholarship opportunities.
+ */
+export function filterProgramsForPackage(
+	allPrograms: Program[],
+	level?: SchoolDegreeLevel | string,
+	fundingTrack?: SchoolFundingTrack | string,
+): Program[] {
+	if (!allPrograms || allPrograms.length === 0) return [];
+
+	return allPrograms.filter((prog) => {
+		// 1. Level filter
+		if (level) {
+			const lvl = level.toLowerCase();
+			if (lvl === "bachelor" || lvl === "undergraduate") {
+				if (prog.level !== "Undergraduate") return false;
+			} else if (lvl === "masters" || lvl === "postgraduate") {
+				if (prog.level !== "Postgraduate") return false;
+			} else if (lvl === "phd" || lvl === "doctorate") {
+				if (prog.level !== "PhD") return false;
+			} else if (lvl === "diploma") {
+				if (prog.level !== "Diploma") return false;
+			}
+		}
+
+		// 2. Funding track filter
+		if (fundingTrack === "scholarship") {
+			const hasScholarships =
+				Array.isArray(prog.scholarshipsAvailable) && prog.scholarshipsAvailable.length > 0;
+			const isZeroTuition = prog.tuitionUsd === 0;
+			if (!hasScholarships && !isZeroTuition) return false;
+		}
+
+		return true;
+	});
+}
+
+/**
+ * Return only universities that offer at least one program in the filtered program list.
+ */
+export function universitiesForPrograms(
+	programList: Program[],
+	allUniversities: University[] = universities,
+): University[] {
+	const validUniIds = new Set(programList.map((p) => p.universityId));
+	return allUniversities.filter((u) => validUniIds.has(u.id));
 }
 
 /** Required deposit before a payment plan can be chosen */

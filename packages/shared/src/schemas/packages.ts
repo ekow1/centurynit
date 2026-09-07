@@ -60,5 +60,7 @@ export type UpdateServicePackage = z.infer<typeof updateServicePackageSchema>;
 export const choosePackageSchema = z.object({
 	packageCode: packageCodeSchema,
 	degreeLevel: z.string().min(1).max(64),
+	targetSchoolCount: z.number().int().min(1).max(10).optional(),
 });
 export type ChoosePackage = z.infer<typeof choosePackageSchema>;
+

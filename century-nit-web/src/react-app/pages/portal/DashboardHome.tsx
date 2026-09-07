@@ -27,11 +27,11 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 
 function currentStageCta(
 	stage: ProcessStageId,
-	proceedStatus: "invited" | "accepted" | "declined",
+	proceedStatus: "invited" | "accepted" | "declined" | "paused",
 ): { to: string; label: string } {
 	if (stage === "proceed") {
-		if (proceedStatus === "declined") {
-			return { to: "/portal/application", label: "View application" };
+		if (proceedStatus === "declined" || proceedStatus === "paused") {
+			return { to: "/portal/consultation", label: "Resume application" };
 		}
 		if (proceedStatus === "accepted") {
 			return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };

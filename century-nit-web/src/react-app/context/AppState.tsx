@@ -39,6 +39,7 @@ import {
 	SCHOOL_FUNDING_TRACKS,
 	AGENCY_DEPOSIT_PORTION,
 	serviceFeeFor,
+	serviceFeeForPackage,
 	STORAGE_KEY,
 	VISA_STAGE_FEE,
 	appInvoiceActualLines,
@@ -158,6 +159,7 @@ export type SchoolApplicationTrack = {
 	offerDepositUsd: number | null;
 	offerDepositDueAt: string | null;
 	offerDepositPaidAt: string | null;
+	offerLetterUrl?: string | null;
 };
 
 export type ApplicationData = {
@@ -198,6 +200,7 @@ export type ApplicationData = {
 	applicationPackageId: string;
 	schoolFundingTrack: SchoolFundingTrack | "";
 	schoolDegreeLevel: SchoolDegreeLevel | "";
+	targetSchoolCount?: number;
 	packageChosenAt: string | null;
 	packageSelectedAt: string | null;
 	/** Installment vs full - after admitted, before visa/travel */
@@ -236,7 +239,7 @@ export type ApplicationData = {
 	 * Consent gate: "invited" (gated, awaiting decision), "accepted" (open),
 	 * or "declined" (stopped, reversible). Drives the portal `proceed` stage.
 	 */
-	proceedStatus: "invited" | "accepted" | "declined";
+	proceedStatus: "invited" | "accepted" | "declined" | "paused";
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -427,6 +430,7 @@ const defaultApplication: ApplicationData = {
 	applicationPackageId: "",
 	schoolFundingTrack: "",
 	schoolDegreeLevel: "",
+	targetSchoolCount: 3,
 	packageChosenAt: null,
 	packageSelectedAt: null,
 	paymentPlanId: "",
@@ -979,7 +983,7 @@ type AppStateContextValue = {
 	payApplicationInvoice: () => void;
 	raiseVisaInvoice: () => void;
 	payVisaInvoice: () => void;
-	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel) => void;
+	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number) => void;
 	choosePaymentPlan: (planId: PaymentPlanId) => void;
 	choosePostArrivalSchedule: (scheduleId: string) => void;
 	/** Post-arrival schedule options enabled by ops (null = all enabled) */
@@ -1673,6 +1677,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				offerDepositUsd: null,
 				offerDepositDueAt: null,
 				offerDepositPaidAt: null,
+				offerLetterUrl: null,
 			};
 			setSchoolApplications((prev) => [...prev, row]);
 		},
@@ -1701,18 +1706,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	);
 
 	const chooseSchoolPackage = useCallback(
-		(funding: SchoolFundingTrack, level: SchoolDegreeLevel) => {
+		(funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount: number = 3) => {
 			const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === funding);
 			const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === level);
 			const now = new Date().toISOString();
 			const id = `${funding}-${level}`;
 			// Agency estimate comes from the shared service package catalogue
-			const agencyBase = serviceFeeFor(funding);
+			const agencyBase = serviceFeeForPackage(level, funding, targetSchoolCount) / 100;
 			setApplication((prev) => ({
 				...prev,
 				applicationPackageId: id,
 				schoolFundingTrack: funding,
 				schoolDegreeLevel: level,
+				targetSchoolCount,
 				packageChosenAt: now,
 				agencyTotal: agencyBase,
 				agencyPaid: 0,
@@ -1722,7 +1728,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				travelInvoicePaid: false,
 				postArrivalSchedule: null,
 				postArrivalPaymentIndex: 0,
-				counselorNote: `School package set: ${fund?.name ?? funding} · ${deg?.name ?? level}. You may pay the application invoice and select schools.`,
+				counselorNote: `School package set: ${fund?.name ?? funding} · ${deg?.name ?? level} (${targetSchoolCount} target schools). You may pay the application invoice and select schools.`,
 			}));
 		},
 		[],
@@ -2263,6 +2269,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					programId: a.program || prev.programId,
 					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
+					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 					// Authoritative coarse journey stage from `applications.stage`.
 					// `getCurrentProcessStage` floors the fine-grained

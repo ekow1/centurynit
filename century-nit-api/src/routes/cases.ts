@@ -1307,6 +1307,7 @@ meRouter.openapi(
 			id: application.id,
 			packageCode: body.packageCode,
 			degreeLevel: body.degreeLevel,
+			targetSchoolCount: body.targetSchoolCount,
 		});
 		return c.json({
 			application: await serializeApplication(updated),
@@ -1609,21 +1610,20 @@ meRouter.openapi(
 				"No agency invoice found. Please ask your consultant to raise one.",
 			);
 		}
-		if (row.status === "proforma") {
-			throw new HttpError(
-				409,
-				"INVOICE_PROFORMA",
-				"Invoice not yet issued. Please ask your consultant to issue it.",
-			);
-		}
 		const serialized = await serializeInvoice(row);
 		if (row.status === "paid" || serialized.balanceCents <= 0) {
 			throw new HttpError(409, "INVOICE_PAID", "Invoice already paid.");
 		}
+		const depositCents = Math.round(serialized.subtotalCents * 0.1);
+		const hasPaidDeposit = serialized.paidCents >= depositCents;
+		const amountCents = !hasPaidDeposit
+			? Math.min(depositCents - serialized.paidCents, serialized.balanceCents)
+			: serialized.balanceCents;
+
 		const origin = c.req.header("origin") || env.FRONTEND_URL;
 		const checkout = await createPaystackCheckout({
 			email: user.email,
-			amountCents: serialized.balanceCents,
+			amountCents,
 			invoiceId: row.id,
 			callbackUrl: `${origin}/portal/pay?invoice=${row.id}&paystack=1`,
 		});

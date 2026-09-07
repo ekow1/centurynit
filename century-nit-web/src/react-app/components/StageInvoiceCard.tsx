@@ -50,13 +50,14 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta, 
 	const payable = invoice.actualAmount ?? invoice.amount;
 	const hasActual = invoice.actualAmount != null;
 	const isPaid = status === "paid";
+	const isActualConfirmed = hasActual || status === "raised" || status === "paid";
 
 	// Ensure we always have displayable lines, especially for paid receipts
 	const displayActualLines: InvoiceLine[] =
 		invoice.actualLines.length > 0
 			? invoice.actualLines
-			: hasActual
-				? [{ id: "actual-total", label: "Amount due", detail: "Confirmed invoice", amount: invoice.actualAmount ?? 0 }]
+			: isActualConfirmed
+				? [{ id: "actual-total", label: "Amount due", detail: "Confirmed invoice", amount: payable }]
 				: [];
 
 	const displayEstimateLines: InvoiceLine[] =
@@ -166,31 +167,24 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta, 
 				<div className="invoice-card__section">
 					<p className="eyebrow mb-2">
 						{hasActual ? "Paid invoice · actual" : "Paid invoice · settled"}
-						{status === "paid" ? " · paid" : ""}
 					</p>
 					<LineList lines={receiptLines} />
 					{invoice.consultantNote ? <p className="muted mt-2">{invoice.consultantNote}</p> : null}
 				</div>
-			) : (
-				<>
-					{status !== "none" ? (
-						<div className="invoice-card__section">
-							<p className="eyebrow mb-2">Estimated invoice · what it entails</p>
-							<LineList lines={displayEstimateLines} />
-						</div>
-					) : null}
-
-					{hasActual && displayActualLines.length ? (
-						<div className="invoice-card__section">
-							<p className="eyebrow mb-2">
-								Actual invoice · issued by your consultant
-							</p>
-							<LineList lines={displayActualLines} />
-							{invoice.consultantNote ? <p className="muted mt-2">{invoice.consultantNote}</p> : null}
-						</div>
-					) : null}
-				</>
-			)}
+			) : isActualConfirmed && displayActualLines.length ? (
+				<div className="invoice-card__section">
+					<p className="eyebrow mb-2">
+						Actual invoice · issued by your consultant
+					</p>
+					<LineList lines={displayActualLines} />
+					{invoice.consultantNote ? <p className="muted mt-2">{invoice.consultantNote}</p> : null}
+				</div>
+			) : status !== "none" ? (
+				<div className="invoice-card__section">
+					<p className="eyebrow mb-2">Estimated invoice · what it entails</p>
+					<LineList lines={displayEstimateLines} />
+				</div>
+			) : null}
 
 			{isPaid && invoice.paidAt ? (
 				<div

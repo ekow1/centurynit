@@ -778,13 +778,23 @@ export async function issueProforma(input: {
 		);
 
 		const officialInvoiceNumber = await nextInvoiceNumber(txDb);
+		const isProformaNote = (n?: string | null) => Boolean(n && n.startsWith("Proforma estimate for"));
+		const issuedNote =
+			input.note !== undefined
+				? isProformaNote(input.note)
+					? null
+					: input.note
+				: isProformaNote(row.note)
+					? null
+					: row.note;
+
 		const [updated] = await tx
 			.update(invoices)
 			.set({
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				subtotalCents: newSubtotal,
-				note: input.note ?? row.note,
+				note: issuedNote,
 				dueAt: input.dueAt && input.dueAt.trim() ? new Date(input.dueAt) : null,
 				issuedBy: input.actor.opsUserId,
 				issuedByName: input.actor.name,

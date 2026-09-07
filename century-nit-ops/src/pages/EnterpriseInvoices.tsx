@@ -514,7 +514,7 @@ function InvoiceDetail({
 						className={`btn btn--sm ${panel === "issue" ? "btn--ghost" : "btn--primary"}`}
 						onClick={() => {
 							setEditLines(inv.lines);
-							setEditNote(inv.note || "");
+							setEditNote(inv.note && !inv.note.startsWith("Proforma estimate for") ? inv.note : "");
 							setPanel(panel === "issue" ? "none" : "issue");
 						}}
 					>

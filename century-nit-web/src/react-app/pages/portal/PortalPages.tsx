@@ -2550,7 +2550,10 @@ function ApplicationHubInner() {
 			estimateLines: lines,
 			actualAmount: isRaised || isPaid ? serverInvoice.subtotalCents / 100 : null,
 			actualLines: isRaised || isPaid ? lines : [],
-			consultantNote: serverInvoice.note,
+			consultantNote:
+				serverInvoice.note && !serverInvoice.note.startsWith("Proforma estimate for")
+					? serverInvoice.note
+					: null,
 		};
 	}, [serverInvoice, inv]);
 

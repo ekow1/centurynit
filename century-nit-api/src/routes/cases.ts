@@ -1564,7 +1564,8 @@ meRouter.openapi(
 				}
 			}
 		}
-		const invoice = await serializeInvoice(row);
+		const freshRow = await getInvoice(row.id);
+		const invoice = await serializeInvoice(freshRow ?? row);
 		return c.json({ invoice });
 	},
 );

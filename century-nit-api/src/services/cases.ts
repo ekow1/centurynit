@@ -2102,6 +2102,7 @@ export async function setApplicationPackage(input: {
 				.insert(invoices)
 				.values({
 					invoiceNumber,
+					applicationId: app.id,
 					clientUserId: applicant.userId ?? null,
 					applicantName: applicant.name ?? "Applicant",
 					applicantEmail: applicant.email ?? null,

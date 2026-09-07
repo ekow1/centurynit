@@ -224,7 +224,7 @@ export async function verifyAndSettlePayment(
 			gateway,
 			reference: tx.reference,
 			actor: {
-				opsUserId: "00000000-0000-0000-0000-000000000000",
+				opsUserId: null,
 				name: `${gateway.toUpperCase()} Gateway Settlement`,
 				email: "payments@centurynit.com",
 			},
@@ -240,7 +240,7 @@ export async function verifyAndSettlePayment(
 				currency: tx.currency,
 			},
 			actor: {
-				opsUserId: "00000000-0000-0000-0000-000000000000",
+				opsUserId: null,
 				name: `${gateway.toUpperCase()} Gateway Settlement`,
 				email: "payments@centurynit.com",
 			},

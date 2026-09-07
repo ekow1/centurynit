@@ -13,6 +13,7 @@ import {
 	invoicePayments,
 	invoices,
 	applications,
+	applicants,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -34,7 +35,7 @@ import { queueEmails } from "../worker/queues.js";
 
 export type InvoiceRow = typeof invoices.$inferSelect;
 
-type Actor = { opsUserId: string; name: string; email: string };
+type Actor = { opsUserId?: string | null; name: string; email: string };
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
@@ -478,7 +479,7 @@ export async function recordPayment(input: {
 			method: input.method,
 			gateway: input.gateway ?? null,
 			reference: input.reference ?? null,
-			recordedBy: input.actor.opsUserId,
+			recordedBy: input.actor.opsUserId && input.actor.opsUserId !== "00000000-0000-0000-0000-000000000000" ? input.actor.opsUserId : null,
 			recordedByName: input.actor.name,
 		});
 
@@ -497,13 +498,28 @@ export async function recordPayment(input: {
 			txDb,
 		);
 
-		if (updated.applicationId) {
+		const targetAppId = updated.applicationId ?? (
+			updated.clientUserId
+				? await txDb
+						.select({ id: applications.id })
+						.from(applications)
+						.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+						.where(eq(applicants.userId, updated.clientUserId))
+						.limit(1)
+						.then((r) => r[0]?.id ?? null)
+				: null
+		);
+
+		if (targetAppId) {
+			if (!updated.applicationId) {
+				await txDb.update(invoices).set({ applicationId: targetAppId }).where(eq(invoices.id, updated.id));
+			}
 			if (updated.type === "application" && status === "paid") {
-				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, updated.applicationId));
+				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "visa" && status === "paid") {
-				await txDb.update(applications).set({ visaInvoicePaid: true }).where(eq(applications.id, updated.applicationId));
+				await txDb.update(applications).set({ visaInvoicePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "travel" && status === "paid") {
-				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, updated.applicationId));
+				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "agency") {
 				const lines = await txDb.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id)).orderBy(invoiceLines.position);
 				let totalPaid = paidCents + input.amountCents;
@@ -519,7 +535,7 @@ export async function recordPayment(input: {
 				await txDb.update(applications).set({ 
 					agencyStageIndex, 
 					agencySettled: agencyStageIndex >= lines.length 
-				}).where(eq(applications.id, updated.applicationId));
+				}).where(eq(applications.id, targetAppId));
 			}
 		}
 

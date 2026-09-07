@@ -7,14 +7,14 @@ import { getInvoice, recordPayment } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import type { InvoiceRow } from "./invoice.js";
 
-const SYSTEM_ACTOR = {
-	opsUserId: "00000000-0000-0000-0000-000000000000",
+export type SettlementActor = { opsUserId?: string | null; name: string; email: string };
+
+const SYSTEM_ACTOR: SettlementActor = {
+	opsUserId: null,
 	name: "System",
 	email: "system@centurynit.com",
 };
 const DEFAULT_GHS_USD_RATE = 15.0;
-
-export type SettlementActor = { opsUserId?: string; name: string; email: string };
 export type PaymentSettlementOptions = {
 	sendReceipt?: boolean;
 	recordGatewayTransaction?: boolean;

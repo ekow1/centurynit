@@ -27,7 +27,7 @@ export const STAGE_PATH: Record<ProcessStageId, string> = {
 	new: "/portal/home",
 	consultation: "/portal/consultation",
 	eligibility: "/portal/consultation",
-	proceed: "/portal/application",
+	proceed: "/portal/package",
 	school_package: "/portal/package",
 	school_select: "/portal/application",
 	application_invoice: "/portal/application",

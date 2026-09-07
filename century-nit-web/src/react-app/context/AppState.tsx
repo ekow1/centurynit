@@ -634,7 +634,9 @@ export function isVisaInvoicePaid(app: ApplicationData) {
 
 export function hasSchoolPackage(app: ApplicationData) {
 	return Boolean(
-		app.packageSelectedAt && app.schoolFundingTrack && app.schoolDegreeLevel,
+		(app.packageSelectedAt || app.packageChosenAt || app.applicationPackageId) &&
+		app.schoolFundingTrack &&
+		app.schoolDegreeLevel,
 	);
 }
 
@@ -702,7 +704,6 @@ function computeHeuristicProcessStage(
 	const consulted = Boolean(booking.confirmationId && booking.paymentStatus === "success");
 	const admitted = hasAcceptedOffer(schools);
 	const pkg = hasSchoolPackage(app);
-	const proceeded = app.proceedStatus === "accepted";
 	const hasSchools = schools.length > 0;
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const appPaid = isAppInvoicePaid(app);
@@ -721,7 +722,6 @@ function computeHeuristicProcessStage(
 	if (selectionConfirmed && !appPaid) return "application_invoice";
 	if (pkg && (hasSchools || selectionConfirmed)) return "school_select";
 	if (pkg) return "school_select";
-	if (eligible && !pkg && !proceeded) return "proceed";
 	if (eligible && !pkg) return "school_package";
 	if (consulted) return "eligibility";
 	return "consultation";
@@ -800,7 +800,7 @@ export function getChapterUnlocks(
 		journey: true,
 		consultation: true,
 		package: eligible || atOrBeyond("school_package"),
-		application: eligible || atOrBeyond("school_select"),
+		application: (eligible && hasSchoolPackage(app)) || atOrBeyond("school_select"),
 		// Tracking is its own page - only after application invoice paid
 		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
 		visa: admitted || atOrBeyond("visa"),
@@ -868,22 +868,34 @@ export function getPendingAction(
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const eligible = isConsultationEligible(booking);
 
-	// Consent gate - the applicant has an explicit decision to make. Only
-	// surface it once the eligibility check is actually complete; the default
-	// proceedStatus is "invited", so without this guard every fresh user
-	// (including after a DB wipe) would see "Start your application".
+	// Package selection gate - applicant chooses their package after eligibility check
 	if (
 		eligible &&
-		app.proceedStatus === "invited" &&
 		!selectionConfirmed &&
 		!hasSchoolPackage(app)
 	) {
 		return {
-			kind: "consent",
-			label: "Start",
-			title: "Start your application",
+			kind: "package",
+			label: "Choose package",
+			title: "Choose your school package",
 			detail:
-				"Your eligibility check is complete. Review your recommended route and confirm you want to proceed.",
+				"Your eligibility check is complete. Select your service package to unlock school selection and begin your application.",
+			to: "/portal/package",
+		};
+	}
+
+	// 10% commitment deposit gate - unlocks school selection once package is chosen
+	if (
+		hasSchoolPackage(app) &&
+		!app.agencyDepositPaid &&
+		!selectionConfirmed
+	) {
+		return {
+			kind: "app_invoice",
+			label: "Pay deposit",
+			title: "Pay 10% commitment deposit",
+			detail:
+				"Settle your 10% commitment deposit to unlock university and programme selection.",
 			to: "/portal/application",
 		};
 	}
@@ -913,17 +925,6 @@ export function getPendingAction(
 			detail:
 				"Settle your Stage II invoice so Century NIT can start tracking your applications.",
 			to: "/portal/financial",
-		};
-	}
-
-	if (stage === "school_package" && !hasSchoolPackage(app)) {
-		return {
-			kind: "package",
-			label: "Choose package",
-			title: "Choose your school package",
-			detail:
-				"Pick a funding track and degree level to shape where Century NIT targets your applications.",
-			to: "/portal/package",
 		};
 	}
 
@@ -1718,10 +1719,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			const agencyBase = totalCents / 100;
 			setApplication((prev) => ({
 				...prev,
+				proceedStatus: "accepted",
 				applicationPackageId: id,
 				schoolFundingTrack: funding,
 				schoolDegreeLevel: level,
 				targetSchoolCount,
+				packageSelectedAt: now,
 				packageChosenAt: now,
 				agencyTotal: agencyBase,
 				agencyPaid: 0,
@@ -2277,9 +2280,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// Authoritative coarse journey stage from `applications.stage`.
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
-journeyStage: a.stage ?? prev.journeyStage,
-				proceedStatus: a.proceedStatus ?? prev.proceedStatus,
-				travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
+					journeyStage: a.stage ?? prev.journeyStage,
+					proceedStatus: a.proceedStatus ?? prev.proceedStatus,
+					packageSelectedAt: a.packageSelectedAt ?? prev.packageSelectedAt,
+					paymentPlanId: (a.paymentPlanId as any) ?? prev.paymentPlanId,
+					agencyDepositPaid: a.agencyStageIndex > 0 || prev.agencyDepositPaid,
+					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
 				}));
 			}
 		} catch {

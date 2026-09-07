@@ -1802,10 +1802,10 @@ export const PROCESS_STAGES: {
 	{
 		id: "proceed",
 		index: 3,
-		label: "Start your application",
-		detail: "Confirm you want to proceed after your eligibility result",
+		label: "Choose your package",
+		detail: "Select your school package after eligibility",
 		owner: "you",
-		path: "/portal/application",
+		path: "/portal/package",
 		band: "application",
 	},
 	{

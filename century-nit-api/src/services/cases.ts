@@ -2045,6 +2045,8 @@ export async function setApplicationPackage(input: {
 			.set({
 				packageId: pkg.id,
 				packageSelectedAt: new Date(),
+				proceedStatus: "accepted",
+				proceededAt: new Date(),
 				fundingTrack: input.packageCode,
 				degreeLevel: input.degreeLevel,
 				targetSchoolCount: targetSchools,

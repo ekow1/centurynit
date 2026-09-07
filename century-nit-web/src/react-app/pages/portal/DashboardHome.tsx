@@ -14,7 +14,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	new: { to: "/portal/consultation", label: "Book consultation" },
 	consultation: { to: "/portal/consultation", label: "Book consultation" },
 	eligibility: { to: "/portal/consultation", label: "View consultation" },
-	proceed: { to: "/portal/application", label: "Start your application" },
+	proceed: { to: "/portal/package", label: "Choose package" },
 	school_package: { to: "/portal/package", label: "Choose package" },
 	school_select: { to: "/portal/application", label: "Select schools" },
 	application_invoice: { to: "/portal/financial", label: "Pay invoice" },
@@ -33,9 +33,7 @@ function currentStageCta(
 		if (proceedStatus === "declined" || proceedStatus === "paused") {
 			return { to: "/portal/consultation", label: "Resume application" };
 		}
-		if (proceedStatus === "accepted") {
-			return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };
-		}
+		return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };
 	}
 	return STAGE_CTA[stage] ?? { to: STAGE_PATH[stage] ?? "/portal/home", label: "Continue" };
 }
@@ -44,7 +42,7 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	new: { title: "Start your journey", desc: "Book your first consultation to begin your application with Century NIT." },
 	consultation: { title: "Start your consultation", desc: "Book the first meeting, fill your assessment, and pay the consultation fee." },
 	eligibility: { title: "Eligibility check", desc: "Our handler reviews your consultation and assessment." },
-	proceed: { title: "Confirm you want to proceed", desc: "Review your recommended route, choose your schools, and confirm you want to start your application." },
+	proceed: { title: "Choose your school package", desc: "Select your funding pathway and degree level to shape your applications." },
 	school_package: { title: "Choose your school package", desc: "Pick a funding track and degree level to shape school targeting." },
 	school_select: { title: "Select schools & programmes", desc: "Choose where to apply, then pay the application invoice." },
 	application_invoice: { title: "Pay the application invoice", desc: "Settle the Stage II invoice so tracking can begin." },

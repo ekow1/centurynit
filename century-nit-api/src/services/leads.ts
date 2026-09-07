@@ -5,6 +5,11 @@ import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContact
 import { queueEmails } from "../worker/queues.js";
 import { leadCreatedForManager } from "./notifications.js";
 import { HttpError } from "../middleware/error.js";
+import {
+	LEAD_STAGE_FROM_DB,
+	LEAD_STAGE_TO_DB,
+	type LeadStage,
+} from "century-nit-shared";
 
 export interface LeadView {
 	id: string;
@@ -12,15 +17,42 @@ export interface LeadView {
 	email: string;
 	phone: string | null;
 	source: string;
-	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+	stage: LeadStage;
 	targetCountry: string | null;
+	country?: string | null;
 	assignedStaffId: string | null;
 	assignedStaffName?: string | null;
+	assignedTo?: string | null;
 	consultationId: string | null;
 	applicationId: string | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
+}
+
+function serializeLead(
+	r: typeof leads.$inferSelect,
+	staffName?: string | null,
+): LeadView {
+	const normalizedStage = (LEAD_STAGE_FROM_DB[r.stage] ?? "new") as LeadStage;
+	return {
+		id: r.id,
+		name: r.name,
+		email: r.email,
+		phone: r.phone,
+		source: r.source,
+		stage: normalizedStage,
+		targetCountry: r.targetCountry,
+		country: r.targetCountry ?? "",
+		assignedStaffId: r.assignedStaffId,
+		assignedStaffName: staffName ?? null,
+		assignedTo: staffName ?? "Unassigned",
+		consultationId: r.consultationId,
+		applicationId: r.applicationId,
+		notes: r.notes,
+		createdAt: r.createdAt.toISOString(),
+		updatedAt: r.updatedAt.toISOString(),
+	};
 }
 
 /** In-memory flag so sync only runs once per server lifetime, not per request. */
@@ -295,22 +327,9 @@ export async function listLeads(query?: {
 		? rows.filter((r) => r.assignedStaffId === query.assignedStaffId || r.assignedStaffId === null)
 		: rows;
 
-	return filteredRows.map((r) => ({
-		id: r.id,
-		name: r.name,
-		email: r.email,
-		phone: r.phone,
-		source: r.source,
-		stage: r.stage,
-		targetCountry: r.targetCountry,
-		assignedStaffId: r.assignedStaffId,
-		assignedStaffName: r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null,
-		consultationId: r.consultationId,
-		applicationId: r.applicationId,
-		notes: r.notes,
-		createdAt: r.createdAt.toISOString(),
-		updatedAt: r.updatedAt.toISOString(),
-	}));
+	return filteredRows.map((r) =>
+		serializeLead(r, r.assignedStaffId ? staffNameMap.get(r.assignedStaffId) ?? null : null),
+	);
 }
 
 export async function createManualLead(input: {
@@ -352,21 +371,7 @@ export async function createManualLead(input: {
 	// In-app + email: surface the manually-created lead to managers/coordinators.
 	notifyManagersOfNewLead(created.name, created.source, created.id).catch(() => {});
 
-	return {
-		id: created.id,
-		name: created.name,
-		email: created.email,
-		phone: created.phone,
-		source: created.source,
-		stage: created.stage,
-		targetCountry: created.targetCountry,
-		assignedStaffId: created.assignedStaffId,
-		consultationId: created.consultationId,
-		applicationId: created.applicationId,
-		notes: created.notes,
-		createdAt: created.createdAt.toISOString(),
-		updatedAt: created.updatedAt.toISOString(),
-	};
+	return serializeLead(created, null);
 }
 
 export async function updateLead(
@@ -375,7 +380,7 @@ export async function updateLead(
 		name: string;
 		email: string;
 		phone: string | null;
-		stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+		stage: string;
 		targetCountry: string | null;
 		assignedStaffId: string | null;
 		consultationId: string | null;
@@ -388,22 +393,31 @@ export async function updateLead(
 	const current = await db.query.leads.findFirst({ where: eq(leads.id, id) });
 	if (!current) return null;
 
+	const dbStage = patch.stage
+		? ((LEAD_STAGE_TO_DB[patch.stage as LeadStage] ?? patch.stage) as typeof leads.$inferSelect["stage"])
+		: undefined;
+
+	const updateValues: Record<string, unknown> = {
+		...patch,
+		updatedAt: new Date(),
+	};
+	if (dbStage) {
+		updateValues.stage = dbStage;
+	}
+
 	const [updated] = await db
 		.update(leads)
-		.set({
-			...patch,
-			updatedAt: new Date(),
-		})
+		.set(updateValues)
 		.where(eq(leads.id, id))
 		.returning();
 
 	if (!updated) return null;
 
 	// Record stage change event
-	if (patch.stage && patch.stage !== current.stage) {
+	if (dbStage && dbStage !== current.stage) {
 		await recordLeadEvent(id, "stage_changed", actorName ?? null, {
 			from: current.stage,
-			to: patch.stage,
+			to: dbStage,
 		});
 	}
 
@@ -427,21 +441,15 @@ export async function updateLead(
 		});
 	}
 
-	return {
-		id: updated.id,
-		name: updated.name,
-		email: updated.email,
-		phone: updated.phone,
-		source: updated.source,
-		stage: updated.stage,
-		targetCountry: updated.targetCountry,
-		assignedStaffId: updated.assignedStaffId,
-		consultationId: updated.consultationId,
-		applicationId: updated.applicationId,
-		notes: updated.notes,
-		createdAt: updated.createdAt.toISOString(),
-		updatedAt: updated.updatedAt.toISOString(),
-	};
+	let assignedStaffName: string | null = null;
+	if (updated.assignedStaffId) {
+		const staff = await db.query.opsUsers.findFirst({
+			where: eq(opsUsers.id, updated.assignedStaffId),
+		});
+		assignedStaffName = staff?.name ?? null;
+	}
+
+	return serializeLead(updated, assignedStaffName);
 }
 
 export async function deleteLead(id: string): Promise<boolean> {
@@ -462,22 +470,7 @@ export async function findLeadByEmail(email: string): Promise<LeadView | null> {
 	const staffMembers = await db.query.opsUsers.findMany();
 	const staffNameMap = new Map(staffMembers.map((s) => [s.id, s.name]));
 
-	return {
-		id: row.id,
-		name: row.name,
-		email: row.email,
-		phone: row.phone,
-		source: row.source,
-		stage: row.stage,
-		targetCountry: row.targetCountry,
-		assignedStaffId: row.assignedStaffId,
-		assignedStaffName: row.assignedStaffId ? staffNameMap.get(row.assignedStaffId) ?? null : null,
-		consultationId: row.consultationId,
-		applicationId: row.applicationId,
-		notes: row.notes,
-		createdAt: row.createdAt.toISOString(),
-		updatedAt: row.updatedAt.toISOString(),
-	};
+	return serializeLead(row, row.assignedStaffId ? staffNameMap.get(row.assignedStaffId) ?? null : null);
 }
 
 /**
@@ -495,7 +488,7 @@ export async function linkConsultationToLead(
 
 		const patch: Record<string, unknown> = { consultationId };
 		// Auto-advance stage if still early in the pipeline
-		if (lead.stage === "New Lead" || lead.stage === "Contacted") {
+		if (lead.stage === "new" || lead.stage === "contacted") {
 			patch.stage = "Consultation Booked";
 		}
 
@@ -521,7 +514,7 @@ export async function linkApplicationToLead(
 
 		const patch: Record<string, unknown> = { applicationId };
 		// Advance to Assessment Complete if consultation is done, or keep at Consultation Booked
-		if (lead.stage === "Consultation Booked") {
+		if (lead.stage === "consultation_booked") {
 			patch.stage = "Assessment Complete";
 		}
 
@@ -547,9 +540,9 @@ export async function syncLeadFromApplicationStatus(
 		if (!lead) return;
 
 		const patch: Record<string, unknown> = { applicationId };
-		if (status === "ACCEPTED" && lead.stage !== "Enrolled") {
+		if (status === "ACCEPTED" && lead.stage !== "converted") {
 			patch.stage = "Enrolled";
-		} else if (status === "UNDER_REVIEW" && lead.stage === "Consultation Booked") {
+		} else if (status === "UNDER_REVIEW" && lead.stage === "consultation_booked") {
 			patch.stage = "Assessment Complete";
 		} else {
 			// nothing to change

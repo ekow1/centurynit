@@ -426,7 +426,7 @@ export function Workspace() {
 					action: "followup",
 					record: lead,
 					title: lead.name,
-					subtitle: `${LEAD_STAGE_LABELS[lead.stage]} · ${lead.country || "—"}`,
+					subtitle: `${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} · ${lead.country || "—"}`,
 					meta: `Last contact ${timeAgo(lead.lastContactAt)}`,
 					branch: "",
 					owner: lead.assignedTo || "Unassigned",

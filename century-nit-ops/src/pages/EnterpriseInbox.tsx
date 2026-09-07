@@ -4,24 +4,10 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useOpsNotifications } from "../hooks/useOpsNotifications";
 import { documentsApi } from "century-nit-core/api";
-import type { ApplicantDocument } from "century-nit-shared";
+import type { ApplicantDocument, ApiLead } from "century-nit-shared";
 import { money } from "./currency";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
-
-interface ApiLead {
-	id: string;
-	name: string;
-	email: string;
-	phone: string | null;
-	source: string;
-	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
-	targetCountry: string | null;
-	assignedStaffId: string | null;
-	notes: string | null;
-	createdAt: string;
-	updatedAt: string;
-}
 
 type NotificationItem = {
 	id: string;
@@ -199,7 +185,7 @@ export function EnterpriseInbox() {
 		}
 
 		for (const al of apiLeads) {
-			if (al.stage === "New Lead" || al.stage === "Contacted") {
+			if (al.stage === "new" || al.stage === "contacted") {
 				items.push({
 					id: `api-lead-${al.id}`,
 					type: "lead",
@@ -207,7 +193,7 @@ export function EnterpriseInbox() {
 					detail: `${al.source || "Portal Sign-In"} · ${al.email}${al.phone && al.phone !== "-" ? ` · ${al.phone}` : ""}`,
 					time: relativeTime(al.createdAt || al.updatedAt),
 					link: "/leads",
-					unread: al.stage === "New Lead",
+					unread: al.stage === "new",
 				});
 			}
 		}

@@ -27,10 +27,18 @@ export const LEAD_STAGE_TO_DB: Record<LeadStage, string> = {
 	lost: "Lost",
 };
 
-/** Map from backend DB enum value to frontend snake_case stage. */
-export const LEAD_STAGE_FROM_DB: Record<string, LeadStage> = Object.fromEntries(
-	Object.entries(LEAD_STAGE_TO_DB).map(([k, v]) => [v, k as LeadStage]),
-) as Record<string, LeadStage>;
+/** Map from backend DB enum value (or already-normalized snake_case) to frontend snake_case stage. */
+export const LEAD_STAGE_FROM_DB: Record<string, LeadStage> = {
+	...Object.fromEntries(
+		Object.entries(LEAD_STAGE_TO_DB).map(([k, v]) => [v, k as LeadStage]),
+	),
+	new: "new",
+	contacted: "contacted",
+	consultation_booked: "consultation_booked",
+	assessment_complete: "assessment_complete",
+	converted: "converted",
+	lost: "lost",
+};
 
 export const leadSchema = z.object({
 	id: z.string().uuid(),
@@ -40,8 +48,10 @@ export const leadSchema = z.object({
 	source: z.string(),
 	stage: leadStageSchema,
 	targetCountry: z.string().nullable(),
+	country: z.string().nullable().optional(),
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable().optional(),
+	assignedTo: z.string().nullable().optional(),
 	consultationId: z.string().uuid().nullable(),
 	applicationId: z.string().uuid().nullable(),
 	notes: z.string().nullable(),

@@ -1,5 +1,10 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
+import {
+	leadSchema,
+	leadListSchema,
+	leadStageSchema,
+} from "century-nit-shared";
 import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -9,34 +14,6 @@ import {
 	listLeads,
 	updateLead,
 } from "../services/leads.js";
-
-const leadSchema = z.object({
-	id: z.string().uuid(),
-	name: z.string(),
-	email: z.string().email(),
-	phone: z.string().nullable(),
-	source: z.string(),
-	stage: z.enum([
-		"New Lead",
-		"Contacted",
-		"Consultation Booked",
-		"Assessment Complete",
-		"Enrolled",
-		"Lost",
-	]),
-	targetCountry: z.string().nullable(),
-	assignedStaffId: z.string().uuid().nullable(),
-	assignedStaffName: z.string().nullable().optional(),
-	consultationId: z.string().uuid().nullable(),
-	applicationId: z.string().uuid().nullable(),
-	notes: z.string().nullable(),
-	createdAt: z.string(),
-	updatedAt: z.string(),
-});
-
-const leadListResponseSchema = z.object({
-	leads: z.array(leadSchema),
-});
 
 const createLeadBodySchema = z.object({
 	name: z.string().min(1, "Name is required"),
@@ -52,13 +29,16 @@ const updateLeadBodySchema = z.object({
 	email: z.string().email().optional(),
 	phone: z.string().optional().nullable(),
 	stage: z
-		.enum([
-			"New Lead",
-			"Contacted",
-			"Consultation Booked",
-			"Assessment Complete",
-			"Enrolled",
-			"Lost",
+		.union([
+			leadStageSchema,
+			z.enum([
+				"New Lead",
+				"Contacted",
+				"Consultation Booked",
+				"Assessment Complete",
+				"Enrolled",
+				"Lost",
+			]),
 		])
 		.optional(),
 	targetCountry: z.string().optional().nullable(),
@@ -99,7 +79,7 @@ leadsRouter.openapi(
 		},
 		responses: {
 			200: {
-				content: { "application/json": { schema: leadListResponseSchema } },
+				content: { "application/json": { schema: leadListSchema } },
 				description: "List of captured CRM leads",
 			},
 		},

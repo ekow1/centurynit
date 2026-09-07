@@ -23,6 +23,7 @@ export interface LeadView {
 	assignedStaffId: string | null;
 	assignedStaffName?: string | null;
 	assignedTo?: string | null;
+	lastContactAt?: string | null;
 	consultationId: string | null;
 	applicationId: string | null;
 	notes: string | null;
@@ -35,6 +36,7 @@ function serializeLead(
 	staffName?: string | null,
 ): LeadView {
 	const normalizedStage = (LEAD_STAGE_FROM_DB[r.stage] ?? "new") as LeadStage;
+	const contactDate = r.updatedAt ? r.updatedAt.toISOString() : r.createdAt.toISOString();
 	return {
 		id: r.id,
 		name: r.name,
@@ -43,10 +45,11 @@ function serializeLead(
 		source: r.source,
 		stage: normalizedStage,
 		targetCountry: r.targetCountry,
-		country: r.targetCountry ?? "",
+		country: r.targetCountry || "Ghana",
 		assignedStaffId: r.assignedStaffId,
 		assignedStaffName: staffName ?? null,
 		assignedTo: staffName ?? "Unassigned",
+		lastContactAt: contactDate,
 		consultationId: r.consultationId,
 		applicationId: r.applicationId,
 		notes: r.notes,

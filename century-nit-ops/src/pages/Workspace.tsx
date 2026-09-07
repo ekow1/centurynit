@@ -118,8 +118,12 @@ type BaseWorkItem =
 
 type WorkItem = BaseWorkItem & { isLive?: boolean };
 
-function timeAgo(iso: string) {
-	const diff = Date.now() - new Date(iso).getTime();
+function timeAgo(iso?: string | null) {
+	if (!iso) return "Just now";
+	const timestamp = new Date(iso).getTime();
+	if (isNaN(timestamp)) return "Just now";
+	const diff = Date.now() - timestamp;
+	if (diff < 0) return "Just now";
 	const hours = Math.floor(diff / 3_600_000);
 	if (hours < 1) return "Just now";
 	if (hours < 24) return `${hours}h ago`;
@@ -171,8 +175,17 @@ export function Workspace() {
 		setLeadsLoading(true);
 		void (async () => {
 			try {
-				const res = await apiFetch<{ leads: Lead[] }>(`${API_PREFIX}/leads`);
-				if (!cancelled) setLeads(res.leads);
+				const res = await apiFetch<{ leads: (Lead & { targetCountry?: string; assignedStaffName?: string; updatedAt?: string; createdAt?: string })[] }>(`${API_PREFIX}/leads`);
+				if (!cancelled) {
+					const mapped = (res.leads || []).map((l) => ({
+						...l,
+						country: l.country || l.targetCountry || "Ghana",
+						assignedTo: l.assignedTo || l.assignedStaffName || "Unassigned",
+						lastContactAt: l.lastContactAt || l.updatedAt || l.createdAt || new Date().toISOString(),
+						phone: l.phone || "—",
+					}));
+					setLeads(mapped as Lead[]);
+				}
 			} catch {
 				if (!cancelled) setLeads([]);
 			} finally {
@@ -426,7 +439,7 @@ export function Workspace() {
 					action: "followup",
 					record: lead,
 					title: lead.name,
-					subtitle: `${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} · ${lead.country || "—"}`,
+					subtitle: `${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} · ${lead.country || "Ghana"}`,
 					meta: `Last contact ${timeAgo(lead.lastContactAt)}`,
 					branch: "",
 					owner: lead.assignedTo || "Unassigned",
@@ -842,7 +855,7 @@ function LeadDetails({ lead }: { lead: Lead }) {
 		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
 			<p style={{ margin: 0 }}><strong>Email:</strong> {lead.email}</p>
 			<p style={{ margin: 0 }}><strong>Phone:</strong> {lead.phone || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Stage:</strong> {LEAD_STAGE_LABELS[lead.stage as LeadStage]}</p>
+			<p style={{ margin: 0 }}><strong>Stage:</strong> {LEAD_STAGE_LABELS[lead.stage as LeadStage] ?? lead.stage}</p>
 			<p style={{ margin: 0 }}><strong>Source:</strong> {lead.source || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Assigned:</strong> {lead.assignedTo || "Unassigned"}</p>
 			<p style={{ margin: 0 }}><strong>Last contact:</strong> {timeAgo(lead.lastContactAt)}</p>

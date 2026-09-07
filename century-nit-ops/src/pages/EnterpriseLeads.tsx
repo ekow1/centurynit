@@ -6,26 +6,8 @@ import {
 	type Lead,
 	type LeadStage,
 } from "century-nit-core";
-import { LEAD_STAGE_TO_DB, LEAD_STAGE_FROM_DB } from "century-nit-shared";
-import { API_PREFIX } from "century-nit-shared";
+import { LEAD_STAGE_TO_DB, LEAD_STAGE_FROM_DB, API_PREFIX, type ApiLead } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
-
-interface ApiLead {
-	id: string;
-	name: string;
-	email: string;
-	phone: string | null;
-	source: string;
-	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
-	targetCountry: string | null;
-	assignedStaffId: string | null;
-	assignedStaffName: string | null;
-	consultationId: string | null;
-	applicationId: string | null;
-	notes: string | null;
-	createdAt: string;
-	updatedAt: string;
-}
 
 const STAGE_COLORS: Record<LeadStage, string> = {
 	new: "#3b82f6",
@@ -45,8 +27,12 @@ const STAGE_ICONS: Record<LeadStage, string> = {
 	lost: "✕",
 };
 
-function timeAgo(iso: string) {
-	const diff = Date.now() - new Date(iso).getTime();
+function timeAgo(iso?: string | null) {
+	if (!iso) return "Just now";
+	const timestamp = new Date(iso).getTime();
+	if (isNaN(timestamp)) return "Just now";
+	const diff = Date.now() - timestamp;
+	if (diff < 0) return "Just now";
 	const hours = Math.floor(diff / 3600000);
 	if (hours < 1) return "Just now";
 	if (hours < 24) return `${hours}h ago`;

@@ -52,6 +52,7 @@ export const leadSchema = z.object({
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable().optional(),
 	assignedTo: z.string().nullable().optional(),
+	lastContactAt: z.string().nullable().optional(),
 	consultationId: z.string().uuid().nullable(),
 	applicationId: z.string().uuid().nullable(),
 	notes: z.string().nullable(),

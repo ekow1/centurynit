@@ -115,6 +115,7 @@ export function PortalProfile() {
 		updateAccount,
 		fees,
 		setAvatarImage,
+		schoolApplications,
 	} = useAppState();
 	const a = application;
 	const ass = booking.assessment;
@@ -170,6 +171,20 @@ export function PortalProfile() {
 	const dest = a.destinationId ? getDestination(a.destinationId) : null;
 	const uni = a.universityId ? getUniversity(a.universityId) : null;
 	const prog = a.programId ? getProgram(a.programId) : null;
+
+	const hasSchools = schoolApplications && schoolApplications.length > 0;
+	
+	const targetInstitution = hasSchools 
+		? schoolApplications.map(s => getUniversity(s.universityId)?.name).join(", ")
+		: (uni?.name || "Pending matching");
+		
+	const targetProgram = hasSchools
+		? schoolApplications.map(s => getProgram(s.programId)?.name).join(", ")
+		: (prog?.name || "Under evaluation");
+
+	const targetDestination = hasSchools
+		? Array.from(new Set(schoolApplications.map(s => getDestination(s.destinationId)?.name))).join(", ")
+		: (dest?.name || "Pending allocation");
 
 	const fullName =
 		authUser?.name || [a.firstName, a.lastName].filter(Boolean).join(" ") || "Century Applicant";
@@ -486,9 +501,9 @@ export function PortalProfile() {
 								</span>
 							</div>
 							<div className="dossier-grid">
-								<DossierField label="Target Destination" value={dest?.name || "Pending allocation"} />
-								<DossierField label="Target Institution" value={uni?.name || "Pending matching"} />
-								<DossierField label="Academic Programme" value={prog?.name || "Under evaluation"} />
+								<DossierField label="Target Destination" value={targetDestination} />
+								<DossierField label="Target Institution" value={targetInstitution} />
+								<DossierField label="Academic Programme" value={targetProgram} />
 								<DossierField label="Target Intake" value={a.intake || ass.intakePreference} />
 								<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
 								<DossierField label="Payment Plan" value={planName || "Direct / Unassigned"} />
@@ -783,9 +798,9 @@ export function PortalProfile() {
 								<h2 className="dossier-card__title">Application Record</h2>
 							</div>
 							<div className="dossier-grid">
-								<DossierField label="Destination" value={dest?.name} />
-								<DossierField label="Target University" value={uni?.name} />
-								<DossierField label="Programme" value={prog?.name} />
+								<DossierField label="Destination" value={targetDestination} />
+								<DossierField label="Target University" value={targetInstitution} />
+								<DossierField label="Programme" value={targetProgram} />
 								<DossierField label="Intake" value={a.intake} />
 								<DossierField label="Package Track" value={packageName} />
 								<DossierField label="Payment Plan" value={planName} />

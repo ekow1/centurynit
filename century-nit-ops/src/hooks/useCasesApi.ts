@@ -119,6 +119,11 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 }
 
 function toApplication(row: ApiApplication): MockApplication {
+	const hasSchools = row.schoolApplications && row.schoolApplications.length > 0;
+	const uniStr = hasSchools ? row.schoolApplications.map(s => s.universityName ?? s.universityId).join(", ") : (row.university ?? "");
+	const progStr = hasSchools ? row.schoolApplications.map(s => s.programName ?? s.programId).join(", ") : (row.program ?? "");
+	const ctryStr = hasSchools ? Array.from(new Set(row.schoolApplications.map(s => s.countryName ?? row.country ?? ""))).join(", ") : (row.country ?? "");
+
 	return {
 		id: row.id,
 		appId: row.appNumber,
@@ -127,9 +132,9 @@ function toApplication(row: ApiApplication): MockApplication {
 		email: row.email,
 		phone: row.phone ?? "",
 		branch: row.branch,
-		university: row.university,
-		program: row.program,
-		country: row.country,
+		university: uniStr,
+		program: progStr,
+		country: ctryStr,
 		degreeLevel: row.degreeLevel,
 		assignedStaff: row.assignedStaffName ?? "",
 		assignedStaffEmail: row.assignedStaffEmail ?? "",
@@ -171,12 +176,17 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 			}
 		: { totalAmount: "-", paidAmount: "-", outstanding: "-", plan: "" };
 
+	const hasSchools = app?.schoolApplications && app.schoolApplications.length > 0;
+	const uniStr = hasSchools ? app.schoolApplications.map(s => s.universityName ?? s.universityId).join(", ") : (app?.university ?? "");
+	const progStr = hasSchools ? app.schoolApplications.map(s => s.programName ?? s.programId).join(", ") : (app?.program ?? "");
+	const ctryStr = hasSchools ? Array.from(new Set(app.schoolApplications.map(s => s.countryName ?? app?.country ?? ""))).join(", ") : (app?.country ?? row.targetCountry ?? "");
+
 	const timeline = app
 		? [
 				{ stage: "Application submitted", status: app.status === "UNDER_REVIEW" ? "Active" : app.status === "ACCEPTED" ? "Complete" : app.status, date: (app.submittedAt ?? app.createdAt).slice(0, 10) },
-				{ stage: "University", status: app.university || "—", date: "" },
-				{ stage: "Program", status: app.program || "—", date: "" },
-				{ stage: "Country", status: app.country || "—", date: "" },
+				{ stage: "University", status: uniStr || "—", date: "" },
+				{ stage: "Program", status: progStr || "—", date: "" },
+				{ stage: "Country", status: ctryStr || "—", date: "" },
 			]
 		: [];
 
@@ -189,9 +199,9 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 		branch: row.branch,
 		assignedOfficer: row.assignedOfficerName ?? "",
 		assignedOfficerEmail: row.assignedOfficerEmail ?? "",
-		country: app?.country ?? row.targetCountry ?? "",
-		university: app?.university ?? "",
-		program: app?.program ?? "",
+		country: ctryStr,
+		university: uniStr,
+		program: progStr,
 		package: app?.fundingTrack ?? "",
 		currentStage: row.currentStage,
 		stageNumber: idx,

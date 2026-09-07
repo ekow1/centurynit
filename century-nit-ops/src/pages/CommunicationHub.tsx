@@ -168,7 +168,14 @@ export function CommunicationHub() {
 		if (!Array.isArray(conversations)) return [];
 		return conversations
 			.filter((c) => c && (c.type === "applicant" || c.type === "support" || c.type === "case" || c.type === "stage" || c.type === "entity"))
-			.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+			// Unread-first: the client's unread messages are the triage signal
+			// (same rule as the Helpdesk page) — they need a reply, the rest wait.
+			.sort((a, b) => {
+				const aUnread = (a.unreadCount || 0) > 0 ? 1 : 0;
+				const bUnread = (b.unreadCount || 0) > 0 ? 1 : 0;
+				if (aUnread !== bUnread) return bUnread - aUnread;
+				return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+			});
 	}, [conversations]);
 
 	const totalUnread = useMemo(

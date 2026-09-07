@@ -201,6 +201,15 @@ clientUsersRouter.openapi(
 		middleware: [requireAuth, requireRole("super_admin")] as const,
 		request: {
 			params: idParamSchema,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							action: z.enum(["disconnect", "purge", "archive"]),
+						}),
+					},
+				},
+			},
 		},
 		responses: {
 			200: {
@@ -218,9 +227,10 @@ clientUsersRouter.openapi(
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
+		const { action } = c.req.valid("json");
 		const staff = c.get("staff");
 		const actorName = staff?.name || "Operations Staff";
-		const result = await deleteClientUser(id, actorName);
+		const result = await deleteClientUser(id, action, actorName);
 		if (!result.success) {
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}

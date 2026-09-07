@@ -898,6 +898,39 @@ export function PortalProfile() {
 									: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
 							</p>
 						</div>
+
+						<div className="dossier-card" style={{ borderColor: "#fecaca" }}>
+							<div className="dossier-card__head">
+								<h2 className="dossier-card__title" style={{ color: "#ef4444" }}>Danger Zone</h2>
+							</div>
+							<div className="dossier-grid">
+								<div style={{ gridColumn: "1 / -1" }}>
+									<p className="muted" style={{ marginBottom: "1rem" }}>
+										Permanently delete your Century NIT student portal account. If you have paid invoices or ongoing applications, your data may be retained for compliance, otherwise it will be purged immediately. This action cannot be undone.
+									</p>
+									<button 
+										type="button" 
+										className="btn btn--danger btn--sm" 
+										onClick={() => {
+											if (window.confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.")) {
+												meApi.deleteAccount("archive")
+													.then((res) => {
+														alert(res.action === "archive" 
+															? "Your account has been deleted and archived for compliance." 
+															: "Your account has been permanently deleted.");
+														window.location.href = "/";
+													})
+													.catch(err => {
+														toast.error(err instanceof Error ? err.message : "Failed to delete account");
+													});
+											}
+										}}
+									>
+										Delete Account
+									</button>
+								</div>
+							</div>
+						</div>
 					</>
 				)}
 			</div>

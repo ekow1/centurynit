@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { meApi } from "century-nit-core";
 import type { CommunicationContext, ChatMessage, QuotedMessage } from "century-nit-shared";
 import {
@@ -9,6 +9,7 @@ import {
 } from "century-nit-chat-ui";
 import { useCommunicationChat } from "../../hooks/useCommunicationChat";
 import { useAiChat } from "../../hooks/useAiChat";
+import { useAppState } from "../../context/AppState";
 
 /**
  * Context-Aware Communication Hub for the Century NIT Client Portal.
@@ -62,14 +63,26 @@ export function CommunicationCenter() {
 	const [context, setContext] = useState<CommunicationContext | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
+	// Journey state — feeds the AI prompt so answers are personalised to the
+	// applicant's actual stage, next step and payment signals (not generic FAQ).
+	const { application, journeyPhase, pendingAction } = useAppState();
+
 	// Communication chat (support + officer share one routed conversation).
 	const chat = useCommunicationChat(open);
 	const [draft, setDraft] = useState("");
 	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
 
-	// AI chat — streamed from the Workers AI edge endpoint.
+	// AI chat — streamed from the Workers AI edge endpoint. Context carries the
+	// live journey signals so the assistant answers with the applicant's real
+	// stage, next unlock, pending action and invoice states (worker caps at 6).
 	const aiChat = useAiChat("portal-comm", {
-		getContext: () => ({ stage: context?.activeStageKey ?? "" }),
+		getContext: () => ({
+			stage: journeyPhase.label,
+			nextUnlock: journeyPhase.nextUnlock ?? "",
+			pendingAction: pendingAction?.title ?? "",
+			applicationInvoice: application.applicationInvoice.status,
+			visaInvoice: application.visaInvoice.status,
+		}),
 	});
 	const aiMessages: AIMessage[] = useMemo(
 		() =>
@@ -163,6 +176,54 @@ export function CommunicationCenter() {
 		void aiChat.send(query);
 	}, [aiDraft, aiTyping, aiChat]);
 
+	/* ── Escalation: AI → human (Phase 2 handoff). Routes the Support thread
+	   and posts the AI transcript as a handoff message, so staff see the
+	   question and what the AI already answered without the applicant
+	   re-explaining. Posts once per question — repeat clicks (or a routing
+	   failure) fall back to the Phase 1 draft prefill. ── */
+	const lastEscalatedRef = useRef<string | null>(null);
+	const [escalating, setEscalating] = useState(false);
+
+	const handleEscalate = useCallback(async () => {
+		if (escalating) return;
+		const lastUser = [...aiChat.messages].reverse().find((m) => m.role === "user");
+		const question = lastUser?.content.trim() ?? "";
+		setEscalating(true);
+		try {
+			await handleSelectChannel("support");
+			if (!question || lastEscalatedRef.current === question) {
+				if (question) setDraft(question);
+				return;
+			}
+			lastEscalatedRef.current = question;
+			// Last substantive AI reply — skip the welcome banner and error stubs.
+			const lastAnswer = [...aiChat.messages]
+				.reverse()
+				.find(
+					(m) =>
+							m.role === "assistant" &&
+							!m.id.endsWith("-welcome") &&
+							m.content.trim() !== "" &&
+							!m.content.startsWith("Sorry"),
+				);
+			const reply = (lastAnswer?.content ?? "").trim();
+			const handoff = [
+				"[AI handoff] I was chatting with the AI assistant and would like a human to help.",
+				`My question: "${question}"`,
+				reply ? `The AI replied: "${reply.length > 300 ? `${reply.slice(0, 300)}…` : reply}"` : "",
+			]
+				.filter(Boolean)
+				.join("\n");
+			await chat.send(handoff);
+		} catch {
+			// Handoff post failed — fall back to the Phase 1 behaviour so the
+			// applicant's question is never lost.
+			setDraft(question);
+		} finally {
+			setEscalating(false);
+		}
+	}, [aiChat.messages, handleSelectChannel, chat, escalating]);
+
 	/* ── Shared component callbacks (support + officer) ── */
 	const isOwn = useCallback(
 		(m: ChatMessage) => m.senderOpsUserId == null,
@@ -190,7 +251,7 @@ export function CommunicationCenter() {
 				deleted: m.deletedAt !== null && m.deletedAt !== undefined,
 			});
 		},
-		onQuoteClick: (_id: string) => {},
+		onQuoteClick: () => {},
 	}), [actionsConfig]);
 
 	ensureChatUiStyles();
@@ -429,6 +490,17 @@ export function CommunicationCenter() {
 										</div>
 									)}
 								</div>
+
+									{/* Escalation: persistent affordance to reach a human. Posts the
+									    AI transcript into the Support thread on switch. */}
+									<button
+										type="button"
+										disabled={escalating}
+										onClick={() => void handleEscalate()}
+										style={{ ...escalateBarStyle, ...(escalating ? escalateBarDisabledStyle : {}) }}
+									>
+										{escalating ? "CONNECTING TO SUPPORT…" : "TALK TO A HUMAN →"}
+									</button>
 
 								{/* AI Quick Prompts */}
 								<div style={aiPromptsRowStyle}>
@@ -740,6 +812,30 @@ const aiPromptsRowStyle: CSSProperties = {
 	padding: "6px 10px",
 	background: "#ffffff",
 	borderTop: "1px solid #e4e4e7",
+};
+
+const escalateBarStyle: CSSProperties = {
+	display: "flex",
+	alignItems: "center",
+	justifyContent: "center",
+	gap: "6px",
+	width: "calc(100% - 32px)",
+	margin: "10px 16px 0",
+	padding: "8px 12px",
+	background: "#ffffff",
+	border: "1px solid #18181b",
+	color: "#18181b",
+	fontSize: "11px",
+	fontWeight: 700,
+	fontFamily: "monospace",
+	letterSpacing: "0.06em",
+	cursor: "pointer",
+	transition: "background 0.15s ease, color 0.15s ease",
+};
+
+const escalateBarDisabledStyle: CSSProperties = {
+	opacity: 0.55,
+	cursor: "wait",
 };
 
 const aiQuickChipStyle: CSSProperties = {

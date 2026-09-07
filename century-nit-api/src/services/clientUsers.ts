@@ -12,6 +12,7 @@ import {
 	messages,
 	sessions,
 	users,
+	leads,
 } from "../db/schema.js";
 import { getDocumentStorage } from "./storage/index.js";
 
@@ -311,12 +312,13 @@ export async function unbanClientUser(
  */
 export async function deleteClientUser(
 	userId: string,
+	action: "disconnect" | "purge" | "archive" = "purge",
 	actorName?: string,
 ): Promise<{ success: boolean; storageErrors?: string[] }> {
 	// Load the user + every entity whose storage key we must collect before
 	// the DB rows disappear.
 	const [user] = await db
-		.select({ id: users.id, image: users.image })
+		.select({ id: users.id, image: users.image, email: users.email })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
@@ -406,62 +408,72 @@ export async function deleteClientUser(
 	// Database transaction: delete child records that have no FK cascade or
 	// that we want gone before the user/applicant cascades fire.
 	await db.transaction(async (tx) => {
-		if (consultationIds.length) {
-			await tx
-				.delete(caseComments)
-				.where(
-					and(
-						eq(caseComments.targetType, "consultation"),
-						inArray(caseComments.targetId, consultationIds),
-					),
-				);
-		}
-		if (applicationIds.length) {
-			await tx
-				.delete(caseComments)
-				.where(
-					and(
-						eq(caseComments.targetType, "application"),
-						inArray(caseComments.targetId, applicationIds),
-					),
-				);
+		// Delete child records depending on the action
+		if (action === "purge") {
+			if (consultationIds.length) {
+				await tx
+					.delete(caseComments)
+					.where(
+						and(
+							eq(caseComments.targetType, "consultation"),
+							inArray(caseComments.targetId, consultationIds),
+						),
+					);
+			}
+			if (applicationIds.length) {
+				await tx
+					.delete(caseComments)
+					.where(
+						and(
+							eq(caseComments.targetType, "application"),
+							inArray(caseComments.targetId, applicationIds),
+						),
+					);
+			}
+
+			// Communication events: remove those tied to the user as actor or to
+			// applications we are deleting.
+			const eventConditions = [eq(communicationEvents.actorUserId, userId)];
+			if (applicationIds.length) {
+				eventConditions.push(inArray(communicationEvents.applicationId, applicationIds));
+			}
+			await tx.delete(communicationEvents).where(or(...eventConditions));
+
+			// Remove any message attachments the user uploaded outside their own
+			// conversations; this prevents broken attachment rows after the user FK
+			// is nulled.
+			if (attachmentIdsToDelete.length) {
+				await tx
+					.delete(messageAttachments)
+					.where(inArray(messageAttachments.id, attachmentIdsToDelete));
+			}
+
+			// Delete conversations owned by or linked to this client.
+			if (conversationIds.length) {
+				await tx
+					.delete(conversations)
+					.where(inArray(conversations.id, conversationIds));
+			}
+
+			// Delete the applicant (cascades applications, etc)
+			if (applicantIds.length) {
+				await tx.delete(applicants).where(inArray(applicants.id, applicantIds));
+			}
+			
+			// Delete leads by email since leads are loosely tied
+			if (user.email) {
+				await tx.delete(leads).where(eq(leads.email, user.email));
+			}
+		} else if (action === "archive") {
+			if (applicantIds.length) {
+				await tx
+					.update(applicants)
+					.set({ archivedAt: new Date() })
+					.where(inArray(applicants.id, applicantIds));
+			}
 		}
 
-		// Communication events: remove those tied to the user as actor or to
-		// applications we are deleting.
-		const eventConditions = [eq(communicationEvents.actorUserId, userId)];
-		if (applicationIds.length) {
-			eventConditions.push(inArray(communicationEvents.applicationId, applicationIds));
-		}
-		await tx.delete(communicationEvents).where(or(...eventConditions));
-
-		// Remove any message attachments the user uploaded outside their own
-		// conversations; this prevents broken attachment rows after the user FK
-		// is nulled.
-		if (attachmentIdsToDelete.length) {
-			await tx
-				.delete(messageAttachments)
-				.where(inArray(messageAttachments.id, attachmentIdsToDelete));
-		}
-
-		// Delete conversations owned by or linked to this client. This cascades
-		// to messages, message reactions, conversation participants, and
-		// communication events linked by conversation_id.
-		if (conversationIds.length) {
-			await tx
-				.delete(conversations)
-				.where(inArray(conversations.id, conversationIds));
-		}
-
-		// Delete the applicant (cascades applications → stage/case assignments
-		// → school applications, and consultations → consultation_activities).
-		if (applicantIds.length) {
-			await tx.delete(applicants).where(inArray(applicants.id, applicantIds));
-		}
-
-		// Finally delete the auth user. Cascades: sessions, accounts, two_factors,
-		// notification_preferences, notifications, bookings, applicant_documents,
-		// message_reactions, conversation_participants, and conversations.userId.
+		// Always delete the auth user for all 3 actions
 		await tx.delete(users).where(eq(users.id, userId));
 	});
 

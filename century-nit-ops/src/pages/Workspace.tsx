@@ -5,7 +5,6 @@ import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { fmtGhs, fmtUsd, money } from "./currency";
-import { LiveMeetings } from "./LiveMeetings";
 import {
 	invoiceBalance,
 	invoiceAgeDays,
@@ -20,6 +19,7 @@ import type {
 } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
+import { bookingsApi } from "century-nit-core/api";
 import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
@@ -44,7 +44,7 @@ const PRIORITY: Record<string, number> = {
 	followup: 11,
 };
 
-type WorkItem =
+type BaseWorkItem =
 	| {
 			id: string;
 			category: string;
@@ -116,6 +116,8 @@ type WorkItem =
 			priority: number;
 	  };
 
+type WorkItem = BaseWorkItem & { isLive?: boolean };
+
 function timeAgo(iso: string) {
 	const diff = Date.now() - new Date(iso).getTime();
 	const hours = Math.floor(diff / 3_600_000);
@@ -162,6 +164,7 @@ export function Workspace() {
 	const [selected, setSelected] = useState<WorkItem | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
+	const [liveBookingIds, setLiveBookingIds] = useState<Set<string>>(new Set());
 
 	useEffect(() => {
 		let cancelled = false;
@@ -177,6 +180,19 @@ export function Workspace() {
 			}
 		})();
 		return () => { cancelled = true; };
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		const fetchLive = async () => {
+			try {
+				const res = await bookingsApi.liveMeetings();
+				if (!cancelled) setLiveBookingIds(new Set(res.bookings.map((b) => b.id)));
+			} catch { /* ignore */ }
+		};
+		void fetchLive();
+		const id = setInterval(fetchLive, 60_000);
+		return () => { cancelled = true; clearInterval(id); };
 	}, []);
 
 	const scopedConsultations = useMemo(
@@ -221,6 +237,7 @@ export function Workspace() {
 		const q: WorkItem[] = [];
 
 		for (const c of scopedConsultations) {
+			const isLive = liveBookingIds.has(c.bookingId || "");
 			if (c.status === "Under Review" && !c.assignedOfficer) {
 				q.push({
 					id: `c-assign-${c.id}`,
@@ -235,6 +252,7 @@ export function Workspace() {
 					owner: "Unassigned",
 					linkTo: `/consultations?id=${c.id}`,
 					priority: PRIORITY.assign_consultation,
+					isLive,
 				});
 			} else if (c.status === "Assigned" || c.status === "Confirmed" || c.status === "In Assessment") {
 				q.push({
@@ -250,6 +268,7 @@ export function Workspace() {
 					owner: c.assignedOfficer || "—",
 					linkTo: `/consultations?id=${c.id}`,
 					priority: PRIORITY.assess,
+					isLive,
 				});
 			} else if (c.rescheduleRequestedAt) {
 				q.push({
@@ -265,6 +284,7 @@ export function Workspace() {
 					owner: c.assignedOfficer || "—",
 					linkTo: `/consultations?id=${c.id}`,
 					priority: PRIORITY.reschedule,
+					isLive,
 				});
 			}
 		}
@@ -416,9 +436,13 @@ export function Workspace() {
 			}
 		}
 
-		q.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
+		q.sort((a, b) => {
+			if (a.isLive && !b.isLive) return -1;
+			if (!a.isLive && b.isLive) return 1;
+			return a.priority - b.priority || a.title.localeCompare(b.title);
+		});
 		return q;
-	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, leads]);
+	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, leads, liveBookingIds]);
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
@@ -499,7 +523,7 @@ export function Workspace() {
 					</div>
 
 					{/* Queue List */}
-					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "60vh", maxHeight: "calc(100vh - 220px)", overflow: "hidden", padding: 0 }}>
+					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "50vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
 						<div style={{ flex: 1, overflowY: "auto" }}>
 							{filtered.length === 0 ? (
 								<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
@@ -520,12 +544,10 @@ export function Workspace() {
 					</div>
 				</div>
 
-				{/* RIGHT COLUMN: Live Meetings & Preview Pane */}
-				<div style={{ display: "flex", flexDirection: "column", gap: "1rem", position: "sticky", top: "1rem" }}>
-					<LiveMeetings compact />
-					
+				{/* RIGHT COLUMN: Preview Pane */}
+				<div style={{ display: "flex", flexDirection: "column", gap: "1rem", position: "sticky", top: "1rem", height: "calc(100vh - 2rem)" }}>
 					{/* Preview Pane */}
-					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "50vh", maxHeight: "calc(100vh - 120px)", overflowY: "auto" }}>
+					<div className="card" style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
 						{selected ? (
 							<PreviewPane
 								item={selected}
@@ -623,6 +645,20 @@ function QueueRow({ item, selected, onSelect }: { item: WorkItem; selected: bool
 					>
 						{actionLabel(item)}
 					</span>
+					{item.isLive && (
+						<span
+							className="portal-pill"
+							style={{
+								fontSize: "var(--text-xs)",
+								padding: "0.1rem 0.45rem",
+								background: "var(--foreground)",
+								color: "var(--background)",
+								fontWeight: "bold",
+							}}
+						>
+							LIVE NOW
+						</span>
+					)}
 					<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{item.title}</span>
 				</div>
 				<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>

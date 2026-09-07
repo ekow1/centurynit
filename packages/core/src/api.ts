@@ -1005,6 +1005,11 @@ export const meApi = {
 		return request(`${API_PREFIX}/me/change-email/confirm`, { method: "POST", ...json(input) });
 	},
 
+	/** Delete the authenticated user account and their data. */
+	deleteAccount(action: "archive" | "purge" | "disconnect"): Promise<{ success: boolean; action: "archive" | "purge" | "disconnect" }> {
+		return request(`${API_PREFIX}/me/account`, { method: "DELETE", ...json({ action }) });
+	},
+
 	/** Choose the school application package (funding track + degree level). */
 	choosePackage(input: ChoosePackage): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/me/application/package`, { method: "POST", ...json(input) });

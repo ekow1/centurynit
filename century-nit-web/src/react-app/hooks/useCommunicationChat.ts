@@ -33,6 +33,10 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	const [sending, setSending] = useState(false);
 	const [typing, setTyping] = useState<{ name?: string } | null>(null);
 	const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// Mirror of conversationId that route() sets synchronously — send() may be
+	// called in the same tick as route() (AI handoff escalation) before the
+	// state update re-renders, so the closure copy would still be stale/null.
+	const conversationIdRef = useRef<string | null>(null);
 
 	// Route to (or create) the right conversation for this context.
 	const route = useCallback(async (opts?: { caseId?: string; stageKey?: string }) => {
@@ -40,6 +44,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 		setLoading(true);
 		try {
 			const conv = await meApi.routeCommunication(opts);
+			conversationIdRef.current = conv.id;
 			setConversationId(conv.id);
 			const res = await meApi.getCommunicationMessages(conv.id, { limit: 50 });
 			setMessages(res.messages);
@@ -53,6 +58,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	}, [enabled]);
 
 	const reset = useCallback(() => {
+		conversationIdRef.current = null;
 		setConversationId(null);
 		setMessages([]);
 		setTyping(null);
@@ -61,10 +67,11 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	// Send a message. The server returns the created message; we append it
 	// locally so the bubble appears instantly without waiting for SSE.
 	const send = useCallback(async (content: string) => {
-		if (!conversationId || !content.trim()) return;
+		const convId = conversationIdRef.current;
+		if (!convId || !content.trim()) return;
 		setSending(true);
 		try {
-			const msg = await meApi.sendCommunicationMessage(conversationId, content);
+			const msg = await meApi.sendCommunicationMessage(convId, content);
 			setMessages((prev) => {
 				if (prev.some((m) => m.id === msg.id)) return prev;
 				return [...prev, msg];
@@ -72,12 +79,13 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 		} finally {
 			setSending(false);
 		}
-	}, [conversationId]);
+	}, []);
 
 	const markRead = useCallback(async () => {
-		if (!conversationId) return;
-		await meApi.markCommunicationRead(conversationId).catch(() => {});
-	}, [conversationId]);
+		const convId = conversationIdRef.current;
+		if (!convId) return;
+		await meApi.markCommunicationRead(convId).catch(() => {});
+	}, []);
 
 	// SSE: handle real-time events for this conversation.
 	useChatStream(useCallback((ev) => {

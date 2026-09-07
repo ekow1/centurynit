@@ -379,6 +379,20 @@
       "when": 1788700000000,
       "tag": "0055_school_offer_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1788751595710,
+      "tag": "0056_brainy_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1788751638645,
+      "tag": "0057_romantic_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

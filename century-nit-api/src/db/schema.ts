@@ -843,6 +843,7 @@ export const applicants = pgTable(
 		}),
 		profile: jsonb("profile").$type<Record<string, string>>().notNull().default({}),
 		portalState: jsonb("portal_state").$type<Record<string, unknown>>().notNull().default({}),
+		archivedAt: timestamp("archived_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},

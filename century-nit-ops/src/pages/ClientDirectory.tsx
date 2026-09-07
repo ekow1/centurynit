@@ -23,6 +23,9 @@ export interface ClientUser {
 	updatedAt: string;
 }
 
+type DeleteAction = "disconnect" | "archive" | "purge";
+
+
 interface ClientListResponse {
 	clients: ClientUser[];
 	metrics: {
@@ -47,6 +50,10 @@ export function ClientDirectory() {
 	const [banTarget, setBanTarget] = useState<ClientUser | null>(null);
 	const [banReason, setBanReason] = useState("");
 	const [banSubmitting, setBanSubmitting] = useState(false);
+
+	const [deleteTarget, setDeleteTarget] = useState<ClientUser | null>(null);
+	const [deleteAction, setDeleteAction] = useState<DeleteAction>("archive");
+	const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
 	const [revokeTarget, setRevokeTarget] = useState<ClientUser | null>(null);
 	const [revokeSubmitting, setRevokeSubmitting] = useState(false);
@@ -182,20 +189,36 @@ export function ClientDirectory() {
 	};
 
 	const handleDeleteClient = (c: ClientUser) => {
-		confirm(
-			"Delete Client Permanently",
-			`This will permanently delete ${c.name} (${c.email}), their applicant profile, applications, uploaded documents, conversation history, and active sessions. Invoices and payment records are kept for accounting. This action cannot be undone.`,
-			async () => {
-				try {
-					await apiFetch(`${API_PREFIX}/client-users/${c.id}`, { method: "DELETE" });
-					say(`${c.name} has been permanently deleted. Account and case data were removed; invoices remain for accounting.`);
-					await fetchClients();
-				} catch (err) {
-					setError(err instanceof Error ? err.message : "Failed to delete client");
-				}
-			},
-			true,
-		);
+		setDeleteTarget(c);
+		setDeleteAction("archive"); // Default safe option
+	};
+
+	const executeDeleteClient = async () => {
+		if (!deleteTarget) return;
+		setDeleteSubmitting(true);
+		try {
+			await apiFetch(`${API_PREFIX}/client-users/${deleteTarget.id}`, { 
+				method: "DELETE",
+				body: JSON.stringify({ action: deleteAction })
+			});
+			
+			let message = "";
+			if (deleteAction === "disconnect") {
+				message = `Login for ${deleteTarget.name} removed. Case data retained.`;
+			} else if (deleteAction === "archive") {
+				message = `${deleteTarget.name} archived. Data hidden from ops views.`;
+			} else {
+				message = `${deleteTarget.name} permanently purged.`;
+			}
+			
+			say(message);
+			await fetchClients();
+			setDeleteTarget(null);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Failed to delete client");
+		} finally {
+			setDeleteSubmitting(false);
+		}
 	};
 
 	return (
@@ -443,6 +466,87 @@ export function ClientDirectory() {
 					</table>
 				</div>
 			</div>
+
+			{/* Modal: Delete Client */}
+			{deleteTarget && (
+				<div className="ops-modal-backdrop" onClick={() => !deleteSubmitting && setDeleteTarget(null)}>
+					<div className="ops-modal card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "550px" }}>
+						<div className="ops-modal__header">
+							<h2 className="ops-modal__title">Delete Applicant Data</h2>
+							<button type="button" className="btn btn--xs btn--ghost" onClick={() => setDeleteTarget(null)} disabled={deleteSubmitting}>✕</button>
+						</div>
+						<div className="ops-modal__body">
+							<p className="muted" style={{ marginBottom: "1.5rem" }}>
+								Choose how to handle the data for <strong>{deleteTarget.name} ({deleteTarget.email})</strong>. 
+							</p>
+
+							<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+								<label className="ops-radio-card" style={{ display: "flex", gap: "1rem", padding: "1rem", border: "1px solid var(--border)", cursor: "pointer", background: deleteAction === "disconnect" ? "var(--bg-alt)" : "transparent" }}>
+									<input 
+										type="radio" 
+										name="deleteAction" 
+										value="disconnect" 
+										checked={deleteAction === "disconnect"} 
+										onChange={() => setDeleteAction("disconnect")} 
+										style={{ marginTop: "4px" }}
+									/>
+									<div>
+										<p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Disconnect Login Only</p>
+										<p className="muted" style={{ fontSize: "0.85rem" }}>
+											Deletes their web login account. Retains their Applicant Profile, Cases, and Leads exactly as they are. Best for users who just want to revoke access but you need their data for compliance.
+										</p>
+									</div>
+								</label>
+
+								<label className="ops-radio-card" style={{ display: "flex", gap: "1rem", padding: "1rem", border: "1px solid var(--border)", cursor: "pointer", background: deleteAction === "archive" ? "var(--bg-alt)" : "transparent" }}>
+									<input 
+										type="radio" 
+										name="deleteAction" 
+										value="archive" 
+										checked={deleteAction === "archive"} 
+										onChange={() => setDeleteAction("archive")} 
+										style={{ marginTop: "4px" }}
+									/>
+									<div>
+										<p style={{ fontWeight: 600, marginBottom: "0.25rem" }}>Archive & Hide (Recommended)</p>
+										<p className="muted" style={{ fontSize: "0.85rem" }}>
+											Deletes the login account and marks the applicant as archived. Their cases will be hidden from the Ops Workspace and queues, but data is retained for 30 days before permanent deletion.
+										</p>
+									</div>
+								</label>
+
+								<label className="ops-radio-card" style={{ display: "flex", gap: "1rem", padding: "1rem", border: "1px solid var(--border)", cursor: "pointer", background: deleteAction === "purge" ? "var(--bg-alt)" : "transparent", borderColor: deleteAction === "purge" ? "#ef4444" : "var(--border)" }}>
+									<input 
+										type="radio" 
+										name="deleteAction" 
+										value="purge" 
+										checked={deleteAction === "purge"} 
+										onChange={() => setDeleteAction("purge")} 
+										style={{ marginTop: "4px" }}
+									/>
+									<div>
+										<p style={{ fontWeight: 600, marginBottom: "0.25rem", color: "#ef4444" }}>Purge Everything</p>
+										<p className="muted" style={{ fontSize: "0.85rem" }}>
+											Completely and immediately obliterates the User login, Applicant Profile, Applications, Consultations, and Leads. Paid invoices will be orphaned. Irreversible.
+										</p>
+									</div>
+								</label>
+							</div>
+						</div>
+						<div className="ops-modal__footer" style={{ marginTop: "2rem", display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setDeleteTarget(null)} disabled={deleteSubmitting}>Cancel</button>
+							<button 
+								type="button" 
+								className="btn btn--sm btn--danger" 
+								onClick={executeDeleteClient} 
+								disabled={deleteSubmitting}
+							>
+								{deleteSubmitting ? "Executing..." : "Confirm Deletion"}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Modal: Revoke Sessions */}
 			{revokeTarget && (

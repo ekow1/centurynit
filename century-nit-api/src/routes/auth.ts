@@ -6,7 +6,7 @@ import { twoFactor } from "better-auth/plugins/two-factor";
 import { phoneNumber } from "better-auth/plugins/phone-number";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import { openAPI } from "better-auth/plugins";
-import { eq } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { toE164 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
@@ -19,6 +19,7 @@ import { getSetting } from "../services/settings.js";
 import { captureLeadFromUser } from "../services/leads.js";
 import { welcomeEmail } from "../services/notifications.js";
 import { rateLimit } from "../middleware/rate-limit.js";
+import { deleteClientUser } from "../services/clientUsers.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
@@ -415,6 +416,36 @@ auth.get("/me", async (c) => {
 					}
 				: null,
 	});
+});
+
+/**
+ * Client-initiated account deletion.
+ * If the user has paid/partial invoices, we archive the data to preserve financial records.
+ * Otherwise, we completely purge the user data.
+ */
+auth.delete("/me/account", async (c) => {
+	const authInstance = await getAuthInstance();
+	const session = await authInstance.api.getSession({ headers: c.req.raw.headers });
+	if (!session?.user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+	
+	const userId = session.user.id;
+	
+	// Check if user has paid or partial invoices
+	const paidInvoices = await db.query.invoices.findMany({
+		where: and(
+			eq(schema.invoices.clientUserId, userId),
+			inArray(schema.invoices.status, ["paid", "partial"])
+		),
+		limit: 1
+	});
+	
+	const action = paidInvoices.length > 0 ? "archive" : "purge";
+	
+	const result = await deleteClientUser(userId, action, session.user.name || session.user.email);
+	
+	return c.json({ success: result.success, action, storageErrors: result.storageErrors });
 });
 
 auth.post("/check-email", async (c) => {

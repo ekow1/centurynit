@@ -284,7 +284,7 @@ export async function createInvoice(input: {
 				status,
 				issuedBy: actor.opsUserId,
 				issuedByName: actor.name,
-				dueAt: data.dueAt ? new Date(data.dueAt) : null,
+				dueAt: data.dueAt && data.dueAt.trim() ? new Date(data.dueAt) : null,
 			})
 			.returning();
 
@@ -739,7 +739,7 @@ export async function issueProforma(input: {
 	invoiceId: string;
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;
-	dueAt?: string;
+	dueAt?: string | null;
 	actor: Actor;
 }): Promise<InvoiceRow> {
 	return db.transaction(async (tx) => {
@@ -785,7 +785,7 @@ export async function issueProforma(input: {
 				status: "issued",
 				subtotalCents: newSubtotal,
 				note: input.note ?? row.note,
-				dueAt: input.dueAt ? new Date(input.dueAt) : null,
+				dueAt: input.dueAt && input.dueAt.trim() ? new Date(input.dueAt) : null,
 				issuedBy: input.actor.opsUserId,
 				issuedByName: input.actor.name,
 				reviewedBy: input.actor.opsUserId,

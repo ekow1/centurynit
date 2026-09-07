@@ -80,6 +80,12 @@ function adaptInvoice(api: ApiInvoice): Invoice {
 	};
 }
 
+function toIso(date?: string) {
+	if (!date || !date.trim()) return undefined;
+	if (date.includes("T")) return date;
+	return `${date}T00:00:00.000Z`;
+}
+
 export function useInvoiceApi() {
 	const { hasPermission } = useOpsAuth();
 	const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -123,6 +129,7 @@ export function useInvoiceApi() {
 			const apiType = (
 				{ Application: "application", Visa: "visa", Consultation: "consultation", Agency: "agency", Travel: "travel", Custom: "custom" } as const
 			)[input.type];
+
 			const created = await apiCreateInvoice({
 				applicantName: input.applicantName,
 				applicantEmail: input.applicantEmail,
@@ -135,7 +142,7 @@ export function useInvoiceApi() {
 					amountCents: Math.round(l.amount * 100),
 				})),
 				note: input.note || undefined,
-				dueAt: input.dueAt,
+				dueAt: toIso(input.dueAt),
 			});
 			setInvoices((prev) => [adaptInvoice(created), ...prev]);
 			return adaptInvoice(created);
@@ -152,7 +159,7 @@ export function useInvoiceApi() {
 					amountCents: Math.round(l.amount * 100),
 				})),
 				note: note || undefined,
-				dueAt,
+				dueAt: toIso(dueAt),
 			});
 			const adapted = adaptInvoice(updated);
 			setInvoices((prev) => prev.map((inv) => (inv.id === id ? adapted : inv)));

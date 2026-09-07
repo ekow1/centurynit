@@ -35,6 +35,16 @@ export const invoiceLineInputSchema = z.object({
 	amountCents: z.number().int().min(0).max(100_000_000),
 });
 
+/** Accepts ISO datetime (2026-09-15T00:00:00Z), date-only (2026-09-15), or empty/null. */
+export const invoiceDueAtSchema = z
+	.union([
+		z.string().datetime(),
+		z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format (expected YYYY-MM-DD)"),
+		z.literal(""),
+	])
+	.nullable()
+	.optional();
+
 export const createInvoiceSchema = z.object({
 	applicantName: z.string().min(1).max(200),
 	applicantEmail: z.string().email().optional(),
@@ -45,7 +55,7 @@ export const createInvoiceSchema = z.object({
 	status: invoiceStoredStatusSchema.default("issued"),
 	lines: z.array(invoiceLineInputSchema).min(1).max(50),
 	note: z.string().max(2000).optional(),
-	dueAt: z.string().datetime().optional(),
+	dueAt: invoiceDueAtSchema,
 });
 
 export const recordPaymentSchema = z.object({
@@ -69,7 +79,7 @@ export const issueProformaSchema = z.object({
 	/** Staff can adjust the line items before issuing. */
 	lines: z.array(invoiceLineInputSchema).min(1).max(50),
 	note: z.string().max(2000).optional(),
-	dueAt: z.string().datetime().optional(),
+	dueAt: invoiceDueAtSchema,
 });
 
 export const listInvoicesQuerySchema = z.object({

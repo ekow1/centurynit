@@ -559,7 +559,12 @@ function InvoiceDetail({
 					className="inv-form"
 					onSubmit={async (e) => {
 						e.preventDefault();
-						await onIssue(editLines, editNote, editDueAt || undefined);
+						const toIso = (date?: string) => {
+							if (!date || !date.trim()) return undefined;
+							if (date.includes("T")) return date;
+							return `${date}T00:00:00.000Z`;
+						};
+						await onIssue(editLines, editNote, toIso(editDueAt));
 						reset();
 					}}
 				>

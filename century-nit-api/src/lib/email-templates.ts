@@ -737,7 +737,7 @@ export function renderSchoolOfferEmail(data: {
 	const portalLink = `${data.portalUrl}/portal/tracking`;
 
 	let headerMessage = `There is an update regarding your application to <strong>${safeUni}</strong> for the <strong>${safeProg}</strong> programme.`;
-	if (data.outcome === "Offer Received") {
+	if (data.outcome === "Admitted") {
 		headerMessage = `Congratulations! <strong>${safeUni}</strong> has issued an official admission offer for the <strong>${safeProg}</strong> programme.`;
 	} else if (data.outcome === "Application Rejected") {
 		headerMessage = `We have received a decision from <strong>${safeUni}</strong> regarding the <strong>${safeProg}</strong> programme. Unfortunately, the application was not successful.`;
@@ -800,7 +800,7 @@ export function renderSchoolOfferEmail(data: {
 	`;
 
 	let headerMessageText = `There is an update regarding your application to ${data.universityName.trim()} for the ${data.programName.trim()} programme.`;
-	if (data.outcome === "Offer Received") {
+	if (data.outcome === "Admitted") {
 		headerMessageText = `Congratulations! ${data.universityName.trim()} has issued an official admission offer for ${data.programName.trim()}.`;
 	} else if (data.outcome === "Application Rejected") {
 		headerMessageText = `We have received a decision from ${data.universityName.trim()} regarding the ${data.programName.trim()} programme. Unfortunately, the application was not successful.`;

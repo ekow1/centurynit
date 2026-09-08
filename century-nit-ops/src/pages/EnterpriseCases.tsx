@@ -15,7 +15,7 @@ import { JOURNEY_STAGE_LABELS, type JourneyStage, type SchoolApplication } from 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
 	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
-	const [outcome, setOutcome] = useState<string>(school.outcome || "Offer Received");
+	const [outcome, setOutcome] = useState<string>(school.outcome || "Admitted");
 	const [offerLetterUrl, setOfferLetterUrl] = useState(school.offerLetterUrl ?? "");
 	const [consultantNote, setConsultantNote] = useState("");
 	const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
@@ -28,8 +28,8 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			await updateSchoolApplication(appId, school.id, {
 				status: status as any,
 				outcome: status === "Decision Reached" ? outcome as any : null,
-				offerLetterUrl: status === "Decision Reached" && outcome === "Offer Received" ? offerLetterUrl.trim() || null : null,
-				sendUpdateEmail: status === "Decision Reached" && outcome === "Offer Received" && sendUpdateEmail && Boolean(offerLetterUrl.trim()),
+				offerLetterUrl: status === "Decision Reached" && outcome === "Admitted" ? offerLetterUrl.trim() || null : null,
+				sendUpdateEmail: status === "Decision Reached" && outcome === "Admitted" && sendUpdateEmail && Boolean(offerLetterUrl.trim()),
 				consultantNote: consultantNote.trim() || undefined,
 			});
 		} catch {
@@ -39,7 +39,7 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 		}
 	};
 
-	const showOfferFields = status === "Decision Reached" && outcome === "Offer Received";
+	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
 
 	return (
 		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
@@ -62,7 +62,7 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 						onChange={(e) => setOutcome(e.target.value)}
 						style={{ width: "auto" }}
 					>
-						<option value="Offer Received">Offer Received</option>
+						<option value="Admitted">Admitted</option>
 						<option value="Waitlisted">Waitlisted</option>
 						<option value="Application Rejected">Application Rejected</option>
 						<option value="Withdrawn">Withdrawn</option>
@@ -611,7 +611,7 @@ export function EnterpriseCases() {
 									{(() => {
 										const schools = selectedApp.schoolApplications ?? [];
 										const total = schools.length;
-										const admitted = schools.filter((s) => s.outcome === "Offer Received").length;
+										const admitted = schools.filter((s) => s.outcome === "Admitted").length;
 										const pending = schools.filter((s) => s.status !== "Decision Reached").length;
 										const rejected = schools.filter((s) => s.outcome === "Application Rejected" || s.outcome === "Withdrawn").length;
 										return (
@@ -629,7 +629,7 @@ export function EnterpriseCases() {
 												const displayName = s.universityName || s.universityId;
 												const displayProgram = s.programName || s.programId;
 												const displayCountry = s.countryName || s.destinationId;
-												const admitted = s.outcome === "Offer Received";
+												const admitted = s.outcome === "Admitted";
 												return (
 													<div
 														key={s.id}

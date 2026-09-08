@@ -3238,7 +3238,7 @@ img.profile-monogram {
 	}
 }
 
-.school-track-card--offer-received {
+.school-track-card--admitted {
 	border-width: 2px;
 	background: var(--muted);
 }
@@ -3999,7 +3999,7 @@ img.profile-monogram {
 	background: var(--muted);
 }
 
-.track-status-pill--offer-received {
+.track-status-pill--admitted {
 	background: var(--foreground);
 	color: var(--accent-foreground);
 }

@@ -1747,7 +1747,7 @@ export const PRE_DEPARTURE_KEY = "century-nit-pre-departure";
 /**
  * Application process (invoices gate the work):
  * Consultation → Package → Select schools → Application invoice (pay) → Tracking
- * → Offer Received → Visa invoice (pay) → Visa tracking → Payment plan → Agency → Complete
+ * → Admitted → Visa invoice (pay) → Visa tracking → Payment plan → Agency → Complete
  */
 export type ProcessStageId =
 	| "new"

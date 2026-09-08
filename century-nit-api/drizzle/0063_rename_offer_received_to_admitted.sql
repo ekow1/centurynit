@@ -1,0 +1,1 @@
+ALTER TYPE "public"."school_outcome" RENAME VALUE 'Offer Received' TO 'Admitted';

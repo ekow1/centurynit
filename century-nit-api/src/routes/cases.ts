@@ -1722,7 +1722,7 @@ meRouter.openapi(
 		);
 		const hasAdmitted = schoolTracks.schools.some(
 			(s) =>
-				s.outcome === "Offer Received",
+				s.outcome === "Admitted",
 		);
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
 		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);

@@ -1,24 +1,25 @@
 import { z } from "zod";
 
 export const schoolTrackStatusSchema = z.enum([
-	"Draft",
 	"Preparing Application",
-	"Documents under review",
-	"Submitted to University",
-	"Conditional Offer Received",
-	"Unconditional Offer",
-	"Offer Accepted",
-	"Offer Declined",
-	"Application Rejected",
-	"Waitlisted",
-	"Withdrawn",
+	"Submitted",
+	"Decision Reached",
 ]);
 export type SchoolTrackStatus = z.infer<typeof schoolTrackStatusSchema>;
+
+export const schoolOutcomeSchema = z.enum([
+	"Offer Received",
+	"Waitlisted",
+	"Application Rejected",
+	"Withdrawn",
+]);
+export type SchoolOutcome = z.infer<typeof schoolOutcomeSchema>;
 
 export const schoolTrackEventSchema = z.object({
 	id: z.string().uuid().optional(),
 	at: z.string().datetime(),
 	status: schoolTrackStatusSchema,
+	outcome: schoolOutcomeSchema.nullable().optional(),
 	note: z.string().default(""),
 	financialNote: z.string().nullable().optional(),
 });
@@ -54,6 +55,7 @@ export const schoolApplicationSchema = z.object({
 	tuitionUsd: z.number().int().nullable().optional(),
 	intake: z.string(),
 	status: schoolTrackStatusSchema,
+	outcome: schoolOutcomeSchema.nullable().optional(),
 	handlerNote: z.string().nullable(),
 	financialNote: z.string().nullable(),
 	events: z.array(schoolTrackEventSchema),
@@ -79,6 +81,7 @@ export type SchoolApplicationList = z.infer<typeof schoolApplicationListSchema>;
 
 export const updateSchoolStatusSchema = z.object({
 	status: schoolTrackStatusSchema,
+	outcome: schoolOutcomeSchema.nullable().optional(),
 	handlerNote: z.string().max(2000).optional(),
 	financialNote: z.string().max(2000).optional(),
 	note: z.string().max(2000).optional(),

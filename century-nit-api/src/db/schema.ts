@@ -1032,16 +1032,15 @@ export const caseComments = pgTable(
  * ══════════════════════════════════════════════════════════════════════════ */
 
 export const schoolTrackStatusEnum = pgEnum("school_track_status", [
-	"Draft",
 	"Preparing Application",
-	"Documents under review",
-	"Submitted to University",
-	"Conditional Offer Received",
-	"Unconditional Offer",
-	"Offer Accepted",
-	"Offer Declined",
-	"Application Rejected",
+	"Submitted",
+	"Decision Reached",
+]);
+
+export const schoolOutcomeEnum = pgEnum("school_outcome", [
+	"Offer Received",
 	"Waitlisted",
+	"Application Rejected",
 	"Withdrawn",
 ]);
 
@@ -1075,7 +1074,8 @@ export const schoolApplications = pgTable(
 		offerDepositPaidAt: timestamp("offer_deposit_paid_at", { withTimezone: true }),
 		offerLetterUrl: text("offer_letter_url"),
 		intake: varchar("intake", { length: 64 }).notNull(),
-		status: schoolTrackStatusEnum("status").notNull().default("Draft"),
+		status: schoolTrackStatusEnum("status").notNull().default("Preparing Application"),
+		outcome: schoolOutcomeEnum("outcome"),
 		handlerNote: text("handler_note"),
 		financialNote: text("financial_note"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1096,6 +1096,7 @@ export const schoolTrackEvents = pgTable(
 			.notNull()
 			.references(() => schoolApplications.id, { onDelete: "cascade" }),
 		status: schoolTrackStatusEnum("status").notNull(),
+		outcome: schoolOutcomeEnum("outcome"),
 		note: text("note").notNull().default(""),
 		financialNote: text("financial_note"),
 		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),

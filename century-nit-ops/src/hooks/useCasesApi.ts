@@ -226,6 +226,7 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 		agencyStageIndex: app?.agencyStageIndex,
 		agencySettled: app?.agencySettled,
 		travelClearance: app?.travelClearance as MockApplicant["travelClearance"],
+		targetSchoolCount: app?.targetSchoolCount ?? null,
 	};
 }
 

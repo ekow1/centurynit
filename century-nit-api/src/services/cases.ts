@@ -1017,7 +1017,7 @@ export async function quotationForApplication(applicationId: string): Promise<Pr
 	const draftRows = await db
 		.select()
 		.from(schoolApplications)
-		.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")));
+		.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Preparing Application")));
 
 	const fees = await getFeeSchedule();
 	const schoolCount = draftRows.length;
@@ -1090,7 +1090,7 @@ export async function acceptProceedForApplication(input: {
 		const draftRows = await tx
 			.select()
 			.from(schoolApplications)
-			.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")));
+			.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Preparing Application")));
 		if (draftRows.length === 0) {
 			throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Select at least one university before confirming.");
 		}
@@ -1236,7 +1236,7 @@ export async function reinviteProceedForApplication(input: {
 			})
 			.where(eq(applications.id, applicationId));
 		await txDb.delete(schoolApplications).where(
-			and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Draft")),
+			and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Preparing Application")),
 		);
 
 		await txDb.insert(caseComments).values({
@@ -1769,9 +1769,9 @@ export async function setApplicationStage(
 		listSchoolsForApplicant(row.applicantId),
 		row.applicantId ? listInvoicesForApplicant(row.applicantId) : [],
 	]);
-	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Draft");
+	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Preparing Application");
 	const hasAdmitted = schoolTracks.schools.some(
-		(s) => s.status === "Unconditional Offer" || s.status === "Offer Accepted",
+		(s) => s.outcome === "Offer Received",
 	);
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");

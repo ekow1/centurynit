@@ -1715,15 +1715,14 @@ meRouter.openapi(
 		// accept to proceed. invited/declined = still gated; accepted = open.
 		const hasProceeded = application?.proceedStatus === "accepted";
 		const hasSelection = schoolTracks.schools.some(
-			(s) => s.status !== "Draft",
+			(s) => s.status !== "Preparing Application",
 		);
 		const isAppInvoicePaid = invoices.some(
 			(i) => i.type === "application" && i.status === "paid",
 		);
 		const hasAdmitted = schoolTracks.schools.some(
 			(s) =>
-				s.status === "Unconditional Offer" ||
-				s.status === "Offer Accepted",
+				s.outcome === "Offer Received",
 		);
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
 		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);

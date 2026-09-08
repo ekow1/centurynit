@@ -294,6 +294,8 @@ export interface MockApplicant {
 	preDepartureTasks?: PreDepartureTask[];
 	/** Travel clearance status */
 	travelClearance?: TravelClearance;
+	/** Number of target schools tracking */
+	targetSchoolCount?: number | null;
 }
 
 /* ─── Ops → Portal directives ───

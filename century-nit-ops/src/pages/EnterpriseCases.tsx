@@ -12,9 +12,10 @@ import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, type JourneyStage, type SchoolApplication } from "century-nit-shared";
 
-function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: SchoolApplication }) {
+function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
-	const [editing, setEditing] = useState(false);
+	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
+	const [outcome, setOutcome] = useState<string>(school.outcome || "Offer Received");
 	const [tuitionUsd, setTuitionUsd] = useState(school.offerTuitionUsd?.toString() ?? "");
 	const [tuitionLabel, setTuitionLabel] = useState(school.offerTuitionLabel ?? "");
 	const [depositUsd, setDepositUsd] = useState(school.offerDepositUsd?.toString() ?? "");
@@ -24,129 +25,132 @@ function InlineSchoolOfferEditor({ appId, school }: { appId: string; school: Sch
 	const [sendOfferEmail, setSendOfferEmail] = useState(true);
 	const [consultantNote, setConsultantNote] = useState("");
 
+	const [isSaving, setIsSaving] = useState(false);
+
 	const toIso = (date: string) => (date ? `${date}T00:00:00Z` : null);
 	const toNumber = (value: string) => {
 		const n = Number(value);
 		return Number.isFinite(n) && value.trim() !== "" ? n : null;
 	};
 
-	if (!editing) {
-		const hasTerms = school.offerTuitionUsd != null || school.offerDepositUsd != null || school.offerTuitionLabel || school.offerLetterUrl;
-		return (
-			<div style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}>
-				{hasTerms ? (
-					<div className="muted">
-						{school.offerTuitionUsd != null ? <span>Tuition: ${school.offerTuitionUsd.toLocaleString()}</span> : null}
-						{school.offerDepositUsd != null ? <span> · Deposit: ${school.offerDepositUsd.toLocaleString()}</span> : null}
-						{school.offerDepositDueAt ? <span> · Due: {new Date(school.offerDepositDueAt).toLocaleDateString()}</span> : null}
-						{school.offerDepositPaidAt ? <span> (paid)</span> : null}
-						{school.offerLetterUrl ? (
-							<div style={{ marginTop: "0.25rem" }}>
-								<a href={school.offerLetterUrl} target="_blank" rel="noopener noreferrer" className="link" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-									📄 View Official Offer Letter (PDF)
-								</a>
-							</div>
-						) : null}
-					</div>
-				) : (
-					<span className="muted">Offer terms not set</span>
-				)}
-				<div>
-					<button
-						type="button"
-						className="btn btn--ghost btn--sm"
-						style={{ marginTop: "0.25rem" }}
-						onClick={() => setEditing(true)}
-					>
-						Edit offer terms
-					</button>
-				</div>
-			</div>
-		);
-	}
+	const handleSave = async () => {
+		setIsSaving(true);
+		try {
+			await updateSchoolApplication(appId, school.id, {
+				status: status as any,
+				outcome: status === "Decision Reached" ? outcome as any : null,
+				offerTuitionUsd: status === "Decision Reached" && outcome === "Offer Received" ? toNumber(tuitionUsd) : null,
+				offerTuitionLabel: status === "Decision Reached" && outcome === "Offer Received" ? tuitionLabel.trim() || null : null,
+				offerDepositUsd: status === "Decision Reached" && outcome === "Offer Received" ? toNumber(depositUsd) : null,
+				offerDepositDueAt: status === "Decision Reached" && outcome === "Offer Received" ? toIso(dueAt) : null,
+				offerDepositPaidAt: status === "Decision Reached" && outcome === "Offer Received" ? toIso(paidAt) : null,
+				offerLetterUrl: status === "Decision Reached" && outcome === "Offer Received" ? offerLetterUrl.trim() || null : null,
+				sendOfferEmail: status === "Decision Reached" && outcome === "Offer Received" && sendOfferEmail && Boolean(offerLetterUrl.trim()),
+				consultantNote: consultantNote.trim() || undefined,
+			});
+		} catch {
+			/* handled by hook */
+		} finally {
+			setIsSaving(false);
+		}
+	};
+
+	const showOfferFields = status === "Decision Reached" && outcome === "Offer Received";
 
 	return (
 		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
-			<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-				<div>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition USD</p>
-					<input className="input input--sm" type="number" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} />
-				</div>
-				<div>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition label</p>
-					<input className="input input--sm" type="text" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} />
-				</div>
-				<div>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit USD</p>
-					<input className="input input--sm" type="number" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} />
-				</div>
-				<div>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit due</p>
-					<input className="input input--sm" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
-				</div>
-				<div>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit paid</p>
-					<input className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
-				</div>
-				<div style={{ gridColumn: "1 / -1" }}>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Official Offer Letter / Document URL (PDF)</p>
-					<input
-						className="input input--sm"
-						type="url"
-						placeholder="https://.../offer-letter.pdf"
-						value={offerLetterUrl}
-						onChange={(e) => setOfferLetterUrl(e.target.value)}
-					/>
-				</div>
-				<div style={{ gridColumn: "1 / -1" }}>
-					<p className="muted" style={{ marginBottom: "0.15rem" }}>Consultant Note to Applicant (included in email)</p>
-					<textarea
-						className="input input--sm"
-						placeholder="e.g. Congratulations! Your official offer has arrived with a scholarship award..."
-						value={consultantNote}
-						onChange={(e) => setConsultantNote(e.target.value)}
-						rows={2}
-					/>
-				</div>
-				<div style={{ gridColumn: "1 / -1" }}>
-					<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
-						<input
-							type="checkbox"
-							checked={sendOfferEmail}
-							onChange={(e) => setSendOfferEmail(e.target.checked)}
-						/>
-						<span>Send official acceptance email with PDF attachment to applicant</span>
-					</label>
-				</div>
-			</div>
-			<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+			<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+				<select 
+					className="input input--sm" 
+					value={status} 
+					onChange={(e) => setStatus(e.target.value)}
+					style={{ width: "auto" }}
+				>
+					<option value="Preparing Application">Preparing Application</option>
+					<option value="Submitted">Submitted</option>
+					<option value="Decision Reached">Decision Reached</option>
+				</select>
+				
+				{status === "Decision Reached" && (
+					<select 
+						className="input input--sm" 
+						value={outcome} 
+						onChange={(e) => setOutcome(e.target.value)}
+						style={{ width: "auto" }}
+					>
+						<option value="Offer Received">Offer Received</option>
+						<option value="Waitlisted">Waitlisted</option>
+						<option value="Application Rejected">Application Rejected</option>
+						<option value="Withdrawn">Withdrawn</option>
+					</select>
+				)}
+
 				<button
 					type="button"
 					className="btn btn--primary btn--sm"
-					onClick={async () => {
-						try {
-							await updateSchoolApplication(appId, school.id, {
-								offerTuitionUsd: toNumber(tuitionUsd),
-								offerTuitionLabel: tuitionLabel.trim() || null,
-								offerDepositUsd: toNumber(depositUsd),
-								offerDepositDueAt: toIso(dueAt),
-								offerDepositPaidAt: toIso(paidAt),
-								offerLetterUrl: offerLetterUrl.trim() || null,
-								sendOfferEmail: sendOfferEmail && Boolean(offerLetterUrl.trim()),
-								consultantNote: consultantNote.trim() || undefined,
-							});
-							setEditing(false);
-						} catch {
-							/* error handled by hook */
-						}
-					}}
+					onClick={handleSave}
+					disabled={isSaving}
+					style={{ marginLeft: "auto" }}
 				>
-					Save
-				</button>
-				<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(false)}>
-					Cancel
+					{isSaving ? "Saving..." : "Update Status"}
 				</button>
 			</div>
+
+			{showOfferFields && (
+				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", marginTop: "0.5rem" }}>
+					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>Offer Details</p>
+					<div>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition USD</p>
+						<input className="input input--sm" type="number" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} />
+					</div>
+					<div>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition label</p>
+						<input className="input input--sm" type="text" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} />
+					</div>
+					<div>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit USD</p>
+						<input className="input input--sm" type="number" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} />
+					</div>
+					<div>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit due</p>
+						<input className="input input--sm" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+					</div>
+					<div>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit paid</p>
+						<input className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Official Offer Letter / Document URL (PDF)</p>
+						<input
+							className="input input--sm"
+							type="url"
+							placeholder="https://.../offer-letter.pdf"
+							value={offerLetterUrl}
+							onChange={(e) => setOfferLetterUrl(e.target.value)}
+						/>
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Consultant Note to Applicant (included in email)</p>
+						<textarea
+							className="input input--sm"
+							placeholder="e.g. Congratulations! Your official offer has arrived with a scholarship award..."
+							value={consultantNote}
+							onChange={(e) => setConsultantNote(e.target.value)}
+							rows={2}
+						/>
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+							<input
+								type="checkbox"
+								checked={sendOfferEmail}
+								onChange={(e) => setSendOfferEmail(e.target.checked)}
+							/>
+							<span>Send official acceptance email with PDF attachment to applicant</span>
+						</label>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -482,22 +486,15 @@ export function EnterpriseCases() {
 								alignItems: "flex-start",
 								flexShrink: 0,
 							}}>
-								<div>
-									<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-										<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", opacity: 0.7 }}>
-											{(liveSelected ?? selectedApp).appId}
-										</span>
-										<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
-											{(liveSelected ?? selectedApp).status}
-										</span>
+									<div style={{ flex: 1, minWidth: 0 }}>
+										<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
+											<h2 style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--background)", margin: 0 }}>{(liveSelected ?? selectedApp).applicantName}</h2>
+											<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>{(liveSelected ?? selectedApp).appId}</span>
+										</div>
+										<p style={{ fontSize: "var(--text-sm)", opacity: 0.7, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+											{selectedApp.targetSchoolCount ? `Tracking ${selectedApp.targetSchoolCount} School${selectedApp.targetSchoolCount === 1 ? "" : "s"}` : "No schools selected yet"}
+										</p>
 									</div>
-									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
-										{(liveSelected ?? selectedApp).applicantName}
-									</h2>
-									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-										{(liveSelected ?? selectedApp).university} · {(liveSelected ?? selectedApp).program} ({(liveSelected ?? selectedApp).country})
-									</p>
-								</div>
 								<button
 									type="button"
 									onClick={() => setSelectedApp(null)}
@@ -626,16 +623,11 @@ export function EnterpriseCases() {
 								</div>
 							</div>
 
-								{/* Application Meta */}
+								{/* Target & Assignment */}
 								<div className="card">
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-										<p className="eyebrow mb-0">Target & Assignment</p>
-										<button className="btn btn--outline btn--sm" onClick={() => setIsScholarshipModalOpen(true)}>Manage Scholarships</button>
-									</div>
-									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended Institution</p><p>{selectedApp.university}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended Program</p><p>{selectedApp.program}</p></div>
-										<div>
+									<p className="eyebrow mb-3">Assignment</p>
+									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+										<div style={{ gridColumn: "1 / -1" }}>
 											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
 											<p>
 												<StaffChatBadge
@@ -669,9 +661,9 @@ export function EnterpriseCases() {
 									{(() => {
 										const schools = selectedApp.schoolApplications ?? [];
 										const total = schools.length;
-										const admitted = schools.filter((s) => s.status === "Offer Accepted").length;
-										const pending = schools.filter((s) => !["Offer Accepted", "Offer Declined", "Application Rejected", "Withdrawn"].includes(s.status)).length;
-										const rejected = schools.filter((s) => s.status === "Application Rejected" || s.status === "Offer Declined").length;
+										const admitted = schools.filter((s) => s.outcome === "Offer Received").length;
+										const pending = schools.filter((s) => s.status !== "Decision Reached").length;
+										const rejected = schools.filter((s) => s.outcome === "Application Rejected" || s.outcome === "Withdrawn").length;
 										return (
 											<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
 												<span>{total} school{total !== 1 ? "s" : ""}</span>
@@ -688,7 +680,7 @@ export function EnterpriseCases() {
 												const displayName = s.universityName || s.universityId;
 												const displayProgram = s.programName || s.programId;
 												const displayCountry = s.countryName || s.destinationId;
-												const admitted = s.status === "Offer Accepted";
+												const admitted = s.outcome === "Offer Received";
 												return (
 													<div
 														key={s.id}
@@ -696,16 +688,15 @@ export function EnterpriseCases() {
 															padding: "0.6rem 0.75rem",
 															border: admitted ? "2px solid #16a34a" : "1px solid var(--border-light)",
 															background: admitted ? "#f0fdf4" : "transparent",
+															borderRadius: "var(--radius-md)",
 														}}
 													>
 														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
-							<div>
-								<p style={{ fontWeight: 500 }}>{displayName}</p>
-								<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
-								{latest ? <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>{latest.status}{latest.note ? ` — ${latest.note}` : ""}</p> : null}
-								<InlineSchoolOfferEditor appId={selectedApp.appId} school={s} />
-							</div>
-															<span style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: admitted ? "#16a34a" : "var(--foreground)", whiteSpace: "nowrap" }}>{s.status}</span>
+															<div style={{ width: "100%" }}>
+																<p style={{ fontWeight: 500 }}>{displayName}</p>
+																<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
+																<InlineSchoolTracker appId={selectedApp.appId} school={s} />
+															</div>
 														</div>
 													</div>
 												);

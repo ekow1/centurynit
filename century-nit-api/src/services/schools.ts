@@ -49,12 +49,7 @@ export async function lockSchoolsForApplicant(
 
 	// Update all draft schools to "Preparing Application"
 	for (const row of rows) {
-		if (row.status === "Draft") {
-			await db
-				.update(schoolApplications)
-				.set({ status: "Preparing Application", updatedAt: new Date() })
-				.where(eq(schoolApplications.id, row.id));
-
+		if (row.status === "Preparing Application") {
 			await db.insert(schoolTrackEvents).values({
 				schoolApplicationId: row.id,
 				status: "Preparing Application",
@@ -195,12 +190,14 @@ export async function serializeSchool(
 		tuitionUsd: row.tuitionUsd,
 		intake: row.intake,
 		status: row.status,
+		outcome: row.outcome ?? undefined,
 		handlerNote: row.handlerNote,
 		financialNote: row.financialNote,
 		events: events.map((e) => ({
 			id: e.id,
 			at: e.at.toISOString(),
 			status: e.status,
+			outcome: e.outcome ?? undefined,
 			note: e.note,
 			financialNote: e.financialNote ?? undefined,
 		})),
@@ -274,15 +271,15 @@ export async function addSchoolForApplicant(
 			countryName: destination?.name ?? university?.name ?? null,
 			tuitionUsd: program?.tuitionUsd ?? null,
 			intake: input.intake,
-			status: "Draft",
+			status: "Preparing Application",
 		})
 		.returning();
 
 	// Insert initial event
 	await db.insert(schoolTrackEvents).values({
 		schoolApplicationId: created.id,
-		status: "Draft",
-		note: "School selection added to draft profile",
+		status: "Preparing Application",
+		note: "School selection added to profile",
 	});
 
 	return serializeSchool(created);
@@ -302,11 +299,11 @@ export async function removeSchoolForApplicant(
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
 
-	if (target.status !== "Draft") {
+	if (target.status !== "Preparing Application") {
 		throw new HttpError(
 			400,
 			"CANNOT_DELETE_ACTIVE_APPLICATION",
-			"Only draft school applications can be removed",
+			"Only preparing school applications can be removed",
 		);
 	}
 
@@ -332,6 +329,7 @@ export async function updateSchoolStatus(
 		.update(schoolApplications)
 		.set({
 			status: input.status,
+			outcome: input.outcome,
 			handlerNote: input.handlerNote ?? target.handlerNote,
 			financialNote: input.financialNote ?? target.financialNote,
 			offerTuitionUsd: input.offerTuitionUsd !== undefined ? input.offerTuitionUsd : target.offerTuitionUsd,
@@ -358,6 +356,7 @@ export async function updateSchoolStatus(
 	await db.insert(schoolTrackEvents).values({
 		schoolApplicationId: schoolId,
 		status: input.status,
+		outcome: input.outcome,
 		note: input.note || input.handlerNote || `Status updated to ${input.status} by ${actorName}`,
 		financialNote: input.financialNote,
 	});

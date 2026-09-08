@@ -159,8 +159,8 @@ export function EnterpriseApplicants() {
 													</span>
 												</div>
 												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{applicant.name}</p>
-												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
-													{applicant.university} · {applicant.country}
+												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+													{applicant.targetSchoolCount ? `Tracking ${applicant.targetSchoolCount} School${applicant.targetSchoolCount === 1 ? "" : "s"}` : "No schools selected yet"}
 												</p>
 												<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
 													{applicant.stageNumber > 0
@@ -218,8 +218,8 @@ export function EnterpriseApplicants() {
 									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
 										{selectedApplicant.name}
 									</h2>
-									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-										{selectedApplicant.university} · {selectedApplicant.program} ({selectedApplicant.country})
+									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+										{selectedApplicant.targetSchoolCount ? `Tracking ${selectedApplicant.targetSchoolCount} School${selectedApplicant.targetSchoolCount === 1 ? "" : "s"}` : "No schools selected yet"}
 									</p>
 								</div>
 								<button

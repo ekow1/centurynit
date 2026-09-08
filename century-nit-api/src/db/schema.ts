@@ -810,10 +810,24 @@ export const applicationStatusEnum = pgEnum("application_status", [
 
 export const visaStageEnum = pgEnum("visa_stage", [
 	"locked",
+	"awaiting_handler",
 	"pending",
 	"biometrics",
 	"decision",
 	"complete",
+]);
+
+/** Queue state for a pending "who owns the new stage?" decision. */
+export const stageHandoffStatusEnum = pgEnum("stage_handoff_status", [
+	"pending",
+	"resolved",
+	"cancelled",
+]);
+
+/** How a manager resolved a handoff: keep continuity or pick a specialist. */
+export const stageHandoffDecisionEnum = pgEnum("stage_handoff_decision", [
+	"keep",
+	"assign",
 ]);
 
 export const caseCommentKindEnum = pgEnum("case_comment_kind", [
@@ -1512,6 +1526,56 @@ export const stageAssignments = pgTable(
 	(t) => ({
 		byApplication: index("stage_assignments_application_idx").on(t.applicationId, t.stage),
 		byOpsUser: index("stage_assignments_ops_user_idx").on(t.opsUserId, t.status),
+	}),
+);
+
+/**
+ * Stage handoff — the assignment decision queue.
+ *
+ * When an application crosses a specialist boundary (e.g. consultation →
+ * visa), the new stage must not silently start without an owner. A handoff
+ * row records that the stage is awaiting a manager decision before it
+ * activates. Resolution writes an active `stage_assignments` row via the
+ * existing assignStageOfficer flow and activates the stage.
+ *
+ * One open (pending) handoff per (application, stage) is enforced by the
+ * partial unique index — payment callbacks and transition retries are
+ * idempotent without extra queries.
+ */
+export const stageHandoffs = pgTable(
+	"stage_handoffs",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
+		/** Specialist stage awaiting an owner (e.g. `visa_processing`). */
+		stage: varchar("stage", { length: 80 }).notNull(),
+		/** Previous handler (continuity candidate). Null when the stage is fresh. */
+		fromOpsUserId: uuid("from_ops_user_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		/** Why the handoff exists — `visa_payment`, `stage_transition`, `migration`. */
+		source: varchar("source", { length: 40 }).notNull().default("stage_transition"),
+		status: stageHandoffStatusEnum("status").notNull().default("pending"),
+		/** Resolution choice; null until decided. */
+		decision: stageHandoffDecisionEnum("decision"),
+		/** Officer chosen on `assign`/`keep` resolution; null until decided. */
+		resolvedOpsUserId: uuid("resolved_ops_user_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		decidedBy: uuid("decided_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		decidedAt: timestamp("decided_at", { withTimezone: true }),
+		/** Deferred resolution bookkeeping — stays `pending`, re-surfaces in the queue. */
+		deferredBy: uuid("deferred_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		deferredAt: timestamp("deferred_at", { withTimezone: true }),
+		deferCount: integer("defer_count").notNull().default(0),
+		reason: text("reason"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplication: index("stage_handoffs_application_idx").on(t.applicationId, t.stage),
+		openByApplicationStage: uniqueIndex("stage_handoffs_open_uniq")
+			.on(t.applicationId, t.stage)
+			.where(sql`${t.status} = 'pending'`),
+		byOpsUser: index("stage_handoffs_ops_user_idx").on(t.fromOpsUserId),
 	}),
 );
 

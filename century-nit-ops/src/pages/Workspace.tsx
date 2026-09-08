@@ -21,7 +21,7 @@ import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
 import { bookingsApi } from "century-nit-core/api";
 import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
 
 /**
  * F-shaped workspace / mission control.
@@ -128,12 +128,27 @@ type BaseWorkItem =
 			owner: string;
 			linkTo: string;
 			priority: number;
+	  }
+	| {
+			id: string;
+			category: string;
+			kind: "handoff";
+			action: "resolve";
+			record: StageHandoff;
+			title: string;
+			subtitle: string;
+			meta: string;
+			branch: string;
+			owner: string;
+			linkTo: string;
+			priority: number;
 	  };
 
 type WorkItem = BaseWorkItem & { isLive?: boolean };
 
 const VISA_STEP_LABELS: Record<string, string> = {
 	locked: "Awaiting payment",
+	awaiting_handler: "Awaiting handler assignment",
 	pending: "Case opened",
 	biometrics: "Biometrics",
 	decision: "Decision",
@@ -173,11 +188,14 @@ export function Workspace() {
 		applications,
 		applicants,
 		assignees,
+		handoffs,
 		loading: casesLoading,
 		error: casesError,
 		refresh,
 		assignConsultation,
 		assignApplication,
+		resolveHandoff,
+		deferHandoff,
 	} = useCases();
 	const { invoices, loading: invoicesLoading } = useInvoiceApi();
 
@@ -434,6 +452,31 @@ export function Workspace() {
 			}
 		}
 
+		for (const h of handoffs) {
+			if (h.status !== "pending") continue;
+			const stageLabel =
+				h.stage === "visa_processing"
+					? "Visa specialist"
+					: h.stage
+							.split("_")
+							.map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+							.join(" ");
+			q.push({
+				id: `handoff-${h.id}`,
+				category: "needs_assignment",
+				kind: "handoff",
+				action: "resolve",
+				record: h,
+				title: h.applicantName ?? "Applicant",
+				subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}`,
+				meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
+				branch: "",
+				owner: h.fromOpsUserName ?? "No previous handler",
+				linkTo: h.stage === "visa_processing" ? `/visa?id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
+				priority: PRIORITY.assign_consultation,
+			});
+		}
+
 		for (const app of scopedApplicants) {
 			const pendingDocs = app.documents.filter((d) => d.status === "Pending Review").length;
 			if (pendingDocs > 0) {
@@ -537,7 +580,7 @@ export function Workspace() {
 			return a.priority - b.priority || a.title.localeCompare(b.title);
 		});
 		return q;
-	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds]);
+	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs]);
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
@@ -651,6 +694,8 @@ export function Workspace() {
 								onAssigned={refresh}
 								onAssignConsultation={assignConsultation}
 								onAssignApplication={assignApplication}
+								onResolveHandoff={resolveHandoff}
+								onDeferHandoff={deferHandoff}
 							/>
 						) : (
 							<div style={{ padding: "4rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
@@ -717,6 +762,7 @@ function actionLabel(item: WorkItem): string {
 	if (item.action === "issue") return "Issue invoice";
 	if (item.action === "chase") return "Chase payment";
 	if (item.action === "followup") return "Follow up";
+	if (item.action === "resolve") return "Resolve";
 	return item.action;
 }
 
@@ -775,6 +821,8 @@ function PreviewPane({
 	onAssigned,
 	onAssignConsultation,
 	onAssignApplication,
+	onResolveHandoff,
+	onDeferHandoff,
 }: {
 	item: WorkItem;
 	assignees: Assignee[];
@@ -782,10 +830,13 @@ function PreviewPane({
 	onAssigned: () => void | Promise<void>;
 	onAssignConsultation: (id: string, to: Assignee) => Promise<unknown>;
 	onAssignApplication: (id: string, to: Assignee) => Promise<unknown>;
+	onResolveHandoff: (handoffId: string, decision: "keep" | "assign", opts?: { opsUserId?: string; reason?: string }) => Promise<unknown>;
+	onDeferHandoff: (handoffId: string, reason?: string) => Promise<unknown>;
 }) {
 	const [assigneeId, setAssigneeId] = useState<string>("");
 	const [assigning, setAssigning] = useState(false);
 	const [assignError, setAssignError] = useState<string | null>(null);
+	const [reason, setReason] = useState<string>("");
 
 	const eligibleAssignees = assignees.filter((a) => a.branch === item.branch || !item.branch || item.branch === "");
 
@@ -799,10 +850,40 @@ function PreviewPane({
 				await onAssignConsultation(item.record.id, to);
 			} else if (item.kind === "application" && item.action === "assign") {
 				await onAssignApplication(item.record.id, to);
+			} else if (item.kind === "handoff" && item.action === "resolve") {
+				await onResolveHandoff(item.record.id, "assign", { opsUserId: to.opsUserId, reason: reason || undefined });
 			}
 			await onAssigned();
 		} catch (err) {
 			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not assign");
+		} finally {
+			setAssigning(false);
+		}
+	}
+
+	async function keepHandler() {
+		if (item.kind !== "handoff") return;
+		setAssigning(true);
+		setAssignError(null);
+		try {
+			await onResolveHandoff(item.record.id, "keep", { reason: reason || undefined });
+			await onAssigned();
+		} catch (err) {
+			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not resolve");
+		} finally {
+			setAssigning(false);
+		}
+	}
+
+	async function defer() {
+		if (item.kind !== "handoff") return;
+		setAssigning(true);
+		setAssignError(null);
+		try {
+			await onDeferHandoff(item.record.id, reason || undefined);
+			await onAssigned();
+		} catch (err) {
+			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not defer");
 		} finally {
 			setAssigning(false);
 		}
@@ -815,11 +896,15 @@ function PreviewPane({
 				? "Open Applications"
 				: item.kind === "visa"
 					? "Open Visa Processing"
-					: item.kind === "applicant"
-						? "Open Applicants"
-						: item.kind === "invoice"
-							? "Open Invoices"
-							: "Open Leads";
+					: item.kind === "handoff"
+						? item.record.stage === "visa_processing"
+							? "Open Visa Processing"
+							: "Open Applications"
+						: item.kind === "applicant"
+							? "Open Applicants"
+							: item.kind === "invoice"
+								? "Open Invoices"
+								: "Open Leads";
 
 	return (
 		<div style={{ padding: "1.25rem" }}>
@@ -845,9 +930,59 @@ function PreviewPane({
 			{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
 			{item.kind === "application" && <ApplicationDetails a={item.record} />}
 			{item.kind === "visa" && <VisaDetails a={item.record} />}
+			{item.kind === "handoff" && <HandoffDetails h={item.record} />}
 			{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
 			{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
 			{item.kind === "lead" && <LeadDetails lead={item.record} />}
+
+			{item.kind === "handoff" && canAssignWork && (
+				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
+					<div className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+						This stage needs an owner before it can start. Keep the previous handler, assign a specialist, or defer the decision.
+					</div>
+					<label className="field" style={{ marginBottom: "0.75rem" }}>
+						<span className="field-label">Assign a specialist</span>
+						<select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+							<option value="">Select staff…</option>
+							{eligibleAssignees.map((a) => (
+								<option key={a.opsUserId || a.email} value={a.opsUserId || a.email}>
+									{a.name} {a.branch ? `(${a.branch})` : ""}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="field" style={{ marginBottom: "0.75rem" }}>
+						<span className="field-label">Reason (optional)</span>
+						<input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this change / assignment" />
+					</label>
+					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+						<button
+							className="btn btn--primary btn--sm"
+							onClick={doAssign}
+							disabled={!assigneeId || assigning}
+						>
+							{assigning ? "Assigning…" : "Assign ↗"}
+						</button>
+						{item.record.fromOpsUserName && (
+							<button
+								className="btn btn--ghost btn--sm"
+								onClick={keepHandler}
+								disabled={assigning}
+							>
+								{assigning ? "Resolving…" : `Keep ${item.record.fromOpsUserName}`}
+							</button>
+						)}
+						<button
+							className="btn btn--ghost btn--sm"
+							onClick={defer}
+							disabled={assigning}
+						>
+							{assigning ? "Deferring…" : "Assign later"}
+						</button>
+					</div>
+					{assignError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{assignError}</p>}
+				</div>
+			)}
 
 			{item.action === "assign" && canAssignWork && (
 				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
@@ -915,6 +1050,27 @@ function VisaDetails({ a }: { a: MockApplication }) {
 			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Invoice paid:</strong> {a.visaInvoicePaid ? "Yes" : "No"}</p>
 			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
+		</div>
+	);
+}
+
+function HandoffDetails({ h }: { h: StageHandoff }) {
+	return (
+		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+			<p style={{ margin: 0 }}><strong>Application:</strong> {h.applicationNumber ?? h.applicationId}</p>
+			<p style={{ margin: 0 }}><strong>Stage:</strong> {h.stage === "visa_processing" ? "Visa processing" : h.stage}</p>
+			<p style={{ margin: 0 }}><strong>Source:</strong> {h.source === "visa_payment" ? "Visa payment received" : h.source === "migration" ? "Existing case setup" : "Stage transition"}</p>
+			<p style={{ margin: 0 }}><strong>Previous handler:</strong> {h.fromOpsUserName ?? "None"}</p>
+			{h.deferCount > 0 && (
+				<p style={{ margin: 0 }}>
+					<strong>Deferred:</strong> {h.deferCount}×{h.deferredAt ? ` · last ${timeAgo(h.deferredAt)}` : ""}
+				</p>
+			)}
+			{h.reason && (
+				<p style={{ margin: 0 }}>
+					<strong>Reason:</strong> {h.reason}
+				</p>
+			)}
 		</div>
 	);
 }

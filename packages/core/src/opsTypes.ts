@@ -168,7 +168,7 @@ export interface MockConsultation {
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";
 
-export type VisaStage = "locked" | "pending" | "biometrics" | "decision" | "complete";
+export type VisaStage = "locked" | "awaiting_handler" | "pending" | "biometrics" | "decision" | "complete";
 
 /**
  * Ops spells this plural and allows "unset"; the portal spells it singular with

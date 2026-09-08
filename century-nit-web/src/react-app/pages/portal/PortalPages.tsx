@@ -3752,6 +3752,7 @@ export function PortalVisaTracking() {
 
 const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 	locked: "Visa case not started yet. Settle the visa invoice to open it.",
+	awaiting_handler: "Visa payment received. We are assigning your visa specialist — you'll be notified once your case handler is confirmed.",
 	pending: "Visa payment received — your handler has opened your visa case.",
 	biometrics: "Visa case in progress. Attend your biometrics / appointment when scheduled.",
 	decision: "Visa case in progress. Awaiting the authority's decision.",
@@ -3768,8 +3769,9 @@ function VisaTrackingInner() {
 		{ id: "decision", label: "Authority decision", detail: "Awaiting decision" },
 		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
 	] as const;
-	const order = ["locked", "pending", "biometrics", "decision", "complete"] as const;
+	const order = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"] as const;
 	const currentIndex = order.indexOf(application.visaStatus);
+	const assigningHandler = application.visaStatus === "awaiting_handler";
 
 	if (!paid) {
 		return (
@@ -3811,6 +3813,15 @@ function VisaTrackingInner() {
 					{VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…"}
 				</p>
 			</div>
+			{assigningHandler && (
+				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
+					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your specialist</p>
+					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.5rem" }}>
+						Your payment is confirmed. Centurion is matching your case to a visa specialist — you'll get a
+						notification with your handler's details once your case is open.
+					</p>
+				</div>
+			)}
 			<ol className="visa-track">
 				{steps.map((step, index) => {
 					const stepIndex = order.indexOf(step.id);

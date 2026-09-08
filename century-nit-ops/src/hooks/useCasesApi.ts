@@ -21,6 +21,8 @@ import {
 	type VisaStage,
 	type JourneyStage,
 	type UpdateSchoolStatus,
+	type StageHandoff,
+	type StageHandoffDecision,
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -235,6 +237,7 @@ export function useCasesApi() {
 	const [applications, setApplications] = useState<MockApplication[]>([]);
 	const [applicants, setApplicants] = useState<MockApplicant[]>([]);
 	const [assignees, setAssignees] = useState<Assignee[]>([]);
+	const [handoffs, setHandoffs] = useState<StageHandoff[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -242,11 +245,12 @@ export function useCasesApi() {
 	const refresh = useCallback(async () => {
 		setError(null);
 		try {
-			const [c, a, p, staff] = await Promise.all([
+			const [c, a, p, staff, hf] = await Promise.all([
 				consultationsApi.list(),
 				applicationsApi.list(),
 				applicantsApi.list(),
 				staffApi.list().catch(() => ({ staff: [] })),
+				apiFetch<{ handoffs: StageHandoff[] }>(`${API_PREFIX}/applications/handoffs?status=pending`).catch(() => ({ handoffs: [] })),
 			]);
 			const apps = Array.isArray(a?.applications) ? a.applications : [];
 			const rawConsultations = Array.isArray(c?.consultations) ? c.consultations : [];
@@ -256,9 +260,10 @@ export function useCasesApi() {
 			setConsultations(rawConsultations.map(toConsultation));
 			setApplications(apps.map(toApplication));
 			setApplicants(rawApplicants.map((row) => toApplicant(row, apps)));
+			setHandoffs(Array.isArray(hf?.handoffs) ? hf.handoffs : []);
 			setAssignees(
 				rawStaff
-					.filter((s) => s.active && (s.role === "consultant" || s.role === "coordinator"))
+					.filter((s) => s.active)
 					.map((s) => ({ name: s.name, email: s.email, branch: s.branch ?? "", opsUserId: s.id })),
 			);
 		} catch (err) {
@@ -290,6 +295,8 @@ export function useCasesApi() {
 			t === "case.assigned" ||
 			t === "case.updated" ||
 			t === "stage.changed" ||
+			t === "stage.needs_handler" ||
+			t === "assignment.handoff_resolved" ||
 			t === "visa.stage_changed" ||
 			t === "coordinator_delegated" ||
 			t === "coordinator_reassigned" ||
@@ -348,6 +355,7 @@ export function useCasesApi() {
 		applications,
 		applicants,
 		assignees,
+		handoffs,
 		loading,
 		error,
 		refresh,
@@ -495,5 +503,23 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.reassign(id, { newCoordinatorOpsUserId, reason })),
 		getWorkload: () => consultationsApi.workload(),
 		getActivity: (id: string) => consultationsApi.getActivity(id),
+		resolveHandoff: async (
+			handoffId: string,
+			decision: StageHandoffDecision,
+			opts?: { opsUserId?: string; reason?: string },
+		) => {
+			await apiFetch<StageHandoff>(`${API_PREFIX}/applications/handoffs/${handoffId}/resolve`, {
+				method: "POST",
+				body: JSON.stringify({ decision, opsUserId: opts?.opsUserId, reason: opts?.reason }),
+			});
+			await refresh();
+		},
+		deferHandoff: async (handoffId: string, reason?: string) => {
+			await apiFetch<StageHandoff>(`${API_PREFIX}/applications/handoffs/${handoffId}/defer`, {
+				method: "POST",
+				body: JSON.stringify({ reason }),
+			});
+			await refresh();
+		},
 	};
 }

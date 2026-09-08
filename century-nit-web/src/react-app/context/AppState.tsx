@@ -96,7 +96,7 @@ export type AuthUser = {
 };
 
 export type DocReviewStatus = "idle" | "pending" | "approved" | "rejected";
-export type VisaStatus = "locked" | "pending" | "biometrics" | "decision" | "complete";
+export type VisaStatus = "locked" | "awaiting_handler" | "pending" | "biometrics" | "decision" | "complete";
 
 export type InvoiceLine = {
 	id: string;

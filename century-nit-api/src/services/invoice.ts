@@ -517,12 +517,20 @@ export async function recordPayment(input: {
 			if (updated.type === "application" && status === "paid") {
 				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "visa" && status === "paid") {
-				// Paying the visa invoice both marks it paid and unlocks tracking:
-				// advance visaStage from locked → pending so the portal shows progress.
-				await txDb
+				// Paying the visa invoice marks it paid and opens the assignment
+				// handoff. The case goes to awaiting_handler — visa tracking does
+				// NOT open until a manager assigns a visa specialist, which moves
+				// visaStage awaiting_handler → pending. Idempotent: only fires
+				// from `locked`, and createOrGet dedupes the handoff.
+				const [paidApp] = await txDb
 					.update(applications)
-					.set({ visaInvoicePaid: true, visaStage: "pending" })
-					.where(and(eq(applications.id, targetAppId), eq(applications.visaStage, "locked")));
+					.set({ visaInvoicePaid: true, visaStage: "awaiting_handler" })
+					.where(and(eq(applications.id, targetAppId), eq(applications.visaStage, "locked")))
+					.returning();
+				if (paidApp) {
+					const { ensureVisaHandoffForApplication } = await import("./handoffs.js");
+					await ensureVisaHandoffForApplication({ applicationId: targetAppId, tx: txDb });
+				}
 			} else if (updated.type === "travel" && status === "paid") {
 				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "agency") {

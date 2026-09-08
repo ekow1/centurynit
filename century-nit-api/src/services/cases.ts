@@ -51,6 +51,12 @@ import {
 	syncLeadAssignment,
 	syncLeadFromApplicationStatus,
 } from "./leads.js";
+import {
+	activeHandlerFor,
+	createOrGetHandoff,
+	isOwnerClassBoundary,
+	stageHasActiveHandler,
+} from "./handoffs.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
 export type ConsultationRow = typeof consultations.$inferSelect;
@@ -2030,6 +2036,19 @@ export async function setApplicationStage(
 	// Leaving a stage the case was in concludes that stage's assignment.
 	if (stage !== row.stage) {
 		markStageCompleted(id, row.stage, actor.opsUserId);
+		// Crossing a specialist boundary (e.g. consultant → visa officer) needs
+		// an explicit assignment decision. Queue the handoff when the new stage
+		// is not already owned so the stage is never silently left without a
+		// handler. `signalStageNeedsHandler` below is its alert.
+		if (isOwnerClassBoundary(row.stage, stage) && !(await stageHasActiveHandler(id, stage))) {
+			const handler = await activeHandlerFor(id, row.stage);
+			await createOrGetHandoff({
+				applicationId: id,
+				stage,
+				source: "stage_transition",
+				fromOpsUserId: handler?.opsUserId ?? null,
+			});
+		}
 		// The new stage may be unowned — surface it instead of silent drift.
 		void signalStageNeedsHandler(id, stage);
 	}
@@ -2081,6 +2100,17 @@ export async function setApplicationVisaStage(
 				"Start the visa process by paying the visa invoice first. Visa tracking stays locked until the invoice is settled.",
 			);
 		}
+	}
+
+	// `awaiting_handler` is a hard gate: only a manager resolving the stage
+	// handoff moves the case to `pending` (handoffs service). Staff nudging
+	// progress must not bypass the assignment decision.
+	if (row.visaStage === "awaiting_handler" && stage !== "locked" && stage !== "awaiting_handler") {
+		throw new HttpError(
+			409,
+			"VISA_ASSIGNMENT_PENDING",
+			"A visa specialist is being assigned. Resolve the assignment from the Workspace before visa tracking opens.",
+		);
 	}
 
 	const [updated] = await db

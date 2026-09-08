@@ -32,6 +32,12 @@ export const stageAssignmentStatusSchema = z.enum([
 ]);
 export type StageAssignmentStatus = z.infer<typeof stageAssignmentStatusSchema>;
 
+export const stageHandoffStatusSchema = z.enum(["pending", "resolved", "cancelled"]);
+export type StageHandoffStatus = z.infer<typeof stageHandoffStatusSchema>;
+
+export const stageHandoffDecisionSchema = z.enum(["keep", "assign"]);
+export type StageHandoffDecision = z.infer<typeof stageHandoffDecisionSchema>;
+
 export const messageTypeSchema = z.enum(["text", "system", "action"]);
 export type ChatMessageType = z.infer<typeof messageTypeSchema>;
 
@@ -415,6 +421,59 @@ export const createStageAssignmentSchema = z.object({
 	scope: z.enum(["stage", "all"]).optional().default("stage"),
 });
 export type CreateStageAssignment = z.infer<typeof createStageAssignmentSchema>;
+
+/**
+ * Stage handoff — an assignment decision waiting on a manager.
+ *
+ * The queue item the Workspace renders as an "Assignment required" card.
+ * Resolution writes an active stage_assignment via assignStageOfficer and
+ * activates the stage (`visa awaiting_handler → pending`).
+ */
+export const stageHandoffSchema = z.object({
+	id: z.string().uuid(),
+	applicationId: z.string().uuid(),
+	applicationNumber: z.string().nullable(),
+	applicantName: z.string().nullable(),
+	stage: z.string(),
+	source: z.string(),
+	status: stageHandoffStatusSchema,
+	decision: stageHandoffDecisionSchema.nullable(),
+	fromOpsUserId: z.string().uuid().nullable(),
+	fromOpsUserName: z.string().nullable(),
+	resolvedOpsUserId: z.string().uuid().nullable(),
+	resolvedOpsUserName: z.string().nullable(),
+	decidedBy: z.string().uuid().nullable(),
+	decidedAt: z.string().datetime().nullable(),
+	deferredAt: z.string().datetime().nullable(),
+	deferCount: z.number().int().nonnegative().default(0),
+	reason: z.string().nullable(),
+	createdAt: z.string().datetime(),
+});
+export type StageHandoff = z.infer<typeof stageHandoffSchema>;
+
+export const listStageHandoffsQuerySchema = z.object({
+	status: z.enum(["pending", "all"]).optional().default("pending"),
+});
+export type ListStageHandoffsQuery = z.infer<typeof listStageHandoffsQuerySchema>;
+
+export const stageHandoffListSchema = z.object({
+	handoffs: z.array(stageHandoffSchema),
+	total: z.number().int().nonnegative(),
+});
+export type StageHandoffList = z.infer<typeof stageHandoffListSchema>;
+
+export const resolveStageHandoffSchema = z.object({
+	decision: stageHandoffDecisionSchema,
+	/** Required when `decision === "assign"`; ignored for `keep`. */
+	opsUserId: z.string().uuid().optional(),
+	reason: z.string().max(500).optional(),
+});
+export type ResolveStageHandoff = z.infer<typeof resolveStageHandoffSchema>;
+
+export const deferStageHandoffSchema = z.object({
+	reason: z.string().max(500).optional(),
+});
+export type DeferStageHandoff = z.infer<typeof deferStageHandoffSchema>;
 
 /** Staff directory entry with presence + load — the OPS hub view. */
 export const staffDirectoryEntryDetailedSchema = z.object({

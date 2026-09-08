@@ -223,7 +223,7 @@ export const APPLICATION_STATUS_TO_OPS: Record<CaseApplicationStatus, string> = 
 	REJECTED: "Rejected",
 };
 
-export const visaStageSchema = z.enum(["locked", "pending", "biometrics", "decision", "complete"]);
+export const visaStageSchema = z.enum(["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"]);
 export type VisaStage = z.infer<typeof visaStageSchema>;
 
 /**

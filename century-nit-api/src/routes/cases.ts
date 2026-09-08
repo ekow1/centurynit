@@ -109,13 +109,25 @@ import {
 	portalStateSchema,
 	updatePortalStateSchema,
 	notificationSchema,
+	deferStageHandoffSchema,
+	stageHandoffListSchema,
+	stageHandoffSchema,
+	listStageHandoffsQuerySchema,
+	resolveStageHandoffSchema,
 } from "century-nit-shared";
+import {
+	deferStageHandoff,
+	getStageHandoff,
+	listStageHandoffs,
+	resolveStageHandoff,
+} from "../services/handoffs.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
 	requireModule,
+	requireRole,
 	type AuthVariables,
 	type StaffContext,
 } from "../middleware/auth.js";
@@ -431,6 +443,107 @@ applicationsRouter.openapi(
 		const rows = await listApplications(c.get("staff")!);
 		const list = await Promise.all(rows.map(serializeApplication));
 		return c.json({ applications: list, total: list.length });
+	},
+);
+
+/* ── Stage handoffs (assignment decision queue) ──────────────────────────── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/handoffs",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		request: {
+			query: listStageHandoffsQuerySchema,
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffListSchema } },
+				description: "Stage handoffs (assignment decisions) awaiting resolution",
+			},
+		},
+	}),
+	async (c) => {
+		const handoffs = await listStageHandoffs(c.req.valid("query"));
+		return c.json({ handoffs, total: handoffs.length });
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/handoffs/{id}",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffSchema } },
+				description: "Single stage handoff",
+			},
+		},
+	}),
+	async (c) => c.json(await getStageHandoff(c.req.valid("param").id)),
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/handoffs/{id}/resolve",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: resolveStageHandoffSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffSchema } },
+				description: "Handoff resolved — stage assignment written, stage activated",
+			},
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json");
+		return c.json(
+			await resolveStageHandoff({
+				handoffId: c.req.valid("param").id,
+				decision: body.decision,
+				opsUserId: body.opsUserId,
+				reason: body.reason,
+				actor: actorFrom(c.get("staff")!),
+			}),
+		);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/handoffs/{id}/defer",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: deferStageHandoffSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: stageHandoffSchema } },
+				description: "Handoff deferred — still pending, managers re-alerted",
+			},
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json");
+		return c.json(
+			await deferStageHandoff({
+				handoffId: c.req.valid("param").id,
+				reason: body.reason,
+				actor: actorFrom(c.get("staff")!),
+			}),
+		);
 	},
 );
 

@@ -1251,7 +1251,11 @@ export function PortalJourney() {
 							<div className="journey-track__cell">
 								<p className="journey-track__label">Visa tracking</p>
 								<p className="journey-track__value" style={{ textTransform: "capitalize" }}>
-									{application.visaStatus.replace("_", " ")}
+									{application.visaStatus === "locked"
+										? "Not started"
+										: application.visaStatus === "awaiting_handler"
+											? "Awaiting handler assignment"
+											: application.visaStatus.replace("_", " ")}
 								</p>
 								<p className="muted mt-3">
 									Updated{" "}

@@ -17,10 +17,11 @@ const VISA_STEPS: { id: VisaStage; label: string }[] = [
 	{ id: "complete", label: "Complete" },
 ];
 
-const VISA_ORDER: VisaStage[] = ["locked", "pending", "biometrics", "decision", "complete"];
+const VISA_ORDER: VisaStage[] = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"];
 
 function visaStepLabel(stage?: VisaStage): string {
 	if (!stage || stage === "locked") return "Awaiting payment";
+	if (stage === "awaiting_handler") return "Awaiting handler assignment";
 	const step = VISA_STEPS.find((s) => s.id === stage);
 	return step ? step.label : stage;
 }
@@ -105,6 +106,7 @@ export function EnterpriseVisa() {
 
 	function advanceVisa(app: MockApplication) {
 		const cur = app.visaStage ?? "locked";
+		if (cur === "awaiting_handler") return;
 		const idx = VISA_ORDER.indexOf(cur);
 		const next = VISA_ORDER[idx + 1];
 		if (next) setVisaStage(app.appId, next);
@@ -390,7 +392,19 @@ export function EnterpriseVisa() {
 								{/* Visa Tracking Steps */}
 								<div className="card">
 									<p className="eyebrow mb-3">Visa Tracking</p>
-									<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+									{active.visaStage === "awaiting_handler" ? (
+										<div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "0.5rem", padding: "0.75rem" }}>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#854d0e", margin: 0 }}>
+												Awaiting handler assignment
+											</p>
+											<p style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem", color: "#854d0e", lineHeight: 1.5 }}>
+												Payment received. A manager needs to assign this case to a visa specialist before tracking can
+												begin — resolve the "Assignment required" card on the Workspace.
+											</p>
+										</div>
+									) : (
+										<>
+										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 										{VISA_STEPS.map((s, i) => {
 											const curIdx = active.visaStage ? VISA_ORDER.indexOf(active.visaStage) : -1;
 											const stepIdx = VISA_ORDER.indexOf(s.id);
@@ -442,6 +456,8 @@ export function EnterpriseVisa() {
 											);
 										})}
 									</div>
+									</>
+									)}
 								</div>
 
 								{/* Counselor Note */}

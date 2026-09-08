@@ -1,0 +1,64 @@
+import { describe, expect, it } from "vitest";
+import type { JourneyStage } from "century-nit-shared";
+import { STAGE_OWNER_CLASS, isOwnerClassBoundary } from "./handoffs.js";
+
+/**
+ * §Assignment decisions — handoffs exist so that ownership never silently
+ * carries over: when an application crosses from one specialist class to
+ * another the manager makes the keep/assign/defer call. The boundary rule is
+ * pure logic, so it is pinned here without a database.
+ */
+
+const STAGES: JourneyStage[] = [
+	"document_verification",
+	"school_submission",
+	"offer_letter_review",
+	"visa_processing",
+	"payment_execution",
+	"travel_assistance",
+	"completed",
+];
+
+describe("STAGE_OWNER_CLASS", () => {
+	it("covers every journey stage", () => {
+		for (const stage of STAGES) {
+			expect(STAGE_OWNER_CLASS[stage], stage).toBeTruthy();
+		}
+	});
+
+	it("groups stages by their owning specialist class", () => {
+		expect(STAGE_OWNER_CLASS.document_verification).toBe("consultant");
+		expect(STAGE_OWNER_CLASS.school_submission).toBe("consultant");
+		expect(STAGE_OWNER_CLASS.offer_letter_review).toBe("consultant");
+		expect(STAGE_OWNER_CLASS.visa_processing).toBe("visa_officer");
+		expect(STAGE_OWNER_CLASS.payment_execution).toBe("finance_officer");
+		expect(STAGE_OWNER_CLASS.travel_assistance).toBe("travel_officer");
+		expect(STAGE_OWNER_CLASS.completed).toBe("none");
+	});
+});
+
+describe("isOwnerClassBoundary", () => {
+	it("is false within a consultant-owned stage run", () => {
+		expect(isOwnerClassBoundary("document_verification", "school_submission")).toBe(false);
+		expect(isOwnerClassBoundary("school_submission", "offer_letter_review")).toBe(false);
+		expect(isOwnerClassBoundary("offer_letter_review", "school_submission")).toBe(false);
+	});
+
+	it("is true wherever the owning class changes", () => {
+		expect(isOwnerClassBoundary("offer_letter_review", "visa_processing")).toBe(true);
+		expect(isOwnerClassBoundary("visa_processing", "payment_execution")).toBe(true);
+		expect(isOwnerClassBoundary("payment_execution", "travel_assistance")).toBe(true);
+		expect(isOwnerClassBoundary("travel_assistance", "completed")).toBe(true);
+	});
+
+	it("is symmetric across a boundary", () => {
+		expect(isOwnerClassBoundary("visa_processing", "offer_letter_review")).toBe(true);
+		expect(isOwnerClassBoundary("completed", "travel_assistance")).toBe(true);
+	});
+
+	it("is false when the stage is unchanged", () => {
+		for (const stage of STAGES) {
+			expect(isOwnerClassBoundary(stage, stage), stage).toBe(false);
+		}
+	});
+});

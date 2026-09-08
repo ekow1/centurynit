@@ -1,6 +1,10 @@
+import { useEffect, useState } from "react";
 import { useAppState } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
+import { meApi, ApiError } from "century-nit-core/api";
+import { useNotifier } from "../../components/notifier/Notifier";
+import { usdFromCents, type ApiInvoice } from "century-nit-shared";
 
 const CATEGORY_LABELS: Record<string, string> = {
 	travel: "Travel",
@@ -29,35 +33,86 @@ export function PortalPreDeparture() {
 }
 
 function PreDepartureInner() {
-	const { preDepartureTasks, togglePreDepartureTask, preDepartureProgress, application } =
+	const { preDepartureTasks, togglePreDepartureTask, preDepartureProgress, application, syncFromServer } =
 		useAppState();
+	const { toast } = useNotifier();
 
-	const finished =
-		Boolean(application.completedAt) ||
-		(Boolean(application.agencySettledAt) &&
-			application.visaStatus === "complete" &&
-			application.travelInvoicePaid);
+	const ticketingPaid = Boolean(application.travelInvoicePaid);
 
-	if (!finished) {
+	// Fetch the real server travel invoice on mount so the card reflects
+	// actual status and a real Paystack checkout can be charged against it.
+	const [serverInv, setServerInv] = useState<ApiInvoice | null>(null);
+	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+
+	useEffect(() => {
+		let cancelled = false;
+		meApi
+			.invoices()
+			.then(({ invoices }) => {
+				if (cancelled) return;
+				setServerInv(invoices.find((i) => i.type === "travel") ?? null);
+			})
+			.catch(() => {});
+		return () => { cancelled = true; };
+	}, []);
+
+	const trip = serverInv ?? null;
+	const tripDue = Boolean(trip) && trip.status !== "paid" && trip.balanceCents > 0;
+	const tripAmountUsd = (trip?.balanceCents ?? 0) > 0 ? trip.balanceCents : trip?.subtotalCents ?? 0;
+	const ticketingEffectivePaid = ticketingPaid || (trip?.status === "paid");
+
+	async function payTicketing() {
+		setPayPhase("loading");
+		try {
+			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
+			if (!backend) {
+				const { invoices } = await meApi.invoices();
+				backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
+			}
+			if (!backend) {
+				toast.error(
+					"Your ticketing invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			const checkout = await meApi.paystackCheckout(backend.id);
+			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
+				window.location.href = checkout.authorizationUrl;
+				return;
+			}
+			toast.error("Could not initialize Paystack checkout.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
+			);
+		} finally {
+			setPayPhase("idle");
+		}
+	}
+
+	const [advancing, setAdvancing] = useState(false);
+	async function handleAdvanceToPlan() {
+		if (advancing) return;
+		setAdvancing(true);
+		try {
+			await meApi.advanceToPaymentPlan();
+			await syncFromServer();
+			toast.success("Your payment plan chapter is now open.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Could not open your payment plan. Please try again.",
+			);
+			setAdvancing(false);
+		}
+	}
+
+	if (payPhase === "loading") {
 		return (
 			<div className="portal-page">
-				<header className="portal-page__header">
-					<div>
-						<p className="eyebrow">Pre-departure</p>
-						<h1 className="page-title mt-1">Almost ready to fly</h1>
-						<p className="lead mt-2">
-							Complete your visa, pay your travel invoice, and settle the agency service fee first — then your
-							pre-departure checklist unlocks here.
-						</p>
-					</div>
-				</header>
-				<div className="row mt-4">
-					<Button to="/portal/visa" arrow>
-						Visa & travel
-					</Button>
-					<Button to="/portal/agency" variant="secondary">
-						Agency settlement
-					</Button>
+				<div className="loading-overlay">
+					<div className="spinner" aria-hidden />
+					<p className="mono">Contacting payment provider…</p>
+					<p className="muted">Charging ${usdFromCents(tripAmountUsd)} ticketing fee</p>
 				</div>
 			</div>
 		);
@@ -73,58 +128,80 @@ function PreDepartureInner() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Pre-departure</p>
-					<h1 className="page-title mt-1">Pre-departure briefing</h1>
+					<p className="eyebrow">Travel assistance</p>
+					<h1 className="page-title mt-1">Almost ready to fly</h1>
 					<p className="lead mt-2">
-						Your application is complete. Before you fly, work through this checklist to ensure
-						a smooth transition to your destination.
+						Pay your ticketing fee, work through the checklist below, and your handler clears you
+						for departure. All other services are covered by your payment plan.
 					</p>
-				</div>
-				<div className="success-check" aria-hidden>
-					✓
 				</div>
 			</header>
 
-			<div className="stat-band mt-4">
-				<div className="stat-cell">
-					<p className="stat-cell__label">Checklist progress</p>
-					<p className="stat-cell__value">{preDepartureProgress}%</p>
+			{/* Ticketing fee — this chapter's payment */}
+			<section className="mt-4">
+				<div className="card card--pad">
+					<p className="eyebrow">Ticketing fee</p>
+					<div className="row mt-2" style={{ alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+						<div>
+							<p className="display" style={{ fontSize: "1.25rem" }}>
+								{tripDue || tripAmountUsd > 0 ? (
+									<>${usdFromCents(trip ? (trip.balanceCents > 0 ? trip.balanceCents : trip.subtotalCents) : tripAmountUsd)}</>
+								) : (
+									"Flights & transfers"
+								)}
+							</p>
+							<p className="muted" style={{ fontSize: "0.85rem" }}>
+								{ticketingEffectivePaid
+									? "Paid — your flight and transfer ticketing is confirmed."
+									: tripDue
+										? `Invoice ${trip?.invoiceNumber ?? ""} · ${trip?.status === "partial" ? "partially paid, balance outstanding" : "awaiting payment"}`
+										: "Raised by your consultant when tickets are confirmed."}
+							</p>
+						</div>
+						<div className="row" style={{ marginLeft: "auto" }}>
+							{!ticketingEffectivePaid ? (
+								<Button variant="primary" onClick={() => void payTicketing()} disabled={!tripDue}>
+									{!tripDue && !trip ? "Awaiting invoice…" : "Pay ticketing fee"}
+								</Button>
+							) : (
+								<span className="success-check" aria-hidden>
+									✓
+								</span>
+							)}
+						</div>
+					</div>
 				</div>
-				<div className="stat-cell">
-					<p className="stat-cell__label">Tasks done</p>
-					<p className="stat-cell__value">
-						{preDepartureTasks.filter((t) => t.done).length}/{preDepartureTasks.length}
-					</p>
-				</div>
-				<div className="stat-cell stat-cell--accent">
-					<p className="stat-cell__label">Status</p>
-					<p className="stat-cell__value">
-						{preDepartureProgress === 100 ? "Ready to fly" : "In progress"}
-					</p>
-				</div>
-			</div>
+			</section>
 
-			<div
-				style={{
-					marginTop: "1.5rem",
-					height: "6px",
-					background: "var(--muted)",
-					borderRadius: "999px",
-					overflow: "hidden",
-				}}
-			>
+			{/* Pre-departure checklist */}
+			<section className="mt-6">
+				<div className="portal-page__row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+					<p className="eyebrow">Pre-departure checklist</p>
+					<p className="muted" style={{ fontSize: "0.85rem" }}>
+						{preDepartureTasks.filter((t) => t.done).length}/{preDepartureTasks.length} done
+					</p>
+				</div>
+
 				<div
 					style={{
-						width: `${preDepartureProgress}%`,
-						height: "100%",
-						background: "var(--foreground)",
-						transition: "width 300ms ease",
+						marginTop: "0.75rem",
+						height: "6px",
+						background: "var(--muted)",
+						borderRadius: "999px",
+						overflow: "hidden",
 					}}
-				/>
-			</div>
+				>
+					<div
+						style={{
+							width: `${preDepartureProgress}%`,
+							height: "100%",
+							background: "var(--foreground)",
+							transition: "width 300ms ease",
+						}}
+					/>
+				</div>
 
-			<section className="mt-6">
-				<div className="portal-grid portal-grid--2 portal-grid--align-start">
+				<div className="portal-grid portal-grid--2 portal-grid--align-start mt-4">
 					{byCategory.map(({ category, tasks }) => {
 						const done = tasks.filter((t) => t.done).length;
 						return (
@@ -225,23 +302,43 @@ function PreDepartureInner() {
 				</div>
 			</section>
 
-			{preDepartureProgress === 100 ? (
-				<div className="card card--pad mt-5 next-action">
-					<p className="eyebrow">All clear!</p>
-					<p className="display mt-2" style={{ fontSize: "1.3rem" }}>
-						You're ready to fly 🛫
-					</p>
-					<p className="muted mt-1">
-						All pre-departure tasks are complete. Safe travels, and don't forget to check in
-						with us after you arrive!
-					</p>
-					<div className="row mt-3">
-						<Button to="/portal/complete" variant="secondary">
-							Back to completion summary
-						</Button>
-					</div>
-				</div>
-			) : null}
+			{/* Next action: move on to the payment plan once the ticketing fee is paid */}
+			<div className="card card--pad mt-5 next-action">
+				{ticketingEffectivePaid ? (
+					<>
+						<p className="eyebrow">Next step</p>
+						<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+							{preDepartureProgress === 100 ? "You're ready to fly 🛫" : "Ticketing fee paid"}
+						</p>
+						<p className="muted mt-1">
+							{preDepartureProgress === 100
+								? "Your checklist is done and your ticketing is settled. Move to your payment plan, settle your service fee, then complete your journey."
+								: "Your ticketing fee is settled. You can keep working the checklist here, or move to your payment plan now."}
+						</p>
+						<div className="row mt-3">
+							<Button className="btn btn--primary" onClick={() => void handleAdvanceToPlan()} disabled={advancing}>
+								{advancing ? "Opening payment plan…" : "Move to Payment Plan →"}
+							</Button>
+							{preDepartureProgress === 100 ? (
+								<Button to="/portal/payment-execution" variant="ghost">
+									See payment plan
+								</Button>
+							) : null}
+						</div>
+					</>
+				) : (
+					<>
+						<p className="eyebrow">Almost there</p>
+						<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+							Pay your ticketing fee
+						</p>
+						<p className="muted mt-1">
+							Settle your ticketing fee above to open your payment plan chapter, where you'll
+							choose how to cover the agency service fee.
+						</p>
+					</>
+				)}
+			</div>
 
 			<div className="card card--pad mt-5">
 				<p className="eyebrow">Need help?</p>
@@ -250,13 +347,6 @@ function PreDepartureInner() {
 					the portal if you have questions about any of these tasks. We're here to
 					help you prepare for departure.
 				</p>
-				<div className="row mt-3">
-					{/* There is no /portal/messages route — FloatingChat is a widget, not
-					    a page. Send the applicant home and point them at the FAB. */}
-					<Button to="/portal/home" variant="ghost">
-						Open chat (bottom right)
-					</Button>
-				</div>
 			</div>
 		</div>
 	);

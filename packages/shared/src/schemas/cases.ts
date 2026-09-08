@@ -19,8 +19,8 @@ export const journeyStageSchema = z.enum([
 	"school_submission",
 	"offer_letter_review",
 	"visa_processing",
-	"payment_execution",
 	"travel_assistance",
+	"payment_execution",
 	"completed",
 ]);
 export type JourneyStage = z.infer<typeof journeyStageSchema>;
@@ -31,8 +31,8 @@ export const JOURNEY_STAGES: JourneyStage[] = [
 	"school_submission",
 	"offer_letter_review",
 	"visa_processing",
-	"payment_execution",
 	"travel_assistance",
+	"payment_execution",
 	"completed",
 ];
 
@@ -120,23 +120,26 @@ export function canAdvanceToStage(
 			return checks.appFeePaid
 				? null
 				: "Cannot advance: application fee must be paid before reviewing offers.";
-		case "payment_execution":
+		case "travel_assistance":
 			return checks.visaStage === "complete"
 				? null
-				: "Cannot advance to Payment Execution: visa processing must be complete.";
-		case "travel_assistance":
-			if (!checks.paymentPlanId) {
-				return "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
-			}
-			if (!checks.agencySettled) {
-				return "Cannot advance to Travel Assistance: agency service fee is not settled.";
-			}
+				: "Cannot advance to Travel Assistance: visa processing must be complete.";
+		case "payment_execution":
 			if (!checks.travelInvoicePaid) {
-				return "Cannot advance to Travel Assistance: the travel invoice is not paid.";
+				return "Cannot advance to Payment Execution: the travel invoice (ticketing fee) is not paid.";
 			}
 			return null;
 		case "completed": {
-			if (!checks.agencySettled) return "Cannot mark complete: agency settlement is not complete.";
+			if (!checks.paymentPlanId) return "Cannot mark complete: applicant has not chosen a payment plan.";
+			if (checks.paymentPlanId === "installment") {
+				if ((checks.agencyStageIndex ?? 0) < 1) {
+					return "Cannot mark complete: the first installment has not been paid.";
+				}
+			} else {
+				if (!checks.agencySettled) {
+					return "Cannot mark complete: agency settlement is not complete.";
+				}
+			}
 			if (!checks.travelInvoicePaid) return "Cannot mark complete: travel invoices are not fully settled.";
 			if (checks.travelClearance !== "cleared") return "Cannot mark complete: travel clearance is not granted.";
 			if (checks.preDepartureTasks && checks.preDepartureTasks.length > 0) {
@@ -185,8 +188,8 @@ export const PORTAL_STAGE_ORDER: string[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"payment_execution",
 	"travel_assistance",
+	"payment_execution",
 	"completed",
 ];
 

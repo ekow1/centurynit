@@ -1036,13 +1036,24 @@ export const meApi = {
 	},
 
 	/**
-	 * Advance from Payment Execution to Travel Assistance once the payment
-	 * contract is settled (plan confirmed, agency fee paid, travel invoice paid).
-	 * Payment Execution is self-serve — the server does not park this on an
-	 * assignment handoff.
+	 * Advance from Travel Assistance to Payment Execution (the plan chapter)
+	 * once the ticketing fee is paid. Travel Assistance is self-serve for the
+	 * ticketing fee — the server does not park this on an assignment handoff.
 	 */
-	advanceToTravel(): Promise<ApiApplication> {
-		return request(`${API_PREFIX}/me/application/advance-to-travel`, {
+	advanceToPaymentPlan(): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/advance-to-plan`, {
+			method: "POST",
+		});
+	},
+
+	/**
+	 * Complete the journey from Payment Execution. The gate is per-plan — full
+	 * plans need the agency service fee settled in full, installment plans only
+	 * their first installment — plus the ticketing fee, travel clearance, and
+	 * the finished pre-departure checklist.
+	 */
+	completeApplication(): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/complete`, {
 			method: "POST",
 		});
 	},

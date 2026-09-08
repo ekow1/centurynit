@@ -5,6 +5,7 @@ import { Field, Input, Select, Textarea } from "../../components/ui/Field";
 import {
 	hasAcceptedOffer,
 	hasPaymentPlan,
+	hasSettledPlan,
 	isAppInvoicePaid,
 	isAgencySettled,
 	isAgencyDepositPaid,
@@ -1390,26 +1391,27 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 	const a = application;
 	const planView = view === "plan";
 
-	// Self-service advance: Payment Execution → Travel Assistance. Open as soon
-	// as the payment contract is settled (plan + agency fee + travel invoice).
-	// The server moves the coarse stage and queues the travel-specialist handoff
-	// without parking the case.
-	const [advancing, setAdvancing] = useState(false);
-	async function handleAdvanceToTravel() {
-		if (advancing) return;
-		setAdvancing(true);
+	// Self-service completion: Payment Execution → Completed. Open once the
+	// plan is settled per-plan (full in full; installment with its first
+	// installment), the ticketing fee is paid, travel clearance is granted and
+	// the pre-departure checklist is finished. The server re-validates all of
+	// it and moves the coarse stage to the terminal state.
+	const [completing, setCompleting] = useState(false);
+	async function handleCompleteJourney() {
+		if (completing) return;
+		setCompleting(true);
 		try {
-			await meApi.advanceToTravel();
+			await meApi.completeApplication();
 			await syncFromServer();
-			toast.success("Payment execution complete — travel assistance is now open.");
-			nav("/portal/pre-departure");
+			toast.success("Your journey is complete — welcome to Century NIT.");
+			nav("/portal/home");
 		} catch (err) {
 			toast.error(
 				err instanceof ApiError
 					? err.message
-					: "Could not open travel assistance. Please try again.",
+					: "Could not complete your journey. Please try again.",
 			);
-			setAdvancing(false);
+			setCompleting(false);
 		}
 	}
 
@@ -1555,7 +1557,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "Confirm your payment plan, settle your service fee, and cover your travel invoice to open travel assistance."
+							? "How will you settle the agency service fee? Pay in full or in installments — once settled, everything else is done and you can complete your journey."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>
@@ -2040,20 +2042,33 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					<Link className="link" to="/portal/financial">Financial</Link> page.
 				</p>
 			) : null}
-			{planView && plan && settled && a.travelInvoicePaid ? (
+			{planView && hasSettledPlan(a) ? (
 				<div className="mt-6 box" style={{ maxWidth: "36rem" }}>
-					<p className="mt-0 mb-2">
-						Your payment contract is settled — travel assistance is open. Move
-						to the next stage now; your travel specialist will pick your case up
-						from the queue.
-					</p>
-					<Button
-						className="btn btn--primary"
-						onClick={handleAdvanceToTravel}
-						disabled={advancing}
-					>
-						{advancing ? "Opening travel stage…" : "Continue to Travel Assistance"}
-					</Button>
+					{a.preDepartureCompletedAt ? (
+						<>
+							<p className="mt-0 mb-2">
+								Your plan is settled. Finish the last step — complete your journey and
+								your consultant picks you up for the post-arrival plan.
+							</p>
+							<Button
+								className="btn btn--primary"
+								onClick={handleCompleteJourney}
+								disabled={completing}
+							>
+								{completing ? "Completing journey…" : "Complete journey"}
+							</Button>
+						</>
+					) : (
+						<>
+							<p className="mt-0 mb-2">
+								Your plan is settled. Finish your pre-departure checklist so your
+								handler can clear you — then you can complete your journey.
+							</p>
+							<Button className="btn btn--primary" to="/portal/pre-departure">
+								Open travel checklist
+							</Button>
+						</>
+					)}
 				</div>
 			) : null}
 		</div>

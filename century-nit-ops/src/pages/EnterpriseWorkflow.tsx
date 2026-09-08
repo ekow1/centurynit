@@ -30,8 +30,8 @@ const STAGE_NUMBERS: Record<JourneyStage, number> = {
 	school_submission: 2,
 	offer_letter_review: 3,
 	visa_processing: 4,
-	payment_execution: 5,
-	travel_assistance: 6,
+	travel_assistance: 5,
+	payment_execution: 6,
 	completed: 7,
 };
 

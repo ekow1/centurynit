@@ -677,6 +677,16 @@ export function isAgencySettled(app: ApplicationData) {
 }
 
 /**
+ * The plan's settlement gate for journey progression — per-plan. A full plan
+ * needs the agency service fee settled in full; an installment plan only its
+ * first installment (the deposit). Either satisfied state counts.
+ */
+export function hasSettledPlan(app: ApplicationData) {
+	if (!hasPaymentPlan(app)) return false;
+	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyDepositPaid;
+}
+
+/**
  * Select schools → pay application invoice → tracking starts.
  * Admitted → pay visa invoice → visa tracking. Then payment plan → agency → complete.
  *
@@ -729,14 +739,17 @@ function computeHeuristicProcessStage(
 	const visaPaid = isVisaInvoicePaid(app);
 	const visaDone = app.visaStatus === "complete";
 	const preDepartureDone = Boolean(app.preDepartureCompletedAt);
-	const paymentDone =
-		hasPaymentPlan(app) && isAgencySettled(app) && Boolean(app.travelInvoicePaid);
+	const ticketingPaid = Boolean(app.travelInvoicePaid);
 
 	// Money is no longer a stage. The spine describes service progress; the
-	// service fee gates travel rather than occupying two milestones of its own.
-	if (app.completedAt || (visaDone && preDepartureDone)) return "completed";
-	if (admitted && visaDone && paymentDone) return "travel_assistance";
-	if (admitted && visaDone) return "payment_execution";
+	// service fee gates the plan chapter (after travel) rather than occupying
+	// two milestones of its own. Under the current model travel comes first —
+	// the ticketing fee opens the plan chapter, then the settled plan completes.
+	if (app.completedAt || (visaDone && ticketingPaid && hasSettledPlan(app) && preDepartureDone)) {
+		return "completed";
+	}
+	if (admitted && visaDone && ticketingPaid) return "payment_execution";
+	if (admitted && visaDone) return "travel_assistance";
 	if (admitted && visaPaid) return "visa";
 	if (admitted && !visaPaid) return "visa_invoice";
 	// Application process (tracking) only after invoice paid
@@ -785,10 +798,10 @@ export function getStageStatus(
 		return si === ci ? "current" : "done";
 	}
 	if (stageId === "visa" && app.visaStatus === "complete") return "done";
-	if (stageId === "payment_execution" && hasPaymentPlan(app) && isAgencySettled(app) && Boolean(app.travelInvoicePaid)) {
+	if (stageId === "travel_assistance" && Boolean(app.travelInvoicePaid)) {
 		return si === ci ? "current" : "done";
 	}
-	if (stageId === "travel_assistance" && app.preDepartureCompletedAt) {
+	if (stageId === "payment_execution" && hasSettledPlan(app) && Boolean(app.travelInvoicePaid)) {
 		return si === ci ? "current" : "done";
 	}
 	if (stageId === "completed" && app.completedAt) return "done";
@@ -814,9 +827,6 @@ export function getChapterUnlocks(
 	const admitted = hasAcceptedOffer(schools);
 	const visaPaid = isVisaInvoicePaid(app);
 	const visaDone = app.visaStatus === "complete";
-	const agencySettled = isAgencySettled(app);
-	const paymentDone =
-		hasPaymentPlan(app) && agencySettled && Boolean(app.travelInvoicePaid);
 
 	const stage = getCurrentProcessStage(app, booking, schools);
 	const order = PROCESS_STAGES.map((s) => s.id);
@@ -831,15 +841,19 @@ export function getChapterUnlocks(
 		// Tracking is its own page - only after application invoice paid
 		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
 		visa: admitted || atOrBeyond("visa"),
-		// Payment execution opens on visa approval; travel assistance opens
-		// once the plan is confirmed AND the agency fee + travel invoice are
-		// settled — the same gates the server and the travel page enforce.
-		payment_execution:
-			(admitted && visaPaid && visaDone) || atOrBeyond("payment_execution"),
+		// Travel assistance opens on visa approval; the plan chapter (Payment
+		// Execution) opens once the ticketing fee is paid — the same gates the
+		// server and the travel page enforce.
 		travel_assistance:
-			(admitted && visaPaid && visaDone && paymentDone) || atOrBeyond("travel_assistance"),
-		// Completion needs the travel checklist finished, not a payment state
-		complete: Boolean(app.preDepartureCompletedAt) || atOrBeyond("completed"),
+			(admitted && visaPaid && visaDone) || atOrBeyond("travel_assistance"),
+		payment_execution:
+			(admitted && visaPaid && visaDone && Boolean(app.travelInvoicePaid)) ||
+			atOrBeyond("payment_execution"),
+		// Completion needs the plan settled, the ticketing fee paid and the
+		// travel checklist finished — not just a payment state.
+		complete:
+			(Boolean(app.preDepartureCompletedAt) && hasSettledPlan(app) && Boolean(app.travelInvoicePaid)) ||
+			atOrBeyond("completed"),
 	};
 }
 
@@ -996,42 +1010,55 @@ export function getPendingAction(
 		};
 	}
 
-	// Payment execution — confirm the plan, settle agency fee + travel invoice.
-	if (stage === "payment_execution") {
-		const hasPlan = hasPaymentPlan(app);
-		const agencyDue = !isAgencySettled(app);
-		const travelDue = !app.travelInvoicePaid;
-		const allSettled = hasPlan && !agencyDue && !travelDue;
+	// Travel assistance — pay the ticketing fee, then open the plan chapter.
+	if (stage === "travel_assistance") {
+		const ticketingDue = !app.travelInvoicePaid;
 		return {
-			kind: "payment_execution",
-			label: !hasPlan ? "Choose plan" : agencyDue || travelDue ? "Settle fees" : "Open Travel Assistance",
-			title: !hasPlan
-				? "Confirm your payment plan"
-				: allSettled
-					? "Open travel assistance"
-					: "Settle your service fees",
-			detail: !hasPlan
-				? "Choose your payment plan, then settle the agency service fee and your travel invoice to open travel assistance."
-				: allSettled
-					? "Your payments are settled. Open travel assistance to start your pre-departure checklist."
-					: agencyDue && travelDue
-						? "Your plan is confirmed. Settle the agency service fee and your travel invoice to open travel assistance."
-						: travelDue
-							? "Your plan is confirmed. Settle your travel invoice to open travel assistance."
-							: "Your plan is confirmed. Settle the pending service fee to open travel assistance.",
-			to: "/portal/payment-execution",
+			kind: "travel",
+			label: ticketingDue ? "Pay ticketing fee" : "Open payment plan",
+			title: ticketingDue
+				? "Pay your ticketing fee"
+				: "Open your payment plan",
+			detail: ticketingDue
+				? "Settle your ticketing fee so your payment plan chapter opens."
+				: "Your ticketing fee is settled. Move to your payment plan to choose how you'll settle the agency service fee.",
+			to: "/portal/pre-departure",
 		};
 	}
 
-	// Travel assistance — finish the pre-departure checklist.
-	if (stage === "travel_assistance" && !app.preDepartureCompletedAt) {
+	// Payment execution (plan chapter) — choose the plan, settle it per-plan,
+	// finish any open travel checklist, then complete the journey.
+	if (stage === "payment_execution") {
+		const hasPlan = hasPaymentPlan(app);
+		const planDue = !hasSettledPlan(app);
+		const travelLeft = !app.preDepartureCompletedAt;
+		const ready = hasPlan && !planDue && !travelLeft;
 		return {
-			kind: "travel",
-			label: "View checklist",
-			title: "Complete your pre-departure checklist",
-			detail:
-				"Work through your travel checklist so your handler can clear you and close your journey.",
-			to: "/portal/pre-departure",
+			kind: "payment_execution",
+			label: !hasPlan
+				? "Choose plan"
+				: planDue
+					? "Settle fees"
+					: travelLeft
+						? "Finish checklist"
+						: "Complete journey",
+			title: !hasPlan
+				? "Confirm your payment plan"
+				: planDue
+					? "Settle your service fees"
+					: travelLeft
+						? "Finish your pre-departure checklist"
+						: "Complete your journey",
+			detail: !hasPlan
+				? "Choose your payment plan — pay the full agency service fee, or settle it in installments — to complete your journey."
+				: planDue
+					? "Your plan is confirmed. Settle your service fee (in full or the first installment) to complete your journey."
+					: travelLeft
+						? "Your plan is settled. Finish your pre-departure checklist and travel clearance, then complete your journey."
+						: ready
+							? "Everything is settled. Complete your journey and hand over to your consultant for post-arrival support."
+							: "Continue your payment plan to complete your journey.",
+			to: "/portal/payment-execution",
 		};
 	}
 

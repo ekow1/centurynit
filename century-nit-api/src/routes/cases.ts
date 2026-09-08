@@ -6,7 +6,8 @@ import * as schema from "../db/schema.js";
 import {
 	acceptApplication,
 	addCaseComment,
-	advanceToTravelFromPayment,
+	advanceToPaymentPlanFromTravel,
+	completeFromPaymentPlan,
 	applicantUserIdOfApplication,
 	applicantUserIdOfConsultation,
 	assignApplication,
@@ -1502,25 +1503,25 @@ meRouter.openapi(
 );
 
 /**
- * Applicant self-service: advance from Payment Execution to Travel Assistance.
+ * Applicant self-service: advance from Travel Assistance to Payment Execution
+ * (the plan chapter).
  *
- * Open once the payment contract is settled — plan confirmed, agency service
- * fee paid, travel invoice paid (`canAdvanceToStage` enforces it server-side).
- * Unlike the ops stage endpoint, this never parks the case on a handoff:
- * Payment Execution is self-serve and has no assignment to wait for. The
- * travel specialist handoff is still queued for the handled travel work.
+ * Open once the ticketing fee is paid (`canAdvanceToStage` enforces it
+ * server-side). Unlike the ops stage endpoint, this never parks the case on a
+ * handoff: the ticketing fee is self-serve and has no assignment to wait for.
+ * The finance handoff is still queued for the handled plan work.
  */
 meRouter.openapi(
 	createRoute({
 		method: "post",
-		path: "/application/advance-to-travel",
+		path: "/application/advance-to-plan",
 		tags: ["Applicants"],
 		middleware: [requireAuth] as const,
 		request: {},
 		responses: {
 			200: {
 				content: { "application/json": { schema: applicationSchema } },
-				description: "The application, now at Travel Assistance",
+				description: "The application, now at Payment Execution (plan chapter)",
 			},
 		},
 	}),
@@ -1534,7 +1535,47 @@ meRouter.openapi(
 		if (!application) {
 			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
 		}
-		const updated = await advanceToTravelFromPayment({
+		const updated = await advanceToPaymentPlanFromTravel({
+			id: application.id,
+			applicantUserId: user.id,
+		});
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * Applicant self-service: complete the journey from Payment Execution.
+ *
+ * The gate is per-plan — full plans need the agency service fee settled in
+ * full, installment plans only their first installment — plus the ticketing
+ * fee, travel clearance, and the finished pre-departure checklist
+ * (`canAdvanceToStage` enforces it server-side).
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/complete",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {},
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationSchema } },
+				description: "The application, now Completed",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
+		}
+		const updated = await completeFromPaymentPlan({
 			id: application.id,
 			applicantUserId: user.id,
 		});
@@ -1914,20 +1955,22 @@ meRouter.openapi(
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
 		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
-		// Payment execution is finished once the applicant has chosen a plan,
-		// settled the agency service fee, and paid the travel invoice — the
-		// same prerequisites the travel stage gate enforces on the ops side.
-		const isPaymentDone =
+		// The plan chapter's settlement is per-plan: full plans need the agency
+		// service fee settled in full, installment plans only their first
+		// installment (the deposit). Travel comes first, so the plan chapter
+		// only opens once the ticketing fee is paid regardless.
+		const planSettled =
 			Boolean(application?.paymentPlanId) &&
-			Boolean(application?.agencySettled) &&
-			isTravelInvoicePaid;
+			(application?.paymentPlanId === "installment"
+				? (application?.agencyStageIndex ?? 0) >= 1
+				: Boolean(application?.agencySettled));
 		const isPreDepartureDone = Boolean(
 			(application?.checklist?.length ?? 0) > 0 &&
 				application?.checklist?.every((item) => item.checked),
 		);
 		const isCompleted =
 			application?.travelClearance === "cleared" &&
-			application?.agencySettled &&
+			planSettled &&
 			isTravelInvoicePaid &&
 			isPreDepartureDone;
 
@@ -1948,12 +1991,12 @@ meRouter.openapi(
 
 		let derivedPortalStage: PortalStage = "consultation";
 
-		if (isCompleted || (isVisaDone && isPreDepartureDone)) {
+		if (isCompleted) {
 			derivedPortalStage = "completed";
 		} else if (hasAdmitted && isVisaDone) {
-			// Visa done → payment execution opens. Travel assistance only opens
-			// once the plan is chosen AND agency + travel payments are settled.
-			derivedPortalStage = isPaymentDone ? "travel_assistance" : "payment_execution";
+			// Visa done → travel assistance opens. The plan chapter (Payment
+			// Execution) only opens once the ticketing fee is paid.
+			derivedPortalStage = isTravelInvoicePaid ? "payment_execution" : "travel_assistance";
 		} else if (hasAdmitted && isVisaInvoicePaid) {
 			derivedPortalStage = "visa";
 		} else if (hasAdmitted && !isVisaInvoicePaid) {
@@ -2008,14 +2051,15 @@ meRouter.openapi(
 						if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
 					} else if (coarseStage === "payment_execution") {
-						if (hasAdmitted && isVisaDone && isPaymentDone) portalStage = "travel_assistance";
-						else if (hasAdmitted && isVisaDone) portalStage = "payment_execution";
+						if (isCompleted) portalStage = "completed";
+						else if (hasAdmitted && isVisaDone && isTravelInvoicePaid) portalStage = "payment_execution";
+						else if (hasAdmitted && isVisaDone) portalStage = "travel_assistance";
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
 						else if (hasAdmitted) portalStage = "visa_invoice";
 					} else if (coarseStage === "travel_assistance") {
-						if (isCompleted || (isVisaDone && isPreDepartureDone)) portalStage = "completed";
-						else if (isPaymentDone) portalStage = "travel_assistance";
-						else portalStage = "payment_execution";
+						if (isCompleted) portalStage = "completed";
+						else if (isTravelInvoicePaid) portalStage = "payment_execution";
+						else portalStage = "travel_assistance";
 					} else if (coarseStage === "completed") {
 						portalStage = "completed";
 					}
@@ -2042,9 +2086,9 @@ meRouter.openapi(
 			application: isEligible,
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
-			payment_execution: hasAdmitted && isVisaInvoicePaid && isVisaDone,
-			travel_assistance:
-				hasAdmitted && isVisaInvoicePaid && isVisaDone && isPaymentDone,
+			travel_assistance: hasAdmitted && isVisaInvoicePaid && isVisaDone,
+			payment_execution:
+				hasAdmitted && isVisaInvoicePaid && isVisaDone && isTravelInvoicePaid,
 			complete: isCompleted,
 		};
 
@@ -2066,8 +2110,8 @@ meRouter.openapi(
 			else if (sid === "school_tracking") done = hasAdmitted;
 			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
 			else if (sid === "visa") done = isVisaDone;
-			else if (sid === "payment_execution") done = isPaymentDone;
-			else if (sid === "travel_assistance") done = isPreDepartureDone;
+			else if (sid === "travel_assistance") done = isTravelInvoicePaid;
+			else if (sid === "payment_execution") done = planSettled;
 			else if (sid === "completed") done = isCompleted;
 
 			if (sid === portalStage) stageStatuses[sid] = "current";

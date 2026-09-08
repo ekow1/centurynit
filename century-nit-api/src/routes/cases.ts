@@ -1065,7 +1065,6 @@ meRouter.openapi(
 	async (c) => {
 		const user = c.get("user")!;
 		const row = await ensureVisaInvoiceForApplication(user.id, {
-			opsUserId: user.id,
 			name: user.name ?? "Applicant",
 			email: user.email,
 		});

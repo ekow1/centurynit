@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, not, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, not, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -1828,7 +1828,7 @@ async function listInvoicesForApplicant(applicantId: string) {
 async function raiseVisaInvoiceForApplication(
 	app: ApplicationRow,
 	applicant: ApplicantRow,
-	actor: Actor,
+	actor: { opsUserId?: string | null; name: string; email: string },
 ): Promise<void> {
 	const clientUserId = applicant.userId ?? undefined;
 	const fees = await getFeeSchedule();
@@ -1856,12 +1856,14 @@ async function raiseVisaInvoiceForApplication(
  * Idempotently ensure a visa invoice exists for the applicant's latest
  * application. The portal's visa step calls this so a proforma estimate lands
  * in Ops for review/issue even if the journey stage has not formally reached
- * `visa_processing` yet. Never duplicates an existing visa invoice, and repairs
- * the application link on an orphaned one.
+ * `visa_processing` yet. Never duplicates an existing visa invoice: it prefers
+ * the invoice already linked to this applicant, then recovers an orphaned one
+ * from before the login link existed (client_user_id null) by attaching it,
+ * and only raises a fresh invoice when neither exists.
  */
 export async function ensureVisaInvoiceForApplication(
 	userId: string,
-	actor: Actor,
+	actor: { opsUserId?: string | null; name: string; email: string },
 ): Promise<InvoiceRow> {
 	const [applicant] = await db
 		.select()
@@ -1872,16 +1874,44 @@ export async function ensureVisaInvoiceForApplication(
 	const app = await latestApplicationForApplicant(applicant.id);
 	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
-	const clientInvoices = await listInvoicesForApplicant(applicant.id);
-	const existing = clientInvoices.find((i) => i.type === "visa" && i.status !== "void");
-	if (existing) {
-		if (!existing.applicationId && app.id) {
+	const linked = (await listInvoicesForApplicant(applicant.id)).find(
+		(i) => i.type === "visa" && i.status !== "void",
+	);
+	if (linked) {
+		if (!linked.applicationId && app.id) {
 			await db
 				.update(invoices)
 				.set({ applicationId: app.id })
-				.where(eq(invoices.id, existing.id));
+				.where(eq(invoices.id, linked.id));
 		}
-		return existing;
+		return linked;
+	}
+
+	// Recover a visa invoice that predates the applicant's login link
+	// (client_user_id is null, e.g. raised from Ops before the portal was
+	// connected) rather than creating a duplicate. Link it to this user.
+	const orphans = await db
+		.select()
+		.from(invoices)
+		.where(and(eq(invoices.type, "visa"), not(eq(invoices.status, "void")), isNull(invoices.clientUserId)))
+		.limit(50);
+	const orphan = orphans.find(
+		(i) =>
+			(i.applicationId === app.id) ||
+			(Boolean(applicant.email) && i.applicantEmail === applicant.email) ||
+			(i.applicantName ?? "").toLowerCase() === (applicant.name ?? "").toLowerCase(),
+	);
+	if (orphan) {
+		await db
+			.update(invoices)
+			.set({ clientUserId: userId, applicationId: app.id })
+			.where(eq(invoices.id, orphan.id));
+		const [recovered] = await db
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, orphan.id))
+			.limit(1);
+		return recovered ?? orphan;
 	}
 
 	await raiseVisaInvoiceForApplication(app, applicant, actor);

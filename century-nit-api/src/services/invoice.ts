@@ -282,7 +282,7 @@ export async function createInvoice(input: {
 				subtotalCents,
 				note: data.note ?? null,
 				status,
-				issuedBy: actor.opsUserId,
+issuedBy: actor.opsUserId ?? null,
 				issuedByName: actor.name,
 				dueAt: data.dueAt && data.dueAt.trim() ? new Date(data.dueAt) : null,
 			})

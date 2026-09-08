@@ -3591,11 +3591,16 @@ function VisaHubInner() {
 				description: `Visa processing fee · ${serverInv.invoiceNumber}`,
 			}
 		: {
-				// No server invoice yet — show a neutral "not raised" card rather
-				// than the stale local estimate (which carried a fake number).
+				// No server invoice yet — show the fee-schedule estimate that ops
+				// will confirm and issue (sourced from the real fee schedule, not
+				// the stale local estimate with its fake number).
 				...inv,
 				id: null,
-				status: "none" as const,
+				status: "estimated" as const,
+				amount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
+				actualAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
+				estimatedAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
+				description: "Visa processing fee (estimate) · awaiting ops confirmation",
 			};
 	const amount = cardInvoice.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
 

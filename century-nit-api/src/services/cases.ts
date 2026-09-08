@@ -1837,6 +1837,7 @@ async function raiseVisaInvoiceForApplication(
 			applicantName: applicant.name,
 			applicantEmail: applicant.email ?? undefined,
 			clientUserId,
+			applicationId: app.id,
 			type: "visa",
 			status: "proforma",
 			lines: [
@@ -1971,6 +1972,25 @@ export async function setApplicationVisaStage(
 ): Promise<ApplicationRow> {
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	// The portal must not show visa tracking until the visa invoice is paid.
+	// Only allow leaving "locked" (starting the visa process) once a paid visa
+	// invoice exists for this application. Payment itself unlocks the stage, so
+	// a manual advance here is only meaningful for staff nudging progress.
+	if (stage !== "locked" && row.visaStage === "locked") {
+		const clientInvoices = row.applicantId ? await listInvoicesForApplicant(row.applicantId) : [];
+		const hasPaidVisaInvoice = clientInvoices.some(
+			(i) => i.type === "visa" && i.status === "paid",
+		);
+		if (!hasPaidVisaInvoice) {
+			throw new HttpError(
+				409,
+				"VISA_INVOICE_UNPAID",
+				"Start the visa process by paying the visa invoice first. Visa tracking stays locked until the invoice is settled.",
+			);
+		}
+	}
+
 	const [updated] = await db
 		.update(applications)
 		.set({

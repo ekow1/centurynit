@@ -19,7 +19,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	school_select: { to: "/portal/application", label: "Select schools" },
 	application_invoice: { to: "/portal/financial", label: "Pay invoice" },
 	school_tracking: { to: "/portal/tracking", label: "View applications" },
-	visa_invoice: { to: "/portal/financial", label: "Pay visa invoice" },
+	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
 	visa: { to: "/portal/visa", label: "View visa" },
 	pre_departure: { to: "/portal/pre-departure", label: "View checklist" },
 	completed: { to: "/portal/complete", label: "View summary" },
@@ -174,7 +174,7 @@ export function DashboardHome() {
 					</p>
 				</Link>
 				<Link
-					to="/portal/financial"
+					to="/portal/visa"
 					className={`stat-cell stat-cell--link${hotCell === "visa_invoice" ? " stat-cell--cta" : ""}`}
 				>
 					<p className="stat-cell__label">

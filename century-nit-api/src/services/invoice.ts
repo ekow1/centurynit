@@ -517,7 +517,12 @@ export async function recordPayment(input: {
 			if (updated.type === "application" && status === "paid") {
 				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "visa" && status === "paid") {
-				await txDb.update(applications).set({ visaInvoicePaid: true }).where(eq(applications.id, targetAppId));
+				// Paying the visa invoice both marks it paid and unlocks tracking:
+				// advance visaStage from locked → pending so the portal shows progress.
+				await txDb
+					.update(applications)
+					.set({ visaInvoicePaid: true, visaStage: "pending" })
+					.where(and(eq(applications.id, targetAppId), eq(applications.visaStage, "locked")));
 			} else if (updated.type === "travel" && status === "paid") {
 				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "agency") {

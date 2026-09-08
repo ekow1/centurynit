@@ -14,7 +14,7 @@ import {
 	type StageInvoice,
 } from "../../context/AppState";
 import { FALLBACK_FEE_SCHEDULE } from "../../context/AppState";
-import { usdFromCents } from "century-nit-shared";
+import { usdFromCents, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 import {
 	AGENCY_STAGES,
 	AGENCY_DEPOSIT_PORTION,
@@ -1227,6 +1227,19 @@ export function PortalJourney() {
 
 					<div>
 						<p className="eyebrow mb-3">Tracking</p>
+						{application.pendingHandoff && (
+							<div className="card card--pad mb-3" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
+								<p className="eyebrow" style={{ color: "#854d0e" }}>
+									Awaiting specialist assignment
+								</p>
+								<p style={{ fontSize: "0.92rem", lineHeight: 1.55, color: "#713f12", marginTop: "0.4rem" }}>
+									We're assigning your{" "}
+									{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
+										application.pendingHandoff.stage}{" "}
+									specialist — you'll be notified once your case handler is confirmed.
+								</p>
+							</div>
+						)}
 						<div className="journey-track journey-track--single">
 							<div className="journey-track__cell">
 								<p className="journey-track__label">School applications</p>

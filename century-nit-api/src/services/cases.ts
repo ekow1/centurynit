@@ -54,7 +54,9 @@ import {
 import {
 	activeHandlerFor,
 	createOrGetHandoff,
+	isAwaitingAssignmentBoundary,
 	isOwnerClassBoundary,
+	pendingHandoffForApplication,
 	stageHasActiveHandler,
 } from "./handoffs.js";
 
@@ -514,6 +516,8 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		? await listSchoolsForApplicant(applicant.id)
 		: { schools: [] as SchoolApplication[], total: 0 };
 
+	const pendingHandoff = await pendingHandoffForApplication(row.id);
+
 	return {
 		id: row.id,
 		appNumber: row.appNumber,
@@ -552,6 +556,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		requestedDocuments: row.requestedDocuments ?? [],
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
 		comments: comments.map(toComment),
+		pendingHandoff,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: null,
 		schoolApplications: schoolList.schools,
@@ -2035,12 +2040,31 @@ export async function setApplicationStage(
 
 	// Leaving a stage the case was in concludes that stage's assignment.
 	if (stage !== row.stage) {
-		markStageCompleted(id, row.stage, actor.opsUserId);
-		// Crossing a specialist boundary (e.g. consultant → visa officer) needs
-		// an explicit assignment decision. Queue the handoff when the new stage
-		// is not already owned so the stage is never silently left without a
-		// handler. `signalStageNeedsHandler` below is its alert.
-		if (isOwnerClassBoundary(row.stage, stage) && !(await stageHasActiveHandler(id, stage))) {
+		const unownedBoundary =
+			isOwnerClassBoundary(row.stage, stage) && !(await stageHasActiveHandler(id, stage));
+
+		// Finance/travel boundary stages hard-gate on entry — the case parks at
+		// its predecessor until a manager resolves the handoff, so the stage is
+		// never worked without a confirmed specialist. `signalStageNeedsHandler`
+		// alerts management; resolving the handoff completes the transition.
+		if (unownedBoundary && isAwaitingAssignmentBoundary(stage)) {
+			const handler = await activeHandlerFor(id, row.stage);
+			await createOrGetHandoff({
+				applicationId: id,
+				stage,
+				source: "stage_transition",
+				fromOpsUserId: handler?.opsUserId ?? null,
+			});
+			markStageCompleted(id, row.stage, actor.opsUserId);
+			void signalStageNeedsHandler(id, stage);
+			await broadcastCaseUpdate(row, actor);
+			return row;
+		}
+
+		if (unownedBoundary) {
+			// Advisory queue for the specialist change (visa pre-payment): the
+			// visa gate itself is the payment-triggered `awaiting_handler`
+			// sub-state, and `completed` is terminal — neither blocks the move.
 			const handler = await activeHandlerFor(id, row.stage);
 			await createOrGetHandoff({
 				applicationId: id,
@@ -2049,11 +2073,61 @@ export async function setApplicationStage(
 				fromOpsUserId: handler?.opsUserId ?? null,
 			});
 		}
+
+		markStageCompleted(id, row.stage, actor.opsUserId);
 		// The new stage may be unowned — surface it instead of silent drift.
 		void signalStageNeedsHandler(id, stage);
 	}
 
 	await broadcastCaseUpdate(updated, actor);
+	return updated;
+}
+
+/**
+ * Complete a boundary transition that hard-gated on entry: once its handoff is
+ * resolved and the new stage staffed, move the parked application into it.
+ * No-ops unless the case is genuinely parked behind this handoff (still at the
+ * owner-class predecessor and not already at the target). Visa's gate is the
+ * `awaiting_handler` sub-state, so its transition never auto-applies here.
+ */
+export async function applyHandoffResolvedTransition(input: {
+	applicationId: string;
+	stage: JourneyStage;
+	actor: Actor;
+}): Promise<ApplicationRow | null> {
+	const row = await getApplication(input.applicationId);
+	if (!row) return null;
+	if (row.stage === input.stage) return row;
+	if (!isOwnerClassBoundary(row.stage, input.stage)) return null;
+
+	const [updated] = await db
+		.update(applications)
+		.set({ stage: input.stage, updatedAt: new Date() })
+		.where(and(eq(applications.id, input.applicationId), eq(applications.stage, row.stage)))
+		.returning();
+	if (!updated) return null;
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: input.applicationId,
+		kind: "status",
+		text: `Stage → ${input.stage} (specialist confirmed)`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	const clientUserId = await applicantUserIdOfApplication(input.applicationId);
+	if (clientUserId) {
+		notify({
+			recipientUserId: clientUserId,
+			type: "stage.changed",
+			title: "Your case has moved to the next stage",
+			body: `Your application has advanced to: ${JOURNEY_STAGE_LABELS[input.stage]}.`,
+			link: "/portal/tracking",
+		}).catch(() => {});
+	}
+
+	await broadcastCaseUpdate(updated, input.actor);
 	return updated;
 }
 

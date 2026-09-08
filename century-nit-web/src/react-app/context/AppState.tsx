@@ -247,6 +247,17 @@ export type ApplicationData = {
 	 * or "declined" (stopped, reversible). Drives the portal `proceed` stage.
 	 */
 	proceedStatus: "invited" | "accepted" | "declined" | "paused";
+	/**
+	 * Open gated assignment, if any: the case is parked because the next
+	 * journey stage's specialist has not been confirmed yet. Mirrors the
+	 * server's `applications.pendingHandoff`.
+	 */
+	pendingHandoff: {
+		id: string;
+		stage: JourneyStage;
+		fromOpsUserName: string | null;
+		reason: string | null;
+	} | null;
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -461,6 +472,7 @@ const defaultApplication: ApplicationData = {
 	referralSource: "",
 	journeyStage: "",
 	proceedStatus: "invited",
+	pendingHandoff: null,
 };
 
 const defaultAssessment: AssessmentData = {
@@ -2197,6 +2209,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
 					journeyStage: a.stage ?? prev.journeyStage,
+					pendingHandoff: a.pendingHandoff
+						? {
+								id: a.pendingHandoff.id,
+								stage: (a.pendingHandoff.stage as JourneyStage) ?? prev.pendingHandoff?.stage,
+								fromOpsUserName: a.pendingHandoff.fromOpsUserName,
+								reason: a.pendingHandoff.reason,
+							}
+						: prev.pendingHandoff,
 					proceedStatus: a.proceedStatus ?? prev.proceedStatus,
 					packageSelectedAt: a.packageSelectedAt ?? prev.packageSelectedAt,
 					paymentPlanId: (a.paymentPlanId as any) ?? prev.paymentPlanId,

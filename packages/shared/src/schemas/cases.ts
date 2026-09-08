@@ -390,6 +390,24 @@ export const consultationSchema = z.object({
 });
 export type ApiConsultation = z.infer<typeof consultationSchema>;
 
+/**
+ * The gated assignment waiting on this application, surfaced on the journey
+ * tracker: the next specialist (owner-class boundary) has not been confirmed,
+ * so the case is parked until a manager resolves the handoff.
+ */
+export const stageHandoffPreviewSchema = z.object({
+	id: z.string().uuid(),
+	/** The stage waiting on its specialist (e.g. payment_execution). */
+	stage: journeyStageSchema,
+	source: z.string(),
+	fromOpsUserId: z.string().nullable(),
+	fromOpsUserName: z.string().nullable(),
+	reason: z.string().nullable(),
+	deferCount: z.number().int(),
+	createdAt: z.string().datetime(),
+});
+export type StageHandoffPreview = z.infer<typeof stageHandoffPreviewSchema>;
+
 export const applicationSchema = z.object({
 	id: z.string().uuid(),
 	appNumber: z.string(),
@@ -436,6 +454,8 @@ export const applicationSchema = z.object({
 		}),
 	),
 	comments: z.array(caseCommentSchema),
+	/** Open gated assignment (pending handoff) parked on this application, if any. */
+	pendingHandoff: stageHandoffPreviewSchema.nullable(),
 	/** Parent consultation, if this application was opened from an assessment. */
 	consultationId: z.string().uuid().nullable(),
 	consultationNumber: z.string().nullable().optional(),

@@ -1,5 +1,10 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
+import {
+	JOURNEY_STAGE_LABELS,
+	type JourneyStage,
+	type StageHandoff,
+	type StageHandoffPreview,
+} from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
 	applicants,
@@ -31,6 +36,22 @@ export const STAGE_OWNER_CLASS: Record<JourneyStage, string> = {
 
 export function isOwnerClassBoundary(from: JourneyStage, to: JourneyStage): boolean {
 	return STAGE_OWNER_CLASS[from] !== STAGE_OWNER_CLASS[to];
+}
+
+/**
+ * Boundary stages that hard-gate on entry — the case stays parked at its
+ * predecessor until the manager resolves the handoff, exactly like the visa
+ * `awaiting_handler` gate. `visa_processing` is excluded: its gate is the
+ * payment-triggered sub-state, and `completed` is terminal. The consultant-run
+ * stages never gate (same owner continues).
+ */
+export const AWAITING_ASSIGNMENT_STAGES: ReadonlySet<JourneyStage> = new Set([
+	"payment_execution",
+	"travel_assistance",
+]);
+
+export function isAwaitingAssignmentBoundary(stage: JourneyStage): boolean {
+	return AWAITING_ASSIGNMENT_STAGES.has(stage);
 }
 
 type Actor = { opsUserId: string; name: string; email: string };
@@ -255,6 +276,38 @@ export async function getStageHandoff(handoffId: string): Promise<StageHandoff> 
 }
 
 /**
+ * The open gated assignment parked on an application, if any — surfaced on the
+ * journey tracker and in the ops case view ("awaiting specialist assignment").
+ */
+export async function pendingHandoffForApplication(
+	applicationId: string,
+	tx: typeof db = db,
+): Promise<StageHandoffPreview | null> {
+	const [row] = await tx
+		.select()
+		.from(stageHandoffs)
+		.where(and(eq(stageHandoffs.applicationId, applicationId), eq(stageHandoffs.status, "pending")))
+		.orderBy(asc(stageHandoffs.createdAt))
+		.limit(1);
+	if (!row) return null;
+	// Use the process-level db for the name lookup: tx may be a transaction for
+	// the row itself, and read-only enrichment does not need to join it.
+	const [fromNameRow] = row.fromOpsUserId
+		? await db.select({ name: opsUsers.name }).from(opsUsers).where(eq(opsUsers.id, row.fromOpsUserId)).limit(1)
+		: [null];
+	return {
+		id: row.id,
+		stage: row.stage as JourneyStage,
+		source: row.source,
+		fromOpsUserId: row.fromOpsUserId,
+		fromOpsUserName: fromNameRow?.name ?? null,
+		reason: row.reason,
+		deferCount: row.deferCount,
+		createdAt: row.createdAt.toISOString(),
+	};
+}
+
+/**
  * Resolve the assignment decision. Writes the active stage assignment through
  * the existing assignStageOfficer flow (which ends any prior stage handler,
  * downgrades their conversation participant role, and keeps history), then
@@ -303,10 +356,21 @@ export async function resolveStageHandoff(input: {
 
 	// Activate the gate that was waiting on this specialist.
 	if (row.stage === "visa_processing") {
+		// Visa gate is the `awaiting_handler` sub-state: opening the case makes
+		// visa tracking live for the applicant.
 		await db
 			.update(applications)
 			.set({ visaStage: "pending", updatedAt: new Date() })
 			.where(and(eq(applications.id, row.applicationId), eq(applications.visaStage, "awaiting_handler")));
+	} else {
+		// Finance/travel boundary stages gate on entry: the case was parked at
+		// its predecessor. It is staffed now, so complete the transition.
+		const { applyHandoffResolvedTransition } = await import("./cases.js");
+		await applyHandoffResolvedTransition({
+			applicationId: row.applicationId,
+			stage: row.stage as JourneyStage,
+			actor: input.actor,
+		});
 	}
 
 	const [resolved] = await db
@@ -361,10 +425,12 @@ export async function resolveStageHandoff(input: {
 		}).catch(() => {});
 	}
 
-	// Notify the applicant that their specialist is confirmed.
+	// Notify the applicant that their specialist is confirmed. Visa tracking
+	// specifically turns live at this point; other gated stages announce the
+	// move itself inside applyHandoffResolvedTransition.
 	const { applicantUserIdOfApplication } = await import("./cases.js");
 	const clientUserId = await applicantUserIdOfApplication(row.applicationId);
-	if (clientUserId) {
+	if (clientUserId && row.stage === "visa_processing") {
 		await notify({
 			recipientUserId: clientUserId,
 			type: "visa.stage_changed",
@@ -420,7 +486,7 @@ export async function deferStageHandoff(input: {
 		recipients.map((r) => ({
 			recipientUserId: r.userId,
 			type: "stage.needs_handler",
-			title: "Visa case still needs a handler",
+			title: "Case still needs a handler",
 			body: `Application ${row.applicationId} still awaits a ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage} assignment.`,
 			link: "/applications",
 			entityType: "case",

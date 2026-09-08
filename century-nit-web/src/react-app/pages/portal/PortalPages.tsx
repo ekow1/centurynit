@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
-import { API_PREFIX, LookupValue } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, type JourneyStage } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
@@ -3057,6 +3057,18 @@ function TrackingPageInner() {
 					</p>
 				</div>
 			</header>
+
+			{application.pendingHandoff && (
+				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
+					<p className="eyebrow" style={{ color: "#854d0e" }}>Awaiting specialist assignment</p>
+					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.4rem" }}>
+						We're assigning your{" "}
+						{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
+							application.pendingHandoff.stage}{" "}
+						specialist — you'll be notified once your case handler is confirmed.
+					</p>
+				</div>
+			)}
 
 			<div className="stat-band mt-4">
 				<div className="stat-cell">

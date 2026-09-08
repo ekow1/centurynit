@@ -267,7 +267,16 @@ export function CaseWorkPanel({
 				<div className="card">
 					<p className="eyebrow mb-2">Case activity</p>
 					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{[...comments].reverse().filter((c, i, arr) => i === 0 || c.text !== arr[i-1].text).map((c) => (
+						{[...comments].reverse().filter((() => {
+							const seenStatus = new Set<string>();
+							return (c: CaseComment) => {
+								if (c.kind === "status") {
+									if (seenStatus.has(c.text)) return false;
+									seenStatus.add(c.text);
+								}
+								return true;
+							};
+						})()).map((c) => (
 							<li key={c.id} style={{ padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
 								<div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
 									<span style={{ fontWeight: 600, fontSize: "var(--text-xs)" }}>{c.author}</span>

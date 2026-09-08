@@ -547,21 +547,18 @@ export function EnterpriseCases() {
 									}
 								/>
 
-							{/* Action Control */}
-							<div className="card" style={{ background: "var(--muted)" }}>
-								<p className="eyebrow mb-1">Application Lifecycle Action</p>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-									<div>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-											Status: {selectedApp.status}
-										</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-											{selectedApp.status === "Accepted"
-												? "This application is Accepted & Active in Applicants directory."
-												: "Accepting will mark this application as Approved & create/activate the Applicant record."}
-										</p>
-									</div>
-									{selectedApp.status !== "Accepted" && (
+							{selectedApp.status !== "Accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Application Lifecycle Action</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												Status: {selectedApp.status}
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												Accepting will mark this application as Approved & create/activate the Applicant record.
+											</p>
+										</div>
 										<button
 											onClick={() => handleAcceptApplication(selectedApp.appId)}
 											className="btn btn--primary"
@@ -569,59 +566,48 @@ export function EnterpriseCases() {
 										>
 											✓ Accept & Approve
 										</button>
-									)}
+									</div>
 								</div>
+							)}
 
-								<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-light)" }}>
-									<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
-										Current stage: {JOURNEY_STAGE_LABELS[(liveSelected ?? selectedApp).stage as JourneyStage]}. Use the <a href="/workflow" style={{ textDecoration: "underline" }}>Workflow board</a> to advance the journey.
-									</p>
-								</div>
-							</div>
-
-							{/* Consent Gate */}
-							<div className="card" style={{ background: "var(--muted)" }}>
-								<p className="eyebrow mb-1">Consent Gate</p>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-									<div>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-											{selectedApp.proceedStatus === "accepted"
-												? "Consent recorded ✓"
-												: selectedApp.proceedStatus === "paused"
+							{selectedApp.proceedStatus !== "accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Consent Gate</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												{selectedApp.proceedStatus === "paused"
 													? "Applicant placed application on hold (Paused)"
 													: selectedApp.proceedStatus === "declined"
 														? "Applicant opted out (Declined)"
 														: "Awaiting the applicant's consent to proceed"}
-										</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-											{selectedApp.proceedStatus === "accepted"
-												? "The consent gate is open — school selection, invoices and tracking are unlocked."
-												: selectedApp.proceedStatus === "paused"
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												{selectedApp.proceedStatus === "paused"
 													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
 													: selectedApp.proceedStatus === "declined"
 														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
 														: "The applicant must confirm in the portal before document verification can advance."}
-										</p>
-									</div>
-									<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-										{selectedApp.proceedStatus !== "accepted" && (
+											</p>
+										</div>
+										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
 												Record consent (override)
 											</button>
-										)}
-										{selectedApp.proceedStatus === "invited" && (
-											<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-												Record decline
-											</button>
-										)}
-										{(selectedApp.proceedStatus === "declined" || selectedApp.proceedStatus === "paused") && (
-											<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-												Re-invite applicant
-											</button>
-										)}
+											{selectedApp.proceedStatus === "invited" && (
+												<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Record decline
+												</button>
+											)}
+											{(selectedApp.proceedStatus === "declined" || selectedApp.proceedStatus === "paused") && (
+												<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Re-invite applicant
+												</button>
+											)}
+										</div>
 									</div>
 								</div>
-							</div>
+							)}
 
 								{/* Target & Assignment */}
 								<div className="card">

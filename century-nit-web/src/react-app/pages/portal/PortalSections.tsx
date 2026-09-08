@@ -1146,7 +1146,7 @@ export function PortalJourney() {
 		application_invoice: "/portal/application",
 		school_tracking: "/portal/tracking",
 		visa_invoice: "/portal/visa",
-		visa: "/portal/visa",
+		visa: "/portal/visa/tracking",
 		payment_plan: "/portal/payment-plan",
 		agency: "/portal/agency",
 		completed: "/portal/complete",

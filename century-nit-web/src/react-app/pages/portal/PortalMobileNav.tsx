@@ -34,6 +34,7 @@ const STAGE_PATHS = [
 	"/portal/application",
 	"/portal/tracking",
 	"/portal/visa",
+	"/portal/visa/tracking",
 	"/portal/payment-plan",
 	"/portal/agency",
 	"/portal/pre-departure",

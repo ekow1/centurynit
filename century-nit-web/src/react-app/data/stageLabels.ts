@@ -33,7 +33,7 @@ export const STAGE_PATH: Record<ProcessStageId, string> = {
 	application_invoice: "/portal/application",
 	school_tracking: "/portal/tracking",
 	visa_invoice: "/portal/visa",
-	visa: "/portal/visa",
+	visa: "/portal/visa/tracking",
 	pre_departure: "/portal/pre-departure",
 	completed: "/portal/complete",
 };

@@ -65,6 +65,7 @@ const PortalPayCallback = lazyNamed(portalPages, "PortalPayCallback");
 const PortalPaymentPlan = lazyNamed(portalPages, "PortalPaymentPlan");
 const PortalTrackingPage = lazyNamed(portalPages, "PortalTrackingPage");
 const PortalVisa = lazyNamed(portalPages, "PortalVisa");
+const PortalVisaTracking = lazyNamed(portalPages, "PortalVisaTracking");
 const PortalFinancial = lazyNamed(portalSections, "PortalFinancial");
 const PortalJourney = lazyNamed(portalSections, "PortalJourney");
 const PortalProfile = lazyNamed(portalSections, "PortalProfile");
@@ -170,6 +171,7 @@ function AppShell() {
 						<Route path="application" element={<PortalApplicationHub />} />
 						<Route path="tracking" element={<PortalTrackingPage />} />
 						<Route path="visa" element={<PortalVisa />} />
+						<Route path="visa/tracking" element={<PortalVisaTracking />} />
 						<Route path="pay" element={<PortalPayCallback />} />
 						{/* Retired stages — kept as redirects so old links still resolve */}
 						<Route path="payment-plan" element={<PortalPaymentPlan />} />

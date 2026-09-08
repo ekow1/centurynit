@@ -20,7 +20,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	application_invoice: { to: "/portal/financial", label: "Pay invoice" },
 	school_tracking: { to: "/portal/tracking", label: "View applications" },
 	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
-	visa: { to: "/portal/visa", label: "View visa" },
+	visa: { to: "/portal/visa/tracking", label: "View visa" },
 	pre_departure: { to: "/portal/pre-departure", label: "View checklist" },
 	completed: { to: "/portal/complete", label: "View summary" },
 };

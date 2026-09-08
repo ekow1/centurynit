@@ -3494,7 +3494,7 @@ function SchoolTrackCard({
 	);
 }
 
-/* ========== Visa stage: invoice + processing ========== */
+/* ========== Visa stage: invoice and processing ========== */
 
 export function PortalVisa() {
 	return (
@@ -3510,7 +3510,6 @@ function VisaHubInner() {
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
-	const nav = useNavigate();
 	const { toast } = useNotifier();
 
 	// Fetch the real server invoice on mount so the card reflects actual status.
@@ -3665,15 +3664,6 @@ function VisaHubInner() {
 		);
 	}
 
-	const steps = [
-		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
-		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },
-		{ id: "decision", label: "Authority decision", detail: "Awaiting decision" },
-		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
-	] as const;
-	const order = ["locked", "pending", "biometrics", "decision", "complete"] as const;
-	const cur = order.indexOf(application.visaStatus);
-
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
@@ -3741,68 +3731,125 @@ function VisaHubInner() {
 				<Button to="/portal/financial" variant="ghost">
 					View all invoices
 				</Button>
+				{paid ? (
+					<Button to="/portal/visa/tracking" arrow>
+						Continue to visa tracking
+					</Button>
+				) : null}
 			</div>
 
-			{/* Tracking only after pay - stays on this stage page but after payment */}
-			{paid ? (
-				<>
-					<div className="card card--pad mb-4">
-						<p className="eyebrow">Visa tracking</p>
-						<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
-							{application.counselorNote ?? "Visa case updating…"}
-						</p>
+		</div>
+	);
+}
+
+export function PortalVisaTracking() {
+	return (
+		<ChapterGate chapter="visa">
+			<VisaTrackingInner />
+		</ChapterGate>
+	);
+}
+
+const VISA_UPDATE_BY_STAGE: Record<string, string> = {
+	locked: "Visa case not started yet. Settle the visa invoice to open it.",
+	pending: "Visa payment received — your handler has opened your visa case.",
+	biometrics: "Visa case in progress. Attend your biometrics / appointment when scheduled.",
+	decision: "Visa case in progress. Awaiting the authority's decision.",
+	complete: "Visa approved. Your visa is complete — set up your payment plan to continue.",
+};
+
+function VisaTrackingInner() {
+	const { application } = useAppState();
+	const nav = useNavigate();
+	const paid = application.visaInvoice.status === "paid";
+	const steps = [
+		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
+		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },
+		{ id: "decision", label: "Authority decision", detail: "Awaiting decision" },
+		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
+	] as const;
+	const order = ["locked", "pending", "biometrics", "decision", "complete"] as const;
+	const currentIndex = order.indexOf(application.visaStatus);
+
+	if (!paid) {
+		return (
+			<div className="portal-page">
+				<header className="portal-page__header">
+					<p className="eyebrow">Dashboard · Visa</p>
+					<h1 className="page-title mt-1">Visa tracking</h1>
+				</header>
+				<div className="card card--pad">
+					<p className="display" style={{ fontSize: "1.2rem" }}>
+						Visa tracking is not open yet
+					</p>
+					<p className="muted mt-2">Pay your visa invoice before visa processing can begin.</p>
+					<Button to="/portal/visa" className="mt-3" arrow>
+						View visa invoice
+					</Button>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="portal-page">
+			<header className="portal-page__header">
+				<div>
+					<p className="eyebrow">Dashboard · Visa</p>
+					<h1 className="page-title mt-1">Visa tracking</h1>
+					<p className="lead mt-2">Follow your visa case updates from your handler.</p>
+				</div>
+			</header>
+			<ol className="mini-steps mb-4">
+				<li className="is-done">1 · Admitted</li>
+				<li className="is-done">2 · Visa invoice</li>
+				<li className="is-current">3 · Visa tracking</li>
+			</ol>
+			<div className="card card--pad mb-4">
+				<p className="eyebrow">Current update</p>
+				<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
+					{VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…"}
+				</p>
+			</div>
+			<ol className="visa-track">
+				{steps.map((step, index) => {
+					const stepIndex = order.indexOf(step.id);
+					const done = currentIndex >= stepIndex && application.visaStatus !== "locked";
+					const current = application.visaStatus === step.id;
+					return (
+						<li
+							key={step.id}
+							className={`visa-track__item${done ? " visa-track__item--done" : ""}${current ? " visa-track__item--current" : ""}`}
+						>
+							<span className="visa-track__dot">{done ? "✓" : index + 1}</span>
+							<div>
+								<strong>{step.label}</strong>
+								<p className="muted">{step.detail}</p>
+							</div>
+						</li>
+					);
+				})}
+			</ol>
+			<div className="card card--pad mt-5 next-action">
+				<p className="eyebrow">Continue</p>
+				{application.visaStatus === "complete" ? (
+					<div className="row mt-3">
+						<Button
+							type="button"
+							arrow
+							onClick={() =>
+								nav(hasPaymentPlan(application) ? "/portal/agency" : "/portal/payment-plan")
+							}
+						>
+							Next · {hasPaymentPlan(application) ? "Agency" : "Payment plan"}
+						</Button>
 					</div>
-					<ol className="visa-track">
-						{steps.map((s, i) => {
-							const idx = order.indexOf(s.id);
-							const done = cur >= idx && application.visaStatus !== "locked";
-							const current = application.visaStatus === s.id;
-							return (
-								<li
-									key={s.id}
-									className={`visa-track__item${done ? " visa-track__item--done" : ""}${current ? " visa-track__item--current" : ""}`}
-								>
-									<span className="visa-track__dot">{done ? "✓" : i + 1}</span>
-									<div>
-										<strong>{s.label}</strong>
-										<p className="muted">{s.detail}</p>
-									</div>
-								</li>
-							);
-						})}
-					</ol>
-					<div className="card card--pad mt-5 next-action">
-						<p className="eyebrow">Continue</p>
-						{application.visaStatus === "complete" ? (
-							<>
-								<p className="muted mt-1">Visa complete. Choose your payment plan next.</p>
-								<div className="row mt-3">
-									<Button
-										type="button"
-										arrow
-										onClick={() =>
-											nav(
-												hasPaymentPlan(application)
-													? "/portal/agency"
-													: "/portal/payment-plan",
-											)
-										}
-									>
-										Next · {hasPaymentPlan(application) ? "Agency" : "Payment plan"}
-									</Button>
-								</div>
-							</>
-						) : (
-							<p className="muted mt-1">
-								Visa tracking in progress ({application.visaStatus}). Payment plan unlocks
-								once visa is complete.
-							</p>
-						)}
-					</div>
-				</>
-			) : hasAdmit ? (
-				<p className="mono muted">Pay the visa invoice first - then tracking appears here.</p>
-			) : null}
+				) : (
+					<p className="muted mt-1">
+						Visa tracking is in progress. Payment plan unlocks once your visa is complete.
+					</p>
+				)}
+			</div>
 		</div>
 	);
 }

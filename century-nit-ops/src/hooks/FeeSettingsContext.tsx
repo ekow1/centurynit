@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { API_PREFIX, DEFAULT_FEE_CENTS } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
+import { useOpsAuth } from "../pages/OpsAuthContext";
 
 export type InvoiceMode = "proforma" | "issued";
 
@@ -60,12 +61,20 @@ export function useFeeSettings() {
 }
 
 export function FeeSettingsProvider({ children }: { children: ReactNode }) {
+	const { hasPermission } = useOpsAuth();
 	const [feeCents, setFeeCents] = useState<typeof DEFAULT_FEE_CENTS>(DEFAULT_FEE_CENTS);
 	const [feeModes, setFeeModes] = useState<FeeIssuanceModes>(DEFAULT_FEE_MODES);
 	const [customFees, setCustomFees] = useState<FeeItem[]>([]);
 	const [loading, setLoading] = useState(true);
 
 	const refresh = async () => {
+		// Only users who can reach the Settings module may read these. Gating the
+		// fetch avoids a noisy 403 ("your role does not include the settings
+		// module") for every other role; they fall back to the defaults below.
+		if (!hasPermission("settings")) {
+			setLoading(false);
+			return;
+		}
 		try {
 			const res = await apiFetch<{ settings: { key: string; valueMasked: string | null }[] }>(`${API_PREFIX}/settings?include_hidden=true`);
 			
@@ -112,7 +121,7 @@ export function FeeSettingsProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		void refresh();
-	}, []);
+	}, [hasPermission]);
 
 	return (
 		<FeeSettingsContext.Provider value={{ feeCents, feeModes, customFees, loading, refresh }}>

@@ -3626,8 +3626,13 @@ function VisaHubInner() {
 	async function pay() {
 		setPayPhase("loading");
 		try {
-			const { invoices } = await meApi.invoices();
-			const backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0);
+			// Charge the exact invoice shown on this page. If the ensure call is
+			// still pending, fall back to the first open visa invoice.
+			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
+			if (!backend) {
+				const { invoices } = await meApi.invoices();
+				backend = invoices.find((i) => i.type === "visa" && i.balanceCents > 0) ?? null;
+			}
 			if (!backend) {
 				toast.error(
 					"Your visa invoice has not been issued on the server yet. Ask your consultant to raise it.",
@@ -3677,7 +3682,7 @@ function VisaHubInner() {
 					<h1 className="page-title mt-1">Visa invoice → then process</h1>
 					<p className="lead mt-2">
 						On admission an invoice is raised <strong>before</strong> the visa process starts. Pay
-						(simulated) → tracking runs. Handler posts are view-only.
+						the invoice → tracking runs. Handler posts are view-only.
 					</p>
 				</div>
 			</header>
@@ -3696,7 +3701,7 @@ function VisaHubInner() {
 						</p>
 						<p className="muted mt-2">
 							Pay the application invoice on Schools, then wait for handler tracking to reach{" "}
-							<strong>Decision Reached</strong> (simulated automatically on your first school).
+							<strong>Decision Reached</strong> (your handler confirms the decision).
 						</p>
 						<div className="row mt-3">
 							<Button to="/portal/application" arrow>

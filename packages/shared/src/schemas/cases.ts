@@ -316,7 +316,6 @@ export const preDepartureTaskSchema = z.object({
 });
 
 export const patchApplicationSchema = z.object({
-	visaInvoicePaid: z.boolean().optional(),
 	visaCounselorNote: z.string().optional(),
 	paymentPlanId: z.string().optional(),
 	agencyStageIndex: z.number().int().min(0).max(2).optional(),

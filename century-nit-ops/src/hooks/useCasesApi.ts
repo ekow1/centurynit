@@ -402,15 +402,6 @@ export function useCasesApi() {
 			});
 			await refresh();
 		},
-		setVisaInvoicePaid: async (appId: string) => {
-			const app = applications.find((a) => a.appId === appId);
-			if (!app) return;
-			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
-				method: "PATCH",
-				body: JSON.stringify({ visaInvoicePaid: true }),
-			});
-			await refresh();
-		},
 		setVisaCounselorNote: async (appId: string, note: string) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;

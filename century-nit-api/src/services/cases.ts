@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, not, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, not, or, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -1696,7 +1696,6 @@ export async function updateApplication(
 	const set: Partial<typeof applications.$inferInsert> & { updatedAt: Date } = {
 		updatedAt: new Date(),
 	};
-	if (input.visaInvoicePaid !== undefined) set.visaInvoicePaid = input.visaInvoicePaid;
 	if (input.visaCounselorNote !== undefined) set.visaCounselorNote = input.visaCounselorNote;
 	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
 	if (input.agencyStageIndex !== undefined) {
@@ -1874,14 +1873,36 @@ export async function ensureVisaInvoiceForApplication(
 	const app = await latestApplicationForApplicant(applicant.id);
 	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
-	const linked = (await listInvoicesForApplicant(applicant.id)).find(
-		(i) => i.type === "visa" && i.status !== "void",
-	);
+	// Reuse any live visa invoice linked to this user or this application —
+	// never open a second one. Prefer the invoice the applicant actually paid
+	// (paid → partial → issued → proforma), then the one tied to this
+	// application, so the portal and checkout never split across duplicates.
+	const candidates = await db
+		.select()
+		.from(invoices)
+		.where(
+			and(
+				eq(invoices.type, "visa"),
+				not(eq(invoices.status, "void")),
+				or(eq(invoices.clientUserId, userId), eq(invoices.applicationId, app.id)),
+			),
+		);
+	const statusRank = (status: string): number =>
+		status === "paid" ? 0 : status === "partial" ? 1 : status === "issued" ? 2 : status === "proforma" ? 3 : 4;
+	candidates.sort((a, b) => {
+		const rankA = statusRank(a.status) + (a.applicationId === app.id ? 0 : 10);
+		const rankB = statusRank(b.status) + (b.applicationId === app.id ? 0 : 10);
+		return rankA - rankB || (a.createdAt < b.createdAt ? -1 : 1);
+	});
+	const linked = candidates[0];
 	if (linked) {
-		if (!linked.applicationId && app.id) {
+		if (!linked.applicationId || !linked.clientUserId) {
 			await db
 				.update(invoices)
-				.set({ applicationId: app.id })
+				.set({
+					...(linked.applicationId ? {} : { applicationId: app.id }),
+					...(linked.clientUserId ? {} : { clientUserId: userId }),
+				})
 				.where(eq(invoices.id, linked.id));
 		}
 		return linked;

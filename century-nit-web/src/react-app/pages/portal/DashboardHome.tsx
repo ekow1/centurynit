@@ -48,7 +48,7 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	application_invoice: { title: "Pay the application invoice", desc: "Settle the Stage II invoice so tracking can begin." },
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa invoice", desc: "On admission, settle the Stage III invoice to start visa." },
-	visa: { title: "Visa tracking", desc: "Follow the simulated visa process after payment." },
+	visa: { title: "Visa tracking", desc: "Your handler processes your visa after you settle the invoice." },
 	pre_departure: { title: "Travel & pre-departure", desc: "Flights, accommodation, insurance and your arrival briefing — we stay with you to the door." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };

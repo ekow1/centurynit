@@ -76,6 +76,20 @@ type BaseWorkItem =
 	| {
 			id: string;
 			category: string;
+			kind: "visa";
+			action: "advance" | "issue" | "chase";
+			record: MockApplication;
+			title: string;
+			subtitle: string;
+			meta: string;
+			branch: string;
+			owner: string;
+			linkTo: string;
+			priority: number;
+	  }
+	| {
+			id: string;
+			category: string;
 			kind: "applicant";
 			action: "docs" | "invoice";
 			record: MockApplicant;
@@ -117,6 +131,20 @@ type BaseWorkItem =
 	  };
 
 type WorkItem = BaseWorkItem & { isLive?: boolean };
+
+const VISA_STEP_LABELS: Record<string, string> = {
+	locked: "Awaiting payment",
+	pending: "Case opened",
+	biometrics: "Biometrics",
+	decision: "Decision",
+	complete: "Complete",
+};
+
+function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
+	return invoices.find(
+		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
+	);
+}
 
 function timeAgo(iso?: string | null) {
 	if (!iso) return "Just now";
@@ -352,6 +380,60 @@ export function Workspace() {
 			}
 		}
 
+		for (const a of scopedApplications) {
+			const visaInv = visaInvoiceFor(invoices, a);
+			const stage = a.visaStage ?? "locked";
+			if (stage === "pending" || stage === "biometrics" || stage === "decision") {
+				q.push({
+					id: `visa-adv-${a.id}`,
+					category: "needs_action",
+					kind: "visa",
+					action: "advance",
+					record: a,
+					title: a.applicantName,
+					subtitle: `Visa processing · ${VISA_STEP_LABELS[stage] ?? stage} · ${a.university || a.country || "—"}`,
+					meta: `App ${a.appId}`,
+					branch: a.branch,
+					owner: a.assignedStaff || "—",
+					linkTo: `/visa?id=${a.id}`,
+					priority: PRIORITY.review_application,
+				});
+			} else if (stage === "locked" && visaInv && visaInv.status !== "void") {
+				const balance = invoiceBalance(visaInv);
+				if (visaInv.status === "proforma" && balance > 0) {
+					q.push({
+						id: `visa-inv-${a.id}`,
+						category: "needs_invoice",
+						kind: "visa",
+						action: "issue",
+						record: a,
+						title: a.applicantName,
+						subtitle: `Visa proforma to issue · ${fmtGhs(visaInv.subtotal)}`,
+						meta: visaInv.invoiceNumber,
+						branch: a.branch,
+						owner: visaInv.issuedBy || a.assignedStaff || "—",
+						linkTo: `/visa?id=${a.id}`,
+						priority: PRIORITY.issue,
+					});
+				} else if (balance > 0) {
+					q.push({
+						id: `visa-chase-${a.id}`,
+						category: "needs_invoice",
+						kind: "visa",
+						action: "chase",
+						record: a,
+						title: a.applicantName,
+						subtitle: `Visa invoice ${visaInv.invoiceNumber} · ${fmtGhs(balance)} due`,
+						meta: `App ${a.appId}`,
+						branch: a.branch,
+						owner: visaInv.issuedBy || a.assignedStaff || "—",
+						linkTo: `/visa?id=${a.id}`,
+						priority: PRIORITY.chase,
+					});
+				}
+			}
+		}
+
 		for (const app of scopedApplicants) {
 			const pendingDocs = app.documents.filter((d) => d.status === "Pending Review").length;
 			if (pendingDocs > 0) {
@@ -455,7 +537,7 @@ export function Workspace() {
 			return a.priority - b.priority || a.title.localeCompare(b.title);
 		});
 		return q;
-	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, leads, liveBookingIds]);
+	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds]);
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
@@ -629,6 +711,7 @@ function actionLabel(item: WorkItem): string {
 	if (item.action === "reschedule") return "Reschedule";
 	if (item.action === "review") return "Review";
 	if (item.action === "checklist") return "Checklist";
+	if (item.action === "advance") return "Advance visa";
 	if (item.action === "docs") return "Documents";
 	if (item.action === "invoice") return "Invoice";
 	if (item.action === "issue") return "Issue invoice";
@@ -730,11 +813,13 @@ function PreviewPane({
 			? "Open Consultations"
 			: item.kind === "application"
 				? "Open Applications"
-				: item.kind === "applicant"
-					? "Open Applicants"
-					: item.kind === "invoice"
-						? "Open Invoices"
-						: "Open Leads";
+				: item.kind === "visa"
+					? "Open Visa Processing"
+					: item.kind === "applicant"
+						? "Open Applicants"
+						: item.kind === "invoice"
+							? "Open Invoices"
+							: "Open Leads";
 
 	return (
 		<div style={{ padding: "1.25rem" }}>
@@ -759,6 +844,7 @@ function PreviewPane({
 
 			{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
 			{item.kind === "application" && <ApplicationDetails a={item.record} />}
+			{item.kind === "visa" && <VisaDetails a={item.record} />}
 			{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
 			{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
 			{item.kind === "lead" && <LeadDetails lead={item.record} />}
@@ -816,6 +902,19 @@ function ApplicationDetails({ a }: { a: MockApplication }) {
 			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
 			<p style={{ margin: 0 }}><strong>Open checklist:</strong> {open}</p>
+		</div>
+	);
+}
+
+function VisaDetails({ a }: { a: MockApplication }) {
+	const step = a.visaStage ? (VISA_STEP_LABELS[a.visaStage] ?? a.visaStage) : "Awaiting payment";
+	return (
+		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+			<p style={{ margin: 0 }}><strong>Application:</strong> {a.appId}</p>
+			<p style={{ margin: 0 }}><strong>Visa stage:</strong> {step}</p>
+			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
+			<p style={{ margin: 0 }}><strong>Invoice paid:</strong> {a.visaInvoicePaid ? "Yes" : "No"}</p>
+			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
 		</div>
 	);
 }

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -56,12 +56,14 @@ export function EnterpriseVisa() {
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
 		return filtered.filter(
 			(a) =>
+				(a.visaStage && a.visaStage !== "locked") ||
+				visaInvoiceFor(allInvoices, a) !== undefined ||
 				a.stage === "visa_processing" ||
 				a.stage === "payment_execution" ||
 				a.stage === "travel_assistance" ||
 				a.stage === "completed",
 		);
-	}, [applications, scopeRecords, opsUser, branchFilter]);
+	}, [applications, scopeRecords, opsUser, branchFilter, allInvoices]);
 
 	const filteredApps = visaApps.filter((a) => {
 		const matchesSearch =
@@ -70,7 +72,10 @@ export function EnterpriseVisa() {
 			a.university.toLowerCase().includes(searchQuery.toLowerCase());
 		if (!matchesSearch) return false;
 		if (statusFilter === "All") return true;
-		if (statusFilter === "Unpaid") return !a.visaInvoicePaid;
+		if (statusFilter === "Unpaid") {
+			const inv = visaInvoiceFor(allInvoices, a);
+			return a.visaStage === "locked" || !!inv && invoiceBalance(inv) > 0;
+		}
 		if (statusFilter === "In Progress") return a.visaStage !== "complete" && a.visaStage !== "locked";
 		if (statusFilter === "Complete") return a.visaStage === "complete";
 		return true;
@@ -79,6 +84,18 @@ export function EnterpriseVisa() {
 	const liveSelected = selectedApp
 		? applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp
 		: null;
+
+	const [searchParams, setSearchParams] = useSearchParams();
+	const idParam = searchParams.get("id");
+	const openedRef = useRef<string | null>(null);
+	useEffect(() => {
+		if (!idParam || openedRef.current === idParam) return;
+		const match = applications.find((a) => a.id === idParam) ?? visaApps.find((a) => a.id === idParam);
+		if (match) {
+			openedRef.current = idParam;
+			setSelectedApp(match);
+		}
+	}, [idParam, applications, visaApps]);
 
 	function openDetail(app: MockApplication) {
 		setSelectedApp(app);
@@ -291,7 +308,10 @@ export function EnterpriseVisa() {
 								</div>
 								<button
 									type="button"
-									onClick={() => setSelectedApp(null)}
+									onClick={() => {
+										setSelectedApp(null);
+										setSearchParams({}, { replace: true });
+									}}
 									aria-label="Close detail"
 									style={{
 										width: "40px",
@@ -469,11 +489,12 @@ export function EnterpriseVisa() {
 									)}
 								</div>
 
-						{active.visaStage === "complete" && active.stage === "visa_processing" && (
+						{active.visaStage === "complete" && (
 							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
 								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved</p>
 								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-									Use the Workflow board to advance this case to Payment Execution.
+									This visa case is complete — the applicant can proceed to the payment plan. Advance this
+									case to Payment Execution on the Workflow board when ready.
 								</p>
 							</div>
 						)}

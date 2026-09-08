@@ -676,7 +676,6 @@ export function EnterpriseCases() {
 									{selectedApp.schoolApplications && selectedApp.schoolApplications.length > 0 ? (
 										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 											{selectedApp.schoolApplications.map((s) => {
-												const latest = s.events?.[0];
 												const displayName = s.universityName || s.universityId;
 												const displayProgram = s.programName || s.programId;
 												const displayCountry = s.countryName || s.destinationId;

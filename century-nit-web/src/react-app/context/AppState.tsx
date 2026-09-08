@@ -135,6 +135,10 @@ export type SchoolApplicationTrack = {
 	destinationId: string;
 	universityId: string;
 	programId: string;
+	/** Snapshot of the university name at selection time. */
+	universityName?: string | null;
+	/** Snapshot of the program name at selection time. */
+	programName?: string | null;
 	intake: string;
 	status: SchoolTrackStatus;
 	outcome?: SchoolOutcome | null;
@@ -162,7 +166,7 @@ export type SchoolApplicationTrack = {
 	offerDepositUsd: number | null;
 	offerDepositDueAt: string | null;
 	offerDepositPaidAt: string | null;
-	offerLetterUrl?: string | null;
+	offerLetterStorageKey?: string | null;
 };
 
 export type ApplicationData = {
@@ -1682,7 +1686,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				offerDepositUsd: null,
 				offerDepositDueAt: null,
 				offerDepositPaidAt: null,
-				offerLetterUrl: null,
+				offerLetterStorageKey: null,
 			};
 			setSchoolApplications((prev) => [...prev, row]);
 		},

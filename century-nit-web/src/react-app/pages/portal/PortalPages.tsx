@@ -2990,31 +2990,34 @@ function TrackingPageInner() {
 				const res = await schoolsApi.list();
 				if (!active) return;
 				const mapped: SchoolApplicationTrack[] = res.schools.map((s) => ({
-					id: s.id,
-					destinationId: s.destinationId,
-					universityId: s.universityId,
-					programId: s.programId,
-					intake: s.intake,
-					status: s.status,
-					outcome: s.outcome ?? null,
-					handlerNote: s.handlerNote,
-					financialNote: s.financialNote,
-					events: (s.events ?? []).map((e) => ({
-						at: e.at,
-						status: e.status,
-						outcome: e.outcome ?? null,
-						note: e.note,
-						financialNote: e.financialNote ?? undefined,
-					})),
-					createdAt: s.createdAt,
-					updatedAt: s.updatedAt,
-					trackStartedAt: null,
-					offerTuitionUsd: s.offerTuitionUsd ?? null,
-					offerTuitionLabel: s.offerTuitionLabel ?? null,
-					offerDepositUsd: s.offerDepositUsd ?? null,
-					offerDepositDueAt: s.offerDepositDueAt ?? null,
-					offerDepositPaidAt: s.offerDepositPaidAt ?? null,
-				}));
+				id: s.id,
+				destinationId: s.destinationId,
+				universityId: s.universityId,
+				programId: s.programId,
+				universityName: s.universityName ?? null,
+				programName: s.programName ?? null,
+				intake: s.intake,
+				status: s.status,
+				outcome: s.outcome ?? null,
+				handlerNote: s.handlerNote,
+				financialNote: s.financialNote,
+				events: (s.events ?? []).map((e) => ({
+					at: e.at,
+					status: e.status,
+					outcome: e.outcome ?? null,
+					note: e.note,
+					financialNote: e.financialNote ?? undefined,
+				})),
+				createdAt: s.createdAt,
+				updatedAt: s.updatedAt,
+				trackStartedAt: null,
+				offerTuitionUsd: s.offerTuitionUsd ?? null,
+				offerTuitionLabel: s.offerTuitionLabel ?? null,
+				offerDepositUsd: s.offerDepositUsd ?? null,
+				offerDepositDueAt: s.offerDepositDueAt ?? null,
+				offerDepositPaidAt: s.offerDepositPaidAt ?? null,
+				offerLetterStorageKey: s.offerLetterStorageKey ?? null,
+			}));
 				setSchoolApplications(mapped);
 			} catch {
 				/* keep local state on network drop */
@@ -3217,6 +3220,129 @@ function trackLabel(row: SchoolApplicationTrack): string {
 	return SCHOOL_TRACK_STATUS_LABELS[row.status];
 }
 
+function decisionUpdateCopy(row: SchoolApplicationTrack, uniName: string, programName: string): string {
+	if (row.handlerNote) return row.handlerNote;
+	if (row.status !== "Decision Reached" || !row.outcome) {
+		return "Waiting for first handler update…";
+	}
+	const uni = uniName.trim() || "the university";
+	const prog = programName.trim();
+	switch (row.outcome) {
+		case "Admitted":
+			return `Congratulations! ${uni} has issued an official admission offer${prog ? ` for ${prog}` : ""}.`;
+		case "Application Rejected":
+			return `A decision has been received from ${uni}. Unfortunately this application was not successful.`;
+		case "Waitlisted":
+			return `${uni} has placed this application on the waitlist.`;
+		case "Withdrawn":
+			return `This application to ${uni} has been withdrawn.`;
+		default:
+			return "Waiting for first handler update…";
+	}
+}
+
+function AdmissionLetterViewer({ schoolId, universityName }: { schoolId: string; universityName: string }) {
+	const [open, setOpen] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [url, setUrl] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	const openModal = async () => {
+		setOpen(true);
+		if (url) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const ticket = await schoolsApi.meAdmissionLetterDownloadUrl(schoolId);
+			setUrl(ticket.url);
+		} catch {
+			setError("Could not load the admission letter. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const closeModal = () => {
+		setOpen(false);
+	};
+
+	return (
+		<>
+			<button
+				type="button"
+				onClick={openModal}
+				className="btn btn--secondary btn--sm"
+				style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+			>
+				<span aria-hidden>📄</span>
+				<span>View admission letter</span>
+			</button>
+
+			{open ? (
+				<div
+					className="admission-letter-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label={`Admission letter for ${universityName}`}
+					onClick={closeModal}
+				>
+					<div
+						className="admission-letter-modal__panel"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="admission-letter-modal__header">
+							<div>
+								<p className="eyebrow" style={{ fontSize: "0.65rem" }}>Admission letter</p>
+								<p style={{ fontWeight: 600, fontSize: "0.95rem" }}>{universityName}</p>
+							</div>
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+								{url ? (
+									<a
+										href={url}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="btn btn--ghost btn--sm"
+										style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+									>
+										<span aria-hidden>⤢</span>
+										<span>Expand</span>
+									</a>
+								) : null}
+								<button
+									type="button"
+									onClick={closeModal}
+									aria-label="Close"
+									className="btn btn--ghost btn--sm"
+									style={{ fontSize: "1rem", lineHeight: 1 }}
+								>
+									✕
+								</button>
+							</div>
+						</div>
+						<div className="admission-letter-modal__body">
+							{busy ? (
+								<div className="admission-letter-modal__loading">
+									<p className="mono muted">Loading admission letter…</p>
+								</div>
+							) : error ? (
+								<div className="admission-letter-modal__error">
+									<p>{error}</p>
+								</div>
+							) : url ? (
+								<iframe
+									src={url}
+									title={`Admission letter for ${universityName}`}
+									className="admission-letter-modal__frame"
+								/>
+							) : null}
+						</div>
+					</div>
+				</div>
+			) : null}
+		</>
+	);
+}
+
 /** Read-only school card - applicant sees handler updates, cannot edit them */
 function SchoolTrackCard({
 	row,
@@ -3257,22 +3383,6 @@ function SchoolTrackCard({
 				{/* Offer terms — only displayed for schools that have made an offer */}
 				{row.offerTuitionUsd && row.outcome === "Admitted" ? (
 					<OfferTerms row={row} />
-				) : null}
-
-				{/* Official Offer Document attachment download */}
-				{row.offerLetterUrl ? (
-					<div className="mt-3">
-						<a
-							href={row.offerLetterUrl}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="btn btn--secondary btn--sm"
-							style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
-						>
-							<span aria-hidden>📄</span>
-							<span>Download Official Offer Letter (PDF)</span>
-						</a>
-					</div>
 				) : null}
 
 				{/* Compact progress bar */}
@@ -3328,7 +3438,7 @@ function SchoolTrackCard({
 					))}
 				</ol>
 
-				{/* Latest update */}
+				{/* Latest update — congrats / decision copy, admission letter, docs */}
 				<div
 					className="card card--pad"
 					style={{
@@ -3342,9 +3452,20 @@ function SchoolTrackCard({
 							<p className="eyebrow" style={{ fontSize: "0.65rem" }}>
 								Latest update
 							</p>
-							<p className="mt-2" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-								{row.handlerNote ?? "Waiting for first handler update…"}
+							<p className="mt-2" style={{ fontSize: "0.95rem", fontWeight: 500, lineHeight: 1.55 }}>
+								{decisionUpdateCopy(row, uni?.name ?? "", program?.name ?? "")}
 							</p>
+							{row.outcome === "Admitted" && row.offerLetterStorageKey ? (
+								<div className="mt-3" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+									<AdmissionLetterViewer schoolId={row.id} universityName={uni?.name ?? row.universityName ?? "University"} />
+								</div>
+							) : null}
+							{row.outcome === "Admitted" && !row.offerLetterStorageKey ? (
+								<p className="muted mt-2" style={{ fontSize: "0.8rem" }}>
+									The official admission letter and documents will appear here once your consultant
+									uploads them.
+								</p>
+							) : null}
 							{row.updatedAt ? (
 								<p className="mono muted mt-2" style={{ fontSize: "0.7rem" }}>
 									{new Date(row.updatedAt).toLocaleString()}

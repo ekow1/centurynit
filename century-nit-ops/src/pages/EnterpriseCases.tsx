@@ -17,10 +17,12 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
 	const [outcome, setOutcome] = useState<string>(school.outcome || "Admitted");
 	const [offerLetterUrl, setOfferLetterUrl] = useState(school.offerLetterUrl ?? "");
-	const [consultantNote, setConsultantNote] = useState("");
+	const [consultantNote, setConsultantNote] = useState(school.handlerNote ?? "");
 	const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
 
 	const [isSaving, setIsSaving] = useState(false);
+	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
+	const showDecisionFields = status === "Decision Reached";
 
 	const handleSave = async () => {
 		setIsSaving(true);
@@ -28,8 +30,9 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			await updateSchoolApplication(appId, school.id, {
 				status: status as any,
 				outcome: status === "Decision Reached" ? outcome as any : null,
-				offerLetterUrl: status === "Decision Reached" && outcome === "Admitted" ? offerLetterUrl.trim() || null : null,
-				sendUpdateEmail: status === "Decision Reached" && outcome === "Admitted" && sendUpdateEmail && Boolean(offerLetterUrl.trim()),
+				offerLetterUrl: showOfferFields ? offerLetterUrl.trim() || null : undefined,
+				sendUpdateEmail: status === "Decision Reached" && sendUpdateEmail,
+				handlerNote: consultantNote.trim() || undefined,
 				consultantNote: consultantNote.trim() || undefined,
 			});
 		} catch {
@@ -38,8 +41,6 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			setIsSaving(false);
 		}
 	};
-
-	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
 
 	return (
 		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
@@ -80,24 +81,28 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 				</button>
 			</div>
 
-			{showOfferFields && (
+			{showDecisionFields && (
 				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", marginTop: "0.5rem" }}>
-					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>Offer Details</p>
+					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>
+						{showOfferFields ? "Offer details" : "Decision update"}
+					</p>
+					{showOfferFields ? (
+						<div style={{ gridColumn: "1 / -1" }}>
+							<p className="muted" style={{ marginBottom: "0.15rem" }}>Official offer letter / document URL (PDF)</p>
+							<input
+								className="input input--sm"
+								type="url"
+								placeholder="https://.../offer-letter.pdf"
+								value={offerLetterUrl}
+								onChange={(e) => setOfferLetterUrl(e.target.value)}
+							/>
+						</div>
+					) : null}
 					<div style={{ gridColumn: "1 / -1" }}>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Official Offer Letter / Document URL (PDF)</p>
-						<input
-							className="input input--sm"
-							type="url"
-							placeholder="https://.../offer-letter.pdf"
-							value={offerLetterUrl}
-							onChange={(e) => setOfferLetterUrl(e.target.value)}
-						/>
-					</div>
-					<div style={{ gridColumn: "1 / -1" }}>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Consultant Note to Applicant (included in email)</p>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>Note to applicant (shown in portal Latest update)</p>
 						<textarea
 							className="input input--sm"
-							placeholder="e.g. Congratulations! Your official offer has arrived with a scholarship award..."
+							placeholder={showOfferFields ? "e.g. Congratulations! Your official offer has arrived…" : "e.g. Decision received from the university…"}
 							value={consultantNote}
 							onChange={(e) => setConsultantNote(e.target.value)}
 							rows={2}

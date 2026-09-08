@@ -1387,7 +1387,49 @@ export const schoolsApi = {
 	/** Staff: update an application track status, handler note, or timeline event. */
 	updateStatus(id: string, input: UpdateSchoolStatus): Promise<SchoolApplication> {
 		return request(`${API_PREFIX}/schools/${id}/status`, { method: "PATCH", ...json(input) });
-	}
+	},
+
+	/**
+	 * Staff: request a signed upload URL for an admission/offer letter. The
+	 * server builds the storage key from the applicant's name so the vault has
+	 * a sensible folder layout. PUT the file to `uploadUrl`, then call
+	 * `completeAdmissionLetter` with the returned `storageKey`.
+	 */
+	requestAdmissionLetterUpload(
+		id: string,
+		input: { fileName: string; contentType: string },
+	): Promise<{ uploadUrl: string; storageKey: string; expiresAt: string; headers?: Record<string, string> }> {
+		return request(`${API_PREFIX}/schools/${id}/admission-letter/upload-url`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Staff: confirm an admission-letter upload landed and attach it to the row. */
+	completeAdmissionLetterUpload(
+		id: string,
+		storageKey: string,
+	): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/admission-letter/complete`, {
+			method: "POST",
+			...json({ storageKey }),
+		});
+	},
+
+	/** Staff: remove an admission letter from the row and storage. */
+	removeAdmissionLetter(id: string): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/admission-letter`, { method: "DELETE" });
+	},
+
+	/** Staff: get a short-lived signed download URL for an admission letter. */
+	admissionLetterDownloadUrl(id: string): Promise<{ url: string; expiresAt: string }> {
+		return request(`${API_PREFIX}/schools/${id}/admission-letter/download`);
+	},
+
+	/** Applicant: get a short-lived signed download URL for an admission letter. */
+	meAdmissionLetterDownloadUrl(id: string): Promise<{ url: string; expiresAt: string }> {
+		return request(`${API_PREFIX}/me/schools/${id}/admission-letter/download`);
+	},
 };
 
 /* ── CRM Leads ─────────────────────────────────────────────────────────── */

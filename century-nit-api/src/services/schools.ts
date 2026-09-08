@@ -1,4 +1,5 @@
 import { and, desc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import type {
 	AddSchoolApplication,
 	SchoolApplication,
@@ -26,6 +27,7 @@ import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
+import { getDocumentStorage } from "./storage/index.js";
 
 export async function lockSchoolsForApplicant(
 	applicantId: string,
@@ -208,6 +210,7 @@ export async function serializeSchool(
 		offerDepositUsd: row.offerDepositUsd,
 		offerDepositDueAt: row.offerDepositDueAt?.toISOString() ?? null,
 		offerDepositPaidAt: row.offerDepositPaidAt?.toISOString() ?? null,
+		offerLetterStorageKey: row.offerLetterUrl ?? null,
 		offerLetterUrl: row.offerLetterUrl ?? null,
 	};
 }
@@ -310,6 +313,27 @@ export async function removeSchoolForApplicant(
 	await db.delete(schoolApplications).where(eq(schoolApplications.id, schoolId));
 }
 
+function defaultDecisionNote(
+	outcome: string | null | undefined,
+	universityName: string | null,
+	programName: string | null,
+): string | null {
+	const uni = universityName?.trim() || "the university";
+	const prog = programName?.trim();
+	switch (outcome) {
+		case "Admitted":
+			return `Congratulations! ${uni} has issued an official admission offer${prog ? ` for ${prog}` : ""}.`;
+		case "Application Rejected":
+			return `A decision has been received from ${uni}. Unfortunately this application was not successful.`;
+		case "Waitlisted":
+			return `${uni} has placed this application on the waitlist.`;
+		case "Withdrawn":
+			return `This application to ${uni} has been withdrawn.`;
+		default:
+			return null;
+	}
+}
+
 export async function updateSchoolStatus(
 	schoolId: string,
 	input: UpdateSchoolStatus,
@@ -325,12 +349,27 @@ export async function updateSchoolStatus(
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
 
+	const providedNote = [input.handlerNote, input.consultantNote, input.note]
+		.map((n) => n?.trim())
+		.find(Boolean);
+	const fallbackNote =
+		input.status === "Decision Reached"
+			? defaultDecisionNote(input.outcome, target.universityName, target.programName)
+			: null;
+	const nextHandlerNote = providedNote || target.handlerNote || fallbackNote || null;
+	const nextOfferLetterUrl =
+		input.offerLetterUrl !== undefined
+			? input.offerLetterUrl
+			: input.offerLetterStorageKey !== undefined
+				? input.offerLetterStorageKey
+				: target.offerLetterUrl;
+
 	const [updated] = await db
 		.update(schoolApplications)
 		.set({
 			status: input.status,
 			outcome: input.outcome,
-			handlerNote: input.handlerNote ?? target.handlerNote,
+			handlerNote: nextHandlerNote,
 			financialNote: input.financialNote ?? target.financialNote,
 			offerTuitionUsd: input.offerTuitionUsd !== undefined ? input.offerTuitionUsd : target.offerTuitionUsd,
 			offerTuitionLabel: input.offerTuitionLabel !== undefined ? input.offerTuitionLabel : target.offerTuitionLabel,
@@ -347,7 +386,7 @@ export async function updateSchoolStatus(
 						? new Date(input.offerDepositPaidAt)
 						: null
 					: target.offerDepositPaidAt,
-			offerLetterUrl: input.offerLetterUrl !== undefined ? input.offerLetterUrl : target.offerLetterUrl,
+			offerLetterUrl: nextOfferLetterUrl,
 			updatedAt: new Date(),
 		})
 		.where(eq(schoolApplications.id, schoolId))
@@ -357,7 +396,7 @@ export async function updateSchoolStatus(
 		schoolApplicationId: schoolId,
 		status: input.status,
 		outcome: input.outcome,
-		note: input.note || input.handlerNote || `Status updated to ${input.status} by ${actorName}`,
+		note: providedNote || fallbackNote || `Status updated to ${input.status} by ${actorName}`,
 		financialNote: input.financialNote,
 	});
 
@@ -378,6 +417,24 @@ export async function updateSchoolStatus(
 					subject = `Application Update: Decision from ${target.universityName || "University"}`;
 				}
 
+				const storedLetter = nextOfferLetterUrl;
+				let attachmentUrl: string | null = null;
+				if (storedLetter) {
+					if (/^https?:\/\//i.test(storedLetter)) {
+						attachmentUrl = storedLetter;
+					} else {
+						try {
+							const storage = await getDocumentStorage();
+							if (storage.enabled) {
+								const ticket = await storage.createDownloadUrl({ key: storedLetter });
+								attachmentUrl = ticket.url;
+							}
+						} catch {
+							/* storage not configured — email still sends without the attachment */
+						}
+					}
+				}
+
 				const emailContent = renderSchoolOfferEmail({
 					clientName: appRow.name || "Applicant",
 					universityName: target.universityName || "University",
@@ -386,9 +443,9 @@ export async function updateSchoolStatus(
 					tuitionFormatted: null,
 					depositFormatted: null,
 					depositDeadlineFormatted: null,
-					consultantNote: input.consultantNote,
+					consultantNote: providedNote || fallbackNote,
 					portalUrl: frontendUrl,
-					hasAttachment: Boolean(input.offerLetterUrl),
+					hasAttachment: Boolean(attachmentUrl),
 				});
 
 				await sendEmail({
@@ -396,14 +453,16 @@ export async function updateSchoolStatus(
 					subject,
 					html: emailContent.html,
 					text: emailContent.text,
-					...(input.offerLetterUrl
-						? [
-								{
-									filename: `Document_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
-									path: input.offerLetterUrl,
-								},
-							]
-						: []),
+					...(attachmentUrl
+						? {
+								attachments: [
+									{
+										filename: `Document_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
+										path: attachmentUrl,
+									},
+								],
+							}
+						: {}),
 				});
 			}
 		} catch (err) {
@@ -468,4 +527,190 @@ export async function removeScholarshipForApplicant(applicantId: string, scholar
 				eq(studentScholarships.scholarshipId, scholarshipId)
 			)
 		);
+}
+
+/* ── Admission letters (offer letters) ────────────────────────────────────── */
+
+/**
+ * Admission / offer letters live in the same private document vault as applicant
+ * uploads, under a sub-directory keyed by the applicant's name so a reviewer
+ * browsing the bucket sees a sensible layout. The applicant's *original* filename
+ * is never used as the path — it is attacker-controlled — only as a stored label.
+ *
+ * Structure: `admission-letters/{nameSlug}/{nameSlug}-admission-letter-{suffix}.{ext}`
+ */
+function buildAdmissionLetterKey(applicantName: string | null, fileName: string): string {
+	const extension = (fileName.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] ?? "pdf").toLowerCase();
+	const nameSlug = sanitizeApplicantSlug(applicantName ?? "applicant");
+	const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
+	return `admission-letters/${nameSlug}/${nameSlug}-admission-letter-${suffix}.${extension}`;
+}
+
+function sanitizeApplicantSlug(input: string): string {
+	return (
+		input
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/-+/g, "-")
+			.replace(/^-|-$/g, "")
+			.slice(0, 64) || "applicant"
+	);
+}
+
+/**
+ * Resolve the applicant name for a school application row, so the storage path
+ * can be built from it.
+ */
+async function applicantNameFor(schoolRow: { applicantId: string }): Promise<string | null> {
+	const [appRow] = await db
+		.select({ name: applicants.name })
+		.from(applicants)
+		.where(eq(applicants.id, schoolRow.applicantId))
+		.limit(1);
+	return appRow?.name ?? null;
+}
+
+export async function createAdmissionLetterUpload(
+	schoolId: string,
+	input: { fileName: string; contentType: string },
+): Promise<{ uploadUrl: string; storageKey: string; expiresAt: string; headers?: Record<string, string> }> {
+	const [target] = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.id, schoolId))
+		.limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+
+	const storage = await getDocumentStorage();
+	if (!storage.enabled) {
+		throw new HttpError(
+			503,
+			"STORAGE_NOT_CONFIGURED",
+			"Document storage is not configured on this server.",
+		);
+	}
+
+	const applicantName = await applicantNameFor(target);
+	const storageKey = buildAdmissionLetterKey(applicantName, input.fileName);
+
+	const ticket = await storage.createUploadUrl({
+		key: storageKey,
+		contentType: input.contentType,
+	});
+
+	return {
+		uploadUrl: ticket.url,
+		storageKey,
+		expiresAt: ticket.expiresAt.toISOString(),
+		headers: ticket.headers,
+	};
+}
+
+export async function completeAdmissionLetterUpload(
+	schoolId: string,
+	storageKey: string,
+): Promise<SchoolApplication> {
+	const [target] = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.id, schoolId))
+		.limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+
+	const storage = await getDocumentStorage();
+	if (!storage.enabled) {
+		throw new HttpError(
+			503,
+			"STORAGE_NOT_CONFIGURED",
+			"Document storage is not configured on this server.",
+		);
+	}
+
+	// Trusting the client here would let anyone point the record at a key that
+	// was never uploaded. Verify the object exists before committing the key.
+	const object = await storage.head(storageKey);
+	if (!object) {
+		throw new HttpError(409, "UPLOAD_NOT_COMPLETED", "The file has not finished uploading");
+	}
+
+	// Remove any previous letter object so the vault folder has only the latest.
+	if (target.offerLetterUrl && target.offerLetterUrl !== storageKey && !/^https?:\/\//i.test(target.offerLetterUrl)) {
+		await storage.remove(target.offerLetterUrl).catch(() => {
+			/* orphaned object; not worth failing the replacement */
+		});
+	}
+
+	const [updated] = await db
+		.update(schoolApplications)
+		.set({ offerLetterUrl: storageKey, updatedAt: new Date() })
+		.where(eq(schoolApplications.id, schoolId))
+		.returning();
+
+	return serializeSchool(updated);
+}
+
+export async function removeAdmissionLetter(schoolId: string): Promise<SchoolApplication> {
+	const [target] = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.id, schoolId))
+		.limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+
+	if (target.offerLetterUrl && !/^https?:\/\//i.test(target.offerLetterUrl)) {
+		try {
+			const storage = await getDocumentStorage();
+			if (storage.enabled) {
+				await storage.remove(target.offerLetterUrl);
+			}
+		} catch {
+			/* storage not configured or object already gone — clear the row regardless */
+		}
+	}
+
+	const [updated] = await db
+		.update(schoolApplications)
+		.set({ offerLetterUrl: null, updatedAt: new Date() })
+		.where(eq(schoolApplications.id, schoolId))
+		.returning();
+
+	return serializeSchool(updated);
+}
+
+export async function getAdmissionLetterDownloadUrl(
+	schoolId: string,
+): Promise<{ url: string; expiresAt: string }> {
+	const [target] = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.id, schoolId))
+		.limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+	if (!target.offerLetterUrl) {
+		throw new HttpError(404, "DOCUMENT_NOT_FOUND", "No admission letter has been uploaded");
+	}
+
+	if (/^https?:\/\//i.test(target.offerLetterUrl)) {
+		return { url: target.offerLetterUrl, expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+	}
+
+	const storage = await getDocumentStorage();
+	if (!storage.enabled) {
+		throw new HttpError(
+			503,
+			"STORAGE_NOT_CONFIGURED",
+			"Document storage is not configured on this server.",
+		);
+	}
+
+	const ticket = await storage.createDownloadUrl({ key: target.offerLetterUrl });
+	return { url: ticket.url, expiresAt: ticket.expiresAt.toISOString() };
 }

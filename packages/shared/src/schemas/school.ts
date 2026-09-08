@@ -86,6 +86,7 @@ export const schoolApplicationSchema = z.object({
 	offerDepositUsd: z.number().int().nullable().optional(),
 	offerDepositDueAt: z.string().datetime().nullable().optional(),
 	offerDepositPaidAt: z.string().datetime().nullable().optional(),
+	offerLetterStorageKey: z.string().nullable().optional(),
 	offerLetterUrl: z.string().nullable().optional(),
 });
 export type SchoolApplication = z.infer<typeof schoolApplicationSchema>;
@@ -109,6 +110,7 @@ export const updateSchoolStatusSchema = z.object({
 	offerDepositUsd: z.number().int().nullable().optional(),
 	offerDepositDueAt: z.string().datetime().nullable().optional(),
 	offerDepositPaidAt: z.string().datetime().nullable().optional(),
+	offerLetterStorageKey: z.string().nullable().optional(),
 	offerLetterUrl: z.string().nullable().optional(),
 	sendUpdateEmail: z.boolean().optional(),
 	consultantNote: z.string().max(2000).optional(),

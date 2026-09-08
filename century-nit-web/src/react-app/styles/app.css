@@ -3260,6 +3260,83 @@ img.profile-monogram {
 	opacity: 0.65;
 }
 
+/* Admission letter modal viewer */
+
+.admission-letter-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	background: rgba(0, 0, 0, 0.6);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1rem;
+}
+
+.admission-letter-modal__panel {
+	background: var(--background);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md, 8px);
+	width: min(900px, 100%);
+	max-height: 90vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.admission-letter-modal__header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.85rem 1.1rem;
+	border-bottom: 1px solid var(--border-light);
+	background: var(--muted);
+	flex-shrink: 0;
+}
+
+.admission-letter-modal__body {
+	flex: 1;
+	overflow: hidden;
+	min-height: 50vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--background);
+}
+
+.admission-letter-modal__frame {
+	width: 100%;
+	height: 100%;
+	min-height: 50vh;
+	border: 0;
+	display: block;
+}
+
+.admission-letter-modal__loading,
+.admission-letter-modal__error {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	padding: 3rem 1.5rem;
+	text-align: center;
+}
+
+.admission-letter-modal__error {
+	color: var(--danger, #b91c1c);
+}
+
+@media (max-width: 720px) {
+	.admission-letter-modal__panel {
+		max-height: 95vh;
+	}
+	.admission-letter-modal__body {
+		min-height: 40vh;
+	}
+}
+
 /* School package degree chips */
 
 .degree-chip-grid {

@@ -141,17 +141,26 @@ export function overlaps(
  * "Thu 20 Aug 2026, 10:00 (GMT)". Used in emails, where the recipient's zone
  * differs from the server's and an unqualified time is a missed meeting.
  */
+const ZONE_FORMAT: Intl.DateTimeFormatOptions = {
+	weekday: "short",
+	day: "numeric",
+	month: "short",
+	year: "numeric",
+	hour: "2-digit",
+	minute: "2-digit",
+	timeZoneName: "short",
+};
+
 export function formatInZone(instant: Date, timeZone: string): string {
-	return new Intl.DateTimeFormat("en-GB", {
-		timeZone,
-		weekday: "short",
-		day: "numeric",
-		month: "short",
-		year: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		timeZoneName: "short",
-	}).format(instant);
+	try {
+		return new Intl.DateTimeFormat("en-GB", { ...ZONE_FORMAT, timeZone }).format(instant);
+	} catch {
+		try {
+			return new Intl.DateTimeFormat("en-GB", { ...ZONE_FORMAT, timeZone: "UTC" }).format(instant);
+		} catch {
+			return Number.isNaN(instant.getTime()) ? "scheduled time" : instant.toISOString();
+		}
+	}
 }
 
 /**

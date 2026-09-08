@@ -11,6 +11,7 @@ import {
 	type AcceptProceedResponse,
 	canAdvanceToStage,
 	JOURNEY_STAGES,
+	JOURNEY_STAGE_LABELS,
 	type JourneyStage,
 	patchApplicationSchema,
 	type ProceedQuotation,
@@ -24,6 +25,7 @@ import {
 	applicants,
 	applications,
 	bookings,
+	caseAssignments,
 	caseComments,
 	consultationActivities,
 	consultations,
@@ -34,6 +36,7 @@ import {
 	opsUsers,
 	schoolApplications,
 	servicePackages,
+	stageAssignments,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -750,8 +753,8 @@ export async function assignConsultation(input: {
 					link: "/applications",
 				}).catch(() => {});
 			}
-		} catch {
-			// Notification failure must not block the assignment.
+		} catch (err) {
+			console.error(`[cases] failed to queue consultation assignment email for ${updated.reference}:`, err);
 		}
 	}
 
@@ -836,8 +839,8 @@ export async function confirmConsultationSlot(id: string, actor: Actor): Promise
 				link: "/portal/consultation",
 			}).catch(() => {});
 		}
-	} catch {
-		// Notification failure must not roll back the confirmation.
+	} catch (err) {
+		console.error(`[cases] failed to queue slot-confirmed email for ${row.reference}:`, err);
 	}
 
 	return updated;
@@ -937,8 +940,8 @@ export async function completeConsultationAssessment(input: {
 				clientEmail: applicant.email ?? "",
 			}),
 		]);
-	} catch {
-		// Notification failure must not block the assessment completion.
+	} catch (err) {
+		console.error(`[cases] failed to queue assessment email for ${updated.reference}:`, err);
 	}
 
 	// In-app: tell the client their assessment is ready to view.
@@ -979,7 +982,9 @@ export async function completeConsultationAssessment(input: {
 				program: input.result.recProgram || "TBC",
 				country: input.result.recCountry || row.targetCountry || applicant.targetCountry || "TBC",
 				degreeLevel: (applicant.profile as ApplicantProfile)?.degreeLevel || "Master's",
-				assignedStaffId: row.assignedOfficerId,
+				// Deliberately null: the consultation's officer must NOT be inherited —
+				// a manager assigns the application handler from the ops workspace.
+				assignedStaffId: null,
 				stage: "document_verification",
 				status: "UNDER_REVIEW",
 				// The application is locked until the client consents to start it.
@@ -990,12 +995,46 @@ export async function completeConsultationAssessment(input: {
 				submittedAt: new Date(),
 			})
 			.returning();
+
+		// Fully release the consultant — same principle as assignedStaffId above.
+		await tx
+			.update(applicants)
+			.set({ assignedOfficerId: null, updatedAt: new Date() })
+			.where(eq(applicants.id, row.applicantId));
+
 		return app;
 	});
 
 	if (applicant?.email && created) {
 		await linkApplicationToLead(created.id, applicant.email, input.actor.name);
 	}
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: created.id,
+		kind: "assignment",
+		text: "Application opened — awaiting assignment",
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	// In-app: hand the case to management — it needs an owner before work starts.
+	getManagerAndCoordinatorUserIds()
+		.then((recipients) =>
+			notifyMany(
+				recipients.map((r) => ({
+					recipientUserId: r.userId,
+					type: "application.awaiting_assignment",
+					title: "New application awaiting assignment",
+					body: `${applicant.name ?? "A client"}'s application ${created.appNumber} opened from consultation ${updated.reference} — awaiting assignment.`,
+					link: "/applications",
+					entityType: "case",
+					entityId: created.id,
+					caseId: created.id,
+				})),
+			),
+		)
+		.catch(() => {});
 
 	return { consultation: updated, application: created };
 }
@@ -1521,6 +1560,65 @@ function markStageCompleted(
 		.catch((err) => console.warn("[cases] Failed to complete stage assignment:", err));
 }
 
+/**
+ * After a stage transition, check whether anyone owns the new stage. If a
+ * whole-case owner (`case_assignments`, target `application`) or a stage
+ * specialist (`stage_assignments` for this stage) is active, stay quiet.
+ * Otherwise alert managers/coordinators so the stage is not worked silently —
+ * the complement to markStageCompleted, which releases the outgoing officer.
+ */
+async function signalStageNeedsHandler(applicationId: string, stage: JourneyStage): Promise<void> {
+	try {
+		const [wholeCase, stageRows] = await Promise.all([
+			db
+				.select({ id: caseAssignments.id })
+				.from(caseAssignments)
+				.where(
+					and(
+						eq(caseAssignments.targetType, "application"),
+						eq(caseAssignments.targetId, applicationId),
+						eq(caseAssignments.status, "active"),
+					),
+				)
+				.limit(1)
+				.then((r) => r[0]),
+			db
+				.select({ id: stageAssignments.id })
+				.from(stageAssignments)
+				.where(
+					and(
+						eq(stageAssignments.applicationId, applicationId),
+						eq(stageAssignments.stage, stage),
+						eq(stageAssignments.status, "active"),
+					),
+				)
+				.limit(1),
+		]);
+		if (wholeCase || stageRows.length > 0) return;
+
+		const [app] = await db
+			.select({ appNumber: applications.appNumber })
+			.from(applications)
+			.where(eq(applications.id, applicationId))
+			.limit(1);
+		const recipients = await getManagerAndCoordinatorUserIds();
+		await notifyMany(
+			recipients.map((r) => ({
+				recipientUserId: r.userId,
+				type: "stage.needs_handler",
+				title: "Stage has no assigned handler",
+				body: `Stage "${JOURNEY_STAGE_LABELS[stage]}" on ${app?.appNumber ?? "an application"} has no handler.`,
+				link: "/applications",
+				entityType: "case",
+				entityId: applicationId,
+				caseId: applicationId,
+			})),
+		);
+	} catch (err) {
+		console.warn("[cases] Failed to signal stage handler need:", err);
+	}
+}
+
 export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise<void> {
 	try {
 		const [applicant] = await db
@@ -1559,6 +1657,7 @@ export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise
 		if (!updated) return;
 
 		markStageCompleted(application.id, "document_verification", null);
+		void signalStageNeedsHandler(application.id, "school_submission");
 
 		await db.insert(caseComments).values({
 			targetType: "application",
@@ -1771,7 +1870,7 @@ export async function setApplicationStage(
 	]);
 	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Preparing Application");
 	const hasAdmitted = schoolTracks.schools.some(
-		(s) => s.outcome === "Offer Received",
+		(s) => s.outcome === "Admitted",
 	);
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
@@ -1836,7 +1935,11 @@ export async function setApplicationStage(
 	}
 
 	// Leaving a stage the case was in concludes that stage's assignment.
-	if (stage !== row.stage) markStageCompleted(id, row.stage, actor.opsUserId);
+	if (stage !== row.stage) {
+		markStageCompleted(id, row.stage, actor.opsUserId);
+		// The new stage may be unowned — surface it instead of silent drift.
+		void signalStageNeedsHandler(id, stage);
+	}
 
 	await broadcastCaseUpdate(updated, actor);
 	return updated;

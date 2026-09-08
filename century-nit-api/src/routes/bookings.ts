@@ -21,6 +21,7 @@ import {
 	completeBooking,
 	createBooking,
 	getBooking,
+	notifyBookingCreated,
 	listBookings,
 	listBookingsForClient,
 	markNoShow,
@@ -284,6 +285,7 @@ bookingsRouter.openapi(
 			)
 			.limit(1);
 		if (existing) {
+			await notifyBookingCreated(existing);
 			return c.json(toBookingResponse(existing), 200);
 		}
 
@@ -317,6 +319,7 @@ bookingsRouter.openapi(
 					)
 					.limit(1);
 				if (fallback) {
+					await notifyBookingCreated(fallback);
 					return c.json(toBookingResponse(fallback), 200);
 				}
 			}

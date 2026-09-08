@@ -7,13 +7,32 @@ export const schoolTrackStatusSchema = z.enum([
 ]);
 export type SchoolTrackStatus = z.infer<typeof schoolTrackStatusSchema>;
 
+export const SCHOOL_TRACK_STAGES: SchoolTrackStatus[] = [
+	"Preparing Application",
+	"Submitted",
+	"Decision Reached",
+];
+
+export const SCHOOL_TRACK_STATUS_LABELS: Record<SchoolTrackStatus, string> = {
+	"Preparing Application": "Preparing Application",
+	Submitted: "Submitted",
+	"Decision Reached": "Decision Reached",
+};
+
 export const schoolOutcomeSchema = z.enum([
-	"Offer Received",
+	"Admitted",
 	"Waitlisted",
 	"Application Rejected",
 	"Withdrawn",
 ]);
 export type SchoolOutcome = z.infer<typeof schoolOutcomeSchema>;
+
+export const SCHOOL_OUTCOME_LABELS: Record<SchoolOutcome, string> = {
+	Admitted: "Admitted",
+	Waitlisted: "Waitlisted",
+	"Application Rejected": "Rejected",
+	Withdrawn: "Withdrawn",
+};
 
 export const schoolTrackEventSchema = z.object({
 	id: z.string().uuid().optional(),

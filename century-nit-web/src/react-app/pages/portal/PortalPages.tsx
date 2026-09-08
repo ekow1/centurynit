@@ -36,6 +36,8 @@ import {
 	filterProgramsForPackage,
 	universitiesForPrograms,
 	SCHOOL_TRACK_STATUS_LABELS,
+	SCHOOL_TRACK_STAGES,
+	SCHOOL_OUTCOME_LABELS,
 	type SchoolDegreeLevel,
 	type PaymentPlanId,
 	type SchoolFundingTrack,
@@ -2975,7 +2977,7 @@ export function PortalTrackingPage() {
 function TrackingPageInner() {
 	const { schoolApplications, application, setSchoolApplications } = useAppState();
 	const paid = application.applicationInvoice.status === "paid";
-	const acceptedCount = schoolApplications.filter((s) => s.status === "accepted").length;
+	const acceptedCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
 
 	// Poll the server for the authoritative school application statuses. The
 	// local state is the seed; the server is the source of truth once the
@@ -2993,12 +2995,14 @@ function TrackingPageInner() {
 					universityId: s.universityId,
 					programId: s.programId,
 					intake: s.intake,
-					status: mapServerStatusToLocal(s.status),
+					status: s.status,
+					outcome: s.outcome ?? null,
 					handlerNote: s.handlerNote,
 					financialNote: s.financialNote,
 					events: (s.events ?? []).map((e) => ({
 						at: e.at,
-						status: mapServerStatusToLocal(e.status),
+						status: e.status,
+						outcome: e.outcome ?? null,
 						note: e.note,
 						financialNote: e.financialNote ?? undefined,
 					})),
@@ -3058,7 +3062,7 @@ function TrackingPageInner() {
 				<div className="stat-cell">
 					<p className="stat-cell__label">Offers</p>
 					<p className="stat-cell__value">
-						{schoolApplications.filter((s) => s.status === "offer" || s.status === "accepted").length}
+						{schoolApplications.filter((s) => s.status === "Decision Reached").length}
 					</p>
 				</div>
 				<div className="stat-cell stat-cell--accent">
@@ -3118,7 +3122,7 @@ function TrackingPageInner() {
 				<div className="card card--pad mt-6">
 					<p className="eyebrow">In progress</p>
 					<p className="muted mt-2">
-						First school reaches <strong>Accepted</strong> to unlock the visa stage. This is
+						First school reaches <strong>Decision Reached</strong> to unlock the visa stage. This is
 						automated in the simulation.
 					</p>
 				</div>
@@ -3200,31 +3204,17 @@ function OfferTerms({ row }: { row: SchoolApplicationTrack }) {
 	);
 }
 
-const TRACK_PIPELINE: SchoolTrackStatus[] = [
-	"queued",
-	"submitted",
-	"under_review",
-	"offer",
-	"accepted",
-];
+const TRACK_PIPELINE: SchoolTrackStatus[] = SCHOOL_TRACK_STAGES;
 
-/**
- * Map the server's human-readable SchoolTrackStatus (e.g. "Offer Accepted")
- * to the local lowercase enum the portal UI is built against. The two sides
- * drifted when the API switched to title-case strings; this keeps the
- * tracking page in sync without rewriting every status check in the UI.
- */
-function mapServerStatusToLocal(status: string): SchoolTrackStatus {
-	const s = status.toLowerCase();
-	if (s.includes("accepted")) return "accepted";
-	if (s.includes("unconditional") || s.includes("offer received") || s === "conditional offer received") return "offer";
-	if (s.includes("rejected")) return "rejected";
-	if (s.includes("withdrawn") || s.includes("declined")) return "withdrawn";
-	if (s.includes("under review") || s.includes("documents under")) return "under_review";
-	if (s.includes("submitted")) return "submitted";
-	if (s.includes("preparing") || s === "draft") return "queued";
-	if (s.includes("waitlist") || s.includes("additional")) return "additional_info";
-	return "queued";
+function trackSlug(status: SchoolTrackStatus): string {
+	return status.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+function trackLabel(row: SchoolApplicationTrack): string {
+	if (row.status === "Decision Reached" && row.outcome) {
+		return SCHOOL_OUTCOME_LABELS[row.outcome];
+	}
+	return SCHOOL_TRACK_STATUS_LABELS[row.status];
 }
 
 /** Read-only school card - applicant sees handler updates, cannot edit them */
@@ -3244,7 +3234,9 @@ function SchoolTrackCard({
 	const events = [...(row.events ?? [])].reverse();
 
 	return (
-		<li className={`school-track-card school-track-card--${row.status}`}>
+		<li
+			className={`school-track-card school-track-card--${trackSlug(row.status)}${row.outcome === "Admitted" ? " school-track-card--admitted" : ""}`}
+		>
 			<div className="school-track-card__main">
 				<div className="between" style={{ gap: "1rem", flexWrap: "wrap", alignItems: "flex-start" }}>
 					<div>
@@ -3258,13 +3250,13 @@ function SchoolTrackCard({
 							{program?.name} · {row.intake}
 						</p>
 					</div>
-					<span className={`track-status-pill track-status-pill--${row.status}`}>
-						{SCHOOL_TRACK_STATUS_LABELS[row.status]}
+					<span className={`track-status-pill track-status-pill--${trackSlug(row.status)}${row.outcome === "Admitted" ? " track-status-pill--admitted" : ""}`}>
+						{trackLabel(row)}
 					</span>
 				</div>
 
 				{/* Offer terms — only displayed for schools that have made an offer */}
-				{row.offerTuitionUsd && (row.status === "accepted" || row.status === "offer") ? (
+				{row.offerTuitionUsd && row.outcome === "Admitted" ? (
 					<OfferTerms row={row} />
 				) : null}
 
@@ -3395,7 +3387,9 @@ function SchoolTrackCard({
 										{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
 									</span>
 									<span className="handler-feed__status">
-										{SCHOOL_TRACK_STATUS_LABELS[e.status]}
+										{e.status === "Decision Reached" && e.outcome
+											? SCHOOL_OUTCOME_LABELS[e.outcome] ?? e.outcome
+											: SCHOOL_TRACK_STATUS_LABELS[e.status]}
 									</span>
 									<span className="handler-feed__note">{e.note}</span>
 								</li>
@@ -3429,7 +3423,7 @@ function VisaHubInner() {
 	const { application, schoolApplications, fees } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
-	const accepted = schoolApplications.filter((s) => s.status === "accepted" || s.status === "offer");
+	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	const paid = inv.status === "paid";
 	const amount = inv.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
@@ -3510,7 +3504,7 @@ function VisaHubInner() {
 						</p>
 						<p className="muted mt-2">
 							Pay the application invoice on Schools, then wait for handler tracking to reach{" "}
-							<strong>Accepted</strong> (simulated automatically on your first school).
+							<strong>Decision Reached</strong> (simulated automatically on your first school).
 						</p>
 						<div className="row mt-3">
 							<Button to="/portal/application" arrow>
@@ -3526,7 +3520,7 @@ function VisaHubInner() {
 								<li key={s.id}>
 									<span>{getUniversity(s.universityId)?.name}</span>
 									<strong>
-										{getProgram(s.programId)?.name} · {SCHOOL_TRACK_STATUS_LABELS[s.status]}
+										{getProgram(s.programId)?.name} · {trackLabel(s)}
 									</strong>
 								</li>
 							))}
@@ -3622,7 +3616,7 @@ function CompleteInner() {
 	const finished =
 		Boolean(application.completedAt) ||
 		(Boolean(application.agencySettledAt) && application.visaStatus === "complete");
-	const accepted = schoolApplications.filter((s) => s.status === "accepted");
+	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
 

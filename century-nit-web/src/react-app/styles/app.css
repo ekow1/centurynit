@@ -3238,7 +3238,7 @@ img.profile-monogram {
 	}
 }
 
-.school-track-card--accepted {
+.school-track-card--admitted {
 	border-width: 2px;
 	background: var(--muted);
 }
@@ -3252,7 +3252,7 @@ img.profile-monogram {
 	}
 }
 
-.school-track-card--offer {
+.school-track-card--decision-reached {
 	border-width: 2px;
 }
 
@@ -3999,8 +3999,7 @@ img.profile-monogram {
 	background: var(--muted);
 }
 
-.track-status-pill--offer,
-.track-status-pill--accepted {
+.track-status-pill--admitted {
 	background: var(--foreground);
 	color: var(--accent-foreground);
 }
@@ -4008,7 +4007,7 @@ img.profile-monogram {
 .track-pipeline {
 	list-style: none;
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(3, 1fr);
 	gap: 0.65rem;
 	margin: 1.5rem 0 1.25rem;
 }

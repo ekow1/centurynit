@@ -414,6 +414,13 @@
       "when": 1788828103545,
       "tag": "0060_three_stage_tracking_update",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0061_rename_offer_received",
+      "breakpoints": true
     }
   ]
 }

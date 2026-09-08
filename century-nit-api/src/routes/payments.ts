@@ -17,7 +17,7 @@ import {
 	verifyAndSettlePayment,
 } from "../services/payments.js";
 import { listPaystackTransactions, verifyPaystackTransaction } from "../services/paystack.js";
-import { createBooking } from "../services/booking.js";
+import { createBooking, notifyBookingCreated } from "../services/booking.js";
 import { createConsultationInvoice } from "../services/invoice.js";
 import { ensureCaseForBooking } from "../services/cases.js";
 import { resolveServiceName } from "../services/availability.js";
@@ -242,6 +242,7 @@ paymentsRouter.openapi(
 
 			if (existingBooking) {
 				bookingId = existingBooking.id;
+				await notifyBookingCreated(existingBooking);
 			} else {
 				const serviceName = resolveServiceName(bookingPayload.serviceId);
 				const booking = await createBooking({

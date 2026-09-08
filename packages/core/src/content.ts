@@ -2303,26 +2303,13 @@ export const POST_ARRIVAL_SCHEDULES = [
 export type PostArrivalScheduleId =
 	(typeof POST_ARRIVAL_SCHEDULES)[number]["id"];
 
-export type SchoolTrackStatus =
-	| "queued"
-	| "submitted"
-	| "under_review"
-	| "additional_info"
-	| "offer"
-	| "accepted"
-	| "rejected"
-	| "withdrawn";
-
-export const SCHOOL_TRACK_STATUS_LABELS: Record<SchoolTrackStatus, string> = {
-	queued: "Queued",
-	submitted: "Submitted (tracking)",
-	under_review: "Under review",
-	additional_info: "Additional info",
-	offer: "Offer received",
-	accepted: "Accepted",
-	rejected: "Rejected",
-	withdrawn: "Withdrawn",
-};
+export {
+	type SchoolTrackStatus,
+	type SchoolOutcome,
+	SCHOOL_TRACK_STAGES,
+	SCHOOL_TRACK_STATUS_LABELS,
+	SCHOOL_OUTCOME_LABELS,
+} from "century-nit-shared";
 
 export const REQUIRED_DOCUMENTS = [
 	{

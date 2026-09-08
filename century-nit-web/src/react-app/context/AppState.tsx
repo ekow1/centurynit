@@ -56,6 +56,7 @@ import {
 	type SchoolDegreeLevel,
 	type SchoolFundingTrack,
 	type SchoolTrackStatus,
+	type SchoolOutcome,
 } from "century-nit-core";
 
 /**
@@ -124,6 +125,7 @@ export type StageInvoice = {
 export type SchoolTrackEvent = {
 	at: string;
 	status: SchoolTrackStatus;
+	outcome?: SchoolOutcome | null;
 	note: string;
 	financialNote?: string | null;
 };
@@ -135,6 +137,7 @@ export type SchoolApplicationTrack = {
 	programId: string;
 	intake: string;
 	status: SchoolTrackStatus;
+	outcome?: SchoolOutcome | null;
 	/** Handler / consultant feedback for the applicant (read-only) */
 	handlerNote: string | null;
 	/** Financial feedback (fees, deposits, funding notes) - read-only */
@@ -621,7 +624,7 @@ export function isConsultationEligible(booking: BookingData) {
 }
 
 export function hasAcceptedOffer(schools: SchoolApplicationTrack[]) {
-	return schools.some((s) => s.status === "accepted");
+	return schools.some((s) => s.outcome === "Admitted");
 }
 
 export function isAppInvoicePaid(app: ApplicationData) {
@@ -1584,7 +1587,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				const note = "Payment cleared - application process started. Handler is filing your case.";
 				return {
 					...s,
-					status: "submitted" as SchoolTrackStatus,
+					status: "Submitted" as SchoolTrackStatus,
 					trackStartedAt: s.trackStartedAt ?? startAt,
 					updatedAt: now,
 					handlerNote: note,
@@ -1592,7 +1595,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						...(s.events ?? []),
 						{
 							at: now,
-							status: "submitted" as SchoolTrackStatus,
+							status: "Submitted" as SchoolTrackStatus,
 							note,
 						},
 					],
@@ -1660,13 +1663,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			const row: SchoolApplicationTrack = {
 				id: `SCH-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 99)}`,
 				...input,
-				status: "queued",
+				status: "Preparing Application",
+				outcome: null,
 				handlerNote: "Queued - waiting for application invoice payment to start process.",
 				financialNote: null,
 				events: [
 					{
 						at: now,
-						status: "queued",
+						status: "Preparing Application",
 						note: "School added to your application list.",
 					},
 				],

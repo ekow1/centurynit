@@ -311,7 +311,7 @@ export function Workspace() {
 					action: "assign",
 					record: a,
 					title: `${a.applicantName}`,
-					subtitle: `Application ${a.appId} · ${a.country || "—"}`,
+					subtitle: `Application ${a.appId} · Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
 					meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
 					branch: a.branch,
 					owner: "Unassigned",

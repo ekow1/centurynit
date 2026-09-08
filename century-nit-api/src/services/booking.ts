@@ -264,16 +264,7 @@ export async function createBooking(input: {
 	}
 
 	// Queued, never inline: a failed email must not undo a real booking (§13).
-	const ctx = await notificationContext(booking);
-	const managers = await db
-		.select({ email: opsUsers.email })
-		.from(opsUsers)
-		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, ["manager", "coordinator"])));
-
-	await queueEmails([
-		mail.bookingCreatedForClient(ctx),
-		...managers.map((m) => mail.bookingCreatedForManagers(ctx, m.email)),
-	]);
+	await notifyBookingCreated(booking);
 
 	// In-app notification to every manager/coordinator/super_admin: a new
 	// booking is waiting to be assigned. Fire-and-forget so a notification
@@ -356,7 +347,9 @@ export async function assignBooking(input: {
 		{ employeeId },
 	);
 	if (!firstTime) {
-		return (await getBooking(bookingId))!;
+		const existing = (await getBooking(bookingId))!;
+		await notifyBookingAssigned(existing, employee);
+		return existing;
 	}
 
 	let updated: BookingRow;
@@ -399,9 +392,7 @@ export async function assignBooking(input: {
 		updated = await syncCalendarForBooking(updated.id);
 	}
 
-	const ctx = await notificationContext(updated, employee);
-	await queueEmails([mail.bookingAssignedForClient(ctx), mail.bookingAssignedForEmployee(ctx)]);
-	await scheduleReminders(updated, employee);
+	await notifyBookingAssigned(updated, employee);
 
 	// In-app notification to the assigned employee about their new consultation.
 	if (employee?.email) {
@@ -1261,6 +1252,39 @@ export async function cancelCalendarForBooking(bookingId: string): Promise<void>
 		.set({ calendarSyncStatus: "NOT_REQUIRED", meetingUrl: null, meetingProvider: null, meetingSpace: null, updatedAt: new Date() })
 		.where(eq(bookings.id, bookingId));
 	await audit(bookingId, "calendar.cancelled", "system");
+}
+
+/**
+ * Booking-received mail. Safe to call again: job ids are idempotent, and a
+ * previously failed job is re-queued. Must never throw into the request path.
+ */
+export async function notifyBookingCreated(booking: BookingRow): Promise<void> {
+	try {
+		const ctx = await notificationContext(booking);
+		const managers = await db
+			.select({ email: opsUsers.email })
+			.from(opsUsers)
+			.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, ["manager", "coordinator"])));
+		await queueEmails([
+			mail.bookingCreatedForClient(ctx),
+			...managers.map((m) => mail.bookingCreatedForManagers(ctx, m.email)),
+		]);
+	} catch (err) {
+		console.error(`[booking] failed to queue created emails for ${booking.reference}:`, err);
+	}
+}
+
+async function notifyBookingAssigned(
+	booking: BookingRow,
+	employee: { name: string; email: string; id?: string },
+): Promise<void> {
+	try {
+		const ctx = await notificationContext(booking, employee);
+		await queueEmails([mail.bookingAssignedForClient(ctx), mail.bookingAssignedForEmployee(ctx)]);
+		await scheduleReminders(booking, employee);
+	} catch (err) {
+		console.error(`[booking] failed to queue assigned emails for ${booking.reference}:`, err);
+	}
 }
 
 /* ── Reminders ───────────────────────────────────────────────────────────── */

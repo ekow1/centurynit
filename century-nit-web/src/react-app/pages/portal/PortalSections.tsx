@@ -29,6 +29,7 @@ import {
 	PROCESS_STAGES,
 	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_TRACK_STATUS_LABELS,
+	SCHOOL_OUTCOME_LABELS,
 	REQUIRED_DOCUMENTS,
 	getBranchName,
 } from "century-nit-core";
@@ -1237,7 +1238,9 @@ export function PortalJourney() {
 											<li key={s.id}>
 												<span>{uni?.name ?? s.universityId}</span>
 												<strong style={{ textTransform: "capitalize" }}>
-													{SCHOOL_TRACK_STATUS_LABELS[s.status] ?? s.status.replace("_", " ")}
+													{s.status === "Decision Reached" && s.outcome
+														? SCHOOL_OUTCOME_LABELS[s.outcome] ?? s.outcome
+														: SCHOOL_TRACK_STATUS_LABELS[s.status] ?? s.status.replace("_", " ")}
 												</strong>
 											</li>
 										);

@@ -40,6 +40,42 @@ const RETRY: JobsOptions = {
 	removeOnFail: 5000,
 };
 
+function isDuplicateJobId(err: unknown): boolean {
+	return err instanceof Error && /already exists/i.test(err.message);
+}
+
+/**
+ * Enqueue an email job. A duplicate job id is a no-op when the original is
+ * still waiting, delayed, active, or completed. If that job already failed,
+ * it is removed and a new attempt is queued — otherwise a one-shot claim that
+ * threw after commit can silence consultation mail forever.
+ */
+async function addEmailJob(message: QueuedEmail, extra?: Pick<JobsOptions, "delay">): Promise<void> {
+	if (!message.to) return;
+	const jobId = toJobId(message.idempotencyKey);
+	const opts: JobsOptions = { ...RETRY, jobId, ...extra };
+	try {
+		await emailQueue.add("send", message, opts);
+		return;
+	} catch (err) {
+		if (!isDuplicateJobId(err)) throw err;
+	}
+	const existing = await emailQueue.getJob(jobId);
+	if (!existing) return;
+	const state = await existing.getState();
+	if (state !== "failed") return;
+	try {
+		await existing.remove();
+	} catch {
+		return;
+	}
+	try {
+		await emailQueue.add("send", message, opts);
+	} catch (err) {
+		if (!isDuplicateJobId(err)) throw err;
+	}
+}
+
 export const emailQueue = new Queue("email", { connection });
 export const calendarQueue = new Queue("calendar", { connection });
 export const pushQueue = new Queue("push", { connection });
@@ -57,8 +93,7 @@ export const campaignQueue = new Queue("campaign", { connection });
  * id rather than sending a second copy (§14).
  */
 export async function queueEmail(message: QueuedEmail): Promise<void> {
-	if (!message.to) return; // nothing to send to — e.g. unassigned booking
-	await emailQueue.add("send", message, { ...RETRY, jobId: toJobId(message.idempotencyKey) });
+	await addEmailJob(message);
 }
 
 export async function queueEmails(messages: QueuedEmail[]): Promise<void> {
@@ -101,11 +136,7 @@ export async function queueReminder(
 ): Promise<void> {
 	const delay = sendAt.getTime() - Date.now();
 	if (delay <= 0) return; // in the past — nothing useful to send
-	await emailQueue.add("send", message, {
-		...RETRY,
-		jobId: toJobId(message.idempotencyKey),
-		delay,
-	});
+	await addEmailJob(message, { delay });
 }
 
 /** Cancel a scheduled reminder, e.g. after a cancellation or reschedule. */

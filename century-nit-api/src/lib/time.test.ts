@@ -121,4 +121,10 @@ describe("formatInZone", () => {
 		expect(london).toContain("11:00"); // BST
 		expect(accra).not.toBe(london);
 	});
+
+	it("falls back instead of throwing on a bad zone", () => {
+		const instant = zonedTimeToUtc("2026-08-20", "10:00", "Africa/Accra");
+		expect(() => formatInZone(instant, "Not/AZone")).not.toThrow();
+		expect(formatInZone(instant, "Not/AZone")).toMatch(/2026/);
+	});
 });

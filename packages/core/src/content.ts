@@ -2309,6 +2309,7 @@ export {
 	SCHOOL_TRACK_STAGES,
 	SCHOOL_TRACK_STATUS_LABELS,
 	SCHOOL_OUTCOME_LABELS,
+	schoolDecisionNote,
 } from "century-nit-shared";
 
 export const REQUIRED_DOCUMENTS = [

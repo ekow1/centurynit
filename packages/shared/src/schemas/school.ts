@@ -34,6 +34,35 @@ export const SCHOOL_OUTCOME_LABELS: Record<SchoolOutcome, string> = {
 	Withdrawn: "Withdrawn",
 };
 
+/**
+ * Single source of truth for the automated "decision reached" message shown in
+ * the portal's Latest update, sent in the update email, and previewed in Ops.
+ * When a handler leaves the note blank, every surface derives this from the
+ * same function so the three never drift. Returns null when there is no
+ * decision to announce.
+ */
+export function schoolDecisionNote(input: {
+	outcome: SchoolOutcome | null | undefined;
+	universityName?: string | null;
+	programName?: string | null;
+}): string | null {
+	if (!input.outcome) return null;
+	const uni = input.universityName?.trim() || "the university";
+	const prog = input.programName?.trim();
+	switch (input.outcome) {
+		case "Admitted":
+			return `Congratulations! ${uni} has issued an official admission offer${prog ? ` for ${prog}` : ""}.`;
+		case "Application Rejected":
+			return `A decision has been received from ${uni}. Unfortunately this application was not successful.`;
+		case "Waitlisted":
+			return `${uni} has placed this application on the waitlist.`;
+		case "Withdrawn":
+			return `This application to ${uni} has been withdrawn.`;
+		default:
+			return null;
+	}
+}
+
 export const schoolTrackEventSchema = z.object({
 	id: z.string().uuid().optional(),
 	at: z.string().datetime(),
@@ -102,7 +131,7 @@ export type SchoolApplicationList = z.infer<typeof schoolApplicationListSchema>;
 export const updateSchoolStatusSchema = z.object({
 	status: schoolTrackStatusSchema,
 	outcome: schoolOutcomeSchema.nullable().optional(),
-	handlerNote: z.string().max(2000).optional(),
+	handlerNote: z.string().max(2000).nullable().optional(),
 	financialNote: z.string().max(2000).optional(),
 	note: z.string().max(2000).optional(),
 	offerTuitionUsd: z.number().int().nullable().optional(),
@@ -113,7 +142,7 @@ export const updateSchoolStatusSchema = z.object({
 	offerLetterStorageKey: z.string().nullable().optional(),
 	offerLetterUrl: z.string().nullable().optional(),
 	sendUpdateEmail: z.boolean().optional(),
-	consultantNote: z.string().max(2000).optional(),
+	consultantNote: z.string().max(2000).nullable().optional(),
 });
 export type UpdateSchoolStatus = z.infer<typeof updateSchoolStatusSchema>;
 

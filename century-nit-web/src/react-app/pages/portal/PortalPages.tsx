@@ -38,6 +38,7 @@ import {
 	SCHOOL_TRACK_STATUS_LABELS,
 	SCHOOL_TRACK_STAGES,
 	SCHOOL_OUTCOME_LABELS,
+	schoolDecisionNote,
 	type SchoolDegreeLevel,
 	type PaymentPlanId,
 	type SchoolFundingTrack,
@@ -3225,20 +3226,10 @@ function decisionUpdateCopy(row: SchoolApplicationTrack, uniName: string, progra
 	if (row.status !== "Decision Reached" || !row.outcome) {
 		return "Waiting for first handler update…";
 	}
-	const uni = uniName.trim() || "the university";
-	const prog = programName.trim();
-	switch (row.outcome) {
-		case "Admitted":
-			return `Congratulations! ${uni} has issued an official admission offer${prog ? ` for ${prog}` : ""}.`;
-		case "Application Rejected":
-			return `A decision has been received from ${uni}. Unfortunately this application was not successful.`;
-		case "Waitlisted":
-			return `${uni} has placed this application on the waitlist.`;
-		case "Withdrawn":
-			return `This application to ${uni} has been withdrawn.`;
-		default:
-			return "Waiting for first handler update…";
-	}
+	return (
+		schoolDecisionNote({ outcome: row.outcome, universityName: uniName, programName }) ??
+		"Waiting for first handler update…"
+	);
 }
 
 function AdmissionLetterViewer({ schoolId, universityName }: { schoolId: string; universityName: string }) {

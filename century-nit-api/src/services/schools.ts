@@ -9,6 +9,8 @@ import type {
 	StudentScholarship,
 } from "century-nit-shared";
 
+import { schoolDecisionNote } from "century-nit-shared";
+
 import { db } from "../db/index.js";
 import {
 	applicants,
@@ -313,27 +315,6 @@ export async function removeSchoolForApplicant(
 	await db.delete(schoolApplications).where(eq(schoolApplications.id, schoolId));
 }
 
-function defaultDecisionNote(
-	outcome: string | null | undefined,
-	universityName: string | null,
-	programName: string | null,
-): string | null {
-	const uni = universityName?.trim() || "the university";
-	const prog = programName?.trim();
-	switch (outcome) {
-		case "Admitted":
-			return `Congratulations! ${uni} has issued an official admission offer${prog ? ` for ${prog}` : ""}.`;
-		case "Application Rejected":
-			return `A decision has been received from ${uni}. Unfortunately this application was not successful.`;
-		case "Waitlisted":
-			return `${uni} has placed this application on the waitlist.`;
-		case "Withdrawn":
-			return `This application to ${uni} has been withdrawn.`;
-		default:
-			return null;
-	}
-}
-
 export async function updateSchoolStatus(
 	schoolId: string,
 	input: UpdateSchoolStatus,
@@ -349,14 +330,20 @@ export async function updateSchoolStatus(
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
 
+	const clearNote =
+		input.handlerNote === null || (typeof input.handlerNote === "string" && input.handlerNote.trim() === "");
 	const providedNote = [input.handlerNote, input.consultantNote, input.note]
 		.map((n) => n?.trim())
 		.find(Boolean);
 	const fallbackNote =
 		input.status === "Decision Reached"
-			? defaultDecisionNote(input.outcome, target.universityName, target.programName)
+			? schoolDecisionNote({
+					outcome: input.outcome,
+					universityName: target.universityName,
+					programName: target.programName,
+				})
 			: null;
-	const nextHandlerNote = providedNote || target.handlerNote || fallbackNote || null;
+	const nextHandlerNote = clearNote ? null : providedNote || target.handlerNote;
 	const nextOfferLetterUrl =
 		input.offerLetterUrl !== undefined
 			? input.offerLetterUrl

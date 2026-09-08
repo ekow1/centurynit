@@ -12,7 +12,7 @@ import { branchName } from "century-nit-core/ops";
 import { schoolsApi, ApiError } from "century-nit-core/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage, type SchoolApplication } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, schoolDecisionNote, type JourneyStage, type SchoolApplication, type SchoolOutcome } from "century-nit-shared";
 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
@@ -31,6 +31,15 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
 	const showDecisionFields = status === "Decision Reached";
 
+	const effectiveNote = showDecisionFields
+		? consultantNote.trim() ||
+			(schoolDecisionNote({
+				outcome: outcome as SchoolOutcome,
+				universityName: school.universityName,
+				programName: school.programName,
+			}) ?? "")
+		: "";
+
 	const handleSave = async () => {
 		setIsSaving(true);
 		try {
@@ -38,8 +47,8 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 				status: status as any,
 				outcome: status === "Decision Reached" ? outcome as any : null,
 				sendUpdateEmail: status === "Decision Reached" && sendUpdateEmail,
-				handlerNote: consultantNote.trim() || undefined,
-				consultantNote: consultantNote.trim() || undefined,
+				handlerNote: consultantNote.trim() || null,
+				consultantNote: consultantNote.trim() || null,
 			});
 		} catch {
 			/* handled by hook */
@@ -189,14 +198,32 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 						</div>
 					) : null}
 					<div style={{ gridColumn: "1 / -1" }}>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Note to applicant (shown in portal Latest update)</p>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>
+							Note to applicant (optional — leave blank to use the automated message)
+						</p>
 						<textarea
 							className="input input--sm"
-							placeholder={showOfferFields ? "e.g. Congratulations! Your official offer has arrived…" : "e.g. Decision received from the university…"}
+							placeholder="Leave blank for the automated message, or type a custom note…"
 							value={consultantNote}
 							onChange={(e) => setConsultantNote(e.target.value)}
 							rows={2}
 						/>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.15rem", marginTop: "0.5rem" }}>
+							Applicant will see in the portal Latest update:
+						</p>
+						<div
+							style={{
+								background: "var(--background)",
+								border: "1px solid var(--border-light)",
+								borderRadius: "var(--radius-md)",
+								padding: "0.5rem 0.6rem",
+								fontSize: "var(--text-xs)",
+								color: "var(--text)",
+								whiteSpace: "pre-wrap",
+							}}
+						>
+							{effectiveNote || <span className="muted">Waiting for first handler update…</span>}
+						</div>
 					</div>
 					<div style={{ gridColumn: "1 / -1" }}>
 						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>

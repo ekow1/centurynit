@@ -1430,6 +1430,42 @@ export const schoolsApi = {
 	meAdmissionLetterDownloadUrl(id: string): Promise<{ url: string; expiresAt: string }> {
 		return request(`${API_PREFIX}/me/schools/${id}/admission-letter/download`);
 	},
+
+	/**
+	 * Staff: the whole admission-letter upload, as one call — ticket, PUT
+	 * straight to storage with progress, then complete. `onProgress` receives
+	 * 0–100 as bytes go up. Returns the updated school application.
+	 */
+	async uploadAdmissionLetter(
+		id: string,
+		file: File,
+		onProgress?: (percent: number) => void,
+	): Promise<SchoolApplication> {
+		const ticket = await schoolsApi.requestAdmissionLetterUpload(id, {
+			fileName: file.name,
+			contentType: file.type as RequestUpload["contentType"],
+		});
+
+		try {
+			await putFileWithProgress(
+				ticket.uploadUrl,
+				file,
+				{ "Content-Type": file.type, ...ticket.headers },
+				onProgress,
+			);
+		} catch (err) {
+			if (err instanceof ApiError && err.code === "UPLOAD_FAILED") {
+				throw new ApiError(
+					err.status,
+					"UPLOAD_FAILED",
+					`Could not upload ${file.name}. The link may have expired — try again.`,
+				);
+			}
+			throw err;
+		}
+
+		return schoolsApi.completeAdmissionLetterUpload(id, ticket.storageKey);
+	},
 };
 
 /* ── CRM Leads ─────────────────────────────────────────────────────────── */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
@@ -9,6 +9,8 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
+import { schoolsApi, ApiError } from "century-nit-core/api";
+import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, type JourneyStage, type SchoolApplication } from "century-nit-shared";
 
@@ -16,11 +18,16 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	const { updateSchoolApplication } = useCases();
 	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
 	const [outcome, setOutcome] = useState<string>(school.outcome || "Admitted");
-	const [offerLetterUrl, setOfferLetterUrl] = useState(school.offerLetterUrl ?? "");
 	const [consultantNote, setConsultantNote] = useState(school.handlerNote ?? "");
 	const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
 
 	const [isSaving, setIsSaving] = useState(false);
+	const [uploading, setUploading] = useState(false);
+	const [uploadPct, setUploadPct] = useState(0);
+	const [uploadError, setUploadError] = useState<string | null>(null);
+	const [hasLetter, setHasLetter] = useState(Boolean(school.offerLetterStorageKey));
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+
 	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
 	const showDecisionFields = status === "Decision Reached";
 
@@ -30,7 +37,6 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			await updateSchoolApplication(appId, school.id, {
 				status: status as any,
 				outcome: status === "Decision Reached" ? outcome as any : null,
-				offerLetterUrl: showOfferFields ? offerLetterUrl.trim() || null : undefined,
 				sendUpdateEmail: status === "Decision Reached" && sendUpdateEmail,
 				handlerNote: consultantNote.trim() || undefined,
 				consultantNote: consultantNote.trim() || undefined,
@@ -42,12 +48,66 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 		}
 	};
 
+	const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		setUploadError(null);
+
+		if (!ALLOWED_DOCUMENT_TYPES.includes(file.type as any)) {
+			setUploadError("Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).");
+			e.target.value = "";
+			return;
+		}
+		if (file.size > MAX_DOCUMENT_BYTES) {
+			setUploadError("That file is larger than 15 MB.");
+			e.target.value = "";
+			return;
+		}
+
+		setUploading(true);
+		setUploadPct(0);
+		try {
+			await schoolsApi.uploadAdmissionLetter(school.id, file, (p) => setUploadPct(p));
+			setHasLetter(true);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: err instanceof Error
+						? err.message
+						: "Could not upload the admission letter.";
+			setUploadError(msg);
+		} finally {
+			setUploading(false);
+			e.target.value = "";
+		}
+	};
+
+	const handleRemoveLetter = async () => {
+		setUploading(true);
+		setUploadError(null);
+		try {
+			await schoolsApi.removeAdmissionLetter(school.id);
+			setHasLetter(false);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: err instanceof Error
+						? err.message
+						: "Could not remove the admission letter.";
+			setUploadError(msg);
+		} finally {
+			setUploading(false);
+		}
+	};
+
 	return (
 		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
 			<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-				<select 
-					className="input input--sm" 
-					value={status} 
+				<select
+					className="input input--sm"
+					value={status}
 					onChange={(e) => setStatus(e.target.value)}
 					style={{ width: "auto" }}
 				>
@@ -55,11 +115,11 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 					<option value="Submitted">Submitted</option>
 					<option value="Decision Reached">Decision Reached</option>
 				</select>
-				
+
 				{status === "Decision Reached" && (
-					<select 
-						className="input input--sm" 
-						value={outcome} 
+					<select
+						className="input input--sm"
+						value={outcome}
 						onChange={(e) => setOutcome(e.target.value)}
 						style={{ width: "auto" }}
 					>
@@ -88,14 +148,44 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 					</p>
 					{showOfferFields ? (
 						<div style={{ gridColumn: "1 / -1" }}>
-							<p className="muted" style={{ marginBottom: "0.15rem" }}>Official offer letter / document URL (PDF)</p>
-							<input
-								className="input input--sm"
-								type="url"
-								placeholder="https://.../offer-letter.pdf"
-								value={offerLetterUrl}
-								onChange={(e) => setOfferLetterUrl(e.target.value)}
-							/>
+							<p className="muted" style={{ marginBottom: "0.15rem" }}>Official admission letter (PDF / image / Word)</p>
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept={ALLOWED_DOCUMENT_TYPES.join(",")}
+									onChange={handleFileChange}
+									disabled={uploading}
+									style={{ fontSize: "var(--text-xs)" }}
+								/>
+								{hasLetter && !uploading ? (
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={handleRemoveLetter}
+									>
+										Remove letter
+									</button>
+								) : null}
+								{uploading ? (
+									<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+										Uploading… {uploadPct}%
+									</span>
+								) : hasLetter ? (
+									<span style={{ color: "var(--success, #15803d)", fontSize: "var(--text-xs)" }}>
+										✓ Letter uploaded
+									</span>
+								) : null}
+							</div>
+							{uploadError ? (
+								<p style={{ color: "var(--danger, #b91c1c)", fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+									{uploadError}
+								</p>
+							) : null}
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+								The letter is stored in the document vault under the applicant's folder and emailed
+								to the applicant when “Send status update email” is checked.
+							</p>
 						</div>
 					) : null}
 					<div style={{ gridColumn: "1 / -1" }}>
@@ -115,7 +205,7 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 								checked={sendUpdateEmail}
 								onChange={(e) => setSendUpdateEmail(e.target.checked)}
 							/>
-							<span>Send status update email to applicant (includes note & document if provided)</span>
+							<span>Send status update email to applicant (includes note & admission letter if uploaded)</span>
 						</label>
 					</div>
 				</div>

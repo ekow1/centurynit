@@ -64,6 +64,7 @@ function adaptInvoice(api: ApiInvoice): Invoice {
 		invoiceNumber: api.invoiceNumber,
 		applicantId: api.clientUserId ?? api.applicantName,
 		applicantName: api.applicantName,
+		applicationId: api.applicationId ?? null,
 		type: TYPE_MAP[api.type],
 		lines,
 		subtotal: api.subtotalCents / 100,

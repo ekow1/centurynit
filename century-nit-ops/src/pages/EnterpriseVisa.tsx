@@ -1,9 +1,13 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import type { MockApplication, VisaStage } from "century-nit-core/ops";
+import type { MockApplication, VisaStage, Invoice } from "century-nit-core/ops";
+import { INVOICE_STATUS_LABELS, invoiceBalance } from "century-nit-core/ops";
+import { fmtBoth } from "./currency";
 import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 const VISA_STEPS: { id: VisaStage; label: string }[] = [
@@ -21,14 +25,20 @@ function visaStepLabel(stage?: VisaStage): string {
 	return step ? step.label : stage;
 }
 
+function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
+	return invoices.find(
+		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
+	);
+}
+
 export function EnterpriseVisa() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
 		setVisaStage,
-		setVisaInvoicePaid,
 		setVisaCounselorNote,
 	} = useCases();
+	const { invoices: allInvoices } = useInvoiceApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -92,6 +102,7 @@ export function EnterpriseVisa() {
 	}
 
 	const active = liveSelected ?? selectedApp;
+	const detailInvoice = active ? visaInvoiceFor(allInvoices, active) : undefined;
 
 	return (
 		<div className="page-content fade-in">
@@ -165,6 +176,7 @@ export function EnterpriseVisa() {
 						) : (
 							filteredApps.map((app) => {
 								const isSelected = selectedApp?.appId === app.appId;
+								const invoice = visaInvoiceFor(allInvoices, app);
 								return (
 									<div
 										key={app.id}
@@ -205,11 +217,23 @@ export function EnterpriseVisa() {
 												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
 													{app.university} {"\u00b7"} {app.program}
 												</p>
-												<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-													<span>{app.visaInvoicePaid ? "Invoice paid" : "Invoice unpaid"}</span>
-													<span>{"\u00b7"}</span>
-													<span>{app.assignedStaff || "Unassigned"}</span>
-												</div>
+<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+                                <span>
+                                  {invoice
+                                    ? invoice.status === "void"
+                                      ? "Invoice void"
+                                      : invoice.status === "paid"
+                                        ? "Invoice paid"
+                                        : invoiceBalance(invoice) > 0
+                                          ? `${invoice.invoiceNumber} · ${fmtBoth(invoiceBalance(invoice))} due`
+                                          : "Invoice settled"
+                                    : app.visaInvoicePaid
+                                      ? "Invoice paid"
+                                      : "No visa invoice"}
+                                </span>
+                                <span>{"\u00b7"}</span>
+                                <span>{app.assignedStaff || "Unassigned"}</span>
+                              </div>
 											</div>
 											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>{"\u2192"}</span>
 										</div>
@@ -298,31 +322,50 @@ export function EnterpriseVisa() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-								{/* Visa Invoice */}
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Visa Invoice</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												{active.visaInvoicePaid ? "Invoice paid" : "Invoice unpaid"}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												{active.visaInvoicePaid
-													? "Visa processing can proceed."
-													: "Applicant must pay the visa invoice before processing begins."}
-											</p>
-										</div>
-										{!active.visaInvoicePaid && (
-											<button
-												onClick={() => setVisaInvoicePaid(active.appId)}
-												className="btn btn--primary"
-												style={{ whiteSpace: "nowrap" }}
-											>
-												{"\u2713"} Mark paid
-											</button>
-										)}
-									</div>
-								</div>
+{/* Visa Invoice */}
+<div className="card" style={{ background: "var(--muted)" }}>
+  <p className="eyebrow mb-1">Visa Invoice</p>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
+    <div>
+      {detailInvoice ? (
+        <>
+          <p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+            {INVOICE_STATUS_LABELS[detailInvoice.status]} · {detailInvoice.invoiceNumber}
+          </p>
+          <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+            {invoiceBalance(detailInvoice) > 0
+              ? `${fmtBoth(detailInvoice.subtotal)} total · ${fmtBoth(invoiceBalance(detailInvoice))} outstanding`
+              : detailInvoice.status === "void"
+                ? "This invoice has been voided."
+                : "Fully paid — visa processing can proceed."}
+          </p>
+          {detailInvoice.note && (
+            <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>{detailInvoice.note}</p>
+          )}
+        </>
+      ) : (
+        <>
+          <p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>No visa invoice</p>
+          <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+            {active.visaInvoicePaid
+              ? "Invoice recorded as paid — record the real invoice in Invoices."
+              : "Issue a visa invoice in Invoices, then the applicant can pay to unlock the visa stage."}
+          </p>
+        </>
+      )}
+    </div>
+    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+      {detailInvoice && invoiceBalance(detailInvoice) > 0 && (
+        <span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>
+          {fmtBoth(invoiceBalance(detailInvoice))} due
+        </span>
+      )}
+      <Link to="/invoices" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
+        {detailInvoice ? "View in Invoices" : "Open Invoices"}
+      </Link>
+    </div>
+  </div>
+</div>
 
 								{/* Visa Tracking Steps */}
 								<div className="card">

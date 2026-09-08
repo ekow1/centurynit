@@ -321,6 +321,8 @@ export type Invoice = {
 	invoiceNumber: string;
 	applicantId: string;
 	applicantName: string;
+	/** Becomes `applicationId` on the API — the linked application UUID, if any. */
+	applicationId?: string | null;
 	type: InvoiceType;
 	lines: OpsInvoiceLine[];
 	subtotal: number;

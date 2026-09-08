@@ -223,6 +223,7 @@ export type ApiInvoice = {
 	applicantName: string;
 	applicantEmail: string | null;
 	clientUserId: string | null;
+	applicationId: string | null;
 	lines: { id: string; label: string; detail: string | null; amountCents: number }[];
 	subtotalCents: number;
 	paidCents: number;

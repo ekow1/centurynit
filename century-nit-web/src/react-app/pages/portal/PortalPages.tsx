@@ -3510,11 +3510,60 @@ function VisaHubInner() {
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
-	const paid = inv.status === "paid";
-	const amount = inv.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
-
 	const nav = useNavigate();
 	const { toast } = useNotifier();
+
+	// Fetch the real server invoice on mount so the card reflects actual status
+	const [serverInv, setServerInv] = useState<{
+		id: string;
+		invoiceNumber: string;
+		status: string;
+		balanceCents: number;
+		subtotalCents: number;
+		paidCents: number;
+	} | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		meApi.invoices()
+			.then(({ invoices }) => {
+				if (cancelled) return;
+				const visa = invoices.find((i) => i.type === "visa");
+				if (visa) {
+					setServerInv({
+						id: visa.id,
+						invoiceNumber: visa.invoiceNumber,
+						status: visa.status,
+						balanceCents: visa.balanceCents,
+						subtotalCents: visa.subtotalCents,
+						paidCents: visa.paidCents,
+					});
+				}
+			})
+			.catch(() => {});
+		return () => { cancelled = true; };
+	}, []);
+
+	const serverPaid = serverInv?.status === "paid";
+	const paid = inv.status === "paid" || serverPaid;
+
+	const cardInvoice: StageInvoice = serverInv
+		? {
+				...inv,
+				id: serverInv.invoiceNumber,
+				status: serverPaid
+					? "paid"
+					: serverInv.status === "proforma"
+						? "estimated"
+						: serverInv.status === "void"
+							? "none"
+							: "raised",
+				amount: usdFromCents(serverInv.balanceCents > 0 ? serverInv.balanceCents : serverInv.subtotalCents),
+				actualAmount: usdFromCents(serverInv.balanceCents > 0 ? serverInv.balanceCents : serverInv.subtotalCents),
+				description: `Visa processing fee · ${serverInv.invoiceNumber}`,
+			}
+		: inv;
+	const amount = cardInvoice.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
 
 	async function pay() {
 		setPayPhase("loading");
@@ -3613,13 +3662,13 @@ function VisaHubInner() {
 					</div>
 				)}
 
-				{/* Invoice first - process blocked until paid */}
-				<StageInvoiceCard
-					invoice={inv}
-					title="Visa invoice · pay before process starts"
-					onPay={pay}
-					paying={false}
-				/>
+{/* Invoice first - process blocked until paid */}
+			<StageInvoiceCard
+				invoice={cardInvoice}
+				title="Visa invoice · pay before process starts"
+				onPay={paid ? undefined : pay}
+				paying={false}
+			/>
 			</div>
 
 			{/* Tracking only after pay - stays on this stage page but after payment */}
@@ -3793,7 +3842,7 @@ function CompleteInner() {
  * before routing to the right stage page.
  */
 export function PortalPayCallback() {
-	const { payApplicationInvoice, payVisaInvoice, syncFromServer } = useAppState();
+	const { payApplicationInvoice, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [failed, setFailed] = useState(false);
@@ -3848,10 +3897,10 @@ export function PortalPayCallback() {
 				if (cancelled) return;
 				const settled = invoice.balanceCents === 0;
 				if (settled) {
-					// Update local AppState optimistically so the portal unlocks immediately.
-					// The 30s background poll will also overwrite with fresh server state.
-					if (invoice.type === "visa") payVisaInvoice();
-					else payApplicationInvoice();
+// Update local AppState optimistically so the portal unlocks immediately.
+				// The 30s background poll will also overwrite with fresh server state.
+				if (invoice.type === "visa") await syncFromServer();
+				else payApplicationInvoice();
 				}
 				nav(invoice.type === "visa" ? "/portal/visa" : "/portal/application", {
 					replace: true,
@@ -3869,7 +3918,7 @@ export function PortalPayCallback() {
 		return () => {
 			cancelled = true;
 		};
-	}, [nav, payApplicationInvoice, payVisaInvoice, syncFromServer, toast]);
+	}, [nav, payApplicationInvoice, syncFromServer, toast]);
 
 	if (failed) {
 		return (

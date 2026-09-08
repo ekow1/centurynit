@@ -989,8 +989,6 @@ type AppStateContextValue = {
 	/** Raise / pay stage invoices */
 	raiseApplicationInvoice: () => void;
 	payApplicationInvoice: () => void;
-	raiseVisaInvoice: () => void;
-	payVisaInvoice: () => void;
 	chooseSchoolPackage: (funding: SchoolFundingTrack, level: SchoolDegreeLevel, targetSchoolCount?: number, explicitPriceCents?: number) => void;
 	choosePaymentPlan: (planId: PaymentPlanId) => void;
 	choosePostArrivalSchedule: (scheduleId: string) => void;
@@ -1373,55 +1371,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		schoolApplications.length,
 	]);
 
-	/**
-	 * Visa invoice ESTIMATE raised on admission - the consultant then issues
-	 * the ACTUAL invoice (separate effect), which is paid BEFORE visa starts.
-	 */
-	useEffect(() => {
-		if (!hasAcceptedOffer(schoolApplications)) return;
-		if (application.visaInvoice.status === "paid") return;
-
-		const t = window.setTimeout(() => {
-			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
-			const estimateLines = visaInvoiceEstimateLines(activeFees);
-			const estimated = sumInvoiceLines(estimateLines);
-			const now = new Date().toISOString();
-			setApplication((prev) => {
-				if (prev.visaInvoice.status === "paid") return prev;
-				if (
-					prev.visaInvoice.status !== "none" &&
-					prev.visaInvoice.status !== "estimated"
-				) {
-					return prev;
-				}
-				if (
-					prev.visaInvoice.status === "estimated" &&
-					prev.visaInvoice.estimatedAmount === estimated
-				) {
-					return prev;
-				}
-				return {
-					...prev,
-					visaInvoice: {
-						...prev.visaInvoice,
-						id: `INV-VISA-${Date.now().toString(36).toUpperCase()}`,
-						status: "estimated",
-						raisedAt: now,
-						estimatedAmount: estimated,
-						estimateLines,
-						amount: estimated,
-						description: "Visa fee estimate - actual invoice follows from your consultant",
-					},
-					visaStatus: "locked",
-					counselorNote: `Admitted. Visa estimate ${formatDualCurrency(estimated)} issued - your consultant confirms the actual invoice.`,
-				};
-			});
-		}, 0);
-		return () => window.clearTimeout(t);
-	}, [schoolApplications, application.visaInvoice.status]);
-
-	/** Visa tracking simulation REMOVED — visaStage is now server-driven via syncFromServer */
-
 	const updateApplication = useCallback((patch: Partial<ApplicationData>) => {
 		setApplication((prev) => ({ ...prev, ...patch }));
 	}, []);
@@ -1606,54 +1555,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				};
 			}),
 		);
-	}, []);
-
-	/** Consultant issues the ACTUAL visa invoice (manual trigger / fallback) */
-	const raiseVisaInvoice = useCallback(() => {
-		const now = new Date().toISOString();
-		setApplication((prev) => {
-			const activeFees = fees || FALLBACK_FEE_SCHEDULE;
-			const actualLines = visaInvoiceActualLines(activeFees);
-			const actual = sumInvoiceLines(actualLines);
-			return {
-				...prev,
-				visaInvoice: {
-					...prev.visaInvoice,
-					id: `INV-VISA-${Date.now().toString(36).toUpperCase()}`,
-					status: "raised",
-					raisedAt: now,
-					amount: actual,
-					actualAmount: actual,
-					actualLines,
-					consultantNote: "Actual visa invoice issued by consultant.",
-				},
-			};
-		});
-	}, []);
-
-	const payVisaInvoice = useCallback(() => {
-		const now = new Date().toISOString();
-		setApplication((prev) => {
-			const amount = prev.visaInvoice.actualAmount ?? prev.visaInvoice.amount ?? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
-			return {
-				...prev,
-				visaInvoice: {
-					...prev.visaInvoice,
-					status: "paid",
-					paidAt: now,
-					id: prev.visaInvoice.id ?? `INV-VISA-${Date.now().toString(36).toUpperCase()}`,
-					amount,
-					actualAmount: prev.visaInvoice.actualAmount ?? amount,
-					actualLines: prev.visaInvoice.actualLines.length
-						? prev.visaInvoice.actualLines
-						: prev.visaInvoice.estimateLines,
-					description: prev.visaInvoice.description,
-				},
-				visaStatus: "pending",
-				visaUpdatedAt: now,
-				counselorNote: `Visa payment received: ${formatDualCurrency(amount)}. Visa process & tracking started.`,
-			};
-		});
 	}, []);
 
 	const addSchoolApplication = useCallback(
@@ -2285,6 +2186,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
+					visaInvoice: a.visaInvoicePaid
+						? {
+								...prev.visaInvoice,
+								status: "paid" as const,
+								paidAt: prev.visaInvoice.paidAt ?? a.updatedAt ?? new Date().toISOString(),
+							}
+						: prev.visaInvoice,
 					// Authoritative coarse journey stage from `applications.stage`.
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
@@ -2593,8 +2501,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			submitSchoolApplication,
 			raiseApplicationInvoice,
 			payApplicationInvoice,
-			raiseVisaInvoice,
-			payVisaInvoice,
 			chooseSchoolPackage,
 			choosePaymentPlan,
 			choosePostArrivalSchedule,
@@ -2678,8 +2584,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			submitSchoolApplication,
 			raiseApplicationInvoice,
 			payApplicationInvoice,
-			raiseVisaInvoice,
-			payVisaInvoice,
 			chooseSchoolPackage,
 			choosePaymentPlan,
 			choosePostArrivalSchedule,

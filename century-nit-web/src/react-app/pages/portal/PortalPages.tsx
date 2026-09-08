@@ -3524,6 +3524,7 @@ function VisaHubInner() {
 		balanceCents: number;
 		subtotalCents: number;
 		paidCents: number;
+		lines: { id: string; label: string; detail: string | null; amountCents: number }[];
 	} | null>(null);
 
 	useEffect(() => {
@@ -3535,6 +3536,7 @@ function VisaHubInner() {
 			balanceCents: number;
 			subtotalCents: number;
 			paidCents: number;
+			lines: { id: string; label: string; detail: string | null; amountCents: number }[];
 		}) => {
 			if (!cancelled) setServerInv(visa);
 		};
@@ -3545,6 +3547,7 @@ function VisaHubInner() {
 			balanceCents: number;
 			subtotalCents: number;
 			paidCents: number;
+			lines: { id: string; label: string; detail: string | null; amountCents: number }[];
 		}) =>
 			apply({
 				id: visa.id,
@@ -3553,6 +3556,7 @@ function VisaHubInner() {
 				balanceCents: visa.balanceCents,
 				subtotalCents: visa.subtotalCents,
 				paidCents: visa.paidCents,
+				lines: visa.lines,
 			});
 		// The portal drive: raise a real invoice for Ops to confirm, unless one
 		// already exists. Falls back to the plain listing on failure so an
@@ -3575,6 +3579,17 @@ function VisaHubInner() {
 	const serverPaid = serverInv?.status === "paid";
 	const paid = inv.status === "paid" || serverPaid;
 
+	// Render the real server invoice lines when one exists — the local
+	// `inv` lines are placeholder breakdowns and must never be shown as an
+	// issued "actual" invoice. When there is no server invoice yet, show the
+	// single fee-schedule estimate that ops will confirm.
+	const serverLines: InvoiceLine[] = (serverInv?.lines ?? []).map((l) => ({
+		id: l.id,
+		label: l.label,
+		detail: l.detail ?? "",
+		amount: usdFromCents(l.amountCents),
+	}));
+
 	const cardInvoice: StageInvoice = serverInv
 		? {
 				...inv,
@@ -3589,6 +3604,8 @@ function VisaHubInner() {
 				amount: usdFromCents(serverInv.balanceCents > 0 ? serverInv.balanceCents : serverInv.subtotalCents),
 				actualAmount: usdFromCents(serverInv.balanceCents > 0 ? serverInv.balanceCents : serverInv.subtotalCents),
 				description: `Visa processing fee · ${serverInv.invoiceNumber}`,
+				estimateLines: serverLines,
+				actualLines: serverLines,
 			}
 		: {
 				// No server invoice yet — show the fee-schedule estimate that ops
@@ -3600,6 +3617,8 @@ function VisaHubInner() {
 				amount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
 				actualAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
 				estimatedAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
+				estimateLines: [],
+				actualLines: [],
 				description: "Visa processing fee (estimate) · awaiting ops confirmation",
 			};
 	const amount = cardInvoice.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);

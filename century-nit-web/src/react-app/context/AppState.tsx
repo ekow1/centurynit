@@ -1001,17 +1001,24 @@ export function getPendingAction(
 		const hasPlan = hasPaymentPlan(app);
 		const agencyDue = !isAgencySettled(app);
 		const travelDue = !app.travelInvoicePaid;
+		const allSettled = hasPlan && !agencyDue && !travelDue;
 		return {
 			kind: "payment_execution",
-			label: !hasPlan ? "Choose plan" : agencyDue || travelDue ? "Settle fees" : "Continue",
-			title: !hasPlan ? "Confirm your payment plan" : "Settle your service fees",
+			label: !hasPlan ? "Choose plan" : agencyDue || travelDue ? "Settle fees" : "Open Travel Assistance",
+			title: !hasPlan
+				? "Confirm your payment plan"
+				: allSettled
+					? "Open travel assistance"
+					: "Settle your service fees",
 			detail: !hasPlan
 				? "Choose your payment plan, then settle the agency service fee and your travel invoice to open travel assistance."
-				: agencyDue && travelDue
-					? "Your plan is confirmed. Settle the agency service fee and your travel invoice to open travel assistance."
-					: travelDue
-						? "Your plan is confirmed. Settle your travel invoice to open travel assistance."
-						: "Your plan is confirmed. Settle the pending service fee to open travel assistance.",
+				: allSettled
+					? "Your payments are settled. Open travel assistance to start your pre-departure checklist."
+					: agencyDue && travelDue
+						? "Your plan is confirmed. Settle the agency service fee and your travel invoice to open travel assistance."
+						: travelDue
+							? "Your plan is confirmed. Settle your travel invoice to open travel assistance."
+							: "Your plan is confirmed. Settle the pending service fee to open travel assistance.",
 			to: "/portal/payment-execution",
 		};
 	}

@@ -6,6 +6,7 @@ import * as schema from "../db/schema.js";
 import {
 	acceptApplication,
 	addCaseComment,
+	advanceToTravelFromPayment,
 	applicantUserIdOfApplication,
 	applicantUserIdOfConsultation,
 	assignApplication,
@@ -1495,6 +1496,47 @@ meRouter.openapi(
 		const updated = await setApplicationPaymentPlan({
 			id: application.id,
 			paymentPlanId: body.paymentPlanId,
+		});
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * Applicant self-service: advance from Payment Execution to Travel Assistance.
+ *
+ * Open once the payment contract is settled — plan confirmed, agency service
+ * fee paid, travel invoice paid (`canAdvanceToStage` enforces it server-side).
+ * Unlike the ops stage endpoint, this never parks the case on a handoff:
+ * Payment Execution is self-serve and has no assignment to wait for. The
+ * travel specialist handoff is still queued for the handled travel work.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/advance-to-travel",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {},
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationSchema } },
+				description: "The application, now at Travel Assistance",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
+		}
+		const updated = await advanceToTravelFromPayment({
+			id: application.id,
+			applicantUserId: user.id,
 		});
 		return c.json(await serializeApplication(updated));
 	},

@@ -2533,6 +2533,104 @@ export async function setApplicationPaymentPlan(input: {
 	return updated;
 }
 
+/**
+ * Applicant self-service: advance from Payment Execution to Travel Assistance
+ * once every payment signal is settled.
+ *
+ * This path is deliberately NOT parked on a handoff, unlike the ops stage
+ * endpoint (`setApplicationStage`). Payment Execution is self-serve — the
+ * applicant chooses the plan, settles the agency service fee, and pays the
+ * travel invoice themselves, so there is nothing for a specialist to assign
+ * before the case moves. The shared `canAdvanceToStage` gate still re-validates
+ * all three signals, then the case advances immediately and the travel
+ * specialist handoff is queued (idempotent) so the *handled* travel work gets
+ * staffed — the pending assignment never blocks the applicant's entry.
+ */
+export async function advanceToTravelFromPayment(input: {
+	id: string;
+	applicantUserId: string;
+}): Promise<ApplicationRow> {
+	const row = await getApplication(input.id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	const applicant = await getApplicant(row.applicantId);
+	if (!applicant || applicant.userId !== input.applicantUserId) {
+		throw new HttpError(403, "FORBIDDEN", "Not your application");
+	}
+
+	if (row.stage === "travel_assistance" || row.stage === "completed") {
+		return row;
+	}
+	if (row.stage !== "payment_execution") {
+		throw new HttpError(
+			409,
+			"STAGE_ADVANCE_BLOCKED",
+			`Travel Assistance opens from Payment Execution. Current stage: ${JOURNEY_STAGE_LABELS[row.stage]}.`,
+		);
+	}
+
+	// Re-validate the same prerequisites the ops gate enforces: plan confirmed,
+	// agency service fee settled, travel invoice paid.
+	const gateReason = canAdvanceToStage(row.stage, "travel_assistance", {
+		visaStage: row.visaStage,
+		agencySettled: row.agencySettled,
+		agencyStageIndex: row.agencyStageIndex,
+		appFeePaid: row.appFeePaid,
+		travelInvoicePaid: row.travelInvoicePaid,
+		travelClearance: row.travelClearance,
+		paymentPlanId: row.paymentPlanId,
+		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+	});
+	if (gateReason) {
+		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", gateReason);
+	}
+
+	const [updated] = await db
+		.update(applications)
+		.set({ stage: "travel_assistance", updatedAt: new Date() })
+		.where(and(eq(applications.id, row.id), eq(applications.stage, "payment_execution")))
+		.returning();
+	if (!updated) return row;
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: row.id,
+		kind: "status",
+		text: "Stage → travel_assistance (applicant advanced after payments settled)",
+		authorName: applicant.name ?? "Applicant",
+		authorOpsUserId: null,
+	});
+
+	// Payment concluded → release the finance owner; queue the travel specialist
+	// for the handled travel work. The handoff must NOT park the transition.
+	markStageCompleted(row.id, "payment_execution", null);
+	const continuity = row.assignedStaffId ? await loadStaff(row.assignedStaffId) : null;
+	await createOrGetHandoff({
+		applicationId: row.id,
+		stage: "travel_assistance",
+		source: "applicant_advance",
+		fromOpsUserId: continuity?.id ?? null,
+	});
+	void signalStageNeedsHandler(row.id, "travel_assistance");
+
+	notify({
+		recipientUserId: input.applicantUserId,
+		type: "stage.changed",
+		title: "Travel assistance is open",
+		body: "Your payments are settled. Your pre-departure checklist is now available.",
+		link: "/portal/pre-departure",
+	}).catch(() => {});
+
+	const actor: Actor = {
+		opsUserId: "",
+		name: applicant.name ?? "Applicant",
+		email: applicant.email ?? "",
+	};
+	await broadcastCaseUpdate(updated, actor);
+
+	return updated;
+}
+
 /** Applicant login ids a consultant may reach via assigned cases, not only bookings. */
 export async function assignedApplicantUserIds(opsUserId: string): Promise<string[]> {
 	const fromConsult = await db

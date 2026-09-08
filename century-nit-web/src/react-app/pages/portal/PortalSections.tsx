@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../../components/ui/Button";
 import { Field, Input, Select, Textarea } from "../../components/ui/Field";
@@ -1384,10 +1384,34 @@ export function PortalPaymentExecution() {
  *  • `view="plan"` (the /portal/payment-execution chapter) — the payment
  *    plan picker, service-fee milestones and the travel invoice position. */
 export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" } = {}) {
-	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees } = useAppState();
+	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees, syncFromServer } = useAppState();
 	const { toast } = useNotifier();
+	const nav = useNavigate();
 	const a = application;
 	const planView = view === "plan";
+
+	// Self-service advance: Payment Execution → Travel Assistance. Open as soon
+	// as the payment contract is settled (plan + agency fee + travel invoice).
+	// The server moves the coarse stage and queues the travel-specialist handoff
+	// without parking the case.
+	const [advancing, setAdvancing] = useState(false);
+	async function handleAdvanceToTravel() {
+		if (advancing) return;
+		setAdvancing(true);
+		try {
+			await meApi.advanceToTravel();
+			await syncFromServer();
+			toast.success("Payment execution complete — travel assistance is now open.");
+			nav("/portal/pre-departure");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError
+					? err.message
+					: "Could not open travel assistance. Please try again.",
+			);
+			setAdvancing(false);
+		}
+	}
 
 	// ── Invoice fetching from the real API ───────────────────────────────
 	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
@@ -2015,6 +2039,22 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					is always on the{" "}
 					<Link className="link" to="/portal/financial">Financial</Link> page.
 				</p>
+			) : null}
+			{planView && plan && settled && a.travelInvoicePaid ? (
+				<div className="mt-6 box" style={{ maxWidth: "36rem" }}>
+					<p className="mt-0 mb-2">
+						Your payment contract is settled — travel assistance is open. Move
+						to the next stage now; your travel specialist will pick your case up
+						from the queue.
+					</p>
+					<Button
+						className="btn btn--primary"
+						onClick={handleAdvanceToTravel}
+						disabled={advancing}
+					>
+						{advancing ? "Opening travel stage…" : "Continue to Travel Assistance"}
+					</Button>
+				</div>
 			) : null}
 		</div>
 	);

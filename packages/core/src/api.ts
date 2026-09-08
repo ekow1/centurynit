@@ -1035,6 +1035,18 @@ export const meApi = {
 		});
 	},
 
+	/**
+	 * Advance from Payment Execution to Travel Assistance once the payment
+	 * contract is settled (plan confirmed, agency fee paid, travel invoice paid).
+	 * Payment Execution is self-serve — the server does not park this on an
+	 * assignment handoff.
+	 */
+	advanceToTravel(): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/advance-to-travel`, {
+			method: "POST",
+		});
+	},
+
 	/** Respond to a completed consultation outcome (accept or request more info). */
 	respondToOutcome(input: { action: "accept" | "request_info"; note?: string }): Promise<{ ok: boolean }> {
 		return request(`${API_PREFIX}/me/application/consultation/respond`, {

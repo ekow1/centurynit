@@ -21,7 +21,8 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	school_tracking: { to: "/portal/tracking", label: "View applications" },
 	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
 	visa: { to: "/portal/visa/tracking", label: "View visa" },
-	pre_departure: { to: "/portal/pre-departure", label: "View checklist" },
+	payment_execution: { to: "/portal/payment-execution", label: "Choose plan & pay" },
+	travel_assistance: { to: "/portal/pre-departure", label: "View checklist" },
 	completed: { to: "/portal/complete", label: "View summary" },
 };
 
@@ -49,7 +50,8 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa invoice", desc: "On admission, settle the Stage III invoice to start visa." },
 	visa: { title: "Visa tracking", desc: "Your handler processes your visa after you settle the invoice." },
-	pre_departure: { title: "Travel & pre-departure", desc: "Flights, accommodation, insurance and your arrival briefing — we stay with you to the door." },
+	payment_execution: { title: "Payment plan & service fees", desc: "Confirm your payment plan, settle the agency service fee, and pay the travel invoice." },
+	travel_assistance: { title: "Travel & pre-departure", desc: "Flights, accommodation, insurance and your arrival briefing — we stay with you to the door." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };
 

@@ -36,7 +36,8 @@ export function EnterpriseApplicants() {
 		if (statusFilter === "Pre-application") return a.currentStage === "pre_application";
 		if (statusFilter === "Pre-Visa") return ["document_verification", "school_submission", "offer_letter_review"].includes(a.currentStage);
 		if (statusFilter === "Visa Processing") return a.currentStage === "visa_processing";
-		if (statusFilter === "Post-Visa") return ["payment_execution", "travel_assistance"].includes(a.currentStage);
+		if (statusFilter === "Payment Execution") return a.currentStage === "payment_execution";
+		if (statusFilter === "Travel Assistance") return a.currentStage === "travel_assistance";
 		if (statusFilter === "Completed") return a.currentStage === "completed";
 		return a.currentStage === statusFilter;
 	});
@@ -93,7 +94,7 @@ export function EnterpriseApplicants() {
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Pre-application", "Pre-Visa", "Visa Processing", "Post-Visa", "Completed"].map((tab) => (
+							{["All", "Pre-application", "Pre-Visa", "Visa Processing", "Payment Execution", "Travel Assistance", "Completed"].map((tab) => (
 								<button
 									key={tab}
 									onClick={() => setStatusFilter(tab)}

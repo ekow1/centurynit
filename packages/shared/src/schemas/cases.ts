@@ -58,8 +58,8 @@ export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
 	school_submission: "school_tracking",
 	offer_letter_review: "school_tracking",
 	visa_processing: "visa",
-	payment_execution: "visa",
-	travel_assistance: "pre_departure",
+	payment_execution: "payment_execution",
+	travel_assistance: "travel_assistance",
 	completed: "completed",
 };
 
@@ -125,9 +125,16 @@ export function canAdvanceToStage(
 				? null
 				: "Cannot advance to Payment Execution: visa processing must be complete.";
 		case "travel_assistance":
-			return checks.paymentPlanId
-				? null
-				: "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
+			if (!checks.paymentPlanId) {
+				return "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
+			}
+			if (!checks.agencySettled) {
+				return "Cannot advance to Travel Assistance: agency service fee is not settled.";
+			}
+			if (!checks.travelInvoicePaid) {
+				return "Cannot advance to Travel Assistance: the travel invoice is not paid.";
+			}
+			return null;
 		case "completed": {
 			if (!checks.agencySettled) return "Cannot mark complete: agency settlement is not complete.";
 			if (!checks.travelInvoicePaid) return "Cannot mark complete: travel invoices are not fully settled.";
@@ -161,7 +168,8 @@ export const PORTAL_STAGE_LABELS: Record<string, string> = {
 	school_tracking: "Application process / tracking",
 	visa_invoice: "Pay visa invoice",
 	visa: "Visa tracking in progress",
-	pre_departure: "Travel & pre-departure",
+	payment_execution: "Payment plan & service fees",
+	travel_assistance: "Travel assistance & pre-departure",
 	completed: "Application complete",
 };
 
@@ -177,7 +185,8 @@ export const PORTAL_STAGE_ORDER: string[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"pre_departure",
+	"payment_execution",
+	"travel_assistance",
 	"completed",
 ];
 

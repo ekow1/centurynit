@@ -35,6 +35,7 @@ import {
 } from "century-nit-core";
 import { documentsApi, meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
+import { ChapterGate } from "./PortalLayout";
 import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
 import { ChangePasswordModal, ChangeEmailModal } from "../../components/portal/SecurityModals";
@@ -1147,8 +1148,8 @@ export function PortalJourney() {
 		school_tracking: "/portal/tracking",
 		visa_invoice: "/portal/visa",
 		visa: "/portal/visa/tracking",
-		payment_plan: "/portal/payment-plan",
-		agency: "/portal/agency",
+		payment_execution: "/portal/payment-execution",
+		travel_assistance: "/portal/pre-departure",
 		completed: "/portal/complete",
 	};
 
@@ -1366,11 +1367,27 @@ function invoiceDetail(inv: StageInvoice) {
 	return "Invoice not raised yet";
 }
 
-/** Financial - every payment, settlement, and what's still outstanding. */
-export function PortalFinancial() {
+/** Payment execution — confirm the plan, settle the service fee, cover travel. */
+export function PortalPaymentExecution() {
+	return (
+		<ChapterGate chapter="payment_execution">
+			<PortalFinancial view="plan" />
+		</ChapterGate>
+	);
+}
+
+/** Financial - every payment, settlement, and what's still outstanding.
+ *
+ * Two surfaces share this component:
+ *  • `view="ledger"` (the /portal/financial page) — a read-only statement of
+ *    every invoice, receipt and university deposit.
+ *  • `view="plan"` (the /portal/payment-execution chapter) — the payment
+ *    plan picker, service-fee milestones and the travel invoice position. */
+export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" } = {}) {
 	const { application, booking, schoolApplications, choosePaymentPlan, choosePostArrivalSchedule, payAgencyInstallment, enabledPostArrivalSchedules, customPostArrivalSchedules, fees } = useAppState();
 	const { toast } = useNotifier();
 	const a = application;
+	const planView = view === "plan";
 
 	// ── Invoice fetching from the real API ───────────────────────────────
 	const [invoices, setInvoices] = useState<ApiInvoice[]>([]);
@@ -1508,15 +1525,21 @@ export function PortalFinancial() {
 			) : null}
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Financial</p>
-					<h1 className="page-title mt-1">Payments & settlements</h1>
+					<p className="eyebrow">{planView ? "Payment execution" : "Financial"}</p>
+					<h1 className="page-title mt-1">
+						{planView ? "Payment plan & service fees" : "Payments & settlements"}
+					</h1>
 					<p className="lead mt-2">
-						Every fee, invoice, and balance - what's paid and what's outstanding.
+						{planView
+							? "Confirm your payment plan, settle your service fee, and cover your travel invoice to open travel assistance."
+							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>
 			</header>
 
-			<section className="mt-4">
+			{!planView ? (
+				<>
+				<section className="mt-4">
 				<div className="stat-band">
 					<div className="stat-cell">
 						<p className="stat-cell__label">Total paid</p>
@@ -1583,11 +1606,29 @@ export function PortalFinancial() {
 							/>
 						);
 					})()}
+					<LedgerRow
+						title="Service fee · agency settlement"
+						status={settled ? "paid" : a.agencyTotal > 0 ? "raised" : "none"}
+						amount={<Money usd={a.agencyTotal} negative={settled} />}
+						detail={
+							settled
+								? "Fully settled"
+								: a.agencyTotal > 0
+									? depositPaid
+										? plan
+											? "Milestones in progress"
+											: "Payment plan not chosen yet"
+										: "Deposit due before plan selection"
+									: "Set once your package and plan are confirmed"}
+					/>
 				</div>
 			</section>
+				</>
+			) : null}
 
 			{/* Payment plan — full width */}
-			<section className="mt-6">
+			{planView ? (
+				<section className="mt-6">
 				<p className="eyebrow mb-3">Payment plan</p>
 
 				{/* Step 1: Deposit — must be paid before plan selection */}
@@ -1641,9 +1682,10 @@ export function PortalFinancial() {
 					</>
 				) : null}
 			</section>
+			) : null}
 
 			{/* Service fee milestones — full width */}
-			{a.agencyTotal > 0 ? (
+			{a.agencyTotal > 0 && planView ? (
 				<section className="mt-6">
 					<p className="eyebrow mb-3">Service fee · milestones</p>
 					<>
@@ -1875,6 +1917,8 @@ export function PortalFinancial() {
 					</section>
 				) : null}
 
+				{!planView ? (
+				<>
 				{/* Second ledger — deliberately never merged with the one above.
 				    Century NIT does not collect tuition, and a combined total would
 				    imply that it does. */}
@@ -1962,6 +2006,15 @@ export function PortalFinancial() {
 						))}
 					</div>
 				</section>
+			) : null}
+				</>
+			) : null}
+			{planView ? (
+				<p className="muted mt-5" style={{ maxWidth: "36rem" }}>
+					Your full invoice ledger — consultation, application, visa and the travel invoice —
+					is always on the{" "}
+					<Link className="link" to="/portal/financial">Financial</Link> page.
+				</p>
 			) : null}
 		</div>
 	);

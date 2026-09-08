@@ -18,7 +18,8 @@ export const STAGE_SHORT: Record<ProcessStageId, string> = {
 	school_tracking: "Applications",
 	visa_invoice: "Visa fee",
 	visa: "Visa",
-	pre_departure: "Travel",
+	payment_execution: "Plan & fees",
+	travel_assistance: "Travel",
 	completed: "Complete",
 };
 
@@ -34,6 +35,7 @@ export const STAGE_PATH: Record<ProcessStageId, string> = {
 	school_tracking: "/portal/tracking",
 	visa_invoice: "/portal/visa",
 	visa: "/portal/visa/tracking",
-	pre_departure: "/portal/pre-departure",
+	payment_execution: "/portal/payment-execution",
+	travel_assistance: "/portal/pre-departure",
 	completed: "/portal/complete",
 };

@@ -1786,6 +1786,10 @@ export function canAdvanceTo(
 		hasVisaInvoice: boolean;
 		visaDone: boolean;
 		travelClearance: string | null;
+		hasPaymentPlan?: boolean;
+		agencySettled?: boolean;
+		travelInvoicePaid?: boolean;
+		preDepartureDone?: boolean;
 	},
 ): string | null {
 	switch (stage) {
@@ -1804,17 +1808,33 @@ export function canAdvanceTo(
 				? null
 				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
 		case "payment_execution":
-			return signals.hasAdmitted
-				? null
-				: "Cannot advance to Payment Execution: no accepted offer (admitted).";
-		case "travel_assistance":
+			if (!signals.hasAdmitted) {
+				return "Cannot advance to Payment Execution: no accepted offer (admitted).";
+			}
 			return signals.visaDone
 				? null
-				: "Cannot advance to Travel Assistance: visa stage is not complete.";
+				: "Cannot advance to Payment Execution: visa processing is not complete.";
+		case "travel_assistance":
+			if (!signals.visaDone) {
+				return "Cannot advance to Travel Assistance: visa stage is not complete.";
+			}
+			if (!signals.hasPaymentPlan) {
+				return "Cannot advance to Travel Assistance: applicant has not chosen a payment plan.";
+			}
+			if (!signals.agencySettled) {
+				return "Cannot advance to Travel Assistance: agency service fee is not settled.";
+			}
+			if (!signals.travelInvoicePaid) {
+				return "Cannot advance to Travel Assistance: the travel invoice is not paid.";
+			}
+			return null;
 		case "completed":
-			return signals.travelClearance === "cleared"
+			if (signals.travelClearance !== "cleared") {
+				return "Cannot advance to Completed: travel clearance is not 'cleared'.";
+			}
+			return signals.preDepartureDone
 				? null
-				: "Cannot advance to Completed: travel clearance is not 'cleared'.";
+				: "Cannot advance to Completed: pre-departure checklist is not finished.";
 		default:
 			return null;
 	}
@@ -2002,6 +2022,13 @@ export async function setApplicationStage(
 		hasVisaInvoice,
 		visaDone: row.visaStage === "complete",
 		travelClearance: row.travelClearance,
+		hasPaymentPlan: Boolean(row.paymentPlanId),
+		agencySettled: row.agencySettled,
+		travelInvoicePaid: row.travelInvoicePaid,
+		preDepartureDone:
+			Array.isArray(row.preDepartureTasks) &&
+			row.preDepartureTasks.length > 0 &&
+			row.preDepartureTasks.every((t) => t.done),
 	});
 	if (blockReason) {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", blockReason);
@@ -2099,6 +2126,22 @@ export async function applyHandoffResolvedTransition(input: {
 	if (!row) return null;
 	if (row.stage === input.stage) return row;
 	if (!isOwnerClassBoundary(row.stage, input.stage)) return null;
+
+	// Defensive re-validation: the gate was satisfied when the handoff was
+	// created, but an invoice void / plan change in between must not let the
+	// transition through silently. If the target's prerequisites no longer
+	// hold, the case stays parked (the specialist is still recorded).
+	const stillGated = canAdvanceToStage(row.stage, input.stage, {
+		visaStage: row.visaStage,
+		agencySettled: row.agencySettled,
+		agencyStageIndex: row.agencyStageIndex,
+		appFeePaid: row.appFeePaid,
+		travelInvoicePaid: row.travelInvoicePaid,
+		travelClearance: row.travelClearance,
+		paymentPlanId: row.paymentPlanId,
+		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+	});
+	if (stillGated) return row;
 
 	const [updated] = await db
 		.update(applications)

@@ -4,7 +4,6 @@ import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { AGENCY_STAGES } from "century-nit-core/content";
 import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
@@ -31,7 +30,6 @@ export function EnterpriseTravel() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
-		advanceAgencyStage,
 		setTravelClearance,
 		togglePreDepartureTask,
 	} = useCases();
@@ -50,7 +48,6 @@ export function EnterpriseTravel() {
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
 		return filtered.filter(
 			(a) =>
-				a.stage === "payment_execution" ||
 				a.stage === "travel_assistance" ||
 				a.stage === "completed",
 		);
@@ -63,7 +60,6 @@ export function EnterpriseTravel() {
 			a.university.toLowerCase().includes(searchQuery.toLowerCase());
 		if (!matchesSearch) return false;
 		if (statusFilter === "All") return true;
-		if (statusFilter === "Payment Execution") return a.stage === "payment_execution";
 		if (statusFilter === "Travel") return a.stage === "travel_assistance";
 		if (statusFilter === "Completed") return a.stage === "completed";
 		return true;
@@ -86,7 +82,7 @@ export function EnterpriseTravel() {
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Travel Assistance</h1>
-					<p className="lead mt-1">Manage payment plans, agency settlement, pre-departure checklists, and travel clearance.</p>
+					<p className="lead mt-1">Manage pre-departure checklists and travel clearance for settled cases.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
@@ -124,7 +120,7 @@ export function EnterpriseTravel() {
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
 					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
 						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Payment Execution", "Travel", "Completed"].map((tab) => (
+							{["All", "Travel", "Completed"].map((tab) => (
 								<button
 									key={tab}
 									onClick={() => setStatusFilter(tab)}
@@ -225,7 +221,7 @@ export function EnterpriseTravel() {
 						<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
 							<span style={{ fontSize: "2.5rem", opacity: 0.15, marginBottom: "1rem" }}>{"\u2708"}</span>
 							<p className="muted" style={{ fontSize: "var(--text-sm)", textAlign: "center" }}>
-								Select a case from the list to manage payment, travel, and pre-departure details.
+								Select a case from the list to manage travel clearance and pre-departure details.
 							</p>
 						</div>
 					) : (
@@ -289,87 +285,10 @@ export function EnterpriseTravel() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-							{/* Payment Execution */}
-						{active.stage === "payment_execution" && (
-							<div className="card" style={{ background: "var(--muted)" }}>
-								<p className="eyebrow mb-1">Payment Execution</p>
-								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
-									The applicant chose their payment plan during package selection. Collect the outstanding balance below, then use the Workflow board to advance the case to Travel Assistance.
-								</p>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-									<div>
-										<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Applicant's plan</p>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{paymentPlanLabel(active.paymentPlanId)}</p>
-									</div>
-								</div>
-							</div>
-						)}
-
-							{/* Agency Settlement */}
-							{(active.stage === "travel_assistance" || active.stage === "completed") && (
-									<div className="card">
-										<p className="eyebrow mb-3">Agency Settlement</p>
-										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-											{AGENCY_STAGES.map((s, i) => {
-												const completed = active.agencySettled || (active.agencyStageIndex ?? 0) > i;
-												const current = !active.agencySettled && (active.agencyStageIndex ?? 0) === i;
-												return (
-													<div
-														key={s.id}
-														style={{
-															display: "flex",
-															alignItems: "center",
-															gap: "0.75rem",
-															padding: "0.6rem 0.75rem",
-															border: "1px solid var(--border-light)",
-															opacity: completed ? 1 : 0.5,
-														}}
-													>
-														<span style={{
-															width: "28px",
-															height: "28px",
-															flexShrink: 0,
-															display: "flex",
-															alignItems: "center",
-															justifyContent: "center",
-															fontSize: "0.72rem",
-															fontWeight: 700,
-															fontFamily: "var(--font-mono)",
-															border: "2px solid",
-															borderColor: completed ? "#22c55e" : current ? "#f97316" : "var(--border)",
-															borderRadius: "50%",
-															color: completed ? "#fff" : current ? "#f97316" : "var(--muted-foreground)",
-															background: completed ? "#22c55e" : "transparent",
-														}}>
-															{completed ? "\u2713" : i + 1}
-														</span>
-														<div style={{ flex: 1 }}>
-															<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
-															<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.1rem" }}>{s.detail} {"\u00b7"} {Math.round(s.portion * 100)}%</p>
-														</div>
-														{current && !active.agencySettled && active.stage === "travel_assistance" && (
-															<button
-																onClick={() => advanceAgencyStage(active.appId)}
-																className="btn btn--ghost btn--sm"
-																style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.6rem" }}
-															>
-																{"\u2192"} Mark complete
-															</button>
-														)}
-													</div>
-												);
-											})}
-										</div>
-										{active.agencySettled && (
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#22c55e", marginTop: "0.5rem" }}>Settlement complete</p>
-										)}
-									</div>
-								)}
-
 							{/* Travel Clearance */}
 							{(active.stage === "travel_assistance" || active.stage === "completed") && (
-									<div className="card" style={{ background: "var(--muted)" }}>
-										<p className="eyebrow mb-1">Travel Clearance</p>
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Travel Clearance</p>
 										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
 											<div>
 												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>

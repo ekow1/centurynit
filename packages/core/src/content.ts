@@ -1760,7 +1760,8 @@ export type ProcessStageId =
 	| "school_tracking"
 	| "visa_invoice"
 	| "visa"
-	| "pre_departure"
+	| "payment_execution"
+	| "travel_assistance"
 	| "completed";
 
 export const PROCESS_STAGES: {
@@ -1863,17 +1864,26 @@ export const PROCESS_STAGES: {
 		band: "visa",
 	},
 	{
-		id: "pre_departure",
+		id: "payment_execution",
 		index: 10,
-		label: "Travel & pre-departure",
-		detail: "Flights, accommodation, insurance & arrival briefing",
+		label: "Payment plan & service fees",
+		detail: "Choose a plan · settle agency fees & travel invoice",
 		owner: "you",
+		path: "/portal/payment-execution",
+		band: "travel",
+	},
+	{
+		id: "travel_assistance",
+		index: 11,
+		label: "Travel assistance",
+		detail: "Handler-led clearance & pre-departure checklist",
+		owner: "counselor",
 		path: "/portal/pre-departure",
 		band: "travel",
 	},
 	{
 		id: "completed",
-		index: 11,
+		index: 12,
 		label: "Complete",
 		detail: "Journey finished - last step",
 		owner: "system",
@@ -1973,7 +1983,8 @@ export type PortalChapterId =
 	| "application"
 	| "tracking"
 	| "visa"
-	| "pre_departure"
+	| "payment_execution"
+	| "travel_assistance"
 	| "complete";
 
 export const PORTAL_CHAPTERS: {
@@ -2033,11 +2044,19 @@ export const PORTAL_CHAPTERS: {
 		path: "/portal/visa",
 	},
 	{
-		id: "pre_departure",
-		step: "VIII",
-		label: "Pre-departure",
-		blurb: "Travel checklist",
-		unlockHint: "Unlocks after agency settled",
+		id: "payment_execution",
+		step: "VI",
+		label: "Payment plan & fees",
+		blurb: "Plan · agency · travel invoice",
+		unlockHint: "Unlocks once your visa is complete",
+		path: "/portal/payment-execution",
+	},
+	{
+		id: "travel_assistance",
+		step: "VII",
+		label: "Travel assistance",
+		blurb: "Clearance & pre-departure",
+		unlockHint: "Unlocks after your plan, agency fee and travel invoice are settled",
 		path: "/portal/pre-departure",
 	},
 	{

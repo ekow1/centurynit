@@ -1785,7 +1785,8 @@ const journeySchema = z.object({
 		application: z.boolean(),
 		tracking: z.boolean(),
 		visa: z.boolean(),
-		pre_departure: z.boolean(),
+		payment_execution: z.boolean(),
+		travel_assistance: z.boolean(),
 		complete: z.boolean(),
 	}),
 	stageStatuses: z.record(z.enum(["done", "current", "locked", "skipped"])),
@@ -1821,7 +1822,8 @@ meRouter.openapi(
 					application: false,
 					tracking: false,
 					visa: false,
-					pre_departure: false,
+					payment_execution: false,
+					travel_assistance: false,
 					complete: false,
 				},
 				stageStatuses: Object.fromEntries(
@@ -1870,6 +1872,13 @@ meRouter.openapi(
 		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
 		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
+		// Payment execution is finished once the applicant has chosen a plan,
+		// settled the agency service fee, and paid the travel invoice — the
+		// same prerequisites the travel stage gate enforces on the ops side.
+		const isPaymentDone =
+			Boolean(application?.paymentPlanId) &&
+			Boolean(application?.agencySettled) &&
+			isTravelInvoicePaid;
 		const isPreDepartureDone = Boolean(
 			(application?.checklist?.length ?? 0) > 0 &&
 				application?.checklist?.every((item) => item.checked),
@@ -1891,7 +1900,8 @@ meRouter.openapi(
 			| "school_tracking"
 			| "visa_invoice"
 			| "visa"
-			| "pre_departure"
+			| "payment_execution"
+			| "travel_assistance"
 			| "completed";
 
 		let derivedPortalStage: PortalStage = "consultation";
@@ -1899,7 +1909,9 @@ meRouter.openapi(
 		if (isCompleted || (isVisaDone && isPreDepartureDone)) {
 			derivedPortalStage = "completed";
 		} else if (hasAdmitted && isVisaDone) {
-			derivedPortalStage = "pre_departure";
+			// Visa done → payment execution opens. Travel assistance only opens
+			// once the plan is chosen AND agency + travel payments are settled.
+			derivedPortalStage = isPaymentDone ? "travel_assistance" : "payment_execution";
 		} else if (hasAdmitted && isVisaInvoicePaid) {
 			derivedPortalStage = "visa";
 		} else if (hasAdmitted && !isVisaInvoicePaid) {
@@ -1950,12 +1962,18 @@ meRouter.openapi(
 						else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
 					} else if (coarseStage === "offer_letter_review") {
 						portalStage = "school_tracking";
-					} else if (coarseStage === "visa_processing" || coarseStage === "payment_execution") {
+					} else if (coarseStage === "visa_processing") {
 						if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
+					} else if (coarseStage === "payment_execution") {
+						if (hasAdmitted && isVisaDone && isPaymentDone) portalStage = "travel_assistance";
+						else if (hasAdmitted && isVisaDone) portalStage = "payment_execution";
+						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
+						else if (hasAdmitted) portalStage = "visa_invoice";
 					} else if (coarseStage === "travel_assistance") {
 						if (isCompleted || (isVisaDone && isPreDepartureDone)) portalStage = "completed";
-						else portalStage = "pre_departure";
+						else if (isPaymentDone) portalStage = "travel_assistance";
+						else portalStage = "payment_execution";
 					} else if (coarseStage === "completed") {
 						portalStage = "completed";
 					}
@@ -1982,7 +2000,9 @@ meRouter.openapi(
 			application: isEligible,
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
-			pre_departure: hasAdmitted && isVisaInvoicePaid && isVisaDone && application?.agencySettled && isTravelInvoicePaid,
+			payment_execution: hasAdmitted && isVisaInvoicePaid && isVisaDone,
+			travel_assistance:
+				hasAdmitted && isVisaInvoicePaid && isVisaDone && isPaymentDone,
 			complete: isCompleted,
 		};
 
@@ -2004,7 +2024,8 @@ meRouter.openapi(
 			else if (sid === "school_tracking") done = hasAdmitted;
 			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
 			else if (sid === "visa") done = isVisaDone;
-			else if (sid === "pre_departure") done = isPreDepartureDone;
+			else if (sid === "payment_execution") done = isPaymentDone;
+			else if (sid === "travel_assistance") done = isPreDepartureDone;
 			else if (sid === "completed") done = isCompleted;
 
 			if (sid === portalStage) stageStatuses[sid] = "current";

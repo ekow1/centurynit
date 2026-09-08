@@ -22,7 +22,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 export function PortalPreDeparture() {
 	return (
-		<ChapterGate chapter="pre_departure">
+		<ChapterGate chapter="travel_assistance">
 			<PreDepartureInner />
 		</ChapterGate>
 	);

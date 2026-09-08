@@ -44,6 +44,7 @@ const STAGE_PATHS = [
 	"/portal/visa/tracking",
 	"/portal/payment-plan",
 	"/portal/agency",
+	"/portal/payment-execution",
 	"/portal/pre-departure",
 	"/portal/complete",
 ];
@@ -237,7 +238,8 @@ function stagePill(s: ProcessStageId) {
 		school_tracking: "Application tracking",
 		visa_invoice: "Visa invoice",
 		visa: "Visa tracking",
-		pre_departure: "Travel & pre-departure",
+		payment_execution: "Payment plan & service fees",
+		travel_assistance: "Travel assistance",
 		completed: "Completed",
 	};
 	return map[s];

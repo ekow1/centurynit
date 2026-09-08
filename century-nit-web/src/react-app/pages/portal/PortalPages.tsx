@@ -8,7 +8,6 @@ import { Field, Select } from "../../components/ui/Field";
 import { StageInvoiceCard } from "../../components/StageInvoiceCard";
 import {
 	hasAcceptedOffer,
-	hasPaymentPlan,
 	hasSchoolPackage,
 	useAppState,
 	type AssessmentData,
@@ -2452,20 +2451,19 @@ export function PortalConsultation() {
 }
 
 /* ========== Payment plan ==========
-   No longer a journey stage. The plan is chosen with the school package and
-   managed from Financial; this route only exists so old links still land
-   somewhere sensible. */
+   The plan is confirmed on the Payment execution chapter; this route only
+   exists so old links still land somewhere sensible. */
 
 export function PortalPaymentPlan() {
-	return <Navigate to="/portal/financial" replace />;
+	return <Navigate to="/portal/payment-execution" replace />;
 }
 
 
 /* ========== Service fee ==========
-   Settlement moved to Financial alongside the invoices — one money surface. */
+   Agency settlement happens on the Payment execution chapter. */
 
 export function PortalAgency() {
-	return <Navigate to="/portal/financial" replace />;
+	return <Navigate to="/portal/payment-execution" replace />;
 }
 
 
@@ -3860,16 +3858,14 @@ function VisaTrackingInner() {
 						<Button
 							type="button"
 							arrow
-							onClick={() =>
-								nav(hasPaymentPlan(application) ? "/portal/agency" : "/portal/payment-plan")
-							}
+							onClick={() => nav("/portal/payment-execution")}
 						>
-							Next · {hasPaymentPlan(application) ? "Agency" : "Payment plan"}
+							Continue to payment plan & fees
 						</Button>
 					</div>
 				) : (
 					<p className="muted mt-1">
-						Visa tracking is in progress. Payment plan unlocks once your visa is complete.
+						Visa tracking is in progress. Payment unlocks once your visa is complete.
 					</p>
 				)}
 			</div>
@@ -3891,7 +3887,9 @@ function CompleteInner() {
 	const { application, booking, schoolApplications } = useAppState();
 	const finished =
 		Boolean(application.completedAt) ||
-		(Boolean(application.agencySettledAt) && application.visaStatus === "complete");
+		(Boolean(application.agencySettledAt) &&
+			application.visaStatus === "complete" &&
+			application.travelInvoicePaid);
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
@@ -3912,11 +3910,8 @@ function CompleteInner() {
 					<Button to="/portal/visa" arrow>
 						Visa & travel
 					</Button>
-					<Button to="/portal/payment-plan" variant="secondary">
-						Payment plan
-					</Button>
-					<Button to="/portal/agency" variant="ghost">
-						Agency
+					<Button to="/portal/payment-execution" variant="secondary">
+						Payment plan & fees
 					</Button>
 				</div>
 			</div>
@@ -3930,7 +3925,7 @@ function CompleteInner() {
 					<p className="eyebrow">Complete · last step</p>
 					<h1 className="page-title mt-1">Application complete</h1>
 					<p className="lead mt-2">
-						Consultation → school package → schools → visa → payment plan → agency → done.
+						Consultation → school package → schools → visa → payment plan & fees → travel → done.
 					</p>
 				</div>
 				<div className="success-check" aria-hidden>

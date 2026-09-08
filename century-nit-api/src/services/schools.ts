@@ -361,7 +361,7 @@ export async function updateSchoolStatus(
 		financialNote: input.financialNote,
 	});
 
-	if (input.sendOfferEmail) {
+	if (input.sendUpdateEmail) {
 		try {
 			const [appRow] = await db
 				.select()
@@ -370,17 +370,22 @@ export async function updateSchoolStatus(
 				.limit(1);
 			if (appRow?.email) {
 				const frontendUrl = process.env.APP_URL || "https://centurynit.com";
+				
+				let subject = `Application Update: ${target.universityName || "University"}`;
+				if (input.outcome === "Offer Received") {
+					subject = `🎉 Admission Offer: ${target.universityName || "University"} has accepted your application!`;
+				} else if (input.outcome === "Application Rejected") {
+					subject = `Application Update: Decision from ${target.universityName || "University"}`;
+				}
+
 				const emailContent = renderSchoolOfferEmail({
 					clientName: appRow.name || "Applicant",
 					universityName: target.universityName || "University",
 					programName: target.programName || "Programme",
-					tuitionFormatted:
-						input.offerTuitionLabel ||
-						(input.offerTuitionUsd ? `$${input.offerTuitionUsd.toLocaleString()}` : null),
-					depositFormatted: input.offerDepositUsd ? `$${input.offerDepositUsd.toLocaleString()}` : null,
-					depositDeadlineFormatted: input.offerDepositDueAt
-						? new Date(input.offerDepositDueAt).toLocaleDateString()
-						: null,
+					outcome: input.outcome,
+					tuitionFormatted: null,
+					depositFormatted: null,
+					depositDeadlineFormatted: null,
 					consultantNote: input.consultantNote,
 					portalUrl: frontendUrl,
 					hasAttachment: Boolean(input.offerLetterUrl),
@@ -388,13 +393,13 @@ export async function updateSchoolStatus(
 
 				await sendEmail({
 					to: appRow.email,
-					subject: `🎉 Admission Offer: ${target.universityName || "University"} has accepted your application!`,
+					subject,
 					html: emailContent.html,
 					text: emailContent.text,
 					...(input.offerLetterUrl
 						? [
 								{
-									filename: `Offer_Letter_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
+									filename: `Document_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
 									path: input.offerLetterUrl,
 								},
 							]
@@ -402,7 +407,7 @@ export async function updateSchoolStatus(
 				});
 			}
 		} catch (err) {
-			console.warn("[schools] Failed to send offer email to applicant:", err);
+			console.warn("[schools] Failed to send update email to applicant:", err);
 		}
 	}
 

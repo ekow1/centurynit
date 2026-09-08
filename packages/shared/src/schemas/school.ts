@@ -91,7 +91,7 @@ export const updateSchoolStatusSchema = z.object({
 	offerDepositDueAt: z.string().datetime().nullable().optional(),
 	offerDepositPaidAt: z.string().datetime().nullable().optional(),
 	offerLetterUrl: z.string().nullable().optional(),
-	sendOfferEmail: z.boolean().optional(),
+	sendUpdateEmail: z.boolean().optional(),
 	consultantNote: z.string().max(2000).optional(),
 });
 export type UpdateSchoolStatus = z.infer<typeof updateSchoolStatusSchema>;

@@ -723,6 +723,7 @@ export function renderSchoolOfferEmail(data: {
 	clientName: string;
 	universityName: string;
 	programName: string;
+	outcome?: string | null;
 	tuitionFormatted?: string | null;
 	depositFormatted?: string | null;
 	depositDeadlineFormatted?: string | null;
@@ -735,13 +736,22 @@ export function renderSchoolOfferEmail(data: {
 	const safeProg = escapeHtml(data.programName.trim());
 	const portalLink = `${data.portalUrl}/portal/tracking`;
 
+	let headerMessage = `There is an update regarding your application to <strong>${safeUni}</strong> for the <strong>${safeProg}</strong> programme.`;
+	if (data.outcome === "Offer Received") {
+		headerMessage = `Congratulations! <strong>${safeUni}</strong> has issued an official admission offer for the <strong>${safeProg}</strong> programme.`;
+	} else if (data.outcome === "Application Rejected") {
+		headerMessage = `We have received a decision from <strong>${safeUni}</strong> regarding the <strong>${safeProg}</strong> programme. Unfortunately, the application was not successful.`;
+	} else if (data.outcome === "Waitlisted") {
+		headerMessage = `Your application to <strong>${safeUni}</strong> for the <strong>${safeProg}</strong> programme has been placed on the waitlist.`;
+	}
+
 	const bodyHtml = `
 		<p style="margin:0 0 18px 0;font-size:16px;color:#000000;">
 			Hello <strong>${safeClient}</strong>,
 		</p>
 
 		<p style="margin:0 0 20px 0;font-size:15px;line-height:1.5;color:#000000;">
-			Congratulations! <strong>${safeUni}</strong> has issued an official admission offer for the <strong>${safeProg}</strong> programme.
+			${headerMessage}
 		</p>
 
 		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:0 0 26px 0;background-color:#f9f9f9;border:2px solid #000000;padding:16px 20px;">
@@ -789,10 +799,19 @@ export function renderSchoolOfferEmail(data: {
 		</table>
 	`;
 
+	let headerMessageText = `There is an update regarding your application to ${data.universityName.trim()} for the ${data.programName.trim()} programme.`;
+	if (data.outcome === "Offer Received") {
+		headerMessageText = `Congratulations! ${data.universityName.trim()} has issued an official admission offer for ${data.programName.trim()}.`;
+	} else if (data.outcome === "Application Rejected") {
+		headerMessageText = `We have received a decision from ${data.universityName.trim()} regarding the ${data.programName.trim()} programme. Unfortunately, the application was not successful.`;
+	} else if (data.outcome === "Waitlisted") {
+		headerMessageText = `Your application to ${data.universityName.trim()} for the ${data.programName.trim()} programme has been placed on the waitlist.`;
+	}
+
 	const text = [
 		`Hello ${data.clientName.trim()},`,
 		``,
-		`Congratulations! ${data.universityName.trim()} has issued an official admission offer for ${data.programName.trim()}.`,
+		headerMessageText,
 		``,
 		`Institution: ${data.universityName.trim()}`,
 		`Programme: ${data.programName.trim()}`,

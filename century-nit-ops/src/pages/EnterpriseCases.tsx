@@ -16,22 +16,11 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	const { updateSchoolApplication } = useCases();
 	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
 	const [outcome, setOutcome] = useState<string>(school.outcome || "Offer Received");
-	const [tuitionUsd, setTuitionUsd] = useState(school.offerTuitionUsd?.toString() ?? "");
-	const [tuitionLabel, setTuitionLabel] = useState(school.offerTuitionLabel ?? "");
-	const [depositUsd, setDepositUsd] = useState(school.offerDepositUsd?.toString() ?? "");
-	const [dueAt, setDueAt] = useState(school.offerDepositDueAt ? school.offerDepositDueAt.slice(0, 10) : "");
-	const [paidAt, setPaidAt] = useState(school.offerDepositPaidAt ? school.offerDepositPaidAt.slice(0, 10) : "");
 	const [offerLetterUrl, setOfferLetterUrl] = useState(school.offerLetterUrl ?? "");
-	const [sendOfferEmail, setSendOfferEmail] = useState(true);
 	const [consultantNote, setConsultantNote] = useState("");
+	const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
 
 	const [isSaving, setIsSaving] = useState(false);
-
-	const toIso = (date: string) => (date ? `${date}T00:00:00Z` : null);
-	const toNumber = (value: string) => {
-		const n = Number(value);
-		return Number.isFinite(n) && value.trim() !== "" ? n : null;
-	};
 
 	const handleSave = async () => {
 		setIsSaving(true);
@@ -39,13 +28,8 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			await updateSchoolApplication(appId, school.id, {
 				status: status as any,
 				outcome: status === "Decision Reached" ? outcome as any : null,
-				offerTuitionUsd: status === "Decision Reached" && outcome === "Offer Received" ? toNumber(tuitionUsd) : null,
-				offerTuitionLabel: status === "Decision Reached" && outcome === "Offer Received" ? tuitionLabel.trim() || null : null,
-				offerDepositUsd: status === "Decision Reached" && outcome === "Offer Received" ? toNumber(depositUsd) : null,
-				offerDepositDueAt: status === "Decision Reached" && outcome === "Offer Received" ? toIso(dueAt) : null,
-				offerDepositPaidAt: status === "Decision Reached" && outcome === "Offer Received" ? toIso(paidAt) : null,
 				offerLetterUrl: status === "Decision Reached" && outcome === "Offer Received" ? offerLetterUrl.trim() || null : null,
-				sendOfferEmail: status === "Decision Reached" && outcome === "Offer Received" && sendOfferEmail && Boolean(offerLetterUrl.trim()),
+				sendUpdateEmail: status === "Decision Reached" && outcome === "Offer Received" && sendUpdateEmail && Boolean(offerLetterUrl.trim()),
 				consultantNote: consultantNote.trim() || undefined,
 			});
 		} catch {
@@ -99,26 +83,6 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			{showOfferFields && (
 				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", marginTop: "0.5rem" }}>
 					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>Offer Details</p>
-					<div>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition USD</p>
-						<input className="input input--sm" type="number" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} />
-					</div>
-					<div>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Tuition label</p>
-						<input className="input input--sm" type="text" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} />
-					</div>
-					<div>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit USD</p>
-						<input className="input input--sm" type="number" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} />
-					</div>
-					<div>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit due</p>
-						<input className="input input--sm" type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
-					</div>
-					<div>
-						<p className="muted" style={{ marginBottom: "0.15rem" }}>Deposit paid</p>
-						<input className="input input--sm" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
-					</div>
 					<div style={{ gridColumn: "1 / -1" }}>
 						<p className="muted" style={{ marginBottom: "0.15rem" }}>Official Offer Letter / Document URL (PDF)</p>
 						<input
@@ -143,10 +107,10 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
 							<input
 								type="checkbox"
-								checked={sendOfferEmail}
-								onChange={(e) => setSendOfferEmail(e.target.checked)}
+								checked={sendUpdateEmail}
+								onChange={(e) => setSendUpdateEmail(e.target.checked)}
 							/>
-							<span>Send official acceptance email with PDF attachment to applicant</span>
+							<span>Send status update email to applicant (includes note & document if provided)</span>
 						</label>
 					</div>
 				</div>

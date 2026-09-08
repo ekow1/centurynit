@@ -1038,7 +1038,7 @@ export const schoolTrackStatusEnum = pgEnum("school_track_status", [
 ]);
 
 export const schoolOutcomeEnum = pgEnum("school_outcome", [
-	"Admitted",
+	"Offer Received",
 	"Waitlisted",
 	"Application Rejected",
 	"Withdrawn",

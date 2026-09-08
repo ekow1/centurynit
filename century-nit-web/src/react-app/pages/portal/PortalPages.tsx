@@ -2977,7 +2977,7 @@ export function PortalTrackingPage() {
 function TrackingPageInner() {
 	const { schoolApplications, application, setSchoolApplications } = useAppState();
 	const paid = application.applicationInvoice.status === "paid";
-	const acceptedCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
+	const acceptedCount = schoolApplications.filter((s) => s.outcome === "Offer Received").length;
 
 	// Poll the server for the authoritative school application statuses. The
 	// local state is the seed; the server is the source of truth once the
@@ -3066,7 +3066,7 @@ function TrackingPageInner() {
 					</p>
 				</div>
 				<div className="stat-cell stat-cell--accent">
-					<p className="stat-cell__label">Admitted</p>
+					<p className="stat-cell__label">Offers</p>
 					<p className="stat-cell__value">{acceptedCount}</p>
 				</div>
 				<div className="stat-cell">
@@ -3105,7 +3105,7 @@ function TrackingPageInner() {
 				<div className="card card--pad mt-6 next-action" style={{ border: "2px solid var(--foreground)" }}>
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
 						<div>
-							<p className="eyebrow">Admitted · {acceptedCount} school(s)</p>
+							<p className="eyebrow">Offers · {acceptedCount} school(s)</p>
 							<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
 								Ready for the visa stage
 							</p>
@@ -3235,7 +3235,7 @@ function SchoolTrackCard({
 
 	return (
 		<li
-			className={`school-track-card school-track-card--${trackSlug(row.status)}${row.outcome === "Admitted" ? " school-track-card--admitted" : ""}`}
+			className={`school-track-card school-track-card--${trackSlug(row.status)}${row.outcome === "Offer Received" ? " school-track-card--offer-received" : ""}`}
 		>
 			<div className="school-track-card__main">
 				<div className="between" style={{ gap: "1rem", flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -3250,13 +3250,13 @@ function SchoolTrackCard({
 							{program?.name} · {row.intake}
 						</p>
 					</div>
-					<span className={`track-status-pill track-status-pill--${trackSlug(row.status)}${row.outcome === "Admitted" ? " track-status-pill--admitted" : ""}`}>
+					<span className={`track-status-pill track-status-pill--${trackSlug(row.status)}${row.outcome === "Offer Received" ? " track-status-pill--offer-received" : ""}`}>
 						{trackLabel(row)}
 					</span>
 				</div>
 
 				{/* Offer terms — only displayed for schools that have made an offer */}
-				{row.offerTuitionUsd && row.outcome === "Admitted" ? (
+				{row.offerTuitionUsd && row.outcome === "Offer Received" ? (
 					<OfferTerms row={row} />
 				) : null}
 
@@ -3423,7 +3423,7 @@ function VisaHubInner() {
 	const { application, schoolApplications, fees } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
-	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
+	const accepted = schoolApplications.filter((s) => s.outcome === "Offer Received");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	const paid = inv.status === "paid";
 	const amount = inv.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
@@ -3491,7 +3491,7 @@ function VisaHubInner() {
 			</header>
 
 			<ol className="mini-steps mb-4">
-				<li className={hasAdmit ? "is-done" : "is-current"}>1 · Admitted</li>
+				<li className={hasAdmit ? "is-done" : "is-current"}>1 · Offer received</li>
 				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>2 · Visa invoice</li>
 				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
 			</ol>
@@ -3616,7 +3616,7 @@ function CompleteInner() {
 	const finished =
 		Boolean(application.completedAt) ||
 		(Boolean(application.agencySettledAt) && application.visaStatus === "complete");
-	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
+	const accepted = schoolApplications.filter((s) => s.outcome === "Offer Received");
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
 

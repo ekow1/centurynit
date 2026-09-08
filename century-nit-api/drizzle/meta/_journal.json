@@ -421,6 +421,13 @@
       "when": 1788900000000,
       "tag": "0061_rename_offer_received",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788910000000,
+      "tag": "0062_rename_admitted_back",
+      "breakpoints": true
     }
   ]
 }

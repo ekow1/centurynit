@@ -624,7 +624,7 @@ export function isConsultationEligible(booking: BookingData) {
 }
 
 export function hasAcceptedOffer(schools: SchoolApplicationTrack[]) {
-	return schools.some((s) => s.outcome === "Admitted");
+	return schools.some((s) => s.outcome === "Offer Received");
 }
 
 export function isAppInvoicePaid(app: ApplicationData) {
@@ -662,7 +662,7 @@ export function isAgencySettled(app: ApplicationData) {
 
 /**
  * Select schools → pay application invoice → tracking starts.
- * Admitted → pay visa invoice → visa tracking. Then payment plan → agency → complete.
+ * Offer received → pay visa invoice → visa tracking. Then payment plan → agency → complete.
  *
  * The authoritative coarse stage is `application.stage` (a shared `JourneyStage`)
  * which `syncFromServer` writes into `app.journeyStage`. When present it is
@@ -1409,7 +1409,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						description: "Visa fee estimate - actual invoice follows from your consultant",
 					},
 					visaStatus: "locked",
-					counselorNote: `Admitted. Visa estimate ${formatDualCurrency(estimated)} issued - your consultant confirms the actual invoice.`,
+					counselorNote: `Offer received. Visa estimate ${formatDualCurrency(estimated)} issued - your consultant confirms the actual invoice.`,
 				};
 			});
 		}, 0);

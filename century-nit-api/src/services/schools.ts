@@ -372,7 +372,7 @@ export async function updateSchoolStatus(
 				const frontendUrl = process.env.APP_URL || "https://centurynit.com";
 				
 				let subject = `Application Update: ${target.universityName || "University"}`;
-				if (input.outcome === "Admitted") {
+				if (input.outcome === "Offer Received") {
 					subject = `🎉 Admission Offer: ${target.universityName || "University"} has accepted your application!`;
 				} else if (input.outcome === "Application Rejected") {
 					subject = `Application Update: Decision from ${target.universityName || "University"}`;

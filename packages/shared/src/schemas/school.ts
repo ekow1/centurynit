@@ -20,7 +20,7 @@ export const SCHOOL_TRACK_STATUS_LABELS: Record<SchoolTrackStatus, string> = {
 };
 
 export const schoolOutcomeSchema = z.enum([
-	"Admitted",
+	"Offer Received",
 	"Waitlisted",
 	"Application Rejected",
 	"Withdrawn",
@@ -28,7 +28,7 @@ export const schoolOutcomeSchema = z.enum([
 export type SchoolOutcome = z.infer<typeof schoolOutcomeSchema>;
 
 export const SCHOOL_OUTCOME_LABELS: Record<SchoolOutcome, string> = {
-	Admitted: "Admitted",
+	"Offer Received": "Offer Received",
 	Waitlisted: "Waitlisted",
 	"Application Rejected": "Rejected",
 	Withdrawn: "Withdrawn",

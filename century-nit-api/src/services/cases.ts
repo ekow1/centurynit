@@ -1870,7 +1870,7 @@ export async function setApplicationStage(
 	]);
 	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Preparing Application");
 	const hasAdmitted = schoolTracks.schools.some(
-		(s) => s.outcome === "Admitted",
+		(s) => s.outcome === "Offer Received",
 	);
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");

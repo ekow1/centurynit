@@ -989,6 +989,16 @@ export const meApi = {
 	},
 
 	/**
+	 * Idempotently ensure the signed-in applicant's visa invoice exists: if none
+	 * has been raised yet, raises a proforma estimate (which appears in Ops for
+	 * review/issue), otherwise returns the existing invoice. Links the invoice
+	 * to the application. Never creates a duplicate.
+	 */
+	ensureVisaInvoice(): Promise<ApiInvoice> {
+		return request(`${API_PREFIX}/me/invoices/visa/ensure`, { method: "POST" });
+	},
+
+	/**
 	 * Update the signed-in applicant's own profile. The server resolves the
 	 * applicant from the session, so no id is sent. `branch` is not accepted
 	 * here — that's an ops placement decision.

@@ -45,7 +45,7 @@ import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { listSchoolsForApplicant } from "./schools.js";
-import { createInvoice, getFeeSchedule } from "./invoice.js";
+import { createInvoice, getFeeSchedule, type InvoiceRow } from "./invoice.js";
 import {
 	linkApplicationToLead,
 	syncLeadAssignment,
@@ -1850,6 +1850,47 @@ async function raiseVisaInvoiceForApplication(
 		},
 		actor,
 	});
+}
+
+/**
+ * Idempotently ensure a visa invoice exists for the applicant's latest
+ * application. The portal's visa step calls this so a proforma estimate lands
+ * in Ops for review/issue even if the journey stage has not formally reached
+ * `visa_processing` yet. Never duplicates an existing visa invoice, and repairs
+ * the application link on an orphaned one.
+ */
+export async function ensureVisaInvoiceForApplication(
+	userId: string,
+	actor: Actor,
+): Promise<InvoiceRow> {
+	const [applicant] = await db
+		.select()
+		.from(applicants)
+		.where(eq(applicants.userId, userId))
+		.limit(1);
+	if (!applicant) throw new HttpError(404, "APPLICANT_NOT_FOUND", "Applicant not found");
+	const app = await latestApplicationForApplicant(applicant.id);
+	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	const clientInvoices = await listInvoicesForApplicant(applicant.id);
+	const existing = clientInvoices.find((i) => i.type === "visa" && i.status !== "void");
+	if (existing) {
+		if (!existing.applicationId && app.id) {
+			await db
+				.update(invoices)
+				.set({ applicationId: app.id })
+				.where(eq(invoices.id, existing.id));
+		}
+		return existing;
+	}
+
+	await raiseVisaInvoiceForApplication(app, applicant, actor);
+	const raised = await listInvoicesForApplicant(applicant.id);
+	const created = raised.find((i) => i.type === "visa" && i.status !== "void");
+	if (!created) {
+		throw new HttpError(500, "VISA_INVOICE_RAISE_FAILED", "Could not raise the visa invoice");
+	}
+	return created;
 }
 
 export async function setApplicationStage(

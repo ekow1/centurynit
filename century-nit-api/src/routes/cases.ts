@@ -17,6 +17,7 @@ import {
 	completeConsultationAssessment,
 	confirmConsultationSlot,
 	delegateCoordinator,
+	ensureVisaInvoiceForApplication,
 	getApplicant,
 	getApplicantByUserId,
 	getApplication,
@@ -1039,6 +1040,36 @@ meRouter.openapi(
 		const rows = await listInvoicesForClient(user.id);
 		const list = await Promise.all(rows.map(serializeInvoice));
 		return c.json({ invoices: list, total: list.length });
+	},
+);
+
+/**
+ * Applicant self-service: idempotently ensure their visa invoice exists.
+ * Raises a proforma estimate when none has been raised yet (so Ops can review
+ * and issue it), backfills the application link on an orphaned one, and never
+ * duplicates an existing visa invoice. Returns the invoice in every case.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/invoices/visa/ensure",
+		tags: ["Applicants"],
+		middleware: [requireAuth, requireMfa] as const,
+		responses: {
+			200: {
+				content: { "application/json": { schema: invoiceSchema } },
+				description: "The applicant's visa invoice (existing or newly raised)",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const row = await ensureVisaInvoiceForApplication(user.id, {
+			opsUserId: user.id,
+			name: user.name ?? "Applicant",
+			email: user.email,
+		});
+		return c.json(await serializeInvoice(row));
 	},
 );
 

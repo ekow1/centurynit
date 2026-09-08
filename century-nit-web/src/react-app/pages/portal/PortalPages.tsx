@@ -3513,7 +3513,10 @@ function VisaHubInner() {
 	const nav = useNavigate();
 	const { toast } = useNotifier();
 
-	// Fetch the real server invoice on mount so the card reflects actual status
+	// Fetch the real server invoice on mount so the card reflects actual status.
+	// Ensure it exists first: if nothing has been raised yet, the server raises
+	// a proforma estimate that appears in Ops for the consultant to confirm and
+	// issue. Idempotent — never duplicates an existing visa invoice.
 	const [serverInv, setServerInv] = useState<{
 		id: string;
 		invoiceNumber: string;
@@ -3525,22 +3528,47 @@ function VisaHubInner() {
 
 	useEffect(() => {
 		let cancelled = false;
-		meApi.invoices()
-			.then(({ invoices }) => {
-				if (cancelled) return;
-				const visa = invoices.find((i) => i.type === "visa");
-				if (visa) {
-					setServerInv({
-						id: visa.id,
-						invoiceNumber: visa.invoiceNumber,
-						status: visa.status,
-						balanceCents: visa.balanceCents,
-						subtotalCents: visa.subtotalCents,
-						paidCents: visa.paidCents,
-					});
-				}
-			})
-			.catch(() => {});
+		const apply = (visa: {
+			id: string;
+			invoiceNumber: string;
+			status: string;
+			balanceCents: number;
+			subtotalCents: number;
+			paidCents: number;
+		}) => {
+			if (!cancelled) setServerInv(visa);
+		};
+		const mapVisa = (visa: {
+			id: string;
+			invoiceNumber: string;
+			status: string;
+			balanceCents: number;
+			subtotalCents: number;
+			paidCents: number;
+		}) =>
+			apply({
+				id: visa.id,
+				invoiceNumber: visa.invoiceNumber,
+				status: visa.status,
+				balanceCents: visa.balanceCents,
+				subtotalCents: visa.subtotalCents,
+				paidCents: visa.paidCents,
+			});
+		// The portal drive: raise a real invoice for Ops to confirm, unless one
+		// already exists. Falls back to the plain listing on failure so an
+		// already-issued invoice still shows.
+		meApi
+			.ensureVisaInvoice()
+			.then(mapVisa)
+			.catch(() =>
+				meApi
+					.invoices()
+					.then(({ invoices }) => {
+						const visa = invoices.find((i) => i.type === "visa");
+						if (visa) mapVisa(visa);
+					})
+					.catch(() => {}),
+			);
 		return () => { cancelled = true; };
 	}, []);
 
@@ -3562,7 +3590,13 @@ function VisaHubInner() {
 				actualAmount: usdFromCents(serverInv.balanceCents > 0 ? serverInv.balanceCents : serverInv.subtotalCents),
 				description: `Visa processing fee · ${serverInv.invoiceNumber}`,
 			}
-		: inv;
+		: {
+				// No server invoice yet — show a neutral "not raised" card rather
+				// than the stale local estimate (which carried a fake number).
+				...inv,
+				id: null,
+				status: "none" as const,
+			};
 	const amount = cardInvoice.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
 
 	async function pay() {
@@ -3603,9 +3637,9 @@ function VisaHubInner() {
 	}
 
 	const steps = [
-		{ id: "pending", label: "Case opened", detail: "After payment - handler opens file" },
-		{ id: "biometrics", label: "Biometrics / appointment", detail: "Simulated window" },
-		{ id: "decision", label: "Authority decision", detail: "In progress" },
+		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
+		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },
+		{ id: "decision", label: "Authority decision", detail: "Awaiting decision" },
 		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
 	] as const;
 	const order = ["locked", "pending", "biometrics", "decision", "complete"] as const;
@@ -3671,11 +3705,20 @@ function VisaHubInner() {
 			/>
 			</div>
 
+			<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+				<Button to="/portal/tracking" variant="secondary">
+					← Back to admission tracking
+				</Button>
+				<Button to="/portal/financial" variant="ghost">
+					View all invoices
+				</Button>
+			</div>
+
 			{/* Tracking only after pay - stays on this stage page but after payment */}
 			{paid ? (
 				<>
 					<div className="card card--pad mb-4">
-						<p className="eyebrow">Visa tracking (simulated · view only)</p>
+						<p className="eyebrow">Visa tracking</p>
 						<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
 							{application.counselorNote ?? "Visa case updating…"}
 						</p>

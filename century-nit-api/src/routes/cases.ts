@@ -78,6 +78,7 @@ import {
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
 import { listSchoolsForApplicant } from "../services/schools.js";
+import { syncLeadFromApplicant } from "../services/leads.js";
 import {
 	getOrCreateApplicantConversation,
 	getApplicantMessages,
@@ -1448,6 +1449,16 @@ meRouter.openapi(
 				.set({ name: body.name.trim(), updatedAt: new Date() })
 				.where(eq(schema.users.id, user.id));
 		}
+
+		// Sync the CRM lead so the ops console reflects the name/phone the
+		// applicant entered in the onboarding popup — `captureLeadFromUser`
+		// only runs on auth events and only fills missing fields, so without
+		// this the lead keeps the email-derived name and null phone forever.
+		syncLeadFromApplicant({
+			email: updated.email ?? user.email,
+			name: updated.name,
+			phone: updated.phone ?? null,
+		}).catch(() => {});
 
 		return c.json(await serializeApplicant(updated));
 	},

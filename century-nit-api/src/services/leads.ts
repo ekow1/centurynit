@@ -210,6 +210,45 @@ export async function captureLeadFromUser(
 	}
 }
 
+/**
+ * Sync the CRM lead for an applicant after they update their profile.
+ *
+ * `captureLeadFromUser` runs on signup/sign-in but only fills in *missing*
+ * fields — it will not overwrite a name like "ads23b00110y" that was derived
+ * from the email prefix at signup. This helper overwrites name/phone on the
+ * lead so the CRM reflects what the applicant actually entered in the
+ * onboarding popup.
+ */
+export async function syncLeadFromApplicant(input: {
+	email: string;
+	name?: string | null;
+	phone?: string | null;
+}): Promise<void> {
+	try {
+		if (!input.email) return;
+		const normalizedEmail = input.email.toLowerCase().trim();
+
+		const existing = await db.query.leads.findFirst({
+			where: eq(leads.email, normalizedEmail),
+		});
+		if (!existing) return;
+
+		const patch: Record<string, unknown> = { updatedAt: new Date() };
+		if (input.name && input.name.trim() && input.name.trim() !== existing.name) {
+			patch.name = input.name.trim();
+		}
+		if (input.phone !== undefined) {
+			const newPhone = input.phone?.trim() || null;
+			if (newPhone !== existing.phone) patch.phone = newPhone;
+		}
+		if (Object.keys(patch).length > 1) {
+			await db.update(leads).set(patch).where(eq(leads.id, existing.id));
+		}
+	} catch (err) {
+		console.warn("[CRM] Failed to sync lead from applicant profile:", err);
+	}
+}
+
 /** Record an event in the lead audit trail. */
 export async function recordLeadEvent(
 	leadId: string,

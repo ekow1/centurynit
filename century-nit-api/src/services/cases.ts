@@ -37,6 +37,7 @@ import {
 	schoolApplications,
 	servicePackages,
 	stageAssignments,
+	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -668,6 +669,32 @@ export async function getApplicant(id: string): Promise<ApplicantRow | null> {
 export async function getApplicantByUserId(userId: string): Promise<ApplicantRow | null> {
 	const [row] = await db.select().from(applicants).where(eq(applicants.userId, userId)).limit(1);
 	return row ?? null;
+}
+
+/**
+ * Travel assistance status for an application, used by the journey gate.
+ * Returns `null` when no request exists (legacy applications) so the gate
+ * falls back to the old `travelInvoicePaid` / `travelClearance` signals.
+ */
+async function getTravelAssistanceStatusForApplication(
+	applicationId: string,
+):
+	| "decision_pending"
+	| "review"
+	| "quote_prepared"
+	| "quote_approved"
+	| "invoiced"
+	| "booked"
+	| "declined"
+	| "on_hold"
+	| null {
+	const [row] = await db
+		.select({ status: travelAssistanceRequests.status })
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.applicationId, applicationId))
+		.orderBy(desc(travelAssistanceRequests.createdAt))
+		.limit(1);
+	return row?.status ?? null;
 }
 
 export { serializeConsultation, serializeApplication, serializeApplicant };
@@ -1790,8 +1817,31 @@ export function canAdvanceTo(
 		agencySettled?: boolean;
 		travelInvoicePaid?: boolean;
 		preDepartureDone?: boolean;
+		/**
+		 * Travel assistance request status from the quote-before-invoice flow.
+	 * When present, this overrides the legacy `travelInvoicePaid` /
+		 * `travelClearance` / `preDepartureDone` signals for travel gating.
+		 *
+		 * - `booked` or `declined` → travel is resolved, never blocks.
+		 * - `on_hold` → applicant parked; does not block (opt-out unblocks).
+		 * - `invoiced` → ticket invoice raised; blocks `payment_execution`
+		 *   until paid (mirrors legacy `travelInvoicePaid`).
+		 * - `quote_prepared`/`quote_approved`/`review`/`decision_pending` →
+		 *   travel not yet resolved; blocks `completed` but not `payment_execution`.
+		 */
+		travelAssistanceStatus?:
+			| "decision_pending"
+			| "review"
+			| "quote_prepared"
+			| "quote_approved"
+			| "invoiced"
+			| "booked"
+			| "declined"
+			| "on_hold";
 	},
 ): string | null {
+	const ta = signals.travelAssistanceStatus;
+	const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
 	switch (stage) {
 		case "document_verification":
 			return null;
@@ -1807,21 +1857,41 @@ export function canAdvanceTo(
 			return signals.hasAdmitted
 				? null
 				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
-		case "payment_execution":
+		case "payment_execution": {
+			// New flow: if a travel assistance request exists, the ticket invoice
+			// must be paid (status `invoiced` with the invoice paid, or `booked`)
+			// before advancing. `declined`/`on_hold` never block.
+			if (ta) {
+				if (travelResolved) return null;
+				if (ta === "invoiced") {
+					return signals.travelInvoicePaid
+						? null
+						: "Cannot advance to Payment Execution: the ticket invoice is not paid.";
+				}
+				return "Cannot advance to Payment Execution: your flight quote is still being prepared. Approve it or ask your consultant for help.";
+			}
 			return signals.travelInvoicePaid
 				? null
 				: "Cannot advance to Payment Execution: the travel invoice (ticketing fee) is not paid.";
+		}
 		case "travel_assistance":
 			return signals.visaDone
 				? null
 				: "Cannot advance to Travel Assistance: visa stage is not complete.";
-		case "completed":
+		case "completed": {
+			// New flow: travel is resolved when the request is booked, declined,
+			// or on hold. Otherwise the legacy clearance + checklist signals apply.
+			if (ta) {
+				if (travelResolved) return null;
+				return "Cannot advance to Completed: your flight booking is not confirmed yet.";
+			}
 			if (signals.travelClearance !== "cleared") {
 				return "Cannot advance to Completed: travel clearance is not 'cleared'.";
 			}
 			return signals.preDepartureDone
 				? null
 				: "Cannot advance to Completed: pre-departure checklist is not finished.";
+		}
 		default:
 			return null;
 	}
@@ -1974,10 +2044,11 @@ export async function setApplicationStage(
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
 	// ── Fetch signals for the precondition guard ────────────────────────
-	const [applicant, schoolTracks, clientInvoices] = await Promise.all([
+	const [applicant, schoolTracks, clientInvoices, travelAssistanceStatus] = await Promise.all([
 		getApplicant(row.applicantId),
 		listSchoolsForApplicant(row.applicantId),
 		row.applicantId ? listInvoicesForApplicant(row.applicantId) : [],
+		getTravelAssistanceStatusForApplication(id),
 	]);
 	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Preparing Application");
 	const hasAdmitted = schoolTracks.schools.some(
@@ -1995,6 +2066,7 @@ export async function setApplicationStage(
 		travelInvoicePaid: row.travelInvoicePaid,
 		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
+		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
 	if (adjacencyReason) {
 		throw new HttpError(409, "STAGE_ADVANCE_BLOCKED", adjacencyReason);
@@ -2016,6 +2088,7 @@ export async function setApplicationStage(
 			Array.isArray(row.preDepartureTasks) &&
 			row.preDepartureTasks.length > 0 &&
 			row.preDepartureTasks.every((t) => t.done),
+		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
 	if (blockReason) {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", blockReason);
@@ -2557,6 +2630,7 @@ export async function advanceToPaymentPlanFromTravel(input: {
 		);
 	}
 
+	const travelAssistanceStatus = await getTravelAssistanceStatusForApplication(input.id);
 	const gateReason = canAdvanceToStage(row.stage, "payment_execution", {
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
@@ -2566,6 +2640,7 @@ export async function advanceToPaymentPlanFromTravel(input: {
 		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
 	if (gateReason) {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", gateReason);
@@ -2649,6 +2724,7 @@ export async function completeFromPaymentPlan(input: {
 		);
 	}
 
+	const travelAssistanceStatus = await getTravelAssistanceStatusForApplication(input.id);
 	const gateReason = canAdvanceToStage(row.stage, "completed", {
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
@@ -2658,6 +2734,7 @@ export async function completeFromPaymentPlan(input: {
 		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
 	if (gateReason) {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", gateReason);

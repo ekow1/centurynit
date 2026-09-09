@@ -82,6 +82,19 @@ export function canAdvanceToStage(
 		preDepartureTasks?: { done: boolean }[];
 		paymentPlanId?: string | null;
 		proceedStatus?: string;
+		/**
+		 * Travel assistance request status from the quote-before-invoice flow.
+	 * When present, overrides the legacy travel signals for gating.
+		 */
+		travelAssistanceStatus?:
+			| "decision_pending"
+			| "review"
+			| "quote_prepared"
+			| "quote_approved"
+			| "invoiced"
+			| "booked"
+			| "declined"
+			| "on_hold";
 	},
 ): string | null {
 	const currentIdx = JOURNEY_STAGES.indexOf(current);
@@ -124,12 +137,26 @@ export function canAdvanceToStage(
 			return checks.visaStage === "complete"
 				? null
 				: "Cannot advance to Travel Assistance: visa processing must be complete.";
-		case "payment_execution":
+		case "payment_execution": {
+			const ta = checks.travelAssistanceStatus;
+			const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
+			if (ta) {
+				if (travelResolved) return null;
+				if (ta === "invoiced") {
+					return checks.travelInvoicePaid
+						? null
+						: "Cannot advance to Payment Execution: the ticket invoice is not paid.";
+				}
+				return "Cannot advance to Payment Execution: your flight quote is still being prepared.";
+			}
 			if (!checks.travelInvoicePaid) {
 				return "Cannot advance to Payment Execution: the travel invoice (ticketing fee) is not paid.";
 			}
 			return null;
+		}
 		case "completed": {
+			const ta = checks.travelAssistanceStatus;
+			const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
 			if (!checks.paymentPlanId) return "Cannot mark complete: applicant has not chosen a payment plan.";
 			if (checks.paymentPlanId === "installment") {
 				if ((checks.agencyStageIndex ?? 0) < 1) {
@@ -139,6 +166,12 @@ export function canAdvanceToStage(
 				if (!checks.agencySettled) {
 					return "Cannot mark complete: agency settlement is not complete.";
 				}
+			}
+			// New travel flow: if a travel assistance request exists, travel is
+			// resolved when booked/declined/on_hold. Otherwise legacy signals apply.
+			if (ta) {
+				if (!travelResolved) return "Cannot mark complete: your flight booking is not confirmed yet.";
+				return null;
 			}
 			if (!checks.travelInvoicePaid) return "Cannot mark complete: travel invoices are not fully settled.";
 			if (checks.travelClearance !== "cleared") return "Cannot mark complete: travel clearance is not granted.";
@@ -684,3 +717,106 @@ export const escalationConfigSchema = z.object({
 	maxCapacityPerCoordinator: z.number().int().min(1).max(50).default(10),
 });
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
+
+/* ── Travel Assistance (quote-before-invoice flow) ─────────────────────── */
+
+export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
+export type TravelDecision = z.infer<typeof travelDecisionSchema>;
+
+export const travelAssistanceStatusSchema = z.enum([
+	"decision_pending",
+	"review",
+	"quote_prepared",
+	"quote_approved",
+	"invoiced",
+	"booked",
+	"declined",
+	"on_hold",
+]);
+export type TravelAssistanceStatus = z.infer<typeof travelAssistanceStatusSchema>;
+
+export const travelAssistanceQuoteSchema = z.object({
+	carrier: z.string().optional(),
+	flightNumber: z.string().optional(),
+	departure: z
+		.object({
+			at: z.string().optional(),
+			from: z.string().optional(),
+		})
+		.optional(),
+	arrival: z
+		.object({
+			at: z.string().optional(),
+			to: z.string().optional(),
+		})
+		.optional(),
+	fareBreakdown: z
+		.array(z.object({ label: z.string(), amountCents: z.number().int() }))
+		.optional(),
+	notes: z.string().optional(),
+	validUntil: z.string().optional(),
+});
+export type TravelAssistanceQuote = z.infer<typeof travelAssistanceQuoteSchema>;
+
+export const travelAssistanceOpsChecklistItemSchema = z.object({
+	id: z.string(),
+	category: z
+		.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"])
+		.optional(),
+	label: z.string(),
+	detail: z.string().optional(),
+	done: z.boolean(),
+});
+export type TravelAssistanceOpsChecklistItem = z.infer<
+	typeof travelAssistanceOpsChecklistItemSchema
+>;
+
+export const travelAssistanceRequestSchema = z.object({
+	id: z.string().uuid(),
+	applicantId: z.string().uuid(),
+	applicationId: z.string().uuid(),
+	decision: travelDecisionSchema.nullable(),
+	status: travelAssistanceStatusSchema,
+	quote: travelAssistanceQuoteSchema.nullable(),
+	ticketAmountCents: z.number().int().nullable(),
+	currency: z.string(),
+	invoiceId: z.string().uuid().nullable(),
+	bookingConfirmation: z
+		.object({
+			confirmationCode: z.string().optional(),
+			carrier: z.string().optional(),
+			notes: z.string().optional(),
+		})
+		.nullable(),
+	opsChecklist: z.array(travelAssistanceOpsChecklistItemSchema),
+	applicantNote: z.string().nullable(),
+	opsNote: z.string().nullable(),
+	createdAt: z.string().datetime(),
+	updatedAt: z.string().datetime(),
+});
+export type TravelAssistanceRequest = z.infer<typeof travelAssistanceRequestSchema>;
+
+export const travelAssistanceDecisionInputSchema = z.object({
+	decision: travelDecisionSchema,
+});
+export type TravelAssistanceDecisionInput = z.infer<typeof travelAssistanceDecisionInputSchema>;
+
+export const travelAssistanceQuoteInputSchema = travelAssistanceQuoteSchema.extend({
+	ticketAmountCents: z.number().int().min(0),
+	opsNote: z.string().max(2000).optional(),
+});
+export type TravelAssistanceQuoteInput = z.infer<typeof travelAssistanceQuoteInputSchema>;
+
+export const travelAssistanceBookingInputSchema = z.object({
+	confirmationCode: z.string().max(64).optional(),
+	carrier: z.string().max(120).optional(),
+	notes: z.string().max(2000).optional(),
+});
+export type TravelAssistanceBookingInput = z.infer<typeof travelAssistanceBookingInputSchema>;
+
+export const travelAssistanceChecklistInputSchema = z.object({
+	checklist: z.array(travelAssistanceOpsChecklistItemSchema),
+});
+export type TravelAssistanceChecklistInput = z.infer<
+	typeof travelAssistanceChecklistInputSchema
+>;

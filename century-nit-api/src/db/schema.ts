@@ -14,6 +14,23 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+/**
+ * Flight option prepared by Ops for the applicant to approve before any ticket
+ * invoice is raised. Kept as a JSONB column on `travel_assistance_requests`
+ * because the shape is advisory — it is shown to the applicant, not used as a
+ * source of truth for billing. The authoritative amount lives in
+ * `ticketAmountCents` and the raised invoice.
+ */
+export type TravelAssistanceQuote = {
+	carrier?: string;
+	flightNumber?: string;
+	departure?: { at?: string; from?: string };
+	arrival?: { at?: string; to?: string };
+	fareBreakdown?: { label: string; amountCents: number }[];
+	notes?: string;
+	validUntil?: string;
+};
+
 export const users = pgTable("users", {
 	id: text("id").primaryKey(),
 	email: varchar("email", { length: 255 }).notNull().unique(),
@@ -1038,6 +1055,85 @@ export const caseComments = pgTable(
 	},
 	(t) => ({
 		byTarget: index("case_comments_target_idx").on(t.targetType, t.targetId, t.at),
+	}),
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Travel Assistance Requests (quote-before-invoice flow)
+ *
+ * The applicant picks one of three paths after visa/payment obligations finish:
+ *   yes  → Ops prepares a flight quote → applicant approves → ticket invoice
+ *          is raised → booked
+ *   hold → parks at "decision pending"; resumable, no invoice
+ *   no   → declined; no invoice, no blockage to journey completion
+ *
+ * The service fee is already collected upfront as part of the package, so
+ * only the ticket fare is invoiced here, and only after the applicant
+ * approves the quote.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+export const travelDecisionEnum = pgEnum("travel_decision", ["yes", "hold", "no"]);
+
+export const travelAssistanceStatusEnum = pgEnum("travel_assistance_status", [
+	"decision_pending",
+	"review",
+	"quote_prepared",
+	"quote_approved",
+	"invoiced",
+	"booked",
+	"declined",
+	"on_hold",
+]);
+
+export const travelAssistanceRequests = pgTable(
+	"travel_assistance_requests",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicantId: uuid("applicant_id")
+			.notNull()
+			.references(() => applicants.id, { onDelete: "cascade" }),
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
+		decision: travelDecisionEnum("decision"),
+		status: travelAssistanceStatusEnum("status").notNull().default("decision_pending"),
+		/** Flight option prepared by Ops: carrier, itinerary, fare breakdown, validity, notes. */
+		quote: jsonb("quote").$type<TravelAssistanceQuote | null>(),
+		/** Airline fare in cents — only set after Ops prepares a quote. */
+		ticketAmountCents: integer("ticket_amount_cents"),
+		currency: varchar("currency", { length: 8 }).notNull().default("USD"),
+		/** The ticket invoice raised after the applicant approves the quote. */
+		invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+		/** Booking confirmation: PNR/confirmation code, carrier, notes. */
+		bookingConfirmation: jsonb("booking_confirmation").$type<{
+			confirmationCode?: string;
+			carrier?: string;
+			notes?: string;
+		} | null>(),
+		/** Ops-only 12-item pre-departure checklist. */
+		opsChecklist: jsonb("ops_checklist")
+			.$type<
+				{
+					id: string;
+					category?: "travel" | "accommodation" | "documents" | "health" | "finance" | "orientation";
+					label: string;
+					detail?: string;
+					done: boolean;
+				}[]
+			>()
+			.notNull()
+			.default([]),
+		/** Applicant note when requesting quote changes. */
+		applicantNote: text("applicant_note"),
+		/** Ops note visible to the applicant alongside the quote. */
+		opsNote: text("ops_note"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplicant: index("travel_assistance_applicant_idx").on(t.applicantId),
+		byApplication: index("travel_assistance_application_idx").on(t.applicationId),
+		byStatus: index("travel_assistance_status_idx").on(t.status),
 	}),
 );
 

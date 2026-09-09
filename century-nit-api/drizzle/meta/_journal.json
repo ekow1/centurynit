@@ -442,6 +442,13 @@
       "when": 1789120000000,
       "tag": "0064_stage_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1788908543589,
+      "tag": "0065_dashing_giant_girl",
+      "breakpoints": true
     }
   ]
 }

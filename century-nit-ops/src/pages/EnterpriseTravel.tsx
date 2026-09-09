@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
+import { applicationsApi } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -37,6 +38,25 @@ export function EnterpriseTravel() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [taQueue, setTaQueue] = useState<TravelAssistanceRequest[]>([]);
+	const [taLoading, setTaLoading] = useState(false);
+
+	useEffect(() => {
+		let cancelled = false;
+		setTaLoading(true);
+		applicationsApi
+			.listTravelAssistance()
+			.then((rows) => {
+				if (!cancelled) setTaQueue(rows);
+			})
+			.catch(() => {})
+			.finally(() => {
+				if (!cancelled) setTaLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const canSeeAll = canSeeAllBranches;
 
@@ -114,7 +134,33 @@ export function EnterpriseTravel() {
 				</span>
 			</div>
 
-			{/* Split Pane Layout */}
+			{/* Travel Assistance Quote Queue (quote-before-invoice flow) */}
+		<div className="card" style={{ marginBottom: "1rem", padding: "1rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+				<div>
+					<p className="eyebrow">Travel Assistance Queue</p>
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+						Flight quotes awaiting preparation, approval, invoicing, or booking.
+					</p>
+				</div>
+				<span className="portal-pill">{taQueue.length} requests</span>
+			</div>
+			{taLoading ? (
+				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</p>
+			) : taQueue.length === 0 ? (
+				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No travel assistance requests yet.</p>
+			) : (
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+					{taQueue.map((ta) => (
+						<TaQueueRow key={ta.id} ta={ta} onChanged={() => {
+							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
+						}} />
+					))}
+				</div>
+			)}
+		</div>
+
+		{/* Split Pane Layout */}
 			<div className="ops-split" style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
 				{/* LEFT: List Pane */}
 				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
@@ -427,6 +473,143 @@ export function EnterpriseTravel() {
 					)}
 				</div>
 			</div>
+		</div>
+	);
+}
+
+const TA_STATUS_LABELS: Record<string, string> = {
+	decision_pending: "Decision pending",
+	review: "In review",
+	quote_prepared: "Quote ready",
+	quote_approved: "Approved",
+	invoiced: "Invoiced",
+	booked: "Booked",
+	declined: "Declined",
+	on_hold: "On hold",
+};
+
+function TaQueueRow({ ta, onChanged }: { ta: TravelAssistanceRequest; onChanged: () => void }) {
+	const [busy, setBusy] = useState(false);
+	const [showQuoteForm, setShowQuoteForm] = useState(false);
+	const [carrier, setCarrier] = useState("");
+	const [flightNumber, setFlightNumber] = useState("");
+	const [ticketAmount, setTicketAmount] = useState("");
+	const [notes, setNotes] = useState("");
+
+	async function prepareQuote() {
+		setBusy(true);
+		try {
+			await applicationsApi.prepareTravelQuote(ta.id, {
+				carrier,
+				flightNumber,
+				ticketAmountCents: Math.round(Number(ticketAmount) * 100),
+				notes,
+			});
+			onChanged();
+		} catch {
+			/* ignore */
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function raiseInvoice() {
+		setBusy(true);
+		try {
+			await applicationsApi.raiseTravelInvoice(ta.id);
+			onChanged();
+		} catch {
+			/* ignore */
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function recordBooking() {
+		setBusy(true);
+		try {
+			await applicationsApi.recordTravelBooking(ta.id, {
+				carrier,
+				confirmationCode: flightNumber,
+				notes,
+			});
+			onChanged();
+		} catch {
+			/* ignore */
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	return (
+		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
+				<div>
+					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+						{ta.applicantId.slice(0, 8)}
+					</p>
+					<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
+						{TA_STATUS_LABELS[ta.status] ?? ta.status}
+						{ta.decision ? ` · ${ta.decision}` : ""}
+					</p>
+				</div>
+				<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+					{ta.status === "review" && (
+						<button className="btn btn--sm btn--primary" onClick={() => setShowQuoteForm((v) => !v)}>
+							Prepare quote
+						</button>
+					)}
+					{ta.status === "quote_approved" && (
+						<button className="btn btn--sm btn--primary" onClick={() => void raiseInvoice()} disabled={busy}>
+							{busy ? "Raising…" : "Raise invoice"}
+						</button>
+					)}
+					{ta.status === "invoiced" && (
+						<button className="btn btn--sm btn--primary" onClick={() => setShowQuoteForm((v) => !v)}>
+							Record booking
+						</button>
+					)}
+				</div>
+			</div>
+
+			{showQuoteForm && (ta.status === "review" || ta.status === "invoiced") && (
+				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
+					<input
+						className="input input--sm"
+						placeholder="Carrier"
+						value={carrier}
+						onChange={(e) => setCarrier(e.target.value)}
+					/>
+					<input
+						className="input input--sm"
+						placeholder={ta.status === "invoiced" ? "Confirmation code" : "Flight number"}
+						value={flightNumber}
+						onChange={(e) => setFlightNumber(e.target.value)}
+					/>
+					{ta.status === "review" && (
+						<input
+							className="input input--sm"
+							placeholder="Ticket amount (USD)"
+							type="number"
+							value={ticketAmount}
+							onChange={(e) => setTicketAmount(e.target.value)}
+						/>
+					)}
+					<input
+						className="input input--sm"
+						placeholder="Notes"
+						value={notes}
+						onChange={(e) => setNotes(e.target.value)}
+					/>
+					<button
+						className="btn btn--sm btn--primary"
+						onClick={() => (ta.status === "review" ? void prepareQuote() : void recordBooking())}
+						disabled={busy}
+					>
+						{busy ? "Saving…" : ta.status === "review" ? "Send quote" : "Confirm booking"}
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }

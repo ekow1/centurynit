@@ -60,6 +60,11 @@ import type {
 	PauseProceed,
 	AcceptProceedResponse,
 	ServicePackage,
+	TravelAssistanceRequest,
+	TravelAssistanceDecisionInput,
+	TravelAssistanceQuoteInput,
+	TravelAssistanceBookingInput,
+	TravelAssistanceChecklistInput,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 
@@ -945,6 +950,44 @@ export const applicationsApi = {
 			...json({ documents }),
 		});
 	},
+
+	/* ── Travel Assistance (Ops side, quote-before-invoice) ─────────── */
+
+	listTravelAssistance(): Promise<TravelAssistanceRequest[]> {
+		return request(`${API_PREFIX}/applications/travel-assistance`);
+	},
+	prepareTravelQuote(
+		id: string,
+		input: TravelAssistanceQuoteInput,
+	): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/quote`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+	raiseTravelInvoice(id: string): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/invoice`, {
+			method: "POST",
+		});
+	},
+	recordTravelBooking(
+		id: string,
+		input: TravelAssistanceBookingInput,
+	): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/booking`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+	updateTravelChecklist(
+		id: string,
+		input: TravelAssistanceChecklistInput,
+	): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/checklist`, {
+			method: "PATCH",
+			...json(input),
+		});
+	},
 };
 
 export const applicantsApi = {
@@ -1055,6 +1098,37 @@ export const meApi = {
 	completeApplication(): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/me/application/complete`, {
 			method: "POST",
+		});
+	},
+
+	/** Get the applicant's current travel assistance request, if any. */
+	travelAssistance(): Promise<TravelAssistanceRequest | null> {
+		return request(`${API_PREFIX}/me/application/travel-assistance`);
+	},
+
+	/** Record the applicant's travel assistance decision (yes/hold/no). */
+	recordTravelDecision(
+		input: TravelAssistanceDecisionInput,
+	): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/me/application/travel-assistance/decision`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Approve the prepared flight quote. */
+	approveTravelQuote(input: { note?: string } = {}): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/me/application/travel-assistance/quote/approve`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Request changes to the prepared flight quote. */
+	requestTravelQuoteChanges(input: { note?: string } = {}): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/me/application/travel-assistance/quote/changes`, {
+			method: "POST",
+			...json(input),
 		});
 	},
 

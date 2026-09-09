@@ -23,6 +23,7 @@ import {
 	type FeeSchedule,
 	DEFAULT_FEE_CENTS,
 	usdFromCents,
+	type TravelAssistanceRequest,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
@@ -258,6 +259,11 @@ export type ApplicationData = {
 		fromOpsUserName: string | null;
 		reason: string | null;
 	} | null;
+	/**
+	 * Travel assistance request from the quote-before-invoice flow.
+	 * `null` for legacy applications that have no request row yet.
+	 */
+	travelAssistance: TravelAssistanceRequest | null;
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -473,6 +479,7 @@ const defaultApplication: ApplicationData = {
 	journeyStage: "",
 	proceedStatus: "invited",
 	pendingHandoff: null,
+	travelAssistance: null,
 };
 
 const defaultAssessment: AssessmentData = {
@@ -1170,6 +1177,10 @@ type AppStateContextValue = {
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
 	fees: FeeSchedule | null;
+	/** Travel assistance (quote-before-invoice flow) */
+	recordTravelDecision: (decision: "yes" | "hold" | "no") => Promise<void>;
+	approveTravelQuote: (note?: string) => Promise<void>;
+	requestTravelQuoteChanges: (note?: string) => Promise<void>;
 };
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
@@ -1256,6 +1267,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const [sessionError, setSessionError] = useState<string | null>(null);
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
 	const syncCountRef = useRef(0);
+	const { toast } = useNotifier();
+	const toastRef = useRef(toast);
+	toastRef.current = toast;
 
 	/**
 	 * Silent Web Push subscription — active whenever the user is signed in.
@@ -2121,6 +2135,45 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
+	const recordTravelDecision = useCallback(async (decision: "yes" | "hold" | "no") => {
+		try {
+			const ta = await meApi.recordTravelDecision({ decision });
+			setApplication((prev) => ({ ...prev, travelAssistance: ta }));
+		} catch (err) {
+			toastRef.current?.error(
+				err instanceof Error ? err.message : "Could not record your travel decision",
+				{ title: "Travel decision failed" },
+			);
+			throw err;
+		}
+	}, []);
+
+	const approveTravelQuote = useCallback(async (note?: string) => {
+		try {
+			const ta = await meApi.approveTravelQuote({ note });
+			setApplication((prev) => ({ ...prev, travelAssistance: ta }));
+		} catch (err) {
+			toastRef.current?.error(
+				err instanceof Error ? err.message : "Could not approve the flight quote",
+				{ title: "Approval failed" },
+			);
+			throw err;
+		}
+	}, []);
+
+	const requestTravelQuoteChanges = useCallback(async (note?: string) => {
+		try {
+			const ta = await meApi.requestTravelQuoteChanges({ note });
+			setApplication((prev) => ({ ...prev, travelAssistance: ta }));
+		} catch (err) {
+			toastRef.current?.error(
+				err instanceof Error ? err.message : "Could not request quote changes",
+				{ title: "Request failed" },
+			);
+			throw err;
+		}
+	}, []);
+
 	/**
 	 * Sync real server consultation, assignment, eligibility and applicant profile
 	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
@@ -2306,6 +2359,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* server state fallback — keep local values */
 		}
 
+		/* ── Sync travel assistance request (quote-before-invoice flow) ──────── */
+		try {
+			const ta = await meApi.travelAssistance();
+			setApplication((prev) => ({ ...prev, travelAssistance: ta ?? null }));
+		} catch {
+			/* server state fallback — keep local values */
+		}
+
 		/* ── Sync portal state (pre-departure tasks, post-arrival schedules) ── */
 		try {
 			const ps = await meApi.portalState();
@@ -2413,9 +2474,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * `EventSource` is same-origin against the portal's `/api/v1` proxy, so
 	 * it rides the existing auth cookie — no headers needed.
 	 */
-	const { toast } = useNotifier();
-	const toastRef = useRef(toast);
-	toastRef.current = toast;
 
 	useEffect(() => {
 		if (!authUser) return;
@@ -2736,6 +2794,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			preDepartureProgress,
 			syncFromServer,
 			fees,
+			recordTravelDecision,
+			approveTravelQuote,
+			requestTravelQuoteChanges,
 		],
 	);
 

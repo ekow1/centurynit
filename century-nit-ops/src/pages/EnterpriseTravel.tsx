@@ -546,9 +546,12 @@ function TaQueueRow({ ta, onChanged }: { ta: TravelAssistanceRequest; onChanged:
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
 				<div>
 					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-						{ta.applicantId.slice(0, 8)}
+						{ta.applicantName ?? ta.applicantId.slice(0, 8)}
 					</p>
 					<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
+						{ta.applicationReference ?? ""}
+						{ta.university ? ` · ${ta.university}` : ""}
+						{" — "}
 						{TA_STATUS_LABELS[ta.status] ?? ta.status}
 						{ta.decision ? ` · ${ta.decision}` : ""}
 					</p>

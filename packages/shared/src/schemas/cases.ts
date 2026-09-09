@@ -793,6 +793,12 @@ export const travelAssistanceRequestSchema = z.object({
 	opsNote: z.string().nullable(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
+	/** Ops-facing display fields — only populated by the ops list endpoint. */
+	applicantName: z.string().optional(),
+	applicantEmail: z.string().optional(),
+	applicationReference: z.string().optional(),
+	university: z.string().optional(),
+	program: z.string().optional(),
 });
 export type TravelAssistanceRequest = z.infer<typeof travelAssistanceRequestSchema>;
 

@@ -78,10 +78,26 @@ export async function getForApplication(
 /** List all travel assistance requests (Ops queue). */
 export async function listForOps(): Promise<TravelAssistanceRequest[]> {
 	const rows = await db
-		.select()
+		.select({
+			req: travelAssistanceRequests,
+			applicantName: applicants.name,
+			applicantEmail: applicants.email,
+			applicationReference: applications.appNumber,
+			university: applications.university,
+			program: applications.program,
+		})
 		.from(travelAssistanceRequests)
+		.innerJoin(applicants, eq(applicants.id, travelAssistanceRequests.applicantId))
+		.innerJoin(applications, eq(applications.id, travelAssistanceRequests.applicationId))
 		.orderBy(desc(travelAssistanceRequests.createdAt));
-	return rows.map(serialize);
+	return rows.map((r) => ({
+		...serialize(r.req),
+		applicantName: r.applicantName,
+		applicantEmail: r.applicantEmail,
+		applicationReference: r.applicationReference,
+		university: r.university,
+		program: r.program,
+	}));
 }
 
 /**

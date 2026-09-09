@@ -84,9 +84,13 @@ async function sendReceipt(input: {
 			.limit(1);
 
 		const rate = await getExchangeRate();
-		const isGhs = payment.currency === "GHS";
-		const amountGhs = isGhs ? payment.amountCents / 100 : (payment.amountCents / 100) * rate;
-		const amountUsd = isGhs ? (payment.amountCents / 100) / rate : payment.amountCents / 100;
+		// amountCents is always in the invoice's currency (USD cents). The
+		// gateway may have charged in GHS, but the webhook converts to USD
+		// cents before calling settleInvoicePayment (see routes/webhooks.ts),
+		// so the receipt must treat amountCents as USD and show GHS as the
+		// equivalent — never the other way around.
+		const amountUsd = payment.amountCents / 100;
+		const amountGhs = amountUsd * rate;
 
 		await sendPaymentReceiptEmail({
 			recipientEmail: invoice.applicantEmail,

@@ -24,7 +24,7 @@ export function formatUsd(amount: number): string {
 
 export function generateReceiptHtml(data: ReceiptEmailData): string {
 	const ghsStr = formatGhs(data.amountGhs);
-	const usdStr = data.amountUsd ? formatUsd(data.amountUsd) : formatUsd(data.amountGhs / 15);
+	const usdStr = data.amountUsd != null ? formatUsd(data.amountUsd) : "";
 	const desc = data.description || `Settlement for Invoice ${data.invoiceNumber}`;
 
 	return `<!DOCTYPE html>

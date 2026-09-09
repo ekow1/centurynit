@@ -1,4 +1,8 @@
 import { desc, eq } from "drizzle-orm";
+import {
+	JOURNEY_STAGES,
+	type JourneyStage,
+} from "century-nit-shared";
 import type {
 	TravelAssistanceBookingInput,
 	TravelAssistanceChecklistInput,
@@ -11,6 +15,7 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
+	caseComments,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
@@ -60,6 +65,40 @@ function serialize(row: typeof travelAssistanceRequests.$inferSelect): TravelAss
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};
+}
+
+/**
+ * When an applicant says "yes" to travel assistance, advance the application's
+ * journey stage to `travel_assistance` if it hasn't been advanced yet and the
+ * visa gate is satisfied. This keeps the ops travel cases list in sync with
+ * the portal — without it the request exists but the application stays at an
+ * earlier stage and never appears in the ops travel page's main list.
+ */
+async function autoAdvanceToTravelAssistance(
+	applicationId: string,
+	currentStage: string,
+	visaStage: string,
+): Promise<void> {
+	const targetIdx = JOURNEY_STAGES.indexOf("travel_assistance");
+	const currentIdx = JOURNEY_STAGES.indexOf(currentStage as JourneyStage);
+	if (currentIdx < 0 || currentIdx >= targetIdx) return;
+	if (visaStage !== "complete") return;
+
+	const [updated] = await db
+		.update(applications)
+		.set({ stage: "travel_assistance", updatedAt: new Date() })
+		.where(eq(applications.id, applicationId))
+		.returning();
+	if (!updated) return;
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: applicationId,
+		kind: "status",
+		text: "Stage → travel_assistance (applicant requested travel assistance)",
+		authorName: "System",
+		authorOpsUserId: null,
+	});
 }
 
 /** Find the active travel assistance request for an application. */
@@ -163,6 +202,9 @@ export async function recordDecision(input: {
 			})
 			.where(eq(travelAssistanceRequests.id, existing.id))
 			.returning();
+		if (input.decision === "yes") {
+			await autoAdvanceToTravelAssistance(input.applicationId, app.stage, app.visaStage);
+		}
 		return serialize(updated);
 	}
 
@@ -175,6 +217,10 @@ export async function recordDecision(input: {
 			status,
 		})
 		.returning();
+
+	if (input.decision === "yes") {
+		await autoAdvanceToTravelAssistance(input.applicationId, app.stage, app.visaStage);
+	}
 
 	// Notify the applicant that their decision was recorded.
 	if (applicant.userId) {

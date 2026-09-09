@@ -66,12 +66,17 @@ export function EnterpriseTravel() {
 			(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
 		);
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
+		// Include applications at the travel/completed stage, plus any that have
+		// a travel assistance request (the applicant may have recorded a decision
+		// before ops advanced the journey stage on the board).
+		const taAppIds = new Set(taQueue.map((ta) => ta.applicationId));
 		return filtered.filter(
 			(a) =>
 				a.stage === "travel_assistance" ||
-				a.stage === "completed",
+				a.stage === "completed" ||
+				taAppIds.has(a.id),
 		);
-	}, [applications, scopeRecords, opsUser, branchFilter]);
+	}, [applications, scopeRecords, opsUser, branchFilter, taQueue]);
 
 	const filteredApps = travelApps.filter((a) => {
 		const matchesSearch =
@@ -154,6 +159,9 @@ export function EnterpriseTravel() {
 					{taQueue.map((ta) => (
 						<TaQueueRow key={ta.id} ta={ta} onChanged={() => {
 							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
+						}} onSelectApp={() => {
+							const app = applications.find((a) => a.id === ta.applicationId);
+							if (app) openDetail(app);
 						}} />
 					))}
 				</div>
@@ -488,7 +496,15 @@ const TA_STATUS_LABELS: Record<string, string> = {
 	on_hold: "On hold",
 };
 
-function TaQueueRow({ ta, onChanged }: { ta: TravelAssistanceRequest; onChanged: () => void }) {
+function TaQueueRow({
+	ta,
+	onChanged,
+	onSelectApp,
+}: {
+	ta: TravelAssistanceRequest;
+	onChanged: () => void;
+	onSelectApp?: () => void;
+}) {
 	const [busy, setBusy] = useState(false);
 	const [showQuoteForm, setShowQuoteForm] = useState(false);
 	const [carrier, setCarrier] = useState("");
@@ -541,12 +557,26 @@ function TaQueueRow({ ta, onChanged }: { ta: TravelAssistanceRequest; onChanged:
 		}
 	}
 
+	const pendingHint =
+		ta.status === "decision_pending"
+			? "Waiting for applicant decision"
+			: ta.status === "quote_prepared"
+				? "Waiting for applicant to approve the quote"
+				: null;
+
+	const quote = ta.quote;
+
 	return (
 		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-				<div>
+				<div
+					onClick={onSelectApp}
+					style={{ cursor: onSelectApp ? "pointer" : "default", flex: 1, minWidth: 0 }}
+					title={onSelectApp ? "View full case detail" : undefined}
+				>
 					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
 						{ta.applicantName ?? ta.applicantId.slice(0, 8)}
+						{onSelectApp && <span style={{ opacity: 0.4, marginLeft: "0.35rem" }}>{"\u2192"}</span>}
 					</p>
 					<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
 						{ta.applicationReference ?? ""}
@@ -574,6 +604,23 @@ function TaQueueRow({ ta, onChanged }: { ta: TravelAssistanceRequest; onChanged:
 					)}
 				</div>
 			</div>
+
+			{pendingHint && (
+				<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", fontStyle: "italic" }}>
+					{pendingHint}
+				</p>
+			)}
+
+			{quote && ta.status === "quote_prepared" && (
+				<div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "var(--muted)", fontSize: "var(--text-xs)" }}>
+					<p style={{ fontWeight: 600 }}>Quote prepared</p>
+					<p>{quote.carrier ?? "—"} · {quote.flightNumber ?? "—"}</p>
+					{ta.ticketAmountCents != null && (
+						<p>{(ta.ticketAmountCents / 100).toFixed(2)} {ta.currency}</p>
+					)}
+					{ta.opsNote && <p className="muted" style={{ marginTop: "0.25rem" }}>{ta.opsNote}</p>}
+				</div>
+			)}
 
 			{showQuoteForm && (ta.status === "review" || ta.status === "invoiced") && (
 				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>

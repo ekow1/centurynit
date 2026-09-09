@@ -334,6 +334,61 @@ export function assessmentCompleteForClient(ctx: {
 }
 
 /** Application/case assigned to a staff member. */
+/** Travel handler assigned — sent to the handler (ops staff). */
+export function travelHandlerAssigned(ctx: {
+	reference: string;
+	clientName: string;
+	clientEmail: string;
+	handlerName: string;
+	handlerEmail: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.handlerName}</strong>,`,
+		`A travel assistance request has been assigned to you.`,
+		`<strong>Client:</strong> ${ctx.clientName} (${ctx.clientEmail})`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		`Log in to the Operations Center to review the request and issue the airline ticket invoice when ready.`,
+	];
+	const { html, text } = formatEmail("A travel assistance request has been assigned to you", lines, null, ctx.reference);
+	return {
+		to: ctx.handlerEmail,
+		subject: `Travel assistance assigned · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:travel:assigned:handler:${ctx.reference}:${ctx.handlerEmail}`,
+		template: "Travel assistance assigned",
+		reference: ctx.reference,
+	};
+}
+
+/** Travel handler assigned — sent to the applicant (client). */
+export function travelHandlerAssignedForClient(ctx: {
+	clientName: string;
+	clientEmail: string;
+	handlerName: string;
+	handlerEmail?: string | null;
+	reference: string;
+	portalUrl: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`Your travel assistance request has been assigned to <strong>${ctx.handlerName}</strong>.`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+		`Your handler will review your request and issue the airline ticket invoice shortly. You will be notified once the invoice is ready for payment.`,
+		`Track the progress in your portal at ${ctx.portalUrl}.`,
+	];
+	const { html, text } = formatEmail("Your travel handler has been assigned", lines, null, ctx.reference);
+	return {
+		to: ctx.clientEmail,
+		subject: `Your travel handler · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:travel:assigned:client:${ctx.clientEmail}:${ctx.reference}`,
+		template: "Travel handler assigned",
+		reference: ctx.reference,
+	};
+}
+
 export function caseAssigned(ctx: {
 	reference: string;
 	clientName: string;

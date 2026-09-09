@@ -22,6 +22,9 @@ import {
 import { HttpError } from "../middleware/error.js";
 import { createInvoice } from "./invoice.js";
 import { notify } from "./notify.js";
+import * as mail from "./notifications.js";
+import { queueEmails } from "../worker/queues.js";
+import { env } from "../env.js";
 
 /**
  * Travel Assistance — quote-before-invoice flow.
@@ -465,7 +468,7 @@ export async function assignHandler(input: {
 	}
 
 	const [handler] = await db
-		.select({ id: opsUsers.id, name: opsUsers.name })
+		.select({ id: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
 		.from(opsUsers)
 		.where(eq(opsUsers.id, input.opsUserId))
 		.limit(1);
@@ -496,6 +499,50 @@ export async function assignHandler(input: {
 			body: `A travel assistance request has been assigned to you. Review it and issue the ticket invoice when ready.`,
 			link: "/ops/travel",
 		}).catch(() => {});
+	}
+
+	// Email the assigned handler and the applicant so both sides know who is
+	// handling the travel request. Fire-and-forget — a failed email must not
+	// block the assignment.
+	try {
+		const [applicant] = await db
+			.select({ name: applicants.name, email: applicants.email })
+			.from(applicants)
+			.where(eq(applicants.id, existing.applicantId))
+			.limit(1);
+		const [application] = await db
+			.select({ appNumber: applications.appNumber })
+			.from(applications)
+			.where(eq(applications.id, existing.applicationId))
+			.limit(1);
+		const reference = application?.appNumber ?? updated.id;
+
+		if (handler.email) {
+			await queueEmails([
+				mail.travelHandlerAssigned({
+					reference,
+					clientName: applicant?.name ?? "Client",
+					clientEmail: applicant?.email ?? "",
+					handlerName: handler.name,
+					handlerEmail: handler.email,
+				}),
+			]);
+		}
+
+		if (applicant?.email) {
+			await queueEmails([
+				mail.travelHandlerAssignedForClient({
+					clientName: applicant.name,
+					clientEmail: applicant.email,
+					handlerName: handler.name,
+					handlerEmail: handler.email,
+					reference,
+					portalUrl: env.FRONTEND_URL,
+				}),
+			]);
+		}
+	} catch (err) {
+		console.error("[travelAssistance] failed to queue handler assignment emails:", err);
 	}
 
 	return serialize(updated);

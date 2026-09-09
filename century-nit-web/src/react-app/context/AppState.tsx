@@ -2727,6 +2727,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			preDepartureProgress,
 			syncFromServer,
 			fees,
+			recordTravelDecision,
+			approveTravelQuote,
+			requestTravelQuoteChanges,
 		}),
 		[
 			application,

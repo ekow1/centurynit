@@ -48,8 +48,38 @@ function TravelAssistanceInner() {
 	}, []);
 
 	const trip = serverInv ?? null;
-	const tripDue = Boolean(trip) && trip.status !== "paid" && trip.balanceCents > 0;
+	const tripDue = Boolean(trip) && trip?.status !== "paid" && (trip?.balanceCents ?? 0) > 0;
+	const tripAmountCents = trip ? (trip.balanceCents > 0 ? trip.balanceCents : trip.subtotalCents) : 0;
 	const ticketingEffectivePaid = ticketingPaid || (trip?.status === "paid");
+
+	async function payTicketing() {
+		setPayPhase("loading");
+		try {
+			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
+			if (!backend) {
+				const { invoices } = await meApi.invoices();
+				backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
+			}
+			if (!backend) {
+				toast.error(
+					"Your ticket invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			const checkout = await meApi.paystackCheckout(backend.id);
+			if (checkout.authorizationUrl && checkout.authorizationUrl.startsWith("http")) {
+				window.location.href = checkout.authorizationUrl;
+				return;
+			}
+			toast.error("Could not initialize Paystack checkout.");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
+			);
+		} finally {
+			setPayPhase("idle");
+		}
+	}
 
 	async function handleDecision(decision: "yes" | "hold" | "no") {
 		if (busy) return;
@@ -326,9 +356,7 @@ function TravelAssistanceInner() {
 						<div className="row mt-2" style={{ alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
 							<div>
 								<p className="display" style={{ fontSize: "1.25rem" }}>
-									{tripDue
-										? `$${usdFromCents(trip ? (trip.balanceCents > 0 ? trip.balanceCents : trip.subtotalCents) : 0)}`
-										: "Flight ticket"}
+									{tripDue ? `$${usdFromCents(tripAmountCents)}` : "Flight ticket"}
 								</p>
 								<p className="muted" style={{ fontSize: "0.85rem" }}>
 									{ticketingEffectivePaid

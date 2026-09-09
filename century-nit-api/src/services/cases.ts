@@ -678,7 +678,7 @@ export async function getApplicantByUserId(userId: string): Promise<ApplicantRow
  */
 async function getTravelAssistanceStatusForApplication(
 	applicationId: string,
-):
+): Promise<
 	| "decision_pending"
 	| "review"
 	| "quote_prepared"
@@ -687,7 +687,8 @@ async function getTravelAssistanceStatusForApplication(
 	| "booked"
 	| "declined"
 	| "on_hold"
-	| null {
+	| null
+> {
 	const [row] = await db
 		.select({ status: travelAssistanceRequests.status })
 		.from(travelAssistanceRequests)

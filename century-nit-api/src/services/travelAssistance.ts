@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type {
 	TravelAssistanceBookingInput,
 	TravelAssistanceChecklistInput,
@@ -15,7 +15,7 @@ import {
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { createInvoice } from "./invoice.js";
-import { notify } from "./notifications.js";
+import { notify } from "./notify.js";
 
 /**
  * Travel Assistance — quote-before-invoice flow.

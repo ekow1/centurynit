@@ -1,9 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import { applicationsApi, staffApi } from "century-nit-core/api";
+import { applicationsApi, staffApi, ApiError } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
@@ -40,30 +40,45 @@ export function EnterpriseTravel() {
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [taQueue, setTaQueue] = useState<TravelAssistanceRequest[]>([]);
 	const [taLoading, setTaLoading] = useState(false);
+	const [taError, setTaError] = useState<string | null>(null);
+	const [selectedTa, setSelectedTa] = useState<TravelAssistanceRequest | null>(null);
 	const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+
+	const loadQueue = useCallback(async () => {
+		setTaLoading(true);
+		setTaError(null);
+		try {
+			const rows = await applicationsApi.listTravelAssistance();
+			console.log("[TA queue] loaded:", rows.length, rows);
+			setTaQueue(rows);
+		} catch (err) {
+			const message = err instanceof ApiError ? err.message : String(err);
+			console.error("[TA queue] failed:", message, err);
+			setTaError(message);
+		} finally {
+			setTaLoading(false);
+		}
+	}, []);
 
 	useEffect(() => {
 		let cancelled = false;
-		setTaLoading(true);
-		applicationsApi
-			.listTravelAssistance()
-			.then((rows) => {
-				if (!cancelled) setTaQueue(rows);
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (!cancelled) setTaLoading(false);
-			});
+		loadQueue();
 		staffApi
 			.list()
 			.then((res) => {
 				if (!cancelled) setStaff(res.staff.map((s) => ({ id: s.id, name: s.name })));
 			})
 			.catch(() => {});
+		const onFocus = () => loadQueue();
+		window.addEventListener("focus", onFocus);
+		const interval = setInterval(() => loadQueue(), 30000);
 		return () => {
 			cancelled = true;
+			window.removeEventListener("focus", onFocus);
+			clearInterval(interval);
 		};
-	}, []);
+	}, [loadQueue]);
+
 
 	const canSeeAll = canSeeAllBranches;
 
@@ -107,6 +122,27 @@ export function EnterpriseTravel() {
 
 	const active = liveSelected ?? selectedApp;
 	const pdProg = active ? preDepartureProgress(active.preDepartureTasks) : 0;
+
+	useEffect(() => {
+		if (!active) {
+			setSelectedTa(null);
+			return;
+		}
+		let cancelled = false;
+		applicationsApi
+			.getTravelAssistance(active.id)
+			.then((ta) => {
+				if (!cancelled) setSelectedTa(ta);
+			})
+			.catch((err: unknown) => {
+				const message = err instanceof ApiError ? err.message : String(err);
+				console.error("[TA detail] failed to load for app", active.id, message);
+				if (!cancelled) setSelectedTa(null);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [active]);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 
 	return (
@@ -160,7 +196,14 @@ export function EnterpriseTravel() {
 			{taLoading ? (
 				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</p>
 			) : taQueue.length === 0 ? (
-				<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No travel assistance requests yet.</p>
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+						{taError ? `Could not load travel queue: ${taError}` : "No travel assistance requests yet."}
+					</p>
+					{taError && (
+						<button className="btn btn-sm" onClick={loadQueue}>Retry</button>
+					)}
+				</div>
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					{taQueue.map((ta) => (
@@ -470,9 +513,9 @@ export function EnterpriseTravel() {
 									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{active.university}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{active.program}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p><p>{active.assignedStaff}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Travel Handler</p><p>{selectedTa?.assignedOpsUserName ?? (selectedTa ? "Not assigned" : "—")}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(active.branch)}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{active.fundingTrack}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Travel Status</p><p>{selectedTa ? (selectedTa.status ?? "—").replace(/_/g, " ") : "—"}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{active.submittedDate}</p></div>
 									</div>
 								</div>

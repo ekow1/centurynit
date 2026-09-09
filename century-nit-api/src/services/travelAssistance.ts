@@ -116,6 +116,39 @@ export async function getForApplication(
 	return row ? serialize(row) : null;
 }
 
+/** Find the active travel assistance request for an application (ops view, with context). */
+export async function getForApplicationWithContext(
+	applicationId: string,
+): Promise<TravelAssistanceRequest | null> {
+	const [row] = await db
+		.select({
+			req: travelAssistanceRequests,
+			applicantName: applicants.name,
+			applicantEmail: applicants.email,
+			applicationReference: applications.appNumber,
+			university: applications.university,
+			program: applications.program,
+			assignedOpsUserName: opsUsers.name,
+		})
+		.from(travelAssistanceRequests)
+		.innerJoin(applicants, eq(applicants.id, travelAssistanceRequests.applicantId))
+		.innerJoin(applications, eq(applications.id, travelAssistanceRequests.applicationId))
+		.leftJoin(opsUsers, eq(opsUsers.id, travelAssistanceRequests.assignedOpsUserId))
+		.where(eq(travelAssistanceRequests.applicationId, applicationId))
+		.orderBy(desc(travelAssistanceRequests.createdAt))
+		.limit(1);
+	if (!row) return null;
+	return {
+		...serialize(row.req),
+		applicantName: row.applicantName,
+		applicantEmail: row.applicantEmail,
+		applicationReference: row.applicationReference,
+		university: row.university,
+		program: row.program,
+		assignedOpsUserName: row.assignedOpsUserName ?? undefined,
+	};
+}
+
 /** List all travel assistance requests (Ops queue). */
 export async function listForOps(): Promise<TravelAssistanceRequest[]> {
 	const rows = await db

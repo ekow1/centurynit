@@ -955,6 +955,9 @@ export const applicationsApi = {
 	listTravelAssistance(): Promise<TravelAssistanceRequest[]> {
 		return request(`${API_PREFIX}/applications/travel-assistance`);
 	},
+	getTravelAssistance(id: string): Promise<TravelAssistanceRequest | null> {
+		return request(`${API_PREFIX}/applications/${id}/travel-assistance`);
+	},
 	assignTravelHandler(
 		id: string,
 		opsUserId: string,

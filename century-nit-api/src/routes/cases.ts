@@ -49,6 +49,7 @@ import {
 } from "../services/cases.js";
 import {
 	getForApplication as getTravelAssistanceForApplication,
+	getForApplicationWithContext as getTravelAssistanceForApplicationOps,
 	listForOps as listTravelAssistanceForOps,
 	recordDecision as recordTravelAssistanceDecision,
 	approveQuote as approveTravelAssistanceQuote,
@@ -860,6 +861,27 @@ applicationsRouter.openapi(
 	async (c) => {
 		const list = await listTravelAssistanceForOps();
 		return c.json(list);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/travel-assistance",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema.nullable() } },
+				description: "The travel assistance request for this application",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const req = await getTravelAssistanceForApplicationOps(id);
+		return c.json(req);
 	},
 );
 

@@ -62,7 +62,6 @@ import type {
 	ServicePackage,
 	TravelAssistanceRequest,
 	TravelAssistanceDecisionInput,
-	TravelAssistanceQuoteInput,
 	TravelAssistanceBookingInput,
 	TravelAssistanceChecklistInput,
 } from "century-nit-shared";
@@ -951,23 +950,32 @@ export const applicationsApi = {
 		});
 	},
 
-	/* ── Travel Assistance (Ops side, quote-before-invoice) ─────────── */
+	/* ── Travel Assistance (Ops side) ──────────────────────────────── */
 
 	listTravelAssistance(): Promise<TravelAssistanceRequest[]> {
 		return request(`${API_PREFIX}/applications/travel-assistance`);
 	},
-	prepareTravelQuote(
+	assignTravelHandler(
 		id: string,
-		input: TravelAssistanceQuoteInput,
+		opsUserId: string,
 	): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/applications/travel-assistance/${id}/quote`, {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/assign`, {
 			method: "POST",
-			...json(input),
+			...json({ opsUserId }),
 		});
 	},
-	raiseTravelInvoice(id: string): Promise<TravelAssistanceRequest> {
+	raiseTravelInvoice(
+		id: string,
+		input: {
+			ticketAmountCents: number;
+			carrier?: string;
+			flightNumber?: string;
+			notes?: string;
+		},
+	): Promise<TravelAssistanceRequest> {
 		return request(`${API_PREFIX}/applications/travel-assistance/${id}/invoice`, {
 			method: "POST",
+			...json(input),
 		});
 	},
 	recordTravelBooking(
@@ -1127,6 +1135,14 @@ export const meApi = {
 	/** Request changes to the prepared flight quote. */
 	requestTravelQuoteChanges(input: { note?: string } = {}): Promise<TravelAssistanceRequest> {
 		return request(`${API_PREFIX}/me/application/travel-assistance/quote/changes`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+
+	/** Choose a payment plan after the flight is booked — clears to travel. */
+	chooseTravelPlan(input: { paymentPlanId: "full" | "installment" }): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/me/application/travel-assistance/plan`, {
 			method: "POST",
 			...json(input),
 		});

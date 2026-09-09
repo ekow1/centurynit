@@ -53,10 +53,11 @@ import {
 	recordDecision as recordTravelAssistanceDecision,
 	approveQuote as approveTravelAssistanceQuote,
 	requestQuoteChanges as requestTravelAssistanceQuoteChanges,
-	prepareQuote as prepareTravelAssistanceQuote,
 	raiseTicketInvoice as raiseTravelTicketInvoice,
 	recordBooking as recordTravelBooking,
 	updateOpsChecklist as updateTravelOpsChecklist,
+	assignHandler as assignTravelHandler,
+	choosePlanAndClear as chooseTravelPlanAndClear,
 } from "../services/travelAssistance.js";
 import {
 	getInvoice,
@@ -129,7 +130,6 @@ import {
 	resolveStageHandoffSchema,
 	travelAssistanceRequestSchema,
 	travelAssistanceDecisionInputSchema,
-	travelAssistanceQuoteInputSchema,
 	travelAssistanceBookingInputSchema,
 	travelAssistanceChecklistInputSchema,
 } from "century-nit-shared";
@@ -866,20 +866,24 @@ applicationsRouter.openapi(
 applicationsRouter.openapi(
 	createRoute({
 		method: "post",
-		path: "/travel-assistance/{id}/quote",
+		path: "/travel-assistance/{id}/assign",
 		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
 		request: {
 			params: idParams,
 			body: {
-				content: { "application/json": { schema: travelAssistanceQuoteInputSchema } },
+				content: {
+					"application/json": {
+						schema: z.object({ opsUserId: z.string().uuid() }),
+					},
+				},
 				required: true,
 			},
 		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Quote prepared and sent to the applicant",
+				description: "Handler assigned to the travel assistance request",
 			},
 		},
 	}),
@@ -887,9 +891,9 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
-		const updated = await prepareTravelAssistanceQuote({
+		const updated = await assignTravelHandler({
 			requestId: id,
-			quote: body,
+			opsUserId: body.opsUserId,
 			actor: actorFrom(staff),
 		});
 		return c.json(updated);
@@ -902,19 +906,39 @@ applicationsRouter.openapi(
 		path: "/travel-assistance/{id}/invoice",
 		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							ticketAmountCents: z.number().int().min(1),
+							carrier: z.string().max(120).optional(),
+							flightNumber: z.string().max(64).optional(),
+							notes: z.string().max(2000).optional(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ticket invoice raised after quote approval",
+				description: "Ticket invoice raised",
 			},
 		},
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
 		const updated = await raiseTravelTicketInvoice({
 			requestId: id,
+			ticketAmountCents: body.ticketAmountCents,
+			carrier: body.carrier,
+			flightNumber: body.flightNumber,
+			notes: body.notes,
 			actor: actorFrom(staff),
 		});
 		return c.json(updated);
@@ -1896,6 +1920,60 @@ meRouter.openapi(
 			applicationId: application.id,
 			applicantUserId: user.id,
 			note: body.note,
+		});
+		return c.json(updated);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/travel-assistance/plan",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							paymentPlanId: z.enum(["full", "installment"]),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Payment plan chosen — applicant is cleared to travel",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
+		}
+		const body = c.req.valid("json");
+		const [ta] = await db
+			.select()
+			.from(schema.travelAssistanceRequests)
+			.where(eq(schema.travelAssistanceRequests.applicationId, application.id))
+			.orderBy(desc(schema.travelAssistanceRequests.createdAt))
+			.limit(1);
+		if (!ta) {
+			throw new HttpError(404, "TRAVEL_ASSISTANCE_NOT_FOUND", "No travel assistance request found");
+		}
+		const updated = await chooseTravelPlanAndClear({
+			requestId: ta.id,
+			paymentPlanId: body.paymentPlanId,
+			applicantUserId: user.id,
 		});
 		return c.json(updated);
 	},

@@ -1080,7 +1080,9 @@ export const travelAssistanceStatusEnum = pgEnum("travel_assistance_status", [
 	"quote_prepared",
 	"quote_approved",
 	"invoiced",
+	"ticket_paid",
 	"booked",
+	"cleared",
 	"declined",
 	"on_hold",
 ]);
@@ -1104,6 +1106,10 @@ export const travelAssistanceRequests = pgTable(
 		currency: varchar("currency", { length: 8 }).notNull().default("USD"),
 		/** The ticket invoice raised after the applicant approves the quote. */
 		invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+		/** Ops handler assigned to work this request (set by a manager). */
+		assignedOpsUserId: uuid("assigned_ops_user_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
 		/** Booking confirmation: PNR/confirmation code, carrier, notes. */
 		bookingConfirmation: jsonb("booking_confirmation").$type<{
 			confirmationCode?: string;
@@ -1134,6 +1140,7 @@ export const travelAssistanceRequests = pgTable(
 		byApplicant: index("travel_assistance_applicant_idx").on(t.applicantId),
 		byApplication: index("travel_assistance_application_idx").on(t.applicationId),
 		byStatus: index("travel_assistance_status_idx").on(t.status),
+		byAssignedOps: index("travel_assistance_assigned_ops_idx").on(t.assignedOpsUserId),
 	}),
 );
 

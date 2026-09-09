@@ -15,18 +15,11 @@ export function PortalPreDeparture() {
 }
 
 function TravelAssistanceInner() {
-	const {
-		application,
-		syncFromServer,
-		recordTravelDecision,
-		approveTravelQuote,
-		requestTravelQuoteChanges,
-	} = useAppState();
+	const { application, syncFromServer, recordTravelDecision } = useAppState();
 	const { toast } = useNotifier();
 
 	const ta = application.travelAssistance;
 	const [busy, setBusy] = useState(false);
-	const [note, setNote] = useState("");
 
 	const ticketingPaid = Boolean(application.travelInvoicePaid);
 
@@ -62,7 +55,7 @@ function TravelAssistanceInner() {
 			}
 			if (!backend) {
 				toast.error(
-					"Your ticket invoice has not been issued on the server yet. Ask your consultant to raise it.",
+					"Your ticket invoice has not been issued on the server yet. Ask your handler to raise it.",
 				);
 				return;
 			}
@@ -88,7 +81,7 @@ function TravelAssistanceInner() {
 			await recordTravelDecision(decision);
 			await syncFromServer();
 			if (decision === "yes") {
-				toast.success("Your consultant will prepare a flight quote for your review.");
+				toast.success("Your request has been sent to our travel team.");
 			} else if (decision === "hold") {
 				toast.info("Travel assistance is on hold. You can resume anytime.");
 			} else {
@@ -101,33 +94,21 @@ function TravelAssistanceInner() {
 		}
 	}
 
-	async function handleApprove() {
-		if (busy) return;
-		setBusy(true);
-		try {
-			await approveTravelQuote(note.trim() || undefined);
-			await syncFromServer();
-			toast.success("Quote approved. Your ticket invoice will be raised shortly.");
-		} catch {
-			/* error already surfaced */
-		} finally {
-			setBusy(false);
-			setNote("");
-		}
-	}
+	const [planChoice, setPlanChoice] = useState<"full" | "installment">("full");
 
-	async function handleRequestChanges() {
+	async function handleChoosePlan() {
 		if (busy) return;
 		setBusy(true);
 		try {
-			await requestTravelQuoteChanges(note.trim() || undefined);
+			await meApi.chooseTravelPlan({ paymentPlanId: planChoice });
 			await syncFromServer();
-			toast.info("Changes requested. Your consultant will revise the quote.");
-		} catch {
-			/* error already surfaced */
+			toast.success("Payment plan chosen. You're cleared to travel!");
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Could not choose your payment plan. Please try again.",
+			);
 		} finally {
 			setBusy(false);
-			setNote("");
 		}
 	}
 
@@ -157,11 +138,10 @@ function TravelAssistanceInner() {
 	const status = ta?.status ?? "decision_pending";
 	const showDecision =
 		!ta || status === "decision_pending" || status === "on_hold" || status === "declined";
-	const showQuote = status === "quote_prepared";
-	const showAwaitingInvoice = status === "quote_approved";
-	const showInvoice = status === "invoiced";
-	const showBooked = status === "booked";
 	const showReview = status === "review";
+	const showInvoice = status === "invoiced" || status === "ticket_paid";
+	const showBooked = status === "booked";
+	const showCleared = status === "cleared";
 
 	return (
 		<div className="portal-page">
@@ -184,12 +164,12 @@ function TravelAssistanceInner() {
 						<p className="eyebrow">How would you like to book your flight?</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
 							Choose whether you'd like our team to help book your flight, hold for now, or arrange
-							your own travel. You can change your mind until a quote is approved.
+							your own travel.
 						</p>
 						<div className="portal-grid portal-grid--3 mt-4">
 							<DecisionCard
 								title="Yes, help me book"
-								description="Our travel desk will prepare a flight quote for your review. You approve before any ticket invoice is raised."
+								description="Our travel team will assign a handler to issue your flight ticket invoice. You pay it and we book your flight."
 								icon="✈"
 								onClick={() => void handleDecision("yes")}
 								disabled={busy}
@@ -227,122 +207,14 @@ function TravelAssistanceInner() {
 				</section>
 			)}
 
-			{/* Review — Ops is preparing the quote */}
+			{/* Review — request sent to ops, awaiting handler */}
 			{showReview && (
 				<section className="mt-4">
 					<div className="card card--pad">
-						<p className="eyebrow">Preparing your flight quote</p>
+						<p className="eyebrow">Request received</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your consultant is preparing a flight option for you. You'll be able to review and
-							approve it here once it's ready.
-						</p>
-					</div>
-				</section>
-			)}
-
-			{/* Quote ready for review */}
-			{showQuote && ta?.quote && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Flight quote — review & approve</p>
-						<div className="mt-3" style={{ display: "grid", gap: "0.75rem" }}>
-							{ta.quote.carrier && <QuoteRow label="Carrier" value={ta.quote.carrier} />}
-							{ta.quote.flightNumber && (
-								<QuoteRow label="Flight" value={ta.quote.flightNumber} />
-							)}
-							{ta.quote.departure?.from && (
-								<QuoteRow
-									label="Departure"
-									value={`${ta.quote.departure.from}${ta.quote.departure.at ? ` · ${ta.quote.departure.at}` : ""}`}
-								/>
-							)}
-							{ta.quote.arrival?.to && (
-								<QuoteRow
-									label="Arrival"
-									value={`${ta.quote.arrival.to}${ta.quote.arrival.at ? ` · ${ta.quote.arrival.at}` : ""}`}
-								/>
-							)}
-							{ta.quote.fareBreakdown && ta.quote.fareBreakdown.length > 0 && (
-								<div className="mt-2">
-									<p className="muted" style={{ fontSize: "0.8rem" }}>
-										Fare breakdown
-									</p>
-									<ul style={{ listStyle: "none", margin: 0, padding: 0, marginTop: "0.5rem" }}>
-										{ta.quote.fareBreakdown.map((f, i) => (
-											<li
-												key={i}
-												style={{
-													display: "flex",
-													justifyContent: "space-between",
-													padding: "0.4rem 0",
-													borderBottom: "1px solid var(--border-light)",
-													fontSize: "0.85rem",
-												}}
-											>
-												<span>{f.label}</span>
-												<span>${usdFromCents(f.amountCents)}</span>
-											</li>
-										))}
-									</ul>
-								</div>
-							)}
-							{ta.ticketAmountCents != null && (
-								<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-									Ticket total: ${usdFromCents(ta.ticketAmountCents)}
-								</p>
-							)}
-							{ta.quote.notes && (
-								<p className="muted" style={{ fontSize: "0.85rem" }}>
-									{ta.quote.notes}
-								</p>
-							)}
-						</div>
-
-						<div className="mt-4">
-							<label className="muted" style={{ fontSize: "0.8rem" }}>
-								Note (optional)
-							</label>
-							<textarea
-								value={note}
-								onChange={(e) => setNote(e.target.value)}
-								placeholder="Add a note for your consultant…"
-								style={{
-									width: "100%",
-									minHeight: "80px",
-									marginTop: "0.4rem",
-									padding: "0.6rem",
-									border: "1px solid var(--border)",
-									borderRadius: "6px",
-									fontFamily: "inherit",
-									fontSize: "0.85rem",
-								}}
-							/>
-						</div>
-
-						<div className="row mt-4" style={{ gap: "0.75rem" }}>
-							<Button variant="primary" onClick={() => void handleApprove()} disabled={busy}>
-								{busy ? "Approving…" : "Approve & raise invoice"}
-							</Button>
-							<Button variant="ghost" onClick={() => void handleRequestChanges()} disabled={busy}>
-								{busy ? "Sending…" : "Request changes"}
-							</Button>
-						</div>
-						<p className="muted mt-3" style={{ fontSize: "0.78rem" }}>
-							Approving raises your ticket invoice. The flight booking service fee is already
-							covered by your payment plan — this invoice is only for the airline fare.
-						</p>
-					</div>
-				</section>
-			)}
-
-			{/* Quote approved — awaiting invoice */}
-			{showAwaitingInvoice && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Quote approved</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your quote is approved. Your consultant is raising the ticket invoice — check back
-							shortly to pay it.
+							Your request has been sent to our travel team. A handler will be assigned to issue
+							your flight ticket invoice shortly. Check back here to pay it once it's ready.
 						</p>
 					</div>
 				</section>
@@ -360,10 +232,10 @@ function TravelAssistanceInner() {
 								</p>
 								<p className="muted" style={{ fontSize: "0.85rem" }}>
 									{ticketingEffectivePaid
-										? "Paid — your flight ticket is settled."
+										? "Paid — your flight ticket is settled. Your handler will confirm the booking shortly."
 										: tripDue
 											? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting payment`
-											: "Awaiting invoice from your consultant."}
+											: "Awaiting invoice from your handler."}
 								</p>
 							</div>
 							<div className="row" style={{ marginLeft: "auto" }}>
@@ -382,11 +254,15 @@ function TravelAssistanceInner() {
 				</section>
 			)}
 
-			{/* Booked — confirmation */}
+			{/* Booked — confirmation from handler */}
 			{showBooked && ta?.bookingConfirmation && (
 				<section className="mt-4">
 					<div className="card card--pad">
 						<p className="eyebrow">Flight booked 🛫</p>
+						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
+							Your handler has confirmed your booking. Choose your payment plan below to be cleared
+							to travel.
+						</p>
 						<div className="mt-2" style={{ display: "grid", gap: "0.5rem" }}>
 							{ta.bookingConfirmation.carrier && (
 								<QuoteRow label="Carrier" value={ta.bookingConfirmation.carrier} />
@@ -404,38 +280,83 @@ function TravelAssistanceInner() {
 				</section>
 			)}
 
+			{/* Choose payment plan → cleared to travel */}
+			{showBooked && (
+				<section className="mt-4">
+					<div className="card card--pad">
+						<p className="eyebrow">Choose your payment plan</p>
+						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
+							Choose how you'd like to settle your service fee. You'll be cleared to travel once
+							you've paid the full amount or your first installment.
+						</p>
+						<div className="portal-grid portal-grid--2 mt-3">
+							<DecisionCard
+								title="Full payment"
+								description="Pay the full service fee now and be cleared to travel immediately."
+								icon="✓"
+								onClick={() => setPlanChoice("full")}
+								disabled={busy}
+								highlighted={planChoice === "full"}
+							/>
+							<DecisionCard
+								title="Installments"
+								description="Pay the first installment now to be cleared to travel. The rest follows your plan."
+								icon="≣"
+								onClick={() => setPlanChoice("installment")}
+								disabled={busy}
+								highlighted={planChoice === "installment"}
+							/>
+						</div>
+						<div className="row mt-3">
+							<Button variant="primary" onClick={() => void handleChoosePlan()} disabled={busy}>
+								{busy ? "Saving…" : `Choose ${planChoice === "full" ? "full payment" : "installments"}`}
+							</Button>
+						</div>
+					</div>
+				</section>
+			)}
+
+			{/* Cleared to travel */}
+			{showCleared && (
+				<section className="mt-4">
+					<div className="card card--pad">
+						<p className="eyebrow">Cleared to travel 🛫</p>
+						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
+							Your flight is booked and your payment plan is in place. You're cleared to travel.
+							Complete your remaining plan payments in the payment plan chapter.
+						</p>
+					</div>
+				</section>
+			)}
+
 			{/* Next action: move on to the payment plan */}
-			<div className="card card--pad mt-5 next-action">
-				<p className="eyebrow">Next step</p>
-				<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-					{status === "booked"
-						? "You're ready to fly 🛫"
-						: status === "declined"
-							? "Travel arranged independently"
-							: "Payment plan"}
-				</p>
-				<p className="muted mt-1">
-					{status === "booked"
-						? "Your flight is booked. Move to your payment plan to settle your service fee and complete your journey."
-						: status === "declined"
-							? "You've opted out of travel assistance. Move to your payment plan to settle your service fee and complete your journey."
-							: "Once your flight is sorted, move to your payment plan to settle your service fee and complete your journey."}
-				</p>
-				<div className="row mt-3">
-					<Button className="btn btn--primary" onClick={() => void handleAdvanceToPlan()}>
-						Move to Payment Plan →
-					</Button>
-					<Button to="/portal/payment-execution" variant="ghost">
-						See payment plan
-					</Button>
+			{(showCleared || status === "declined") && (
+				<div className="card card--pad mt-5 next-action">
+					<p className="eyebrow">Next step</p>
+					<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+						{showCleared ? "You're cleared to fly 🛫" : "Travel arranged independently"}
+					</p>
+					<p className="muted mt-1">
+						{showCleared
+							? "Your flight is booked and you're cleared. Move to your payment plan to settle your service fee and complete your journey."
+							: "You've opted out of travel assistance. Move to your payment plan to settle your service fee and complete your journey."}
+					</p>
+					<div className="row mt-3">
+						<Button className="btn btn--primary" onClick={() => void handleAdvanceToPlan()}>
+							Move to Payment Plan →
+						</Button>
+						<Button to="/portal/payment-execution" variant="ghost">
+							See payment plan
+						</Button>
+					</div>
 				</div>
-			</div>
+			)}
 
 			<div className="card card--pad mt-5">
 				<p className="eyebrow">Need help?</p>
 				<p className="muted mt-2">
-					Message your consultant through the chat widget at the bottom right of the portal if you
-					have questions about your flight or quote.
+					Message your handler through the chat widget at the bottom right of the portal if you
+					have questions about your flight or invoice.
 				</p>
 			</div>
 		</div>

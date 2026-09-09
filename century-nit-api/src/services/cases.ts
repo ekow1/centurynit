@@ -684,7 +684,9 @@ async function getTravelAssistanceStatusForApplication(
 	| "quote_prepared"
 	| "quote_approved"
 	| "invoiced"
+	| "ticket_paid"
 	| "booked"
+	| "cleared"
 	| "declined"
 	| "on_hold"
 	| null
@@ -1836,13 +1838,15 @@ export function canAdvanceTo(
 			| "quote_prepared"
 			| "quote_approved"
 			| "invoiced"
+			| "ticket_paid"
 			| "booked"
+			| "cleared"
 			| "declined"
 			| "on_hold";
 	},
 ): string | null {
 	const ta = signals.travelAssistanceStatus;
-	const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
+	const travelResolved = ta === "cleared" || ta === "booked" || ta === "declined" || ta === "on_hold";
 	switch (stage) {
 		case "document_verification":
 			return null;
@@ -1860,16 +1864,16 @@ export function canAdvanceTo(
 				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
 		case "payment_execution": {
 			// New flow: if a travel assistance request exists, the ticket invoice
-			// must be paid (status `invoiced` with the invoice paid, or `booked`)
-			// before advancing. `declined`/`on_hold` never block.
+			// must be paid (status `ticket_paid`, `booked`, or `cleared`) before
+			// advancing. `declined`/`on_hold` never block.
 			if (ta) {
 				if (travelResolved) return null;
-				if (ta === "invoiced") {
+				if (ta === "invoiced" || ta === "ticket_paid") {
 					return signals.travelInvoicePaid
 						? null
 						: "Cannot advance to Payment Execution: the ticket invoice is not paid.";
 				}
-				return "Cannot advance to Payment Execution: your flight quote is still being prepared. Approve it or ask your consultant for help.";
+				return "Cannot advance to Payment Execution: your flight is still being processed.";
 			}
 			return signals.travelInvoicePaid
 				? null
@@ -1880,11 +1884,11 @@ export function canAdvanceTo(
 				? null
 				: "Cannot advance to Travel Assistance: visa stage is not complete.";
 		case "completed": {
-			// New flow: travel is resolved when the request is booked, declined,
-			// or on hold. Otherwise the legacy clearance + checklist signals apply.
+			// New flow: travel is resolved when the request is cleared, booked,
+			// declined, or on hold. Otherwise the legacy clearance + checklist signals apply.
 			if (ta) {
 				if (travelResolved) return null;
-				return "Cannot advance to Completed: your flight booking is not confirmed yet.";
+				return "Cannot advance to Completed: your travel is not cleared yet.";
 			}
 			if (signals.travelClearance !== "cleared") {
 				return "Cannot advance to Completed: travel clearance is not 'cleared'.";

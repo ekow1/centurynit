@@ -16,6 +16,7 @@ import {
 	applicants,
 	applications,
 	caseComments,
+	opsUsers,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
@@ -62,6 +63,7 @@ function serialize(row: typeof travelAssistanceRequests.$inferSelect): TravelAss
 		opsChecklist: row.opsChecklist ?? [],
 		applicantNote: row.applicantNote ?? null,
 		opsNote: row.opsNote ?? null,
+		assignedOpsUserId: row.assignedOpsUserId ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};
@@ -124,10 +126,12 @@ export async function listForOps(): Promise<TravelAssistanceRequest[]> {
 			applicationReference: applications.appNumber,
 			university: applications.university,
 			program: applications.program,
+			assignedOpsUserName: opsUsers.name,
 		})
 		.from(travelAssistanceRequests)
 		.innerJoin(applicants, eq(applicants.id, travelAssistanceRequests.applicantId))
 		.innerJoin(applications, eq(applications.id, travelAssistanceRequests.applicationId))
+		.leftJoin(opsUsers, eq(opsUsers.id, travelAssistanceRequests.assignedOpsUserId))
 		.orderBy(desc(travelAssistanceRequests.createdAt));
 	return rows.map((r) => ({
 		...serialize(r.req),
@@ -136,6 +140,7 @@ export async function listForOps(): Promise<TravelAssistanceRequest[]> {
 		applicationReference: r.applicationReference,
 		university: r.university,
 		program: r.program,
+		assignedOpsUserName: r.assignedOpsUserName ?? undefined,
 	}));
 }
 
@@ -401,12 +406,13 @@ export async function prepareQuote(input: {
 }
 
 /**
- * Ops raises the ticket invoice after the applicant approves the quote.
- * The service fee is already collected upfront — only the airline fare is
- * invoiced here.
+ * Manager assigns a handler to work a travel assistance request.
+ * The handler is the ops user responsible for issuing the ticket invoice
+ * and recording the booking confirmation.
  */
-export async function raiseTicketInvoice(input: {
+export async function assignHandler(input: {
 	requestId: string;
+	opsUserId: string;
 	actor: Actor;
 }): Promise<TravelAssistanceRequest> {
 	const [existing] = await db
@@ -417,11 +423,78 @@ export async function raiseTicketInvoice(input: {
 	if (!existing) {
 		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
 	}
-	if (existing.status !== "quote_approved") {
+	if (existing.status === "booked" || existing.status === "cleared" || existing.status === "declined") {
+		throw new HttpError(
+			409,
+			TRAVEL_ERROR_CODES.ALREADY_BOOKED,
+			"This request is already resolved and cannot be reassigned.",
+		);
+	}
+
+	const [handler] = await db
+		.select({ id: opsUsers.id, name: opsUsers.name })
+		.from(opsUsers)
+		.where(eq(opsUsers.id, input.opsUserId))
+		.limit(1);
+	if (!handler) {
+		throw new HttpError(404, "OPS_USER_NOT_FOUND", "Handler not found");
+	}
+
+	const [updated] = await db
+		.update(travelAssistanceRequests)
+		.set({
+			assignedOpsUserId: input.opsUserId,
+			updatedAt: new Date(),
+		})
+		.where(eq(travelAssistanceRequests.id, existing.id))
+		.returning();
+
+	// Notify the assigned handler.
+	const handlerUserIds = await db
+		.select({ userId: opsUsers.userId })
+		.from(opsUsers)
+		.where(eq(opsUsers.id, input.opsUserId))
+		.limit(1);
+	if (handlerUserIds[0]?.userId) {
+		notify({
+			recipientUserId: handlerUserIds[0].userId,
+			type: "stage.changed",
+			title: "Travel assistance request assigned to you",
+			body: `A travel assistance request has been assigned to you. Review it and issue the ticket invoice when ready.`,
+			link: "/ops/travel",
+		}).catch(() => {});
+	}
+
+	return serialize(updated);
+}
+
+/**
+ * Handler/manager raises the ticket invoice directly from the `review` status.
+ * The handler specifies the airline fare when raising the invoice — there is
+ * no separate quote-approval step. The service fee is already collected
+ * upfront, so only the airline fare is invoiced here.
+ */
+export async function raiseTicketInvoice(input: {
+	requestId: string;
+	ticketAmountCents: number;
+	carrier?: string;
+	flightNumber?: string;
+	notes?: string;
+	actor: Actor;
+}): Promise<TravelAssistanceRequest> {
+	const [existing] = await db
+		.select()
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.id, input.requestId))
+		.limit(1);
+	if (!existing) {
+		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
+	}
+	if (existing.status !== "review" && existing.status !== "quote_approved") {
 		throw new HttpError(
 			409,
 			TRAVEL_ERROR_CODES.NOT_APPROVED,
-			"The applicant has not approved the quote yet.",
+			"The invoice can only be raised after the applicant requests travel assistance.",
 		);
 	}
 	if (existing.invoiceId) {
@@ -432,6 +505,15 @@ export async function raiseTicketInvoice(input: {
 		);
 	}
 
+	const ticketAmountCents = input.ticketAmountCents;
+	if (ticketAmountCents <= 0) {
+		throw new HttpError(
+			400,
+			TRAVEL_ERROR_CODES.VALIDATION_ERROR,
+			"Ticket amount must be greater than zero.",
+		);
+	}
+
 	const [applicant] = await db
 		.select()
 		.from(applicants)
@@ -439,15 +521,6 @@ export async function raiseTicketInvoice(input: {
 		.limit(1);
 	if (!applicant) {
 		throw new HttpError(404, "APPLICANT_NOT_FOUND", "Applicant not found");
-	}
-
-	const ticketAmountCents = existing.ticketAmountCents ?? 0;
-	if (ticketAmountCents <= 0) {
-		throw new HttpError(
-			400,
-			TRAVEL_ERROR_CODES.VALIDATION_ERROR,
-			"Ticket amount must be set before raising an invoice.",
-		);
 	}
 
 	const invoice = await createInvoice({
@@ -461,11 +534,13 @@ export async function raiseTicketInvoice(input: {
 			lines: [
 				{
 					label: "Flight ticket",
-					detail: "Airline fare per approved quote",
+					detail: input.carrier
+						? `${input.carrier}${input.flightNumber ? ` · ${input.flightNumber}` : ""}`
+						: "Airline fare",
 					amountCents: ticketAmountCents,
 				},
 			],
-			note: existing.opsNote ?? undefined,
+			note: input.notes?.trim() || undefined,
 		},
 		actor: input.actor,
 	});
@@ -474,12 +549,69 @@ export async function raiseTicketInvoice(input: {
 		.update(travelAssistanceRequests)
 		.set({
 			invoiceId: invoice.id,
+			ticketAmountCents,
+			quote: {
+				carrier: input.carrier?.trim() || undefined,
+				flightNumber: input.flightNumber?.trim() || undefined,
+				notes: input.notes?.trim() || undefined,
+			} as TravelAssistanceQuote,
+			opsNote: input.notes?.trim() || null,
 			status: "invoiced",
 			updatedAt: new Date(),
 		})
 		.where(eq(travelAssistanceRequests.id, existing.id))
 		.returning();
+
+	// Notify the applicant that their ticket invoice is ready to pay.
+	if (applicant.userId) {
+		notify({
+			recipientUserId: applicant.userId,
+			type: "stage.changed",
+			title: "Flight ticket invoice ready",
+			body: "Your consultant has issued your flight ticket invoice. Pay it to proceed with booking.",
+			link: "/portal/pre-departure",
+		}).catch(() => {});
+	}
+
 	return serialize(updated);
+}
+
+/**
+ * Mark the ticket as paid. Called when the travel invoice is settled.
+ * Moves the request from `invoiced` → `ticket_paid`, signalling the handler
+ * can now record the booking confirmation.
+ */
+export async function markTicketPaid(requestId: string): Promise<void> {
+	const [existing] = await db
+		.select()
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.id, requestId))
+		.limit(1);
+	if (!existing) return;
+	if (existing.status !== "invoiced") return;
+
+	await db
+		.update(travelAssistanceRequests)
+		.set({ status: "ticket_paid", updatedAt: new Date() })
+		.where(eq(travelAssistanceRequests.id, requestId));
+
+	// Notify the assigned handler that the ticket is paid and booking can proceed.
+	if (existing.assignedOpsUserId) {
+		const [handler] = await db
+			.select({ userId: opsUsers.userId })
+			.from(opsUsers)
+			.where(eq(opsUsers.id, existing.assignedOpsUserId))
+			.limit(1);
+		if (handler?.userId) {
+			notify({
+				recipientUserId: handler.userId,
+				type: "stage.changed",
+				title: "Flight ticket paid — ready to book",
+				body: "The applicant has paid their flight ticket. Confirm the booking to update the portal.",
+				link: "/ops/travel",
+			}).catch(() => {});
+		}
+	}
 }
 
 /** Ops records the booking confirmation after the ticket is paid and issued. */
@@ -496,11 +628,11 @@ export async function recordBooking(input: {
 	if (!existing) {
 		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
 	}
-	if (existing.status !== "invoiced") {
+	if (existing.status !== "ticket_paid") {
 		throw new HttpError(
 			409,
 			TRAVEL_ERROR_CODES.NOT_APPROVED,
-			"Booking can only be recorded after the ticket invoice is raised.",
+			"Booking can only be recorded after the ticket is paid.",
 		);
 	}
 
@@ -529,10 +661,80 @@ export async function recordBooking(input: {
 			recipientUserId: applicant.userId,
 			type: "stage.changed",
 			title: "Flight booking confirmed",
-			body: "Your flight has been booked. Check your travel assistance page for the confirmation details.",
-			link: "/portal/travel-assistance",
+			body: "Your flight has been booked. Check your travel page for the confirmation details, then choose your payment plan to complete your journey.",
+			link: "/portal/pre-departure",
 		}).catch(() => {});
 	}
+
+	return serialize(updated);
+}
+
+/**
+ * Applicant chooses a payment plan and settles it (full payment or first
+ * installment), which clears them to travel. Moves the request from `booked`
+ * → `cleared`. The actual payment is handled by the existing invoice/payment
+ * infrastructure — this just records the plan choice and marks the travel
+ * request as cleared.
+ */
+export async function choosePlanAndClear(input: {
+	requestId: string;
+	paymentPlanId: "full" | "installment";
+	applicantUserId: string;
+}): Promise<TravelAssistanceRequest> {
+	const [existing] = await db
+		.select()
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.id, input.requestId))
+		.limit(1);
+	if (!existing) {
+		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
+	}
+
+	const [app] = await db
+		.select()
+		.from(applications)
+		.where(eq(applications.id, existing.applicationId))
+		.limit(1);
+	if (!app) {
+		throw new HttpError(404, TRAVEL_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	}
+
+	const [applicant] = await db
+		.select()
+		.from(applicants)
+		.where(eq(applicants.id, app.applicantId))
+		.limit(1);
+	if (!applicant || applicant.userId !== input.applicantUserId) {
+		throw new HttpError(403, TRAVEL_ERROR_CODES.FORBIDDEN, "Not your application");
+	}
+
+	if (existing.status !== "booked" && existing.status !== "declined" && existing.status !== "on_hold") {
+		throw new HttpError(
+			409,
+			TRAVEL_ERROR_CODES.NOT_APPROVED,
+			"You can only choose a payment plan after your flight is booked.",
+		);
+	}
+
+	// Record the plan choice on the application.
+	await db
+		.update(applications)
+		.set({ paymentPlanId: input.paymentPlanId, updatedAt: new Date() })
+		.where(eq(applications.id, existing.applicationId));
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: existing.applicationId,
+		kind: "status",
+		text: `Payment plan chosen: ${input.paymentPlanId} (travel assistance)`,
+		authorName: applicant.name ?? "Applicant",
+	});
+
+	const [updated] = await db
+		.update(travelAssistanceRequests)
+		.set({ status: "cleared", updatedAt: new Date() })
+		.where(eq(travelAssistanceRequests.id, existing.id))
+		.returning();
 
 	return serialize(updated);
 }

@@ -92,7 +92,9 @@ export function canAdvanceToStage(
 			| "quote_prepared"
 			| "quote_approved"
 			| "invoiced"
+			| "ticket_paid"
 			| "booked"
+			| "cleared"
 			| "declined"
 			| "on_hold";
 	},
@@ -139,15 +141,15 @@ export function canAdvanceToStage(
 				: "Cannot advance to Travel Assistance: visa processing must be complete.";
 		case "payment_execution": {
 			const ta = checks.travelAssistanceStatus;
-			const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
+			const travelResolved = ta === "cleared" || ta === "booked" || ta === "declined" || ta === "on_hold";
 			if (ta) {
 				if (travelResolved) return null;
-				if (ta === "invoiced") {
+				if (ta === "invoiced" || ta === "ticket_paid") {
 					return checks.travelInvoicePaid
 						? null
 						: "Cannot advance to Payment Execution: the ticket invoice is not paid.";
 				}
-				return "Cannot advance to Payment Execution: your flight quote is still being prepared.";
+				return "Cannot advance to Payment Execution: your flight is still being processed.";
 			}
 			if (!checks.travelInvoicePaid) {
 				return "Cannot advance to Payment Execution: the travel invoice (ticketing fee) is not paid.";
@@ -156,7 +158,7 @@ export function canAdvanceToStage(
 		}
 		case "completed": {
 			const ta = checks.travelAssistanceStatus;
-			const travelResolved = ta === "booked" || ta === "declined" || ta === "on_hold";
+			const travelResolved = ta === "cleared" || ta === "booked" || ta === "declined" || ta === "on_hold";
 			if (!checks.paymentPlanId) return "Cannot mark complete: applicant has not chosen a payment plan.";
 			if (checks.paymentPlanId === "installment") {
 				if ((checks.agencyStageIndex ?? 0) < 1) {
@@ -168,9 +170,9 @@ export function canAdvanceToStage(
 				}
 			}
 			// New travel flow: if a travel assistance request exists, travel is
-			// resolved when booked/declined/on_hold. Otherwise legacy signals apply.
+			// resolved when cleared/booked/declined/on_hold. Otherwise legacy signals apply.
 			if (ta) {
-				if (!travelResolved) return "Cannot mark complete: your flight booking is not confirmed yet.";
+				if (!travelResolved) return "Cannot mark complete: your travel is not cleared yet.";
 				return null;
 			}
 			if (!checks.travelInvoicePaid) return "Cannot mark complete: travel invoices are not fully settled.";
@@ -729,7 +731,9 @@ export const travelAssistanceStatusSchema = z.enum([
 	"quote_prepared",
 	"quote_approved",
 	"invoiced",
+	"ticket_paid",
 	"booked",
+	"cleared",
 	"declined",
 	"on_hold",
 ]);
@@ -791,6 +795,8 @@ export const travelAssistanceRequestSchema = z.object({
 	opsChecklist: z.array(travelAssistanceOpsChecklistItemSchema),
 	applicantNote: z.string().nullable(),
 	opsNote: z.string().nullable(),
+	assignedOpsUserId: z.string().uuid().nullable(),
+	assignedOpsUserName: z.string().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 	/** Ops-facing display fields — only populated by the ops list endpoint. */

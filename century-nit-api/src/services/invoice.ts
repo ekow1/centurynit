@@ -14,6 +14,7 @@ import {
 	invoices,
 	applications,
 	applicants,
+	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -533,6 +534,24 @@ export async function recordPayment(input: {
 				}
 			} else if (updated.type === "travel" && status === "paid") {
 				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
+				// Mark the travel assistance request as ticket_paid so the handler
+				// can record the booking confirmation.
+				try {
+					const [ta] = await txDb
+						.select({ id: travelAssistanceRequests.id })
+						.from(travelAssistanceRequests)
+						.where(eq(travelAssistanceRequests.applicationId, targetAppId))
+						.orderBy(desc(travelAssistanceRequests.createdAt))
+						.limit(1);
+					if (ta) {
+						await txDb
+							.update(travelAssistanceRequests)
+							.set({ status: "ticket_paid", updatedAt: new Date() })
+							.where(eq(travelAssistanceRequests.id, ta.id));
+					}
+				} catch {
+					/* non-fatal — the TA request status is best-effort */
+				}
 			} else if (updated.type === "agency") {
 				const lines = await txDb.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id)).orderBy(invoiceLines.position);
 				let totalPaid = paidCents + input.amountCents;

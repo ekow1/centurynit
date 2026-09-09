@@ -449,6 +449,13 @@
       "when": 1788908543589,
       "tag": "0065_dashing_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0066_travel_handler_assignment",
+      "breakpoints": true
     }
   ]
 }

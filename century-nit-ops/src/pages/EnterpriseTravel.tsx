@@ -3,7 +3,7 @@ import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import { applicationsApi } from "century-nit-core/api";
+import { applicationsApi, staffApi } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
@@ -40,6 +40,7 @@ export function EnterpriseTravel() {
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [taQueue, setTaQueue] = useState<TravelAssistanceRequest[]>([]);
 	const [taLoading, setTaLoading] = useState(false);
+	const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -53,6 +54,12 @@ export function EnterpriseTravel() {
 			.finally(() => {
 				if (!cancelled) setTaLoading(false);
 			});
+		staffApi
+			.list()
+			.then((res) => {
+				if (!cancelled) setStaff(res.staff.map((s) => ({ id: s.id, name: s.name })));
+			})
+			.catch(() => {});
 		return () => {
 			cancelled = true;
 		};
@@ -157,7 +164,7 @@ export function EnterpriseTravel() {
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					{taQueue.map((ta) => (
-						<TaQueueRow key={ta.id} ta={ta} onChanged={() => {
+						<TaQueueRow key={ta.id} ta={ta} staff={staff} onChanged={() => {
 							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
 						}} onSelectApp={() => {
 							const app = applications.find((a) => a.id === ta.applicationId);
@@ -491,7 +498,9 @@ const TA_STATUS_LABELS: Record<string, string> = {
 	quote_prepared: "Quote ready",
 	quote_approved: "Approved",
 	invoiced: "Invoiced",
+	ticket_paid: "Ticket paid",
 	booked: "Booked",
+	cleared: "Cleared to travel",
 	declined: "Declined",
 	on_hold: "On hold",
 };
@@ -500,28 +509,33 @@ function TaQueueRow({
 	ta,
 	onChanged,
 	onSelectApp,
+	staff,
 }: {
 	ta: TravelAssistanceRequest;
 	onChanged: () => void;
 	onSelectApp?: () => void;
+	staff: { id: string; name: string }[];
 }) {
 	const [busy, setBusy] = useState(false);
-	const [showQuoteForm, setShowQuoteForm] = useState(false);
+	const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+	const [showBookingForm, setShowBookingForm] = useState(false);
+	const [showAssignForm, setShowAssignForm] = useState(false);
 	const [carrier, setCarrier] = useState("");
 	const [flightNumber, setFlightNumber] = useState("");
 	const [ticketAmount, setTicketAmount] = useState("");
 	const [notes, setNotes] = useState("");
+	const [confirmationCode, setConfirmationCode] = useState("");
+	const [bookingCarrier, setBookingCarrier] = useState("");
+	const [bookingNotes, setBookingNotes] = useState("");
+	const [assignOpsUserId, setAssignOpsUserId] = useState("");
 
-	async function prepareQuote() {
+	async function assignHandler() {
+		if (!assignOpsUserId) return;
 		setBusy(true);
 		try {
-			await applicationsApi.prepareTravelQuote(ta.id, {
-				carrier,
-				flightNumber,
-				ticketAmountCents: Math.round(Number(ticketAmount) * 100),
-				notes,
-			});
+			await applicationsApi.assignTravelHandler(ta.id, assignOpsUserId);
 			onChanged();
+			setShowAssignForm(false);
 		} catch {
 			/* ignore */
 		} finally {
@@ -532,8 +546,14 @@ function TaQueueRow({
 	async function raiseInvoice() {
 		setBusy(true);
 		try {
-			await applicationsApi.raiseTravelInvoice(ta.id);
+			await applicationsApi.raiseTravelInvoice(ta.id, {
+				carrier: carrier || undefined,
+				flightNumber: flightNumber || undefined,
+				ticketAmountCents: Math.round(Number(ticketAmount) * 100),
+				notes: notes || undefined,
+			});
 			onChanged();
+			setShowInvoiceForm(false);
 		} catch {
 			/* ignore */
 		} finally {
@@ -545,11 +565,12 @@ function TaQueueRow({
 		setBusy(true);
 		try {
 			await applicationsApi.recordTravelBooking(ta.id, {
-				carrier,
-				confirmationCode: flightNumber,
-				notes,
+				carrier: bookingCarrier || undefined,
+				confirmationCode: confirmationCode || undefined,
+				notes: bookingNotes || undefined,
 			});
 			onChanged();
+			setShowBookingForm(false);
 		} catch {
 			/* ignore */
 		} finally {
@@ -560,11 +581,13 @@ function TaQueueRow({
 	const pendingHint =
 		ta.status === "decision_pending"
 			? "Waiting for applicant decision"
-			: ta.status === "quote_prepared"
-				? "Waiting for applicant to approve the quote"
-				: null;
-
-	const quote = ta.quote;
+			: ta.status === "invoiced"
+				? "Waiting for applicant to pay the ticket"
+				: ta.status === "booked"
+					? "Booking confirmed — waiting for applicant to choose a payment plan"
+					: ta.status === "cleared"
+						? "Cleared to travel"
+						: null;
 
 	return (
 		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
@@ -585,20 +608,25 @@ function TaQueueRow({
 						{TA_STATUS_LABELS[ta.status] ?? ta.status}
 						{ta.decision ? ` · ${ta.decision}` : ""}
 					</p>
+					{ta.assignedOpsUserName && (
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+							Handler: {ta.assignedOpsUserName}
+						</p>
+					)}
 				</div>
 				<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+					{ta.status === "review" && !ta.assignedOpsUserId && (
+						<button className="btn btn--sm btn--ghost" onClick={() => setShowAssignForm((v) => !v)}>
+							Assign handler
+						</button>
+					)}
 					{ta.status === "review" && (
-						<button className="btn btn--sm btn--primary" onClick={() => setShowQuoteForm((v) => !v)}>
-							Prepare quote
+						<button className="btn btn--sm btn--primary" onClick={() => setShowInvoiceForm((v) => !v)}>
+							Raise invoice
 						</button>
 					)}
-					{ta.status === "quote_approved" && (
-						<button className="btn btn--sm btn--primary" onClick={() => void raiseInvoice()} disabled={busy}>
-							{busy ? "Raising…" : "Raise invoice"}
-						</button>
-					)}
-					{ta.status === "invoiced" && (
-						<button className="btn btn--sm btn--primary" onClick={() => setShowQuoteForm((v) => !v)}>
+					{ta.status === "ticket_paid" && (
+						<button className="btn btn--sm btn--primary" onClick={() => setShowBookingForm((v) => !v)}>
 							Record booking
 						</button>
 					)}
@@ -611,52 +639,91 @@ function TaQueueRow({
 				</p>
 			)}
 
-			{quote && ta.status === "quote_prepared" && (
-				<div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "var(--muted)", fontSize: "var(--text-xs)" }}>
-					<p style={{ fontWeight: 600 }}>Quote prepared</p>
-					<p>{quote.carrier ?? "—"} · {quote.flightNumber ?? "—"}</p>
-					{ta.ticketAmountCents != null && (
-						<p>{(ta.ticketAmountCents / 100).toFixed(2)} {ta.currency}</p>
-					)}
-					{ta.opsNote && <p className="muted" style={{ marginTop: "0.25rem" }}>{ta.opsNote}</p>}
+			{showAssignForm && ta.status === "review" && (
+				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
+					<select
+						className="input input--sm"
+						value={assignOpsUserId}
+						onChange={(e) => setAssignOpsUserId(e.target.value)}
+					>
+						<option value="">Select a handler…</option>
+						{staff.map((s) => (
+							<option key={s.id} value={s.id}>{s.name}</option>
+						))}
+					</select>
+					<button
+						className="btn btn--sm btn--primary"
+						onClick={() => void assignHandler()}
+						disabled={busy || !assignOpsUserId}
+					>
+						{busy ? "Assigning…" : "Assign"}
+					</button>
 				</div>
 			)}
 
-			{showQuoteForm && (ta.status === "review" || ta.status === "invoiced") && (
+			{showInvoiceForm && ta.status === "review" && (
 				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
 					<input
 						className="input input--sm"
-						placeholder="Carrier"
+						placeholder="Carrier (optional)"
 						value={carrier}
 						onChange={(e) => setCarrier(e.target.value)}
 					/>
 					<input
 						className="input input--sm"
-						placeholder={ta.status === "invoiced" ? "Confirmation code" : "Flight number"}
+						placeholder="Flight number (optional)"
 						value={flightNumber}
 						onChange={(e) => setFlightNumber(e.target.value)}
 					/>
-					{ta.status === "review" && (
-						<input
-							className="input input--sm"
-							placeholder="Ticket amount (USD)"
-							type="number"
-							value={ticketAmount}
-							onChange={(e) => setTicketAmount(e.target.value)}
-						/>
-					)}
 					<input
 						className="input input--sm"
-						placeholder="Notes"
+						placeholder="Ticket amount (USD)"
+						type="number"
+						value={ticketAmount}
+						onChange={(e) => setTicketAmount(e.target.value)}
+					/>
+					<input
+						className="input input--sm"
+						placeholder="Notes (optional)"
 						value={notes}
 						onChange={(e) => setNotes(e.target.value)}
 					/>
 					<button
 						className="btn btn--sm btn--primary"
-						onClick={() => (ta.status === "review" ? void prepareQuote() : void recordBooking())}
+						onClick={() => void raiseInvoice()}
+						disabled={busy || !ticketAmount}
+					>
+						{busy ? "Raising…" : "Raise invoice"}
+					</button>
+				</div>
+			)}
+
+			{showBookingForm && ta.status === "ticket_paid" && (
+				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
+					<input
+						className="input input--sm"
+						placeholder="Carrier"
+						value={bookingCarrier}
+						onChange={(e) => setBookingCarrier(e.target.value)}
+					/>
+					<input
+						className="input input--sm"
+						placeholder="Confirmation code"
+						value={confirmationCode}
+						onChange={(e) => setConfirmationCode(e.target.value)}
+					/>
+					<input
+						className="input input--sm"
+						placeholder="Notes (optional)"
+						value={bookingNotes}
+						onChange={(e) => setBookingNotes(e.target.value)}
+					/>
+					<button
+						className="btn btn--sm btn--primary"
+						onClick={() => void recordBooking()}
 						disabled={busy}
 					>
-						{busy ? "Saving…" : ta.status === "review" ? "Send quote" : "Confirm booking"}
+						{busy ? "Saving…" : "Confirm booking"}
 					</button>
 				</div>
 			)}

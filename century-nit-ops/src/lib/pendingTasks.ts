@@ -426,6 +426,39 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		}
 	}
 
+	// Application invoice issuance: if the application has schools selected
+	// but the app fee hasn't been paid, the handler needs to issue the invoice.
+	// This is independent of the invoice list — it's derived from the application
+	// state itself so it shows up even if invoices aren't loaded.
+	for (const a of applications) {
+		const hasSchools = (a.schoolApplications?.length ?? 0) > 0;
+		if (!hasSchools || a.appFeePaid) continue;
+		// Check if there's already a proforma or issued invoice for this application
+		// in the invoice list. If there's a proforma, the invoice-level task below
+		// will handle it. If there's an issued one, no task needed. If none, we
+		// surface an application-level task.
+		const appInvoices = invoices.filter(
+			(i) => i.type === "Application" && (i.applicationId === a.id || i.applicantName === a.applicantName),
+		);
+		const hasProforma = appInvoices.some((i) => i.status === "proforma");
+		const hasIssued = appInvoices.some((i) => i.status === "issued" || i.status === "partial" || i.status === "paid" || i.status === "overdue");
+		if (hasProforma || hasIssued) continue;
+		q.push({
+			id: `a-invoice-${a.id}`,
+			category: "needs_invoice",
+			kind: "application",
+			action: "review",
+			record: a,
+			title: `${a.applicantName}`,
+			subtitle: `Application invoice needed · ${a.schoolApplications?.length ?? 0} school(s) selected`,
+			meta: `App ${a.appId}`,
+			branch: a.branch,
+			owner: a.assignedStaff || "—",
+			linkTo: `/applications?id=${a.id}`,
+			priority: PRIORITY.issue,
+		});
+	}
+
 	for (const a of applications) {
 		const visaInv = visaInvoiceFor(invoices, a);
 		const stage = a.visaStage ?? "locked";

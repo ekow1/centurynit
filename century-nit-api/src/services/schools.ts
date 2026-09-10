@@ -100,6 +100,14 @@ export async function lockSchoolsForApplicant(
 
 	if (activeInvoice) {
 		invoiceId = activeInvoice.id;
+		// Backfill the applicationId if the existing invoice doesn't have one
+		// (created before the application was linked, or from an older application).
+		if (app && activeInvoice.applicationId !== app.id) {
+			await db
+				.update(invoices)
+				.set({ applicationId: app.id, updatedAt: new Date() })
+				.where(eq(invoices.id, activeInvoice.id));
+		}
 		// If it is still a proforma, update lines to reflect current selected schools count & direct university fees
 		if (activeInvoice.status === "proforma") {
 			const subtotalCents = rows.length * fees.appPerSchoolCents;

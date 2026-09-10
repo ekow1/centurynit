@@ -304,12 +304,19 @@ export function EnterpriseCases() {
 		setAppInvoiceLoading(true);
 		listInvoices({ type: "application" })
 			.then((res) => {
-				const found = res.invoices.find((i) => i.applicationId === liveSelected.id);
+				// Primary: match by applicationId. Fallback: case-insensitive
+				// applicant name match (for invoices created before the
+				// applicationId backfill was added).
+				const found = res.invoices.find(
+					(i) =>
+						i.applicationId === liveSelected.id ||
+						(i.applicantName ?? "").toLowerCase() === (liveSelected.applicantName ?? "").toLowerCase(),
+				);
 				setAppInvoice(found ?? null);
 			})
 			.catch(() => setAppInvoice(null))
 			.finally(() => setAppInvoiceLoading(false));
-	}, [liveSelected?.id]);
+	}, [liveSelected?.id, liveSelected?.applicantName]);
 
 	function handleIssueApplicationInvoice() {
 		if (!liveSelected) return;

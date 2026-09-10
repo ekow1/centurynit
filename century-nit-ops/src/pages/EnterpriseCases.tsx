@@ -12,6 +12,7 @@ import { schoolsApi, ApiError } from "century-nit-core/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, schoolDecisionNote, type JourneyStage, type SchoolApplication, type SchoolOutcome } from "century-nit-shared";
+import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
@@ -274,6 +275,10 @@ export function EnterpriseCases() {
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+	const [appInvoice, setAppInvoice] = useState<ApiInvoice | null>(null);
+	const [appInvoiceLoading, setAppInvoiceLoading] = useState(false);
+	const [issuingInvoice, setIssuingInvoice] = useState(false);
+	const [invoiceFlash, setInvoiceFlash] = useState<string | null>(null);
 
 	const queryId = searchParams.get("id");
 	useEffect(() => {
@@ -289,6 +294,38 @@ export function EnterpriseCases() {
 	const liveSelected = selectedApp
 		? applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp
 		: null;
+
+	// Fetch the application invoice (proforma or issued) for the selected case.
+	useEffect(() => {
+		if (!liveSelected) {
+			setAppInvoice(null);
+			return;
+		}
+		setAppInvoiceLoading(true);
+		listInvoices({ type: "application" })
+			.then((res) => {
+				const found = res.invoices.find((i) => i.applicationId === liveSelected.id);
+				setAppInvoice(found ?? null);
+			})
+			.catch(() => setAppInvoice(null))
+			.finally(() => setAppInvoiceLoading(false));
+	}, [liveSelected?.id]);
+
+	function handleIssueApplicationInvoice() {
+		if (!liveSelected) return;
+		setIssuingInvoice(true);
+		issueApplicationInvoice(liveSelected.id)
+			.then((updated) => {
+				setAppInvoice(updated);
+				setInvoiceFlash(`Invoice ${updated.invoiceNumber} issued — applicant can now pay.`);
+				window.setTimeout(() => setInvoiceFlash(null), 5000);
+			})
+			.catch((e) => {
+				setInvoiceFlash(e instanceof Error ? e.message : "Failed to issue invoice");
+				window.setTimeout(() => setInvoiceFlash(null), 5000);
+			})
+			.finally(() => setIssuingInvoice(false));
+	}
 
 	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 
@@ -617,6 +654,44 @@ export function EnterpriseCases() {
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
 							{(() => {
 								const app = liveSelected ?? selectedApp;
+								if (!app) return null;
+								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
+								const depositPaid = app.depositPaid;
+								const hasHandler = Boolean(app.assignedStaff);
+								const invoiceIssued = appInvoice && appInvoice.status !== "proforma" && appInvoice.status !== "void";
+								const appFeePaid = app.appFeePaid;
+								const steps = [
+									{ label: "10% Deposit", done: depositPaid, pending: !depositPaid },
+									{ label: "Handler Assigned", done: hasHandler, pending: depositPaid && !hasHandler },
+									{ label: "Schools Selected", done: hasSchools, pending: hasHandler && !hasSchools },
+									{ label: "Invoice Issued", done: Boolean(invoiceIssued), pending: hasSchools && !invoiceIssued },
+									{ label: "App Fee Paid", done: Boolean(appFeePaid), pending: Boolean(invoiceIssued) && !appFeePaid },
+								];
+								return (
+									<div className="card" style={{ padding: "0.75rem 1rem" }}>
+										<p className="eyebrow mb-2" style={{ fontSize: "var(--text-xs)" }}>Application Progress</p>
+										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+											{steps.map((s, i) => (
+												<span
+													key={i}
+													style={{
+														fontSize: "var(--text-xs)",
+														padding: "0.2rem 0.5rem",
+														borderRadius: "var(--radius-sm)",
+														background: s.done ? "#dcfce7" : s.pending ? "#fef3c7" : "#f3f4f6",
+														color: s.done ? "#16a34a" : s.pending ? "#d97706" : "#9ca3af",
+														fontWeight: s.done || s.pending ? 600 : 400,
+													}}
+												>
+													{s.done ? "✓" : s.pending ? "●" : "○"} {s.label}
+												</span>
+											))}
+										</div>
+									</div>
+								);
+							})()}
+							{(() => {
+								const app = liveSelected ?? selectedApp;
 								const handoff = handoffs.find(
 									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "document_verification",
 								);
@@ -669,22 +744,87 @@ export function EnterpriseCases() {
 							})()}
 							{(() => {
 								const app = liveSelected ?? selectedApp;
+								if (!app) return null;
 								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
-								if (!hasSchools || app.appFeePaid) return null;
+								if (!hasSchools) return null;
+								if (app.appFeePaid) return null;
+
+								const isProforma = appInvoice?.status === "proforma";
+								const isIssued = appInvoice && (appInvoice.status === "issued" || appInvoice.status === "partial" || appInvoice.status === "paid" || appInvoice.status === "overdue");
+								const subtotalUsd = appInvoice ? (appInvoice.subtotalCents / 100) : null;
+
 								return (
 									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
 										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Application Invoice</p>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-											School selection locked — review and issue the application invoice.
-										</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-											The applicant cannot pay until you issue the invoice. Review the proforma on the Invoices page.
-										</p>
-										<div style={{ marginTop: "0.75rem" }}>
-											<Link to="/invoices" className="btn btn--sm btn--primary">
-												Go to Invoices →
-											</Link>
-										</div>
+										{invoiceFlash && (
+											<p style={{ fontSize: "var(--text-sm)", fontWeight: 600, marginTop: "0.5rem", color: isProforma ? "#dc2626" : "#16a34a" }}>
+												{invoiceFlash}
+											</p>
+										)}
+										{appInvoiceLoading ? (
+											<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>Loading invoice…</p>
+										) : !appInvoice ? (
+											<>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+													No application invoice yet
+												</p>
+												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+													The applicant must lock their school selection to generate a proforma invoice.
+												</p>
+											</>
+										) : isProforma ? (
+											<>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+													Proforma ready — review and issue
+												</p>
+												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+													{appInvoice.invoiceNumber} · ${subtotalUsd?.toLocaleString()} USD
+												</p>
+												<div style={{ marginTop: "0.5rem" }}>
+													{appInvoice.lines.map((l) => (
+														<div key={l.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", padding: "0.15rem 0" }}>
+															<span>{l.label}</span>
+															<span className="mono">${(l.amountCents / 100).toLocaleString()}</span>
+														</div>
+													))}
+													<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-sm)", fontWeight: 600, padding: "0.25rem 0", borderTop: "1px solid var(--border-light)", marginTop: "0.25rem" }}>
+														<span>Total</span>
+														<span className="mono">${subtotalUsd?.toLocaleString()}</span>
+													</div>
+												</div>
+												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
+													The applicant cannot pay until you issue this invoice.
+												</p>
+												<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+													<button
+														type="button"
+														className="btn btn--sm btn--primary"
+														onClick={handleIssueApplicationInvoice}
+														disabled={issuingInvoice}
+													>
+														{issuingInvoice ? "Issuing…" : "Issue Application Invoice"}
+													</button>
+													<Link to="/invoices" className="btn btn--sm btn--ghost">
+														Full invoice view →
+													</Link>
+												</div>
+											</>
+										) : isIssued ? (
+											<>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+													Invoice issued — {appInvoice.invoiceNumber}
+												</p>
+												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+													${subtotalUsd?.toLocaleString()} USD · Status: {appInvoice.status}
+													{appInvoice.balanceCents > 0 ? ` · $${(appInvoice.balanceCents / 100).toLocaleString()} outstanding` : " · Fully paid"}
+												</p>
+												<div style={{ marginTop: "0.5rem" }}>
+													<Link to="/invoices" className="btn btn--sm btn--ghost">
+														View on Invoices page →
+													</Link>
+												</div>
+											</>
+										) : null}
 									</div>
 								);
 							})()}

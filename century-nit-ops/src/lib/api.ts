@@ -312,6 +312,13 @@ export function issueInvoice(
 	});
 }
 
+/** Ops: issue the proforma application invoice for a case directly by application ID. */
+export function issueApplicationInvoice(applicationId: string): Promise<ApiInvoice> {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/issue-application-invoice`, {
+		method: "POST",
+	});
+}
+
 export function recordPayment(
 	id: string,
 	body: {

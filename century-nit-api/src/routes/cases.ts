@@ -2539,8 +2539,15 @@ meRouter.openapi(
 			derivedPortalStage = "application_invoice";
 		} else if (hasSelection && !isAppInvoiceIssued) {
 			derivedPortalStage = "awaiting_invoice";
-		} else if (hasPackage) {
+		} else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) {
+			// Deposit paid but ops has not assigned a handler yet.
+			derivedPortalStage = "awaiting_handler";
+		} else if (hasPackage && hasDepositPaid && hasHandlerAssigned && !hasSelection) {
+			// Handler assigned and deposit paid, but no schools selected yet.
 			derivedPortalStage = "school_select";
+		} else if (hasPackage) {
+			// Package chosen but deposit not paid yet (or no selection handled above).
+			derivedPortalStage = "school_package";
 		} else if (isEligible && hasProceeded && !hasPackage) {
 			derivedPortalStage = "school_package";
 		} else if (isEligible && !hasProceeded) {
@@ -2581,6 +2588,8 @@ meRouter.openapi(
 						if (hasSelection && !isAppInvoiceIssued) portalStage = "awaiting_invoice";
 						else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) portalStage = "application_invoice";
 						else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
+						else if (!hasSelection && !hasHandlerAssigned) portalStage = "awaiting_handler";
+						else if (!hasSelection && hasHandlerAssigned) portalStage = "school_select";
 					} else if (coarseStage === "offer_letter_review") {
 						portalStage = "school_tracking";
 					} else if (coarseStage === "visa_processing") {

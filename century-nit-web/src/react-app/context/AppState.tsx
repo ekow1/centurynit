@@ -2181,11 +2181,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 */
 	const syncFromServer = useCallback(async () => {
 		if (!authUser) return;
+		let hasApplication = false;
 		try {
 			const [res, fetchedFees] = await Promise.all([
 				meApi.application(),
 				meApi.fees().catch(() => null)
 			]);
+			hasApplication = Boolean(res.application);
 			if (fetchedFees) {
 				setFees(fetchedFees);
 			}
@@ -2360,11 +2362,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 
 		/* ── Sync travel assistance request (quote-before-invoice flow) ──────── */
-		try {
-			const ta = await meApi.travelAssistance();
-			setApplication((prev) => ({ ...prev, travelAssistance: ta ?? null }));
-		} catch {
-			/* server state fallback — keep local values */
+		// Only fetch if the applicant has an application — the endpoint 404s
+		// otherwise, which spams the console with noise on every 30s poll.
+		if (hasApplication) {
+			try {
+				const ta = await meApi.travelAssistance();
+				setApplication((prev) => ({ ...prev, travelAssistance: ta ?? null }));
+			} catch {
+				/* server state fallback — keep local values */
+			}
 		}
 
 		/* ── Sync portal state (pre-departure tasks, post-arrival schedules) ── */

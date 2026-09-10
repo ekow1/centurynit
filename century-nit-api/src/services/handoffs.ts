@@ -62,7 +62,10 @@ export function isAwaitingAssignmentBoundary(stage: JourneyStage): boolean {
 type Actor = { opsUserId: string; name: string; email: string };
 export type HandoffRow = typeof stageHandoffs.$inferSelect;
 
-/** Active handler (per-stage or whole-case) responsible for a stage. */
+/** Active handler (per-stage or whole-case) responsible for a stage.
+ * Falls back to applications.assignedStaffId so assignment paths that only set
+ * the application owner (e.g. /applications/:id/assign) are still recognised.
+ */
 export async function activeHandlerFor(
 	applicationId: string,
 	stage: string,
@@ -94,10 +97,20 @@ export async function activeHandlerFor(
 			),
 		)
 		.limit(1);
-	return wholeCase ?? null;
+	if (wholeCase) return wholeCase;
+
+	const [appOwner] = await tx
+		.select({ opsUserId: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
+		.from(applications)
+		.innerJoin(opsUsers, eq(applications.assignedStaffId, opsUsers.id))
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	return appOwner ?? null;
 }
 
-/** True when the stage is already owned (per-stage specialist or whole-case). */
+/** True when the stage is already owned (per-stage specialist, whole-case, or
+ * the application owner). Mirrors activeHandlerFor without returning details.
+ */
 export async function stageHasActiveHandler(
 	applicationId: string,
 	stage: string,
@@ -126,7 +139,13 @@ export async function stageHasActiveHandler(
 			),
 		)
 		.limit(1);
-	return Boolean(wholeCase);
+	if (wholeCase) return true;
+	const [appOwner] = await tx
+		.select({ assignedStaffId: applications.assignedStaffId })
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	return Boolean(appOwner?.assignedStaffId);
 }
 
 /**

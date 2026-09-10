@@ -3027,25 +3027,48 @@ function ApplicationHubInner() {
 				</section>
 			) : null}
 
-			{/* 2 · Invoice only on this page */}
+			{/* 2 · Invoice only on this page — show the real invoice once issued,
+				or a simple "awaiting" card while it's still a proforma. */}
 			{selectionDone ? (
-				<StageInvoiceCard
-					invoice={effectiveInv}
-					title="Application invoice"
-					onPay={payInvoice}
-					meta={
-						<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
-							<li>
-								<span>Schools</span>
-								<strong>{schoolApplications.length}</strong>
-							</li>
-							<li>
-								<span>University Filing Fee</span>
-								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
-							</li>
-						</ul>
-					}
-				/>
+				effectiveInv.status === "estimated" ? (
+					<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--primary, #2563eb)" }}>
+						<p className="eyebrow">Application invoice</p>
+						<h3 className="display mt-1" style={{ fontSize: "1.4rem" }}>
+							Awaiting invoice
+						</h3>
+						<p className="muted mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+							Your school selection has been submitted. Your handler is reviewing the
+							list and will issue the application invoice shortly.
+						</p>
+						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
+							You don't need to do anything right now — the payment card will appear
+							here once the invoice is issued.
+						</p>
+						<div className="row mt-4">
+							<Button to="/portal/home" variant="secondary">
+								Dashboard home
+							</Button>
+						</div>
+					</div>
+				) : (
+					<StageInvoiceCard
+						invoice={effectiveInv}
+						title="Application invoice"
+						onPay={payInvoice}
+						meta={
+							<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
+								<li>
+									<span>Schools</span>
+									<strong>{schoolApplications.length}</strong>
+								</li>
+								<li>
+									<span>University Filing Fee</span>
+									<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
+								</li>
+							</ul>
+						}
+					/>
+				)
 			) : (
 				<p className="mono muted mb-4">Confirm your school list to submit it to your handler for invoicing.</p>
 			)}

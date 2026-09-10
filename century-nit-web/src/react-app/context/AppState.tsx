@@ -723,10 +723,11 @@ export function getCurrentProcessStage(
 ): ProcessStageId {
 	const heuristic = computeHeuristicProcessStage(app, booking, schools);
 
-	// Consent is the first gate of the application stage. The server may say
-	// the coarse stage is document_verification, but the applicant must see
-	// the consent screen until they explicitly accept it.
-	if (app.proceedStatus !== "accepted") {
+	// Consent is the first gate of the application stage — but only when an
+	// application actually exists. Without an application, the user is still in
+	// the consultation/eligibility flow and must not be forced to the consent
+	// screen.
+	if (app.applicationId && app.proceedStatus !== "accepted") {
 		return "proceed";
 	}
 
@@ -2608,10 +2609,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 	const effectiveJourneyPhase = useMemo(() => {
 		if (serverJourney) {
-			// Consent is the first gate. Do not let the server stage (which may be
-			// stale or derived from data created before consent) show package or
-			// school selection before the applicant has clicked Continue.
-			if (application.proceedStatus && application.proceedStatus !== "accepted") {
+			// Consent is the first gate — but only once an application exists. A
+			// brand-new applicant must still be able to see consultation before
+			// the consent card is relevant.
+			if (
+				application.applicationId &&
+				application.proceedStatus &&
+				application.proceedStatus !== "accepted"
+			) {
 				const meta = PROCESS_STAGES.find((s) => s.id === "proceed")!;
 				return {
 					phase: meta.index,

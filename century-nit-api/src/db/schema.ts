@@ -1995,6 +1995,46 @@ export const emailTemplate = pgTable("email_templates", {
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Stage consent — the applicant's explicit decision to start, hold, or opt
+ * out of a major journey stage (application, visa, travel). The consent card
+ * appears on the portal before each stage begins; only "continue" sends the
+ * case to Ops for handler assignment.
+ */
+export const stageConsentStageEnum = pgEnum("stage_consent_stage", [
+	"application",
+	"visa",
+	"travel",
+]);
+
+export const stageConsentDecisionEnum = pgEnum("stage_consent_decision", [
+	"pending",
+	"continue",
+	"hold",
+	"opt_out",
+]);
+
+export const stageConsents = pgTable(
+	"stage_consents",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
+		stage: stageConsentStageEnum("stage").notNull(),
+		decision: stageConsentDecisionEnum("decision").notNull().default("pending"),
+		reason: text("reason"),
+		decidedAt: timestamp("decided_at", { withTimezone: true }),
+		decidedByClientUserId: text("decided_by_client_user_id"),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byApplication: index("stage_consents_application_idx").on(t.applicationId, t.stage),
+		uniqByApplicationStage: uniqueIndex("stage_consents_app_stage_uniq").on(t.applicationId, t.stage),
+	}),
+);
+
 
 
 // --- ACADEMIC CATALOGUE ---

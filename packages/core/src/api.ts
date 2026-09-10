@@ -1053,6 +1053,28 @@ export const meApi = {
 	},
 
 	/**
+	 * Stage consent — the applicant's explicit decision to start, hold, or opt
+	 * out of a major journey stage. Only "continue" sends the case to Ops for
+	 * handler assignment.
+	 */
+	consent(
+		stage: "application" | "visa" | "travel",
+		input: { decision: "continue" | "hold" | "opt_out"; reason?: string },
+	): Promise<{ consent: unknown }> {
+		const path =
+			stage === "application"
+				? "/application/consent"
+				: stage === "visa"
+					? "/application/visa/consent"
+					: "/application/travel/consent";
+		return request(`${API_PREFIX}/me${path}`, { method: "POST", ...json(input) });
+	},
+
+	getConsent(stage: "application" | "visa" | "travel"): Promise<{ consent: unknown }> {
+		return request(`${API_PREFIX}/me/application/consent/${stage}`);
+	},
+
+	/**
 	 * Update the signed-in applicant's own profile. The server resolves the
 	 * applicant from the session, so no id is sent. `branch` is not accepted
 	 * here — that's an ops placement decision.

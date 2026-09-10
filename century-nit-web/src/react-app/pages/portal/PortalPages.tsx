@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
 import { StageInvoiceCard } from "../../components/StageInvoiceCard";
+import { StageConsentCard } from "../../components/StageConsentCard";
 import {
 	hasAcceptedOffer,
 	hasSchoolPackage,
@@ -3667,6 +3668,19 @@ function VisaHubInner() {
 				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>2 · Visa invoice</li>
 				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
 			</ol>
+
+			{hasAdmit && (application.visaConsent?.decision ?? null) !== "continue" && (
+				<StageConsentCard
+					stage="visa"
+					currentDecision={application.visaConsent?.decision ?? null}
+					title="Continue with visa processing?"
+					lead="You've been admitted. Continue with visa processing so we can assign a visa handler and raise your visa invoice."
+					continueDetail="A visa handler will be assigned and an invoice will be raised for the visa processing fee. You'll pay the invoice before visa processing begins."
+					holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
+					optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
+					onDecided={() => window.location.reload()}
+				/>
+			)}
 
 			<div className="portal-grid portal-grid--2 portal-grid--align-start mb-2">
 				{!hasAdmit ? (

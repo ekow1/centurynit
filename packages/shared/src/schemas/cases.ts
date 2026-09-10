@@ -455,6 +455,38 @@ export const stageHandoffPreviewSchema = z.object({
 });
 export type StageHandoffPreview = z.infer<typeof stageHandoffPreviewSchema>;
 
+/* ── Stage consent ─────────────────────────────────────────────────────── */
+/**
+ * The applicant's explicit decision to start, hold, or opt out of a major
+ * journey stage (application, visa, travel). The consent card appears on
+ * the portal before each stage begins; only "continue" sends the case to
+ * Ops for handler assignment.
+ */
+export const stageConsentStageSchema = z.enum(["application", "visa", "travel"]);
+export type StageConsentStage = z.infer<typeof stageConsentStageSchema>;
+
+export const stageConsentDecisionSchema = z.enum(["pending", "continue", "hold", "opt_out"]);
+export type StageConsentDecision = z.infer<typeof stageConsentDecisionSchema>;
+
+export const stageConsentSchema = z.object({
+	id: z.string().uuid(),
+	applicationId: z.string().uuid(),
+	stage: stageConsentStageSchema,
+	decision: stageConsentDecisionSchema,
+	reason: z.string().nullable(),
+	decidedAt: z.string().datetime().nullable(),
+	decidedByClientUserId: z.string().nullable(),
+	createdAt: z.string().datetime(),
+	updatedAt: z.string().datetime(),
+});
+export type StageConsent = z.infer<typeof stageConsentSchema>;
+
+export const stageConsentInputSchema = z.object({
+	decision: z.enum(["continue", "hold", "opt_out"]),
+	reason: z.string().optional(),
+});
+export type StageConsentInput = z.infer<typeof stageConsentInputSchema>;
+
 export const applicationSchema = z.object({
 	id: z.string().uuid(),
 	appNumber: z.string(),
@@ -508,6 +540,10 @@ export const applicationSchema = z.object({
 	consultationNumber: z.string().nullable().optional(),
 	/** The actual schools the applicant selected, with their per-school statuses. */
 	schoolApplications: z.array(schoolApplicationSchema).default([]),
+	/** Stage consent status for each major stage — null when no consent record exists. */
+	applicationConsent: stageConsentSchema.nullable(),
+	visaConsent: stageConsentSchema.nullable(),
+	travelConsent: stageConsentSchema.nullable(),
 	submittedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),

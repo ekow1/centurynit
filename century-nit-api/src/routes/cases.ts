@@ -134,13 +134,24 @@ import {
 	travelAssistanceDecisionInputSchema,
 	travelAssistanceBookingInputSchema,
 	travelAssistanceChecklistInputSchema,
+	stageConsentSchema,
+	stageConsentInputSchema,
+	type StageConsentStage,
+	type StageConsent,
 } from "century-nit-shared";
 import {
 	deferStageHandoff,
 	getStageHandoff,
 	listStageHandoffs,
 	resolveStageHandoff,
+	createOrGetHandoff,
+	activeHandlerFor,
 } from "../services/handoffs.js";
+import {
+	getStageConsent,
+	upsertStageConsent,
+	getApplicationForClientUser,
+} from "../services/stageConsents.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
 import {
@@ -2790,6 +2801,206 @@ meRouter.openapi(
 			.set({ read: true })
 			.where(and(eq(schema.notifications.userId, user.id), eq(schema.notifications.read, false)));
 		return c.json({ ok: true });
+	},
+);
+
+/* ── Stage consent ───────────────────────────────────────────────────────── */
+/**
+ * The applicant's explicit decision to start, hold, or opt out of a major
+ * journey stage. Only "continue" sends the case to Ops for handler assignment.
+ */
+
+/**
+ * Shared helper: process a consent decision for a stage. Called by the three
+ * stage-specific endpoints below.
+ */
+async function processConsentDecision(input: {
+	userId: string;
+	stage: StageConsentStage;
+	decision: "continue" | "hold" | "opt_out";
+	reason?: string;
+}): Promise<{ consent: StageConsent }> {
+	const { applicant, application } = await getApplicationForClientUser(input.userId);
+
+	// Upsert the consent record.
+	const consent = await upsertStageConsent({
+		applicationId: application.id,
+		stage: input.stage,
+		decision: input.decision,
+		reason: input.reason,
+		decidedByClientUserId: input.userId,
+	});
+
+	if (input.decision === "continue") {
+		// Create a handoff so the manager sees "Assign" + "Keep previous
+		// handler" in the Ops pending queue. The previous handler is the
+		// continuity candidate.
+		let fromOpsUserId: string | null = null;
+		if (input.stage === "application") {
+			// For the application stage, the consultation officer is the
+			// continuity candidate.
+			fromOpsUserId = applicant.assignedOfficerId ?? null;
+		} else {
+			// For visa and travel, the current application handler is the
+			// continuity candidate.
+			const handler = await activeHandlerFor(application.id, application.stage);
+			fromOpsUserId = handler?.opsUserId ?? null;
+		}
+
+		const handoffStage =
+			input.stage === "application"
+				? "document_verification"
+				: input.stage === "visa"
+					? "visa_processing"
+					: "travel_assistance";
+
+		await createOrGetHandoff({
+			applicationId: application.id,
+			stage: handoffStage,
+			source: `${input.stage}_consent_continue`,
+			fromOpsUserId,
+		});
+
+		// Audit comment on the application.
+		await db.insert(schema.caseComments).values({
+			targetType: "application",
+			targetId: application.id,
+			kind: "status",
+			text: `Applicant consented to continue with ${input.stage} stage`,
+			authorName: applicant.name ?? "Applicant",
+		});
+	} else if (input.decision === "hold") {
+		await db.insert(schema.caseComments).values({
+			targetType: "application",
+			targetId: application.id,
+			kind: "status",
+			text: `Applicant put ${input.stage} stage on hold${input.reason ? ` — ${input.reason}` : ""}`,
+			authorName: applicant.name ?? "Applicant",
+		});
+	} else if (input.decision === "opt_out") {
+		await db.insert(schema.caseComments).values({
+			targetType: "application",
+			targetId: application.id,
+			kind: "status",
+			text: `Applicant opted out of ${input.stage} stage${input.reason ? ` — ${input.reason}` : ""}`,
+			authorName: applicant.name ?? "Applicant",
+		});
+	}
+
+	return { consent };
+}
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/consent",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: stageConsentInputSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ consent: stageConsentSchema }) } },
+				description: "Application stage consent recorded",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const body = c.req.valid("json");
+		const result = await processConsentDecision({
+			userId: user.id,
+			stage: "application",
+			decision: body.decision,
+			reason: body.reason,
+		});
+		return c.json(result, 200);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/visa/consent",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: stageConsentInputSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ consent: stageConsentSchema }) } },
+				description: "Visa stage consent recorded",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const body = c.req.valid("json");
+		const result = await processConsentDecision({
+			userId: user.id,
+			stage: "visa",
+			decision: body.decision,
+			reason: body.reason,
+		});
+		return c.json(result, 200);
+	},
+);
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/travel/consent",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: stageConsentInputSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ consent: stageConsentSchema }) } },
+				description: "Travel stage consent recorded",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const body = c.req.valid("json");
+		const result = await processConsentDecision({
+			userId: user.id,
+			stage: "travel",
+			decision: body.decision,
+			reason: body.reason,
+		});
+		return c.json(result, 200);
+	},
+);
+
+/** Get the consent status for a specific stage (used by the portal to decide
+ * whether to show the consent card). */
+meRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/application/consent/{stage}",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: z.object({ stage: z.enum(["application", "visa", "travel"]) }),
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ consent: stageConsentSchema.nullable() }) } },
+				description: "Consent status for the stage",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const { stage } = c.req.valid("param");
+		const { application } = await getApplicationForClientUser(user.id);
+		const consent = await getStageConsent(application.id, stage);
+		return c.json({ consent }, 200);
 	},
 );
 

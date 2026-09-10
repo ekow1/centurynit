@@ -361,7 +361,7 @@ export type InvoiceEvent = {
 };
 
 export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
-	proforma: "Pending Review",
+	proforma: "Pending Approval",
 	issued: "Issued",
 	partial: "Part paid",
 	paid: "Paid",

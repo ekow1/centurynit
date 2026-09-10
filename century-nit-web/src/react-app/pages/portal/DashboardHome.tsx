@@ -3,6 +3,7 @@ import { Button } from "../../components/ui/Button";
 import { useAppState, type PendingAction } from "../../context/AppState";
 import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
+import { StageConsentCard } from "../../components/StageConsentCard";
 
 /**
  * Where "continue" goes for the current stage, with a verb that names the
@@ -74,6 +75,7 @@ export function DashboardHome() {
 		schoolApplications,
 		authUser,
 	} = useAppState();
+	const { syncFromServer } = useAppState();
 	const current = journeyPhase.stage;
 	const cta = currentStageCta(current, application.proceedStatus);
 	const meta = STAGE_META[current];
@@ -114,7 +116,24 @@ export function DashboardHome() {
 						Consultation reference · <strong>{consultationRef ?? "Not booked"}</strong>
 					</span>
 				</div>
-			</header>
+		</header>
+
+			{/* Application consent gate — the applicant must say "continue"
+				before the case is sent to Ops for handler assignment. */}
+			{application.applicationId &&
+				(application.applicationConsent?.decision ?? null) !== "continue" &&
+				(application.applicationConsent?.decision ?? null) !== "opt_out" && (
+					<StageConsentCard
+						stage="application"
+						currentDecision={application.applicationConsent?.decision ?? null}
+						title="Continue with your application?"
+						lead="Your consultation is complete and your application is ready to start. Continue so we can assign a handler and begin processing your application."
+						continueDetail="A handler will be assigned to your case. They'll guide you through document verification, school submission, and offer review. An application fee invoice will be raised for you to pay."
+						holdDetail="You can come back and continue with your application whenever you're ready. Nothing is sent to our team until you continue."
+						optOutDetail="Your application will be withdrawn. You'll need to start a new consultation if you change your mind later."
+						onDecided={() => syncFromServer()}
+					/>
+				)}
 
 			{/* Action required OR You are here - unified block to prevent duplicate competing banners */}
 			{pendingAction ? (

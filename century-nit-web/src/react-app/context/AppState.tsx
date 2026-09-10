@@ -264,6 +264,13 @@ export type ApplicationData = {
 	 * `null` for legacy applications that have no request row yet.
 	 */
 	travelAssistance: TravelAssistanceRequest | null;
+	/**
+	 * Stage consent — the applicant's explicit decision to start, hold, or
+	 * opt out of each major journey stage. `null` when no consent record exists.
+	 */
+	applicationConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
+	visaConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
+	travelConsent: { decision: "pending" | "continue" | "hold" | "opt_out" } | null;
 };
 
 export type ConsultationType = "online" | "in_person" | "";
@@ -480,6 +487,9 @@ const defaultApplication: ApplicationData = {
 	proceedStatus: "invited",
 	pendingHandoff: null,
 	travelAssistance: null,
+	applicationConsent: null,
+	visaConsent: null,
+	travelConsent: null,
 };
 
 const defaultAssessment: AssessmentData = {
@@ -2355,6 +2365,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					paymentPlanId: (a.paymentPlanId as any) ?? prev.paymentPlanId,
 					agencyDepositPaid: a.agencyStageIndex > 0 || prev.agencyDepositPaid,
 					travelInvoicePaid: a.travelInvoicePaid ?? prev.travelInvoicePaid,
+					applicationConsent: (a as any).applicationConsent ?? prev.applicationConsent,
+					visaConsent: (a as any).visaConsent ?? prev.visaConsent,
+					travelConsent: (a as any).travelConsent ?? prev.travelConsent,
 				}));
 			}
 		} catch {

@@ -518,6 +518,15 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 
 	const pendingHandoff = await pendingHandoffForApplication(row.id);
 
+	// Load consent status for all three stages so the portal can decide
+	// whether to show the consent card.
+	const { getStageConsent } = await import("./stageConsents.js");
+	const [applicationConsent, visaConsent, travelConsent] = await Promise.all([
+		getStageConsent(row.id, "application"),
+		getStageConsent(row.id, "visa"),
+		getStageConsent(row.id, "travel"),
+	]);
+
 	return {
 		id: row.id,
 		appNumber: row.appNumber,
@@ -560,6 +569,9 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		consultationId: row.consultationId ?? null,
 		consultationNumber: null,
 		schoolApplications: schoolList.schools,
+		applicationConsent,
+		visaConsent,
+		travelConsent,
 		submittedAt: row.submittedAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
@@ -2140,6 +2152,22 @@ export async function setApplicationStage(
 	});
 	if (blockReason) {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", blockReason);
+	}
+
+	// ── Consent gate: the applicant must have said "continue" before the
+	// case can advance into visa_processing or travel_assistance. This stops
+	// Ops from pushing the applicant into a stage they haven't agreed to.
+	if (stage === "visa_processing" || stage === "travel_assistance") {
+		const { getStageConsent } = await import("./stageConsents.js");
+		const consentStage = stage === "visa_processing" ? "visa" : "travel";
+		const consent = await getStageConsent(id, consentStage);
+		if (!consent || consent.decision !== "continue") {
+			throw new HttpError(
+				409,
+				"STAGE_CONSENT_REQUIRED",
+				`The applicant must consent to continue with the ${consentStage} stage before it can begin.`,
+			);
+		}
 	}
 
 	// ── Auto-raise visa invoice on entering visa_processing ──────────────

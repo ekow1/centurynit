@@ -5,6 +5,7 @@ import { ChapterGate } from "./PortalLayout";
 import { meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { usdFromCents, type ApiInvoice } from "century-nit-shared";
+import { StageConsentCard } from "../../components/StageConsentCard";
 
 export function PortalPreDeparture() {
 	return (
@@ -159,6 +160,21 @@ function TravelAssistanceInner() {
 					</p>
 				</div>
 			</header>
+
+			{/* Consent gate — the applicant must say "continue" before the
+				case is sent to Ops for travel handler assignment. */}
+			{(application.travelConsent?.decision ?? null) !== "continue" && (
+				<StageConsentCard
+					stage="travel"
+					currentDecision={application.travelConsent?.decision ?? null}
+					title="Continue with travel assistance?"
+					lead="Your visa is sorted. Continue with travel assistance so we can assign a travel handler and help you book your flight."
+					continueDetail="A travel handler will be assigned to arrange your flight. They'll prepare a quote, raise the airline ticket invoice, and book your flight once you pay."
+					holdDetail="You can come back and continue with travel assistance whenever you're ready. Nothing is sent to our team until you continue."
+					optOutDetail="Travel assistance will be cancelled. You'll need to arrange your own flight. The application can still complete."
+					onDecided={() => syncFromServer()}
+				/>
+			)}
 
 			{/* 3-way decision */}
 			{showDecision && (

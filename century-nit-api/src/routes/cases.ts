@@ -2361,6 +2361,23 @@ meRouter.openapi(
 				listInvoicesForClient(user.id),
 			]);
 
+		// Travel assistance request status — the source of truth for the
+		// travel -> payment_execution transition. The portal stage must stay at
+		// travel_assistance until the TA request is cleared (or declined/on_hold),
+		// not jump to payment_execution the moment the ticket is paid.
+		const [taRow] = await db
+			.select({ status: schema.travelAssistanceRequests.status })
+			.from(schema.travelAssistanceRequests)
+			.where(
+				application
+					? eq(schema.travelAssistanceRequests.applicationId, application.id)
+					: eq(schema.travelAssistanceRequests.applicantId, applicant.id),
+			)
+			.orderBy(desc(schema.travelAssistanceRequests.createdAt))
+			.limit(1);
+		const taStatus = taRow?.status ?? null;
+		const taResolved = taStatus === "cleared" || taStatus === "declined" || taStatus === "on_hold";
+
 		// ── Derive booleans ────────────────────────────────────────────────
 		const hasConsultation = Boolean(consultation);
 		const isEligible =
@@ -2426,8 +2443,10 @@ meRouter.openapi(
 			derivedPortalStage = "completed";
 		} else if (hasAdmitted && isVisaDone) {
 			// Visa done → travel assistance opens. The plan chapter (Payment
-			// Execution) only opens once the ticketing fee is paid.
-			derivedPortalStage = isTravelInvoicePaid ? "payment_execution" : "travel_assistance";
+			// Execution) only opens once the TA request is resolved (cleared,
+			// declined, or on_hold) — not the moment the ticket is paid. The
+			// applicant must choose a payment plan and be cleared first.
+			derivedPortalStage = taResolved ? "payment_execution" : "travel_assistance";
 		} else if (hasAdmitted && isVisaInvoicePaid) {
 			derivedPortalStage = "visa";
 		} else if (hasAdmitted && !isVisaInvoicePaid) {
@@ -2483,13 +2502,13 @@ meRouter.openapi(
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
 					} else if (coarseStage === "payment_execution") {
 						if (isCompleted) portalStage = "completed";
-						else if (hasAdmitted && isVisaDone && isTravelInvoicePaid) portalStage = "payment_execution";
+						else if (hasAdmitted && isVisaDone && taResolved) portalStage = "payment_execution";
 						else if (hasAdmitted && isVisaDone) portalStage = "travel_assistance";
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
 						else if (hasAdmitted) portalStage = "visa_invoice";
 					} else if (coarseStage === "travel_assistance") {
 						if (isCompleted) portalStage = "completed";
-						else if (isTravelInvoicePaid) portalStage = "payment_execution";
+						else if (taResolved) portalStage = "payment_execution";
 						else portalStage = "travel_assistance";
 					} else if (coarseStage === "completed") {
 						portalStage = "completed";
@@ -2518,8 +2537,12 @@ meRouter.openapi(
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
 			travel_assistance: hasAdmitted && isVisaInvoicePaid && isVisaDone,
+			// Payment Execution opens once the TA request is resolved (cleared,
+			// declined, or on_hold) — not just when the ticket is paid. The
+			// applicant must choose a plan and be cleared first (or opt out).
 			payment_execution:
-				hasAdmitted && isVisaInvoicePaid && isVisaDone && isTravelInvoicePaid,
+				(hasAdmitted && isVisaInvoicePaid && isVisaDone && taResolved) ||
+				(hasAdmitted && isVisaInvoicePaid && isVisaDone && isTravelInvoicePaid && !taStatus),
 			complete: isCompleted,
 		};
 
@@ -2541,8 +2564,8 @@ meRouter.openapi(
 			else if (sid === "school_tracking") done = hasAdmitted;
 			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
 			else if (sid === "visa") done = isVisaDone;
-			else if (sid === "travel_assistance") done = isTravelInvoicePaid;
-			else if (sid === "payment_execution") done = planSettled;
+			else if (sid === "travel_assistance") done = taResolved;
+			else if (sid === "payment_execution") done = planSettled && taResolved;
 			else if (sid === "completed") done = isCompleted;
 
 			if (sid === portalStage) stageStatuses[sid] = "current";

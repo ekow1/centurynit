@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import type { AssignableEmployee, Booking } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
+import { formatBookingWhen } from "../lib/pendingTasks";
 
 /**
  * The manager's triage queue (§2) — shared unassigned-bookings panel.
@@ -18,24 +19,6 @@ import { useOpsAuth } from "./OpsAuthContext";
  * triage surface appears wherever a manager dispatches work.
  */
 
-function formatWhen(booking: Booking): { date: string; time: string } {
-	const at = new Date(booking.startsAt);
-	return {
-		date: at.toLocaleDateString(undefined, {
-			weekday: "long",
-			day: "numeric",
-			month: "long",
-			year: "numeric",
-			timeZone: booking.timezone,
-		}),
-		time: at.toLocaleTimeString(undefined, {
-			hour: "numeric",
-			minute: "2-digit",
-			timeZone: booking.timezone,
-		}),
-	};
-}
-
 /** Why an employee cannot take this slot, in words a manager can act on. */
 const REASON_LABEL: Record<string, string> = {
 	booked: "Busy — another appointment",
@@ -45,7 +28,7 @@ const REASON_LABEL: Record<string, string> = {
 	past: "Slot is in the past",
 };
 
-function AssignDialog({
+export function AssignDialog({
 	booking,
 	onClose,
 	onAssigned,
@@ -86,7 +69,7 @@ function AssignDialog({
 		}
 	}
 
-	const when = formatWhen(booking);
+	const when = formatBookingWhen(booking);
 
 	return (
 		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Assign employee">
@@ -237,7 +220,7 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 					</thead>
 					<tbody>
 						{bookings.map((b) => {
-							const when = formatWhen(b);
+							const when = formatBookingWhen(b);
 							return (
 								<tr key={b.id}>
 									<td>

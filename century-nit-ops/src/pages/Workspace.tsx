@@ -1,185 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { fmtGhs, fmtUsd, money } from "./currency";
-import {
-	invoiceBalance,
-	invoiceAgeDays,
-} from "century-nit-core/ops";
 import type {
 	MockConsultation,
 	MockApplication,
 	MockApplicant,
 	Invoice,
 	Assignee,
-	InvoiceStatus,
 } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
 import { bookingsApi } from "century-nit-core/api";
 import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
+import {
+	buildInvoiceRows,
+	buildPendingTasks,
+	taskActionLabel,
+	timeAgo,
+	type PendingTask,
+} from "../lib/pendingTasks";
+import { PendingTaskTable } from "./PendingTasks";
 
 /**
  * F-shaped workspace / mission control.
  *
  * The first scan is the top KPI strip; the second scan is the long, left-aligned
- * work queue; the right-hand pane shows context without leaving the page.
+ * work queue presented as a table with inline assignment; the right-hand pane
+ * shows context without leaving the page.
  */
-
-const PRIORITY: Record<string, number> = {
-	assign_consultation: 1,
-	assign_application: 2,
-	reschedule: 3,
-	assess: 4,
-	review_application: 5,
-	checklist: 6,
-	docs: 7,
-	invoice: 8,
-	issue: 9,
-	chase: 10,
-	followup: 11,
-};
-
-type BaseWorkItem =
-	| {
-			id: string;
-			category: string;
-			kind: "consultation";
-			action: "assign" | "assess" | "reschedule";
-			record: MockConsultation;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "application";
-			action: "assign" | "review" | "checklist";
-			record: MockApplication;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "visa";
-			action: "advance" | "issue" | "chase";
-			record: MockApplication;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "applicant";
-			action: "docs" | "invoice";
-			record: MockApplicant;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "invoice";
-			action: "issue" | "chase";
-			record: Invoice;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "lead";
-			action: "followup";
-			record: Lead;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  }
-	| {
-			id: string;
-			category: string;
-			kind: "handoff";
-			action: "resolve";
-			record: StageHandoff;
-			title: string;
-			subtitle: string;
-			meta: string;
-			branch: string;
-			owner: string;
-			linkTo: string;
-			priority: number;
-	  };
-
-type WorkItem = BaseWorkItem & { isLive?: boolean };
-
-const VISA_STEP_LABELS: Record<string, string> = {
-	locked: "Awaiting payment",
-	awaiting_handler: "Awaiting handler assignment",
-	pending: "Case opened",
-	biometrics: "Biometrics",
-	decision: "Decision",
-	complete: "Complete",
-};
-
-function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
-	return invoices.find(
-		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
-	);
-}
-
-function timeAgo(iso?: string | null) {
-	if (!iso) return "Just now";
-	const timestamp = new Date(iso).getTime();
-	if (isNaN(timestamp)) return "Just now";
-	const diff = Date.now() - timestamp;
-	if (diff < 0) return "Just now";
-	const hours = Math.floor(diff / 3_600_000);
-	if (hours < 1) return "Just now";
-	if (hours < 24) return `${hours}h ago`;
-	const days = Math.floor(hours / 24);
-	return `${days}d ago`;
-}
-
-function derivedStatus(inv: Invoice): InvoiceStatus {
-	const age = invoiceAgeDays(inv);
-	if (inv.status === "overdue") return "overdue";
-	if ((inv.status === "issued" || inv.status === "partial") && age !== null && age > 0) return "overdue";
-	return inv.status;
-}
 
 export function Workspace() {
 	const { opsUser, canSeeAllBranches, canAssignWork, scopeRecords } = useOpsAuth();
@@ -211,7 +64,7 @@ export function Workspace() {
 		else params.set("filter", next);
 		setSearchParams(params, { replace: true });
 	};
-	const [selected, setSelected] = useState<WorkItem | null>(null);
+	const [selected, setSelected] = useState<PendingTask | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
 	const [liveBookingIds, setLiveBookingIds] = useState<Set<string>>(new Set());
@@ -281,305 +134,19 @@ export function Workspace() {
 		[scopeRecords, applicants, opsUser],
 	);
 
-	const invoiceRows = useMemo(
-		() =>
-			invoices.map((inv) => {
-				const status = derivedStatus(inv);
-				const balance = invoiceBalance(inv);
-				const age = invoiceAgeDays(inv);
-				return { inv, status, balance, age };
-			}),
-		[invoices],
-	);
+	const invoiceRows = useMemo(() => buildInvoiceRows(invoices), [invoices]);
 
-	const items = useMemo<WorkItem[]>(() => {
-		const q: WorkItem[] = [];
-
-		for (const c of scopedConsultations) {
-			const isLive = liveBookingIds.has(c.bookingId || "");
-			if (c.status === "Under Review" && !c.assignedOfficer) {
-				q.push({
-					id: `c-assign-${c.id}`,
-					category: "needs_assignment",
-					kind: "consultation",
-					action: "assign",
-					record: c,
-					title: c.applicantName,
-					subtitle: `Consultation · ${c.type} · ${c.targetCountry || "—"}`,
-					meta: c.dateTime,
-					branch: c.branch,
-					owner: "Unassigned",
-					linkTo: `/consultations?id=${c.id}`,
-					priority: PRIORITY.assign_consultation,
-					isLive,
-				});
-			} else if (c.status === "Assigned" || c.status === "Confirmed" || c.status === "In Assessment") {
-				q.push({
-					id: `c-assess-${c.id}`,
-					category: "needs_action",
-					kind: "consultation",
-					action: "assess",
-					record: c,
-					title: c.applicantName,
-					subtitle: `Ready for assessment · ${c.type} · ${c.targetCountry || "—"}`,
-					meta: c.dateTime,
-					branch: c.branch,
-					owner: c.assignedOfficer || "—",
-					linkTo: `/consultations?id=${c.id}`,
-					priority: PRIORITY.assess,
-					isLive,
-				});
-			} else if (c.rescheduleRequestedAt) {
-				q.push({
-					id: `c-res-${c.id}`,
-					category: "needs_action",
-					kind: "consultation",
-					action: "reschedule",
-					record: c,
-					title: c.applicantName,
-					subtitle: `Reschedule requested · ${c.type}`,
-					meta: `Requested ${timeAgo(c.rescheduleRequestedAt)}`,
-					branch: c.branch,
-					owner: c.assignedOfficer || "—",
-					linkTo: `/consultations?id=${c.id}`,
-					priority: PRIORITY.reschedule,
-					isLive,
-				});
-			}
-		}
-
-		for (const a of scopedApplications) {
-			if (!a.assignedStaff) {
-				q.push({
-					id: `a-assign-${a.id}`,
-					category: "needs_assignment",
-					kind: "application",
-					action: "assign",
-					record: a,
-					title: `${a.applicantName}`,
-					subtitle: `Application ${a.appId} · Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
-					meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
-					branch: a.branch,
-					owner: "Unassigned",
-					linkTo: `/applications?id=${a.id}`,
-					priority: PRIORITY.assign_application,
-				});
-			} else if (a.status === "Under Review") {
-				q.push({
-					id: `a-review-${a.id}`,
-					category: "needs_action",
-					kind: "application",
-					action: "review",
-					record: a,
-					title: `${a.applicantName}`,
-					subtitle: `Application under review · ${a.university || a.country || "—"}`,
-					meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
-					branch: a.branch,
-					owner: a.assignedStaff,
-					linkTo: `/applications?id=${a.id}`,
-					priority: PRIORITY.review_application,
-				});
-			} else if (a.checklist.some((i) => !i.checked)) {
-				const open = a.checklist.filter((i) => !i.checked).length;
-				q.push({
-					id: `a-check-${a.id}`,
-					category: "needs_action",
-					kind: "application",
-					action: "checklist",
-					record: a,
-					title: `${a.applicantName}`,
-					subtitle: `${open} open checklist item${open === 1 ? "" : "s"}`,
-					meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
-					branch: a.branch,
-					owner: a.assignedStaff,
-					linkTo: `/applications?id=${a.id}`,
-					priority: PRIORITY.checklist,
-				});
-			}
-		}
-
-		for (const a of scopedApplications) {
-			const visaInv = visaInvoiceFor(invoices, a);
-			const stage = a.visaStage ?? "locked";
-			if (stage === "pending" || stage === "biometrics" || stage === "decision") {
-				q.push({
-					id: `visa-adv-${a.id}`,
-					category: "needs_action",
-					kind: "visa",
-					action: "advance",
-					record: a,
-					title: a.applicantName,
-					subtitle: `Visa processing · ${VISA_STEP_LABELS[stage] ?? stage} · ${a.university || a.country || "—"}`,
-					meta: `App ${a.appId}`,
-					branch: a.branch,
-					owner: a.assignedStaff || "—",
-					linkTo: `/visa?id=${a.id}`,
-					priority: PRIORITY.review_application,
-				});
-			} else if (stage === "locked" && visaInv && visaInv.status !== "void") {
-				const balance = invoiceBalance(visaInv);
-				if (visaInv.status === "proforma" && balance > 0) {
-					q.push({
-						id: `visa-inv-${a.id}`,
-						category: "needs_invoice",
-						kind: "visa",
-						action: "issue",
-						record: a,
-						title: a.applicantName,
-						subtitle: `Visa proforma to issue · ${fmtGhs(visaInv.subtotal)}`,
-						meta: visaInv.invoiceNumber,
-						branch: a.branch,
-						owner: visaInv.issuedBy || a.assignedStaff || "—",
-						linkTo: `/visa?id=${a.id}`,
-						priority: PRIORITY.issue,
-					});
-				} else if (balance > 0) {
-					q.push({
-						id: `visa-chase-${a.id}`,
-						category: "needs_invoice",
-						kind: "visa",
-						action: "chase",
-						record: a,
-						title: a.applicantName,
-						subtitle: `Visa invoice ${visaInv.invoiceNumber} · ${fmtGhs(balance)} due`,
-						meta: `App ${a.appId}`,
-						branch: a.branch,
-						owner: visaInv.issuedBy || a.assignedStaff || "—",
-						linkTo: `/visa?id=${a.id}`,
-						priority: PRIORITY.chase,
-					});
-				}
-			}
-		}
-
-		for (const h of handoffs) {
-			if (h.status !== "pending") continue;
-			const stageLabel =
-				h.stage === "visa_processing"
-					? "Visa specialist"
-					: h.stage
-							.split("_")
-							.map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-							.join(" ");
-			q.push({
-				id: `handoff-${h.id}`,
-				category: "needs_assignment",
-				kind: "handoff",
-				action: "resolve",
-				record: h,
-				title: h.applicantName ?? "Applicant",
-				subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}`,
-				meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
-				branch: "",
-				owner: h.fromOpsUserName ?? "No previous handler",
-				linkTo: h.stage === "visa_processing" ? `/visa?id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
-				priority: PRIORITY.assign_consultation,
-			});
-		}
-
-		for (const app of scopedApplicants) {
-			const pendingDocs = app.documents.filter((d) => d.status === "Pending Review").length;
-			if (pendingDocs > 0) {
-				q.push({
-					id: `app-docs-${app.id}`,
-					category: "needs_action",
-					kind: "applicant",
-					action: "docs",
-					record: app,
-					title: app.name,
-					subtitle: `${pendingDocs} document${pendingDocs === 1 ? "" : "s"} pending review`,
-					meta: `Stage: ${app.currentStage}`,
-					branch: app.branch,
-					owner: app.assignedOfficer || "—",
-					linkTo: `/applicants?id=${app.id}`,
-					priority: PRIORITY.docs,
-				});
-			}
-
-			const outstanding = money(app.financials.outstanding);
-			if (outstanding > 0) {
-				const hasOpenInvoice = invoiceRows.some(
-					(r) => r.inv.applicantName === app.name && r.status !== "paid" && r.status !== "void",
-				);
-				if (!hasOpenInvoice) {
-					q.push({
-						id: `app-inv-${app.id}`,
-						category: "needs_invoice",
-						kind: "applicant",
-						action: "invoice",
-						record: app,
-						title: app.name,
-						subtitle: `Outstanding balance · ${fmtGhs(outstanding)}`,
-						meta: `Plan: ${app.financials.plan || "—"}`,
-						branch: app.branch,
-						owner: app.assignedOfficer || "—",
-						linkTo: `/invoices`,
-						priority: PRIORITY.invoice,
-					});
-				}
-			}
-		}
-
-		for (const r of invoiceRows) {
-			if (r.status === "proforma") {
-				q.push({
-					id: `inv-issue-${r.inv.id}`,
-					category: "needs_invoice",
-					kind: "invoice",
-					action: "issue",
-					record: r.inv,
-					title: r.inv.applicantName,
-					subtitle: `Proforma invoice · ${fmtGhs(r.inv.subtotal)}`,
-					meta: r.inv.invoiceNumber,
-					branch: "",
-					owner: r.inv.issuedBy || "—",
-					linkTo: `/invoices`,
-					priority: PRIORITY.issue,
-				});
-			}
-			if (r.status === "overdue") {
-				q.push({
-					id: `inv-chase-${r.inv.id}`,
-					category: "needs_invoice",
-					kind: "invoice",
-					action: "chase",
-					record: r.inv,
-					title: r.inv.applicantName,
-					subtitle: `Overdue · balance ${fmtGhs(r.balance)}`,
-					meta: `Due ${r.age ?? "?"} day${r.age === 1 ? "" : "s"} ago`,
-					branch: "",
-					owner: r.inv.issuedBy || "—",
-					linkTo: `/invoices`,
-					priority: PRIORITY.chase,
-				});
-			}
-		}
-
-		for (const lead of leads) {
-			if (lead.stage === "new" || lead.stage === "contacted") {
-				q.push({
-					id: `lead-${lead.id}`,
-					category: "needs_followup",
-					kind: "lead",
-					action: "followup",
-					record: lead,
-					title: lead.name,
-					subtitle: `${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} · ${lead.country || "Ghana"}`,
-					meta: `Last contact ${timeAgo(lead.lastContactAt)}`,
-					branch: "",
-					owner: lead.assignedTo || "Unassigned",
-					linkTo: `/leads`,
-					priority: PRIORITY.followup,
-				});
-			}
-		}
-
-		q.sort((a, b) => {
-			if (a.isLive && !b.isLive) return -1;
-			if (!a.isLive && b.isLive) return 1;
-			return a.priority - b.priority || a.title.localeCompare(b.title);
+	const items = useMemo<PendingTask[]>(() => {
+		return buildPendingTasks({
+			consultations: scopedConsultations,
+			applications: scopedApplications,
+			applicants: scopedApplicants,
+			handoffs,
+			invoiceRows,
+			invoices,
+			leads,
+			liveBookingIds: liveBookingIds,
 		});
-		return q;
 	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs]);
 
 	const filtered = useMemo(() => {
@@ -604,6 +171,25 @@ export function Workspace() {
 	}, [items, invoiceRows, applicants]);
 
 	const loading = casesLoading || invoicesLoading || leadsLoading;
+
+	const doAssign = useCallback(
+		async (task: PendingTask, to: Assignee, reason?: string) => {
+			if (task.kind === "consultation" && task.action === "assign") {
+				return assignConsultation(task.record.id, to);
+			}
+			if (task.kind === "application" && task.action === "assign") {
+				return assignApplication(task.record.id, to);
+			}
+			if (task.kind === "handoff" && task.action === "resolve") {
+				return resolveHandoff(task.record.id, "assign", {
+					opsUserId: to.opsUserId,
+					reason: reason || undefined,
+				});
+			}
+			throw new Error("This task cannot be assigned from here.");
+		},
+		[assignConsultation, assignApplication, resolveHandoff],
+	);
 
 	return (
 		<div className="page-content fade-in" style={{ backgroundColor: "#f8fafc", minHeight: "100%" }}>
@@ -660,24 +246,19 @@ export function Workspace() {
 						</div>
 					</div>
 
-					{/* Queue List */}
+					{/* Queue List — tabular, with inline assignment like the Dashboard */}
 					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "50vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
 						<div style={{ flex: 1, overflowY: "auto" }}>
-							{filtered.length === 0 ? (
-								<div style={{ padding: "3rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
-									<span style={{ fontSize: "3rem", opacity: 0.2 }}>📥</span>
-									{loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
-								</div>
-							) : (
-								filtered.map((item) => (
-									<QueueRow
-										key={item.id}
-										item={item}
-										selected={selected?.id === item.id}
-										onSelect={() => setSelected(item)}
-									/>
-								))
-							)}
+							<PendingTaskTable
+								items={filtered}
+								assignees={assignees}
+								canAssignWork={canAssignWork}
+								onAssign={doAssign}
+								onAssigned={refresh}
+								onSelect={setSelected}
+								selectedId={selected?.id}
+								emptyLabel={loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
+							/>
 						</div>
 					</div>
 				</div>
@@ -750,70 +331,6 @@ function KPICard({
 	);
 }
 
-function actionLabel(item: WorkItem): string {
-	if (item.action === "assign") return "Assign";
-	if (item.action === "assess") return "Assess";
-	if (item.action === "reschedule") return "Reschedule";
-	if (item.action === "review") return "Review";
-	if (item.action === "checklist") return "Checklist";
-	if (item.action === "advance") return "Advance visa";
-	if (item.action === "docs") return "Documents";
-	if (item.action === "invoice") return "Invoice";
-	if (item.action === "issue") return "Issue invoice";
-	if (item.action === "chase") return "Chase payment";
-	if (item.action === "followup") return "Follow up";
-	if (item.action === "resolve") return "Resolve";
-	return item.action;
-}
-
-function QueueRow({ item, selected, onSelect }: { item: WorkItem; selected: boolean; onSelect: () => void }) {
-	return (
-		<div
-			onClick={onSelect}
-			className={`queue-row ${selected ? "queue-row--selected" : ""}`}
-		>
-			<div style={{ minWidth: 0, flex: 1 }}>
-				<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem", flexWrap: "wrap" }}>
-					<span
-						className="portal-pill"
-						style={{
-							fontSize: "var(--text-xs)",
-							padding: "0.1rem 0.45rem",
-							background: selected ? "var(--background)" : "var(--foreground)",
-							color: selected ? "var(--foreground)" : "var(--background)",
-							border: "1px solid",
-							borderColor: selected ? "transparent" : "var(--foreground)",
-						}}
-					>
-						{actionLabel(item)}
-					</span>
-					{item.isLive && (
-						<span
-							className="portal-pill"
-							style={{
-								fontSize: "var(--text-xs)",
-								padding: "0.1rem 0.45rem",
-								background: "var(--foreground)",
-								color: "var(--background)",
-								fontWeight: "bold",
-							}}
-						>
-							LIVE NOW
-						</span>
-					)}
-					<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{item.title}</span>
-				</div>
-				<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
-					{item.subtitle}
-				</p>
-				<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.15rem 0 0" }}>
-					{item.meta} · {item.owner}
-				</p>
-			</div>
-		</div>
-	);
-}
-
 function PreviewPane({
 	item,
 	assignees,
@@ -824,7 +341,7 @@ function PreviewPane({
 	onResolveHandoff,
 	onDeferHandoff,
 }: {
-	item: WorkItem;
+	item: PendingTask;
 	assignees: Assignee[];
 	canAssignWork: boolean;
 	onAssigned: () => void | Promise<void>;
@@ -890,28 +407,30 @@ function PreviewPane({
 	}
 
 	const linkLabel =
-		item.kind === "consultation"
+		item.kind === "booking"
 			? "Open Consultations"
-			: item.kind === "application"
-				? "Open Applications"
-				: item.kind === "visa"
-					? "Open Visa Processing"
-					: item.kind === "handoff"
-						? item.record.stage === "visa_processing"
-							? "Open Visa Processing"
-							: "Open Applications"
-						: item.kind === "applicant"
-							? "Open Applicants"
-							: item.kind === "invoice"
-								? "Open Invoices"
-								: "Open Leads";
+			: item.kind === "consultation"
+				? "Open Consultations"
+				: item.kind === "application"
+					? "Open Applications"
+					: item.kind === "visa"
+						? "Open Visa Processing"
+						: item.kind === "handoff"
+							? item.record.stage === "visa_processing"
+								? "Open Visa Processing"
+								: "Open Applications"
+							: item.kind === "applicant"
+								? "Open Applicants"
+								: item.kind === "invoice"
+									? "Open Invoices"
+									: "Open Leads";
 
 	return (
 		<div style={{ padding: "1.25rem" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
 				<div>
 					<span className="portal-pill" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem", display: "inline-block" }}>
-						{actionLabel(item)}
+						{taskActionLabel(item)}
 					</span>
 					<h3 style={{ margin: "0.35rem 0 0", fontSize: "1.1rem" }}>{item.title}</h3>
 				</div>

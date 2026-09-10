@@ -539,15 +539,17 @@ export async function recordPayment(input: {
 			} else if (updated.type === "travel" && status === "paid") {
 				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
 				// Mark the travel assistance request as ticket_paid so the handler
-				// can record the booking confirmation.
+				// can record the booking confirmation. Only fire from `invoiced` —
+				// if the TA request has already advanced to `booked` or `cleared`,
+				// a late webhook must not regress it.
 				try {
 					const [ta] = await txDb
-						.select({ id: travelAssistanceRequests.id })
+						.select({ id: travelAssistanceRequests.id, status: travelAssistanceRequests.status })
 						.from(travelAssistanceRequests)
 						.where(eq(travelAssistanceRequests.applicationId, targetAppId))
 						.orderBy(desc(travelAssistanceRequests.createdAt))
 						.limit(1);
-					if (ta) {
+					if (ta && ta.status === "invoiced") {
 						await txDb
 							.update(travelAssistanceRequests)
 							.set({ status: "ticket_paid", updatedAt: new Date() })

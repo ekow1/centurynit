@@ -6,7 +6,7 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import { API_PREFIX } from "century-nit-shared";
 import { fmtBoth, fmtFin, fmtGhs, fmtUsd, money } from "./currency";
-import { UnassignedQueue } from "./UnassignedBookings";
+import { PendingTasks } from "./PendingTasks";
 import { LiveMeetings } from "./LiveMeetings";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { apiFetch } from "../lib/api";
@@ -147,14 +147,14 @@ export function EnterpriseDashboard() {
 
 			{/* Role-specific dashboard view */}
 			{opsRole === "coordinator" ? (
-				<CoordinatorView stats={stats} funnel={funnel} funnelMax={funnelMax} />
+				<CoordinatorView stats={stats} funnel={funnel} funnelMax={funnelMax} branch={branchFilter} />
 			) : opsRole === "consultant" ? (
 				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} assignees={assignees} />
 			) : opsRole === "finance" ? (
 				<FinanceView stats={stats} applicants={scoped.applicants} />
 			) : (
 				/* super_admin, admin, manager, or unassigned staff default to full operational executive overview */
-				<ManagerView stats={stats} funnel={funnel} funnelMax={funnelMax} applicants={scoped.applicants} />
+				<ManagerView stats={stats} funnel={funnel} funnelMax={funnelMax} applicants={scoped.applicants} branch={branchFilter} />
 			)}
 		</div>
 	);
@@ -190,6 +190,7 @@ function ManagerView({
 	funnel,
 	funnelMax,
 	applicants,
+	branch,
 }: {
 	stats: Stats;
 	funnel: { label: string; value: number; to?: string }[];
@@ -200,6 +201,7 @@ function ManagerView({
 		name: string;
 		financials: { outstanding: string; plan: string };
 	}[];
+	branch: string;
 }) {
 	return (
 		<>
@@ -218,7 +220,7 @@ function ManagerView({
 			</div>
 
 			<div style={{ marginBottom: "2rem" }}>
-				<UnassignedQueue />
+				<PendingTasks branchFilter={branch} />
 			</div>
 
 			<div style={{ marginBottom: "2rem" }}>
@@ -279,22 +281,26 @@ function CoordinatorView({
 	stats,
 	funnel,
 	funnelMax,
+	branch,
 }: {
 	stats: Stats;
 	funnel: { label: string; value: number; to?: string }[];
 	funnelMax: number;
+	branch: string;
 }) {
 	return (
 		<>
-			<UnassignedQueue />
+			<PendingTasks branchFilter={branch} />
 
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
 				<KPICard
-					label="Unassigned Bookings"
-					value={String(stats.unassignedConsultations)}
-					note="Awaiting consultant assignment"
+					label="Pending Tasks"
+					value={String(
+						stats.unassignedConsultations + stats.unassignedApplications + stats.pendingDocs + stats.openChecklistItems,
+					)}
+					note="Across consultations, cases & documents"
 					inverted
-					to="/consultations"
+					to="/workspace?filter=needs_assignment"
 				/>
 				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
 				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />

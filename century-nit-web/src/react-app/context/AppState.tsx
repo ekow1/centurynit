@@ -2355,7 +2355,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 								fromOpsUserName: a.pendingHandoff.fromOpsUserName,
 								reason: a.pendingHandoff.reason,
 							}
-						: prev.pendingHandoff,
+						: null,
 					proceedStatus: a.proceedStatus ?? prev.proceedStatus,
 					packageSelectedAt: a.packageSelectedAt ?? prev.packageSelectedAt,
 					paymentPlanId: (a.paymentPlanId as any) ?? prev.paymentPlanId,
@@ -2594,16 +2594,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			return;
 		}
 		let cancelled = false;
-		meApi
-			.journey()
-			.then((j: ServerJourney) => {
-				if (!cancelled) setServerJourney(j);
-			})
-			.catch(() => {
-				/* keep local fallback */
-			});
+		const fetchJourney = () =>
+			meApi
+				.journey()
+				.then((j: ServerJourney) => {
+					if (!cancelled) setServerJourney(j);
+				})
+				.catch(() => {
+					/* keep local fallback */
+				});
+		fetchJourney();
+		// Refresh the server journey on the same cadence as syncFromServer so
+		// a handler assignment / stage change is reflected without a reload.
+		const id = window.setInterval(fetchJourney, 30_000);
 		return () => {
 			cancelled = true;
+			window.clearInterval(id);
 		};
 	}, [authUser]);
 

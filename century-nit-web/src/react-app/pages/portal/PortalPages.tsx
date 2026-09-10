@@ -2616,7 +2616,10 @@ function ApplicationHubInner() {
 	if (!depositPaid) {
 		return <Navigate to="/portal/package" replace />;
 	}
-	if (application.pendingHandoff) {
+	if (
+		application.pendingHandoff &&
+		application.pendingHandoff.stage === "school_submission"
+	) {
 		return <Navigate to="/portal/awaiting-handler" replace />;
 	}
 
@@ -4209,18 +4212,31 @@ export function PortalPayCallback() {
 
 				const { invoice } = await meApi.paystackVerify(invoiceId, reference);
 				if (cancelled) return;
+
+				// Always re-sync so a partial (deposit/installment) payment also
+				// updates the portal immediately instead of waiting for the 30s poll.
+				await syncFromServer();
+				if (cancelled) return;
+
 				const settled = invoice.balanceCents === 0;
-				if (settled) {
-// Update local AppState optimistically so the portal unlocks immediately.
-				// The 30s background poll will also overwrite with fresh server state.
-				if (invoice.type === "visa") await syncFromServer();
-				else payApplicationInvoice();
+				// Only the application invoice unlocks the application stage
+				// locally; other invoice types (agency/visa/travel) are handled by
+				// the sync above. The 30s poll confirms with server truth.
+				if (settled && invoice.type === "application") {
+					payApplicationInvoice();
 				}
-				nav(invoice.type === "visa" ? "/portal/visa" : "/portal/application", {
-					replace: true,
-				});
+				nav(
+					invoice.type === "visa"
+						? "/portal/visa"
+						: invoice.type === "agency"
+							? "/portal/financial"
+							: invoice.type === "travel"
+								? "/portal/pre-departure"
+								: "/portal/application",
+					{ replace: true },
+				);
 				if (settled) toast.success("Payment confirmed. Your stage is now unlocked.");
-				else toast.error("Payment was not completed.");
+				else toast.success("Payment confirmed. Your payment has been received.");
 			} catch (err) {
 				if (cancelled) return;
 				setFailed(true);

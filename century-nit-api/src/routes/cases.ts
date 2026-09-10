@@ -2371,9 +2371,7 @@ meRouter.openapi(
 		// Consent gate: before the application truly opens, the applicant must
 		// accept to proceed. invited/declined = still gated; accepted = open.
 		const hasProceeded = application?.proceedStatus === "accepted";
-		const hasSelection = schoolTracks.schools.some(
-			(s) => s.status !== "Preparing Application",
-		);
+		const hasSelection = schoolTracks.schools.length > 0;
 		const isAppInvoicePaid = invoices.some(
 			(i) => i.type === "application" && i.status === "paid",
 		);

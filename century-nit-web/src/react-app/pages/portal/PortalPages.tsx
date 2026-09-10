@@ -29,7 +29,6 @@ import {
 	programs,
 	programsForUniversity,
 	SCHOOL_DEGREE_LEVELS,
-	PAYMENT_PLANS,
 	SCHOOL_FUNDING_TRACKS,
 	serviceFeeForPackage,
 	filterProgramsForPackage,
@@ -39,7 +38,6 @@ import {
 	SCHOOL_OUTCOME_LABELS,
 	schoolDecisionNote,
 	type SchoolDegreeLevel,
-	type PaymentPlanId,
 	type SchoolFundingTrack,
 	type SchoolTrackStatus,
 	universities,
@@ -76,11 +74,10 @@ export function PortalPackage() {
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, choosePaymentPlan, payAgencyInstallment } = useAppState();
+	const { application, chooseSchoolPackage, payAgencyInstallment } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
-	const [plan, setPlan] = useState<PaymentPlanId>(application.paymentPlanId || "full");
 	const [funding, setFunding] = useState<SchoolFundingTrack | "">(
 		application.schoolFundingTrack || "scholarship",
 	);
@@ -149,9 +146,7 @@ function SchoolPackageInner() {
 				degreeLevel: level,
 				targetSchoolCount,
 			});
-			await meApi.choosePaymentPlan({ paymentPlanId: plan });
 			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents);
-			choosePaymentPlan(plan);
 
 			if (andPayDeposit) {
 				setPayingDeposit(true);
@@ -331,7 +326,7 @@ function SchoolPackageInner() {
 							<span className="pkg-cost__label">
 								Remaining 90% balance
 								<span className="pkg-cost__when">
-									{plan === "full" ? "Settled as one payment upon admission" : "Split across pre-departure & post-arrival milestones"}
+									Settled later via the Payment Execution chapter (full or installment plan)
 								</span>
 							</span>
 							<Money usd={remainingUsd} className="pkg-cost__amt" />
@@ -371,26 +366,6 @@ function SchoolPackageInner() {
 					<p className="pkg-cost__excl mt-3">
 						Institutional university application fees and tuition are <strong>not</strong> agency fees. Application fees are billed per school selected, and tuition is paid directly to whichever university issues your offer.
 					</p>
-
-					<div className="pkg-plan mt-4">
-						<p className="eyebrow pkg-plan__q">How would you like to pay the remaining 90% service fee?</p>
-						<div className="pkg-plan__opts">
-							{PAYMENT_PLANS.map((pl) => (
-								<button
-									key={pl.id}
-									type="button"
-									className={`pkg-plan__opt${plan === pl.id ? " pkg-plan__opt--on" : ""}`}
-									onClick={() => !chosen && setPlan(pl.id)}
-									disabled={chosen}
-									aria-pressed={plan === pl.id}
-								>
-									<span className="pkg-plan__check" aria-hidden>✓</span>
-									<span className="pkg-plan__name">{pl.name}</span>
-									<span className="pkg-plan__blurb">{pl.blurb}</span>
-								</button>
-							))}
-						</div>
-					</div>
 				</section>
 			) : null}
 

@@ -81,10 +81,10 @@ export type ServicePackage = {
 /** Exchange rate: 1 USD = 15 GHS (Ghanaian Cedi) */
 export const GHS_RATE = 15;
 
-/** Format an amount in USD as a dual-currency string: "GH₵1,125 / $75 USD" */
+/** Format an amount in USD as a dual-currency string: "$75 USD ≈ GH₵1,125" */
 export function formatDualCurrency(usd: number): string {
 	const ghs = Math.round(usd * GHS_RATE);
-	return `GH₵${ghs.toLocaleString()} / $${usd.toLocaleString()} USD`;
+	return `$${usd.toLocaleString()} USD ≈ GH₵${ghs.toLocaleString()}`;
 }
 
 /** Format just the GHS equivalent of a USD amount */

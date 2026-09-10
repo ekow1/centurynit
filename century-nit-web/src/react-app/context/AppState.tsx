@@ -192,6 +192,7 @@ export type ApplicationData = {
 	privacyAccepted: boolean;
 	currentStep: number;
 	applicationId: string | null;
+	appNumber: string | null;
 	paymentStatus: "idle" | "processing" | "success" | "failed";
 	submittedAt: string | null;
 	profileCompletedAt: string | null;
@@ -424,6 +425,7 @@ const defaultApplication: ApplicationData = {
 	privacyAccepted: false,
 	currentStep: 0,
 	applicationId: null,
+	appNumber: null,
 	paymentStatus: "idle",
 	submittedAt: null,
 	profileCompletedAt: null,
@@ -2326,6 +2328,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				setApplication((prev) => ({
 					...prev,
 					applicationId: a.id || prev.applicationId,
+					appNumber: a.appNumber || prev.appNumber || prev.applicationId,
 					destinationId: a.country || prev.destinationId,
 					universityId: a.university || prev.universityId,
 					programId: a.program || prev.programId,

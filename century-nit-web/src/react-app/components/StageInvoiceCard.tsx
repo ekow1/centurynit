@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { InvoiceLine, StageInvoice } from "../context/AppState";
-import { formatDualCurrency, GHS_RATE, sumInvoiceLines } from "century-nit-core";
+import { formatDualCurrency, GHS_RATE, sumInvoiceLines, toGHS } from "century-nit-core";
 import { Button } from "./ui/Button";
 
 function LineList({ lines }: { lines: InvoiceLine[] }) {
@@ -120,15 +120,14 @@ export function StageInvoiceCard({ invoice, title, meta, onPay, paying, payCta, 
 						</p>
 					) : (
 						<p className="display mt-1" style={{ fontSize: "2rem" }}>
-							${payable.toLocaleString()}
+							${payable.toLocaleString()} USD
 							<span style={{ fontSize: "1rem", fontFamily: "var(--font-mono)" }}>
 								{" "}
-								GH₵{Math.round(payable * GHS_RATE).toLocaleString()} / USD
+								≈ {toGHS(payable)}
 							</span>
 						</p>
 					)}
 					<p className="muted mt-1">{invoice.description}</p>
-					{invoice.id ? <p className="mono muted mt-2">{invoice.id}</p> : null}
 					{meta ? <div className="mt-3">{meta}</div> : null}
 				</div>
 				<div className="invoice-card__head-aside">

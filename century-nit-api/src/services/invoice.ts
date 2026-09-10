@@ -570,6 +570,16 @@ export async function recordPayment(input: {
 					.update(applications)
 					.set({ visaInvoicePaid: true })
 					.where(eq(applications.id, targetAppId));
+				// Paying the visa invoice is the applicant's confirmation that they
+				// want to proceed with visa processing; record the stage consent so
+				// the portal stops showing the consent card after payment.
+				const { upsertStageConsent } = await import("./stageConsents.js");
+				await upsertStageConsent({
+					applicationId: targetAppId,
+					stage: "visa",
+					decision: "continue",
+					decidedByClientUserId: updated.clientUserId ?? undefined,
+				});
 				// The stage transition (locked → awaiting_handler) and the handoff
 				// only fire once, from "locked". Idempotent: createOrGet dedupes.
 				const [paidApp] = await txDb

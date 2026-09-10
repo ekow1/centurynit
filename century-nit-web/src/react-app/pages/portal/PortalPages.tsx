@@ -3824,10 +3824,11 @@ function VisaHubInner() {
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">Dashboard · Visa</p>
-					<h1 className="page-title mt-1">Visa invoice → then process</h1>
+					<h1 className="page-title mt-1">{paid ? "Visa tracking" : "Visa invoice → then process"}</h1>
 					<p className="lead mt-2">
-						On admission an invoice is raised <strong>before</strong> the visa process starts. Pay
-						the invoice → tracking runs. Handler posts are view-only.
+						{paid
+							? "Visa invoice settled. Your handler will open your visa case and update you through the tracking page."
+							: "On admission an invoice is raised before the visa process starts. Pay the invoice → tracking runs. Handler posts are view-only."}
 					</p>
 				</div>
 			</header>
@@ -3838,7 +3839,7 @@ function VisaHubInner() {
 				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
 			</ol>
 
-			{hasAdmit && (application.visaConsent?.decision ?? null) !== "continue" && (
+			{hasAdmit && !paid && (application.visaConsent?.decision ?? null) !== "continue" && (
 				<StageConsentCard
 					stage="visa"
 					currentDecision={application.visaConsent?.decision ?? null}

@@ -9,14 +9,14 @@
  */
 
 export const DEFAULT_FEE_CENTS = {
-	appBase: 7,
-	appPerSchool: 7,
-	appDocVerify: 7,
-	appMatchReview: 7,
-	visaBase: 7,
-	visaBiometrics: 7,
-	visaTranslation: 7,
-	consultation: 7,
+	appBase: 25_000,
+	appPerSchool: 7_000,
+	appDocVerify: 5_000,
+	appMatchReview: 5_000,
+	visaBase: 35_000,
+	visaBiometrics: 10_000,
+	visaTranslation: 5_000,
+	consultation: 15_000,
 } as const;
 
 export type FeeSchedule = {

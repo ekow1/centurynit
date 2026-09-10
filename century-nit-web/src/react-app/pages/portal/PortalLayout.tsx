@@ -98,7 +98,7 @@ export function PortalLayout() {
 	const inJourney = pathname === "/portal/journey" || STAGE_PATHS.some((p) => pathname.startsWith(p));
 
 	const currentRef =
-		application.applicationId ?? booking.confirmationId ?? null;
+		application.appNumber ?? booking.confirmationId ?? null;
 
 	let pageTitle = "Dashboard";
 	const activeNav = MAIN_NAV.find((n) => pathname.startsWith(n.to));

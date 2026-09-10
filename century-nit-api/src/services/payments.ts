@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import type {
 	InitializePayment,
@@ -6,7 +6,7 @@ import type {
 	PaymentVerificationResult,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { paymentTransactions } from "../db/schema.js";
+import { invoicePayments, paymentTransactions } from "../db/schema.js";
 import { getInvoice, recordPayment, paidCentsOf } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
@@ -152,6 +152,7 @@ export async function initializePayment(
 export async function verifyAndSettlePayment(
 	reference: string,
 	gateway: "paystack" | "stripe" = "paystack",
+	ownerUserId?: string,
 ): Promise<PaymentVerificationResult> {
 	const [tx] = await db
 		.select()
@@ -161,6 +162,10 @@ export async function verifyAndSettlePayment(
 
 	if (!tx) {
 		throw new HttpError(404, "TRANSACTION_NOT_FOUND", "Payment transaction reference not found");
+	}
+
+	if (ownerUserId && tx.clientUserId && tx.clientUserId !== ownerUserId) {
+		throw new HttpError(403, "FORBIDDEN", "You can only verify your own payment transactions");
 	}
 
 	if (tx.status === "success") {
@@ -203,20 +208,27 @@ export async function verifyAndSettlePayment(
 		}
 	}
 
-	// Mark transaction successful
-	const now = new Date();
-	await db
-		.update(paymentTransactions)
-		.set({
-			status: "success",
-			paidAt: now,
-			updatedAt: now,
-		})
-		.where(eq(paymentTransactions.id, tx.id));
-
-	// Record payment on invoice
+	// Idempotent recovery: a prior attempt may have credited the invoice and
+	// crashed before marking the transaction successful. Never credit twice.
 	const invoice = await getInvoice(tx.invoiceId);
-	if (invoice && invoice.status !== "paid") {
+	const [existingPayment] = invoice
+		? await db
+				.select({ id: invoicePayments.id })
+				.from(invoicePayments)
+				.where(
+					and(
+						eq(invoicePayments.reference, tx.reference),
+						eq(invoicePayments.invoiceId, invoice.id),
+					),
+				)
+				.limit(1)
+		: [];
+
+	// Settle the invoice BEFORE declaring the transaction successful. If
+	// recordPayment throws (overpayment, void, proforma), the transaction must
+	// stay pending so a retry can still act — marking it success first left the
+	// invoice unpaid while the dedup path returned "success" forever.
+	if (invoice && invoice.status !== "paid" && !existingPayment) {
 		const updated = await recordPayment({
 			invoiceId: tx.invoiceId,
 			amountCents: tx.amountCents,
@@ -248,6 +260,17 @@ export async function verifyAndSettlePayment(
 		});
 	}
 
+	// Mark transaction successful only after the invoice was settled.
+	const now = new Date();
+	await db
+		.update(paymentTransactions)
+		.set({
+			status: "success",
+			paidAt: now,
+			updatedAt: now,
+		})
+		.where(eq(paymentTransactions.id, tx.id));
+
 	return {
 		success: true,
 		status: "success",
@@ -261,15 +284,24 @@ export async function verifyAndSettlePayment(
 
 export async function processPaystackWebhook(
 	rawBody: string,
-	signature: string,
+	signature?: string,
 ): Promise<{ processed: boolean }> {
 	const secret = await getSetting("PAYSTACK_SECRET_KEY");
 
-	if (secret && signature) {
-		const hash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
-		if (hash !== signature) {
-			throw new HttpError(400, "INVALID_SIGNATURE", "Webhook signature verification failed");
-		}
+	if (!secret) {
+		throw new HttpError(
+			503,
+			"PAYMENT_GATEWAY_UNCONFIGURED",
+			"Paystack secret key is not set; cannot verify webhook.",
+		);
+	}
+	if (!signature) {
+		throw new HttpError(400, "INVALID_SIGNATURE", "Missing x-paystack-signature header");
+	}
+
+	const hash = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
+	if (hash !== signature) {
+		throw new HttpError(400, "INVALID_SIGNATURE", "Webhook signature verification failed");
 	}
 
 	const payload = JSON.parse(rawBody);

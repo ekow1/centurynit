@@ -65,6 +65,7 @@ paymentsRouter.openapi(
 		method: "get",
 		path: "/verify/{reference}",
 		tags: ["Payments"],
+		middleware: [requireAuth] as const,
 		request: {
 			params: verifyParams,
 			query: verifyQuery,
@@ -77,9 +78,10 @@ paymentsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		const user = c.get("user")!;
 		const { reference } = c.req.valid("param");
 		const { gateway } = c.req.valid("query");
-		const res = await verifyAndSettlePayment(reference, gateway);
+		const res = await verifyAndSettlePayment(reference, gateway, user.id);
 		return c.json(res);
 	},
 );
@@ -100,7 +102,7 @@ paymentsRouter.openapi(
 	}),
 	async (c) => {
 		const rawBody = await c.req.text();
-		const signature = c.req.header("x-paystack-signature") || "";
+		const signature = c.req.header("x-paystack-signature");
 		await processPaystackWebhook(rawBody, signature);
 		return c.json({ status: "success" });
 	},
@@ -275,6 +277,12 @@ paymentsRouter.openapi(
 						reference: booking.reference,
 						amountCents: txn.amountCents,
 						issuedBy: "Reconciliation",
+						paid: {
+							amountCents: txn.amountCents,
+							method: "Card Payment",
+							gateway: "paystack",
+							reference,
+						},
 					});
 					invoiceId = invoice.id;
 				}
@@ -341,6 +349,7 @@ paymentsRouter.openapi(
 		path: "/send-receipt",
 		tags: ["Payments"],
 		summary: "Send official payment receipt email to client",
+		middleware: [requireAuth, requireModule("payments")] as const,
 		request: {
 			body: {
 				content: {
@@ -375,11 +384,30 @@ paymentsRouter.openapi(
 				},
 				description: "Receipt email delivery status",
 			},
+			502: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							code: z.string(),
+							message: z.string(),
+						}),
+					},
+				},
+				description: "Receipt email could not be delivered",
+			},
 		},
 	}),
 	async (c) => {
 		const body = c.req.valid("json");
-		await sendPaymentReceiptEmail(body);
+		try {
+			await sendPaymentReceiptEmail(body);
+		} catch (err) {
+			throw new HttpError(
+				502,
+				"RECEIPT_EMAIL_FAILED",
+				err instanceof Error ? err.message : "Failed to send receipt email",
+			);
+		}
 		return c.json({ sent: true, message: `Official receipt sent to ${body.recipientEmail}` }, 200);
 	},
 );

@@ -368,8 +368,16 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		}
 	}
 
+	// Applications with a pending handoff are already surfaced as handoff tasks
+	// (with "Assign" + "Keep previous handler"). Suppress the duplicate
+	// `a-assign` task so the manager doesn't see two rows for the same case and
+	// accidentally click the one that lacks the "Keep" button.
+	const handoffAppIds = new Set(
+		handoffs.filter((h) => h.status === "pending" && h.applicationId).map((h) => h.applicationId),
+	);
+
 	for (const a of applications) {
-		if (!a.assignedStaff) {
+		if (!a.assignedStaff && !handoffAppIds.has(a.id)) {
 			q.push({
 				id: `a-assign-${a.id}`,
 				category: "needs_assignment",

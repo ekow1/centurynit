@@ -950,6 +950,17 @@ export async function completeConsultationAssessment(input: {
 		.where(eq(consultations.id, row.id))
 		.returning();
 
+	// Mark the booking as COMPLETED so the portal appointment card updates —
+	// the portal reads the booking status, not the consultation status, so
+	// without this the appointment stays "Confirmed" even after the assessment
+	// is done.
+	if (row.bookingId) {
+		await db
+			.update(bookings)
+			.set({ status: "COMPLETED", updatedAt: new Date() })
+			.where(eq(bookings.id, row.bookingId));
+	}
+
 	// End the assignment history row — the consultation is closed.
 	const { endAssignment: endConsultAssignmentComplete } = await import("./caseAssignments.js");
 	await endConsultAssignmentComplete({
@@ -2138,6 +2149,25 @@ export async function setApplicationStage(
 			body: `Your application has advanced to: ${stage}.`,
 			link: "/portal/tracking",
 		}).catch(() => {});
+	}
+
+	// Email: queue a stage-advance notification so the client is informed even
+	// if they aren't logged into the portal. Previously only an in-app notify
+	// fired, so clients who never opened the portal never saw the update.
+	if (applicant?.email && row.appNumber) {
+		const stageLabel = JOURNEY_STAGE_LABELS?.[stage] ?? stage.replace(/_/g, " ");
+		try {
+			await queueEmails([
+				mail.stageAdvancedForClient({
+					clientName: applicant.name ?? "Client",
+					clientEmail: applicant.email,
+					stageLabel,
+					appNumber: row.appNumber,
+				}),
+			]);
+		} catch (err) {
+			console.error(`[cases] failed to queue stage-advance email for ${row.appNumber}:`, err);
+		}
 	}
 
 	// Leaving a stage the case was in concludes that stage's assignment.

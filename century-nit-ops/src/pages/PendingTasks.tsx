@@ -107,7 +107,9 @@ export function AssignTaskDialog({
 							<option value="">Select staff…</option>
 							{assigneeOptions.map((a) => (
 								<option key={a.email} value={a.email}>
-									{a.name} {a.branch ? `(${a.branch})` : ""}
+									{a.name}
+									{a.role ? ` — ${a.role}` : ""}
+									{a.branch ? ` · ${a.branch}` : ""}
 								</option>
 							))}
 						</select>
@@ -127,7 +129,7 @@ export function AssignTaskDialog({
 				)}
 
 				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-					{task.kind === "handoff" && onKeepHandler && task.record?.fromOpsUserName && (
+					{task.kind === "handoff" && onKeepHandler && (
 						<button
 							type="button"
 							className="btn btn--ghost btn--sm"
@@ -143,7 +145,11 @@ export function AssignTaskDialog({
 									});
 							}}
 						>
-							{assigning ? "Resolving…" : `Keep ${task.record.fromOpsUserName}`}
+							{assigning
+								? "Resolving…"
+								: task.record?.fromOpsUserName
+									? `Keep ${task.record.fromOpsUserName}`
+									: "Keep previous handler"}
 						</button>
 					)}
 					<button

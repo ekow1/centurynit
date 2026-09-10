@@ -680,6 +680,7 @@ export const invoicePayments = pgTable(
 	},
 	(t) => ({
 		byInvoice: index("invoice_payments_invoice_idx").on(t.invoiceId, t.at),
+		referenceUnique: uniqueIndex("invoice_payments_reference_key").on(t.reference),
 	}),
 );
 

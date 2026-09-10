@@ -470,7 +470,9 @@ function PreviewPane({
 							<option value="">Select staff…</option>
 							{eligibleAssignees.map((a) => (
 								<option key={a.opsUserId || a.email} value={a.opsUserId || a.email}>
-									{a.name} {a.branch ? `(${a.branch})` : ""}
+									{a.name}
+									{a.role ? ` — ${a.role}` : ""}
+									{a.branch ? ` · ${a.branch}` : ""}
 								</option>
 							))}
 						</select>
@@ -516,7 +518,9 @@ function PreviewPane({
 							<option value="">Select staff…</option>
 							{eligibleAssignees.map((a) => (
 								<option key={a.email} value={a.email}>
-									{a.name} {a.branch ? `(${a.branch})` : ""}
+									{a.name}
+									{a.role ? ` — ${a.role}` : ""}
+									{a.branch ? ` · ${a.branch}` : ""}
 								</option>
 							))}
 						</select>

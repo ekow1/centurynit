@@ -538,3 +538,28 @@ export function documentReviewedForClient(ctx: {
 		template: "Document reviewed",
 	};
 }
+
+/** Application advanced to the next journey stage — sent to the client. */
+export function stageAdvancedForClient(ctx: {
+	clientName: string;
+	clientEmail: string;
+	stageLabel: string;
+	appNumber: string;
+}): QueuedEmail {
+	const to = ctx.clientEmail;
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`Your application <strong>${ctx.appNumber}</strong> has advanced to the next stage: <strong>${ctx.stageLabel}</strong>.`,
+		`Log in to your portal to view the latest progress and any actions required from you.`,
+	];
+	const { html, text } = formatEmail("Your case has moved to the next stage", lines, null, ctx.appNumber);
+	return {
+		to,
+		subject: `Case Update · ${ctx.appNumber} → ${ctx.stageLabel}`,
+		html,
+		text,
+		idempotencyKey: `notify:stage_advanced:${ctx.appNumber}:${ctx.stageLabel}`,
+		template: "Stage advanced",
+		reference: ctx.appNumber,
+	};
+}

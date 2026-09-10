@@ -1,5 +1,12 @@
 import { sendEmail } from "../lib/resend.js";
 
+export interface ReceiptLineItem {
+	label: string;
+	detail?: string | null;
+	amountUsd: number;
+	amountGhs: number;
+}
+
 export interface ReceiptEmailData {
 	recipientEmail: string;
 	recipientName: string;
@@ -12,6 +19,9 @@ export interface ReceiptEmailData {
 	paymentChannel: string;
 	reference: string;
 	description?: string;
+	/** Real invoice line items — when provided, rendered instead of the
+	 * hardcoded single-row fallback. */
+	lineItems?: ReceiptLineItem[];
 }
 
 export function formatGhs(amount: number): string {
@@ -26,6 +36,41 @@ export function generateReceiptHtml(data: ReceiptEmailData): string {
 	const ghsStr = formatGhs(data.amountGhs);
 	const usdStr = data.amountUsd != null ? formatUsd(data.amountUsd) : "";
 	const desc = data.description || `Settlement for Invoice ${data.invoiceNumber}`;
+
+	// Build the line-items body from real invoice lines when available, so the
+	// receipt shows what was actually paid for (visa fee, travel ticket, etc.)
+	// instead of a hardcoded "Consultation, processing & admission fees" row.
+	const lineItemsHtml =
+		data.lineItems && data.lineItems.length > 0
+			? data.lineItems
+					.map(
+						(item) => `
+						<tr style="border-bottom: 1px solid #e4e4e7;">
+							<td style="padding: 14px 8px; vertical-align: top;">
+								<strong style="color: #18181b;">${item.label}</strong>
+								${item.detail ? `<div style="font-size: 11px; color: #71717a; margin-top: 2px;">${item.detail}</div>` : ""}
+							</td>
+							<td style="padding: 14px 8px; text-align: right; font-family: monospace; vertical-align: top;">
+								GHS / USD
+							</td>
+							<td style="padding: 14px 8px; text-align: right; font-weight: 700; font-family: monospace; vertical-align: top; color: #18181b;">
+								${formatGhs(item.amountGhs)}
+							</td>
+						</tr>`,
+					)
+					.join("")
+			: `
+					<tr style="border-bottom: 1px solid #e4e4e7;">
+						<td style="padding: 14px 8px; vertical-align: top;">
+							<strong style="color: #18181b;">${desc}</strong>
+						</td>
+						<td style="padding: 14px 8px; text-align: right; font-family: monospace; vertical-align: top;">
+							GHS / USD
+						</td>
+						<td style="padding: 14px 8px; text-align: right; font-weight: 700; font-family: monospace; vertical-align: top; color: #18181b;">
+							${ghsStr}
+						</td>
+					</tr>`;
 
 	return `<!DOCTYPE html>
 <html>
@@ -116,18 +161,7 @@ export function generateReceiptHtml(data: ReceiptEmailData): string {
 						</tr>
 					</thead>
 					<tbody>
-						<tr style="border-bottom: 1px solid #e4e4e7;">
-							<td style="padding: 14px 8px; vertical-align: top;">
-								<strong style="color: #18181b;">${desc}</strong>
-								<div style="font-size: 11px; color: #71717a; margin-top: 2px;">Consultation, processing & admission fees</div>
-							</td>
-							<td style="padding: 14px 8px; text-align: right; font-family: monospace; vertical-align: top;">
-								GHS / USD
-							</td>
-							<td style="padding: 14px 8px; text-align: right; font-weight: 700; font-family: monospace; vertical-align: top; color: #18181b;">
-								${ghsStr}
-							</td>
-						</tr>
+						${lineItemsHtml}
 					</tbody>
 					<tfoot>
 						<tr>
@@ -204,5 +238,8 @@ export async function sendPaymentReceiptEmail(data: ReceiptEmailData): Promise<v
 		console.log(`[receipt] Sent official branded receipt to ${data.recipientEmail} for invoice ${data.invoiceNumber}`);
 	} catch (err) {
 		console.error(`[receipt] Failed to send receipt email to ${data.recipientEmail}:`, err);
+		// Surface the failure so callers (and the API route) can tell the user
+		// the receipt was NOT delivered instead of reporting a false success.
+		throw err;
 	}
 }

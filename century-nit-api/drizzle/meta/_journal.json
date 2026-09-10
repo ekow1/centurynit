@@ -456,6 +456,13 @@
       "when": 1789000000000,
       "tag": "0066_travel_handler_assignment",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789006953621,
+      "tag": "0067_nice_shocker",
+      "breakpoints": true
     }
   ]
 }

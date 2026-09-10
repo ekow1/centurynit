@@ -264,7 +264,13 @@ export function useCasesApi() {
 			setAssignees(
 				rawStaff
 					.filter((s) => s.active)
-					.map((s) => ({ name: s.name, email: s.email, branch: s.branch ?? "", opsUserId: s.id })),
+					.map((s) => ({
+						name: s.name,
+						email: s.email,
+						branch: s.branch ?? "",
+						role: s.role,
+						opsUserId: s.id,
+					})),
 			);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not load cases");

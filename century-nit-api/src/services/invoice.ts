@@ -349,13 +349,45 @@ export async function createConsultationInvoice(input: {
 	reference: string;
 	amountCents: number;
 	issuedBy?: string;
+	/** A verified gateway transaction (the consultation was actually paid). */
+	paid?: {
+		amountCents: number;
+		method: string;
+		gateway: string;
+		reference: string;
+	};
 }): Promise<InvoiceRow> {
 	const [existing] = await db
 		.select()
 		.from(invoices)
 		.where(and(eq(invoices.type, "consultation"), ilike(invoices.note, `%${input.reference}%`)))
 		.limit(1);
-	if (existing) return existing;
+	// If the invoice already exists (e.g. POST /bookings created it as "issued"
+	// before payment) and we now have a verified gateway transaction, upgrade it
+	// to "paid" — insert the payment row and flip the status. Without this, the
+	// invoice stays "issued" forever even though Paystack confirmed the charge.
+	if (existing) {
+		if (input.paid && existing.status !== "paid") {
+			await db.transaction(async (tx) => {
+				const txDb = tx as unknown as typeof db;
+				await tx.insert(invoicePayments).values({
+					invoiceId: existing.id,
+					amountCents: input.paid!.amountCents,
+					method: input.paid!.method,
+					gateway: input.paid!.gateway,
+					reference: input.paid!.reference,
+					recordedBy: null,
+					recordedByName: input.issuedBy ?? "System",
+				});
+				await tx
+					.update(invoices)
+					.set({ status: "paid", updatedAt: new Date() })
+					.where(eq(invoices.id, existing.id));
+				await audit(existing.id, "paid", input.issuedBy ?? "System", "Consultation fee paid via verified gateway transaction", txDb);
+			});
+		}
+		return existing;
+	}
 
 	const row = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
@@ -370,7 +402,7 @@ export async function createConsultationInvoice(input: {
 				type: "consultation",
 				subtotalCents: input.amountCents,
 				note: `Consultation Booking ${input.reference}`,
-				status: "paid",
+				status: input.paid ? "paid" : "issued",
 				issuedBy: "system",
 				issuedByName: input.issuedBy ?? "System",
 			})
@@ -386,17 +418,20 @@ export async function createConsultationInvoice(input: {
 			},
 		]);
 
-		await tx.insert(invoicePayments).values({
-			invoiceId: created.id,
-			amountCents: input.amountCents,
-			method: "Card Payment",
-			gateway: "Paystack",
-			reference: `PAY-${input.reference}`,
-			recordedBy: "system",
-			recordedByName: input.issuedBy ?? "System",
-		});
-
-		await audit(created.id, "paid", input.issuedBy ?? "System", "Consultation fee paid upon booking", txDb);
+		if (input.paid) {
+			await tx.insert(invoicePayments).values({
+				invoiceId: created.id,
+				amountCents: input.paid.amountCents,
+				method: input.paid.method,
+				gateway: input.paid.gateway,
+				reference: input.paid.reference,
+				recordedBy: null,
+				recordedByName: input.issuedBy ?? "System",
+			});
+			await audit(created.id, "paid", input.issuedBy ?? "System", "Consultation fee paid via verified gateway transaction", txDb);
+		} else {
+			await audit(created.id, "issued", input.issuedBy ?? "System", "Consultation invoice issued upon booking", txDb);
+		}
 		return created;
 	});
 

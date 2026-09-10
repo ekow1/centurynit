@@ -347,6 +347,12 @@ bookingsRouter.openapi(
 					reference: booking.reference,
 					amountCents: txn.amountCents,
 					issuedBy: "System",
+					paid: {
+						amountCents: txn.amountCents,
+						method: "Card Payment",
+						gateway: "paystack",
+						reference,
+					},
 				});
 
 				// Record the Paystack transaction in the canonical payment ledger

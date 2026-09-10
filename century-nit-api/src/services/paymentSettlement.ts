@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { invoicePayments, paymentTransactions, applicants } from "../db/schema.js";
+import { invoicePayments, invoiceLines, paymentTransactions, applicants } from "../db/schema.js";
 import { getSetting } from "./settings.js";
 import { sendPaymentReceiptEmail } from "./receiptEmail.js";
 import { getInvoice, recordPayment } from "./invoice.js";
@@ -76,38 +76,57 @@ async function sendReceipt(input: {
 	const { invoice, payment } = input;
 	if (!invoice.applicantEmail) return;
 
-	try {
-		const [applicant] = await db
-			.select({ phone: applicants.phone })
-			.from(applicants)
-			.where(eq(applicants.email, invoice.applicantEmail))
-			.limit(1);
+	const [applicant] = await db
+		.select({ phone: applicants.phone })
+		.from(applicants)
+		.where(eq(applicants.email, invoice.applicantEmail))
+		.limit(1);
 
-		const rate = await getExchangeRate();
-		// amountCents is always in the invoice's currency (USD cents). The
-		// gateway may have charged in GHS, but the webhook converts to USD
-		// cents before calling settleInvoicePayment (see routes/webhooks.ts),
-		// so the receipt must treat amountCents as USD and show GHS as the
-		// equivalent — never the other way around.
-		const amountUsd = payment.amountCents / 100;
-		const amountGhs = amountUsd * rate;
+	// Load the actual invoice line items so the receipt shows what was paid for
+	// (visa fee, travel ticket, consultation, etc.) instead of a hardcoded
+	// "Consultation, processing & admission fees" row.
+	const lines = await db
+		.select()
+		.from(invoiceLines)
+		.where(eq(invoiceLines.invoiceId, invoice.id))
+		.orderBy(invoiceLines.position);
 
-		await sendPaymentReceiptEmail({
-			recipientEmail: invoice.applicantEmail,
-			recipientName: invoice.applicantName || "Valued Client",
-			recipientPhone: applicant?.phone ?? null,
-			receiptNumber: `REC-${payment.reference ?? Date.now()}`,
-			invoiceNumber: invoice.invoiceNumber,
-			amountGhs,
-			amountUsd,
-			paymentDate: new Date().toLocaleDateString("en-US"),
-			paymentChannel: payment.method,
-			reference: payment.reference ?? "",
-			description: `Settlement for Invoice ${invoice.invoiceNumber}`,
-		});
-	} catch (err) {
-		console.error("[paymentSettlement] Failed to send receipt:", err);
-	}
+	const rate = await getExchangeRate();
+	// amountCents is always in the invoice's currency (USD cents). The
+	// gateway may have charged in GHS, but the webhook converts to USD
+	// cents before calling settleInvoicePayment (see routes/webhooks.ts),
+	// so the receipt must treat amountCents as USD and show GHS as the
+	// equivalent — never the other way around.
+	const amountUsd = payment.amountCents / 100;
+	const amountGhs = amountUsd * rate;
+
+	const lineItems =
+		lines.length > 0
+			? lines.map((l) => ({
+					label: l.label,
+					detail: l.detail ?? null,
+					amountUsd: l.amountCents / 100,
+					amountGhs: (l.amountCents / 100) * rate,
+				}))
+			: undefined;
+
+	// Don't swallow the error — let it propagate so the caller (and the API
+	// route) can tell the user the receipt was NOT delivered instead of
+	// reporting a false success.
+	await sendPaymentReceiptEmail({
+		recipientEmail: invoice.applicantEmail,
+		recipientName: invoice.applicantName || "Valued Client",
+		recipientPhone: applicant?.phone ?? null,
+		receiptNumber: `REC-${payment.reference ?? Date.now()}`,
+		invoiceNumber: invoice.invoiceNumber,
+		amountGhs,
+		amountUsd,
+		paymentDate: new Date().toLocaleDateString("en-US"),
+		paymentChannel: payment.method,
+		reference: payment.reference ?? "",
+		description: `Settlement for Invoice ${invoice.invoiceNumber}`,
+		lineItems,
+	});
 }
 
 export async function postPaymentSettlement(input: {
@@ -143,7 +162,18 @@ export async function postPaymentSettlement(input: {
 	}
 
 	if (options.sendReceipt) {
-		await sendReceipt({ invoice: input.invoice, payment: input.payment });
+		// The payment is already recorded at this point — a receipt failure
+		// must not roll it back. But log it loudly so ops can see that the
+		// client did NOT receive their receipt (the previous code swallowed
+		// this silently and reported false success).
+		try {
+			await sendReceipt({ invoice: input.invoice, payment: input.payment });
+		} catch (err) {
+			console.error(
+				`[paymentSettlement] RECEIPT NOT DELIVERED for invoice ${input.invoice.invoiceNumber} (ref ${input.payment.reference ?? "—"}):`,
+				err,
+			);
+		}
 	}
 }
 

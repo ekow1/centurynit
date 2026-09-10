@@ -12,7 +12,7 @@
  *     because their filenames change on every build.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `century-nit-${VERSION}`;
 const PRECACHE = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
@@ -74,8 +74,15 @@ self.addEventListener("fetch", (event) => {
 					}
 					return response;
 				})
-				// Offline: fall back to this document, then to the app shell.
-				.catch(() => caches.match(request).then((cached) => cached || caches.match("/"))),
+				// Offline: fall back to this document, then to the app shell,
+				// then to a synthetic Response so respondWith never gets
+				// undefined (which throws "Failed to convert value to 'Response'").
+				.catch(() =>
+					caches
+						.match(request)
+						.then((cached) => cached || caches.match("/"))
+						.then((cached) => cached || new Response("Offline", { status: 503, statusText: "Offline" })),
+				),
 		);
 		return;
 	}

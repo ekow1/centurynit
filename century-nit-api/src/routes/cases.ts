@@ -2561,10 +2561,10 @@ meRouter.openapi(
 				portalStage = baseIdx >= derivedIdx ? base : derivedPortalStage;
 				if (portalStage === base) {
 					if (coarseStage === "document_verification") {
-						if (hasPackage && hasHandlerAssigned && !hasSelection) portalStage = "school_select";
-						else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) portalStage = "awaiting_handler";
+						if (isEligible && !hasProceeded) portalStage = "proceed";
 						else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
-						else if (isEligible && !hasProceeded) portalStage = "proceed";
+						else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) portalStage = "awaiting_handler";
+						else if (hasPackage && hasHandlerAssigned && !hasSelection) portalStage = "school_select";
 						else if (!isEligible && hasConsultation) portalStage = "eligibility";
 						else if (!hasConsultation) portalStage = "consultation";
 					} else if (coarseStage === "school_submission") {

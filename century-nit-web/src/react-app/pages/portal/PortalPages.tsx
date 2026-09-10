@@ -2739,18 +2739,6 @@ function ApplicationHubInner() {
 		}
 	}
 
-	async function acceptProformaEstimate() {
-		if (!serverInvoice) return;
-		try {
-			await meApi.acceptInvoice(serverInvoice.id);
-			await fetchInvoice();
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Estimate could not be accepted. Please try again.",
-			);
-		}
-	}
-
 	function addSchool(e: FormEvent) {
 		e.preventDefault();
 		const d = destId || destinations[0]?.id || "uk";
@@ -3029,7 +3017,7 @@ function ApplicationHubInner() {
 					{schoolApplications.length > 0 ? (
 						<div className="row mt-4">
 							<Button type="button" onClick={handleLockSelection}>
-								Confirm school list & raise invoice
+								Confirm school list & submit to handler
 							</Button>
 						</div>
 					) : (
@@ -3045,8 +3033,6 @@ function ApplicationHubInner() {
 					invoice={effectiveInv}
 					title="Application invoice"
 					onPay={payInvoice}
-					paying={false}
-					onAccept={acceptProformaEstimate}
 					meta={
 						<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
 							<li>
@@ -3061,7 +3047,7 @@ function ApplicationHubInner() {
 					}
 				/>
 			) : (
-				<p className="mono muted mb-4">Confirm your school list to raise the invoice.</p>
+				<p className="mono muted mb-4">Confirm your school list to submit it to your handler for invoicing.</p>
 			)}
 
 

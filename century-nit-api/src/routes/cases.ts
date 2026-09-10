@@ -1454,10 +1454,12 @@ meRouter.openapi(
 		// applicant entered in the onboarding popup — `captureLeadFromUser`
 		// only runs on auth events and only fills missing fields, so without
 		// this the lead keeps the email-derived name and null phone forever.
+		const profile = (updated.profile as Record<string, string> | null) ?? {};
 		syncLeadFromApplicant({
 			email: updated.email ?? user.email,
 			name: updated.name,
 			phone: updated.phone ?? null,
+			referralSource: profile.referralSource ?? null,
 		}).catch(() => {});
 
 		return c.json(await serializeApplicant(updated));

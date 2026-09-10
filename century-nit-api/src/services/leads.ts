@@ -218,11 +218,16 @@ export async function captureLeadFromUser(
  * from the email prefix at signup. This helper overwrites name/phone on the
  * lead so the CRM reflects what the applicant actually entered in the
  * onboarding popup.
+ *
+ * If no lead exists yet (e.g. captureLeadFromUser failed or the user existed
+ * before that hook was wired), create one so the onboarding data is never
+ * lost.
  */
 export async function syncLeadFromApplicant(input: {
 	email: string;
 	name?: string | null;
 	phone?: string | null;
+	referralSource?: string | null;
 }): Promise<void> {
 	try {
 		if (!input.email) return;
@@ -231,7 +236,27 @@ export async function syncLeadFromApplicant(input: {
 		const existing = await db.query.leads.findFirst({
 			where: eq(leads.email, normalizedEmail),
 		});
-		if (!existing) return;
+
+		if (!existing) {
+			// Create the lead so the onboarding data is not lost. Use the
+			// referral source as the lead source if provided, otherwise fall
+			// back to "Account Registration".
+			const displayName =
+				input.name?.trim() ||
+				normalizedEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+				"New Client";
+			const source = input.referralSource?.trim() || "Account Registration";
+			await db.insert(leads).values({
+				name: displayName,
+				email: normalizedEmail,
+				phone: input.phone?.trim() || null,
+				source,
+				stage: "New Lead",
+				notes: `Captured from onboarding popup (${new Date().toLocaleDateString()}).`,
+			});
+			console.log(`[CRM] Created lead from onboarding for: ${normalizedEmail}`);
+			return;
+		}
 
 		const patch: Record<string, unknown> = { updatedAt: new Date() };
 		if (input.name && input.name.trim() && input.name.trim() !== existing.name) {
@@ -240,6 +265,12 @@ export async function syncLeadFromApplicant(input: {
 		if (input.phone !== undefined) {
 			const newPhone = input.phone?.trim() || null;
 			if (newPhone !== existing.phone) patch.phone = newPhone;
+		}
+		// Update the lead source with the referral source if one was provided
+		// and the existing source is the generic "Account Registration" or
+		// "Portal Sign-In" — don't overwrite a more specific source set by ops.
+		if (input.referralSource?.trim() && (existing.source === "Account Registration" || existing.source === "Portal Sign-In")) {
+			patch.source = input.referralSource.trim();
 		}
 		if (Object.keys(patch).length > 1) {
 			await db.update(leads).set(patch).where(eq(leads.id, existing.id));

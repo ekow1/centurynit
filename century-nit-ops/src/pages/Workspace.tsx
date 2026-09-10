@@ -176,10 +176,10 @@ export function Workspace() {
 
 	const doAssign = useCallback(
 		async (task: PendingTask, to: Assignee, reason?: string) => {
-			if (task.kind === "consultation" && task.action === "assign") {
+			if (task.kind === "consultation") {
 				return assignConsultation(task.record.id, to);
 			}
-			if (task.kind === "application" && task.action === "assign") {
+			if (task.kind === "application") {
 				return assignApplication(task.record.id, to);
 			}
 			if (task.kind === "handoff" && task.action === "resolve") {

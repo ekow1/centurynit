@@ -199,9 +199,9 @@ export function canAdvanceToStage(
 export const PORTAL_STAGE_LABELS: Record<string, string> = {
 	new: "New",
 	consultation: "Stage I · Consultation first",
-	eligibility: "Awaiting eligibility",
+	eligibility: "Your assessment & recommendation",
 	proceed: "Start your application",
-	school_package: "Choose school application package",
+	school_package: "Choose your package",
 	awaiting_handler: "Awaiting handler assignment",
 	school_select: "Select schools & programmes",
 	awaiting_invoice: "Awaiting application invoice",

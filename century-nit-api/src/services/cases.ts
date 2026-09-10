@@ -1207,13 +1207,9 @@ export async function acceptProceedForApplication(input: {
 			);
 		}
 
-		const draftRows = await tx
-			.select()
-			.from(schoolApplications)
-			.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Preparing Application")));
-		if (draftRows.length === 0) {
-			throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Select at least one university before confirming.");
-		}
+		// School selection now happens *after* consent, so do not require draft
+		// schools before the applicant can confirm they want to proceed.
+		const schoolCount = 0;
 
 		const txDb = tx as unknown as typeof db;
 		await txDb
@@ -1244,7 +1240,7 @@ export async function acceptProceedForApplication(input: {
 			authorOpsUserId: actor.opsUserId ?? null,
 		});
 
-		return { quotation: await quotationForApplication(applicationId), schoolCount: draftRows.length };
+		return { quotation: await quotationForApplication(applicationId), schoolCount };
 	});
 }
 

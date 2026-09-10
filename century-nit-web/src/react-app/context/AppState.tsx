@@ -721,6 +721,13 @@ export function getCurrentProcessStage(
 ): ProcessStageId {
 	const heuristic = computeHeuristicProcessStage(app, booking, schools);
 
+	// Consent is the first gate of the application stage. The server may say
+	// the coarse stage is document_verification, but the applicant must see
+	// the consent screen until they explicitly accept it.
+	if (app.proceedStatus !== "accepted") {
+		return "proceed";
+	}
+
 	const coarseFromServer = app.journeyStage
 		? (JOURNEY_STAGE_TO_PORTAL[app.journeyStage] as ProcessStageId)
 		: null;

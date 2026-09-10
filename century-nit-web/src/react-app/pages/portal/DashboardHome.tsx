@@ -51,8 +51,8 @@ function currentStageCta(
 const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	new: { title: "Start your journey", desc: "Book your first consultation to begin your application with Century NIT." },
 	consultation: { title: "Start your consultation", desc: "Book the first meeting, fill your assessment, and pay the consultation fee." },
-	eligibility: { title: "Eligibility check", desc: "Our handler reviews your consultation and assessment." },
-	proceed: { title: "Choose your school package", desc: "Select your funding pathway and degree level to shape your applications." },
+	eligibility: { title: "Your recommendation", desc: "Review the assessment outcome and the package your consultant recommends." },
+	proceed: { title: "Start your application", desc: "Confirm you want to continue so we can assign a handler and begin processing." },
 	school_package: { title: "Choose your school package", desc: "Pick a funding track and degree level to shape school targeting." },
 	awaiting_handler: { title: "Awaiting handler assignment", desc: "Your 10% deposit has been received. A handler is being assigned to your case." },
 	school_select: { title: "Select schools & programmes", desc: "Choose where to apply, then pay the application invoice." },
@@ -130,7 +130,8 @@ export function DashboardHome() {
 
 			{/* Application consent gate — the applicant must say "continue"
 				before the case is sent to Ops for handler assignment. */}
-			{application.applicationId &&
+			{current === "proceed" &&
+				application.applicationId &&
 				(application.applicationConsent?.decision ?? null) !== "continue" &&
 				(application.applicationConsent?.decision ?? null) !== "opt_out" && (
 					<StageConsentCard
@@ -146,7 +147,7 @@ export function DashboardHome() {
 				)}
 
 			{/* Action required OR You are here - unified block to prevent duplicate competing banners */}
-			{pendingAction ? (
+			{current !== "proceed" && (pendingAction ? (
 				<div className="action-now mt-5">
 					<div>
 						<p className="eyebrow">Action required</p>
@@ -173,56 +174,58 @@ export function DashboardHome() {
 						{cta.label}
 					</Button>
 				</div>
-			)}
+			))}
 
 			{/* Snapshot - stat cells double as shortcuts; the cell belonging to a
 			    pending action is highlighted so the way to resolve it is one click. */}
-			<div className="stat-band mt-5">
-				<Link
-					to="/portal/consultation"
-					className={`stat-cell stat-cell--link${hotCell === "consultation" ? " stat-cell--cta" : ""}`}
-				>
-					<p className="stat-cell__label">
-						{hotCell === "consultation" ? "Action required" : "Consultation"}
-					</p>
-					<p className="stat-cell__value stat-cell__value--sm">
-						{hotCell === "consultation" ? "Confirm →" : consultationStatus}
-					</p>
-				</Link>
-				<Link
-					to="/portal/financial"
-					className={`stat-cell stat-cell--link${hotCell === "app_invoice" ? " stat-cell--cta" : ""}`}
-				>
-					<p className="stat-cell__label">
-						{hotCell === "app_invoice" ? "Action required" : "Application invoice"}
-					</p>
-					<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
-						{hotCell === "app_invoice" ? "Pay now →" : appInvoice.status}
-					</p>
-					<p className="stat-cell__sub">
-						{schoolApplications.length} school{schoolApplications.length === 1 ? "" : "s"}
-						{selectionConfirmed ? " · selection locked" : ""}
-					</p>
-				</Link>
-				<Link
-					to="/portal/visa"
-					className={`stat-cell stat-cell--link${hotCell === "visa_invoice" ? " stat-cell--cta" : ""}`}
-				>
-					<p className="stat-cell__label">
-						{hotCell === "visa_invoice" ? "Action required" : "Visa invoice"}
-					</p>
-					<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
-						{hotCell === "visa_invoice" ? "Pay now →" : visaInvoice.status}
-					</p>
-					<p className="stat-cell__sub">
-						{application.paymentPlanId ? (
-							<>Plan · {application.paymentPlanId}</>
-						) : (
-							"No payment plan"
-						)}
-					</p>
-				</Link>
-			</div>
+			{current !== "proceed" && (
+				<div className="stat-band mt-5">
+					<Link
+						to="/portal/consultation"
+						className={`stat-cell stat-cell--link${hotCell === "consultation" ? " stat-cell--cta" : ""}`}
+					>
+						<p className="stat-cell__label">
+							{hotCell === "consultation" ? "Action required" : "Consultation"}
+						</p>
+						<p className="stat-cell__value stat-cell__value--sm">
+							{hotCell === "consultation" ? "Confirm →" : consultationStatus}
+						</p>
+					</Link>
+					<Link
+						to="/portal/financial"
+						className={`stat-cell stat-cell--link${hotCell === "app_invoice" ? " stat-cell--cta" : ""}`}
+					>
+						<p className="stat-cell__label">
+							{hotCell === "app_invoice" ? "Action required" : "Application invoice"}
+						</p>
+						<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
+							{hotCell === "app_invoice" ? "Pay now →" : appInvoice.status}
+						</p>
+						<p className="stat-cell__sub">
+							{schoolApplications.length} school{schoolApplications.length === 1 ? "" : "s"}
+							{selectionConfirmed ? " · selection locked" : ""}
+						</p>
+					</Link>
+					<Link
+						to="/portal/visa"
+						className={`stat-cell stat-cell--link${hotCell === "visa_invoice" ? " stat-cell--cta" : ""}`}
+					>
+						<p className="stat-cell__label">
+							{hotCell === "visa_invoice" ? "Action required" : "Visa invoice"}
+						</p>
+						<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
+							{hotCell === "visa_invoice" ? "Pay now →" : visaInvoice.status}
+						</p>
+						<p className="stat-cell__sub">
+							{application.paymentPlanId ? (
+								<>Plan · {application.paymentPlanId}</>
+							) : (
+								"No payment plan"
+							)}
+						</p>
+					</Link>
+				</div>
+			)}
 
 			{/* Return to marketing website link */}
 			<div className="row mt-5">

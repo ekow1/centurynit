@@ -2613,6 +2613,12 @@ function ApplicationHubInner() {
 	if (!hasPkg) {
 		return <Navigate to="/portal/package" replace />;
 	}
+	if (!depositPaid) {
+		return <Navigate to="/portal/package" replace />;
+	}
+	if (application.pendingHandoff) {
+		return <Navigate to="/portal/awaiting-handler" replace />;
+	}
 
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 

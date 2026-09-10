@@ -1796,8 +1796,8 @@ export const PROCESS_STAGES: {
 	{
 		id: "eligibility",
 		index: 2,
-		label: "Eligibility",
-		detail: "Handler outcome after consultation",
+		label: "Your assessment",
+		detail: "Consultant recommendation after consultation",
 		owner: "counselor",
 		path: "/portal/consultation",
 		band: "consultation",

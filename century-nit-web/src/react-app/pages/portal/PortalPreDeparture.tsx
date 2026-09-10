@@ -138,8 +138,11 @@ function TravelAssistanceInner() {
 	const status = ta?.status ?? "decision_pending";
 	const showDecision =
 		!ta || status === "decision_pending" || status === "on_hold" || status === "declined";
-	const showReview = status === "review";
-	const showInvoice = status === "invoiced" || status === "ticket_paid";
+	// If a travel invoice exists on the server, always surface it — even if
+	// the TA request status hasn't been updated to "invoiced" yet. The
+	// server invoice is the source of truth for payment.
+	const showReview = status === "review" && !trip;
+	const showInvoice = status === "invoiced" || status === "ticket_paid" || status === "booked" || Boolean(trip);
 	const showBooked = status === "booked";
 	const showCleared = status === "cleared";
 

@@ -260,6 +260,7 @@ export async function paymentWithReferenceExists(
 export async function createInvoice(input: {
 	data: CreateInvoice;
 	actor: Actor;
+	tx?: typeof db;
 }): Promise<InvoiceRow> {
 	const { data, actor } = input;
 	const subtotalCents = data.lines.reduce((n, l) => n + l.amountCents, 0);
@@ -267,11 +268,10 @@ export async function createInvoice(input: {
 		throw new HttpError(400, "VALIDATION_ERROR", "Invoice total must be greater than zero");
 	}
 
-	const row = await db.transaction(async (tx) => {
-		const txDb = tx as unknown as typeof db;
+	const doCreate = async (txDb: typeof db) => {
 		const invoiceNumber = await nextInvoiceNumber(txDb);
 		const status = data.status ?? "issued";
-		const [created] = await tx
+		const [created] = await txDb
 			.insert(invoices)
 			.values({
 				invoiceNumber,
@@ -283,13 +283,13 @@ export async function createInvoice(input: {
 				subtotalCents,
 				note: data.note ?? null,
 				status,
-issuedBy: actor.opsUserId ?? null,
+				issuedBy: actor.opsUserId ?? null,
 				issuedByName: actor.name,
 				dueAt: data.dueAt && data.dueAt.trim() ? new Date(data.dueAt) : null,
 			})
 			.returning();
 
-		await tx.insert(invoiceLines).values(
+		await txDb.insert(invoiceLines).values(
 			data.lines.map((l, position) => ({
 				invoiceId: created.id,
 				position,
@@ -303,7 +303,11 @@ issuedBy: actor.opsUserId ?? null,
 		const auditDetail = status === "proforma" ? `Estimate created by ${actor.name}` : `Issued by ${actor.name}`;
 		await audit(created.id, auditAction, actor.email, auditDetail, txDb);
 		return created;
-	});
+	};
+
+	const row = input.tx
+		? await doCreate(input.tx)
+		: await db.transaction(async (tx) => doCreate(tx as unknown as typeof db));
 
 	// Notify the client that an invoice is outstanding.
 	if (row.status === "issued" && row.applicantEmail) {

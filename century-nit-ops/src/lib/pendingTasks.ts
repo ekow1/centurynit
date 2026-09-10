@@ -158,7 +158,7 @@ export type BookingTask = {
 
 export type PendingTask = (BaseTask | BookingTask) & { isLive?: boolean };
 
-const VISA_STEP_LABELS: Record<string, string> = {
+export const VISA_STEP_LABELS: Record<string, string> = {
 	locked: "Awaiting payment",
 	awaiting_handler: "Awaiting handler assignment",
 	pending: "Case opened",

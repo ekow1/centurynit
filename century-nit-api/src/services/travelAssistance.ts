@@ -603,44 +603,57 @@ export async function raiseTicketInvoice(input: {
 		throw new HttpError(404, "APPLICANT_NOT_FOUND", "Applicant not found");
 	}
 
-	const invoice = await createInvoice({
-		data: {
-			applicantName: applicant.name,
-			applicantEmail: applicant.email ?? undefined,
-			clientUserId: applicant.userId ?? undefined,
-			applicationId: existing.applicationId,
-			type: "travel",
-			status: "issued",
-			lines: [
-				{
-					label: "Flight ticket",
-					detail: input.carrier
-						? `${input.carrier}${input.flightNumber ? ` · ${input.flightNumber}` : ""}`
-						: "Airline fare",
-					amountCents: ticketAmountCents,
-				},
-			],
-			note: input.notes?.trim() || undefined,
-		},
-		actor: input.actor,
+	await db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const created = await createInvoice({
+			data: {
+				applicantName: applicant.name,
+				applicantEmail: applicant.email ?? undefined,
+				clientUserId: applicant.userId ?? undefined,
+				applicationId: existing.applicationId,
+				type: "travel",
+				status: "issued",
+				lines: [
+					{
+						label: "Flight ticket",
+						detail: input.carrier
+							? `${input.carrier}${input.flightNumber ? ` · ${input.flightNumber}` : ""}`
+							: "Airline fare",
+						amountCents: ticketAmountCents,
+					},
+				],
+				note: input.notes?.trim() || undefined,
+			},
+			actor: input.actor,
+			tx: txDb,
+		});
+
+		await txDb
+			.update(travelAssistanceRequests)
+			.set({
+				invoiceId: created.id,
+				ticketAmountCents,
+				quote: {
+					carrier: input.carrier?.trim() || undefined,
+					flightNumber: input.flightNumber?.trim() || undefined,
+					notes: input.notes?.trim() || undefined,
+				} as TravelAssistanceQuote,
+				opsNote: input.notes?.trim() || null,
+				status: "invoiced",
+				updatedAt: new Date(),
+			})
+			.where(eq(travelAssistanceRequests.id, existing.id));
+
+		return created;
 	});
 
+	// Re-fetch the updated request inside a transaction isn't needed since
+	// we already know the values, but `serialize` needs the full row.
 	const [updated] = await db
-		.update(travelAssistanceRequests)
-		.set({
-			invoiceId: invoice.id,
-			ticketAmountCents,
-			quote: {
-				carrier: input.carrier?.trim() || undefined,
-				flightNumber: input.flightNumber?.trim() || undefined,
-				notes: input.notes?.trim() || undefined,
-			} as TravelAssistanceQuote,
-			opsNote: input.notes?.trim() || null,
-			status: "invoiced",
-			updatedAt: new Date(),
-		})
+		.select()
+		.from(travelAssistanceRequests)
 		.where(eq(travelAssistanceRequests.id, existing.id))
-		.returning();
+		.limit(1);
 
 	// Notify the applicant that their ticket invoice is ready to pay.
 	if (applicant.userId) {

@@ -12,6 +12,7 @@ import type {
 	Invoice,
 	Assignee,
 } from "century-nit-core/ops";
+import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
 import { bookingsApi } from "century-nit-core/api";
@@ -22,6 +23,7 @@ import {
 	buildPendingTasks,
 	taskActionLabel,
 	timeAgo,
+	VISA_STEP_LABELS,
 	type PendingTask,
 } from "../lib/pendingTasks";
 import { PendingTaskTable } from "./PendingTasks";

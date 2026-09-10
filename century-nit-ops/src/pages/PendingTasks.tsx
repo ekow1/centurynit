@@ -340,28 +340,15 @@ export function PendingTasks({
 		let cancelled = false;
 		void (async () => {
 			try {
-				const res = await apiFetch<{ leads: unknown[] }>(`${API_PREFIX}/leads`);
+				const res = await apiFetch<{ leads: (Lead & { targetCountry?: string; assignedStaffName?: string; updatedAt?: string; createdAt?: string })[] }>(`${API_PREFIX}/leads`);
 				if (cancelled) return;
-				const mapped = (res.leads || []).map(
-					(l) =>
-						({
-							...l,
-							country:
-								(l as { country?: string; targetCountry?: string }).country ??
-								(l as { targetCountry?: string }).targetCountry ??
-								"Ghana",
-							assignedTo:
-								(l as { assignedTo?: string; assignedStaffName?: string }).assignedTo ??
-								(l as { assignedStaffName?: string }).assignedStaffName ??
-								"Unassigned",
-							lastContactAt:
-								(l as { lastContactAt?: string; updatedAt?: string; createdAt?: string }).lastContactAt ??
-								(l as { updatedAt?: string }).updatedAt ??
-								(l as { createdAt?: string }).createdAt ??
-								new Date().toISOString(),
-							phone: (l as { phone?: string }).phone || "—",
-						}) as Lead,
-				);
+				const mapped = (res.leads || []).map((l) => ({
+					...l,
+					country: l.country || l.targetCountry || "Ghana",
+					assignedTo: l.assignedTo || l.assignedStaffName || "Unassigned",
+					lastContactAt: l.lastContactAt || l.updatedAt || l.createdAt || new Date().toISOString(),
+					phone: l.phone || "—",
+				}));
 				setLeads(mapped);
 			} catch {
 				if (!cancelled) setLeads([]);

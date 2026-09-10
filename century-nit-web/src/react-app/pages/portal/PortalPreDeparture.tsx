@@ -173,7 +173,7 @@ function TravelAssistanceInner() {
 					currentDecision={application.travelConsent?.decision ?? null}
 					title="Continue with travel assistance?"
 					lead="Your visa is sorted. Continue with travel assistance so we can assign a travel handler and help you book your flight."
-					continueDetail="A travel handler will be assigned to arrange your flight. They'll prepare a quote, raise the airline ticket invoice, and book your flight once you pay."
+					continueDetail="A travel handler will be assigned to arrange your flight. They'll raise the airline ticket invoice, and book your flight once you pay."
 					holdDetail="You can come back and continue with travel assistance whenever you're ready. Nothing is sent to our team until you continue."
 					optOutDetail="Travel assistance will be cancelled. You'll need to arrange your own flight. The application can still complete."
 					onDecided={() => syncFromServer()}

@@ -182,13 +182,13 @@ export function EnterpriseTravel() {
 				</span>
 			</div>
 
-			{/* Travel Assistance Quote Queue (quote-before-invoice flow) */}
+			{/* Travel Assistance Queue (direct-invoice flow) */}
 		<div className="card" style={{ marginBottom: "1rem", padding: "1rem" }}>
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
 				<div>
 					<p className="eyebrow">Travel Assistance Queue</p>
 					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-						Flight quotes awaiting preparation, approval, invoicing, or booking.
+						Travel requests awaiting handler assignment, invoicing, or booking.
 					</p>
 				</div>
 				<span className="portal-pill">{taQueue.length} requests</span>

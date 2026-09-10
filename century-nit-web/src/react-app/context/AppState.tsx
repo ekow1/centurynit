@@ -260,7 +260,7 @@ export type ApplicationData = {
 		reason: string | null;
 	} | null;
 	/**
-	 * Travel assistance request from the quote-before-invoice flow.
+	 * Travel assistance request from the direct-invoice flow.
 	 * `null` for legacy applications that have no request row yet.
 	 */
 	travelAssistance: TravelAssistanceRequest | null;
@@ -1187,7 +1187,7 @@ type AppStateContextValue = {
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
 	fees: FeeSchedule | null;
-	/** Travel assistance (quote-before-invoice flow) */
+	/** Travel assistance (direct-invoice flow) */
 	recordTravelDecision: (decision: "yes" | "hold" | "no") => Promise<void>;
 };
 
@@ -2346,7 +2346,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* server state fallback — keep local values */
 		}
 
-		/* ── Sync travel assistance request (quote-before-invoice flow) ──────── */
+		/* ── Sync travel assistance request (direct-invoice flow) ──────── */
 		// Only fetch if the applicant has an application — the endpoint 404s
 		// otherwise, which spams the console with noise on every 30s poll.
 		if (hasApplication) {

@@ -83,7 +83,7 @@ export function canAdvanceToStage(
 		paymentPlanId?: string | null;
 		proceedStatus?: string;
 		/**
-		 * Travel assistance request status from the quote-before-invoice flow.
+		 * Travel assistance request status from the direct-invoice flow.
 	 * When present, overrides the legacy travel signals for gating.
 		 */
 		travelAssistanceStatus?:
@@ -756,7 +756,7 @@ export const escalationConfigSchema = z.object({
 });
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
 
-/* ── Travel Assistance (quote-before-invoice flow) ─────────────────────── */
+/* ── Travel Assistance (direct-invoice flow) ─────────────────────────────── */
 
 export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
 export type TravelDecision = z.infer<typeof travelDecisionSchema>;

@@ -852,7 +852,7 @@ applicationsRouter.openapi(
 	},
 );
 
-/* ── Travel Assistance (Ops side, quote-before-invoice) ───────────────────── */
+/* ── Travel Assistance (Ops side, direct-invoice) ─────────────────────────── */
 
 applicationsRouter.openapi(
 	createRoute({
@@ -1813,7 +1813,7 @@ meRouter.openapi(
 	},
 );
 
-/* ── Travel Assistance (applicant self-service, quote-before-invoice) ─────── */
+/* ── Travel Assistance (applicant self-service, direct-invoice) ────────────── */
 
 meRouter.openapi(
 	createRoute({

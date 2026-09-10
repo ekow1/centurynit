@@ -1876,7 +1876,7 @@ export function canAdvanceTo(
 		travelInvoicePaid?: boolean;
 		preDepartureDone?: boolean;
 		/**
-		 * Travel assistance request status from the quote-before-invoice flow.
+		 * Travel assistance request status from the direct-invoice flow.
 	 * When present, this overrides the legacy `travelInvoicePaid` /
 		 * `travelClearance` / `preDepartureDone` signals for travel gating.
 		 *
@@ -1884,7 +1884,7 @@ export function canAdvanceTo(
 		 * - `on_hold` → applicant parked; does not block (opt-out unblocks).
 		 * - `invoiced` → ticket invoice raised; blocks `payment_execution`
 		 *   until paid (mirrors legacy `travelInvoicePaid`).
-		 * - `quote_prepared`/`quote_approved`/`review`/`decision_pending` →
+		 * - `quote_prepared`/`quote_approved` (legacy, removed flow)/`review`/`decision_pending` →
 		 *   travel not yet resolved; blocks `completed` but not `payment_execution`.
 		 */
 		travelAssistanceStatus?:

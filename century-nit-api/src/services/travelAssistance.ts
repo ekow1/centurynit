@@ -26,14 +26,13 @@ import { queueEmails } from "../worker/queues.js";
 import { env } from "../env.js";
 
 /**
- * Travel Assistance — quote-before-invoice flow.
+ * Travel Assistance — direct-invoice flow.
  *
  * The applicant picks yes/hold/no once visa & payment obligations are done.
- * Only "yes" leads to a quote → approval → ticket invoice → booking. The
+ * Only "yes" leads to handler assignment → ticket invoice → booking. The
  * service fee is already collected upfront as part of the package, so only
- * the airline fare is invoiced here, and only after the applicant approves
- * the quote — we never bill a client for a changing ticket price before they
- * have seen and accepted the itinerary.
+ * the airline fare is invoiced here, and only after a handler is assigned —
+ * we never bill a client for a ticket before someone owns the case.
  */
 
 export const TRAVEL_ERROR_CODES = {
@@ -41,7 +40,6 @@ export const TRAVEL_ERROR_CODES = {
 	APPLICATION_NOT_FOUND: "APPLICATION_NOT_FOUND",
 	FORBIDDEN: "FORBIDDEN",
 	NOT_ELIGIBLE: "TRAVEL_NOT_ELIGIBLE",
-	QUOTE_NOT_PREPARED: "QUOTE_NOT_PREPARED",
 	ALREADY_INVOICED: "ALREADY_INVOICED",
 	ALREADY_BOOKED: "ALREADY_BOOKED",
 	NOT_APPROVED: "QUOTE_NOT_APPROVED",
@@ -183,7 +181,7 @@ export async function listForOps(): Promise<TravelAssistanceRequest[]> {
 /**
  * Applicant records their decision. Creates a request if none exists.
  *
- * - yes  → status `review` (Ops prepares a quote)
+ * - yes  → status `review` (Ops assigns a handler, then raises the ticket invoice)
  * - hold → status `on_hold` (no invoice, no handler, resumable)
  * - no   → status `declined` (no invoice, unblocks journey completion)
  */
@@ -271,7 +269,7 @@ export async function recordDecision(input: {
 			title: "Travel assistance decision recorded",
 			body:
 				input.decision === "yes"
-					? "Your consultant will prepare a flight quote for your review."
+					? "Your request has been sent to our travel team. A handler will be assigned to raise your ticket invoice."
 					: input.decision === "hold"
 						? "Your travel assistance is on hold. You can resume anytime."
 						: "You've chosen to arrange your own flight. Safe travels!",

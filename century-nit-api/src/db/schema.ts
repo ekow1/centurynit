@@ -1060,11 +1060,10 @@ export const caseComments = pgTable(
 );
 
 /* ══════════════════════════════════════════════════════════════════════════
- * Travel Assistance Requests (quote-before-invoice flow)
+ * Travel Assistance Requests (direct-invoice flow)
  *
  * The applicant picks one of three paths after visa/payment obligations finish:
- *   yes  → Ops prepares a flight quote → applicant approves → ticket invoice
- *          is raised → booked
+ *   yes  → Ops assigns a handler → handler raises the ticket invoice → booked
  *   hold → parks at "decision pending"; resumable, no invoice
  *   no   → declined; no invoice, no blockage to journey completion
  *
@@ -1102,10 +1101,10 @@ export const travelAssistanceRequests = pgTable(
 		status: travelAssistanceStatusEnum("status").notNull().default("decision_pending"),
 		/** Flight option prepared by Ops: carrier, itinerary, fare breakdown, validity, notes. */
 		quote: jsonb("quote").$type<TravelAssistanceQuote | null>(),
-		/** Airline fare in cents — only set after Ops prepares a quote. */
+		/** Airline fare in cents — set by the handler when raising the ticket invoice. */
 		ticketAmountCents: integer("ticket_amount_cents"),
 		currency: varchar("currency", { length: 8 }).notNull().default("USD"),
-		/** The ticket invoice raised after the applicant approves the quote. */
+		/** The ticket invoice raised by the handler once the applicant opts in. */
 		invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
 		/** Ops handler assigned to work this request (set by a manager). */
 		assignedOpsUserId: uuid("assigned_ops_user_id").references(() => opsUsers.id, {

@@ -664,15 +664,18 @@ export function EnterpriseCases() {
 								if (!app) return null;
 								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
 								const depositPaid = app.depositPaid;
-								const hasHandler = Boolean(app.assignedStaff);
+								const pendingDocHandoff = handoffs.find(
+									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "document_verification",
+								);
+								const hasHandler = !pendingDocHandoff && Boolean(app.assignedStaff);
 								const invoiceIssued = appInvoice && appInvoice.status !== "proforma" && appInvoice.status !== "void";
 								const appFeePaid = app.appFeePaid;
 								const steps = [
 									{ label: "10% Deposit", done: depositPaid, pending: !depositPaid },
-									{ label: "Handler Assigned", done: hasHandler, pending: depositPaid && !hasHandler },
-									{ label: "Schools Selected", done: hasSchools, pending: hasHandler && !hasSchools },
-									{ label: "Invoice Issued", done: Boolean(invoiceIssued), pending: !invoiceIssued },
-									{ label: "App Fee Paid", done: Boolean(appFeePaid), pending: Boolean(invoiceIssued) && !appFeePaid },
+									{ label: "Handler Assigned", done: hasHandler, pending: depositPaid && pendingDocHandoff },
+									{ label: "Schools Selected", done: hasHandler && hasSchools, pending: hasHandler && !hasSchools },
+									{ label: "Invoice Issued", done: hasHandler && hasSchools && Boolean(invoiceIssued), pending: hasHandler && hasSchools && !invoiceIssued },
+									{ label: "App Fee Paid", done: hasHandler && hasSchools && Boolean(appFeePaid), pending: hasHandler && hasSchools && invoiceIssued && !appFeePaid },
 								];
 								return (
 									<div className="card" style={{ padding: "0.75rem 1rem" }}>
@@ -853,6 +856,13 @@ export function EnterpriseCases() {
 									comments={(liveSelected ?? selectedApp).comments ?? []}
 									requestedDocuments={(liveSelected ?? selectedApp).requestedDocuments ?? []}
 									canAssign={canAssignWork}
+									pendingHandoffNote={
+										handoffs.find(
+											(h) => h.applicationId === (liveSelected ?? selectedApp).id && h.status === "pending" && h.stage === "document_verification",
+										)
+											? "Resolve the handler assignment above first"
+											: undefined
+									}
 									actor={opsUser?.name ?? "Staff"}
 									isMine={(liveSelected ?? selectedApp).assignedStaffEmail === opsUser?.email}
 									assignees={assignees}

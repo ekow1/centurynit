@@ -26,6 +26,7 @@ export function CaseWorkPanel({
 	actor,
 	kind,
 	closedNote,
+	pendingHandoffNote,
 	onAssign,
 	onComment,
 	onRequestDocs,
@@ -53,6 +54,13 @@ export function CaseWorkPanel({
 	 * both untrue and not the reason they cannot act.
 	 */
 	closedNote?: string;
+	/**
+	 * When a stage handoff is pending resolution, the assignment UI is locked —
+	 * the "HANDLER ASSIGNMENT REQUIRED" card above is the canonical way to
+	 * resolve it. Showing a separate "Unassigned - pick a consultant" dropdown
+	 * here is confusing, so this note replaces it.
+	 */
+	pendingHandoffNote?: string;
 	onAssign: (to: Assignee) => void;
 	onComment: (kind: CommentKind, text: string) => void;
 	onRequestDocs: (docs: string[]) => void;
@@ -92,6 +100,10 @@ export function CaseWorkPanel({
 									email={assignedEmail}
 								/>
 							</div>
+						) : pendingHandoffNote ? (
+							<p style={{ fontWeight: 600, marginTop: "0.2rem", color: "var(--accent)" }}>
+								{pendingHandoffNote}
+							</p>
 						) : (
 							<p style={{ fontWeight: 600, marginTop: "0.2rem" }}>
 								{closedNote
@@ -103,7 +115,7 @@ export function CaseWorkPanel({
 						)}
 					</div>
 
-					{canAssign ? (
+					{pendingHandoffNote ? null : canAssign ? (
 						<select
 							className="input input--sm"
 							value={assignedEmail}

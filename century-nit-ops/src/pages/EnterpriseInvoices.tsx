@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -42,10 +43,11 @@ export function EnterpriseInvoices() {
 	} = useInvoiceApi();
 
 
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [view, setView] = useState<"invoices" | "accounts">("invoices");
 	const [status, setStatus] = useState<"all" | InvoiceStatus>("all");
 	const [search, setSearch] = useState("");
-	const [openId, setOpenId] = useState<string | null>(null);
+	const [openId, setOpenId] = useState<string | null>(searchParams.get("open"));
 	const [building, setBuilding] = useState<{ applicantId: string; applicantName: string; type: InvoiceType } | null>(null);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [pickedApplicantId, setPickedApplicantId] = useState<string>("");
@@ -199,7 +201,10 @@ export function EnterpriseInvoices() {
 										key={inv.id}
 										type="button"
 										className={`inv-row${openId === inv.id ? " inv-row--on" : ""}`}
-										onClick={() => setOpenId(inv.id)}
+										onClick={() => {
+											setOpenId(inv.id);
+											setSearchParams({ open: inv.id });
+										}}
 									>
 										<span className="inv-row__top">
 											<span className="inv-row__num mono">{inv.invoiceNumber}</span>

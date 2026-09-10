@@ -814,19 +814,11 @@ export function EnterpriseCases() {
 													</div>
 												</div>
 												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-													The applicant cannot pay until you issue this invoice.
+													The applicant cannot pay until you review and issue this invoice.
 												</p>
 												<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-													<button
-														type="button"
-														className="btn btn--sm btn--primary"
-														onClick={handleIssueApplicationInvoice}
-														disabled={issuingInvoice}
-													>
-														{issuingInvoice ? "Issuing…" : "Issue Application Invoice"}
-													</button>
-													<Link to="/invoices" className="btn btn--sm btn--ghost">
-														Full invoice view →
+													<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--primary">
+														Review & Issue Invoice
 													</Link>
 												</div>
 											</>

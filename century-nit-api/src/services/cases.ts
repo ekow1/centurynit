@@ -37,6 +37,7 @@ import {
 	schoolApplications,
 	servicePackages,
 	stageAssignments,
+	stageHandoffs,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
@@ -1510,6 +1511,27 @@ export async function assignApplication(input: {
 		opsUserId: input.employeeId,
 		assignedBy: input.actor.opsUserId,
 	});
+
+	// Resolve any pending handoff for this application — the handler has been
+	// assigned directly, so the handoff is no longer needed. Without this, the
+	// portal keeps showing "Awaiting specialist assignment" even though a
+	// handler is already in place.
+	await db
+		.update(stageHandoffs)
+		.set({
+			status: "resolved",
+			decision: "assign",
+			resolvedOpsUserId: input.employeeId,
+			decidedBy: input.actor.opsUserId ?? null,
+			decidedAt: new Date(),
+			updatedAt: new Date(),
+		})
+		.where(
+			and(
+				eq(stageHandoffs.applicationId, row.id),
+				eq(stageHandoffs.status, "pending"),
+			),
+		);
 
 	await db
 		.update(applicants)

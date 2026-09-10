@@ -2832,21 +2832,13 @@ async function processConsentDecision(input: {
 	});
 
 	if (input.decision === "continue") {
-		// Create a handoff so the manager sees "Assign" + "Keep previous
-		// handler" in the Ops pending queue. The previous handler is the
-		// continuity candidate.
-		let fromOpsUserId: string | null = null;
-		if (input.stage === "application") {
-			// For the application stage, the consultation officer is the
-			// continuity candidate.
-			fromOpsUserId = applicant.assignedOfficerId ?? null;
-		} else {
-			// For visa and travel, the current application handler is the
-			// continuity candidate.
-			const handler = await activeHandlerFor(application.id, application.stage);
-			fromOpsUserId = handler?.opsUserId ?? null;
-		}
-
+		// Only create a handoff if there's no active handler for the target
+		// stage yet. If the consultation officer was already assigned as the
+		// application handler (or a visa/travel handler already exists), the
+		// case doesn't need re-assignment — the consent just unblocks the
+		// stage. Creating a handoff here would force the manager to re-assign
+		// and show "Awaiting specialist assignment" on the portal even though
+		// a handler is already in place.
 		const handoffStage =
 			input.stage === "application"
 				? "document_verification"
@@ -2854,12 +2846,36 @@ async function processConsentDecision(input: {
 					? "visa_processing"
 					: "travel_assistance";
 
-		await createOrGetHandoff({
-			applicationId: application.id,
-			stage: handoffStage,
-			source: `${input.stage}_consent_continue`,
-			fromOpsUserId,
-		});
+		const existingHandler = await activeHandlerFor(application.id, handoffStage);
+
+		if (!existingHandler) {
+			// No handler yet — create a handoff so the manager sees "Assign" +
+			// "Keep previous handler" in the Ops pending queue.
+			let fromOpsUserId: string | null = null;
+			if (input.stage === "application") {
+				fromOpsUserId = applicant.assignedOfficerId ?? null;
+			} else {
+				const handler = await activeHandlerFor(application.id, application.stage);
+				fromOpsUserId = handler?.opsUserId ?? null;
+			}
+
+			await createOrGetHandoff({
+				applicationId: application.id,
+				stage: handoffStage,
+				source: `${input.stage}_consent_continue`,
+				fromOpsUserId,
+			});
+		}
+
+		// If the applicant is continuing with the application stage, mark
+		// the application as accepted (proceedStatus = "accepted") so the
+		// portal doesn't show the "invited" gate anymore.
+		if (input.stage === "application" && application.proceedStatus === "invited") {
+			await db
+				.update(schema.applications)
+				.set({ proceedStatus: "accepted", proceededAt: new Date(), updatedAt: new Date() })
+				.where(eq(schema.applications.id, application.id));
+		}
 
 		// Audit comment on the application.
 		await db.insert(schema.caseComments).values({

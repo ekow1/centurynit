@@ -2648,6 +2648,18 @@ function ApplicationHubInner() {
 		}
 	}
 
+	async function acceptProformaEstimate() {
+		if (!serverInvoice) return;
+		try {
+			await meApi.acceptInvoice(serverInvoice.id);
+			await fetchInvoice();
+		} catch (err) {
+			toast.error(
+				err instanceof ApiError ? err.message : "Estimate could not be accepted. Please try again.",
+			);
+		}
+	}
+
 	function addSchool(e: FormEvent) {
 		e.preventDefault();
 		const d = destId || destinations[0]?.id || "uk";
@@ -2943,6 +2955,7 @@ function ApplicationHubInner() {
 					title="Application invoice"
 					onPay={payInvoice}
 					paying={false}
+					onAccept={acceptProformaEstimate}
 					meta={
 						<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
 							<li>

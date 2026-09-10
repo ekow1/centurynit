@@ -671,7 +671,7 @@ export function EnterpriseCases() {
 									{ label: "10% Deposit", done: depositPaid, pending: !depositPaid },
 									{ label: "Handler Assigned", done: hasHandler, pending: depositPaid && !hasHandler },
 									{ label: "Schools Selected", done: hasSchools, pending: hasHandler && !hasSchools },
-									{ label: "Invoice Issued", done: Boolean(invoiceIssued), pending: hasSchools && !invoiceIssued },
+									{ label: "Invoice Issued", done: Boolean(invoiceIssued), pending: !invoiceIssued },
 									{ label: "App Fee Paid", done: Boolean(appFeePaid), pending: Boolean(invoiceIssued) && !appFeePaid },
 								];
 								return (
@@ -752,8 +752,6 @@ export function EnterpriseCases() {
 							{(() => {
 								const app = liveSelected ?? selectedApp;
 								if (!app) return null;
-								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
-								if (!hasSchools) return null;
 								if (app.appFeePaid) return null;
 
 								const isProforma = appInvoice?.status === "proforma";
@@ -773,10 +771,10 @@ export function EnterpriseCases() {
 								) : !appInvoice ? (
 									<>
 										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-											No invoice yet — {app.schoolApplications?.length ?? 0} school(s) selected
+											No invoice yet — {(app.schoolApplications?.length ?? 0) === 0 ? "no schools selected" : `${app.schoolApplications?.length ?? 0} school(s) selected`}
 										</p>
 										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-											Issue the application invoice so the applicant can pay the application fee. A proforma will be created from the selected schools automatically.
+											Issue the application fee invoice so the applicant can pay. Per-school line items will be added automatically as schools are selected.
 										</p>
 										<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 											<button

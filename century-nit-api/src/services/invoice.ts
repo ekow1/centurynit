@@ -1020,6 +1020,7 @@ export async function issueProformaByOps(input: {
 			.set({
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
+				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
 				updatedAt: new Date(),
 			})
 			.where(eq(invoices.id, row.id))

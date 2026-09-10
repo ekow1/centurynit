@@ -706,6 +706,12 @@ applicationsRouter.openapi(
 			.where(eq(schema.applicants.id, app.applicantId))
 			.limit(1);
 
+		// Only staff who can see this application may issue its invoice.
+		const ownerUserId = await applicantUserIdOfApplication(id);
+		if (!canSeeApplication({ ...app, applicantUserId: ownerUserId }, c.get("user").id, staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Not allowed to issue an invoice for this application");
+		}
+
 		// Find the proforma application invoice for this application.
 		let [appInvoice] = await db
 			.select()
@@ -739,19 +745,14 @@ applicationsRouter.openapi(
 		// This lets the handler issue the invoice directly without waiting for
 		// the applicant to formally "lock" school selection — breaking the
 		// deadlock where the handler can't issue, the applicant can't pay, and
-		// school processing is blocked.
+		// school processing is blocked. A baseline application fee line is used
+		// when no schools are selected yet, so the handler can always bill the
+		// applicant and get processing unblocked.
 		if (!appInvoice) {
 			const schools = await db
 				.select()
 				.from(schema.schoolApplications)
 				.where(eq(schema.schoolApplications.applicantId, app.applicantId));
-			if (schools.length === 0) {
-				throw new HttpError(
-					400,
-					"NO_SCHOOLS_SELECTED",
-					"No schools have been selected for this application. The applicant must select at least one school before an invoice can be issued.",
-				);
-			}
 			const fees = await getFeeSchedule();
 			const schoolLines = schools.map((s) => ({
 				label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
@@ -765,10 +766,13 @@ applicationsRouter.openapi(
 					clientUserId: applicant?.userId ?? undefined,
 					applicationId: app.id,
 					type: "application",
+					status: "proforma",
 					lines: schoolLines.length > 0
 						? schoolLines
 						: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
-					note: `Application invoice for ${schools.length} university application(s).`,
+					note: schools.length > 0
+						? `Application invoice for ${schools.length} university application(s).`
+						: "Application fee invoice. Per-school line items will follow as schools are added.",
 				},
 			});
 			appInvoice = proforma;

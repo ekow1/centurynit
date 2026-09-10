@@ -176,7 +176,11 @@ export async function lockSchoolsForApplicant(
 		invoiceId = proforma.id;
 	}
 
-	if (app && app.stage === "document_verification") {
+	// Entering school_submission is gated on the 10% deposit elsewhere
+	// (see setApplicationStage). Only mirror that advance when the deposit is
+	// actually paid, so an applicant can add schools without their case being
+	// pushed past the deposit gate on a technicality.
+	if (app && app.stage === "document_verification" && app.depositPaid) {
 		// Just in case it hasn't advanced to school_submission automatically yet
 		await db
 			.update(applications)
@@ -358,10 +362,13 @@ export async function updateSchoolStatus(
 	// processing (status updates, submissions, decisions) until the applicant
 	// has paid the application fee. This is the hard boundary between school
 	// selection and actual school application processing.
+	const parentCondition = target.applicationId
+		? eq(applications.id, target.applicationId)
+		: eq(applications.applicantId, target.applicantId);
 	const [parentApp] = await db
 		.select({ appFeePaid: applications.appFeePaid })
 		.from(applications)
-		.where(eq(applications.applicantId, target.applicantId))
+		.where(parentCondition)
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
 	if (parentApp && !parentApp.appFeePaid) {

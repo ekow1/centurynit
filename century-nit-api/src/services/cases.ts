@@ -1487,6 +1487,59 @@ export async function requestCaseDocuments(input: {
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
+
+	// Notify the applicant when documents are requested on their application
+	// (or consultation). The portal surfaces this as an action-required card.
+	if (input.targetType === "application") {
+		const [app] = await db
+			.select({ applicantId: applications.applicantId })
+			.from(applications)
+			.where(eq(applications.id, input.targetId))
+			.limit(1);
+		if (app) {
+			const [applicant] = await db
+				.select({ userId: applicants.userId, name: applicants.name })
+				.from(applicants)
+				.where(eq(applicants.id, app.applicantId))
+				.limit(1);
+			if (applicant?.userId) {
+				await notify({
+					recipientUserId: applicant.userId,
+					type: "document.requested",
+					title: "Documents required",
+					body: `Your case handler requested: ${input.documents.join(", ")}. Please upload them in your document vault.`,
+					link: "/portal/documents",
+					entityType: "case",
+					entityId: input.targetId,
+					caseId: input.targetId,
+				}).catch(() => {});
+			}
+		}
+	} else {
+		const [cons] = await db
+			.select({ applicantId: consultations.applicantId })
+			.from(consultations)
+			.where(eq(consultations.id, input.targetId))
+			.limit(1);
+		if (cons) {
+			const [applicant] = await db
+				.select({ userId: applicants.userId })
+				.from(applicants)
+				.where(eq(applicants.id, cons.applicantId))
+				.limit(1);
+			if (applicant?.userId) {
+				await notify({
+					recipientUserId: applicant.userId,
+					type: "document.requested",
+					title: "Documents required",
+					body: `Your counselor requested: ${input.documents.join(", ")}. Please upload them in your document vault.`,
+					link: "/portal/documents",
+					entityType: "case",
+					entityId: input.targetId,
+				}).catch(() => {});
+			}
+		}
+	}
 }
 
 /* ── Application commands ────────────────────────────────────────────────── */

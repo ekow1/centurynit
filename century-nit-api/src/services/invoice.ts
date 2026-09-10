@@ -460,6 +460,12 @@ export async function recordClientPayment(input: {
 	if (row.clientUserId !== input.userId) {
 		throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
 	}
+	// Proforma invoices cannot be paid — the handler must issue the invoice
+	// first. This prevents the applicant from paying before the handler has
+	// reviewed and approved the school selection.
+	if (row.status === "proforma") {
+		throw new HttpError(409, "INVOICE_NOT_ISSUED", "This invoice is still a proforma estimate. Your handler must issue it before you can pay.");
+	}
 	return recordPayment({
 		invoiceId: input.invoiceId,
 		amountCents: input.amountCents,
@@ -609,10 +615,43 @@ export async function recordPayment(input: {
 						break;
 					}
 				}
-				await txDb.update(applications).set({ 
-					agencyStageIndex, 
-					agencySettled: agencyStageIndex >= lines.length 
-				}).where(eq(applications.id, targetAppId));
+				const depositPaid = agencyStageIndex >= 1;
+				const [paidApp] = await txDb
+					.update(applications)
+					.set({
+						agencyStageIndex,
+						agencySettled: agencyStageIndex >= lines.length,
+						depositPaid,
+					})
+					.where(and(eq(applications.id, targetAppId), eq(applications.depositPaid, false)))
+					.returning();
+				// First deposit payment: create a handler-assignment handoff so
+				// the case becomes visible in ops as "Pending Handler Assignment".
+				if (paidApp && depositPaid) {
+					const { createOrGetHandoff } = await import("./handoffs.js");
+					const [appRow] = await txDb
+						.select({ consultationId: applications.consultationId })
+						.from(applications)
+						.where(eq(applications.id, targetAppId))
+						.limit(1);
+					let fromOpsUserId: string | null = null;
+					if (appRow?.consultationId) {
+						const { consultations } = await import("../db/schema.js");
+						const [consultation] = await txDb
+							.select({ assignedOfficerId: consultations.assignedOfficerId })
+							.from(consultations)
+							.where(eq(consultations.id, appRow.consultationId))
+							.limit(1);
+						fromOpsUserId = consultation?.assignedOfficerId ?? null;
+					}
+					await createOrGetHandoff({
+						applicationId: targetAppId,
+						stage: "document_verification",
+						source: "deposit_payment",
+						fromOpsUserId,
+						tx: txDb,
+					});
+				}
 			}
 		}
 
@@ -668,7 +707,7 @@ export async function voidInvoice(input: {
 			} else if (updated.type === "travel") {
 				await txDb.update(applications).set({ travelInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
 			} else if (updated.type === "agency") {
-				await txDb.update(applications).set({ agencySettled: false, agencyStageIndex: 0 }).where(eq(applications.id, updated.applicationId));
+				await txDb.update(applications).set({ agencySettled: false, agencyStageIndex: 0, depositPaid: false }).where(eq(applications.id, updated.applicationId));
 			}
 		}
 
@@ -940,6 +979,53 @@ if (row.status !== "proforma") {
 			.returning();
 
 		await audit(row.id, "issued", input.userEmail ?? input.userName, "Estimate accepted - moving to issued invoice", txDb);
+		return updated;
+	});
+}
+
+/**
+ * Ops action: issue a proforma application invoice, turning it into a payable
+ * invoice. This is the handler's explicit "issue" step after reviewing the
+ * applicant's school selection. Only the assigned handler or a manager can
+ * call this. The applicant cannot pay until the invoice is issued.
+ */
+export async function issueProformaByOps(input: {
+	invoiceId: string;
+	actorName: string;
+}): Promise<InvoiceRow> {
+	return db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [row] = await tx
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, input.invoiceId))
+			.limit(1)
+			.for("update");
+
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.type !== "application") {
+			throw new HttpError(409, "NOT_APPLICATION_INVOICE", "Only application invoices can be issued via this endpoint.");
+		}
+		if (row.status !== "proforma") {
+			throw new HttpError(409, "NOT_PROFORMA", "Only proforma invoices can be issued. This invoice is already issued.");
+		}
+
+		let officialInvoiceNumber = row.invoiceNumber;
+		if (row.invoiceNumber.startsWith("PRO-")) {
+			officialInvoiceNumber = await nextInvoiceNumber(txDb);
+		}
+
+		const [updated] = await tx
+			.update(invoices)
+			.set({
+				invoiceNumber: officialInvoiceNumber,
+				status: "issued",
+				updatedAt: new Date(),
+			})
+			.where(eq(invoices.id, row.id))
+			.returning();
+
+		await audit(row.id, "issued", input.actorName, "Application invoice issued by handler", txDb);
 		return updated;
 	});
 }

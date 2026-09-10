@@ -44,6 +44,11 @@ export function isOwnerClassBoundary(from: JourneyStage, to: JourneyStage): bool
  * `awaiting_handler` gate. `visa_processing` is excluded: its gate is the
  * payment-triggered sub-state, and `completed` is terminal. The consultant-run
  * stages never gate (same owner continues).
+ *
+ * `document_verification` is NOT in this set — it's the first stage, so cases
+ * start there rather than transitioning into it. Its handler-assignment handoff
+ * is created by the 10% deposit payment (not a stage transition), and the
+ * pending handoff itself is what signals "Pending Handler Assignment" to ops.
  */
 export const AWAITING_ASSIGNMENT_STAGES: ReadonlySet<JourneyStage> = new Set([
 	"payment_execution",

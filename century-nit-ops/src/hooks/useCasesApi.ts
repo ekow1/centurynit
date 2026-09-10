@@ -154,6 +154,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
+		depositPaid: row.depositPaid,
+		appFeePaid: row.appFeePaid,
 		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
 		targetSchoolCount: row.targetSchoolCount ?? null,

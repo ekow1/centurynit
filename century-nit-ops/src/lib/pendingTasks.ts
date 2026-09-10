@@ -496,7 +496,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			action: "resolve",
 			record: h,
 			title: h.applicantName ?? "Applicant",
-			subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}`,
+			subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""}`,
 			meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
 			branch: "",
 			owner: h.fromOpsUserName ?? "No previous handler",

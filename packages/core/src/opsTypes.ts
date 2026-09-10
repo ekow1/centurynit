@@ -218,6 +218,8 @@ export interface MockApplication {
 	visaInvoicePaid?: boolean;
 	/** App fee has been paid */
 	appFeePaid?: boolean;
+	/** 10% deposit has been paid (first agency milestone) */
+	depositPaid?: boolean;
 	/** Counselor note shown in visa tracking */
 	visaCounselorNote?: string;
 	/** Payment plan selection (after visa invoice paid) */
@@ -282,6 +284,8 @@ export interface MockApplicant {
 	visaStage?: VisaStage;
 	/** Visa invoice has been paid */
 	visaInvoicePaid?: boolean;
+	/** 10% deposit has been paid (first agency milestone) */
+	depositPaid?: boolean;
 	/** Counselor note shown in visa tracking */
 	visaCounselorNote?: string;
 	/** Payment plan selection (after visa invoice paid) */

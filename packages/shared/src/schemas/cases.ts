@@ -76,6 +76,7 @@ export function canAdvanceToStage(
 		visaStage?: string;
 		agencyStageIndex?: number;
 		agencySettled?: boolean;
+		depositPaid?: boolean;
 		appFeePaid?: boolean;
 		travelInvoicePaid?: boolean;
 		travelClearance?: string;
@@ -201,7 +202,9 @@ export const PORTAL_STAGE_LABELS: Record<string, string> = {
 	eligibility: "Awaiting eligibility",
 	proceed: "Start your application",
 	school_package: "Choose school application package",
+	awaiting_handler: "Awaiting handler assignment",
 	school_select: "Select schools & programmes",
+	awaiting_invoice: "Awaiting application invoice",
 	application_invoice: "Pay application invoice",
 	school_tracking: "Application process / tracking",
 	visa_invoice: "Pay visa invoice",
@@ -218,7 +221,9 @@ export const PORTAL_STAGE_ORDER: string[] = [
 	"eligibility",
 	"proceed",
 	"school_package",
+	"awaiting_handler",
 	"school_select",
+	"awaiting_invoice",
 	"application_invoice",
 	"school_tracking",
 	"visa_invoice",
@@ -367,6 +372,7 @@ export const patchApplicationSchema = z.object({
 	paymentPlanId: z.string().optional(),
 	agencyStageIndex: z.number().int().min(0).max(2).optional(),
 	agencySettled: z.boolean().optional(),
+	depositPaid: z.boolean().optional(),
 	appFeePaid: z.boolean().optional(),
 	travelClearance: z.enum(["pending", "cleared"]).optional(),
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
@@ -519,6 +525,7 @@ export const applicationSchema = z.object({
 	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),
 	agencySettled: z.boolean(),
+	depositPaid: z.boolean(),
 	appFeePaid: z.boolean(),
 	travelInvoicePaid: z.boolean(),
 	travelClearance: z.enum(["pending", "cleared"]),

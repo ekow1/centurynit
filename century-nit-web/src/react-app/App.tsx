@@ -57,6 +57,7 @@ const PortalLayout = lazyNamed(() => import("./pages/portal/PortalLayout"), "Por
 const DashboardHome = lazyNamed(() => import("./pages/portal/DashboardHome"), "DashboardHome");
 const PortalAgency = lazyNamed(portalPages, "PortalAgency");
 const PortalApplicationHub = lazyNamed(portalPages, "PortalApplicationHub");
+const PortalAwaitingHandler = lazyNamed(portalPages, "PortalAwaitingHandler");
 const PortalComplete = lazyNamed(portalPages, "PortalComplete");
 const PortalConsultation = lazyNamed(portalPages, "PortalConsultation");
 const PortalIndex = lazyNamed(portalPages, "PortalIndex");
@@ -170,6 +171,7 @@ function AppShell() {
 						<Route path="payment-execution" element={<PortalPaymentExecution />} />
 						<Route path="consultation" element={<PortalConsultation />} />
 						<Route path="package" element={<PortalPackage />} />
+						<Route path="awaiting-handler" element={<PortalAwaitingHandler />} />
 						<Route path="application" element={<PortalApplicationHub />} />
 						<Route path="tracking" element={<PortalTrackingPage />} />
 						<Route path="visa" element={<PortalVisa />} />

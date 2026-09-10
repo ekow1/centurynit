@@ -560,6 +560,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		packageSelectedAt: row.packageSelectedAt?.toISOString() ?? null,
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
+		depositPaid: row.depositPaid,
 		appFeePaid: row.appFeePaid,
 		travelInvoicePaid: row.travelInvoicePaid,
 		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
@@ -642,13 +643,17 @@ export async function listConsultations(staff: StaffContext): Promise<Consultati
 }
 
 export async function listApplications(staff: StaffContext): Promise<ApplicationRow[]> {
+	// Only applications where the 10% deposit has been paid are visible to ops.
+	// Applications without a deposit are still portal-only — the applicant hasn't
+	// crossed into the operational workflow yet.
+	const depositFilter = eq(applications.depositPaid, true);
 	if (canSeeAllCases(staff)) {
-		return db.select().from(applications).orderBy(desc(applications.createdAt));
+		return db.select().from(applications).where(depositFilter).orderBy(desc(applications.createdAt));
 	}
 	return db
 		.select()
 		.from(applications)
-		.where(eq(applications.assignedStaffId, staff.opsUserId))
+		.where(and(depositFilter, eq(applications.assignedStaffId, staff.opsUserId)))
 		.orderBy(desc(applications.createdAt));
 }
 
@@ -2559,6 +2564,12 @@ export async function setApplicationPackage(input: {
 			throw new HttpError(403, "CONSULTATION_NOT_ELIGIBLE", "Package selection requires a completed, eligible consultation");
 		}
 
+		// Consent gate: the applicant must have explicitly accepted to proceed
+		// before a package can be selected. Consent is a separate step.
+		if (app.proceedStatus !== "accepted") {
+			throw new HttpError(409, "CONSENT_REQUIRED", "The applicant must consent to proceed before selecting a package.");
+		}
+
 		const [pkg] = await tx
 			.select()
 			.from(servicePackages)
@@ -2574,8 +2585,6 @@ export async function setApplicationPackage(input: {
 			.set({
 				packageId: pkg.id,
 				packageSelectedAt: new Date(),
-				proceedStatus: "accepted",
-				proceededAt: new Date(),
 				fundingTrack: input.packageCode,
 				degreeLevel: input.degreeLevel,
 				targetSchoolCount: targetSchools,

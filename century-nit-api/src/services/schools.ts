@@ -30,6 +30,7 @@ import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
 import { getDocumentStorage } from "./storage/index.js";
+import { activeHandlerFor } from "./handoffs.js";
 
 export async function lockSchoolsForApplicant(
 	applicantId: string,
@@ -50,6 +51,21 @@ export async function lockSchoolsForApplicant(
 		.where(eq(applications.applicantId, applicantId))
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
+
+	// Handler-assignment gate: the applicant cannot lock school selection
+	// until ops has explicitly assigned a handler for document_verification.
+	// This is the hard boundary between the applicant-only journey and the
+	// operational workflow — enforced server-side, not just in the UI.
+	if (app) {
+		const handler = await activeHandlerFor(app.id, "document_verification");
+		if (!handler) {
+			throw new HttpError(
+				409,
+				"HANDLER_NOT_ASSIGNED",
+				"A handler must be assigned to your case before you can lock school selection. Please wait for your handler to be assigned.",
+			);
+		}
+	}
 
 	// Update all draft schools to "Preparing Application"
 	for (const row of rows) {
@@ -328,6 +344,24 @@ export async function updateSchoolStatus(
 
 	if (!target) {
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+
+	// Application fee gate: the handler cannot begin actual school application
+	// processing (status updates, submissions, decisions) until the applicant
+	// has paid the application fee. This is the hard boundary between school
+	// selection and actual school application processing.
+	const [parentApp] = await db
+		.select({ appFeePaid: applications.appFeePaid })
+		.from(applications)
+		.where(eq(applications.applicantId, target.applicantId))
+		.orderBy(desc(applications.createdAt))
+		.limit(1);
+	if (parentApp && !parentApp.appFeePaid) {
+		throw new HttpError(
+			409,
+			"APP_FEE_NOT_PAID",
+			"The application fee must be paid before school application processing can begin.",
+		);
 	}
 
 	const clearNote =

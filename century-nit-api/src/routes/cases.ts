@@ -65,6 +65,7 @@ import {
 	recordClientPayment,
 	serializeInvoice,
 	acceptProformaClient,
+	issueProformaByOps,
 } from "../services/invoice.js";
 import {
 	createPaystackCheckout,
@@ -661,6 +662,52 @@ applicationsRouter.openapi(
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * Ops action: issue a proforma application invoice, turning it into a payable
+ * invoice. This is the handler's explicit "issue" step after reviewing the
+ * applicant's school selection. Only managers/coordinators (or the assigned
+ * handler) can call this. The applicant cannot pay until the invoice is issued.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/issue-application-invoice",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: invoiceSchema } },
+				description: "The issued application invoice",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		// Find the proforma application invoice for this application.
+		const [appInvoice] = await db
+			.select()
+			.from(schema.invoices)
+			.where(
+				and(
+					eq(schema.invoices.applicationId, id),
+					eq(schema.invoices.type, "application"),
+				),
+			)
+			.orderBy(desc(schema.invoices.createdAt))
+			.limit(1);
+		if (!appInvoice) {
+			throw new HttpError(404, "INVOICE_NOT_FOUND", "No application invoice found for this case. The applicant must lock school selection first.");
+		}
+		const updated = await issueProformaByOps({
+			invoiceId: appInvoice.id,
+			actorName: staff.name ?? "Handler",
+		});
+		return c.json(await serializeInvoice(updated));
 	},
 );
 
@@ -2313,9 +2360,23 @@ meRouter.openapi(
 		// Consent gate: before the application truly opens, the applicant must
 		// accept to proceed. invited/declined = still gated; accepted = open.
 		const hasProceeded = application?.proceedStatus === "accepted";
+		// Handler assignment gate: after the 10% deposit is paid, a handoff is
+		// created for document_verification. The case stays "awaiting handler"
+		// until ops explicitly assigns (or keeps the previous) handler.
+		const hasDepositPaid = Boolean(application?.depositPaid);
+		const hasHandlerAssigned = hasDepositPaid && application
+			? await activeHandlerFor(application.id, "document_verification").then((h) => Boolean(h))
+			: false;
 		const hasSelection = schoolTracks.schools.length > 0;
 		const isAppInvoicePaid = invoices.some(
 			(i) => i.type === "application" && i.status === "paid",
+		);
+		// The application invoice starts as "proforma" when the applicant locks
+		// school selection. The handler must explicitly "issue" it before the
+		// applicant can pay. While it's still proforma, the portal shows
+		// "awaiting invoice" rather than "pay application invoice".
+		const isAppInvoiceIssued = invoices.some(
+			(i) => i.type === "application" && (i.status === "issued" || i.status === "partial" || i.status === "paid"),
 		);
 		const hasAdmitted = schoolTracks.schools.some(
 			(s) =>
@@ -2353,7 +2414,9 @@ meRouter.openapi(
 			| "eligibility"
 			| "proceed"
 			| "school_package"
+			| "awaiting_handler"
 			| "school_select"
+			| "awaiting_invoice"
 			| "application_invoice"
 			| "school_tracking"
 			| "visa_invoice"
@@ -2378,8 +2441,10 @@ meRouter.openapi(
 			derivedPortalStage = "visa_invoice";
 		} else if (isAppInvoicePaid && hasSelection) {
 			derivedPortalStage = "school_tracking";
-		} else if (hasSelection && !isAppInvoicePaid) {
+		} else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) {
 			derivedPortalStage = "application_invoice";
+		} else if (hasSelection && !isAppInvoiceIssued) {
+			derivedPortalStage = "awaiting_invoice";
 		} else if (hasPackage) {
 			derivedPortalStage = "school_select";
 		} else if (isEligible && hasProceeded && !hasPackage) {
@@ -2412,13 +2477,15 @@ meRouter.openapi(
 				portalStage = baseIdx >= derivedIdx ? base : derivedPortalStage;
 				if (portalStage === base) {
 					if (coarseStage === "document_verification") {
-						if (hasPackage && !hasSelection) portalStage = "school_select";
+						if (hasPackage && hasHandlerAssigned && !hasSelection) portalStage = "school_select";
+						else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) portalStage = "awaiting_handler";
 						else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
 						else if (isEligible && !hasProceeded) portalStage = "proceed";
 						else if (!isEligible && hasConsultation) portalStage = "eligibility";
 						else if (!hasConsultation) portalStage = "consultation";
 					} else if (coarseStage === "school_submission") {
-						if (hasSelection && !isAppInvoicePaid) portalStage = "application_invoice";
+						if (hasSelection && !isAppInvoiceIssued) portalStage = "awaiting_invoice";
+						else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) portalStage = "application_invoice";
 						else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
 					} else if (coarseStage === "offer_letter_review") {
 						portalStage = "school_tracking";
@@ -2458,7 +2525,7 @@ meRouter.openapi(
 			journey: true,
 			consultation: true,
 			package: isEligible,
-			application: isEligible,
+			application: isEligible && (!hasDepositPaid || hasHandlerAssigned),
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
 			travel_assistance: hasAdmitted && isVisaInvoicePaid && isVisaDone,
@@ -2484,7 +2551,9 @@ meRouter.openapi(
 			else if (sid === "eligibility") done = isEligible;
 			else if (sid === "proceed") done = hasProceeded;
 			else if (sid === "school_package") done = hasPackage;
+			else if (sid === "awaiting_handler") done = hasHandlerAssigned;
 			else if (sid === "school_select") done = hasSelection;
+			else if (sid === "awaiting_invoice") done = isAppInvoiceIssued;
 			else if (sid === "application_invoice") done = isAppInvoicePaid;
 			else if (sid === "school_tracking") done = hasAdmitted;
 			else if (sid === "visa_invoice") done = isVisaInvoicePaid;

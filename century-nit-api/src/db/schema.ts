@@ -1021,6 +1021,8 @@ export const applications = pgTable(
 		paymentPlanId: varchar("payment_plan_id", { length: 32 }),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
+		/** True once the applicant has paid the 10% deposit (first agency milestone). */
+		depositPaid: boolean("deposit_paid").notNull().default(false),
 		appFeePaid: boolean("app_fee_paid").notNull().default(false),
 		travelInvoicePaid: boolean("travel_invoice_paid").notNull().default(false),
 		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),

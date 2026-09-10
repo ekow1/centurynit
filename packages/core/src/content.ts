@@ -1755,7 +1755,9 @@ export type ProcessStageId =
 	| "eligibility"
 	| "proceed"
 	| "school_package"
+	| "awaiting_handler"
 	| "school_select"
+	| "awaiting_invoice"
 	| "application_invoice"
 	| "school_tracking"
 	| "visa_invoice"
@@ -1819,8 +1821,17 @@ export const PROCESS_STAGES: {
 		band: "application",
 	},
 	{
-		id: "school_select",
+		id: "awaiting_handler",
 		index: 5,
+		label: "Awaiting handler",
+		detail: "10% deposit received - handler being assigned",
+		owner: "system",
+		path: "/portal/awaiting-handler",
+		band: "application",
+	},
+	{
+		id: "school_select",
+		index: 6,
 		label: "Select schools",
 		detail: "Choose schools & programmes first",
 		owner: "you",
@@ -1828,8 +1839,17 @@ export const PROCESS_STAGES: {
 		band: "application",
 	},
 	{
+		id: "awaiting_invoice",
+		index: 7,
+		label: "Awaiting invoice",
+		detail: "Handler reviewing school selection - invoice coming soon",
+		owner: "counselor",
+		path: "/portal/application",
+		band: "application",
+	},
+	{
 		id: "application_invoice",
-		index: 6,
+		index: 8,
 		label: "Application invoice",
 		detail: "Raised after selection - pay before tracking starts",
 		owner: "you",
@@ -1838,7 +1858,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "school_tracking",
-		index: 7,
+		index: 9,
 		label: "Application tracking",
 		detail: "Process begins only after invoice is paid",
 		owner: "counselor",
@@ -1847,7 +1867,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "visa_invoice",
-		index: 8,
+		index: 10,
 		label: "Visa invoice",
 		detail: "Raised on admission - pay before visa process starts",
 		owner: "you",
@@ -1856,7 +1876,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "visa",
-		index: 9,
+		index: 11,
 		label: "Visa tracking",
 		detail: "Simulated visa processing after payment",
 		owner: "counselor",
@@ -1865,7 +1885,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "travel_assistance",
-		index: 10,
+		index: 12,
 		label: "Travel assistance",
 		detail: "Handler-led clearance & pre-departure checklist · ticketing fee",
 		owner: "counselor",
@@ -1874,7 +1894,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "payment_execution",
-		index: 11,
+		index: 13,
 		label: "Payment plan & service fees",
 		detail: "Choose a plan · settle agency fees",
 		owner: "you",
@@ -1883,7 +1903,7 @@ export const PROCESS_STAGES: {
 	},
 	{
 		id: "completed",
-		index: 12,
+		index: 14,
 		label: "Complete",
 		detail: "Journey finished - last step",
 		owner: "system",

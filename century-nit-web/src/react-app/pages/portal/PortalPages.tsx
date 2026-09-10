@@ -64,6 +64,56 @@ export function PortalJourney() {
 	return <Navigate to="/portal/home" replace />;
 }
 
+/* ========== Awaiting handler assignment (after 10% deposit) ========== */
+
+export function PortalAwaitingHandler() {
+	return (
+		<div className="portal-page">
+			<header className="portal-page__header">
+				<p className="eyebrow">Dashboard · Application</p>
+				<h1 className="page-title mt-1">Awaiting handler assignment</h1>
+			</header>
+			<div className="card card--pad">
+				<p className="display" style={{ fontSize: "1.2rem" }}>
+					Your 10% deposit has been received
+				</p>
+				<p className="muted mt-2">
+					A handler is being assigned to your case. Once assigned, you'll be able to
+					select schools and programmes. This usually happens within 1–2 business days.
+				</p>
+				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
+					You don't need to do anything right now — check back shortly.
+				</p>
+			</div>
+		</div>
+	);
+}
+
+/* ========== Awaiting application invoice (after school lock) ========== */
+
+export function PortalAwaitingInvoice() {
+	return (
+		<div className="portal-page">
+			<header className="portal-page__header">
+				<p className="eyebrow">Dashboard · Application</p>
+				<h1 className="page-title mt-1">Awaiting application invoice</h1>
+			</header>
+			<div className="card card--pad">
+				<p className="display" style={{ fontSize: "1.2rem" }}>
+					Your school selection has been submitted
+				</p>
+				<p className="muted mt-2">
+					Your handler is reviewing your selected schools and programmes. The application
+					invoice will be issued shortly — you'll be able to pay it once it's ready.
+				</p>
+				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
+					You don't need to do anything right now — check back shortly.
+				</p>
+			</div>
+		</div>
+	);
+}
+
 /* ========== School application package (after eligibility) ========== */
 
 export function PortalPackage() {

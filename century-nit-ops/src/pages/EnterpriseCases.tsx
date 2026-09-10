@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { CaseWorkPanel } from "./CaseWorkPanel";
@@ -258,6 +257,8 @@ export function EnterpriseCases() {
 		recordProceed,
 		declineProceed,
 		reinviteProceed,
+		handoffs,
+		resolveHandoff,
 	} = useCases();
 
 	/**
@@ -614,7 +615,80 @@ export function EnterpriseCases() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-								<CaseWorkPanel
+							{(() => {
+								const app = liveSelected ?? selectedApp;
+								const handoff = handoffs.find(
+									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "document_verification",
+								);
+								if (!handoff) return null;
+								return (
+									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
+										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Handler Assignment Required</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+											10% deposit received — this case needs a handler before school selection can proceed.
+										</p>
+										{handoff.fromOpsUserName && (
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+												Previous handler: <strong>{handoff.fromOpsUserName}</strong>
+											</p>
+										)}
+										<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+											{handoff.fromOpsUserName && (
+												<button
+													className="btn btn--sm btn--ghost"
+													onClick={() => {
+														void resolveHandoff(handoff.id, "keep").then(() => navigate("/applications"));
+													}}
+												>
+													Continue with Previous Handler
+												</button>
+											)}
+											<select
+												className="input"
+												style={{ width: "auto", minWidth: "12rem" }}
+												defaultValue=""
+												onChange={(e) => {
+													const opsUserId = e.target.value;
+													if (!opsUserId) return;
+													void resolveHandoff(handoff.id, "assign", { opsUserId }).then(() => {
+														e.target.value = "";
+														navigate("/applications");
+													});
+												}}
+											>
+												<option value="">Assign New Handler…</option>
+												{assignees.map((a) => (
+													<option key={a.opsUserId} value={a.opsUserId}>
+														{a.name} {a.email ? `(${a.email})` : ""}
+													</option>
+												))}
+											</select>
+										</div>
+									</div>
+								);
+							})()}
+							{(() => {
+								const app = liveSelected ?? selectedApp;
+								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
+								if (!hasSchools || app.appFeePaid) return null;
+								return (
+									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
+										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Application Invoice</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+											School selection locked — review and issue the application invoice.
+										</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+											The applicant cannot pay until you issue the invoice. Review the proforma on the Invoices page.
+										</p>
+										<div style={{ marginTop: "0.75rem" }}>
+											<Link to="/invoices" className="btn btn--sm btn--primary">
+												Go to Invoices →
+											</Link>
+										</div>
+									</div>
+								);
+							})()}
+							<CaseWorkPanel
 									kind="application"
 									assignedName={(liveSelected ?? selectedApp).assignedStaff}
 									assignedEmail={(liveSelected ?? selectedApp).assignedStaffEmail}

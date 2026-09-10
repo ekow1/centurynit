@@ -2251,8 +2251,15 @@ meRouter.openapi(
 				"This payment does not belong to that invoice",
 			);
 		}
+		if (txn.status !== "success") {
+			throw new HttpError(
+				400,
+				"PAYMENT_NOT_COMPLETED",
+				`Payment was not completed (${txn.status}). If you were charged, the payment will still be recorded via the webhook.`,
+			);
+		}
 		const before = await serializeInvoice(row);
-		if (txn.status === "success" && before.balanceCents > 0) {
+		if (before.balanceCents > 0) {
 			const alreadyRecorded = await paymentWithReferenceExists(row.id, body.reference);
 			if (!alreadyRecorded) {
 				const rate = await getExchangeRate();
@@ -2445,9 +2452,12 @@ meRouter.openapi(
 		// Handler assignment gate: after the 10% deposit is paid, a handoff is
 		// created for school_submission. The case stays "awaiting handler"
 		// until ops explicitly assigns (or keeps the previous) handler.
+		// assignedStaffId is the authoritative whole-case owner; fall back to
+		// activeHandlerFor only when it is empty (legacy per-stage assignment).
 		const hasDepositPaid = Boolean(application?.depositPaid);
 		const hasHandlerAssigned = hasDepositPaid && application
-			? await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h))
+			? Boolean(application.assignedStaffId) ||
+			  (await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h)))
 			: false;
 		const hasSelection = schoolTracks.schools.length > 0;
 		const isAppInvoicePaid =

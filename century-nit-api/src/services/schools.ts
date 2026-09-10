@@ -54,9 +54,8 @@ export async function lockSchoolsForApplicant(
 
 	// Handler-assignment gate: the applicant cannot lock school selection
 	// until ops has explicitly assigned a handler for the school application
-	// stage. This is the hard boundary between the applicant-only journey and
-	// the operational workflow — enforced server-side, not just in the UI.
-	if (app) {
+	// stage. assignedStaffId is the authoritative whole-case owner.
+	if (app && !app.assignedStaffId) {
 		const handler = await activeHandlerFor(app.id, "school_submission");
 		if (!handler) {
 			throw new HttpError(

@@ -1061,6 +1061,7 @@ export async function completeConsultationAssessment(input: {
 				fundingTrack: input.result.recPackage || null,
 				notes: input.result.notes || "Opened from a completed consultation assessment.",
 				checklist,
+				requestedDocuments: row.requestedDocuments ?? [],
 				submittedAt: new Date(),
 			})
 			.returning();

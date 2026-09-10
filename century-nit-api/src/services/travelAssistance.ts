@@ -8,7 +8,6 @@ import type {
 	TravelAssistanceChecklistInput,
 	TravelAssistanceDecisionInput,
 	TravelAssistanceQuote,
-	TravelAssistanceQuoteInput,
 	TravelAssistanceRequest,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
@@ -46,6 +45,7 @@ export const TRAVEL_ERROR_CODES = {
 	ALREADY_INVOICED: "ALREADY_INVOICED",
 	ALREADY_BOOKED: "ALREADY_BOOKED",
 	NOT_APPROVED: "QUOTE_NOT_APPROVED",
+	HANDLER_NOT_ASSIGNED: "HANDLER_NOT_ASSIGNED",
 	VALIDATION_ERROR: "VALIDATION_ERROR",
 } as const;
 
@@ -282,165 +282,6 @@ export async function recordDecision(input: {
 	return serialize(created);
 }
 
-/** Applicant approves the prepared quote. */
-export async function approveQuote(input: {
-	applicationId: string;
-	applicantUserId: string;
-	note?: string;
-}): Promise<TravelAssistanceRequest> {
-	const [app] = await db
-		.select()
-		.from(applications)
-		.where(eq(applications.id, input.applicationId))
-		.limit(1);
-	if (!app) {
-		throw new HttpError(404, TRAVEL_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	}
-
-	const [applicant] = await db
-		.select()
-		.from(applicants)
-		.where(eq(applicants.id, app.applicantId))
-		.limit(1);
-	if (!applicant || applicant.userId !== input.applicantUserId) {
-		throw new HttpError(403, TRAVEL_ERROR_CODES.FORBIDDEN, "Not your application");
-	}
-
-	const [existing] = await db
-		.select()
-		.from(travelAssistanceRequests)
-		.where(eq(travelAssistanceRequests.applicationId, input.applicationId))
-		.orderBy(desc(travelAssistanceRequests.createdAt))
-		.limit(1);
-	if (!existing) {
-		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "No travel assistance request found");
-	}
-	if (existing.status !== "quote_prepared") {
-		throw new HttpError(
-			409,
-			TRAVEL_ERROR_CODES.QUOTE_NOT_PREPARED,
-			"There is no prepared quote to approve.",
-		);
-	}
-
-	const [updated] = await db
-		.update(travelAssistanceRequests)
-		.set({
-			status: "quote_approved",
-			applicantNote: input.note?.trim() || null,
-			updatedAt: new Date(),
-		})
-		.where(eq(travelAssistanceRequests.id, existing.id))
-		.returning();
-	return serialize(updated);
-}
-
-/** Applicant requests changes to the prepared quote. */
-export async function requestQuoteChanges(input: {
-	applicationId: string;
-	applicantUserId: string;
-	note?: string;
-}): Promise<TravelAssistanceRequest> {
-	const [app] = await db
-		.select()
-		.from(applications)
-		.where(eq(applications.id, input.applicationId))
-		.limit(1);
-	if (!app) {
-		throw new HttpError(404, TRAVEL_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	}
-
-	const [applicant] = await db
-		.select()
-		.from(applicants)
-		.where(eq(applicants.id, app.applicantId))
-		.limit(1);
-	if (!applicant || applicant.userId !== input.applicantUserId) {
-		throw new HttpError(403, TRAVEL_ERROR_CODES.FORBIDDEN, "Not your application");
-	}
-
-	const [existing] = await db
-		.select()
-		.from(travelAssistanceRequests)
-		.where(eq(travelAssistanceRequests.applicationId, input.applicationId))
-		.orderBy(desc(travelAssistanceRequests.createdAt))
-		.limit(1);
-	if (!existing) {
-		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "No travel assistance request found");
-	}
-	if (existing.status !== "quote_prepared") {
-		throw new HttpError(
-			409,
-			TRAVEL_ERROR_CODES.QUOTE_NOT_PREPARED,
-			"There is no prepared quote to change.",
-		);
-	}
-
-	const [updated] = await db
-		.update(travelAssistanceRequests)
-		.set({
-			status: "review",
-			applicantNote: input.note?.trim() || null,
-			updatedAt: new Date(),
-		})
-		.where(eq(travelAssistanceRequests.id, existing.id))
-		.returning();
-	return serialize(updated);
-}
-
-/** Ops prepares a flight quote and sends it to the applicant. */
-export async function prepareQuote(input: {
-	requestId: string;
-	quote: TravelAssistanceQuoteInput;
-	actor: Actor;
-}): Promise<TravelAssistanceRequest> {
-	const [existing] = await db
-		.select()
-		.from(travelAssistanceRequests)
-		.where(eq(travelAssistanceRequests.id, input.requestId))
-		.limit(1);
-	if (!existing) {
-		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
-	}
-	if (existing.status === "invoiced" || existing.status === "booked") {
-		throw new HttpError(
-			409,
-			TRAVEL_ERROR_CODES.ALREADY_INVOICED,
-			"This request is already invoiced or booked.",
-		);
-	}
-
-	const [updated] = await db
-		.update(travelAssistanceRequests)
-		.set({
-			quote: input.quote as TravelAssistanceQuote,
-			ticketAmountCents: input.quote.ticketAmountCents,
-			opsNote: input.quote.opsNote?.trim() || null,
-			status: "quote_prepared",
-			updatedAt: new Date(),
-		})
-		.where(eq(travelAssistanceRequests.id, existing.id))
-		.returning();
-
-	// Notify the applicant that a quote is ready for review.
-	const [applicant] = await db
-		.select()
-		.from(applicants)
-		.where(eq(applicants.id, existing.applicantId))
-		.limit(1);
-	if (applicant?.userId) {
-		notify({
-			recipientUserId: applicant.userId,
-			type: "stage.changed",
-			title: "Flight quote ready for review",
-			body: "Your consultant has prepared a flight option. Review and approve it to proceed.",
-			link: "/portal/travel-assistance",
-		}).catch(() => {});
-	}
-
-	return serialize(updated);
-}
-
 /**
  * Manager assigns a handler to work a travel assistance request.
  * The handler is the ops user responsible for issuing the ticket invoice
@@ -570,11 +411,18 @@ export async function raiseTicketInvoice(input: {
 	if (!existing) {
 		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
 	}
-	if (existing.status !== "review" && existing.status !== "quote_approved") {
+	if (existing.status !== "review") {
 		throw new HttpError(
 			409,
 			TRAVEL_ERROR_CODES.NOT_APPROVED,
 			"The invoice can only be raised after the applicant requests travel assistance.",
+		);
+	}
+	if (!existing.assignedOpsUserId) {
+		throw new HttpError(
+			409,
+			TRAVEL_ERROR_CODES.HANDLER_NOT_ASSIGNED,
+			"Assign a handler before raising the ticket invoice.",
 		);
 	}
 	if (existing.invoiceId) {

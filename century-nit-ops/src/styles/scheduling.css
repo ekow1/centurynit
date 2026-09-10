@@ -91,6 +91,11 @@
 	color: var(--background);
 }
 
+.ops-status--assigned {
+	background: var(--accent, #e6f4ff);
+	color: var(--foreground);
+}
+
 /* ── Assign dialog ── */
 
 .ops-modal-backdrop {

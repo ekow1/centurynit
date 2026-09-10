@@ -1149,22 +1149,6 @@ export const meApi = {
 		});
 	},
 
-	/** Approve the prepared flight quote. */
-	approveTravelQuote(input: { note?: string } = {}): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/me/application/travel-assistance/quote/approve`, {
-			method: "POST",
-			...json(input),
-		});
-	},
-
-	/** Request changes to the prepared flight quote. */
-	requestTravelQuoteChanges(input: { note?: string } = {}): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/me/application/travel-assistance/quote/changes`, {
-			method: "POST",
-			...json(input),
-		});
-	},
-
 	/** Choose a payment plan after the flight is booked — clears to travel. */
 	chooseTravelPlan(input: { paymentPlanId: "full" | "installment" }): Promise<TravelAssistanceRequest> {
 		return request(`${API_PREFIX}/me/application/travel-assistance/plan`, {

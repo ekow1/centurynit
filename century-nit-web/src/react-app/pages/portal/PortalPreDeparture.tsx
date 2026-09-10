@@ -142,7 +142,11 @@ function TravelAssistanceInner() {
 	// If a travel invoice exists on the server, always surface it — even if
 	// the TA request status hasn't been updated to "invoiced" yet. The
 	// server invoice is the source of truth for payment.
-	const showReview = status === "review" && !trip;
+	// `quote_prepared`/`quote_approved` are legacy statuses from the removed
+	// quote flow; keep them covered here so a stray legacy row never renders
+	// a blank page between the header and the help card.
+	const showReview =
+		(status === "review" || status === "quote_prepared" || status === "quote_approved") && !trip;
 	const showInvoice = status === "invoiced" || status === "ticket_paid" || status === "booked" || Boolean(trip);
 	const showBooked = status === "booked";
 	const showCleared = status === "cleared";

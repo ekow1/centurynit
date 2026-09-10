@@ -82,13 +82,27 @@ export function AssignTaskDialog({
 	}
 
 	return (
-		<div className="ops-modal-backdrop" role="dialog" aria-modal="true" aria-label="Assign task">
+		<div
+			className="ops-modal-backdrop"
+			role="dialog"
+			aria-modal="true"
+			aria-label={task.owner === "Unassigned" ? "Assign task" : "Reassign task"}
+		>
 			<div className="ops-modal">
 				<header className="ops-modal__head">
 					<div>
-						<h2 className="ops-modal__title">Assign {taskActionLabel(task).toLowerCase()}</h2>
+						<h2 className="ops-modal__title">
+							{task.owner === "Unassigned" ? "Assign" : "Reassign"}{" "}
+							{taskActionLabel(task).toLowerCase()}
+						</h2>
 						<p className="ops-modal__sub">
 							{task.title} · {task.subtitle}
+							{task.owner !== "Unassigned" && (
+								<>
+									{" · "}
+									<span className="muted">Current: {task.owner}</span>
+								</>
+							)}
 						</p>
 					</div>
 					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
@@ -158,12 +172,20 @@ export function AssignTaskDialog({
 						disabled={!assigneeId || assigning}
 					onClick={doAssign}
 					>
-						{assigning ? "Assigning…" : "Assign"}
+						{assigning
+						? task.owner === "Unassigned"
+							? "Assigning…"
+							: "Reassigning…"
+						: task.owner === "Unassigned"
+							? "Assign"
+							: "Reassign"}
 					</button>
 				</div>
 
 				<p className="ops-modal__foot">
-					Assigning notifies the staff member and moves the item out of the pending queue.
+					{task.owner === "Unassigned"
+						? "Assigning notifies the staff member and moves the item out of the pending queue."
+						: "Reassigning transfers ownership to the new staff member and notifies them."}
 				</p>
 			</div>
 		</div>
@@ -196,7 +218,11 @@ export function PendingTaskTable({
 	const [justAssigned, setJustAssigned] = useState<string | null>(null);
 
 	const isAssignable = (t: PendingTask) =>
-		canAssignWork && (t.action === "assign" || t.action === "resolve");
+		canAssignWork &&
+		(t.kind === "booking" ||
+			t.kind === "consultation" ||
+			t.kind === "application" ||
+			t.action === "resolve");
 
 	return (
 		<>
@@ -271,7 +297,11 @@ export function PendingTaskTable({
 														t.kind === "booking" ? setBooking(t.record) : setTask(t)
 													}
 												>
-													{t.kind === "booking" ? "Assign employee" : "Assign"}
+													{t.kind === "booking"
+													? "Assign employee"
+													: t.owner === "Unassigned"
+														? "Assign"
+														: "Reassign"}
 												</button>
 											) : (
 												<Link to={t.linkTo} className="btn btn--ghost btn--sm">
@@ -495,10 +525,10 @@ export function PendingTasks({
 
 	const doAssign = useCallback(
 		async (task: PendingTask, to: Assignee, reason?: string) => {
-			if (task.kind === "consultation" && task.action === "assign") {
+			if (task.kind === "consultation") {
 				return assignConsultation(task.record.id, to);
 			}
-			if (task.kind === "application" && task.action === "assign") {
+			if (task.kind === "application") {
 				return assignApplication(task.record.id, to);
 			}
 			if (task.kind === "handoff" && task.action === "resolve") {

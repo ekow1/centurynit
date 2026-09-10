@@ -149,10 +149,11 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 	const [error, setError] = useState<string | null>(null);
 	const [selected, setSelected] = useState<Booking | null>(null);
 	const [justAssigned, setJustAssigned] = useState<Booking | null>(null);
+	const [showAssigned, setShowAssigned] = useState(false);
 
 	const load = useCallback(() => {
 		bookingsApi
-			.list({ status: "UNASSIGNED" })
+			.list({ status: showAssigned ? "ASSIGNED" : "UNASSIGNED" })
 			.then((res) => {
 				setBookings(res.bookings);
 				setError(null);
@@ -167,7 +168,7 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 							: "Could not load bookings.",
 				);
 			});
-	}, []);
+	}, [showAssigned]);
 
 	useEffect(load, [load]);
 
@@ -177,14 +178,23 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 		<section className="ops-panel" aria-labelledby="unassigned-heading">
 			<header className="ops-panel__head">
 				<h2 id="unassigned-heading" className="section-title">
-					{title}
+					{showAssigned ? "Assigned bookings" : title}
 					{bookings && bookings.length > 0 && (
 						<span className="ops-pill">{bookings.length}</span>
 					)}
 				</h2>
-				<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
-					Refresh
-				</button>
+				<div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						onClick={() => setShowAssigned((v) => !v)}
+					>
+						{showAssigned ? "Show unassigned" : "Show assigned"}
+					</button>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
+						Refresh
+					</button>
+				</div>
 			</header>
 
 			{error && <p className="ops-modal__error">{error}</p>}
@@ -201,7 +211,9 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 			{!bookings && <p className="ops-panel__muted">Loading…</p>}
 
 			{bookings && bookings.length === 0 && !error && (
-				<p className="ops-panel__muted">Nothing waiting to be assigned.</p>
+				<p className="ops-panel__muted">
+					{showAssigned ? "No assigned bookings to reassign." : "Nothing waiting to be assigned."}
+				</p>
 			)}
 
 			{bookings && bookings.length > 0 && (
@@ -214,6 +226,7 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 							<th>Time</th>
 							<th>Duration</th>
 							<th>Status</th>
+							{showAssigned && <th>Assigned to</th>}
 							<th>Created</th>
 							<th />
 						</tr>
@@ -232,8 +245,15 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 									<td>{when.time}</td>
 									<td>{b.durationMinutes} minutes</td>
 									<td>
-										<span className="ops-status ops-status--unassigned">{b.status}</span>
+										<span
+											className={`ops-status ${
+												showAssigned ? "ops-status--assigned" : "ops-status--unassigned"
+											}`}
+										>
+											{b.status}
+										</span>
 									</td>
+									{showAssigned && <td>{b.employeeName ?? "—"}</td>}
 									<td>{new Date(b.createdAt).toLocaleDateString()}</td>
 									<td>
 										<button
@@ -241,7 +261,7 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 											className="btn btn--primary btn--sm"
 											onClick={() => setSelected(b)}
 										>
-											Assign employee
+											{showAssigned ? "Reassign" : "Assign employee"}
 										</button>
 									</td>
 								</tr>

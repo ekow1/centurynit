@@ -624,13 +624,15 @@ function TaQueueRow({
 	const pendingHint =
 		ta.status === "decision_pending"
 			? "Waiting for applicant decision"
-			: ta.status === "invoiced"
-				? "Waiting for applicant to pay the ticket"
-				: ta.status === "booked"
-					? "Booking confirmed — waiting for applicant to choose a payment plan"
-					: ta.status === "cleared"
-						? "Cleared to travel"
-						: null;
+			: ta.status === "review" && !ta.assignedOpsUserId
+				? "Assign a handler before raising the ticket invoice."
+				: ta.status === "invoiced"
+					? "Waiting for applicant to pay the ticket"
+					: ta.status === "booked"
+						? "Booking confirmed — waiting for applicant to choose a payment plan"
+						: ta.status === "cleared"
+							? "Cleared to travel"
+							: null;
 
 	return (
 		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
@@ -658,12 +660,12 @@ function TaQueueRow({
 					)}
 				</div>
 				<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-					{ta.status === "review" && !ta.assignedOpsUserId && (
+					{ta.status === "review" && (
 						<button className="btn btn--sm btn--ghost" onClick={() => setShowAssignForm((v) => !v)}>
-							Assign handler
+							{ta.assignedOpsUserId ? "Reassign handler" : "Assign handler"}
 						</button>
 					)}
-					{ta.status === "review" && (
+					{ta.status === "review" && ta.assignedOpsUserId && (
 						<button className="btn btn--sm btn--primary" onClick={() => setShowInvoiceForm((v) => !v)}>
 							Raise invoice
 						</button>
@@ -704,7 +706,7 @@ function TaQueueRow({
 				</div>
 			)}
 
-			{showInvoiceForm && ta.status === "review" && (
+			{showInvoiceForm && ta.status === "review" && ta.assignedOpsUserId && (
 				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
 					<input
 						className="input input--sm"

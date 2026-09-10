@@ -1189,8 +1189,6 @@ type AppStateContextValue = {
 	fees: FeeSchedule | null;
 	/** Travel assistance (quote-before-invoice flow) */
 	recordTravelDecision: (decision: "yes" | "hold" | "no") => Promise<void>;
-	approveTravelQuote: (note?: string) => Promise<void>;
-	requestTravelQuoteChanges: (note?: string) => Promise<void>;
 };
 
 const AppStateContext = createContext<AppStateContextValue | null>(null);
@@ -2158,32 +2156,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
-	const approveTravelQuote = useCallback(async (note?: string) => {
-		try {
-			const ta = await meApi.approveTravelQuote({ note });
-			setApplication((prev) => ({ ...prev, travelAssistance: ta }));
-		} catch (err) {
-			toastRef.current?.error(
-				err instanceof Error ? err.message : "Could not approve the flight quote",
-				{ title: "Approval failed" },
-			);
-			throw err;
-		}
-	}, []);
-
-	const requestTravelQuoteChanges = useCallback(async (note?: string) => {
-		try {
-			const ta = await meApi.requestTravelQuoteChanges({ note });
-			setApplication((prev) => ({ ...prev, travelAssistance: ta }));
-		} catch (err) {
-			toastRef.current?.error(
-				err instanceof Error ? err.message : "Could not request quote changes",
-				{ title: "Request failed" },
-			);
-			throw err;
-		}
-	}, []);
-
 	/**
 	 * Sync real server consultation, assignment, eligibility and applicant profile
 	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
@@ -2747,8 +2719,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			syncFromServer,
 			fees,
 			recordTravelDecision,
-			approveTravelQuote,
-			requestTravelQuoteChanges,
 		}),
 		[
 			application,
@@ -2817,8 +2787,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			syncFromServer,
 			fees,
 			recordTravelDecision,
-			approveTravelQuote,
-			requestTravelQuoteChanges,
 		],
 	);
 

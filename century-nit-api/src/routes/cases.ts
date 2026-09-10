@@ -52,8 +52,6 @@ import {
 	getForApplicationWithContext as getTravelAssistanceForApplicationOps,
 	listForOps as listTravelAssistanceForOps,
 	recordDecision as recordTravelAssistanceDecision,
-	approveQuote as approveTravelAssistanceQuote,
-	requestQuoteChanges as requestTravelAssistanceQuoteChanges,
 	raiseTicketInvoice as raiseTravelTicketInvoice,
 	recordBooking as recordTravelBooking,
 	updateOpsChecklist as updateTravelOpsChecklist,
@@ -1880,92 +1878,6 @@ meRouter.openapi(
 			applicationId: application.id,
 			applicantUserId: user.id,
 			decision: body.decision,
-		});
-		return c.json(updated);
-	},
-);
-
-meRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/application/travel-assistance/quote/approve",
-		tags: ["Applicants"],
-		middleware: [requireAuth] as const,
-		request: {
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({ note: z.string().max(2000).optional() }),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "The approved travel assistance request",
-			},
-		},
-	}),
-	async (c) => {
-		const user = c.get("user");
-		const applicant = await getApplicantByUserId(user.id);
-		if (!applicant) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
-		}
-		const application = await latestApplicationForApplicant(applicant.id);
-		if (!application) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
-		}
-		const body = c.req.valid("json");
-		const updated = await approveTravelAssistanceQuote({
-			applicationId: application.id,
-			applicantUserId: user.id,
-			note: body.note,
-		});
-		return c.json(updated);
-	},
-);
-
-meRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/application/travel-assistance/quote/changes",
-		tags: ["Applicants"],
-		middleware: [requireAuth] as const,
-		request: {
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({ note: z.string().max(2000).optional() }),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "The travel assistance request, back in review",
-			},
-		},
-	}),
-	async (c) => {
-		const user = c.get("user");
-		const applicant = await getApplicantByUserId(user.id);
-		if (!applicant) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
-		}
-		const application = await latestApplicationForApplicant(applicant.id);
-		if (!application) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
-		}
-		const body = c.req.valid("json");
-		const updated = await requestTravelAssistanceQuoteChanges({
-			applicationId: application.id,
-			applicantUserId: user.id,
-			note: body.note,
 		});
 		return c.json(updated);
 	},

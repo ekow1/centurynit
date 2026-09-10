@@ -1588,6 +1588,15 @@ export async function assignApplication(input: {
 			),
 		);
 
+	// Advance the case from document_verification into school_submission once
+	// a handler is assigned and the deposit is paid. This keeps the DB stage
+	// in sync with the assignment so Ops stops showing "Document Verification".
+	await applyHandoffResolvedTransition({
+		applicationId: row.id,
+		stage: "school_submission",
+		actor: input.actor,
+	});
+
 	await db
 		.update(applicants)
 		.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })

@@ -769,17 +769,30 @@ export function EnterpriseCases() {
 											</p>
 										)}
 										{appInvoiceLoading ? (
-											<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>Loading invoice…</p>
-										) : !appInvoice ? (
-											<>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-													No application invoice yet
-												</p>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-													The applicant must lock their school selection to generate a proforma invoice.
-												</p>
-											</>
-										) : isProforma ? (
+									<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>Loading invoice…</p>
+								) : !appInvoice ? (
+									<>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+											No invoice yet — {app.schoolApplications?.length ?? 0} school(s) selected
+										</p>
+										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+											Issue the application invoice so the applicant can pay the application fee. A proforma will be created from the selected schools automatically.
+										</p>
+										<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+											<button
+												type="button"
+												className="btn btn--sm btn--primary"
+												onClick={handleIssueApplicationInvoice}
+												disabled={issuingInvoice}
+											>
+												{issuingInvoice ? "Issuing…" : "Issue Application Invoice"}
+											</button>
+											<Link to="/invoices" className="btn btn--sm btn--ghost">
+												Full invoice view →
+											</Link>
+										</div>
+									</>
+								) : isProforma ? (
 											<>
 												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
 													Proforma ready — review and issue

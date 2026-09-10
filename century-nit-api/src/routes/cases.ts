@@ -66,6 +66,8 @@ import {
 	serializeInvoice,
 	acceptProformaClient,
 	issueProformaByOps,
+	createProforma,
+	getFeeSchedule,
 } from "../services/invoice.js";
 import {
 	createPaystackCheckout,
@@ -688,6 +690,22 @@ applicationsRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
+
+		// Load the application and applicant.
+		const [app] = await db
+			.select()
+			.from(schema.applications)
+			.where(eq(schema.applications.id, id))
+			.limit(1);
+		if (!app) {
+			throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+		}
+		const [applicant] = await db
+			.select()
+			.from(schema.applicants)
+			.where(eq(schema.applicants.id, app.applicantId))
+			.limit(1);
+
 		// Find the proforma application invoice for this application.
 		let [appInvoice] = await db
 			.select()
@@ -701,40 +719,61 @@ applicationsRouter.openapi(
 			.orderBy(desc(schema.invoices.createdAt))
 			.limit(1);
 
-		// Fallback: if no invoice is linked by applicationId, find the applicant's
-		// userId and look up by clientUserId. This covers invoices created before
-		// the applicationId backfill was added.
-		if (!appInvoice) {
-			const [app] = await db
-				.select({ applicantId: schema.applications.applicantId })
-				.from(schema.applications)
-				.where(eq(schema.applications.id, id))
+		// Fallback: look up by clientUserId (for invoices created before the
+		// applicationId backfill was added).
+		if (!appInvoice && applicant?.userId) {
+			[appInvoice] = await db
+				.select()
+				.from(schema.invoices)
+				.where(
+					and(
+						eq(schema.invoices.clientUserId, applicant.userId),
+						eq(schema.invoices.type, "application"),
+					),
+				)
+				.orderBy(desc(schema.invoices.createdAt))
 				.limit(1);
-			if (app) {
-				const [applicant] = await db
-					.select({ userId: schema.applicants.userId })
-					.from(schema.applicants)
-					.where(eq(schema.applicants.id, app.applicantId))
-					.limit(1);
-				if (applicant?.userId) {
-					[appInvoice] = await db
-						.select()
-						.from(schema.invoices)
-						.where(
-							and(
-								eq(schema.invoices.clientUserId, applicant.userId),
-								eq(schema.invoices.type, "application"),
-							),
-						)
-						.orderBy(desc(schema.invoices.createdAt))
-						.limit(1);
-				}
-			}
 		}
 
+		// If no proforma exists yet, create one from the selected schools.
+		// This lets the handler issue the invoice directly without waiting for
+		// the applicant to formally "lock" school selection — breaking the
+		// deadlock where the handler can't issue, the applicant can't pay, and
+		// school processing is blocked.
 		if (!appInvoice) {
-			throw new HttpError(404, "INVOICE_NOT_FOUND", "No application invoice found for this case. The applicant must lock school selection first.");
+			const schools = await db
+				.select()
+				.from(schema.schoolApplications)
+				.where(eq(schema.schoolApplications.applicantId, app.applicantId));
+			if (schools.length === 0) {
+				throw new HttpError(
+					400,
+					"NO_SCHOOLS_SELECTED",
+					"No schools have been selected for this application. The applicant must select at least one school before an invoice can be issued.",
+				);
+			}
+			const fees = await getFeeSchedule();
+			const schoolLines = schools.map((s) => ({
+				label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
+				detail: `Direct institutional submission & processing (${s.intake})`,
+				amountCents: fees.appPerSchoolCents,
+			}));
+			const proforma = await createProforma({
+				data: {
+					applicantName: applicant?.name ?? "Applicant",
+					applicantEmail: applicant?.email ?? undefined,
+					clientUserId: applicant?.userId ?? undefined,
+					applicationId: app.id,
+					type: "application",
+					lines: schoolLines.length > 0
+						? schoolLines
+						: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
+					note: `Application invoice for ${schools.length} university application(s).`,
+				},
+			});
+			appInvoice = proforma;
 		}
+
 		// Backfill applicationId if missing.
 		if (!appInvoice.applicationId) {
 			await db

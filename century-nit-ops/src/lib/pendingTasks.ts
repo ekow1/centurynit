@@ -377,7 +377,12 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 	);
 
 	for (const a of applications) {
-		if (!a.assignedStaff && !handoffAppIds.has(a.id)) {
+		// If there's a pending handoff for this application, ONLY the handoff
+		// task should show. The application can't be reviewed, checked, or
+		// invoiced until a handler is assigned. Without this, the dashboard
+		// shows two conflicting cards for the same case.
+		if (handoffAppIds.has(a.id)) continue;
+		if (!a.assignedStaff) {
 			q.push({
 				id: `a-assign-${a.id}`,
 				category: "needs_assignment",
@@ -431,6 +436,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 	// This is independent of the invoice list — it's derived from the application
 	// state itself so it shows up even if invoices aren't loaded.
 	for (const a of applications) {
+		// Skip if there's a pending handoff — the handler hasn't been assigned yet.
+		if (handoffAppIds.has(a.id)) continue;
 		const hasSchools = (a.schoolApplications?.length ?? 0) > 0;
 		if (!hasSchools || a.appFeePaid) continue;
 		// Check if there's already a proforma or issued invoice for this application

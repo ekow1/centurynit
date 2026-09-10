@@ -518,14 +518,18 @@ export async function recordPayment(input: {
 			if (updated.type === "application" && status === "paid") {
 				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, targetAppId));
 			} else if (updated.type === "visa" && status === "paid") {
-				// Paying the visa invoice marks it paid and opens the assignment
-				// handoff. The case goes to awaiting_handler — visa tracking does
-				// NOT open until a manager assigns a visa specialist, which moves
-				// visaStage awaiting_handler → pending. Idempotent: only fires
-				// from `locked`, and createOrGet dedupes the handoff.
+				// Always mark the visa invoice as paid on the application row so the
+				// portal and /me/journey see the correct status — the flag must not
+				// depend on the current visaStage (ops may have already advanced it).
+				await txDb
+					.update(applications)
+					.set({ visaInvoicePaid: true })
+					.where(eq(applications.id, targetAppId));
+				// The stage transition (locked → awaiting_handler) and the handoff
+				// only fire once, from "locked". Idempotent: createOrGet dedupes.
 				const [paidApp] = await txDb
 					.update(applications)
-					.set({ visaInvoicePaid: true, visaStage: "awaiting_handler" })
+					.set({ visaStage: "awaiting_handler" })
 					.where(and(eq(applications.id, targetAppId), eq(applications.visaStage, "locked")))
 					.returning();
 				if (paidApp) {

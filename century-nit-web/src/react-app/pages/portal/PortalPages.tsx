@@ -3747,7 +3747,25 @@ const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 function VisaTrackingInner() {
 	const { application } = useAppState();
 	const nav = useNavigate();
-	const paid = application.visaInvoice.status === "paid";
+	// Fetch the real server invoice so the paid check doesn't rely solely on
+	// the local `application.visaInvoice.status` (which is only synced when
+	// the `visaInvoicePaid` flag is set on the application row). The invoice
+	// table is the source of truth — see VisaHubInner for the same pattern.
+	const [serverInv, setServerInv] = useState<{ status: string } | null>(null);
+	useEffect(() => {
+		let cancelled = false;
+		meApi
+			.invoices()
+			.then(({ invoices }) => {
+				if (cancelled) return;
+				const visa = invoices.find((i) => i.type === "visa");
+				if (visa) setServerInv({ status: visa.status });
+			})
+			.catch(() => {});
+		return () => { cancelled = true; };
+	}, []);
+	const serverPaid = serverInv?.status === "paid";
+	const paid = application.visaInvoice.status === "paid" || serverPaid;
 	const steps = [
 		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
 		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },

@@ -2379,8 +2379,12 @@ meRouter.openapi(
 			(s) =>
 				s.outcome === "Admitted",
 		);
-		const isVisaInvoicePaid = Boolean(application?.visaInvoicePaid);
-		const isTravelInvoicePaid = Boolean(application?.travelInvoicePaid);
+		const isVisaInvoicePaid =
+			invoices.some((i) => i.type === "visa" && i.status === "paid") ||
+			Boolean(application?.visaInvoicePaid);
+		const isTravelInvoicePaid =
+			invoices.some((i) => i.type === "travel" && i.status === "paid") ||
+			Boolean(application?.travelInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
 		// The plan chapter's settlement is per-plan: full plans need the agency
 		// service fee settled in full, installment plans only their first

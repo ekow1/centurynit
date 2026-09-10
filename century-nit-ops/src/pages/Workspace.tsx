@@ -357,7 +357,10 @@ function PreviewPane({
 	const [assignError, setAssignError] = useState<string | null>(null);
 	const [reason, setReason] = useState<string>("");
 
-	const eligibleAssignees = assignees.filter((a) => a.branch === item.branch || !item.branch || item.branch === "");
+	const branchMatches = assignees.filter((a) => a.branch === item.branch || !item.branch || item.branch === "");
+	// Fall back to all staff when the branch filter produces an empty list —
+	// otherwise the dropdown renders nothing and the manager cannot assign.
+	const eligibleAssignees = branchMatches.length > 0 ? branchMatches : assignees;
 
 	async function doAssign() {
 		const to = assignees.find((a) => a.email === assigneeId || a.opsUserId === assigneeId);

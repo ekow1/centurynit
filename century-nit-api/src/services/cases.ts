@@ -58,7 +58,6 @@ import {
 	isAwaitingAssignmentBoundary,
 	isOwnerClassBoundary,
 	pendingHandoffForApplication,
-	stageHasActiveHandler,
 } from "./handoffs.js";
 
 export type ApplicantRow = typeof applicants.$inferSelect;
@@ -1057,6 +1056,17 @@ export async function completeConsultationAssessment(input: {
 		text: "Application opened — awaiting assignment",
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	// Create a handoff so the manager sees "Assign" + "Continue with [consultation
+	// officer]" on the first application assignment. The consultation's officer
+	// is the continuity candidate — they already know the applicant from the
+	// consultation and can keep working the case if the manager chooses.
+	await createOrGetHandoff({
+		applicationId: created.id,
+		stage: "document_verification",
+		source: "consultation_completed",
+		fromOpsUserId: row.assignedOfficerId ?? null,
 	});
 
 	// In-app: hand the case to management — it needs an owner before work starts.
@@ -2132,38 +2142,28 @@ export async function setApplicationStage(
 
 	// Leaving a stage the case was in concludes that stage's assignment.
 	if (stage !== row.stage) {
-		const unownedBoundary =
-			isOwnerClassBoundary(row.stage, stage) && !(await stageHasActiveHandler(id, stage));
+		const handler = await activeHandlerFor(id, row.stage);
+		const isGated = isAwaitingAssignmentBoundary(stage);
+
+		// Create a handoff on EVERY stage transition so the manager always
+		// sees "Assign" + "Keep previous handler" — not just at owner-class
+		// boundaries. The previous stage's handler is the continuity candidate.
+		await createOrGetHandoff({
+			applicationId: id,
+			stage,
+			source: "stage_transition",
+			fromOpsUserId: handler?.opsUserId ?? null,
+		});
 
 		// Finance/travel boundary stages hard-gate on entry — the case parks at
 		// its predecessor until a manager resolves the handoff, so the stage is
 		// never worked without a confirmed specialist. `signalStageNeedsHandler`
 		// alerts management; resolving the handoff completes the transition.
-		if (unownedBoundary && isAwaitingAssignmentBoundary(stage)) {
-			const handler = await activeHandlerFor(id, row.stage);
-			await createOrGetHandoff({
-				applicationId: id,
-				stage,
-				source: "stage_transition",
-				fromOpsUserId: handler?.opsUserId ?? null,
-			});
+		if (isGated) {
 			markStageCompleted(id, row.stage, actor.opsUserId);
 			void signalStageNeedsHandler(id, stage);
 			await broadcastCaseUpdate(row, actor);
 			return row;
-		}
-
-		if (unownedBoundary) {
-			// Advisory queue for the specialist change (visa pre-payment): the
-			// visa gate itself is the payment-triggered `awaiting_handler`
-			// sub-state, and `completed` is terminal — neither blocks the move.
-			const handler = await activeHandlerFor(id, row.stage);
-			await createOrGetHandoff({
-				applicationId: id,
-				stage,
-				source: "stage_transition",
-				fromOpsUserId: handler?.opsUserId ?? null,
-			});
 		}
 
 		markStageCompleted(id, row.stage, actor.opsUserId);

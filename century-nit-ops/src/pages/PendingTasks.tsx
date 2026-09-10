@@ -40,15 +40,22 @@ export function AssignTaskDialog({
 	assignees,
 	onClose,
 	onAssign,
+	onKeepHandler,
 }: {
 	task: PendingTask;
 	assignees: Assignee[];
 	onClose: () => void;
 	onAssign: (to: Assignee, reason?: string) => Promise<unknown>;
+	onKeepHandler?: (reason?: string) => Promise<unknown>;
 }) {
 	const eligibleAssignees = assignees.filter(
 		(a) => a.branch === task.branch || !task.branch || task.branch === "",
 	);
+	// Fall back to all staff when the branch filter produces an empty list —
+	// otherwise the dropdown says "No staff are configured for this branch"
+	// and the manager cannot assign at all (e.g. consultation branch has no
+	// matching staff, or the applicant's branch was never set).
+	const assigneeOptions = eligibleAssignees.length > 0 ? eligibleAssignees : assignees;
 	const [assigneeId, setAssigneeId] = useState("");
 	const [reason, setReason] = useState("");
 	const [assigning, setAssigning] = useState(false);
@@ -91,14 +98,14 @@ export function AssignTaskDialog({
 
 				{error && <p className="ops-modal__error">{error}</p>}
 
-				{eligibleAssignees.length === 0 ? (
+				{assigneeOptions.length === 0 ? (
 					<p className="ops-modal__muted">No staff are configured for this branch.</p>
 				) : (
 					<label className="field" style={{ marginBottom: "0.75rem" }}>
 						<span className="field-label">Assign to</span>
 						<select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
 							<option value="">Select staff…</option>
-							{eligibleAssignees.map((a) => (
+							{assigneeOptions.map((a) => (
 								<option key={a.email} value={a.email}>
 									{a.name} {a.branch ? `(${a.branch})` : ""}
 								</option>
@@ -119,12 +126,31 @@ export function AssignTaskDialog({
 					</label>
 				)}
 
-				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
+					{task.kind === "handoff" && onKeepHandler && task.record?.fromOpsUserName && (
+						<button
+							type="button"
+							className="btn btn--ghost btn--sm"
+							disabled={assigning}
+							onClick={() => {
+								setAssigning(true);
+								setError(null);
+								onKeepHandler(reason || undefined)
+									.then(() => onClose())
+									.catch((err) => {
+										setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not resolve");
+										setAssigning(false);
+									});
+							}}
+						>
+							{assigning ? "Resolving…" : `Keep ${task.record.fromOpsUserName}`}
+						</button>
+					)}
 					<button
 						type="button"
 						className="btn btn--primary btn--sm"
 						disabled={!assigneeId || assigning}
-						onClick={doAssign}
+					onClick={doAssign}
 					>
 						{assigning ? "Assigning…" : "Assign"}
 					</button>
@@ -143,6 +169,7 @@ export function PendingTaskTable({
 	assignees,
 	canAssignWork,
 	onAssign,
+	onKeepHandler,
 	onAssigned,
 	onSelect,
 	selectedId,
@@ -152,6 +179,7 @@ export function PendingTaskTable({
 	assignees: Assignee[];
 	canAssignWork: boolean;
 	onAssign: (task: PendingTask, to: Assignee, reason?: string) => Promise<unknown>;
+	onKeepHandler?: (task: PendingTask, reason?: string) => Promise<unknown>;
 	onAssigned: () => void | Promise<void>;
 	onSelect?: (task: PendingTask) => void;
 	selectedId?: string | null;
@@ -280,6 +308,14 @@ export function PendingTaskTable({
 						onAssign(task, to, reason).then(() => {
 							void onAssigned();
 						})
+					}
+					onKeepHandler={
+						onKeepHandler
+							? (reason) =>
+									onKeepHandler(task, reason).then(() => {
+										void onAssigned();
+									})
+							: undefined
 					}
 				/>
 			)}
@@ -470,6 +506,16 @@ export function PendingTasks({
 		[assignConsultation, assignApplication, resolveHandoff],
 	);
 
+	const doKeepHandler = useCallback(
+		async (task: PendingTask, reason?: string) => {
+			if (task.kind === "handoff" && task.action === "resolve") {
+				return resolveHandoff(task.record.id, "keep", { reason: reason || undefined });
+			}
+			throw new Error("This task does not support keeping the previous handler.");
+		},
+		[resolveHandoff],
+	);
+
 	if (!canAssignWork) return null;
 
 	const loading = (casesLoading || invoicesLoading) && items.length === 0;
@@ -505,6 +551,7 @@ export function PendingTasks({
 					assignees={assignees}
 					canAssignWork={canAssignWork}
 					onAssign={doAssign}
+					onKeepHandler={doKeepHandler}
 					onAssigned={() => {
 						loadBookings();
 						void refresh();

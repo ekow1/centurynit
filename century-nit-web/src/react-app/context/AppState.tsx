@@ -854,7 +854,10 @@ export function getChapterUnlocks(
 		journey: true,
 		consultation: true,
 		package: eligible || atOrBeyond("school_package"),
-		application: (eligible && hasSchoolPackage(app)) || atOrBeyond("school_select"),
+		// The application chapter stays unlocked once the applicant has a
+		// package — the awaiting_handler stage is part of this chapter, not
+		// a locked future chapter.
+		application: (eligible && hasSchoolPackage(app)) || atOrBeyond("awaiting_handler"),
 		// Tracking is its own page - only after application invoice paid
 		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
 		visa: admitted || atOrBeyond("visa"),

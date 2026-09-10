@@ -2603,7 +2603,12 @@ meRouter.openapi(
 			journey: true,
 			consultation: true,
 			package: isEligible,
-			application: isEligible && (!hasDepositPaid || hasHandlerAssigned),
+			// The application chapter stays unlocked once the deposit is paid.
+			// The applicant is in the application journey — they may be waiting
+			// for a handler (awaiting_handler), but that's part of this chapter,
+			// not a locked future chapter. Locking it would show a generic
+			// "Stage locked" gate instead of the awaiting-handler page.
+			application: isEligible && hasPackage,
 			tracking: isAppInvoicePaid && hasSelection,
 			visa: hasAdmitted,
 			travel_assistance: hasAdmitted && isVisaInvoicePaid && isVisaDone,

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, not, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, not, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -1987,10 +1987,11 @@ export async function ensureVisaInvoiceForApplication(
 	const app = await latestApplicationForApplicant(applicant.id);
 	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
-	// Reuse any live visa invoice linked to this user or this application —
-	// never open a second one. Prefer the invoice the applicant actually paid
-	// (paid → partial → issued → proforma), then the one tied to this
-	// application, so the portal and checkout never split across duplicates.
+	// Reuse any live visa invoice linked to THIS application — never one from
+	// a different application. Previously the query matched by clientUserId OR
+	// applicationId, so a stale paid visa invoice from a previous application
+	// would be returned here, making the portal show "Paid" for a visa invoice
+	// the client never paid on the current case.
 	const candidates = await db
 		.select()
 		.from(invoices)
@@ -1998,28 +1999,49 @@ export async function ensureVisaInvoiceForApplication(
 			and(
 				eq(invoices.type, "visa"),
 				not(eq(invoices.status, "void")),
-				or(eq(invoices.clientUserId, userId), eq(invoices.applicationId, app.id)),
+				eq(invoices.applicationId, app.id),
 			),
 		);
 	const statusRank = (status: string): number =>
 		status === "paid" ? 0 : status === "partial" ? 1 : status === "issued" ? 2 : status === "proforma" ? 3 : 4;
-	candidates.sort((a, b) => {
-		const rankA = statusRank(a.status) + (a.applicationId === app.id ? 0 : 10);
-		const rankB = statusRank(b.status) + (b.applicationId === app.id ? 0 : 10);
-		return rankA - rankB || (a.createdAt < b.createdAt ? -1 : 1);
-	});
+	candidates.sort((a, b) => statusRank(a.status) - statusRank(b.status) || (a.createdAt < b.createdAt ? -1 : 1));
 	const linked = candidates[0];
 	if (linked) {
-		if (!linked.applicationId || !linked.clientUserId) {
+		if (!linked.clientUserId) {
 			await db
 				.update(invoices)
-				.set({
-					...(linked.applicationId ? {} : { applicationId: app.id }),
-					...(linked.clientUserId ? {} : { clientUserId: userId }),
-				})
+				.set({ clientUserId: userId })
 				.where(eq(invoices.id, linked.id));
 		}
 		return linked;
+	}
+
+	// Fall back to an unlinked visa invoice for this user (raised by ops before
+	// the application was created, applicationId is null). Link it to this app.
+	// Never fall back to a paid invoice from another application.
+	const unlinked = await db
+		.select()
+		.from(invoices)
+		.where(
+			and(
+				eq(invoices.type, "visa"),
+				not(eq(invoices.status, "void")),
+				eq(invoices.clientUserId, userId),
+				isNull(invoices.applicationId),
+			),
+		)
+		.limit(1);
+	if (unlinked[0]) {
+		await db
+			.update(invoices)
+			.set({ clientUserId: userId, applicationId: app.id })
+			.where(eq(invoices.id, unlinked[0].id));
+		const [recovered] = await db
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, unlinked[0].id))
+			.limit(1);
+		if (recovered) return recovered;
 	}
 
 	// Recover a visa invoice that predates the applicant's login link

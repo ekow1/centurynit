@@ -359,6 +359,16 @@ export async function resolveStageHandoff(input: {
 		reason: input.reason ?? (input.decision === "keep" ? "handoff: keep current handler" : "handoff: assign specialist"),
 	});
 
+	// The document_verification handoff establishes the case owner for the
+	// whole application. Write it to applications.assignedStaffId so the ops
+	// case view and the portal see the same handler.
+	if (row.stage === "document_verification") {
+		await db
+			.update(applications)
+			.set({ assignedStaffId: resolvedOpsUserId, updatedAt: new Date() })
+			.where(eq(applications.id, row.applicationId));
+	}
+
 	// Activate the gate that was waiting on this specialist.
 	if (row.stage === "visa_processing") {
 		// Visa gate is the `awaiting_handler` sub-state: opening the case makes

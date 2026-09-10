@@ -1153,6 +1153,7 @@ type AppStateContextValue = {
 	visaStageFee: number;
 	autosaveLabel: string;
 	chapterUnlocks: Record<PortalChapterId, boolean>;
+	refreshJourney: () => Promise<void>;
 	journeyPhase: ReturnType<typeof getJourneyPhase>;
 	pendingAction: PendingAction | null;
 	processStage: ProcessStageId;
@@ -2629,6 +2630,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// this kills the two-competing-server-reads flaw (#1) where chapter
 	// unlocks (from meApi.application()) and the displayed phase (from
 	// meApi.journey()) could disagree.
+	const refreshJourney = useCallback(async () => {
+		try {
+			const j = await meApi.journey();
+			setServerJourney(j);
+		} catch {
+			/* keep existing data */
+		}
+	}, []);
+
 	const chapterUnlocks = useMemo(
 		() => serverJourney?.chapterUnlocks ?? localChapterUnlocks,
 		[serverJourney, localChapterUnlocks],
@@ -2689,6 +2699,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			applicationStageFee: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents),
 			visaStageFee: VISA_STAGE_FEE,
 			autosaveLabel,
+			refreshJourney,
 			chapterUnlocks,
 			journeyPhase: effectiveJourneyPhase,
 			pendingAction,

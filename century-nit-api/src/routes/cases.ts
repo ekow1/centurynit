@@ -2450,9 +2450,11 @@ meRouter.openapi(
 			? await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h))
 			: false;
 		const hasSelection = schoolTracks.schools.length > 0;
-		const isAppInvoicePaid = invoices.some(
-			(i) => i.type === "application" && i.status === "paid",
-		);
+		const isAppInvoicePaid =
+			application?.appFeePaid ||
+			invoices.some(
+				(i) => i.type === "application" && i.status === "paid",
+			);
 		// The application invoice starts as "proforma" when the applicant locks
 		// school selection. The handler must explicitly "issue" it before the
 		// applicant can pay. While it's still proforma, the portal shows

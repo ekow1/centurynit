@@ -2149,11 +2149,14 @@ export function PortalConsultationBookingFlow() {
 
 
 export function PortalConsultation() {
-	const { booking } = useAppState();
+	const { booking, updateApplication } = useAppState();
+	const { toast } = useNotifier();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [consentBusy, setConsentBusy] = useState(false);
+
 	const refreshLiveCase = useCallback(async () => {
 		try {
 			const res = await meApi.application();
@@ -2169,6 +2172,47 @@ export function PortalConsultation() {
 	useEffect(() => {
 		void refreshLiveCase();
 	}, [refreshLiveCase]);
+
+	const applicationConsent = liveApplication?.applicationConsent?.decision ?? null;
+
+	const submitConsent = useCallback(
+		async (decision: "continue" | "hold" | "opt_out", reason?: string) => {
+			if (!liveApplication?.id) {
+				toast.error("Your application is not ready yet. Please wait for the consultation to be completed.");
+				return;
+			}
+			setConsentBusy(true);
+			try {
+				await meApi.consent("application", { decision, reason });
+				toast.success(
+					decision === "continue"
+						? "Your case has been sent to our team."
+						: decision === "hold"
+							? "This stage is on hold."
+							: "You've opted out of this stage.",
+				);
+				if (decision === "continue") {
+					updateApplication({ proceedStatus: "accepted" });
+					await refreshLiveCase();
+				} else if (decision === "hold") {
+					updateApplication({ proceedStatus: "paused" });
+					await refreshLiveCase();
+				} else {
+					updateApplication({ proceedStatus: "declined" });
+					await refreshLiveCase();
+				}
+			} catch (err) {
+				toast.error(
+					err instanceof ApiError
+						? err.message
+						: "Could not submit your decision. Please try again.",
+				);
+			} finally {
+				setConsentBusy(false);
+			}
+		},
+		[liveApplication?.id, toast, updateApplication, refreshLiveCase],
+	);
 
 	// An active case exists if there's a consultation OR an application. Ops
 	// can create the application directly (bypassing consultation), and a
@@ -2410,36 +2454,83 @@ export function PortalConsultation() {
 								</div>
 							)}
 
-							<div className="row mt-4" style={{ justifyContent: "flex-end" }}>
-								<Button to="/portal/package" arrow>
-									Proceed to Stage II: School Package Selection →
+							{applicationConsent === "continue" && (
+								<div className="row mt-4" style={{ justifyContent: "flex-end" }}>
+									<Button to="/portal/package" arrow>
+										Next · School Package →
+									</Button>
+								</div>
+							)}
+						</div>
+					)}
+
+					{/* Consent gate — the applicant must explicitly continue before
+						package selection is available. Shows the same card as the
+						dashboard so the question is answered in place. */}
+					{activeOutcome && applicationConsent !== "continue" && applicationConsent !== "opt_out" && (
+						<StageConsentCard
+							stage="application"
+							currentDecision={applicationConsent}
+							title="Continue with your application?"
+							lead="Your consultation is complete and your application is ready to start. Continue so we can assign a handler and begin processing your application."
+							continueDetail="A handler will be assigned to your case. They'll guide you through document verification, school submission, and offer review. An application fee invoice will be raised for you to pay."
+							holdDetail="You can come back and continue with your application whenever you're ready. Nothing is sent to our team until you continue."
+							optOutDetail="Your application will be withdrawn. You'll need to start a new consultation if you change your mind later."
+							onDecided={refreshLiveCase}
+						/>
+					)}
+
+					{/* Opted-out state */}
+					{activeOutcome && applicationConsent === "opt_out" && (
+						<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--border-light, #9ca3af)" }}>
+							<p className="eyebrow">Your decision</p>
+							<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>
+								Application Closed for This Cycle
+							</h3>
+							<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
+								You chose to opt out of the application stage for this cycle. If your plans change, you can resume at any time.
+							</p>
+							<div className="row mt-3">
+								<Button
+									type="button"
+									variant="secondary"
+									disabled={consentBusy}
+									onClick={() => void submitConsent("continue")}
+								>
+									{consentBusy ? "Resuming…" : "Change Mind & Resume"}
 								</Button>
 							</div>
 						</div>
 					)}
 
-					{/* Requested Documents from Consultant */}
-					{liveConsultation?.requestedDocuments && liveConsultation.requestedDocuments.length > 0 && (
-						<div
-							className="card card--pad"
-							style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
-						>
-							<h3 className="section-title mb-1" style={{ color: "#92400e", fontSize: "1.05rem" }}>
-								Action Required: Documents Requested by Counselor
-							</h3>
-							<p className="muted mb-3" style={{ fontSize: "0.85rem", color: "#b45309" }}>
-								Please upload these items to your document vault for verification:
-							</p>
-							<ul style={{ paddingLeft: "1.2rem", margin: "0 0 1rem 0", color: "#92400e" }}>
-								{liveConsultation.requestedDocuments.map((doc) => (
-									<li key={doc} style={{ marginBottom: "0.25rem" }}>{doc}</li>
-								))}
-							</ul>
-							<Button to="/portal/documents" variant="secondary">
-								Upload Documents in Vault →
-							</Button>
-						</div>
-					)}
+					{/* Requested Documents — consultant + handler combined */}
+					{(() => {
+						const consultationDocs = liveConsultation?.requestedDocuments ?? [];
+						const applicationDocs = liveApplication?.requestedDocuments ?? [];
+						const allRequested = Array.from(new Set([...consultationDocs, ...applicationDocs]));
+						if (allRequested.length === 0) return null;
+						return (
+							<div
+								className="card card--pad"
+								style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
+							>
+								<h3 className="section-title mb-1" style={{ color: "#92400e", fontSize: "1.05rem" }}>
+									Action Required: Documents Needed
+								</h3>
+								<p className="muted mb-3" style={{ fontSize: "0.85rem", color: "#b45309" }}>
+									Please upload these items to your document vault for verification:
+								</p>
+								<ul style={{ paddingLeft: "1.2rem", margin: "0 0 1rem 0", color: "#92400e" }}>
+									{allRequested.map((doc) => (
+										<li key={doc} style={{ marginBottom: "0.25rem" }}>{doc}</li>
+									))}
+								</ul>
+								<Button to="/portal/documents" variant="secondary">
+									Upload Documents in Vault →
+								</Button>
+							</div>
+						);
+					})()}
 
 					{/* Live Messages / Comments from Advisor */}
 					{liveConsultation?.comments && liveConsultation.comments.length > 0 && (

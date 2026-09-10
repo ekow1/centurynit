@@ -762,6 +762,8 @@ function computeHeuristicProcessStage(
 	// service fee gates the plan chapter (after travel) rather than occupying
 	// two milestones of its own. Under the current model travel comes first —
 	// the ticketing fee opens the plan chapter, then the settled plan completes.
+	const hasProceeded = app.proceedStatus === "accepted";
+
 	if (app.completedAt || (visaDone && ticketingPaid && hasSettledPlan(app) && preDepartureDone)) {
 		return "completed";
 	}
@@ -769,12 +771,12 @@ function computeHeuristicProcessStage(
 	if (admitted && visaDone) return "travel_assistance";
 	if (admitted && visaPaid) return "visa";
 	if (admitted && !visaPaid) return "visa_invoice";
-	// Application process (tracking) only after invoice paid
 	if (appPaid && selectionConfirmed) return "school_tracking";
 	if (selectionConfirmed && !appPaid) return "application_invoice";
-	if (pkg && (hasSchools || selectionConfirmed)) return "school_select";
-	if (pkg) return "school_select";
-	if (eligible && !pkg) return "school_package";
+	if (hasSchools && hasProceeded) return "school_select";
+	if (pkg && hasProceeded) return "school_select";
+	if (eligible && hasProceeded && !pkg) return "school_package";
+	if (eligible && !hasProceeded) return "proceed";
 	if (consulted) return "eligibility";
 	return "consultation";
 }
@@ -853,11 +855,13 @@ export function getChapterUnlocks(
 	return {
 		journey: true,
 		consultation: true,
-		package: eligible || atOrBeyond("school_package"),
+		// Package chapter is gated on the applicant's explicit "continue"
+		// consent — eligible alone is not enough, they must choose to proceed.
+		package: (eligible && app.proceedStatus === "accepted") || atOrBeyond("school_package"),
 		// The application chapter stays unlocked once the applicant has a
 		// package — the awaiting_handler stage is part of this chapter, not
 		// a locked future chapter.
-		application: (eligible && hasSchoolPackage(app)) || atOrBeyond("awaiting_handler"),
+		application: (eligible && app.proceedStatus === "accepted" && hasSchoolPackage(app)) || atOrBeyond("awaiting_handler"),
 		// Tracking is its own page - only after application invoice paid
 		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
 		visa: admitted || atOrBeyond("visa"),
@@ -933,8 +937,13 @@ export function getPendingAction(
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const eligible = isConsultationEligible(booking);
 
-	// Package selection gate - applicant chooses their package after eligibility check
+	const hasProceeded =
+		app.proceedStatus === "accepted" || app.applicationConsent?.decision === "continue";
+
+	// Package selection gate - applicant chooses their package after they have
+	// both passed eligibility and explicitly continued past the consent gate.
 	if (
+		hasProceeded &&
 		eligible &&
 		!selectionConfirmed &&
 		!hasSchoolPackage(app)

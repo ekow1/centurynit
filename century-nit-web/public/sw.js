@@ -10,9 +10,15 @@
  *     to the index.html they first loaded, so a deploy never reaches them until
  *     they hard-refresh. Static hashed assets are safe to serve cache-first
  *     because their filenames change on every build.
+ *
+ *  respondWith guarantee: the fetch handler must resolve with a Response in
+ *  every branch. A rejected promise or a non-Response resolves to
+ *  "The FetchEvent ... resulted in a network error response" and
+ *  "Failed to convert value to 'Response'", so the last line of defence is a
+ *  synthetic 503 Response that can never throw.
  */
 
-const VERSION = "v4";
+const VERSION = "v5";
 const CACHE = `century-nit-${VERSION}`;
 const PRECACHE = ["/", "/manifest.webmanifest", "/favicon.svg"];
 
@@ -29,6 +35,14 @@ function isBypassed(url) {
 		url.pathname.startsWith("/ops/") ||
 		url.pathname === "/sw.js"
 	);
+}
+
+/** Fire-and-forget cache write. Must never reject, for the same reason as above. */
+function queueCachePut(request, response) {
+	caches
+		.open(CACHE)
+		.then((cache) => cache.put(request, response))
+		.catch(() => {});
 }
 
 self.addEventListener("install", (event) => {
@@ -50,6 +64,37 @@ self.addEventListener("activate", (event) => {
 	);
 });
 
+async function handleFetch(request) {
+	// Rule 2 — navigations are network-first so deploys land immediately.
+	// Offline: fall back to this document, then to the app shell, then to a
+	// synthetic Response so respondWith never gets undefined.
+	if (request.mode === "navigate") {
+		try {
+			const response = await fetch(request);
+			if (response && response.ok) {
+				queueCachePut(request, response.clone());
+			}
+			return response;
+		} catch {
+			const cached = (await caches.match(request)) || (await caches.match("/"));
+			return cached || new Response("Offline", { status: 503, statusText: "Offline" });
+		}
+	}
+
+	// Static assets — cache-first, revalidating in the background. Build output
+	// is content-hashed, so a stale hit here is a hit on a file that never changes.
+	const cached = await caches.match(request);
+	const fetched = fetch(request)
+		.then((response) => {
+			if (response && response.status === 200 && response.type === "basic") {
+				queueCachePut(request, response.clone());
+			}
+			return response;
+		})
+		.catch(() => cached || new Response("Offline", { status: 503, statusText: "Offline" }));
+	return cached || fetched;
+}
+
 self.addEventListener("fetch", (event) => {
 	const { request } = event;
 	if (request.method !== "GET") return;
@@ -63,44 +108,10 @@ self.addEventListener("fetch", (event) => {
 	// Rule 1 — the API is never cached, in either direction.
 	if (isBypassed(url)) return;
 
-	// Rule 2 — navigations are network-first so deploys land immediately.
-	if (request.mode === "navigate") {
-		event.respondWith(
-			fetch(request)
-				.then((response) => {
-					if (response && response.ok) {
-						const clone = response.clone();
-						caches.open(CACHE).then((cache) => cache.put(request, clone));
-					}
-					return response;
-				})
-				// Offline: fall back to this document, then to the app shell,
-				// then to a synthetic Response so respondWith never gets
-				// undefined (which throws "Failed to convert value to 'Response'").
-				.catch(() =>
-					caches
-						.match(request)
-						.then((cached) => cached || caches.match("/"))
-						.then((cached) => cached || new Response("Offline", { status: 503, statusText: "Offline" })),
-				),
-		);
-		return;
-	}
-
-	// Static assets — cache-first, revalidating in the background. Build output
-	// is content-hashed, so a stale hit here is a hit on a file that never changes.
+	// Final line of defence: handleFetch can theoretically still reject, so the
+	// wrap turns any rejection into the same synthetic Response instead of an
+	// unhandled FetchEvent error.
 	event.respondWith(
-		caches.match(request).then((cached) => {
-			const fetched = fetch(request)
-				.then((response) => {
-					if (response && response.status === 200 && response.type === "basic") {
-						const clone = response.clone();
-						caches.open(CACHE).then((cache) => cache.put(request, clone));
-					}
-					return response;
-				})
-				.catch(() => cached);
-			return cached || fetched;
-		}),
+		handleFetch(request).catch(() => new Response("Offline", { status: 503, statusText: "Offline" })),
 	);
 });

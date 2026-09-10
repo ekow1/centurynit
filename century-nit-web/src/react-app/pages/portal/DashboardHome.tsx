@@ -37,7 +37,13 @@ function currentStageCta(
 		if (proceedStatus === "declined" || proceedStatus === "paused") {
 			return { to: "/portal/consultation", label: "Resume application" };
 		}
-		return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };
+		if (proceedStatus === "accepted") {
+			return STAGE_CTA.school_package ?? { to: "/portal/package", label: "Choose package" };
+		}
+		// invited — the consent gate is still open. The consultation page shows
+		// the assessment recommendation + consent card, so we send them there
+		// instead of straight to package selection.
+		return { to: "/portal/consultation", label: "Review recommendation" };
 	}
 	return STAGE_CTA[stage] ?? { to: STAGE_PATH[stage] ?? "/portal/home", label: "Continue" };
 }

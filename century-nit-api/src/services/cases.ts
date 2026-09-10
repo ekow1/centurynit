@@ -1094,7 +1094,7 @@ export async function completeConsultationAssessment(input: {
 	// consultation and can keep working the case if the manager chooses.
 	await createOrGetHandoff({
 		applicationId: created.id,
-		stage: "document_verification",
+		stage: "school_submission",
 		source: "consultation_completed",
 		fromOpsUserId: row.assignedOfficerId ?? null,
 	});

@@ -2443,11 +2443,11 @@ meRouter.openapi(
 		// accept to proceed. invited/declined = still gated; accepted = open.
 		const hasProceeded = application?.proceedStatus === "accepted";
 		// Handler assignment gate: after the 10% deposit is paid, a handoff is
-		// created for document_verification. The case stays "awaiting handler"
+		// created for school_submission. The case stays "awaiting handler"
 		// until ops explicitly assigns (or keeps the previous) handler.
 		const hasDepositPaid = Boolean(application?.depositPaid);
 		const hasHandlerAssigned = hasDepositPaid && application
-			? await activeHandlerFor(application.id, "document_verification").then((h) => Boolean(h))
+			? await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h))
 			: false;
 		const hasSelection = schoolTracks.schools.length > 0;
 		const isAppInvoicePaid = invoices.some(
@@ -2909,7 +2909,7 @@ async function processConsentDecision(input: {
 		// a handler is already in place.
 		const handoffStage =
 			input.stage === "application"
-				? "document_verification"
+				? "school_submission"
 				: input.stage === "visa"
 					? "visa_processing"
 					: "travel_assistance";

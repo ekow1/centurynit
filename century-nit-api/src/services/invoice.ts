@@ -646,7 +646,7 @@ export async function recordPayment(input: {
 					}
 					await createOrGetHandoff({
 						applicationId: targetAppId,
-						stage: "document_verification",
+						stage: "school_submission",
 						source: "deposit_payment",
 						fromOpsUserId,
 						tx: txDb,

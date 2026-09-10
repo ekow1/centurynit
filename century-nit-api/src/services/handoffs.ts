@@ -359,10 +359,10 @@ export async function resolveStageHandoff(input: {
 		reason: input.reason ?? (input.decision === "keep" ? "handoff: keep current handler" : "handoff: assign specialist"),
 	});
 
-	// The document_verification handoff establishes the case owner for the
-	// whole application. Write it to applications.assignedStaffId so the ops
-	// case view and the portal see the same handler.
-	if (row.stage === "document_verification") {
+	// The school_submission handoff establishes the case owner for the whole
+	// application. Write it to applications.assignedStaffId so the ops case
+	// view and the portal see the same handler.
+	if (row.stage === "school_submission") {
 		await db
 			.update(applications)
 			.set({ assignedStaffId: resolvedOpsUserId, updatedAt: new Date() })

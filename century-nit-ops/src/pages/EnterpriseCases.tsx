@@ -665,7 +665,7 @@ export function EnterpriseCases() {
 								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
 								const depositPaid = app.depositPaid;
 								const pendingDocHandoff = handoffs.find(
-									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "document_verification",
+									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
 								);
 								const hasHandler = !pendingDocHandoff && Boolean(app.assignedStaff);
 								const invoiceIssued = appInvoice && appInvoice.status !== "proforma" && appInvoice.status !== "void";
@@ -703,7 +703,7 @@ export function EnterpriseCases() {
 							{(() => {
 								const app = liveSelected ?? selectedApp;
 								const handoff = handoffs.find(
-									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "document_verification",
+									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
 								);
 								if (!handoff) return null;
 								return (
@@ -850,7 +850,7 @@ export function EnterpriseCases() {
 									canAssign={canAssignWork}
 									pendingHandoffNote={
 										handoffs.find(
-											(h) => h.applicationId === (liveSelected ?? selectedApp).id && h.status === "pending" && h.stage === "document_verification",
+											(h) => h.applicationId === (liveSelected ?? selectedApp).id && h.status === "pending" && h.stage === "school_submission",
 										)
 											? "Resolve the handler assignment above first"
 											: undefined

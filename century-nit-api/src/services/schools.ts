@@ -53,11 +53,11 @@ export async function lockSchoolsForApplicant(
 		.limit(1);
 
 	// Handler-assignment gate: the applicant cannot lock school selection
-	// until ops has explicitly assigned a handler for document_verification.
-	// This is the hard boundary between the applicant-only journey and the
-	// operational workflow — enforced server-side, not just in the UI.
+	// until ops has explicitly assigned a handler for the school application
+	// stage. This is the hard boundary between the applicant-only journey and
+	// the operational workflow — enforced server-side, not just in the UI.
 	if (app) {
-		const handler = await activeHandlerFor(app.id, "document_verification");
+		const handler = await activeHandlerFor(app.id, "school_submission");
 		if (!handler) {
 			throw new HttpError(
 				409,

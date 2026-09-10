@@ -2605,6 +2605,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
 	const effectiveJourneyPhase = useMemo(() => {
 		if (serverJourney) {
+			// Consent is the first gate. Do not let the server stage (which may be
+			// stale or derived from data created before consent) show package or
+			// school selection before the applicant has clicked Continue.
+			if (application.proceedStatus && application.proceedStatus !== "accepted") {
+				const meta = PROCESS_STAGES.find((s) => s.id === "proceed")!;
+				return {
+					phase: meta.index,
+					label: PORTAL_STAGE_LABELS["proceed"],
+					nextUnlock: serverJourney.nextUnlock,
+					stage: "proceed" as ProcessStageId,
+				};
+			}
+
 			// The server is the single source of truth for the portal stage.
 			// Prefer an explicit `portalStage`; otherwise map the coarse
 			// `currentStage` (a `JourneyStage`) through JOURNEY_STAGE_TO_PORTAL.
@@ -2630,7 +2643,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			};
 		}
 		return journeyPhase;
-	}, [serverJourney, journeyPhase]);
+	}, [serverJourney, journeyPhase, application.proceedStatus]);
 
 	// Single source of truth for chapter unlocks + process stage: the server
 	// /me/journey response. Local heuristic is the offline fallback only —

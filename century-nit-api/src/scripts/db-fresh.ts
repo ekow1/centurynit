@@ -97,7 +97,19 @@ await client.query(`
 	END $$;
 `);
 
-// 4. Stamp the journal so a later `db:migrate` on this database applies only
+// 4. Database logic that schema.ts cannot express and that lives only in a
+// migration. Listed explicitly: each must be safe to run on an empty,
+// freshly pushed schema (functions and triggers with CREATE OR REPLACE /
+// DROP IF EXISTS).
+const LOGIC_MIGRATIONS = ["0073_paid_flags_from_ledger"];
+for (const tag of LOGIC_MIGRATIONS) {
+	const sqlText = readFileSync(join(apiRoot, "drizzle", `${tag}.sql`), "utf8");
+	for (const statement of sqlText.split("--> statement-breakpoint")) {
+		if (statement.trim()) await client.query(statement);
+	}
+}
+
+// 5. Stamp the journal so a later `db:migrate` on this database applies only
 // migrations added after today, never the historical chain.
 type Journal = { entries: { tag: string; when: number }[] };
 const journal = JSON.parse(readFileSync(join(apiRoot, "drizzle", "meta", "_journal.json"), "utf8")) as Journal;

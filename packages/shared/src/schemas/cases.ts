@@ -367,13 +367,15 @@ export const preDepartureTaskSchema = z.object({
 	done: z.boolean(),
 });
 
+/**
+ * Ops edits to an application. Payment state (`appFeePaid`, `depositPaid`,
+ * `agencyStageIndex`, `agencySettled`, …) is deliberately absent: it is
+ * derived from the invoice ledger by a database trigger and cannot be set
+ * by hand — record a payment against the invoice instead.
+ */
 export const patchApplicationSchema = z.object({
 	visaCounselorNote: z.string().optional(),
 	paymentPlanId: z.string().optional(),
-	agencyStageIndex: z.number().int().min(0).max(2).optional(),
-	agencySettled: z.boolean().optional(),
-	depositPaid: z.boolean().optional(),
-	appFeePaid: z.boolean().optional(),
 	travelClearance: z.enum(["pending", "cleared"]).optional(),
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
 	notes: z.string().optional(),

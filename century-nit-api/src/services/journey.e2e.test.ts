@@ -177,6 +177,11 @@ describe("the applicant journey, end to end", () => {
 		const depositCents = Math.round(agency.api.subtotalCents * 0.1);
 		await recordPayment({ invoiceId: agency.row.id, amountCents: depositCents, method: "card", actor: ACTOR });
 		expect(await stage()).toBe("awaiting_handler");
+		// The paid flags are derived from the ledger by trigger, not written by hand.
+		const [afterDeposit] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(afterDeposit.depositPaid).toBe(true);
+		expect(afterDeposit.agencyStageIndex).toBe(1);
+		expect(afterDeposit.agencySettled).toBe(false);
 
 		// The deposit raised exactly one handoff, sourced from the payment.
 		const handoff = await pendingHandoffForApplication(appId);
@@ -211,6 +216,8 @@ describe("the applicant journey, end to end", () => {
 		const issued = (await invoiceOfType("application"))!;
 		await recordPayment({ invoiceId: issued.row.id, amountCents: issued.api.balanceCents, method: "card", actor: ACTOR });
 		expect(await stage()).toBe("school_tracking");
+		const [afterAppFee] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(afterAppFee.appFeePaid).toBe(true);
 
 		// ── Admission → visa consent ─────────────────────────────────────
 		const [school] = (await db.execute<{ id: string }>(sql`SELECT id FROM school_applications WHERE application_id = ${appId}`)).rows;

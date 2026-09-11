@@ -1900,11 +1900,6 @@ export async function updateApplication(
 	};
 	if (input.visaCounselorNote !== undefined) set.visaCounselorNote = input.visaCounselorNote;
 	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
-	if (input.agencyStageIndex !== undefined) {
-		set.agencyStageIndex = input.agencyStageIndex;
-		set.agencySettled = input.agencyStageIndex >= 2;
-	}
-	if (input.agencySettled !== undefined) set.agencySettled = input.agencySettled;
 	if (input.travelClearance !== undefined) set.travelClearance = input.travelClearance;
 	if (input.preDepartureTasks !== undefined) set.preDepartureTasks = input.preDepartureTasks;
 	if (input.notes !== undefined) set.notes = input.notes;

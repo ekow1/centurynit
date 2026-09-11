@@ -596,20 +596,15 @@ export async function recordPayment(input: {
 				: null
 		);
 
+		// The paid flags on the application (appFeePaid, depositPaid, …) are
+		// not written here: a database trigger derives them from the ledger
+		// on every invoice / line / payment change (drizzle/0073). What follows
+		// are the workflow side effects of a payment, not its bookkeeping.
 		if (targetAppId) {
 			if (!updated.applicationId) {
 				await txDb.update(invoices).set({ applicationId: targetAppId }).where(eq(invoices.id, updated.id));
 			}
-			if (updated.type === "application" && status === "paid") {
-				await txDb.update(applications).set({ appFeePaid: true }).where(eq(applications.id, targetAppId));
-			} else if (updated.type === "visa" && status === "paid") {
-				// Always mark the visa invoice as paid on the application row so the
-				// portal and /me/journey see the correct status — the flag must not
-				// depend on the current visaStage (ops may have already advanced it).
-				await txDb
-					.update(applications)
-					.set({ visaInvoicePaid: true })
-					.where(eq(applications.id, targetAppId));
+			if (updated.type === "visa" && status === "paid") {
 				// Paying the visa invoice is the applicant's confirmation that they
 				// want to proceed with visa processing; record the stage consent so
 				// the portal stops showing the consent card after payment.
@@ -632,7 +627,6 @@ export async function recordPayment(input: {
 					await ensureVisaHandoffForApplication({ applicationId: targetAppId, tx: txDb });
 				}
 			} else if (updated.type === "travel" && status === "paid") {
-				await txDb.update(applications).set({ travelInvoicePaid: true }).where(eq(applications.id, targetAppId));
 				// Mark the travel assistance request as ticket_paid so the handler
 				// can record the booking confirmation. Only fire from `invoiced` —
 				// if the TA request has already advanced to `booked` or `cleared`,
@@ -654,32 +648,18 @@ export async function recordPayment(input: {
 					/* non-fatal — the TA request status is best-effort */
 				}
 			} else if (updated.type === "agency") {
-				const lines = await txDb.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id)).orderBy(invoiceLines.position);
-				let totalPaid = paidCents + input.amountCents;
-				let agencyStageIndex = 0;
-				for (const line of lines) {
-					if (totalPaid >= line.amountCents) {
-						agencyStageIndex++;
-						totalPaid -= line.amountCents;
-					} else {
-						break;
-					}
-				}
-				const depositPaid = agencyStageIndex >= 1;
+				// The trigger has already recomputed depositPaid / agencyStageIndex
+				// from the ledger inside this transaction; read them back.
 				const [paidApp] = await txDb
-					.update(applications)
-					.set({
-						agencyStageIndex,
-						agencySettled: agencyStageIndex >= lines.length,
-						depositPaid,
-					})
+					.select({ stage: applications.stage, depositPaid: applications.depositPaid })
+					.from(applications)
 					.where(eq(applications.id, targetAppId))
-					.returning();
+					.limit(1);
 				// The deposit is the single trigger for the school_submission
 				// handler. It fires once — on the payment that crosses the deposit
 				// line while the case is still at document_verification — so later
 				// installments never re-open a resolved handoff.
-				if (paidApp && depositPaid && paidApp.stage === "document_verification") {
+				if (paidApp?.depositPaid && paidApp.stage === "document_verification") {
 					const { activeHandlerFor, createOrGetHandoff } = await import("./handoffs.js");
 					const handler = await activeHandlerFor(targetAppId, "school_submission", txDb);
 					if (handler) {
@@ -774,15 +754,8 @@ export async function voidInvoice(input: {
 		await audit(row.id, "voided", input.actor.email, input.reason, txDb);
 
 		if (updated.applicationId) {
-			if (updated.type === "application") {
-				await txDb.update(applications).set({ appFeePaid: false }).where(eq(applications.id, updated.applicationId));
-			} else if (updated.type === "visa") {
-				await txDb.update(applications).set({ visaInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
-			} else if (updated.type === "travel") {
-				await txDb.update(applications).set({ travelInvoicePaid: false }).where(eq(applications.id, updated.applicationId));
-			} else if (updated.type === "agency") {
-				await txDb.update(applications).set({ agencySettled: false, agencyStageIndex: 0, depositPaid: false }).where(eq(applications.id, updated.applicationId));
-			}
+			// The application's paid flags follow the ledger via trigger
+			// (drizzle/0073); voiding needs no bookkeeping here.
 		}
 
 		return updated;

@@ -498,6 +498,13 @@
       "when": 1789500000000,
       "tag": "0072_enforce_application_scoping",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0073_paid_flags_from_ledger",
+      "breakpoints": true
     }
   ]
 }

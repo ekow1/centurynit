@@ -102,6 +102,7 @@ import {
 	consultationSchema,
 	delegateConsultationSchema,
 	JOURNEY_STAGES,
+	JOURNEY_STAGE_LABELS,
 	type JourneyStage,
 	deriveJourney,
 	emptyJourney,
@@ -2778,6 +2779,14 @@ async function processConsentDecision(input: {
 	}
 
 	if (input.stage === "visa") {
+		// The applicant's consent opens the visa stage, whatever column the
+		// case sits in on the ops board. If the handler never moved it to
+		// offer_letter_review, that column is skipped — say so in the case
+		// history rather than block the applicant on board housekeeping or
+		// fabricate a stage the case never occupied.
+		const skippedStages = (JOURNEY_STAGES as string[])
+			.slice(JOURNEY_STAGES.indexOf(application.stage) + 1, JOURNEY_STAGES.indexOf("visa_processing"))
+			.map((s) => JOURNEY_STAGE_LABELS[s as JourneyStage]);
 		await db
 			.update(schema.applications)
 			.set({
@@ -2785,7 +2794,20 @@ async function processConsentDecision(input: {
 				visaStage: existingHandler ? "pending" : "awaiting_handler",
 				updatedAt: new Date(),
 			})
-			.where(eq(schema.applications.id, application.id));
+			.where(and(eq(schema.applications.id, application.id), not(eq(schema.applications.stage, "visa_processing"))));
+		if (application.stage !== "visa_processing") {
+			await db.insert(schema.caseComments).values({
+				targetType: "application",
+				targetId: application.id,
+				kind: "status",
+				text:
+					skippedStages.length > 0
+						? `Stage → Visa Processing on the applicant's consent (${skippedStages.join(", ")} skipped — offers were accepted while the case was still in ${JOURNEY_STAGE_LABELS[application.stage as JourneyStage] ?? application.stage}).`
+						: "Stage → Visa Processing on the applicant's consent.",
+				authorName: "System",
+				authorOpsUserId: null,
+			});
+		}
 
 		if (existingHandler) {
 			await ensureVisaInvoiceForApplication(input.userId, {

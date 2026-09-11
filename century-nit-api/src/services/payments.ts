@@ -6,7 +6,7 @@ import type {
 	PaymentVerificationResult,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { invoicePayments, paymentTransactions } from "../db/schema.js";
+import { invoicePayments, invoices, paymentTransactions } from "../db/schema.js";
 import { getInvoice, recordPayment, paidCentsOf } from "./invoice.js";
 import { getSetting } from "./settings.js";
 import { HttpError } from "../middleware/error.js";
@@ -23,11 +23,19 @@ export async function initializePayment(
 	}
 
 	if (invoice.status === "proforma") {
-		throw new HttpError(
-			400,
-			"INVOICE_PROFORMA",
-			"Cannot pay a proforma estimate before it is reviewed and issued by staff",
-		);
+		if (invoice.type === "agency") {
+			await db
+				.update(invoices)
+				.set({ status: "issued", updatedAt: new Date() })
+				.where(eq(invoices.id, invoice.id));
+			invoice.status = "issued";
+		} else {
+			throw new HttpError(
+				400,
+				"INVOICE_PROFORMA",
+				"Cannot pay a proforma estimate before it is reviewed and issued by staff",
+			);
+		}
 	}
 
 	if (invoice.status === "paid" || invoice.status === "void") {

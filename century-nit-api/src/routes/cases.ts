@@ -2184,11 +2184,19 @@ meRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
 		}
 		if (row.status === "proforma") {
-			throw new HttpError(
-				409,
-				"INVOICE_PROFORMA",
-				"Cannot pay a proforma invoice before it is reviewed and issued by staff",
-			);
+			if (row.type === "agency") {
+				await db
+					.update(schema.invoices)
+					.set({ status: "issued", updatedAt: new Date() })
+					.where(eq(schema.invoices.id, row.id));
+				row.status = "issued";
+			} else {
+				throw new HttpError(
+					409,
+					"INVOICE_PROFORMA",
+					"Cannot pay a proforma invoice before it is reviewed and issued by staff",
+				);
+			}
 		}
 		const serialized = await serializeInvoice(row);
 

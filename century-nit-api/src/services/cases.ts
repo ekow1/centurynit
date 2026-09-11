@@ -2582,7 +2582,7 @@ export async function applicantUserIdOfApplication(id: string): Promise<string |
  */
 
 import { AGENCY_STAGES, serviceFeeForPackage } from "century-nit-core/content";
-import { nextProformaNumber } from "./invoice.js";
+import { nextInvoiceNumber } from "./invoice.js";
 
 export async function setApplicationPackage(input: {
 	id: string;
@@ -2651,7 +2651,7 @@ export async function setApplicationPackage(input: {
 			.where(eq(applications.id, app.id))
 			.returning();
 
-		// Void any prior agency proforma for this applicant.
+		// Void any prior unpaid agency invoices for this applicant.
 		const prior = await tx
 			.select({ id: invoices.id })
 			.from(invoices)
@@ -2659,7 +2659,7 @@ export async function setApplicationPackage(input: {
 				and(
 					eq(invoices.clientUserId, applicant.userId ?? ""),
 					eq(invoices.type, "agency"),
-					eq(invoices.status, "proforma"),
+					sql`${invoices.status} IN ('proforma', 'issued')`,
 				),
 			);
 		for (const p of prior) {
@@ -2693,7 +2693,7 @@ export async function setApplicationPackage(input: {
 		let proformaInvoice: typeof invoices.$inferSelect | null = null;
 
 		if (subtotalCents > 0) {
-			const invoiceNumber = await nextProformaNumber(txDb);
+			const invoiceNumber = await nextInvoiceNumber(txDb);
 			const [created] = await tx
 				.insert(invoices)
 				.values({
@@ -2704,7 +2704,7 @@ export async function setApplicationPackage(input: {
 					applicantEmail: applicant.email ?? null,
 					type: "agency",
 					subtotalCents,
-					status: "proforma",
+					status: "issued",
 					issuedBy: null,
 					issuedByName: "Century NIT",
 					note: `Service package: ${pkg.name}`,
@@ -2723,9 +2723,9 @@ export async function setApplicationPackage(input: {
 
 			await tx.insert(invoiceEvents).values({
 				invoiceId: created.id,
-				action: "proforma_created",
+				action: "issued",
 				actor: "system",
-				detail: `Proforma estimate from package ${pkg.code} — pending handler review`,
+				detail: `Issued from package ${pkg.code}`,
 			});
 
 			proformaInvoice = created;

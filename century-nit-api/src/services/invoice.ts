@@ -41,7 +41,7 @@ type Actor = { opsUserId?: string | null; name: string; email: string };
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 
 /** `INV-2026-0007`. Advisory-locked so concurrent creates cannot collide. */
-async function nextInvoiceNumber(tx: typeof db): Promise<string> {
+export async function nextInvoiceNumber(tx: typeof db): Promise<string> {
 	const year = new Date().getUTCFullYear();
 	await tx.execute(sql`SELECT pg_advisory_xact_lock(710002, ${year})`);
 	const [row] = await tx
@@ -502,11 +502,19 @@ export async function recordPayment(input: {
 			throw new HttpError(409, "INVOICE_VOID", "Cannot record a payment against a void invoice");
 		}
 		if (row.status === "proforma") {
-			throw new HttpError(
-				409,
-				"INVOICE_PROFORMA",
-				"Cannot pay a proforma invoice before it is reviewed and issued by staff",
-			);
+			if (row.type === "agency") {
+				await tx
+					.update(invoices)
+					.set({ status: "issued", updatedAt: new Date() })
+					.where(eq(invoices.id, row.id));
+				row.status = "issued";
+			} else {
+				throw new HttpError(
+					409,
+					"INVOICE_PROFORMA",
+					"Cannot pay a proforma invoice before it is reviewed and issued by staff",
+				);
+			}
 		}
 
 		const paidCents = await paidCentsOf(row.id, txDb);

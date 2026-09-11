@@ -11,6 +11,7 @@ import {
 	index,
 	uniqueIndex,
 	primaryKey,
+	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -643,6 +644,13 @@ export const invoices = pgTable(
 	(t) => ({
 		byStatus: index("invoices_status_idx").on(t.status, t.dueAt),
 		byClient: index("invoices_client_idx").on(t.clientUserId, t.createdAt),
+		byApplication: index("invoices_application_idx").on(t.applicationId, t.type),
+		// Journey invoices belong to a case. Only consultation (raised before
+		// any application exists) and custom one-offs may stand alone.
+		journeyLinked: check(
+			"invoices_journey_linked",
+			sql`${t.type} IN ('consultation', 'custom') OR ${t.applicationId} IS NOT NULL`,
+		),
 	}),
 );
 
@@ -1170,9 +1178,10 @@ export const schoolApplications = pgTable(
 		applicantId: uuid("applicant_id")
 			.notNull()
 			.references(() => applicants.id, { onDelete: "cascade" }),
-		applicationId: uuid("application_id").references(() => applications.id, {
-			onDelete: "set null",
-		}),
+		// A school track is always a selection on one application.
+		applicationId: uuid("application_id")
+			.notNull()
+			.references(() => applications.id, { onDelete: "cascade" }),
 		destinationId: varchar("destination_id", { length: 64 }).notNull().references(() => destinations.id),
 		universityId: text("university_id").notNull().references(() => catalogUniversities.id),
 		programId: text("program_id").notNull().references(() => catalogPrograms.id),

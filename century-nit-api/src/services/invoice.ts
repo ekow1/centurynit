@@ -292,6 +292,38 @@ async function notifyClientInvoice(row: InvoiceRow, kind: "issued" | "paid"): Pr
 	}
 }
 
+/** Invoice types that belong to a case and drive the applicant's journey. */
+export const JOURNEY_INVOICE_TYPES: ReadonlySet<string> = new Set(["application", "visa", "agency", "travel"]);
+
+/**
+ * The application a new invoice belongs to. Journey-typed invoices must be
+ * linked (the database enforces it); when the caller did not say which
+ * application, the client's current one is used — the same rule every
+ * journey read applies. Consultation and custom invoices may stand alone.
+ */
+async function resolveInvoiceApplication(data: CreateInvoice, txDb: typeof db): Promise<string | null> {
+	if (data.applicationId) return data.applicationId;
+	if (!JOURNEY_INVOICE_TYPES.has(data.type)) return null;
+	const current = data.clientUserId
+		? await txDb
+				.select({ id: applications.id })
+				.from(applications)
+				.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+				.where(eq(applicants.userId, data.clientUserId))
+				.orderBy(desc(applications.createdAt))
+				.limit(1)
+				.then((r) => r[0]?.id ?? null)
+		: null;
+	if (!current) {
+		throw new HttpError(
+			409,
+			"INVOICE_NEEDS_APPLICATION",
+			`A ${data.type} invoice belongs to a case. Raise it from the application, or use the "custom" type for a one-off charge.`,
+		);
+	}
+	return current;
+}
+
 export async function createInvoice(input: {
 	data: CreateInvoice;
 	actor: Actor;
@@ -306,12 +338,13 @@ export async function createInvoice(input: {
 	const doCreate = async (txDb: typeof db) => {
 		const invoiceNumber = await nextInvoiceNumber(txDb);
 		const status = data.status ?? "issued";
+		const applicationId = await resolveInvoiceApplication(data, txDb);
 		const [created] = await txDb
 			.insert(invoices)
 			.values({
 				invoiceNumber,
 				clientUserId: data.clientUserId ?? null,
-				applicationId: data.applicationId ?? null,
+				applicationId,
 				applicantName: data.applicantName,
 				applicantEmail: data.applicantEmail ?? null,
 				type: data.type,

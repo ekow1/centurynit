@@ -491,6 +491,13 @@
       "when": 1789400000000,
       "tag": "0071_scope_invoices_and_schools_to_application",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0072_enforce_application_scoping",
+      "breakpoints": true
     }
   ]
 }

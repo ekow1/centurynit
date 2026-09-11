@@ -69,30 +69,53 @@ address. Better Auth builds the Google callback and every password-reset and
 verification link from it, and in production it must be `https` or the browser
 will refuse the `Secure` cookie the session depends on.
 
-> **Note on the `localStorage` bridge.** The live applicant case, ops
-directives, the CMS overlay and shared support tickets were originally
-`localStorage` handshakes, which are scoped per origin. With the two apps now
-on separate origins, those bridges do not work cross-origin. They will need to
-be replaced with an API-based channel; until then, those features only work
-when both apps share an origin (e.g., local dev through a single Worker).
+## Where the product lives
 
-## Where the product actually lives
+In the API. Cases (consultations, applications, school tracks, handoffs, stage
+consents), invoices and payments, documents, scheduling, chat and
+notifications are all Postgres-backed and served by `century-nit-api`; both
+front ends are thin clients over it. The portal keeps a small amount of
+per-browser convenience state in `localStorage` (drafts, dismissed hints) and
+an offline fallback for the journey, but nothing there is authoritative.
 
-Most of it is still in the browser. Both front-end apps are complete working
-products backed by `localStorage` rather than by the API.
+### The applicant journey
 
-**Scheduling is the exception, and the pattern to follow.** Appointments live in
-Postgres because they have to be visible to staff, survive a browser, and be
-protected from double-booking. `century-nit-api` serves health, authentication
-(applicant *and* staff), and the whole booking lifecycle: availability, booking,
-manager assignment, Google Calendar/Meet, rescheduling, cancellation, and the
-notification and calendar-retry queues.
+One case moves through these coarse stages, stored on `applications.stage`:
 
-Everything else — cases, invoices, documents, tickets, CMS — is still
-browser-only.
+```
+document_verification → school_submission → offer_letter_review
+  → visa_processing → travel_assistance → payment_execution → completed
+```
 
-`century-nit-web/docs/API_MIGRATION_PLAN.md` is the plan for closing that gap
-and tracks progress per phase. Read it before adding endpoints.
+The portal shows a finer-grained step. It is **derived**, never stored:
+`GET /api/v1/me/journey` gathers the facts about the applicant's current
+application (consent, deposit, handler, locked schools, invoice status,
+admissions, visa, travel assistance, plan) and hands them to
+`deriveJourney()` in `packages/shared/src/journey.ts`. That function is pure
+and table-tested (`century-nit-api/src/services/journey.test.ts`); read it
+before touching anything that decides "where is this applicant".
+
+The rules worth knowing:
+
+- **Everything is scoped to the current (newest) application.** Schools and
+  invoices are read by `application_id`, never by applicant or client user, so
+  a returning client's earlier case cannot leak paid invoices or admissions
+  into the new one. `GET /me/invoices` returns only the current case's
+  invoices (plus the consultation invoice).
+- **Consent has one state machine**, `applications.proceedStatus`, changed
+  only by `accept/pause/declineProceedForApplication`. The applicant reaches
+  it through `POST /me/application/consent`.
+- **The 10% deposit is the only trigger for the school-submission handler.**
+  Paying it either raises a `stage_handoffs` row for a manager to resolve or,
+  if a handler was assigned ahead of time, opens the stage directly.
+- **Applicants pay only through Paystack** (checkout → verify → webhook).
+  There is deliberately no applicant-side "record a payment" route.
+- **The portal is push-driven.** Stage, assignment, invoice and visa events
+  arrive over SSE (`/api/v1/events/stream`) and trigger a `syncFromServer`;
+  the 20–30 s polls are a fallback for a dropped stream, not the mechanism.
+
+`century-nit-web/docs/API_MIGRATION_PLAN.md` records how the API was grown
+out of the original browser-only prototype and is mostly historical now.
 
 ## Local development
 
@@ -129,9 +152,9 @@ and tracks progress per phase. Read it before adding endpoints.
    npm run dev:ops   # Operations Center on :5174
    ```
 
-   In development the two front ends are on different ports (different
-   origins), so the `localStorage` bridge between them does not work. To
-   exercise the two-window demo, build and serve each through its own Worker:
+   The two front ends talk to each other only through the API, so running
+   them on different ports is fine. To exercise the production layout (each
+   SPA behind its own Worker proxying `/api/*`):
 
    ```bash
    npm run build:frontend

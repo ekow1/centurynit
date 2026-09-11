@@ -138,11 +138,36 @@ out of the original browser-only prototype and is mostly historical now.
    npm run build:packages
    ```
 
-4. Run migrations:
+4. Build the database. On a **new** database:
+
+   ```bash
+   DATABASE_URL=postgres://century:century@localhost:5433/century_nit      npm run db:fresh --workspace=century-nit-api
+   ```
+
+   On a database that already has data, apply what is pending instead:
 
    ```bash
    npm run db:migrate
    ```
+
+   Why two commands: the migration chain in `century-nit-api/drizzle/` was
+   grown by hand and by generator side by side and no longer replays from
+   zero (generated files re-create objects hand-written ones already made,
+   and journal timestamps were edited out of order). `db:fresh` builds the
+   schema from `schema.ts` — what the code actually expects — plus the
+   pieces Drizzle cannot express (the `btree_gist` extension, the
+   double-booking exclusion constraint, the RLS sweep, and the trigger
+   migrations listed in `src/scripts/db-fresh.ts`), then stamps the journal
+   so `db:migrate` picks up from there. CI uses it. If your local database
+   is old and `db:migrate` fails on it, drop it and use `db:fresh`; local
+   data is disposable.
+
+   Two rules for new migrations, learned the hard way:
+   - Never `ALTER TYPE … ADD VALUE` and use the new value in the same
+     `db:migrate` run — Drizzle applies all pending files in one transaction
+     and Postgres refuses. Recreate the type instead.
+   - Journal `when` values must increase. Drizzle skips any entry whose
+     timestamp is not greater than the last applied one.
 
 5. Run the dev servers — one per terminal:
 
@@ -164,6 +189,22 @@ out of the original browser-only prototype and is mostly historical now.
 
 Copy `century-nit-api/.env.example` to `century-nit-api/.env` to override
 defaults. It is loaded automatically via `dotenv/config`.
+
+## Tests
+
+```bash
+npm run test --workspace=century-nit-api      # needs Postgres + Redis from docker compose
+```
+
+The API suite is integration-first: booking, handoffs, RLS, document access
+and the end-to-end journey walk (`src/services/journey.e2e.test.ts`) run
+against a real database, because the guarantees that matter — no double
+booking, application scoping, the paid flags following the ledger — are
+enforced by Postgres, and a mocked database would pass without them. Each
+suite skips itself when no database is reachable; CI fails the run if any
+test skipped, so a green build always means the integration suites ran.
+The pure derivation rules (`deriveJourney`, stage guards) are unit-tested
+without a database.
 
 ## Environment
 

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type {
 	StageConsent,
 	StageConsentDecision,
@@ -121,7 +121,7 @@ export async function getApplicationForClientUser(userId: string) {
 		.select()
 		.from(applications)
 		.where(eq(applications.applicantId, applicant.id))
-		.orderBy(applications.createdAt)
+		.orderBy(desc(applications.createdAt))
 		.limit(1);
 	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
 	return { applicant, application: app };

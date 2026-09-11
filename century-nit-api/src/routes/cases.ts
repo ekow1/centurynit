@@ -2459,7 +2459,9 @@ meRouter.openapi(
 			? Boolean(application.assignedStaffId) ||
 			  (await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h)))
 			: false;
-		const hasSelection = schoolTracks.schools.length > 0;
+		const hasSelection = schoolTracks.schools.some(
+			(s) => s.status !== "Preparing Application",
+		);
 		const isAppInvoicePaid =
 			application?.appFeePaid ||
 			invoices.some(

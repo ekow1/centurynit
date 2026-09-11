@@ -74,7 +74,7 @@ function emptyProfile(): ApplicantProfile {
 
 async function nextAppNumber(tx: typeof db): Promise<string> {
 	const year = new Date().getUTCFullYear();
-	await tx.execute(sql`SELECT pg_advisory_xact_lock(710003, ${year})`);
+	await tx.execute(sql`SELECT pg_advisory_xact_lock(710004, ${year})`);
 	const [row] = await tx
 		.select({
 			max: sql<number>`coalesce(max(split_part(${applications.appNumber}, '-', 3)::int), 0)::int`,
@@ -1088,16 +1088,11 @@ export async function completeConsultationAssessment(input: {
 		authorOpsUserId: input.actor.opsUserId,
 	});
 
-	// Create a handoff so the manager sees "Assign" + "Continue with [consultation
-	// officer]" on the first application assignment. The consultation's officer
-	// is the continuity candidate — they already know the applicant from the
-	// consultation and can keep working the case if the manager chooses.
-	await createOrGetHandoff({
-		applicationId: created.id,
-		stage: "school_submission",
-		source: "consultation_completed",
-		fromOpsUserId: row.assignedOfficerId ?? null,
-	});
+	// NOTE: the school_submission handoff is NOT created here. It fires when
+	// the 10% agency deposit is paid (see recordPayment in invoice.ts). Creating
+	// it at consultation completion was premature — the applicant hasn't even
+	// accepted to proceed yet, and a pending handoff for a declined applicant
+	// would sit in the ops queue as a phantom entry.
 
 	// In-app: hand the case to management — it needs an owner before work starts.
 	getManagerAndCoordinatorUserIds()
@@ -1589,13 +1584,17 @@ export async function assignApplication(input: {
 		);
 
 	// Advance the case from document_verification into school_submission once
-	// a handler is assigned and the deposit is paid. This keeps the DB stage
-	// in sync with the assignment so Ops stops showing "Document Verification".
-	await applyHandoffResolvedTransition({
-		applicationId: row.id,
-		stage: "school_submission",
-		actor: input.actor,
-	});
+	// a handler is assigned and the deposit is paid. Only fire when the deposit
+	// is actually paid and the case is still at document_verification — calling
+	// this unconditionally would resolve handoffs for cases that haven't paid,
+	// causing them to bounce between "handler assigned" and "awaiting handler".
+	if (row.stage === "document_verification" && row.depositPaid) {
+		await applyHandoffResolvedTransition({
+			applicationId: row.id,
+			stage: "school_submission",
+			actor: input.actor,
+		});
+	}
 
 	await db
 		.update(applicants)
@@ -2705,7 +2704,7 @@ export async function setApplicationPackage(input: {
 					applicantEmail: applicant.email ?? null,
 					type: "agency",
 					subtotalCents,
-					status: "issued",
+					status: "proforma",
 					issuedBy: null,
 					issuedByName: "Century NIT",
 					note: `Service package: ${pkg.name}`,
@@ -2724,9 +2723,9 @@ export async function setApplicationPackage(input: {
 
 			await tx.insert(invoiceEvents).values({
 				invoiceId: created.id,
-				action: "issued",
+				action: "proforma_created",
 				actor: "system",
-				detail: `Issued from package ${pkg.code}`,
+				detail: `Proforma estimate from package ${pkg.code} — pending handler review`,
 			});
 
 			proformaInvoice = created;

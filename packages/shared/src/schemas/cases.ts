@@ -42,8 +42,8 @@ export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = {
 	school_submission: "School Submission",
 	offer_letter_review: "Offer Letter Review",
 	visa_processing: "Visa Processing",
-	payment_execution: "Payment Execution",
 	travel_assistance: "Travel Assistance",
+	payment_execution: "Payment Execution",
 	completed: "Completed",
 };
 

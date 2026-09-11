@@ -633,7 +633,7 @@ export async function recordPayment(input: {
 						agencySettled: agencyStageIndex >= lines.length,
 						depositPaid,
 					})
-					.where(and(eq(applications.id, targetAppId), eq(applications.depositPaid, false)))
+					.where(eq(applications.id, targetAppId))
 					.returning();
 				// First deposit payment: create a handler-assignment handoff so
 				// the case becomes visible in ops as "Pending Handler Assignment".

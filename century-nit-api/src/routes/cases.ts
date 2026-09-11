@@ -102,10 +102,9 @@ import {
 	consultationSchema,
 	delegateConsultationSchema,
 	JOURNEY_STAGES,
-	JOURNEY_STAGE_TO_PORTAL,
-	PORTAL_STAGE_LABELS,
-	PORTAL_STAGE_ORDER,
 	type JourneyStage,
+	deriveJourney,
+	emptyJourney,
 	invoiceListSchema,
 	invoiceSchema,
 	myApplicationSchema,
@@ -2357,7 +2356,13 @@ const journeySchema = z.object({
 	label: z.string(),
 	nextUnlock: z.string().nullable(),
 });
-
+/**
+ * Applicant self-service: where they are in the journey.
+ *
+ * This handler only gathers facts about the current case; the rules that
+ * turn facts into a portal stage, chapter unlocks and per-step statuses live
+ * in `deriveJourney` (century-nit-shared), which is pure and unit-tested.
+ */
 meRouter.openapi(
 	createRoute({
 		method: "get",
@@ -2374,315 +2379,87 @@ meRouter.openapi(
 	async (c) => {
 		const user = c.get("user");
 		const applicant = await getApplicantByUserId(user.id);
-
-		if (!applicant) {
-			return c.json({
-				currentStage: "consultation",
-				portalStage: "consultation",
-				chapterUnlocks: {
-					journey: true,
-					consultation: true,
-					package: false,
-					application: false,
-					tracking: false,
-					visa: false,
-					payment_execution: false,
-					travel_assistance: false,
-					complete: false,
-				},
-				stageStatuses: Object.fromEntries(
-					PORTAL_STAGE_ORDER.map((sid) => [
-						sid,
-						(sid === "consultation" ? "current" : "locked") as
-							| "done"
-							| "current"
-							| "locked"
-							| "skipped",
-					]),
-				),
-				label: "Stage I · Consultation first",
-				nextUnlock: null,
-			});
-		}
+		if (!applicant) return c.json(emptyJourney());
 
 		const [consultation, application, allInvoices] = await Promise.all([
 			latestConsultationForApplicant(applicant.id),
 			latestApplicationForApplicant(applicant.id),
 			listInvoicesForClient(user.id),
 		]);
-		// Every signal below is scoped to the current application. A returning
+
+		// Every signal is scoped to the current application. A returning
 		// client's earlier application keeps its own schools and paid invoices;
 		// none of that may count towards the new one.
 		const schoolTracks = application
 			? await listSchoolsForApplication(application.id)
 			: { schools: [] as Awaited<ReturnType<typeof listSchoolsForApplication>>["schools"], total: 0 };
-		const invoices = application
-			? allInvoices.filter((i) => i.applicationId === application.id)
-			: allInvoices;
+		const invoices = application ? allInvoices.filter((i) => i.applicationId === application.id) : allInvoices;
 
-		const visaConsent = application ? await getStageConsent(application.id, "visa") : null;
-		const hasVisaConsent = visaConsent?.decision === "continue";
+		const [visaConsent, taRow, handler] = await Promise.all([
+			application ? getStageConsent(application.id, "visa") : null,
+			db
+				.select({ status: schema.travelAssistanceRequests.status })
+				.from(schema.travelAssistanceRequests)
+				.where(
+					application
+						? eq(schema.travelAssistanceRequests.applicationId, application.id)
+						: eq(schema.travelAssistanceRequests.applicantId, applicant.id),
+				)
+				.orderBy(desc(schema.travelAssistanceRequests.createdAt))
+				.limit(1)
+				.then((r) => r[0] ?? null),
+			// assignedStaffId is the authoritative whole-case owner; fall back to
+			// the per-stage assignment for cases assigned the legacy way.
+			application
+				? application.assignedStaffId
+					? true
+					: activeHandlerFor(application.id, "school_submission").then(Boolean)
+				: false,
+		]);
 
-		// Travel assistance request status — the source of truth for the
-		// travel -> payment_execution transition. The portal stage must stay at
-		// travel_assistance until the TA request is cleared (or declined/on_hold),
-		// not jump to payment_execution the moment the ticket is paid.
-		const [taRow] = await db
-			.select({ status: schema.travelAssistanceRequests.status })
-			.from(schema.travelAssistanceRequests)
-			.where(
-				application
-					? eq(schema.travelAssistanceRequests.applicationId, application.id)
-					: eq(schema.travelAssistanceRequests.applicantId, applicant.id),
-			)
-			.orderBy(desc(schema.travelAssistanceRequests.createdAt))
-			.limit(1);
-		const taStatus = taRow?.status ?? null;
-		const taResolved = taStatus === "cleared" || taStatus === "declined" || taStatus === "on_hold";
-
-		// ── Derive booleans ────────────────────────────────────────────────
-		const hasConsultation = Boolean(consultation);
-		const isEligible =
-			consultation?.assessmentResult?.outcome === "Eligible" ||
-			consultation?.assessmentResult?.outcome === "Conditionally Eligible";
-
-		const hasPackage = Boolean(application?.fundingTrack);
-		// Consent gate: before the application truly opens, the applicant must
-		// accept to proceed. invited/declined = still gated; accepted = open.
-		const hasProceeded = application?.proceedStatus === "accepted";
-		// Handler assignment gate: after the 10% deposit is paid, a handoff is
-		// created for school_submission. The case stays "awaiting handler"
-		// until ops explicitly assigns (or keeps the previous) handler.
-		// assignedStaffId is the authoritative whole-case owner; fall back to
-		// activeHandlerFor only when it is empty (legacy per-stage assignment).
-		const hasDepositPaid = Boolean(application?.depositPaid);
-		const hasHandlerAssigned = hasDepositPaid && application
-			? Boolean(application.assignedStaffId) ||
-			  (await activeHandlerFor(application.id, "school_submission").then((h) => Boolean(h)))
-			: false;
+		const invoiceIs = (type: string, ...statuses: string[]) =>
+			invoices.some((i) => i.type === type && statuses.includes(i.status));
 		const hasSchools = schoolTracks.schools.length > 0;
 		const hasAppInvoice = invoices.some((i) => i.type === "application");
-		const hasSelection =
-			hasSchools &&
-			(hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application"));
-		const invoicePaid = (type: string) => invoices.some((i) => i.type === type && i.status === "paid");
-		const isAppInvoicePaid = Boolean(application?.appFeePaid) || invoicePaid("application");
-		// The application invoice starts as "proforma" when the applicant locks
-		// school selection. The handler must explicitly "issue" it before the
-		// applicant can pay. While it's still proforma, the portal shows
-		// "awaiting invoice" rather than "pay application invoice".
-		const isAppInvoiceIssued = invoices.some(
-			(i) =>
-				i.type === "application" && (i.status === "issued" || i.status === "partial" || i.status === "paid"),
+
+		return c.json(
+			deriveJourney({
+				hasConsultation: Boolean(consultation),
+				isEligible:
+					consultation?.assessmentResult?.outcome === "Eligible" ||
+					consultation?.assessmentResult?.outcome === "Conditionally Eligible",
+				proceedStatus: application?.proceedStatus ?? null,
+				hasPackage: Boolean(application?.fundingTrack),
+				depositPaid: Boolean(application?.depositPaid),
+				hasHandler: handler,
+				// Locked selection: the lock raises the application invoice, and
+				// ops moving a track past "Preparing Application" implies it too.
+				hasSelection:
+					hasSchools &&
+					(hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application")),
+				// The invoice starts as a proforma when the applicant locks
+				// schools; the handler must issue it before the applicant can pay.
+				appInvoiceIssued: invoiceIs("application", "issued", "partial", "paid"),
+				appInvoicePaid: Boolean(application?.appFeePaid) || invoiceIs("application", "paid"),
+				hasAdmitted: schoolTracks.schools.some((s) => s.outcome === "Admitted"),
+				hasVisaConsent: visaConsent?.decision === "continue",
+				visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
+				visaDone: application?.visaStage === "complete",
+				travelInvoicePaid: Boolean(application?.travelInvoicePaid) || invoiceIs("travel", "paid"),
+				travelAssistanceStatus: taRow?.status ?? null,
+				paymentPlanId: application?.paymentPlanId ?? null,
+				agencyStageIndex: application?.agencyStageIndex ?? 0,
+				agencySettled: Boolean(application?.agencySettled),
+				travelCleared: application?.travelClearance === "cleared",
+				preDepartureDone: Boolean(
+					(application?.checklist?.length ?? 0) > 0 && application?.checklist?.every((item) => item.checked),
+				),
+				coarseStage:
+					application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)
+						? (application.stage as JourneyStage)
+						: null,
+			}),
 		);
-		const hasAdmitted = schoolTracks.schools.some((s) => s.outcome === "Admitted");
-		const isVisaInvoicePaid = invoicePaid("visa") || Boolean(application?.visaInvoicePaid);
-		const isTravelInvoicePaid = invoicePaid("travel") || Boolean(application?.travelInvoicePaid);
-		const isVisaDone = application?.visaStage === "complete";
-		// The plan chapter's settlement is per-plan: full plans need the agency
-		// service fee settled in full, installment plans only their first
-		// installment (the deposit). Travel comes first, so the plan chapter
-		// only opens once the ticketing fee is paid regardless.
-		const planSettled =
-			Boolean(application?.paymentPlanId) &&
-			(application?.paymentPlanId === "installment"
-				? (application?.agencyStageIndex ?? 0) >= 1
-				: Boolean(application?.agencySettled));
-		const isPreDepartureDone = Boolean(
-			(application?.checklist?.length ?? 0) > 0 &&
-				application?.checklist?.every((item) => item.checked),
-		);
-		const isCompleted =
-			application?.travelClearance === "cleared" &&
-			planSettled &&
-			isTravelInvoicePaid &&
-			isPreDepartureDone;
-
-		// ── Determine stage ────────────────────────────────────────────────
-		type PortalStage =
-			| "consultation"
-			| "eligibility"
-			| "proceed"
-			| "school_package"
-			| "awaiting_handler"
-			| "school_select"
-			| "awaiting_invoice"
-			| "application_invoice"
-			| "school_tracking"
-			| "visa_invoice"
-			| "visa"
-			| "payment_execution"
-			| "travel_assistance"
-			| "completed";
-
-		let derivedPortalStage: PortalStage = "consultation";
-
-		if (isCompleted) {
-			derivedPortalStage = "completed";
-		} else if (hasAdmitted && isVisaDone) {
-			// Visa done → travel assistance opens. The plan chapter (Payment
-			// Execution) only opens once the TA request is resolved (cleared,
-			// declined, or on_hold) — not the moment the ticket is paid. The
-			// applicant must choose a payment plan and be cleared first.
-			derivedPortalStage = taResolved ? "payment_execution" : "travel_assistance";
-		} else if (hasAdmitted && isVisaInvoicePaid) {
-			derivedPortalStage = "visa";
-		} else if (hasAdmitted && !isVisaInvoicePaid && hasVisaConsent) {
-			derivedPortalStage = "visa_invoice";
-		} else if (hasAdmitted && !hasVisaConsent) {
-			derivedPortalStage = "school_tracking";
-		} else if (isAppInvoicePaid && hasSelection) {
-			derivedPortalStage = "school_tracking";
-		} else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) {
-			derivedPortalStage = "application_invoice";
-		} else if (hasSelection && !isAppInvoiceIssued) {
-			derivedPortalStage = "awaiting_invoice";
-		} else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) {
-			// Deposit paid but ops has not assigned a handler yet.
-			derivedPortalStage = "awaiting_handler";
-		} else if (hasPackage && hasDepositPaid && hasHandlerAssigned && !hasSelection) {
-			// Handler assigned and deposit paid, but no schools selected yet.
-			derivedPortalStage = "school_select";
-		} else if (hasPackage) {
-			// Package chosen but deposit not paid yet (or no selection handled above).
-			derivedPortalStage = "school_package";
-		} else if (isEligible && hasProceeded && !hasPackage) {
-			derivedPortalStage = "school_package";
-		} else if (isEligible && !hasProceeded) {
-			// Assessment complete but the consent gate is still open.
-			derivedPortalStage = "proceed";
-		} else if (hasConsultation) {
-			derivedPortalStage = "eligibility";
-		}
-
-		// ── Coarse stage from the DB (primary), fall back to derivation ──
-		const dbStage = application?.stage;
-		const coarseStage: JourneyStage | null =
-			dbStage && (JOURNEY_STAGES as string[]).includes(dbStage)
-				? (dbStage as JourneyStage)
-				: null;
-
-		// ── Portal stage: signal-derived floor, refined by coarse stage ─────
-		// The heuristic `derivedPortalStage` is computed from live signals (invoice
-		// paid, offer accepted, visa complete, etc.). Use it as the floor so a
-		// stale DB stage cannot regress the applicant past what they have
-		// actually completed. The coarse DB stage may only push them forward.
-		let portalStage: PortalStage = derivedPortalStage;
-		if (coarseStage) {
-			const base = JOURNEY_STAGE_TO_PORTAL[coarseStage] as PortalStage;
-			if (base) {
-				const derivedIdx = PORTAL_STAGE_ORDER.indexOf(derivedPortalStage);
-				const baseIdx = PORTAL_STAGE_ORDER.indexOf(base);
-				portalStage = baseIdx >= derivedIdx ? base : derivedPortalStage;
-				if (portalStage === base) {
-					if (coarseStage === "document_verification") {
-						if (isEligible && !hasProceeded) portalStage = "proceed";
-						else if (isEligible && hasProceeded && !hasPackage) portalStage = "school_package";
-						else if (hasPackage && hasDepositPaid && !hasHandlerAssigned) portalStage = "awaiting_handler";
-						else if (hasPackage && hasHandlerAssigned && !hasSelection) portalStage = "school_select";
-						else if (!isEligible && hasConsultation) portalStage = "eligibility";
-						else if (!hasConsultation) portalStage = "consultation";
-					} else if (coarseStage === "school_submission") {
-						if (hasSelection && !isAppInvoiceIssued) portalStage = "awaiting_invoice";
-						else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) portalStage = "application_invoice";
-						else if (hasSelection && isAppInvoicePaid) portalStage = "school_tracking";
-						else if (!hasSelection && !hasHandlerAssigned) portalStage = "awaiting_handler";
-						else if (!hasSelection && hasHandlerAssigned) portalStage = "school_select";
-					} else if (coarseStage === "offer_letter_review") {
-						portalStage = "school_tracking";
-					} else if (coarseStage === "visa_processing") {
-						if (hasAdmitted && !hasVisaConsent) portalStage = "school_tracking";
-						else if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
-						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
-					} else if (coarseStage === "payment_execution") {
-						if (isCompleted) portalStage = "completed";
-						else if (hasAdmitted && isVisaDone && taResolved) portalStage = "payment_execution";
-						else if (hasAdmitted && isVisaDone) portalStage = "travel_assistance";
-						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
-						else if (hasAdmitted) portalStage = "visa_invoice";
-					} else if (coarseStage === "travel_assistance") {
-						if (isCompleted) portalStage = "completed";
-						else if (taResolved) portalStage = "payment_execution";
-						else portalStage = "travel_assistance";
-					} else if (coarseStage === "completed") {
-						portalStage = "completed";
-					}
-				}
-			}
-		}
-
-		const currentStage: string = coarseStage ?? portalStage;
-
-		// ── Labels ─────────────────────────────────────────────────────────
-		// Canonical labels/order live in shared (PORTAL_STAGE_LABELS /
-		// PORTAL_STAGE_ORDER) — no longer rebuilt inline here.
-		const idx = PORTAL_STAGE_ORDER.indexOf(portalStage);
-		const nextUnlock =
-			idx >= 0 && idx < PORTAL_STAGE_ORDER.length - 1
-				? PORTAL_STAGE_LABELS[PORTAL_STAGE_ORDER[idx + 1]]
-				: null;
-
-		// ── Chapter unlocks ────────────────────────────────────────────────
-		const chapterUnlocks = {
-			journey: true,
-			consultation: true,
-			package: isEligible,
-			// The application chapter stays unlocked once the deposit is paid.
-			// The applicant is in the application journey — they may be waiting
-			// for a handler (awaiting_handler), but that's part of this chapter,
-			// not a locked future chapter. Locking it would show a generic
-			// "Stage locked" gate instead of the awaiting-handler page.
-			application: isEligible && hasPackage,
-			tracking: isAppInvoicePaid && hasSelection,
-			visa: hasAdmitted,
-			travel_assistance: hasAdmitted && isVisaInvoicePaid && isVisaDone,
-			// Payment Execution opens once the TA request is resolved (cleared,
-			// declined, or on_hold) — not just when the ticket is paid. The
-			// applicant must choose a plan and be cleared first (or opt out).
-			payment_execution:
-				(hasAdmitted && isVisaInvoicePaid && isVisaDone && taResolved) ||
-				(hasAdmitted && isVisaInvoicePaid && isVisaDone && isTravelInvoicePaid && !taStatus),
-			complete: isCompleted,
-		};
-
-		// ── Per-stage status (done|current|locked|skipped) ────────────────
-		// Computed from real signals, not index comparison — a stage advanced
-		// past without its signal met shows "skipped", not "done". The portal
-		// spine consumes this so "Done" never lies.
-		const stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> = {};
-		const currentIdx = PORTAL_STAGE_ORDER.indexOf(portalStage);
-		for (const sid of PORTAL_STAGE_ORDER) {
-			const si = PORTAL_STAGE_ORDER.indexOf(sid);
-			let done = false;
-			if (sid === "consultation") done = hasConsultation;
-			else if (sid === "eligibility") done = isEligible;
-			else if (sid === "proceed") done = hasProceeded;
-			else if (sid === "school_package") done = hasPackage;
-			else if (sid === "awaiting_handler") done = hasHandlerAssigned;
-			else if (sid === "school_select") done = hasSelection;
-			else if (sid === "awaiting_invoice") done = isAppInvoiceIssued;
-			else if (sid === "application_invoice") done = isAppInvoicePaid;
-			else if (sid === "school_tracking") done = hasAdmitted && hasVisaConsent;
-			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
-			else if (sid === "visa") done = isVisaDone;
-			else if (sid === "travel_assistance") done = taResolved;
-			else if (sid === "payment_execution") done = planSettled && taResolved;
-			else if (sid === "completed") done = isCompleted;
-
-			if (sid === portalStage) stageStatuses[sid] = "current";
-			else if (done) stageStatuses[sid] = "done";
-			else if (si < currentIdx) stageStatuses[sid] = "skipped";
-			else stageStatuses[sid] = "locked";
-		}
-
-		return c.json({
-			currentStage,
-			portalStage,
-			chapterUnlocks,
-			stageStatuses,
-			label: PORTAL_STAGE_LABELS[portalStage],
-			nextUnlock,
-		});
 	},
 );
 

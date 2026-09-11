@@ -8,7 +8,9 @@ import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage, Invoice } from "century-nit-core/ops";
 import { INVOICE_STATUS_LABELS, invoiceBalance } from "century-nit-core/ops";
 import { fmtBoth } from "./currency";
-import { JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, VISA_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { AssignControl, CaseHeader } from "century-nit-core/ui";
+
 import { handoffOffersKeep } from "../lib/pendingTasks";
 
 const VISA_STEPS: { id: VisaStage; label: string }[] = [
@@ -352,6 +354,19 @@ export function EnterpriseVisa() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+								<div className="card" style={{ padding: "0.75rem 1rem" }}>
+									<CaseHeader
+										name={active.applicantName}
+										reference={active.appId}
+										branch={active.branch}
+										stage={active.stage}
+										portalStage={active.journey?.portalStage ?? null}
+										handlerName={
+											(active.stageHandlers ?? []).find((h) => h.stage === "visa_processing")?.opsUserName ?? active.assignedStaff ?? null
+										}
+										extra={[{ label: "Visa", value: VISA_STAGE_LABELS[active.visaStage ?? "locked"] ?? active.visaStage ?? "—" }]}
+									/>
+								</div>
 {/* Visa Invoice */}
 <div className="card" style={{ background: "var(--muted)" }}>
   <p className="eyebrow mb-1">Visa Invoice</p>
@@ -405,50 +420,26 @@ export function EnterpriseVisa() {
 											const handoff = handoffs.find(
 												(h) => h.applicationId === active.id && h.status === "pending" && h.stage === "visa_processing",
 											);
-											const eligible = assignees.filter((a) => canOwnStage(a.role, "visa_processing"));
+											const canResolve = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
 											return (
-												<div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "0.5rem", padding: "0.75rem" }}>
-													<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#854d0e", margin: 0 }}>
-														Awaiting visa specialist
+												<div className="card" style={{ padding: "0.75rem 1rem" }}>
+													<p className="eyebrow mb-1">Awaiting visa specialist</p>
+													<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+														The applicant is ready for visa processing. Assign a specialist to open tracking.
 													</p>
-													<p style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem", color: "#854d0e", lineHeight: 1.5 }}>
-														The applicant is ready for visa processing. Assign a visa specialist to open tracking.
-													</p>
-													{handoff && (opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin") ? (
-														<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem", flexWrap: "wrap" }}>
-															{handoffOffersKeep(handoff) && (
-																<button
-																	type="button"
-																	className="btn btn--sm btn--ghost"
-																	onClick={() => void resolveHandoff(handoff.id, "keep")}
-																>
-																	Keep {handoff.fromOpsUserName}
-																</button>
-															)}
-															<select
-																className="input"
-																style={{ width: "auto", minWidth: "12rem" }}
-																defaultValue=""
-																onChange={(e) => {
-																	const opsUserId = e.target.value;
-																	if (!opsUserId) return;
-																	void resolveHandoff(handoff.id, "assign", { opsUserId }).then(() => {
-																		e.target.value = "";
-																	});
-																}}
-															>
-																<option value="">Assign visa specialist…</option>
-																{eligible.map((a) => (
-																	<option key={a.opsUserId} value={a.opsUserId}>
-																		{a.name}
-																	</option>
-																))}
-															</select>
+													{handoff && canResolve ? (
+														<div className="mt-3">
+															<AssignControl
+																stage="visa_processing"
+																staff={assignees}
+																branch={active.branch}
+																keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+																onAssign={(opsUserId, reason) => resolveHandoff(handoff.id, "assign", { opsUserId, reason })}
+																onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason })}
+															/>
 														</div>
 													) : (
-														<p style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", color: "#854d0e" }}>
-															A manager or coordinator assigns the specialist.
-														</p>
+														<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>A manager or coordinator assigns the specialist.</p>
 													)}
 												</div>
 											);

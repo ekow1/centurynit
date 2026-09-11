@@ -8,7 +8,8 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { apiFetch } from "../lib/api";
-import { API_PREFIX, canOwnStage } from "century-nit-shared";
+import { API_PREFIX } from "century-nit-shared";
+import { AssignControl } from "century-nit-core/ui";
 import { AssignDialog } from "./UnassignedBookings";
 import {
 	buildInvoiceRows,
@@ -49,9 +50,7 @@ export function AssignTaskDialog({
 	onAssign: (to: Assignee, reason?: string) => Promise<unknown>;
 	onKeepHandler?: (reason?: string) => Promise<unknown>;
 }) {
-	// Who may take this item: a role that can own the stage (a rule the server
-	// enforces too), preferring the same branch (a preference — fall back to
-	// everyone who can own the stage rather than an empty list).
+	// Which stage the picker is staffing — decides which roles are offered.
 	const stageForRoles =
 		task.kind === "handoff"
 			? task.record.stage
@@ -60,56 +59,23 @@ export function AssignTaskDialog({
 				: task.kind === "application"
 					? "school_submission"
 					: "consultation";
-	const roleMatches = assignees.filter((a) => canOwnStage(a.role, stageForRoles));
-	const eligibleAssignees = roleMatches.filter((a) => a.branch === task.branch || !task.branch);
-	const assigneeOptions = eligibleAssignees.length > 0 ? eligibleAssignees : roleMatches;
-	const [assigneeId, setAssigneeId] = useState("");
-	const [reason, setReason] = useState("");
-	const [assigning, setAssigning] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	async function doAssign() {
-		const to = assignees.find((a) => a.email === assigneeId || a.opsUserId === assigneeId);
-		if (!to) return;
-		setAssigning(true);
-		setError(null);
-		try {
-			await onAssign(to, reason || undefined);
-			onClose();
-		} catch (err) {
-			setError(
-				err instanceof ApiError
-					? err.message
-					: err instanceof Error
-						? err.message
-						: "Could not assign. Please try again.",
-			);
-			setAssigning(false);
-		}
-	}
+	const current = task.owner && task.owner !== "Unassigned" ? task.owner : null;
 
 	return (
 		<div
 			className="ops-modal-backdrop"
 			role="dialog"
 			aria-modal="true"
-			aria-label={task.owner === "Unassigned" ? "Assign task" : "Reassign task"}
+			aria-label={current ? "Reassign task" : "Assign task"}
 		>
 			<div className="ops-modal">
 				<header className="ops-modal__head">
 					<div>
 						<h2 className="ops-modal__title">
-							{task.owner === "Unassigned" ? "Assign" : "Reassign"}{" "}
-							{taskActionLabel(task).toLowerCase()}
+							{current ? "Reassign" : "Assign"} {taskActionLabel(task).toLowerCase()}
 						</h2>
 						<p className="ops-modal__sub">
 							{task.title} · {task.subtitle}
-							{task.owner !== "Unassigned" && (
-								<>
-									{" · "}
-									<span className="muted">Current: {task.owner}</span>
-								</>
-							)}
 						</p>
 					</div>
 					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
@@ -117,82 +83,33 @@ export function AssignTaskDialog({
 					</button>
 				</header>
 
-				{error && <p className="ops-modal__error">{error}</p>}
-
-				{assigneeOptions.length === 0 ? (
-					<p className="ops-modal__muted">No staff are configured for this branch.</p>
-				) : (
-					<label className="field" style={{ marginBottom: "0.75rem" }}>
-						<span className="field-label">Assign to</span>
-						<select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-							<option value="">Select staff…</option>
-							{assigneeOptions.map((a) => (
-								<option key={a.email} value={a.email}>
-									{a.name}
-									{a.role ? ` — ${a.role}` : ""}
-									{a.branch ? ` · ${a.branch}` : ""}
-								</option>
-							))}
-						</select>
-					</label>
-				)}
-
-				{task.kind === "handoff" && (
-					<label className="field" style={{ marginBottom: "0.75rem" }}>
-						<span className="field-label">Reason (optional)</span>
-						<input
-							className="input"
-							value={reason}
-							onChange={(e) => setReason(e.target.value)}
-							placeholder="Why this assignment"
-						/>
-					</label>
-				)}
-
-				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-					{task.kind === "handoff" && onKeepHandler && handoffOffersKeep(task.record) && (
-						<button
-							type="button"
-							className="btn btn--ghost btn--sm"
-							disabled={assigning}
-							onClick={() => {
-								setAssigning(true);
-								setError(null);
-								onKeepHandler(reason || undefined)
-									.then(() => onClose())
-									.catch((err) => {
-										setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not resolve");
-										setAssigning(false);
-									});
-							}}
-						>
-							{assigning
-								? "Resolving…"
-								: task.record?.fromOpsUserName
-									? `Keep ${task.record.fromOpsUserName}`
-									: "Keep previous handler"}
-						</button>
-					)}
-					<button
-						type="button"
-						className="btn btn--primary btn--sm"
-						disabled={!assigneeId || assigning}
-					onClick={doAssign}
-					>
-						{assigning
-						? task.owner === "Unassigned"
-							? "Assigning…"
-							: "Reassigning…"
-						: task.owner === "Unassigned"
-							? "Assign"
-							: "Reassign"}
-					</button>
-				</div>
+				<AssignControl
+					stage={stageForRoles}
+					staff={assignees}
+					branch={task.branch}
+					currentName={current}
+					keepName={task.kind === "handoff" && onKeepHandler && handoffOffersKeep(task.record) ? task.record.fromOpsUserName : null}
+					withReason={task.kind === "handoff"}
+					onAssign={async (opsUserId, reason) => {
+						const to = assignees.find((a) => a.opsUserId === opsUserId);
+						if (!to) throw new Error("Staff member not found");
+						await onAssign(to, reason);
+						onClose();
+					}}
+					onKeep={
+						onKeepHandler
+							? async (reason) => {
+									await onKeepHandler(reason);
+									onClose();
+								}
+							: undefined
+					}
+				/>
 
 				<p className="ops-modal__foot">
-					{task.owner === "Unassigned"
-						? "Assigning notifies the staff member and moves the item out of the pending queue."
-						: "Reassigning transfers ownership to the new staff member and notifies them."}
+					{current
+						? "Reassigning transfers ownership to the new staff member and notifies them."
+						: "Assigning notifies the staff member and moves the item out of the pending queue."}
 				</p>
 			</div>
 		</div>

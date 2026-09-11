@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 /* Cascade order is load-bearing: shared base, then this app's own layer, then
  * the mobile refinements on top of both. */
 import "century-nit-core/styles/base.css";
+import "century-nit-core/styles/components.css";
 import "./styles/app.css";
 import "century-nit-core/styles/base.mobile.css";
 import "./styles/app.mobile.css";

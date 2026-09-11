@@ -16,8 +16,9 @@ import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
+import { AssignControl } from "century-nit-core/ui";
 import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage, type StageHandoff } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
@@ -360,14 +361,10 @@ function PreviewPane({
 	onResolveHandoff: (handoffId: string, decision: "keep" | "assign", opts?: { opsUserId?: string; reason?: string }) => Promise<unknown>;
 	onDeferHandoff: (handoffId: string, reason?: string) => Promise<unknown>;
 }) {
-	const [assigneeId, setAssigneeId] = useState<string>("");
-	const [assigning, setAssigning] = useState(false);
-	const [assignError, setAssignError] = useState<string | null>(null);
-	const [reason, setReason] = useState<string>("");
+	const [deferring, setDeferring] = useState(false);
+	const [deferError, setDeferError] = useState<string | null>(null);
 
-	// Who may take this item: a role that can own the stage, in the same
-	// branch. Branch is a preference (fall back to everyone who can own the
-	// stage); role is a rule the server enforces too.
+	// Which stage the picker is staffing — decides which roles are offered.
 	const stageForRoles =
 		item.kind === "handoff"
 			? item.record.stage
@@ -376,58 +373,41 @@ function PreviewPane({
 				: item.kind === "application"
 					? "school_submission"
 					: "consultation";
-	const roleMatches = assignees.filter((a) => canOwnStage(a.role, stageForRoles));
-	const branchMatches = roleMatches.filter((a) => a.branch === item.branch || !item.branch);
-	const eligibleAssignees = branchMatches.length > 0 ? branchMatches : roleMatches;
 
-	async function doAssign() {
-		const to = assignees.find((a) => a.email === assigneeId || a.opsUserId === assigneeId);
-		if (!to || !item.record) return;
-		setAssigning(true);
-		setAssignError(null);
-		try {
-			if (item.kind === "consultation" && item.action === "assign") {
-				await onAssignConsultation(item.record.id, to);
-			} else if (item.kind === "application" && item.action === "assign") {
-				await onAssignApplication(item.record.id, to);
-			} else if (item.kind === "handoff" && item.action === "resolve") {
-				await onResolveHandoff(item.record.id, "assign", { opsUserId: to.opsUserId, reason: reason || undefined });
-			} else if (item.kind === "travel" && to.opsUserId) {
-				await applicationsApi.assignTravelHandler(item.record.id, to.opsUserId);
-			}
-			await onAssigned();
-		} catch (err) {
-			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not assign");
-		} finally {
-			setAssigning(false);
+	const byId = (opsUserId: string) => assignees.find((a) => a.opsUserId === opsUserId);
+
+	async function assignTo(opsUserId: string, reason?: string) {
+		const to = byId(opsUserId);
+		if (!to || !item.record) throw new Error("Staff member not found");
+		if (item.kind === "consultation" && item.action === "assign") {
+			await onAssignConsultation(item.record.id, to);
+		} else if (item.kind === "application" && item.action === "assign") {
+			await onAssignApplication(item.record.id, to);
+		} else if (item.kind === "handoff" && item.action === "resolve") {
+			await onResolveHandoff(item.record.id, "assign", { opsUserId, reason });
+		} else if (item.kind === "travel" && item.action === "assign") {
+			await applicationsApi.assignTravelHandler(item.record.id, opsUserId);
 		}
+		await onAssigned();
 	}
 
-	async function keepHandler() {
+	async function keepHandler(reason?: string) {
 		if (item.kind !== "handoff") return;
-		setAssigning(true);
-		setAssignError(null);
-		try {
-			await onResolveHandoff(item.record.id, "keep", { reason: reason || undefined });
-			await onAssigned();
-		} catch (err) {
-			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not resolve");
-		} finally {
-			setAssigning(false);
-		}
+		await onResolveHandoff(item.record.id, "keep", { reason });
+		await onAssigned();
 	}
 
 	async function defer() {
 		if (item.kind !== "handoff") return;
-		setAssigning(true);
-		setAssignError(null);
+		setDeferring(true);
+		setDeferError(null);
 		try {
-			await onDeferHandoff(item.record.id, reason || undefined);
+			await onDeferHandoff(item.record.id);
 			await onAssigned();
 		} catch (err) {
-			setAssignError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not defer");
+			setDeferError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not defer");
 		} finally {
-			setAssigning(false);
+			setDeferring(false);
 		}
 	}
 
@@ -481,74 +461,36 @@ function PreviewPane({
 
 			{item.kind === "handoff" && canAssignWork && (
 				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
-					<div className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
-						This stage needs an owner before it can start. Keep the previous handler, assign a specialist, or defer the decision.
-					</div>
-					<label className="field" style={{ marginBottom: "0.75rem" }}>
-						<span className="field-label">Assign a specialist</span>
-						<select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-							<option value="">Select staff…</option>
-							{eligibleAssignees.map((a) => (
-								<option key={a.opsUserId || a.email} value={a.opsUserId || a.email}>
-									{a.name}
-									{a.role ? ` — ${a.role}` : ""}
-									{a.branch ? ` · ${a.branch}` : ""}
-								</option>
-							))}
-						</select>
-					</label>
-					<label className="field" style={{ marginBottom: "0.75rem" }}>
-						<span className="field-label">Reason (optional)</span>
-						<input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this change / assignment" />
-					</label>
-					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-						<button
-							className="btn btn--primary btn--sm"
-							onClick={doAssign}
-							disabled={!assigneeId || assigning}
-						>
-							{assigning ? "Assigning…" : "Assign ↗"}
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+						This stage needs an owner before it can start.
+					</p>
+					<AssignControl
+						stage={item.record.stage}
+						staff={assignees}
+						branch={item.branch}
+						keepName={handoffOffersKeep(item.record) ? item.record.fromOpsUserName : null}
+						withReason
+						onAssign={assignTo}
+						onKeep={keepHandler}
+					/>
+					<div style={{ marginTop: "0.6rem" }}>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => void defer()} disabled={deferring}>
+							{deferring ? "Deferring…" : "Assign later"}
 						</button>
-						{handoffOffersKeep(item.record) && (
-							<button
-								className="btn btn--ghost btn--sm"
-								onClick={keepHandler}
-								disabled={assigning}
-							>
-								{assigning ? "Resolving…" : `Keep ${item.record.fromOpsUserName}`}
-							</button>
-						)}
-						<button
-							className="btn btn--ghost btn--sm"
-							onClick={defer}
-							disabled={assigning}
-						>
-							{assigning ? "Deferring…" : "Assign later"}
-						</button>
+						{deferError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{deferError}</p>}
 					</div>
-					{assignError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{assignError}</p>}
 				</div>
 			)}
 
 			{item.action === "assign" && canAssignWork && (
 				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
-					<label className="field" style={{ marginBottom: "0.75rem" }}>
-						<span className="field-label">Assign to</span>
-						<select className="select" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-							<option value="">Select staff…</option>
-							{eligibleAssignees.map((a) => (
-								<option key={a.email} value={a.email}>
-									{a.name}
-									{a.role ? ` — ${a.role}` : ""}
-									{a.branch ? ` · ${a.branch}` : ""}
-								</option>
-							))}
-						</select>
-					</label>
-					<button className="btn btn--primary btn--sm" onClick={doAssign} disabled={!assigneeId || assigning}>
-						{assigning ? "Assigning…" : "Assign"}
-					</button>
-					{assignError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{assignError}</p>}
+					<AssignControl
+						stage={stageForRoles}
+						staff={assignees}
+						branch={item.branch}
+						currentName={item.owner && item.owner !== "Unassigned" ? item.owner : null}
+						onAssign={assignTo}
+					/>
 				</div>
 			)}
 		</div>

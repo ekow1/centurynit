@@ -5,7 +5,8 @@ import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, type JourneyStage } from
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
-import { StageInvoiceCard } from "../../components/StageInvoiceCard";
+import { InvoiceCard, formatMoney } from "century-nit-core/ui";
+import { downloadReceipt } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
 import {
@@ -2781,25 +2782,35 @@ function ApplicationHubInner() {
 							</Button>
 						</div>
 					</div>
-				) : (
-					<StageInvoiceCard
-						invoice={effectiveInv}
-						title="Application invoice"
-						onPay={payInvoice}
-						meta={
-							<ul className="portal-snapshot" style={{ maxWidth: "20rem" }}>
-								<li>
-									<span>Schools</span>
-									<strong>{schoolApplications.length}</strong>
-								</li>
-								<li>
-									<span>University Filing Fee</span>
-									<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
-								</li>
-							</ul>
-						}
-					/>
-				)
+				) : serverInvoice ? (
+					<section className="card card--pad mb-4">
+						<InvoiceCard
+							title="Application invoice"
+							invoice={serverInvoice}
+							actions={
+								serverInvoice.status === "paid" ? (
+									<Button variant="secondary" onClick={() => downloadReceipt(serverInvoice, "Application invoice")}>
+										Download receipt
+									</Button>
+								) : serverInvoice.status !== "proforma" && serverInvoice.balanceCents > 0 ? (
+									<Button onClick={payInvoice} arrow>
+										Pay {formatMoney(serverInvoice.balanceCents, "ghs")}
+									</Button>
+								) : null
+							}
+						/>
+						<ul className="portal-snapshot mt-4" style={{ maxWidth: "20rem" }}>
+							<li>
+								<span>Schools</span>
+								<strong>{schoolApplications.length}</strong>
+							</li>
+							<li>
+								<span>University filing fee</span>
+								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
+							</li>
+						</ul>
+					</section>
+				) : null
 			) : (
 				<p className="mono muted mb-4">Confirm your school list to submit it to your consultant for invoicing.</p>
 			)}
@@ -3412,15 +3423,7 @@ function VisaHubInner() {
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	const { toast } = useNotifier();
 
-	const [serverInv, setServerInv] = useState<{
-		id: string;
-		invoiceNumber: string;
-		status: string;
-		balanceCents: number;
-		subtotalCents: number;
-		paidCents: number;
-		lines: { id: string; label: string; detail: string | null; amountCents: number }[];
-	} | null>(null);
+	const [serverInv, setServerInv] = useState<ApiInvoice | null>(null);
 
 	const serverPaid = serverInv?.status === "paid";
 	const paid = Boolean(serverPaid);
@@ -3447,20 +3450,7 @@ function VisaHubInner() {
 			.invoices({ type: "visa" })
 			.then(({ invoices }) => {
 				if (cancelled) return;
-				const visa = invoices.find((i) => i.status !== "void");
-				if (visa) {
-					setServerInv({
-						id: visa.id,
-						invoiceNumber: visa.invoiceNumber,
-						status: visa.status,
-						balanceCents: visa.balanceCents,
-						subtotalCents: visa.subtotalCents,
-						paidCents: visa.paidCents,
-						lines: visa.lines,
-					});
-				} else {
-					setServerInv(null);
-				}
+				setServerInv(invoices.find((i) => i.status !== "void") ?? null);
 			})
 			.catch(() => {});
 		return () => {
@@ -3682,13 +3672,25 @@ function VisaHubInner() {
 							</div>
 						</div>
 					</div>
-				) : hasIssuedInvoice || paid ? (
-					<StageInvoiceCard
-						invoice={cardInvoice}
-						title="Visa invoice · pay before process starts"
-						onPay={paid ? undefined : pay}
-						paying={false}
-					/>
+				) : (hasIssuedInvoice || paid) && serverInv ? (
+					<section className="card card--pad mb-4">
+						<InvoiceCard
+							title="Visa invoice"
+							invoice={serverInv}
+							actions={
+								serverInv.status === "paid" ? (
+									<Button variant="secondary" onClick={() => downloadReceipt(serverInv, "Visa invoice")}>
+										Download receipt
+									</Button>
+								) : serverInv.balanceCents > 0 ? (
+									<Button onClick={pay} arrow>
+										Pay {formatMoney(serverInv.balanceCents, "ghs")}
+									</Button>
+								) : null
+							}
+							hint={paid ? undefined : "Visa processing starts once this invoice is paid."}
+						/>
+					</section>
 				) : null}
 			</div>
 

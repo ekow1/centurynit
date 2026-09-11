@@ -24,6 +24,7 @@
 			"import": "./dist/ui/index.js"
 		},
 		"./styles/base.css": "./styles/base.css",
+		"./styles/components.css": "./styles/components.css",
 		"./styles/base.mobile.css": "./styles/base.mobile.css",
 		"./api": {
 			"types": "./dist/api.d.ts",

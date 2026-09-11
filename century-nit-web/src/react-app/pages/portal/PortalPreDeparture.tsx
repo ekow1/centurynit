@@ -1,10 +1,12 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { InvoiceCard, formatMoney } from "century-nit-core/ui";
+import { downloadReceipt } from "../../lib/receipt";
 import { useAppState } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
 import { meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
-import { usdFromCents, type ApiInvoice } from "century-nit-shared";
+import type { ApiInvoice } from "century-nit-shared";
 
 export function PortalPreDeparture() {
 	return (
@@ -46,7 +48,6 @@ function TravelAssistanceInner() {
 	// it first. Show "Awaiting approval" instead of a Pay button.
 	const tripProforma = Boolean(trip) && trip?.status === "proforma";
 	const tripDue = Boolean(trip) && trip?.status !== "paid" && !tripProforma && (trip?.balanceCents ?? 0) > 0;
-	const tripAmountCents = trip ? (trip.balanceCents > 0 ? trip.balanceCents : trip.subtotalCents) : 0;
 	const ticketingEffectivePaid = ticketingPaid || (trip?.status === "paid");
 
 	async function payTicketing() {
@@ -246,42 +247,39 @@ function TravelAssistanceInner() {
 				</section>
 			)}
 
-			{/* Ticket invoice — pay it */}
+			{/* Ticket invoice — the same card as every other invoice */}
 			{showInvoice && (
 				<section className="mt-4">
 					<div className="card card--pad">
-						<p className="eyebrow">Ticket invoice</p>
-						<div className="row mt-2" style={{ alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-							<div>
-								<p className="display" style={{ fontSize: "1.25rem" }}>
-									{tripDue ? `$${usdFromCents(tripAmountCents)}` : "Flight ticket"}
-								</p>
-								<p className="muted" style={{ fontSize: "0.85rem" }}>
-									{ticketingEffectivePaid
-										? "Paid — your flight ticket is settled. Your consultant will confirm the booking shortly."
-										: tripProforma
-											? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting manager approval`
-											: tripDue
-												? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting payment`
-												: "Awaiting invoice from your consultant."}
-								</p>
-							</div>
-							<div className="row" style={{ marginLeft: "auto" }}>
-								{!ticketingEffectivePaid ? (
-									tripProforma ? (
-										<span className="portal-pill" style={{ background: "var(--muted)" }}>Pending approval</span>
-									) : (
-										<Button variant="primary" onClick={() => void payTicketing()} disabled={!tripDue}>
-											{!tripDue && !trip ? "Awaiting invoice…" : "Pay ticket"}
+						{trip ? (
+							<InvoiceCard
+								title="Ticket invoice"
+								invoice={trip}
+								actions={
+									trip.status === "paid" ? (
+										<Button variant="secondary" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
+											Download receipt
 										</Button>
-									)
-								) : (
-									<span className="success-check" aria-hidden>
-										✓
-									</span>
-								)}
-							</div>
-						</div>
+									) : tripDue ? (
+										<Button variant="primary" onClick={() => void payTicketing()} arrow>
+											Pay {formatMoney(trip.balanceCents, "ghs")}
+										</Button>
+									) : null
+								}
+								hint={
+									trip.status === "paid"
+										? "Paid — your consultant will confirm the booking shortly."
+										: tripProforma
+											? "Your ticket invoice is with a manager for approval. You'll be able to pay it here once it's issued."
+											: undefined
+								}
+							/>
+						) : (
+							<>
+								<p className="eyebrow">Ticket invoice</p>
+								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Awaiting invoice from your consultant.</p>
+							</>
+						)}
 					</div>
 				</section>
 			)}

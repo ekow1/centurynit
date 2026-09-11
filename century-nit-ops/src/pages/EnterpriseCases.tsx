@@ -23,6 +23,8 @@ import {
 } from "century-nit-shared";
 import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
 import { handoffOffersKeep } from "../lib/pendingTasks";
+import { AssignControl, CaseHeader, InvoiceCard } from "century-nit-core/ui";
+
 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
@@ -671,6 +673,25 @@ export function EnterpriseCases() {
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
 							{(() => {
 								const app = liveSelected ?? selectedApp;
+								return (
+									<div className="card" style={{ padding: "0.75rem 1rem" }}>
+										<CaseHeader
+											name={app.applicantName}
+											reference={app.appId}
+											branch={app.branch}
+											stage={app.stage}
+											portalStage={app.journey?.portalStage ?? null}
+											handlerName={app.assignedStaff || null}
+											extra={[
+												{ label: "Country", value: app.country || "—" },
+												{ label: "Programme", value: app.program || "—" },
+											]}
+										/>
+									</div>
+								);
+							})()}
+							{(() => {
+								const app = liveSelected ?? selectedApp;
 								if (!app?.journey) return null;
 								// The applicant's own journey, from the same derivation the
 								// portal reads — what the client sees is what we see.
@@ -731,47 +752,23 @@ export function EnterpriseCases() {
 											: handoff.source === "offboarding"
 												? "The previous handler has left — this stage needs a new owner."
 												: `This case needs a handler for ${stageLabel}.`;
-								const eligible = assignees.filter((a) => canOwnStage(a.role, handoff.stage));
 								return (
-									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
-										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Handler Assignment Required · {stageLabel}</p>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>{why}</p>
-										{handoff.fromOpsUserName && (
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-												Previous handler: <strong>{handoff.fromOpsUserName}</strong>
-											</p>
-										)}
-										<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-											{handoffOffersKeep(handoff) && (
-												<button
-													className="btn btn--sm btn--ghost"
-													onClick={() => {
-														void resolveHandoff(handoff.id, "keep").then(() => navigate("/applications"));
-													}}
-												>
-													Continue with Previous Handler
-												</button>
-											)}
-											<select
-												className="input"
-												style={{ width: "auto", minWidth: "12rem" }}
-												defaultValue=""
-												onChange={(e) => {
-													const opsUserId = e.target.value;
-													if (!opsUserId) return;
-													void resolveHandoff(handoff.id, "assign", { opsUserId }).then(() => {
-														e.target.value = "";
-														navigate("/applications");
-													});
-												}}
-											>
-												<option value="">Assign New Handler…</option>
-												{eligible.map((a) => (
-													<option key={a.opsUserId} value={a.opsUserId}>
-														{a.name} {a.email ? `(${a.email})` : ""}
-													</option>
-												))}
-											</select>
+									<div className="card">
+										<p className="eyebrow mb-1">Handler assignment required · {stageLabel}</p>
+										<p className="mt-2" style={{ fontSize: "var(--text-sm)" }}>{why}</p>
+										<div className="mt-3">
+											<AssignControl
+												stage={handoff.stage}
+												staff={assignees}
+												branch={app.branch}
+												currentName={null}
+												keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+												withReason
+												onAssign={(opsUserId, reason) =>
+													resolveHandoff(handoff.id, "assign", { opsUserId, reason }).then(() => navigate("/applications"))
+												}
+												onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason }).then(() => navigate("/applications"))}
+											/>
 										</div>
 									</div>
 								);
@@ -782,86 +779,48 @@ export function EnterpriseCases() {
 								if (app.appFeePaid) return null;
 
 								const isProforma = appInvoice?.status === "proforma";
-								const isIssued = appInvoice && (appInvoice.status === "issued" || appInvoice.status === "partial" || appInvoice.status === "paid" || appInvoice.status === "overdue");
-								const subtotalUsd = appInvoice ? (appInvoice.subtotalCents / 100) : null;
+								const schools = app.schoolApplications?.length ?? 0;
 
 								return (
-									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
-										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Application Invoice</p>
+									<div className="card">
 										{invoiceFlash && (
-											<p style={{ fontSize: "var(--text-sm)", fontWeight: 600, marginTop: "0.5rem", color: isProforma ? "#dc2626" : "#16a34a" }}>
-												{invoiceFlash}
-											</p>
+											<p className="mb-2" style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{invoiceFlash}</p>
 										)}
 										{appInvoiceLoading ? (
-									<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>Loading invoice…</p>
-								) : !appInvoice ? (
-									<>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-											No invoice yet — {(app.schoolApplications?.length ?? 0) === 0 ? "no schools selected" : `${app.schoolApplications?.length ?? 0} school(s) selected`}
-										</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-											Issue the application fee invoice so the applicant can pay. Per-school line items will be added automatically as schools are selected.
-										</p>
-										<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-											<button
-												type="button"
-												className="btn btn--sm btn--primary"
-												onClick={handleIssueApplicationInvoice}
-												disabled={issuingInvoice}
-											>
-												{issuingInvoice ? "Issuing…" : "Issue Application Invoice"}
-											</button>
-											<Link to="/invoices" className="btn btn--sm btn--ghost">
-												Full invoice view →
-											</Link>
-										</div>
-									</>
-								) : isProforma ? (
+											<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading invoice…</p>
+										) : !appInvoice ? (
 											<>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-													Proforma ready — review and issue
+												<p className="eyebrow mb-1">Application invoice</p>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+													No invoice yet — {schools === 0 ? "no schools selected" : `${schools} school(s) selected`}
 												</p>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-													{appInvoice.invoiceNumber} · ${subtotalUsd?.toLocaleString()} USD
+												<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
+													Issue the application fee invoice so the applicant can pay. Per-school line items are added as schools are selected.
 												</p>
-												<div style={{ marginTop: "0.5rem" }}>
-													{appInvoice.lines.map((l) => (
-														<div key={l.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", padding: "0.15rem 0" }}>
-															<span>{l.label}</span>
-															<span className="mono">${(l.amountCents / 100).toLocaleString()}</span>
-														</div>
-													))}
-													<div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-sm)", fontWeight: 600, padding: "0.25rem 0", borderTop: "1px solid var(--border-light)", marginTop: "0.25rem" }}>
-														<span>Total</span>
-														<span className="mono">${subtotalUsd?.toLocaleString()}</span>
-													</div>
-												</div>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
-													The applicant cannot pay until you review and issue this invoice.
-												</p>
-												<div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-													<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--primary">
-														Review & Issue Invoice
-													</Link>
+												<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+													<button type="button" className="btn btn--sm btn--primary" onClick={handleIssueApplicationInvoice} disabled={issuingInvoice}>
+														{issuingInvoice ? "Issuing…" : "Issue application invoice"}
+													</button>
 												</div>
 											</>
-										) : isIssued ? (
-											<>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-													Invoice issued — {appInvoice.invoiceNumber}
-												</p>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-													${subtotalUsd?.toLocaleString()} USD · Status: {appInvoice.status}
-													{appInvoice.balanceCents > 0 ? ` · $${(appInvoice.balanceCents / 100).toLocaleString()} outstanding` : " · Fully paid"}
-												</p>
-												<div style={{ marginTop: "0.5rem" }}>
-													<Link to="/invoices" className="btn btn--sm btn--ghost">
-														View on Invoices page →
-													</Link>
-												</div>
-											</>
-										) : null}
+										) : (
+											<InvoiceCard
+												title="Application invoice"
+												invoice={appInvoice}
+												hint={isProforma ? "The applicant cannot pay until you review and issue this invoice." : undefined}
+												actions={
+													isProforma ? (
+														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--primary">
+															Review & issue
+														</Link>
+													) : (
+														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--ghost">
+															Open in Invoices →
+														</Link>
+													)
+												}
+											/>
+										)}
 									</div>
 								);
 							})()}

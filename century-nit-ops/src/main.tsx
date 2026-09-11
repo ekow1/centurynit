@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
  * the mobile refinements on top of both. The public site's styles are not here
  * — staff never download them. */
 import "century-nit-core/styles/base.css";
+import "century-nit-core/styles/components.css";
 import "./styles/app.css";
 import "century-nit-core/styles/base.mobile.css";
 import "./styles/app.mobile.css";

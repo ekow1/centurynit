@@ -1,0 +1,83 @@
+/*
+ * Shared components — the pieces both apps kept re-implementing by hand:
+ * status pill, money, invoice card, assignment control, case header.
+ *
+ * Styled only with tokens. Status tone is functional (it says done / waiting
+ * / blocked), so the five tones are the one place the system uses hue; they
+ * are defined here once and nowhere else. No page should contain a hex.
+ */
+
+:root {
+	--tone-neutral-bg: var(--muted);
+	--tone-neutral-fg: var(--muted-foreground);
+	--tone-done-bg: #e6f4ea;
+	--tone-done-fg: #1e6b3a;
+	--tone-current-bg: #fff4d6;
+	--tone-current-fg: #7a4d00;
+	--tone-waiting-bg: #e8f0fb;
+	--tone-waiting-fg: #1f4e8c;
+	--tone-blocked-bg: #fde8e8;
+	--tone-blocked-fg: #9b1c1c;
+	--tone-void-bg: var(--muted);
+	--tone-void-fg: var(--muted-foreground);
+}
+
+/* ── StatusPill ─────────────────────────────────────────────────────────── */
+.cn-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35em;
+	padding: 0.15em 0.6em;
+	border-radius: 999px;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.6;
+	white-space: nowrap;
+	background: var(--tone-neutral-bg);
+	color: var(--tone-neutral-fg);
+}
+.cn-pill--done { background: var(--tone-done-bg); color: var(--tone-done-fg); }
+.cn-pill--current { background: var(--tone-current-bg); color: var(--tone-current-fg); }
+.cn-pill--waiting { background: var(--tone-waiting-bg); color: var(--tone-waiting-fg); }
+.cn-pill--blocked { background: var(--tone-blocked-bg); color: var(--tone-blocked-fg); }
+.cn-pill--void { background: var(--tone-void-bg); color: var(--tone-void-fg); text-decoration: line-through; }
+.cn-pill__dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: currentColor; }
+
+/* ── Money ──────────────────────────────────────────────────────────────── */
+.cn-money { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cn-money__secondary { color: var(--muted-foreground); font-size: 0.85em; margin-left: 0.4em; }
+
+/* ── InvoiceCard ────────────────────────────────────────────────────────── */
+.cn-invoice { display: flex; flex-direction: column; gap: 0.75rem; }
+.cn-invoice__head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.cn-invoice__title { display: flex; flex-direction: column; gap: 0.15rem; }
+.cn-invoice__number { font-family: var(--font-mono); font-size: var(--text-sm); }
+.cn-invoice__lines { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-light); }
+.cn-invoice__line { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-light); font-size: var(--text-sm); }
+.cn-invoice__line-detail { display: block; color: var(--muted-foreground); font-size: var(--text-xs); }
+.cn-invoice__totals { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1.5rem; font-size: var(--text-sm); }
+.cn-invoice__totals dt { color: var(--muted-foreground); }
+.cn-invoice__totals dd { margin: 0; text-align: right; }
+.cn-invoice__totals .cn-invoice__balance { font-weight: 700; font-size: var(--text-base); }
+.cn-invoice__meta { color: var(--muted-foreground); font-size: var(--text-xs); }
+.cn-invoice__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; padding-top: 0.25rem; }
+.cn-invoice__hint { color: var(--muted-foreground); font-size: var(--text-sm); margin: 0; }
+
+/* ── AssignControl ──────────────────────────────────────────────────────── */
+.cn-assign { display: flex; flex-direction: column; gap: 0.6rem; }
+.cn-assign__current { font-size: var(--text-sm); }
+.cn-assign__current strong { font-weight: 600; }
+.cn-assign__row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.cn-assign__row .input, .cn-assign__row .select { min-width: 12rem; flex: 1 1 12rem; }
+.cn-assign__error { color: var(--tone-blocked-fg); font-size: var(--text-sm); margin: 0; }
+.cn-assign__empty { color: var(--muted-foreground); font-size: var(--text-sm); margin: 0; }
+
+/* ── CaseHeader ─────────────────────────────────────────────────────────── */
+.cn-case { display: flex; flex-direction: column; gap: 0.35rem; }
+.cn-case__top { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.cn-case__name { font-size: var(--text-lg); font-weight: 700; margin: 0; }
+.cn-case__ref { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
+.cn-case__facts { display: flex; gap: 1rem; flex-wrap: wrap; font-size: var(--text-sm); color: var(--muted-foreground); }
+.cn-case__facts strong { color: var(--foreground); font-weight: 600; }

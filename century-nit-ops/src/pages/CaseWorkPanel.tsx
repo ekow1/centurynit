@@ -1,13 +1,13 @@
 import { useState } from "react";
 import {
 	COMMENT_KIND_LABELS,
-	branchName,
 	type Assignee,
 	type CaseComment,
 	type CommentKind,
 } from "century-nit-core/ops";
 import { ReschedulePanel } from "./ReschedulePanel";
 import { StaffChatBadge } from "./StaffChatBadge";
+import { AssignControl } from "century-nit-core/ui";
 
 /**
  * Shown above the detail tabs on a case drawer.
@@ -116,22 +116,18 @@ export function CaseWorkPanel({
 					</div>
 
 					{pendingHandoffNote ? null : canAssign ? (
-						<select
-							className="input input--sm"
-							value={assignedEmail}
-							onChange={(e) => {
-								const to = assignees.find((c) => c.email === e.target.value);
-								if (to) onAssign(to);
-							}}
-							style={{ minWidth: "210px", color: "var(--foreground)" }}
-						>
-							<option value="">Assign to…</option>
-							{assignees.map((c) => (
-								<option key={c.email} value={c.email}>
-									{c.name} · {branchName(c.branch)}
-								</option>
-							))}
-						</select>
+						<div style={{ minWidth: "16rem" }}>
+							<AssignControl
+								stage={kind === "consultation" ? "consultation" : "school_submission"}
+								staff={assignees}
+								branch={branchLabel || null}
+								currentName={assignedName || null}
+								onAssign={(opsUserId) => {
+									const to = assignees.find((c) => c.opsUserId === opsUserId);
+									if (to) onAssign(to);
+								}}
+							/>
+						</div>
 					) : (
 						<span
 							className="portal-pill"

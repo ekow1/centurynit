@@ -3,9 +3,12 @@ import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import { applicationsApi, staffApi, ApiError } from "century-nit-core/api";
+import { applicationsApi, ApiError } from "century-nit-core/api";
+import type { Assignee } from "century-nit-core/ops";
+import { AssignControl, CaseHeader } from "century-nit-core/ui";
+
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, TRAVEL_STATUS_LABELS, canOwnStage, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, TRAVEL_STATUS_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -31,6 +34,7 @@ export function EnterpriseTravel() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const {
 		applications,
+		assignees,
 		setTravelClearance,
 		togglePreDepartureTask,
 	} = useCases();
@@ -42,7 +46,6 @@ export function EnterpriseTravel() {
 	const [taLoading, setTaLoading] = useState(false);
 	const [taError, setTaError] = useState<string | null>(null);
 	const [selectedTa, setSelectedTa] = useState<TravelAssistanceRequest | null>(null);
-	const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
 
 	const loadQueue = useCallback(async () => {
 		setTaLoading(true);
@@ -61,25 +64,11 @@ export function EnterpriseTravel() {
 	}, []);
 
 	useEffect(() => {
-		let cancelled = false;
 		loadQueue();
-		staffApi
-			.list()
-			.then((res) => {
-				// Only staff whose role may own the travel stage are offered.
-				if (!cancelled)
-					setStaff(
-						res.staff
-							.filter((s) => s.active && canOwnStage(s.role, "travel_assistance"))
-							.map((s) => ({ id: s.id, name: s.name })),
-					);
-			})
-			.catch(() => {});
 		const onFocus = () => loadQueue();
 		window.addEventListener("focus", onFocus);
 		const interval = setInterval(() => loadQueue(), 30000);
 		return () => {
-			cancelled = true;
 			window.removeEventListener("focus", onFocus);
 			clearInterval(interval);
 		};
@@ -221,7 +210,7 @@ export function EnterpriseTravel() {
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					{taQueue.map((ta) => (
-						<TaQueueRow key={ta.id} ta={ta} staff={staff} canIssue={canIssueTravelInvoice} onChanged={() => {
+						<TaQueueRow key={ta.id} ta={ta} staff={assignees} branch={applications.find((a) => a.id === ta.applicationId)?.branch} canIssue={canIssueTravelInvoice} onChanged={() => {
 							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
 						}} onSelectApp={() => {
 							const app = applications.find((a) => a.id === ta.applicationId);
@@ -403,6 +392,18 @@ export function EnterpriseTravel() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+								<div className="card" style={{ padding: "0.75rem 1rem" }}>
+									<CaseHeader
+										name={active.applicantName}
+										reference={active.appId}
+										branch={active.branch}
+										stage={active.stage}
+										portalStage={active.journey?.portalStage ?? null}
+										handlerName={
+											(active.stageHandlers ?? []).find((h) => h.stage === "travel_assistance")?.opsUserName ?? active.assignedStaff ?? null
+										}
+									/>
+								</div>
 							{/* Travel Clearance */}
 							{(active.stage === "travel_assistance" || active.stage === "completed") && (
 								<div className="card" style={{ background: "var(--muted)" }}>
@@ -558,12 +559,14 @@ function TaQueueRow({
 	onChanged,
 	onSelectApp,
 	staff,
+	branch,
 	canIssue,
 }: {
 	ta: TravelAssistanceRequest;
 	onChanged: () => void;
 	onSelectApp?: () => void;
-	staff: { id: string; name: string }[];
+	staff: Assignee[];
+	branch?: string;
 	canIssue?: boolean;
 }) {
 	const [busy, setBusy] = useState(false);
@@ -577,20 +580,10 @@ function TaQueueRow({
 	const [confirmationCode, setConfirmationCode] = useState("");
 	const [bookingCarrier, setBookingCarrier] = useState("");
 	const [bookingNotes, setBookingNotes] = useState("");
-	const [assignOpsUserId, setAssignOpsUserId] = useState("");
-
-	async function assignHandler() {
-		if (!assignOpsUserId) return;
-		setBusy(true);
-		try {
-			await applicationsApi.assignTravelHandler(ta.id, assignOpsUserId);
-			onChanged();
-			setShowAssignForm(false);
-		} catch {
-			/* ignore */
-		} finally {
-			setBusy(false);
-		}
+	async function assignHandler(opsUserId: string) {
+		await applicationsApi.assignTravelHandler(ta.id, opsUserId);
+		onChanged();
+		setShowAssignForm(false);
 	}
 
 	async function raiseInvoice() {
@@ -713,24 +706,15 @@ function TaQueueRow({
 			)}
 
 			{showAssignForm && ta.status === "review" && (
-				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
-					<select
-						className="input input--sm"
-						value={assignOpsUserId}
-						onChange={(e) => setAssignOpsUserId(e.target.value)}
-					>
-						<option value="">Select a handler…</option>
-						{staff.map((s) => (
-							<option key={s.id} value={s.id}>{s.name}</option>
-						))}
-					</select>
-					<button
-						className="btn btn--sm btn--primary"
-						onClick={() => void assignHandler()}
-						disabled={busy || !assignOpsUserId}
-					>
-						{busy ? "Assigning…" : "Assign"}
-					</button>
+				<div className="mt-3">
+					<AssignControl
+						stage="travel_assistance"
+						staff={staff}
+						branch={branch}
+						currentName={ta.assignedOpsUserName ?? null}
+						busy={busy}
+						onAssign={(opsUserId) => assignHandler(opsUserId)}
+					/>
 				</div>
 			)}
 

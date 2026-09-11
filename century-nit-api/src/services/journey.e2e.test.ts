@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
 	applicants,
@@ -60,7 +60,7 @@ const dbAvailable = await (async () => {
 const maybe = () => (dbAvailable ? it : it.skip);
 
 async function wipe() {
-	await db.execute(sql`DELETE FROM invoices WHERE client_user_id = ${CLIENT_ID}`);
+	await db.execute(sql`DELETE FROM invoices WHERE client_user_id = ${CLIENT_ID} OR applicant_email = ${"client" + SUFFIX}`);
 	await db.execute(sql`DELETE FROM applicants WHERE user_id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM users WHERE id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM ops_users WHERE email LIKE ${"%" + SUFFIX}`);
@@ -256,5 +256,25 @@ describe("the applicant journey, end to end", () => {
 		const journey = await journeyForApplicant(applicant, second!);
 		expect(journey.chapterUnlocks.visa).toBe(false);
 		expect(journey.stageStatuses.application_invoice).toBe("locked");
+	});
+
+	maybe()("purging the client keeps their invoices as detached one-off charges", async () => {
+		// Invoices outlive the case (the FK only nulls application_id), and a
+		// journey-typed invoice must name its application — so the purge has
+		// to detach them itself or the cascade is refused by the database.
+		const { deleteClientUser } = await import("./clientUsers.js");
+		const before = await db.select({ id: invoices.id }).from(invoices).where(eq(invoices.clientUserId, CLIENT_ID));
+		expect(before.length).toBeGreaterThan(0);
+
+		const result = await deleteClientUser(CLIENT_ID, "purge", "Manager");
+		expect(result.success).toBe(true);
+
+		const survivors = await db.select().from(invoices).where(inArray(invoices.id, before.map((i) => i.id)));
+		expect(survivors).toHaveLength(before.length);
+		for (const inv of survivors) {
+			expect(inv.applicationId).toBeNull();
+			expect(["custom", "consultation"]).toContain(inv.type);
+		}
+		expect(await getApplicantByUserId(CLIENT_ID)).toBeNull();
 	});
 });

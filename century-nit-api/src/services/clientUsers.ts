@@ -1,7 +1,8 @@
-import { and, desc, eq, gt, ilike, inArray, or } from "drizzle-orm";
+import { and, desc, eq, gt, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
 	applicants,
+	invoices,
 	applicantDocuments,
 	applications,
 	caseComments,
@@ -453,6 +454,28 @@ export async function deleteClientUser(
 				await tx
 					.delete(conversations)
 					.where(inArray(conversations.id, conversationIds));
+			}
+
+			// Invoices are financial records and outlive the case: the FK only
+			// nulls application_id when the application goes. A journey-typed
+			// invoice must name its application (invoices_journey_linked), so
+			// detach these explicitly as one-off charges first — the same
+			// treatment migration 0072 gave legacy unlinked invoices.
+			if (applicationIds.length) {
+				await tx
+					.update(invoices)
+					.set({
+						type: "custom",
+						applicationId: null,
+						note: sql`concat_ws(' ', ${invoices.note}, '(application purged)')`,
+						updatedAt: new Date(),
+					})
+					.where(
+						and(
+							inArray(invoices.applicationId, applicationIds),
+							inArray(invoices.type, ["application", "visa", "agency", "travel"]),
+						),
+					);
 			}
 
 			// Delete the applicant (cascades applications, etc)

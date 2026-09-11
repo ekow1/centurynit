@@ -21,6 +21,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import { createInvoice } from "./invoice.js";
 import { notify } from "./notify.js";
+import { upsertStageConsent } from "./stageConsents.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { env } from "../env.js";
@@ -222,6 +223,18 @@ export async function recordDecision(input: {
 			: input.decision === "hold"
 				? "on_hold"
 				: "declined";
+
+	// This decision *is* the applicant's consent for the travel stage — one
+	// question, answered once. Record it as the stage consent too, so the
+	// manual stage-advance guard and the case history see it, without a
+	// separate consent card or a second manager queue item: the travel
+	// request itself is what ops works from.
+	await upsertStageConsent({
+		applicationId: input.applicationId,
+		stage: "travel",
+		decision: input.decision === "yes" ? "continue" : input.decision === "hold" ? "hold" : "opt_out",
+		decidedByClientUserId: input.applicantUserId,
+	});
 
 	if (existing) {
 		// Don't allow re-deciding after a booking is confirmed or an invoice is paid.

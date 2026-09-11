@@ -382,6 +382,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		// invoiced until a handler is assigned. Without this, the dashboard
 		// shows two conflicting cards for the same case.
 		if (handoffAppIds.has(a.id)) continue;
+		// A case only needs a handler once the applicant has said yes. Before
+		// that (invited / on hold / declined) there is nothing to work on, and
+		// assigning someone would only create noise for both sides.
+		if (a.proceedStatus && a.proceedStatus !== "accepted") continue;
 		if (!a.assignedStaff) {
 			q.push({
 				id: `a-assign-${a.id}`,

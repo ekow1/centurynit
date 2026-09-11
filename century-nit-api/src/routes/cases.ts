@@ -17,7 +17,9 @@ import {
 	canSeeApplication,
 	canSeeConsultation,
 	completeConsultationAssessment,
+	acceptProceedForApplication,
 	confirmConsultationSlot,
+	declineProceedForApplication,
 	delegateCoordinator,
 	ensureVisaInvoiceForApplication,
 	getApplicant,
@@ -32,6 +34,7 @@ import {
 	listApplications,
 	listConsultations,
 	patchApplicant,
+	pauseProceedForApplication,
 	reassignCoordinator,
 	respondToOutcome,
 	requestCaseDocuments,
@@ -2898,6 +2901,17 @@ meRouter.openapi(
 /**
  * Shared helper: process a consent decision for a stage. Called by the three
  * stage-specific endpoints below.
+ *
+ * The application stage has exactly one state machine — `proceedStatus`,
+ * driven by the transactional `accept/pause/declineProceedForApplication`
+ * helpers — and this is its only applicant-facing entry point. The consent
+ * record is written after the transition so a refused transition (already
+ * open, etc.) leaves no half-recorded decision behind.
+ *
+ * No handoff is created here for the application stage: the handler is
+ * requested when the 10% deposit is paid (see recordPayment in invoice.ts),
+ * which is the moment the case is actually ready for one. Visa and travel do
+ * hand off on consent, because consent is what opens those stages.
  */
 async function processConsentDecision(input: {
 	userId: string;
@@ -2906,8 +2920,20 @@ async function processConsentDecision(input: {
 	reason?: string;
 }): Promise<{ consent: StageConsent }> {
 	const { applicant, application } = await getApplicationForClientUser(input.userId);
+	const actor = { name: applicant.name ?? "Applicant" };
 
-	// Upsert the consent record.
+	if (input.stage === "application") {
+		if (input.decision === "continue") {
+			if (application.proceedStatus !== "accepted") {
+				await acceptProceedForApplication({ applicationId: application.id, actor });
+			}
+		} else if (input.decision === "hold") {
+			await pauseProceedForApplication({ applicationId: application.id, reason: input.reason, actor });
+		} else {
+			await declineProceedForApplication({ applicationId: application.id, reason: input.reason, actor });
+		}
+	}
+
 	const consent = await upsertStageConsent({
 		applicationId: application.id,
 		stage: input.stage,
@@ -2916,131 +2942,81 @@ async function processConsentDecision(input: {
 		decidedByClientUserId: input.userId,
 	});
 
-	if (input.decision === "continue") {
-		// Only create a handoff if there's no active handler for the target
-		// stage yet. If the consultation officer was already assigned as the
-		// application handler (or a visa/travel handler already exists), the
-		// case doesn't need re-assignment — the consent just unblocks the
-		// stage. Creating a handoff here would force the manager to re-assign
-		// and show "Awaiting specialist assignment" on the portal even though
-		// a handler is already in place.
-		const handoffStage =
-			input.stage === "application"
-				? "school_submission"
-				: input.stage === "visa"
-					? "visa_processing"
-					: "travel_assistance";
+	// The proceed helpers write their own audit comment for the application
+	// stage; visa and travel are recorded here.
+	if (input.stage !== "application") {
+		const verb =
+			input.decision === "continue"
+				? "consented to continue with"
+				: input.decision === "hold"
+					? "put on hold"
+					: "opted out of";
+		const suffix = input.decision !== "continue" && input.reason ? ` — ${input.reason}` : "";
+		await db.insert(schema.caseComments).values({
+			targetType: "application",
+			targetId: application.id,
+			kind: "status",
+			text: `Applicant ${verb} the ${input.stage} stage${suffix}`,
+			authorName: actor.name,
+		});
+	}
 
-		let existingHandler: { opsUserId: string; name: string; email: string } | null = null;
-		if (input.stage === "visa" || input.stage === "travel") {
-			// Check specific stage assignment! Do NOT fall back to whole-case school handler (assignedStaffId),
-			// because the school application officer is not automatically the visa specialist.
-			const [specific] = await db
-				.select({
-					opsUserId: schema.stageAssignments.opsUserId,
-					name: schema.opsUsers.name,
-					email: schema.opsUsers.email,
-				})
-				.from(schema.stageAssignments)
-				.innerJoin(schema.opsUsers, eq(schema.stageAssignments.opsUserId, schema.opsUsers.id))
-				.where(
-					and(
-						eq(schema.stageAssignments.applicationId, application.id),
-						eq(schema.stageAssignments.stage, handoffStage),
-						eq(schema.stageAssignments.status, "active"),
-					),
-				)
-				.limit(1);
-			existingHandler = specific ?? null;
-		} else {
-			existingHandler = await activeHandlerFor(application.id, handoffStage);
-		}
+	if (input.stage === "application" || input.decision !== "continue") {
+		return { consent };
+	}
 
-		if (!existingHandler) {
-			// No handler yet — create a handoff so the manager sees "Assign" +
-			// "Keep previous handler" in the Ops pending queue.
-			let fromOpsUserId: string | null = null;
-			if (input.stage === "application") {
-				fromOpsUserId = applicant.assignedOfficerId ?? null;
-			} else {
-				const handler = await activeHandlerFor(application.id, application.stage);
-				fromOpsUserId = handler?.opsUserId ?? null;
-			}
+	// ── Visa / travel: consent opens the stage and requests a specialist ──
+	const handoffStage = input.stage === "visa" ? "visa_processing" : "travel_assistance";
 
-			await createOrGetHandoff({
-				applicationId: application.id,
-				stage: handoffStage,
-				source: `${input.stage}_consent_continue`,
-				fromOpsUserId,
+	// Only a specialist assigned to *this* stage counts. The whole-case school
+	// handler (assignedStaffId) is not automatically the visa or travel
+	// specialist, so activeHandlerFor's fallback must not be used here.
+	const [existingHandler] = await db
+		.select({
+			opsUserId: schema.stageAssignments.opsUserId,
+			name: schema.opsUsers.name,
+			email: schema.opsUsers.email,
+		})
+		.from(schema.stageAssignments)
+		.innerJoin(schema.opsUsers, eq(schema.stageAssignments.opsUserId, schema.opsUsers.id))
+		.where(
+			and(
+				eq(schema.stageAssignments.applicationId, application.id),
+				eq(schema.stageAssignments.stage, handoffStage),
+				eq(schema.stageAssignments.status, "active"),
+			),
+		)
+		.limit(1);
+
+	if (!existingHandler) {
+		// The current stage's handler is the continuity candidate the manager
+		// can "keep".
+		const current = await activeHandlerFor(application.id, application.stage);
+		await createOrGetHandoff({
+			applicationId: application.id,
+			stage: handoffStage,
+			source: `${input.stage}_consent_continue`,
+			fromOpsUserId: current?.opsUserId ?? null,
+		});
+	}
+
+	if (input.stage === "visa") {
+		await db
+			.update(schema.applications)
+			.set({
+				stage: "visa_processing",
+				visaStage: existingHandler ? "pending" : "awaiting_handler",
+				updatedAt: new Date(),
+			})
+			.where(eq(schema.applications.id, application.id));
+
+		if (existingHandler) {
+			await ensureVisaInvoiceForApplication(input.userId, {
+				opsUserId: existingHandler.opsUserId,
+				name: existingHandler.name,
+				email: existingHandler.email,
 			});
 		}
-
-		// If the applicant is continuing with the application stage, mark
-		// the application as accepted (proceedStatus = "accepted") so the
-		// portal doesn't show the "invited" or "paused" gate anymore.
-		if (input.stage === "application" && application.proceedStatus !== "accepted") {
-			await db
-				.update(schema.applications)
-				.set({ proceedStatus: "accepted", proceededAt: new Date(), updatedAt: new Date() })
-				.where(eq(schema.applications.id, application.id));
-		}
-
-		if (input.stage === "visa") {
-			const targetVisaStage = existingHandler ? "pending" : "awaiting_handler";
-			await db
-				.update(schema.applications)
-				.set({
-					stage: "visa_processing",
-					visaStage: targetVisaStage,
-					updatedAt: new Date(),
-				})
-				.where(eq(schema.applications.id, application.id));
-
-			if (existingHandler) {
-				await ensureVisaInvoiceForApplication(input.userId, {
-					opsUserId: existingHandler.opsUserId,
-					name: existingHandler.name,
-					email: existingHandler.email,
-				});
-			}
-		}
-
-		// Audit comment on the application.
-		await db.insert(schema.caseComments).values({
-			targetType: "application",
-			targetId: application.id,
-			kind: "status",
-			text: `Applicant consented to continue with ${input.stage} stage`,
-			authorName: applicant.name ?? "Applicant",
-		});
-	} else if (input.decision === "hold") {
-		if (input.stage === "application" && application.proceedStatus !== "paused") {
-			await db
-				.update(schema.applications)
-				.set({ proceedStatus: "paused", updatedAt: new Date() })
-				.where(eq(schema.applications.id, application.id));
-		}
-		await db.insert(schema.caseComments).values({
-			targetType: "application",
-			targetId: application.id,
-			kind: "status",
-			text: `Applicant put ${input.stage} stage on hold${input.reason ? ` — ${input.reason}` : ""}`,
-			authorName: applicant.name ?? "Applicant",
-		});
-	} else if (input.decision === "opt_out") {
-		if (input.stage === "application" && application.proceedStatus !== "declined") {
-			await db
-				.update(schema.applications)
-				.set({ proceedStatus: "declined", updatedAt: new Date() })
-				.where(eq(schema.applications.id, application.id));
-		}
-		await db.insert(schema.caseComments).values({
-			targetType: "application",
-			targetId: application.id,
-			kind: "status",
-			text: `Applicant opted out of ${input.stage} stage${input.reason ? ` — ${input.reason}` : ""}`,
-			authorName: applicant.name ?? "Applicant",
-		});
 	}
 
 	return { consent };

@@ -68,7 +68,7 @@ export function PortalJourney() {
 /* ========== Awaiting handler assignment (after 10% deposit) ========== */
 
 export function PortalAwaitingHandler() {
-	const { application, journeyPhase, syncFromServer, refreshJourney } = useAppState();
+	const { application, journeyPhase, syncFromServer } = useAppState();
 	const navigate = useNavigate();
 
 	const hasHandler = Boolean(application.assignedStaffId);
@@ -80,21 +80,14 @@ export function PortalAwaitingHandler() {
 		journeyPhase.stage !== "eligibility") ||
 		(!application.pendingHandoff && application.agencyDepositPaid);
 
-	const checkStatus = useCallback(async () => {
-		try {
-			await Promise.all([syncFromServer(), refreshJourney()]);
-		} catch {
-			/* keep polling behind the scenes */
-		}
-	}, [syncFromServer, refreshJourney]);
-
+	// The assignment arrives over SSE (`stage.changed` /
+	// `assignment.handoff_resolved`), which AppState turns into a sync. A
+	// slow interval is only the fallback for a dropped stream.
 	useEffect(() => {
-		void checkStatus();
-		const timer = window.setInterval(() => {
-			void checkStatus();
-		}, 2500);
+		void syncFromServer();
+		const timer = window.setInterval(() => void syncFromServer(), 20_000);
 		return () => window.clearInterval(timer);
-	}, [checkStatus]);
+	}, [syncFromServer]);
 
 	useEffect(() => {
 		if (hasHandler || stageAdvanced) {
@@ -175,35 +168,32 @@ export function PortalAwaitingHandler() {
 /* ========== Awaiting application invoice (after school lock) ========== */
 
 export function PortalAwaitingInvoice() {
-	const { syncFromServer, refreshJourney } = useAppState();
+	const { syncFromServer, syncTick } = useAppState();
 	const navigate = useNavigate();
 
+	// Re-check whenever AppState syncs — which happens on the `invoice.issued`
+	// SSE event — plus a slow fallback interval.
 	useEffect(() => {
 		let active = true;
 		const checkInvoice = async () => {
 			try {
-				const { invoices } = await meApi.invoices();
-				const inv = invoices.find((i) => i.type === "application");
-				if (inv && (inv.status === "issued" || inv.status === "partial" || inv.status === "paid")) {
-					await Promise.all([syncFromServer(), refreshJourney()]);
-					if (active) {
-						navigate("/portal/application", { replace: true });
-					}
-				}
+				const { invoices } = await meApi.invoices({ type: "application" });
+				const inv = invoices.find((i) => i.status === "issued" || i.status === "partial" || i.status === "paid");
+				if (inv && active) navigate("/portal/application", { replace: true });
 			} catch {
 				/* silent background retry */
 			}
 		};
-
 		void checkInvoice();
-		const timer = window.setInterval(() => {
-			void checkInvoice();
-		}, 2500);
 		return () => {
 			active = false;
-			window.clearInterval(timer);
 		};
-	}, [navigate, syncFromServer, refreshJourney]);
+	}, [navigate, syncTick]);
+
+	useEffect(() => {
+		const timer = window.setInterval(() => void syncFromServer(), 20_000);
+		return () => window.clearInterval(timer);
+	}, [syncFromServer]);
 
 	return (
 		<div className="portal-page">
@@ -2326,6 +2316,8 @@ function ApplicationHubInner() {
 		booking,
 		fees,
 		payAgencyInstallment,
+		syncFromServer,
+		syncTick,
 	} = useAppState();
 	const nav = useNavigate();
 	const [depositPaying, setDepositPaying] = useState(false);
@@ -2340,26 +2332,22 @@ function ApplicationHubInner() {
 	const hasPkg = hasSchoolPackage(application);
 	const depositPaid = application.agencyDepositPaid;
 
-	const fetchInvoice = useCallback(() => {
+	// Refetched on every AppState sync — the `invoice.issued` / `invoice.paid`
+	// SSE events trigger one — so no page-level polling is needed.
+	useEffect(() => {
+		let cancelled = false;
 		meApi
-			.invoices()
+			.invoices({ type: "application" })
 			.then((res) => {
-				const found = res.invoices.find((i) => i.type === "application");
+				if (cancelled) return;
+				const found = res.invoices.find((i) => i.status !== "void");
 				if (found) setServerInvoice(found);
 			})
 			.catch(() => {});
-	}, []);
-
-	useEffect(() => {
-		fetchInvoice();
-		const shouldPoll = !serverInvoice || serverInvoice.status === "proforma";
-		if (shouldPoll) {
-			const timer = window.setInterval(() => {
-				fetchInvoice();
-			}, 2500);
-			return () => window.clearInterval(timer);
-		}
-	}, [fetchInvoice, serverInvoice]);
+		return () => {
+			cancelled = true;
+		};
+	}, [syncTick]);
 
 	const inv = application.applicationInvoice;
 
@@ -2515,7 +2503,8 @@ function ApplicationHubInner() {
 	async function handleLockSelection() {
 		try {
 			await schoolsApi.lock();
-			fetchInvoice();
+			// Pulls the proforma the lock just raised (via the syncTick refetch).
+			void syncFromServer();
 		} catch (err) {
 			console.warn("Failed to sync lock to server", err);
 		}
@@ -3416,7 +3405,7 @@ export function PortalVisa() {
 }
 
 function VisaHubInner() {
-	const { application, schoolApplications, fees, syncFromServer } = useAppState();
+	const { application, schoolApplications, fees, syncFromServer, syncTick } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
@@ -3449,20 +3438,16 @@ function VisaHubInner() {
 	);
 	const isPendingInvoice = isConsented && !isAwaitingSpecialist && !hasIssuedInvoice && !paid;
 
-	// Initial fetch of invoices on mount
+	// The visa invoice for the current application. `/me/invoices` is already
+	// scoped to it server-side. Refetched on every AppState sync, which the
+	// `invoice.issued` / `invoice.paid` / `visa.*` SSE events trigger.
 	useEffect(() => {
 		let cancelled = false;
 		meApi
-			.invoices()
+			.invoices({ type: "visa" })
 			.then(({ invoices }) => {
 				if (cancelled) return;
-				const currentAppId = application.applicationId;
-				const visa = invoices.find(
-					(i) =>
-						i.type === "visa" &&
-						i.status !== "void" &&
-						(currentAppId ? i.applicationId === currentAppId : true),
-				);
+				const visa = invoices.find((i) => i.status !== "void");
 				if (visa) {
 					setServerInv({
 						id: visa.id,
@@ -3481,50 +3466,15 @@ function VisaHubInner() {
 		return () => {
 			cancelled = true;
 		};
-	}, [application.applicationId]);
+	}, [application.applicationId, syncTick]);
 
-	// Silent background polling: when awaiting specialist assignment, poll application state every 2.5s
+	// While waiting on ops (specialist assignment or invoice issuance) the
+	// update arrives over SSE; a slow interval is only the fallback.
 	useEffect(() => {
-		if (!isAwaitingSpecialist) return;
-		const timer = window.setInterval(() => {
-			void syncFromServer();
-		}, 2500);
+		if (!isAwaitingSpecialist && !isPendingInvoice) return;
+		const timer = window.setInterval(() => void syncFromServer(), 20_000);
 		return () => window.clearInterval(timer);
-	}, [isAwaitingSpecialist, syncFromServer]);
-
-	// Silent background polling: when specialist is assigned but invoice is still pending issuance, poll invoices every 2.5s
-	useEffect(() => {
-		if (!isPendingInvoice) return;
-		const timer = window.setInterval(() => {
-			meApi
-				.invoices()
-				.then(({ invoices }) => {
-					const currentAppId = application.applicationId;
-					const visa = invoices.find(
-						(i) =>
-							i.type === "visa" &&
-							i.status !== "void" &&
-							(currentAppId ? i.applicationId === currentAppId : true),
-					);
-					if (visa) {
-						setServerInv({
-							id: visa.id,
-							invoiceNumber: visa.invoiceNumber,
-							status: visa.status,
-							balanceCents: visa.balanceCents,
-							subtotalCents: visa.subtotalCents,
-							paidCents: visa.paidCents,
-							lines: visa.lines,
-						});
-						if (visa.status === "issued" || visa.status === "paid") {
-							void syncFromServer();
-						}
-					}
-				})
-				.catch(() => {});
-		}, 2500);
-		return () => window.clearInterval(timer);
-	}, [isPendingInvoice, application.applicationId, syncFromServer]);
+	}, [isAwaitingSpecialist, isPendingInvoice, syncFromServer]);
 
 	const serverLines: InvoiceLine[] = (serverInv?.lines ?? []).map((l) => ({
 		id: l.id,

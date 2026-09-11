@@ -78,11 +78,9 @@ export function AssessmentOutcomeCard({
 			});
 
 			if (decision === "continue") {
-				try {
-					await meApi.proceed({ acceptQuotation: true });
-				} catch {
-					/* fallback */
-				}
+				// `consent("application", continue)` already opens the
+				// application server-side (proceedStatus → accepted); there is
+				// no separate "proceed" call to make.
 				const mappedTrack = effectivePackage
 					? effectivePackage.toLowerCase().includes("non")
 						? "non_scholarship"
@@ -107,11 +105,6 @@ export function AssessmentOutcomeCard({
 				navigate("/portal/package");
 				return;
 			} else if (decision === "hold") {
-				try {
-					await meApi.holdProceed({ reason: optionalReason || reason || "Applicant requested time" });
-				} catch {
-					/* fallback */
-				}
 				updateApplication({
 					proceedStatus: "paused",
 					applicationConsent: {
@@ -120,11 +113,6 @@ export function AssessmentOutcomeCard({
 				});
 				toast.success("Application placed on hold. Take all the time you need.");
 			} else if (decision === "opt_out") {
-				try {
-					await meApi.declineProceed({ reason: optionalReason || reason || "Applicant opted out" });
-				} catch {
-					/* fallback */
-				}
 				updateApplication({
 					proceedStatus: "declined",
 					applicationConsent: {

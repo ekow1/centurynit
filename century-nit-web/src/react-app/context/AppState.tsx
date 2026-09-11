@@ -80,6 +80,26 @@ function isStaffOnlyNotification(type: string): boolean {
 	return (STAFF_ONLY_NOTIFICATION_TYPES as readonly string[]).includes(type);
 }
 
+/**
+ * Notification types that mean "your case changed on the server". Receiving
+ * one over SSE triggers an immediate `syncFromServer` so the portal reflects
+ * a handler assignment, stage move, or invoice event without waiting for the
+ * periodic poll — and without the pages having to poll on their own.
+ */
+const JOURNEY_NOTIFICATION_PREFIXES = [
+	"stage.",
+	"assignment.",
+	"assessment.",
+	"case.",
+	"invoice.",
+	"visa.",
+	"document.",
+	"booking.",
+] as const;
+function isJourneyNotification(type: string): boolean {
+	return JOURNEY_NOTIFICATION_PREFIXES.some((p) => type.startsWith(p));
+}
+
 export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone" | "single_sign_on";
 
 export type AuthUser = {
@@ -1219,6 +1239,12 @@ type AppStateContextValue = {
 	/** Pre-departure */
 	/** Force an immediate re-sync of server consultation / invoice state */
 	syncFromServer: () => Promise<void>;
+	/**
+	 * Increments after every completed `syncFromServer` (mount, 30s poll, or
+	 * an SSE journey event). Pages that hold server data outside AppState
+	 * (their invoice, say) refetch on it instead of polling on their own.
+	 */
+	syncTick: number;
 	preDepartureTasks: PreDepartureTask[];
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
@@ -1311,6 +1337,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const [sessionError, setSessionError] = useState<string | null>(null);
 	const [autosaveLabel, setAutosaveLabel] = useState("Ready");
 	const syncCountRef = useRef(0);
+	const [syncTick, setSyncTick] = useState(0);
 	const { toast } = useNotifier();
 	const toastRef = useRef(toast);
 	toastRef.current = toast;
@@ -2514,6 +2541,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		} catch {
 			/* keep local values — server may be unreachable */
 		}
+		setSyncTick((n) => n + 1);
 	}, [authUser, resetJourney]);
 
 	/** Run on mount */
@@ -2535,6 +2563,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * `EventSource` is same-origin against the portal's `/api/v1` proxy, so
 	 * it rides the existing auth cookie — no headers needed.
 	 */
+
+	// Latest sync function without making it an effect dependency — a changed
+	// identity must not tear down and reopen the stream.
+	const syncRef = useRef(syncFromServer);
+	syncRef.current = syncFromServer;
 
 	useEffect(() => {
 		if (!authUser) return;
@@ -2574,6 +2607,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			if (document.visibilityState === "visible") {
 				toastRef.current.info(notif.body, { title: notif.title });
 			}
+			// The server just told us the case moved — pull the new state now.
+			if (isJourneyNotification(data.type)) void syncRef.current();
 			} catch {
 				/* ignore malformed payloads */
 			}
@@ -2617,29 +2652,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// API and prefer it over the locally computed one.  Falls back to local
 	// on network error so the portal never breaks.
 	//
+	// `syncFromServer` (mount + 30s + every SSE journey event) fetches
+	// `/me/journey` alongside the application, so no separate poll is needed
+	// here — only the sign-out reset.
 	useEffect(() => {
-		if (!authUser) {
-			setServerJourney(null);
-			return;
-		}
-		let cancelled = false;
-		const fetchJourney = () =>
-			meApi
-				.journey()
-				.then((j: ServerJourney) => {
-					if (!cancelled) setServerJourney(j);
-				})
-				.catch(() => {
-					/* keep local fallback */
-				});
-		fetchJourney();
-		// Refresh the server journey on the same cadence as syncFromServer so
-		// a handler assignment / stage change is reflected without a reload.
-		const id = window.setInterval(fetchJourney, 30_000);
-		return () => {
-			cancelled = true;
-			window.clearInterval(id);
-		};
+		if (!authUser) setServerJourney(null);
 	}, [authUser]);
 
 	const effectiveJourneyPhase = useMemo(() => {
@@ -2795,6 +2812,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			togglePreDepartureTask,
 			preDepartureProgress,
 			syncFromServer,
+			syncTick,
 			fees,
 			recordTravelDecision,
 		}),
@@ -2863,6 +2881,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			togglePreDepartureTask,
 			preDepartureProgress,
 			syncFromServer,
+			syncTick,
 			fees,
 			recordTravelDecision,
 		],

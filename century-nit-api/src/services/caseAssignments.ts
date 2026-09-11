@@ -23,6 +23,8 @@ export interface StartAssignmentInput {
 	role?: "primary" | "secondary" | "reviewer";
 	assignedBy: string | null;
 	note?: string;
+	/** Run inside the caller's transaction. */
+	tx?: typeof db;
 }
 
 export interface EndAssignmentInput {
@@ -31,6 +33,8 @@ export interface EndAssignmentInput {
 	endedBy: string | null;
 	endReason: "reassigned" | "completed" | "cancelled" | "offboarded" | "unassigned";
 	role?: "primary" | "secondary" | "reviewer";
+	/** Run inside the caller's transaction. */
+	tx?: typeof db;
 }
 
 /**
@@ -41,15 +45,17 @@ export interface EndAssignmentInput {
  * reassignment — it preserves the history by ending, not overwriting.
  */
 export async function startAssignment(input: StartAssignmentInput) {
+	const txDb = input.tx ?? db;
 	await endAssignment({
 		targetType: input.targetType,
 		targetId: input.targetId,
 		endedBy: input.assignedBy,
 		endReason: "reassigned",
 		role: input.role ?? "primary",
+		tx: txDb,
 	});
 
-	const [row] = await db
+	const [row] = await txDb
 		.insert(caseAssignments)
 		.values({
 			targetType: input.targetType,
@@ -69,7 +75,7 @@ export async function startAssignment(input: StartAssignmentInput) {
  * No-op if there is no active assignment.
  */
 export async function endAssignment(input: EndAssignmentInput): Promise<void> {
-	await db
+	await (input.tx ?? db)
 		.update(caseAssignments)
 		.set({
 			status: "ended",

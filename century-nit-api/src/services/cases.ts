@@ -1187,10 +1187,13 @@ export async function acceptProceedForApplication(input: {
 		const row = await lockApplicationRow(tx, applicationId);
 		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
+		// An applicant may accept from "invited" or after putting the case on
+		// hold; only ops can accept on behalf of someone who declined.
 		const isOverride = typeof actor.opsUserId === "string";
-		const allowed = isOverride
-			? row.proceedStatus === "invited" || row.proceedStatus === "declined"
-			: row.proceedStatus === "invited";
+		const allowed =
+			row.proceedStatus === "invited" ||
+			row.proceedStatus === "paused" ||
+			(isOverride && row.proceedStatus === "declined");
 		if (!allowed) {
 			throw new HttpError(
 				409,
@@ -1546,62 +1549,70 @@ export async function assignApplication(input: {
 	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
 	const applicant = await getApplicant(row.applicantId);
 
-	const [updated] = await db
-		.update(applications)
-		.set({ assignedStaffId: input.employeeId, updatedAt: new Date() })
-		.where(eq(applications.id, row.id))
-		.returning();
-
-	// Record the assignment in the append-only history table.
+	// Ownership is recorded in several places (applications.assignedStaffId,
+	// case_assignments, applicants.assignedOfficerId) and a pending handoff may
+	// need closing. They must agree, so they change together or not at all.
 	const { startAssignment: startAppAssignment } = await import("./caseAssignments.js");
-	await startAppAssignment({
-		targetType: "application",
-		targetId: row.id,
-		opsUserId: input.employeeId,
-		assignedBy: input.actor.opsUserId,
-	});
-
-	// Resolve any pending handoff for this application — the handler has been
-	// assigned directly, so the handoff is no longer needed. Without this, the
-	// portal keeps showing "Awaiting specialist assignment" even though a
-	// handler is already in place.
-	await db
-		.update(stageHandoffs)
-		.set({
-			status: "resolved",
-			decision: "assign",
-			resolvedOpsUserId: input.employeeId,
-			decidedBy: input.actor.opsUserId ?? null,
-			decidedAt: new Date(),
-			updatedAt: new Date(),
-		})
-		.where(
-			and(
-				eq(stageHandoffs.applicationId, row.id),
-				eq(stageHandoffs.status, "pending"),
-			),
-		);
-
-	// Advance the case from document_verification into school_submission once
-	// a handler is assigned and the deposit is paid. Only fire when the deposit
-	// is actually paid and the case is still at document_verification — calling
-	// this unconditionally would resolve handoffs for cases that haven't paid,
-	// causing them to bounce between "handler assigned" and "awaiting handler".
-	if (row.stage === "document_verification" && row.depositPaid) {
-		await db
+	const stageOpened = row.stage === "document_verification" && row.depositPaid;
+	const updated = await db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [app] = await txDb
 			.update(applications)
-			.set({ stage: "school_submission", updatedAt: new Date() })
-			.where(and(eq(applications.id, row.id), eq(applications.stage, "document_verification")));
+			.set({ assignedStaffId: input.employeeId, updatedAt: new Date() })
+			.where(eq(applications.id, row.id))
+			.returning();
 
-		await db.insert(caseComments).values({
+		// Append-only history.
+		await startAppAssignment({
 			targetType: "application",
 			targetId: row.id,
-			kind: "status",
-			text: "Stage → school_submission (handler assigned & deposit paid)",
-			authorName: input.actor.name,
-			authorOpsUserId: input.actor.opsUserId,
+			opsUserId: input.employeeId,
+			assignedBy: input.actor.opsUserId,
+			tx: txDb,
 		});
 
+		// The handler has been assigned directly, so any pending handoff is
+		// answered. Without this the portal would keep showing "awaiting
+		// specialist assignment" with a handler already in place.
+		await txDb
+			.update(stageHandoffs)
+			.set({
+				status: "resolved",
+				decision: "assign",
+				resolvedOpsUserId: input.employeeId,
+				decidedBy: input.actor.opsUserId ?? null,
+				decidedAt: new Date(),
+				updatedAt: new Date(),
+			})
+			.where(and(eq(stageHandoffs.applicationId, row.id), eq(stageHandoffs.status, "pending")));
+
+		// A handler plus a paid deposit opens school submission. Without the
+		// deposit the case stays at document_verification — the deposit
+		// payment will open the stage when it lands (see recordPayment).
+		if (stageOpened) {
+			await txDb
+				.update(applications)
+				.set({ stage: "school_submission", updatedAt: new Date() })
+				.where(and(eq(applications.id, row.id), eq(applications.stage, "document_verification")));
+			await txDb.insert(caseComments).values({
+				targetType: "application",
+				targetId: row.id,
+				kind: "status",
+				text: "Stage → school_submission (handler assigned & deposit paid)",
+				authorName: input.actor.name,
+				authorOpsUserId: input.actor.opsUserId,
+			});
+		}
+
+		await txDb
+			.update(applicants)
+			.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
+			.where(eq(applicants.id, row.applicantId));
+
+		return app;
+	});
+
+	if (stageOpened) {
 		const clientUserId = await applicantUserIdOfApplication(row.id);
 		if (clientUserId) {
 			notify({
@@ -1613,11 +1624,6 @@ export async function assignApplication(input: {
 			}).catch(() => {});
 		}
 	}
-
-	await db
-		.update(applicants)
-		.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
-		.where(eq(applicants.id, row.applicantId));
 
 	if (applicant?.email) {
 		await syncLeadAssignment(applicant.email, input.employeeId, employee.name, input.actor.name);
@@ -1822,14 +1828,19 @@ export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise
 		const allVerified = requested.every((t) => verifiedTypes.has(t));
 		if (!allVerified) return;
 
-		// Direct DB update (matching paymentSettlement.ts pattern) — no full
-		// setApplicationStage guard because the only prerequisite for
-		// school_submission is a package, and the system auto-advance is
-		// the intended path when all documents pass.
+		// Verified documents alone do not open school submission: the same
+		// gates as every other route into that stage apply — the applicant has
+		// consented, paid the deposit, and a handler owns the case. When the
+		// deposit lands or the handoff resolves, those paths advance the stage;
+		// this one only completes it when everything else is already in place.
+		if (application.proceedStatus !== "accepted" || !application.depositPaid) return;
+		const { activeHandlerFor } = await import("./handoffs.js");
+		if (!(await activeHandlerFor(application.id, "school_submission"))) return;
+
 		const [updated] = await db
 			.update(applications)
 			.set({ stage: "school_submission", updatedAt: new Date() })
-			.where(eq(applications.id, application.id))
+			.where(and(eq(applications.id, application.id), eq(applications.stage, "document_verification")))
 			.returning();
 		if (!updated) return;
 
@@ -1850,9 +1861,9 @@ export async function checkAndAdvanceDocumentStage(ownerUserId: string): Promise
 			notify({
 				recipientUserId: clientUserId,
 				type: "stage.changed",
-				title: "Your case has moved to the next stage",
-				body: "Your application has advanced to: school_submission.",
-				link: "/portal/tracking",
+				title: "Your documents are verified",
+				body: "All requested documents have been verified. Your case has moved on to school submission.",
+				link: "/portal/application",
 			}).catch(() => {});
 		}
 

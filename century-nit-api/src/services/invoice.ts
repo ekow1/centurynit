@@ -14,6 +14,7 @@ import {
 	invoices,
 	applications,
 	applicants,
+	caseComments,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
@@ -257,6 +258,40 @@ export async function paymentWithReferenceExists(
 
 /* ── Commands ────────────────────────────────────────────────────────────── */
 
+const INVOICE_TYPE_LABEL: Record<string, string> = {
+	application: "application",
+	visa: "visa",
+	travel: "travel",
+	agency: "service fee",
+	consultation: "consultation",
+};
+
+/**
+ * In-app (SSE-delivered) event for the client when an invoice becomes payable
+ * or is settled. The portal refreshes its journey on these instead of polling
+ * the invoice list; email is queued separately by the caller.
+ */
+async function notifyClientInvoice(row: InvoiceRow, kind: "issued" | "paid"): Promise<void> {
+	if (!row.clientUserId) return;
+	const label = INVOICE_TYPE_LABEL[row.type] ?? row.type;
+	try {
+		const { notify } = await import("./notify.js");
+		await notify({
+			recipientUserId: row.clientUserId,
+			type: kind === "issued" ? "invoice.issued" : "invoice.paid",
+			title: kind === "issued" ? "Your invoice is ready" : "Payment received",
+			body:
+				kind === "issued"
+					? `Your ${label} invoice ${row.invoiceNumber} has been issued and is ready to pay.`
+					: `Your ${label} invoice ${row.invoiceNumber} is paid. Thank you.`,
+			link: "/portal/financial",
+			eventId: `invoice:${kind}:${row.id}`,
+		});
+	} catch {
+		// A missed in-app ping is caught by the portal's periodic sync.
+	}
+}
+
 export async function createInvoice(input: {
 	data: CreateInvoice;
 	actor: Actor;
@@ -308,6 +343,8 @@ export async function createInvoice(input: {
 	const row = input.tx
 		? await doCreate(input.tx)
 		: await db.transaction(async (tx) => doCreate(tx as unknown as typeof db));
+
+	if (row.status === "issued") await notifyClientInvoice(row, "issued");
 
 	// Notify the client that an invoice is outstanding.
 	if (row.status === "issued" && row.applicantEmail) {
@@ -605,36 +642,60 @@ export async function recordPayment(input: {
 					})
 					.where(eq(applications.id, targetAppId))
 					.returning();
-				// First deposit payment: create a handler-assignment handoff so
-				// the case becomes visible in ops as "Pending Handler Assignment".
-				if (paidApp && depositPaid) {
-					const { createOrGetHandoff } = await import("./handoffs.js");
-					const [appRow] = await txDb
-						.select({ consultationId: applications.consultationId })
-						.from(applications)
-						.where(eq(applications.id, targetAppId))
-						.limit(1);
-					let fromOpsUserId: string | null = null;
-					if (appRow?.consultationId) {
-						const { consultations } = await import("../db/schema.js");
-						const [consultation] = await txDb
-							.select({ assignedOfficerId: consultations.assignedOfficerId })
-							.from(consultations)
-							.where(eq(consultations.id, appRow.consultationId))
+				// The deposit is the single trigger for the school_submission
+				// handler. It fires once — on the payment that crosses the deposit
+				// line while the case is still at document_verification — so later
+				// installments never re-open a resolved handoff.
+				if (paidApp && depositPaid && paidApp.stage === "document_verification") {
+					const { activeHandlerFor, createOrGetHandoff } = await import("./handoffs.js");
+					const handler = await activeHandlerFor(targetAppId, "school_submission", txDb);
+					if (handler) {
+						// A handler was assigned ahead of the deposit (directly from
+						// the ops queue). Nothing to hand off — open the stage now,
+						// exactly as resolving a handoff would.
+						await txDb
+							.update(applications)
+							.set({ stage: "school_submission", assignedStaffId: handler.opsUserId, updatedAt: new Date() })
+							.where(and(eq(applications.id, targetAppId), eq(applications.stage, "document_verification")));
+						await txDb.insert(caseComments).values({
+							targetType: "application",
+							targetId: targetAppId,
+							kind: "status",
+							text: "Stage → school_submission (deposit paid; handler already assigned)",
+							authorName: input.actor.name,
+							authorOpsUserId: null,
+						});
+					} else {
+						const [appRow] = await txDb
+							.select({ consultationId: applications.consultationId })
+							.from(applications)
+							.where(eq(applications.id, targetAppId))
 							.limit(1);
-						fromOpsUserId = consultation?.assignedOfficerId ?? null;
+						let fromOpsUserId: string | null = null;
+						if (appRow?.consultationId) {
+							const { consultations } = await import("../db/schema.js");
+							const [consultation] = await txDb
+								.select({ assignedOfficerId: consultations.assignedOfficerId })
+								.from(consultations)
+								.where(eq(consultations.id, appRow.consultationId))
+								.limit(1);
+							fromOpsUserId = consultation?.assignedOfficerId ?? null;
+						}
+						await createOrGetHandoff({
+							applicationId: targetAppId,
+							stage: "school_submission",
+							source: "deposit_payment",
+							fromOpsUserId,
+							tx: txDb,
+						});
 					}
-					await createOrGetHandoff({
-						applicationId: targetAppId,
-						stage: "school_submission",
-						source: "deposit_payment",
-						fromOpsUserId,
-						tx: txDb,
-					});
 				}
 			}
 		}
 
+		return updated;
+	}).then(async (updated) => {
+		if (updated.status === "paid") await notifyClientInvoice(updated, "paid");
 		return updated;
 	});
 }
@@ -910,6 +971,9 @@ export async function issueProforma(input: {
 			txDb,
 		);
 		return updated;
+	}).then(async (updated) => {
+		await notifyClientInvoice(updated, "issued");
+		return updated;
 	});
 }
 
@@ -1007,6 +1071,9 @@ export async function issueProformaByOps(input: {
 			.returning();
 
 		await audit(row.id, "issued", input.actorName, "Application invoice issued by handler", txDb);
+		return updated;
+	}).then(async (updated) => {
+		await notifyClientInvoice(updated, "issued");
 		return updated;
 	});
 }

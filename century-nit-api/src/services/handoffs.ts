@@ -346,13 +346,7 @@ export async function resolveStageHandoff(input: {
 	reason?: string;
 	actor: Actor;
 }): Promise<StageHandoff> {
-	const [row] = await db
-		.select()
-		.from(stageHandoffs)
-		.where(eq(stageHandoffs.id, input.handoffId))
-		.limit(1)
-		.for("update");
-	if (!row) throw new HttpError(404, "HANDOFF_NOT_FOUND", "Handoff not found");
+	const row = await getHandoffRow(input.handoffId);
 	if (row.status !== "pending") {
 		throw new HttpError(409, "HANDOFF_ALREADY_RESOLVED", "Handoff has already been resolved");
 	}
@@ -367,6 +361,27 @@ export async function resolveStageHandoff(input: {
 				? "This stage has no previous handler to keep — assign a specialist instead."
 				: "opsUserId is required when assigning a handler.",
 		);
+	}
+
+	// Claim the handoff atomically. Two managers resolving the same handoff at
+	// once must not both proceed: a plain SELECT ... FOR UPDATE outside a
+	// transaction releases its lock immediately, so the status check above is
+	// only advisory — this conditional update is the real guard.
+	const [resolved] = await db
+		.update(stageHandoffs)
+		.set({
+			status: "resolved",
+			decision: input.decision,
+			resolvedOpsUserId,
+			decidedBy: input.actor.opsUserId,
+			decidedAt: new Date(),
+			reason: input.reason ?? null,
+			updatedAt: new Date(),
+		})
+		.where(and(eq(stageHandoffs.id, row.id), eq(stageHandoffs.status, "pending")))
+		.returning();
+	if (!resolved) {
+		throw new HttpError(409, "HANDOFF_ALREADY_RESOLVED", "Handoff has already been resolved");
 	}
 
 	const { assignStageOfficer, recordEvent } = await import("./communication.js");
@@ -438,20 +453,6 @@ export async function resolveStageHandoff(input: {
 			actor: input.actor,
 		});
 	}
-
-	const [resolved] = await db
-		.update(stageHandoffs)
-		.set({
-			status: "resolved",
-			decision: input.decision,
-			resolvedOpsUserId,
-			decidedBy: input.actor.opsUserId,
-			decidedAt: new Date(),
-			reason: input.reason ?? null,
-			updatedAt: new Date(),
-		})
-		.where(eq(stageHandoffs.id, row.id))
-		.returning();
 
 	const [officer] = await db
 		.select({ name: opsUsers.name, email: opsUsers.email })

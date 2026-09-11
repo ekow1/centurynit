@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, inArray, not } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
@@ -62,7 +62,6 @@ import {
 	getInvoice,
 	listInvoicesForClient,
 	paymentWithReferenceExists,
-	recordClientPayment,
 	serializeInvoice,
 	acceptProformaClient,
 	issueProformaByOps,
@@ -75,10 +74,9 @@ import {
 } from "../services/paystack.js";
 import {
 	getExchangeRate,
-	postPaymentSettlement,
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
-import { listSchoolsForApplicant } from "../services/schools.js";
+import { listSchoolsForApplication } from "../services/schools.js";
 import { syncLeadFromApplicant } from "../services/leads.js";
 import {
 	getOrCreateApplicantConversation,
@@ -114,7 +112,6 @@ import {
 	patchApplicantSchema,
 	patchApplicationSchema,
 	reassignCoordinatorSchema,
-	recordPaymentSchema,
 	requestDocumentsSchema,
 	setStageSchema,
 	setTravelClearanceSchema,
@@ -725,8 +722,9 @@ applicationsRouter.openapi(
 			.orderBy(desc(schema.invoices.createdAt))
 			.limit(1);
 
-		// Fallback: look up by clientUserId (for invoices created before the
-		// applicationId backfill was added).
+		// Fallback: a legacy invoice raised before invoices carried
+		// application_id. Only an *unlinked* one qualifies — an invoice linked
+		// to a different application is that application's, not this one's.
 		if (!appInvoice && applicant?.userId) {
 			[appInvoice] = await db
 				.select()
@@ -735,6 +733,8 @@ applicationsRouter.openapi(
 					and(
 						eq(schema.invoices.clientUserId, applicant.userId),
 						eq(schema.invoices.type, "application"),
+						isNull(schema.invoices.applicationId),
+						not(eq(schema.invoices.status, "void")),
 					),
 				)
 				.orderBy(desc(schema.invoices.createdAt))
@@ -752,7 +752,7 @@ applicationsRouter.openapi(
 			const schools = await db
 				.select()
 				.from(schema.schoolApplications)
-				.where(eq(schema.schoolApplications.applicantId, app.applicantId));
+				.where(eq(schema.schoolApplications.applicationId, app.id));
 			const fees = await getFeeSchedule();
 			const schoolLines = schools.map((s) => ({
 				label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
@@ -1484,22 +1484,45 @@ meRouter.openapi(
  * Unlike /api/v1/invoices this is not gated by staff module permissions, because
  * the portal (not operations staff) uses it to show the user their invoices.
  */
+/**
+ * Applicant self-service: the invoices of their *current* case.
+ *
+ * Scoped to the newest application (plus the consultation invoice, which
+ * predates any application). A returning client's earlier application keeps
+ * its invoices to itself — the portal reads this list to decide what is paid,
+ * so an old paid visa or application invoice must never appear here as if it
+ * belonged to the new case.
+ */
 meRouter.openapi(
 	createRoute({
 		method: "get",
 		path: "/invoices",
 		tags: ["Applicants"],
 		middleware: [requireAuth, requireMfa] as const,
+		request: {
+			query: z.object({
+				type: z.string().optional(),
+				status: z.string().optional(),
+			}),
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: invoiceListSchema } },
-				description: "Signed-in user's invoices",
+				description: "Signed-in user's invoices for their current application",
 			},
 		},
 	}),
 	async (c) => {
 		const user = c.get("user");
-		const rows = await listInvoicesForClient(user.id);
+		const query = c.req.valid("query");
+		const applicant = await getApplicantByUserId(user.id);
+		const application = applicant ? await latestApplicationForApplicant(applicant.id) : null;
+		const rows = (await listInvoicesForClient(user.id)).filter((i) => {
+			if (query.type && i.type !== query.type) return false;
+			if (query.status && i.status !== query.status) return false;
+			if (!application) return true;
+			return i.applicationId === application.id || (i.applicationId === null && i.type === "consultation");
+		});
 		const list = await Promise.all(rows.map(serializeInvoice));
 		return c.json({ invoices: list, total: list.length });
 	},
@@ -2066,62 +2089,10 @@ meRouter.openapi(
 	},
 );
 
-/**
- * Applicant self-service: record a payment directly against one of their own
- * invoices (the "server-side record" path).
- *
- * Uses `recordClientPayment`, which resolves the invoice, verifies it belongs
- * to the session user, and reuses the same locked transaction, audit event and
- * balance checks as staff-recorded payments. The actor is the session user —
- * never taken from the body.
- */
-meRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/invoices/{id}/payments",
-		tags: ["Invoices"],
-		middleware: [requireAuth] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: recordPaymentSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: invoiceSchema } },
-				description: "The updated invoice",
-			},
-		},
-	}),
-	async (c) => {
-		const user = c.get("user");
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const updated = await recordClientPayment({
-			invoiceId: id,
-			userId: user.id,
-			userName: user.name ?? "Applicant",
-			userEmail: user.email,
-			amountCents: body.amountCents,
-			method: body.method,
-			gateway: body.gateway,
-			reference: body.reference,
-		});
-		await postPaymentSettlement({
-			invoice: updated,
-			payment: {
-				amountCents: body.amountCents,
-				method: body.method,
-				reference: body.reference,
-			},
-			actor: { name: user.name ?? "Applicant", email: user.email },
-			options: { recordGatewayTransaction: false },
-		});
-		return c.json(await serializeInvoice(updated));
-	},
-);
+// NOTE: there is deliberately no applicant-side "record a payment" route.
+// Applicants only settle invoices through Paystack (checkout + verify +
+// webhook); a self-recorded payment would let a signed-in client mark their
+// own invoice paid and advance the journey without paying.
 
 /**
  * Applicant self-service: accept a proforma estimate to turn it into an issued invoice.
@@ -2326,8 +2297,17 @@ meRouter.openapi(
 	}),
 	async (c) => {
 		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		const application = applicant ? await latestApplicationForApplicant(applicant.id) : null;
 		const invoices = await listInvoicesForClient(user.id);
-		const row = invoices.find((i) => i.type === "agency");
+		// The current application's live agency invoice — never a void one, and
+		// never one raised for an earlier application.
+		const row = invoices.find(
+			(i) =>
+				i.type === "agency" &&
+				i.status !== "void" &&
+				(application ? i.applicationId === application.id : true),
+		);
 		if (!row) {
 			throw new HttpError(
 				404,
@@ -2422,13 +2402,20 @@ meRouter.openapi(
 			});
 		}
 
-		const [consultation, application, schoolTracks, invoices] =
-			await Promise.all([
-				latestConsultationForApplicant(applicant.id),
-				latestApplicationForApplicant(applicant.id),
-				listSchoolsForApplicant(applicant.id),
-				listInvoicesForClient(user.id),
-			]);
+		const [consultation, application, allInvoices] = await Promise.all([
+			latestConsultationForApplicant(applicant.id),
+			latestApplicationForApplicant(applicant.id),
+			listInvoicesForClient(user.id),
+		]);
+		// Every signal below is scoped to the current application. A returning
+		// client's earlier application keeps its own schools and paid invoices;
+		// none of that may count towards the new one.
+		const schoolTracks = application
+			? await listSchoolsForApplication(application.id)
+			: { schools: [] as Awaited<ReturnType<typeof listSchoolsForApplication>>["schools"], total: 0 };
+		const invoices = application
+			? allInvoices.filter((i) => i.applicationId === application.id)
+			: allInvoices;
 
 		const visaConsent = application ? await getStageConsent(application.id, "visa") : null;
 		const hasVisaConsent = visaConsent?.decision === "continue";
@@ -2475,28 +2462,19 @@ meRouter.openapi(
 		const hasSelection =
 			hasSchools &&
 			(hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application"));
-		const isAppInvoicePaid =
-			application?.appFeePaid ||
-			invoices.some(
-				(i) => i.type === "application" && i.status === "paid",
-			);
+		const invoicePaid = (type: string) => invoices.some((i) => i.type === type && i.status === "paid");
+		const isAppInvoicePaid = Boolean(application?.appFeePaid) || invoicePaid("application");
 		// The application invoice starts as "proforma" when the applicant locks
 		// school selection. The handler must explicitly "issue" it before the
 		// applicant can pay. While it's still proforma, the portal shows
 		// "awaiting invoice" rather than "pay application invoice".
 		const isAppInvoiceIssued = invoices.some(
-			(i) => i.type === "application" && (i.status === "issued" || i.status === "partial" || i.status === "paid"),
+			(i) =>
+				i.type === "application" && (i.status === "issued" || i.status === "partial" || i.status === "paid"),
 		);
-		const hasAdmitted = schoolTracks.schools.some(
-			(s) =>
-				s.outcome === "Admitted",
-		);
-		const isVisaInvoicePaid =
-			invoices.some((i) => i.type === "visa" && i.status === "paid") ||
-			Boolean(application?.visaInvoicePaid);
-		const isTravelInvoicePaid =
-			invoices.some((i) => i.type === "travel" && i.status === "paid") ||
-			Boolean(application?.travelInvoicePaid);
+		const hasAdmitted = schoolTracks.schools.some((s) => s.outcome === "Admitted");
+		const isVisaInvoicePaid = invoicePaid("visa") || Boolean(application?.visaInvoicePaid);
+		const isTravelInvoicePaid = invoicePaid("travel") || Boolean(application?.travelInvoicePaid);
 		const isVisaDone = application?.visaStage === "complete";
 		// The plan chapter's settlement is per-plan: full plans need the agency
 		// service fee settled in full, installment plans only their first

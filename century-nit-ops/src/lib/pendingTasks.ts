@@ -445,7 +445,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		// will handle it. If there's an issued one, no task needed. If none, we
 		// surface an application-level task.
 		const appInvoices = invoices.filter(
-			(i) => i.type === "Application" && (i.applicationId === a.id || i.applicantName === a.applicantName),
+			(i) => i.type === "Application" && i.applicationId === a.id,
 		);
 		const hasProforma = appInvoices.some((i) => i.status === "proforma");
 		const hasIssued = appInvoices.some((i) => i.status === "issued" || i.status === "partial" || i.status === "paid" || i.status === "overdue");

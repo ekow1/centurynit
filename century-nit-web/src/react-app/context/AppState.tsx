@@ -2383,7 +2383,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 								status: "paid" as const,
 								paidAt: prev.visaInvoice.paidAt ?? a.updatedAt ?? new Date().toISOString(),
 							}
-						: prev.visaInvoice,
+						: {
+								...prev.visaInvoice,
+								status: prev.visaInvoice.status === "paid" ? "none" : prev.visaInvoice.status,
+								paidAt: prev.visaInvoice.status === "paid" ? null : prev.visaInvoice.paidAt,
+						  },
 					// Authoritative coarse journey stage from `applications.stage`.
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.

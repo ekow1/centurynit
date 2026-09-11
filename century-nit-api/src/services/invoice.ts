@@ -438,48 +438,6 @@ export async function createConsultationInvoice(input: {
 	return row;
 }
 
-/**
- * Applicant self-service: record a payment against one of their own invoices.
- *
- * The staff-gated `recordPayment` above is the only writer for staff; this is
- * the mirror for a logged-in applicant, restricted to invoices that carry their
- * `clientUserId`. The actor is derived from the session, never from the body.
- */
-export async function recordClientPayment(input: {
-	invoiceId: string;
-	userId: string;
-	userName: string;
-	userEmail: string;
-	amountCents: number;
-	method: string;
-	gateway?: string;
-	reference?: string;
-}): Promise<InvoiceRow> {
-	const row = await getInvoice(input.invoiceId);
-	if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
-	if (row.clientUserId !== input.userId) {
-		throw new HttpError(403, "FORBIDDEN", "Not allowed to pay this invoice");
-	}
-	// Proforma invoices cannot be paid — the handler must issue the invoice
-	// first. This prevents the applicant from paying before the handler has
-	// reviewed and approved the school selection.
-	if (row.status === "proforma") {
-		throw new HttpError(409, "INVOICE_NOT_ISSUED", "This invoice is still a proforma estimate. Your handler must issue it before you can pay.");
-	}
-	return recordPayment({
-		invoiceId: input.invoiceId,
-		amountCents: input.amountCents,
-		method: input.method,
-		gateway: input.gateway,
-		reference: input.reference,
-		actor: {
-			opsUserId: input.userId,
-			name: input.userName || "Applicant",
-			email: input.userEmail,
-		},
-	});
-}
-
 export async function recordPayment(input: {
 	invoiceId: string;
 	amountCents: number;
@@ -552,6 +510,9 @@ export async function recordPayment(input: {
 			txDb,
 		);
 
+		// Invoices are raised against an application. A legacy unlinked invoice
+		// is attributed to the client's *current* (newest) application — the
+		// same rule the journey uses — and linked so it stays scoped.
 		const targetAppId = updated.applicationId ?? (
 			updated.clientUserId
 				? await txDb
@@ -559,6 +520,7 @@ export async function recordPayment(input: {
 						.from(applications)
 						.innerJoin(applicants, eq(applications.applicantId, applicants.id))
 						.where(eq(applicants.userId, updated.clientUserId))
+						.orderBy(desc(applications.createdAt))
 						.limit(1)
 						.then((r) => r[0]?.id ?? null)
 				: null

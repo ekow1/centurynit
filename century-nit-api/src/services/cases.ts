@@ -15,7 +15,6 @@ import {
 	type JourneyStage,
 	patchApplicationSchema,
 	type ProceedQuotation,
-	type SchoolApplication,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import type { z } from "zod";
@@ -46,7 +45,7 @@ import type { StaffContext } from "../middleware/auth.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
-import { listSchoolsForApplicant } from "./schools.js";
+import { listSchoolsForApplication } from "./schools.js";
 import { createInvoice, getFeeSchedule, type InvoiceRow } from "./invoice.js";
 import {
 	linkApplicationToLead,
@@ -513,9 +512,9 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		commentsFor("application", row.id),
 	]);
 
-	const schoolList = applicant
-		? await listSchoolsForApplicant(applicant.id)
-		: { schools: [] as SchoolApplication[], total: 0 };
+	// Scoped to this application, not the applicant — an earlier application's
+	// tracks must not appear on this one.
+	const schoolList = await listSchoolsForApplication(row.id);
 
 	const pendingHandoff = await pendingHandoffForApplication(row.id);
 
@@ -2104,10 +2103,9 @@ export async function ensureVisaInvoiceForApplication(
 	if (!app) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
 	// Reuse any live visa invoice linked to THIS application — never one from
-	// a different application. Previously the query matched by clientUserId OR
-	// applicationId, so a stale paid visa invoice from a previous application
-	// would be returned here, making the portal show "Paid" for a visa invoice
-	// the client never paid on the current case.
+	// a different application. Stale paid visa invoices created before this
+	// application or with notes referencing a different application number must
+	// never be reused.
 	const candidates = await db
 		.select()
 		.from(invoices)
@@ -2118,10 +2116,15 @@ export async function ensureVisaInvoiceForApplication(
 				eq(invoices.applicationId, app.id),
 			),
 		);
+	const validCandidates = candidates.filter((c) => {
+		if (c.status === "paid" && c.createdAt < app.createdAt) return false;
+		if (c.note && app.appNumber && c.note.includes("application APP-") && !c.note.includes(app.appNumber)) return false;
+		return true;
+	});
 	const statusRank = (status: string): number =>
 		status === "paid" ? 0 : status === "partial" ? 1 : status === "issued" ? 2 : status === "proforma" ? 3 : 4;
-	candidates.sort((a, b) => statusRank(a.status) - statusRank(b.status) || (a.createdAt < b.createdAt ? -1 : 1));
-	const linked = candidates[0];
+	validCandidates.sort((a, b) => statusRank(a.status) - statusRank(b.status) || (a.createdAt < b.createdAt ? -1 : 1));
+	const linked = validCandidates[0];
 	if (linked) {
 		if (!linked.clientUserId) {
 			await db
@@ -2142,6 +2145,7 @@ export async function ensureVisaInvoiceForApplication(
 			and(
 				eq(invoices.type, "visa"),
 				not(eq(invoices.status, "void")),
+				not(eq(invoices.status, "paid")),
 				eq(invoices.clientUserId, userId),
 				isNull(invoices.applicationId),
 			),
@@ -2163,14 +2167,22 @@ export async function ensureVisaInvoiceForApplication(
 	// Recover a visa invoice that predates the applicant's login link
 	// (client_user_id is null, e.g. raised from Ops before the portal was
 	// connected) rather than creating a duplicate. Link it to this user.
+	// Never adopt a paid invoice or an invoice that belongs to another application!
 	const orphans = await db
 		.select()
 		.from(invoices)
-		.where(and(eq(invoices.type, "visa"), not(eq(invoices.status, "void")), isNull(invoices.clientUserId)))
+		.where(
+			and(
+				eq(invoices.type, "visa"),
+				not(eq(invoices.status, "void")),
+				not(eq(invoices.status, "paid")),
+				isNull(invoices.clientUserId),
+				isNull(invoices.applicationId),
+			),
+		)
 		.limit(50);
 	const orphan = orphans.find(
 		(i) =>
-			(i.applicationId === app.id) ||
 			(Boolean(applicant.email) && i.applicantEmail === applicant.email) ||
 			(i.applicantName ?? "").toLowerCase() === (applicant.name ?? "").toLowerCase(),
 	);
@@ -2189,7 +2201,7 @@ export async function ensureVisaInvoiceForApplication(
 
 	await raiseVisaInvoiceForApplication(app, applicant, actor);
 	const raised = await listInvoicesForApplicant(applicant.id);
-	const created = raised.find((i) => i.type === "visa" && i.status !== "void");
+	const created = raised.find((i) => i.type === "visa" && i.status !== "void" && i.applicationId === app.id);
 	if (!created) {
 		throw new HttpError(500, "VISA_INVOICE_RAISE_FAILED", "Could not raise the visa invoice");
 	}
@@ -2208,12 +2220,14 @@ export async function setApplicationStage(
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 
 	// ── Fetch signals for the precondition guard ────────────────────────
-	const [applicant, schoolTracks, clientInvoices, travelAssistanceStatus] = await Promise.all([
+	const [applicant, schoolTracks, applicantInvoices, travelAssistanceStatus] = await Promise.all([
 		getApplicant(row.applicantId),
-		listSchoolsForApplicant(row.applicantId),
+		listSchoolsForApplication(row.id),
 		row.applicantId ? listInvoicesForApplicant(row.applicantId) : [],
 		getTravelAssistanceStatusForApplication(id),
 	]);
+	// Only this application's invoices count as signals.
+	const clientInvoices = applicantInvoices.filter((i) => i.applicationId === row.id);
 	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
 	const hasSelection = schoolTracks.schools.length > 0 && (hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application"));
 	const hasAdmitted = schoolTracks.schools.some(

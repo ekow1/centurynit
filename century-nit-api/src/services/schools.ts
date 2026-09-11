@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, not, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type {
 	AddSchoolApplication,
@@ -32,30 +32,44 @@ import { renderSchoolOfferEmail } from "../lib/email-templates.js";
 import { getDocumentStorage } from "./storage/index.js";
 import { activeHandlerFor } from "./handoffs.js";
 
-export async function lockSchoolsForApplicant(
-	applicantId: string,
-	user: { id: string; email: string; name?: string | null },
-): Promise<SchoolApplicationList> {
-	const rows = await db
-		.select()
-		.from(schoolApplications)
-		.where(eq(schoolApplications.applicantId, applicantId));
-
-	if (rows.length === 0) {
-		throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Please select at least one university/program before locking.");
-	}
-
+/**
+ * The applicant's current application — the newest row. Every school and
+ * invoice read in the journey is scoped to this application, never to the
+ * applicant, so a returning client's earlier application cannot leak its
+ * school tracks or paid invoices into the new one.
+ */
+export async function currentApplicationForApplicant(applicantId: string) {
 	const [app] = await db
 		.select()
 		.from(applications)
 		.where(eq(applications.applicantId, applicantId))
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
+	return app ?? null;
+}
+
+export async function lockSchoolsForApplicant(
+	applicantId: string,
+	user: { id: string; email: string; name?: string | null },
+): Promise<SchoolApplicationList> {
+	const app = await currentApplicationForApplicant(applicantId);
+	if (!app) {
+		throw new HttpError(409, "APPLICATION_NOT_FOUND", "There is no open application to lock schools for.");
+	}
+
+	const rows = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.applicationId, app.id));
+
+	if (rows.length === 0) {
+		throw new HttpError(400, "NO_SCHOOLS_SELECTED", "Please select at least one university/program before locking.");
+	}
 
 	// Handler-assignment gate: the applicant cannot lock school selection
 	// until ops has explicitly assigned a handler for the school application
 	// stage. assignedStaffId is the authoritative whole-case owner.
-	if (app && !app.assignedStaffId) {
+	if (!app.assignedStaffId) {
 		const handler = await activeHandlerFor(app.id, "school_submission");
 		if (!handler) {
 			throw new HttpError(
@@ -87,21 +101,33 @@ export async function lockSchoolsForApplicant(
 		.where(eq(applicants.id, applicantId))
 		.limit(1);
 
-	// Check if an application invoice already exists for this client to prevent duplicate invoices on re-lock
+	// Reuse this application's live application invoice on re-lock rather than
+	// raising a duplicate. Only an invoice already linked to THIS application
+	// qualifies, or a legacy one with no link at all (raised before invoices
+	// carried application_id) — never one that belongs to another application,
+	// because relinking a paid invoice from an earlier application would make
+	// the new one look paid.
 	const existingInvoices = await db
 		.select()
 		.from(invoices)
-		.where(and(eq(invoices.clientUserId, user.id), eq(invoices.type, "application")))
+		.where(
+			and(
+				eq(invoices.type, "application"),
+				not(eq(invoices.status, "void")),
+				or(eq(invoices.applicationId, app.id), and(isNull(invoices.applicationId), eq(invoices.clientUserId, user.id))),
+			),
+		)
 		.orderBy(desc(invoices.createdAt));
 
-	const activeInvoice = existingInvoices.find((i) => i.status !== "void");
+	const activeInvoice =
+		existingInvoices.find((i) => i.applicationId === app.id) ??
+		existingInvoices.find((i) => i.status !== "paid");
 	let invoiceId: string;
 
 	if (activeInvoice) {
 		invoiceId = activeInvoice.id;
-		// Backfill the applicationId if the existing invoice doesn't have one
-		// (created before the application was linked, or from an older application).
-		if (app && activeInvoice.applicationId !== app.id) {
+		// Adopt a legacy unlinked invoice so it is scoped from here on.
+		if (!activeInvoice.applicationId) {
 			await db
 				.update(invoices)
 				.set({ applicationId: app.id, updatedAt: new Date() })
@@ -156,7 +182,7 @@ export async function lockSchoolsForApplicant(
 				applicantName: applicantRow?.name ?? user.name ?? "Applicant",
 				applicantEmail: applicantRow?.email ?? user.email,
 				clientUserId: user.id,
-				applicationId: app?.id ?? null,
+				applicationId: app.id,
 				type: "application",
 				status: "proforma",
 				lines:
@@ -179,7 +205,7 @@ export async function lockSchoolsForApplicant(
 	// (see setApplicationStage). Only mirror that advance when the deposit is
 	// actually paid, so an applicant can add schools without their case being
 	// pushed past the deposit gate on a technicality.
-	if (app && app.stage === "document_verification" && app.depositPaid) {
+	if (app.stage === "document_verification" && app.depositPaid) {
 		// Just in case it hasn't advanced to school_submission automatically yet
 		await db
 			.update(applications)
@@ -190,7 +216,7 @@ export async function lockSchoolsForApplicant(
 			.where(eq(applications.id, app.id));
 	}
 
-	const updated = await listSchoolsForApplicant(applicantId);
+	const updated = await listSchoolsForApplication(app.id);
 	return {
 		...updated,
 		selectionDoneAt: new Date().toISOString(),
@@ -244,11 +270,12 @@ export async function serializeSchool(
 	};
 }
 
-export async function listSchoolsForApplicant(applicantId: string): Promise<SchoolApplicationList> {
+/** School tracks of one application. This is the journey's read. */
+export async function listSchoolsForApplication(applicationId: string): Promise<SchoolApplicationList> {
 	const rows = await db
 		.select()
 		.from(schoolApplications)
-		.where(eq(schoolApplications.applicantId, applicantId))
+		.where(eq(schoolApplications.applicationId, applicationId))
 		.orderBy(schoolApplications.createdAt);
 
 	const schools = await Promise.all(rows.map(serializeSchool));
@@ -258,17 +285,27 @@ export async function listSchoolsForApplicant(applicantId: string): Promise<Scho
 	};
 }
 
+/**
+ * School tracks of the applicant's *current* application. An applicant with
+ * no application has no school tracks — earlier applications' tracks are
+ * history, not the live selection.
+ */
+export async function listSchoolsForApplicant(applicantId: string): Promise<SchoolApplicationList> {
+	const app = await currentApplicationForApplicant(applicantId);
+	if (!app) return { schools: [], total: 0 };
+	return listSchoolsForApplication(app.id);
+}
+
 export async function addSchoolForApplicant(
 	applicantId: string,
 	input: AddSchoolApplication,
 ): Promise<SchoolApplication> {
-	// Find active application
-	const [app] = await db
-		.select()
-		.from(applications)
-		.where(eq(applications.applicantId, applicantId))
-		.orderBy(desc(applications.createdAt))
-		.limit(1);
+	// Schools always belong to an application; without one there is nothing
+	// to select for and the row would be unscoped forever.
+	const app = await currentApplicationForApplicant(applicantId);
+	if (!app) {
+		throw new HttpError(409, "APPLICATION_NOT_FOUND", "Schools can only be selected once an application is open.");
+	}
 
 	// Freeze snapshots of the catalog rows so the applicant's choice survives
 	// later catalog edits/deletions and keeps the quotation stable.
@@ -294,7 +331,7 @@ export async function addSchoolForApplicant(
 		.insert(schoolApplications)
 		.values({
 			applicantId,
-			applicationId: app?.id ?? null,
+			applicationId: app.id,
 			destinationId: input.destinationId,
 			universityId: input.universityId,
 			programId: input.programId,

@@ -484,6 +484,13 @@
       "when": 1789300000000,
       "tag": "0070_backfill_invoice_application_id",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0071_scope_invoices_and_schools_to_application",
+      "breakpoints": true
     }
   ]
 }

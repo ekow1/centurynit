@@ -3434,7 +3434,7 @@ function VisaHubInner() {
 	} | null>(null);
 
 	const serverPaid = serverInv?.status === "paid";
-	const paid = inv.status === "paid" || serverPaid;
+	const paid = Boolean(serverPaid);
 
 	const isConsented = (application.visaConsent?.decision ?? null) === "continue";
 	const isAwaitingSpecialist =
@@ -3456,7 +3456,13 @@ function VisaHubInner() {
 			.invoices()
 			.then(({ invoices }) => {
 				if (cancelled) return;
-				const visa = invoices.find((i) => i.type === "visa" && i.status !== "void");
+				const currentAppId = application.applicationId;
+				const visa = invoices.find(
+					(i) =>
+						i.type === "visa" &&
+						i.status !== "void" &&
+						(currentAppId ? i.applicationId === currentAppId : true),
+				);
 				if (visa) {
 					setServerInv({
 						id: visa.id,
@@ -3467,13 +3473,15 @@ function VisaHubInner() {
 						paidCents: visa.paidCents,
 						lines: visa.lines,
 					});
+				} else {
+					setServerInv(null);
 				}
 			})
 			.catch(() => {});
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [application.applicationId]);
 
 	// Silent background polling: when awaiting specialist assignment, poll application state every 2.5s
 	useEffect(() => {
@@ -3491,7 +3499,13 @@ function VisaHubInner() {
 			meApi
 				.invoices()
 				.then(({ invoices }) => {
-					const visa = invoices.find((i) => i.type === "visa" && i.status !== "void");
+					const currentAppId = application.applicationId;
+					const visa = invoices.find(
+						(i) =>
+							i.type === "visa" &&
+							i.status !== "void" &&
+							(currentAppId ? i.applicationId === currentAppId : true),
+					);
 					if (visa) {
 						setServerInv({
 							id: visa.id,
@@ -3510,7 +3524,7 @@ function VisaHubInner() {
 				.catch(() => {});
 		}, 2500);
 		return () => window.clearInterval(timer);
-	}, [isPendingInvoice, syncFromServer]);
+	}, [isPendingInvoice, application.applicationId, syncFromServer]);
 
 	const serverLines: InvoiceLine[] = (serverInv?.lines ?? []).map((l) => ({
 		id: l.id,

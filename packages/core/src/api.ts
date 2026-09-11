@@ -1165,17 +1165,6 @@ export const meApi = {
 		});
 	},
 
-	/**
-	 * Record a payment directly against one of the applicant's own invoices
-	 * (server-side record path — no payment gateway involved).
-	 */
-	payInvoice(invoiceId: string, body: RecordPayment): Promise<ApiInvoice> {
-		return request(`${API_PREFIX}/me/invoices/${invoiceId}/payments`, {
-			method: "POST",
-			...json(body),
-		});
-	},
-
 	/** Accept a proforma estimate, converting it into a payable invoice. */
 	acceptInvoice(invoiceId: string): Promise<ApiInvoice> {
 		return request(`${API_PREFIX}/me/invoices/${invoiceId}/accept`, {

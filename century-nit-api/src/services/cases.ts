@@ -1589,11 +1589,30 @@ export async function assignApplication(input: {
 	// this unconditionally would resolve handoffs for cases that haven't paid,
 	// causing them to bounce between "handler assigned" and "awaiting handler".
 	if (row.stage === "document_verification" && row.depositPaid) {
-		await applyHandoffResolvedTransition({
-			applicationId: row.id,
-			stage: "school_submission",
-			actor: input.actor,
+		await db
+			.update(applications)
+			.set({ stage: "school_submission", updatedAt: new Date() })
+			.where(and(eq(applications.id, row.id), eq(applications.stage, "document_verification")));
+
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: row.id,
+			kind: "status",
+			text: "Stage → school_submission (handler assigned & deposit paid)",
+			authorName: input.actor.name,
+			authorOpsUserId: input.actor.opsUserId,
 		});
+
+		const clientUserId = await applicantUserIdOfApplication(row.id);
+		if (clientUserId) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "stage.changed",
+				title: "Your application handler has been assigned",
+				body: "A handler has been assigned to your case. You can now select your schools and programmes.",
+				link: "/portal/application",
+			}).catch(() => {});
+		}
 	}
 
 	await db
@@ -2195,12 +2214,12 @@ export async function setApplicationStage(
 		row.applicantId ? listInvoicesForApplicant(row.applicantId) : [],
 		getTravelAssistanceStatusForApplication(id),
 	]);
-	const hasSelection = schoolTracks.schools.some((s) => s.status !== "Preparing Application");
+	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
+	const hasSelection = schoolTracks.schools.length > 0 && (hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application"));
 	const hasAdmitted = schoolTracks.schools.some(
 		(s) => s.outcome === "Admitted",
 	);
 	const hasVisaInvoice = clientInvoices.some((i) => i.type === "visa");
-	const hasAppInvoice = clientInvoices.some((i) => i.type === "application");
 
 	// ── Guard: adjacency + completion + per-stage prerequisites ────────
 	const adjacencyReason = canAdvanceToStage(row.stage, stage, {
@@ -2355,7 +2374,8 @@ export async function applyHandoffResolvedTransition(input: {
 	const row = await getApplication(input.applicationId);
 	if (!row) return null;
 	if (row.stage === input.stage) return row;
-	if (!isOwnerClassBoundary(row.stage, input.stage)) return null;
+	const isDocToSchoolTransition = row.stage === "document_verification" && input.stage === "school_submission";
+	if (!isOwnerClassBoundary(row.stage, input.stage) && !isDocToSchoolTransition) return null;
 
 	// Defensive re-validation: the gate was satisfied when the handoff was
 	// created, but an invoice void / plan change in between must not let the

@@ -379,17 +379,39 @@ export async function resolveStageHandoff(input: {
 	});
 
 	// The school_submission handoff establishes the case owner for the whole
-	// application. Write it to applications.assignedStaffId so the ops case
-	// view and the portal see the same handler.
+	// application and unlocks school selection. Advance the stage from
+	// document_verification to school_submission and write assignedStaffId.
 	if (row.stage === "school_submission") {
 		await db
 			.update(applications)
-			.set({ assignedStaffId: resolvedOpsUserId, updatedAt: new Date() })
+			.set({
+				stage: "school_submission",
+				assignedStaffId: resolvedOpsUserId,
+				updatedAt: new Date(),
+			})
 			.where(eq(applications.id, row.applicationId));
-	}
 
-	// Activate the gate that was waiting on this specialist.
-	if (row.stage === "visa_processing") {
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: row.applicationId,
+			kind: "status",
+			text: "Stage → school_submission (specialist assigned)",
+			authorName: input.actor.name,
+			authorOpsUserId: input.actor.opsUserId,
+		});
+
+		const { applicantUserIdOfApplication } = await import("./cases.js");
+		const clientUserId = await applicantUserIdOfApplication(row.applicationId);
+		if (clientUserId) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "stage.changed",
+				title: "Your application handler has been assigned",
+				body: "A handler has been assigned to your case. You can now select your schools and programmes.",
+				link: "/portal/application",
+			}).catch(() => {});
+		}
+	} else if (row.stage === "visa_processing") {
 		// Visa gate is the `awaiting_handler` sub-state: opening the case makes
 		// visa tracking live for the applicant.
 		await db

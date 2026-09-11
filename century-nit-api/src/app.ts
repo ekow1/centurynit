@@ -276,6 +276,7 @@ app.route(`${API_PREFIX}/fees`, feesRouter);
 		name: "Company Google Meet",
 		description: "Company Google account connection and status for automated Google Meet creation.",
 	},
+	{ name: "Packages", description: "Service packages and pricing configuration." },
 	],
 	};
 

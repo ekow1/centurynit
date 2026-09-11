@@ -78,7 +78,7 @@ packagesRouter.openapi(
 packagesRouter.openapi(
 	createRoute({
 		method: "get",
-		path: "/:code",
+		path: "/{code}",
 		tags: ["Packages"],
 		summary: "Get a single package",
 		request: {
@@ -196,7 +196,7 @@ packagesRouter.openapi(
 packagesRouter.openapi(
 	createRoute({
 		method: "put",
-		path: "/:code",
+		path: "/{code}",
 		tags: ["Packages"],
 		summary: "Update a service package",
 		middleware: [requireAuth, requireModule("packages")] as const,
@@ -250,7 +250,7 @@ packagesRouter.openapi(
 packagesRouter.openapi(
 	createRoute({
 		method: "delete",
-		path: "/:code",
+		path: "/{code}",
 		tags: ["Packages"],
 		summary: "Deactivate a service package",
 		middleware: [requireAuth, requireModule("packages")] as const,

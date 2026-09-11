@@ -2607,23 +2607,16 @@ function ApplicationHubInner() {
 	} = useAppState();
 	const nav = useNavigate();
 	const [depositPaying, setDepositPaying] = useState(false);
+	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
+	const [destId, setDestId] = useState("");
+	const [uniId, setUniId] = useState("");
+	const [progId, setProgId] = useState("");
+	const [intake, setIntake] = useState("");
+	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+	const { toast } = useNotifier();
+
 	const hasPkg = hasSchoolPackage(application);
 	const depositPaid = application.agencyDepositPaid;
-
-	if (!hasPkg) {
-		return <Navigate to="/portal/package" replace />;
-	}
-	if (!depositPaid) {
-		return <Navigate to="/portal/package" replace />;
-	}
-	if (
-		application.pendingHandoff &&
-		application.pendingHandoff.stage === "school_submission"
-	) {
-		return <Navigate to="/portal/awaiting-handler" replace />;
-	}
-
-	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 
 	const fetchInvoice = useCallback(() => {
 		meApi
@@ -2686,12 +2679,6 @@ function ApplicationHubInner() {
 
 	const selectionDone = Boolean(application.schoolSelectionDoneAt) || Boolean(serverInvoice);
 	const paid = effectiveInv.status === "paid" || inv.status === "paid";
-	const [destId, setDestId] = useState("");
-	const [uniId, setUniId] = useState("");
-	const [progId, setProgId] = useState("");
-	const [intake, setIntake] = useState("");
-	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
-	const { toast } = useNotifier();
 
 	const selectedLevel = application.schoolDegreeLevel || undefined;
 	const selectedTrack = application.schoolFundingTrack || undefined;
@@ -2714,6 +2701,19 @@ function ApplicationHubInner() {
 	const intakes = program?.intake ?? ["September 2026", "January 2027"];
 	const previewAmount =
 		Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
+
+	if (!hasPkg) {
+		return <Navigate to="/portal/package" replace />;
+	}
+	if (!depositPaid) {
+		return <Navigate to="/portal/package" replace />;
+	}
+	if (
+		application.pendingHandoff &&
+		application.pendingHandoff.stage === "school_submission"
+	) {
+		return <Navigate to="/portal/awaiting-handler" replace />;
+	}
 
 	async function payInvoice() {
 		setPayPhase("loading");

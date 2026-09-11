@@ -254,6 +254,8 @@ export type ApplicationData = {
 	 * journey stage's specialist has not been confirmed yet. Mirrors the
 	 * server's `applications.pendingHandoff`.
 	 */
+	assignedStaffId: string | null;
+	assignedStaffName: string | null;
 	pendingHandoff: {
 		id: string;
 		stage: JourneyStage;
@@ -487,6 +489,8 @@ const defaultApplication: ApplicationData = {
 	referralSource: "",
 	journeyStage: "",
 	proceedStatus: "invited",
+	assignedStaffId: null,
+	assignedStaffName: null,
 	pendingHandoff: null,
 	travelAssistance: null,
 	applicationConsent: null,
@@ -2348,6 +2352,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					// `getCurrentProcessStage` floors the fine-grained
 					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
 					journeyStage: a.stage ?? prev.journeyStage,
+					assignedStaffId: a.assignedStaffId ?? prev.assignedStaffId,
+					assignedStaffName: a.assignedStaffName ?? prev.assignedStaffName,
 					pendingHandoff: a.pendingHandoff
 						? {
 								id: a.pendingHandoff.id,

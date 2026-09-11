@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, type JourneyStage } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
@@ -67,6 +67,50 @@ export function PortalJourney() {
 /* ========== Awaiting handler assignment (after 10% deposit) ========== */
 
 export function PortalAwaitingHandler() {
+	const { application, journeyPhase } = useAppState();
+	const navigate = useNavigate();
+
+	const hasHandler = Boolean(application.assignedStaffId);
+	const stageAdvanced =
+		journeyPhase.stage !== "awaiting_handler" &&
+		journeyPhase.stage !== "school_package" &&
+		journeyPhase.stage !== "proceed" &&
+		journeyPhase.stage !== "consultation" &&
+		journeyPhase.stage !== "eligibility";
+
+	useEffect(() => {
+		if (hasHandler || stageAdvanced) {
+			navigate("/portal/application", { replace: true });
+		}
+	}, [hasHandler, stageAdvanced, navigate]);
+
+	if (hasHandler || stageAdvanced) {
+		return (
+			<div className="portal-page">
+				<header className="portal-page__header">
+					<p className="eyebrow">Dashboard · Application</p>
+					<h1 className="page-title mt-1">Handler Assigned</h1>
+				</header>
+				<div className="card card--pad">
+					<p className="display" style={{ fontSize: "1.2rem" }}>
+						Your handler has been assigned
+					</p>
+					<p className="muted mt-2">
+						{application.assignedStaffName
+							? `${application.assignedStaffName} has been assigned to your case.`
+							: "A specialist handler has been assigned to your case."}{" "}
+						You can now proceed to select your preferred schools and programmes.
+					</p>
+					<div className="mt-4">
+						<Link to="/portal/application" className="btn btn--primary">
+							Continue to School Selection →
+						</Link>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">

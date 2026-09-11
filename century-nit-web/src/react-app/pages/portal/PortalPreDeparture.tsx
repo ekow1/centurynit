@@ -28,6 +28,7 @@ function TravelAssistanceInner() {
 	// actual status and a real Paystack checkout can be charged against it.
 	const [serverInv, setServerInv] = useState<ApiInvoice | null>(null);
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
+	const [planChoice, setPlanChoice] = useState<"full" | "installment">("full");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -94,8 +95,6 @@ function TravelAssistanceInner() {
 			setBusy(false);
 		}
 	}
-
-	const [planChoice, setPlanChoice] = useState<"full" | "installment">("full");
 
 	async function handleChoosePlan() {
 		if (busy) return;

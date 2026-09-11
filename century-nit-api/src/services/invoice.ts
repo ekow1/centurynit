@@ -1091,3 +1091,51 @@ export async function issueProformaByOps(input: {
 		return updated;
 	});
 }
+
+/**
+ * Generic proforma → issued flip for any invoice type (travel, visa, agency).
+ * Mirrors `issueProformaByOps` but without the `type === "application"` guard,
+ * so the travel ticket invoice can go through the same approval step.
+ */
+export async function issueInvoiceByOps(input: {
+	invoiceId: string;
+	actorName: string;
+	auditNote?: string;
+}): Promise<InvoiceRow> {
+	return db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [row] = await tx
+			.select()
+			.from(invoices)
+			.where(eq(invoices.id, input.invoiceId))
+			.limit(1)
+			.for("update");
+
+		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
+		if (row.status !== "proforma") {
+			throw new HttpError(409, "NOT_PROFORMA", "Only proforma invoices can be issued. This invoice is already issued.");
+		}
+
+		let officialInvoiceNumber = row.invoiceNumber;
+		if (row.invoiceNumber.startsWith("PRO-")) {
+			officialInvoiceNumber = await nextInvoiceNumber(txDb);
+		}
+
+		const [updated] = await tx
+			.update(invoices)
+			.set({
+				invoiceNumber: officialInvoiceNumber,
+				status: "issued",
+				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+				updatedAt: new Date(),
+			})
+			.where(eq(invoices.id, row.id))
+			.returning();
+
+		await audit(row.id, "issued", input.actorName, input.auditNote ?? "Invoice issued by manager", txDb);
+		return updated;
+	}).then(async (updated) => {
+		await notifyClientInvoice(updated, "issued");
+		return updated;
+	});
+}

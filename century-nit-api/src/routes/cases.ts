@@ -593,201 +593,6 @@ applicationsRouter.openapi(
 	},
 );
 
-/* ── Travel Assistance (Ops side, direct-invoice) ─────────────────────────── */
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/travel-assistance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {},
-		responses: {
-			200: {
-				content: { "application/json": { schema: z.array(travelAssistanceRequestSchema) } },
-				description: "Travel assistance queue",
-			},
-		},
-	}),
-	async (c) => {
-		const list = await listTravelAssistanceForOps();
-		return c.json(list);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/travel-assistance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema.nullable() } },
-				description: "The travel assistance request for this application",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const { id } = c.req.valid("param");
-		const req = await getTravelAssistanceForApplicationOps(id);
-		return c.json(req);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/assign",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({ opsUserId: z.string().uuid() }),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Handler assigned to the travel assistance request",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await assignTravelHandler({
-			requestId: id,
-			opsUserId: body.opsUserId,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/invoice",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							ticketAmountCents: z.number().int().min(1),
-							carrier: z.string().max(120).optional(),
-							flightNumber: z.string().max(64).optional(),
-							notes: z.string().max(2000).optional(),
-						}),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ticket invoice raised",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await raiseTravelTicketInvoice({
-			requestId: id,
-			ticketAmountCents: body.ticketAmountCents,
-			carrier: body.carrier,
-			flightNumber: body.flightNumber,
-			notes: body.notes,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/booking",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: travelAssistanceBookingInputSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Booking confirmation recorded",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await recordTravelBooking({
-			requestId: id,
-			booking: body,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "patch",
-		path: "/travel-assistance/{id}/checklist",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: travelAssistanceChecklistInputSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ops pre-departure checklist updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await updateTravelOpsChecklist({
-			requestId: id,
-			checklist: body.checklist,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
 applicationsRouter.openapi(
 	createRoute({
 		method: "get",
@@ -1188,6 +993,201 @@ applicationsRouter.openapi(
 			actor: actorFrom(c.get("staff")!),
 		});
 		return c.json(await serializeApplication((await getApplication(id))!));
+	},
+);
+
+/* ── Travel Assistance (Ops side, direct-invoice) ─────────────────────────── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/travel-assistance",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.array(travelAssistanceRequestSchema) } },
+				description: "Travel assistance queue",
+			},
+		},
+	}),
+	async (c) => {
+		const list = await listTravelAssistanceForOps();
+		return c.json(list);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/travel-assistance",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema.nullable() } },
+				description: "The travel assistance request for this application",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const { id } = c.req.valid("param");
+		const req = await getTravelAssistanceForApplicationOps(id);
+		return c.json(req);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/travel-assistance/{id}/assign",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ opsUserId: z.string().uuid() }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Handler assigned to the travel assistance request",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff")!;
+		const updated = await assignTravelHandler({
+			requestId: id,
+			opsUserId: body.opsUserId,
+			actor: actorFrom(staff),
+		});
+		return c.json(updated);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/travel-assistance/{id}/invoice",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							ticketAmountCents: z.number().int().min(1),
+							carrier: z.string().max(120).optional(),
+							flightNumber: z.string().max(64).optional(),
+							notes: z.string().max(2000).optional(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Ticket invoice raised",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff")!;
+		const updated = await raiseTravelTicketInvoice({
+			requestId: id,
+			ticketAmountCents: body.ticketAmountCents,
+			carrier: body.carrier,
+			flightNumber: body.flightNumber,
+			notes: body.notes,
+			actor: actorFrom(staff),
+		});
+		return c.json(updated);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/travel-assistance/{id}/booking",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: travelAssistanceBookingInputSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Booking confirmation recorded",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff")!;
+		const updated = await recordTravelBooking({
+			requestId: id,
+			booking: body,
+			actor: actorFrom(staff),
+		});
+		return c.json(updated);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/travel-assistance/{id}/checklist",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: travelAssistanceChecklistInputSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Ops pre-departure checklist updated",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staff = c.get("staff")!;
+		const updated = await updateTravelOpsChecklist({
+			requestId: id,
+			checklist: body.checklist,
+			actor: actorFrom(staff),
+		});
+		return c.json(updated);
 	},
 );
 

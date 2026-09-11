@@ -176,6 +176,71 @@ export async function ensureVisaHandoffForApplication(input: {
 	});
 }
 
+/**
+ * Travel assistance handoff — mirrors the visa handoff. When the applicant says
+ * "yes" to travel assistance, a `travel_assistance` handoff is created so the
+ * case appears in the same Workspace "Needs assignment" queue and on the Cases
+ * board handoff column as application and visa. The manager resolves it (keep
+ * or assign) exactly like the other stages; `assignHandler` in travelAssistance
+ * resolves any pending travel handoff when a handler is assigned directly.
+ */
+export async function ensureTravelHandoffForApplication(input: {
+	applicationId: string;
+	tx?: typeof db;
+}): Promise<HandoffRow> {
+	const txDb = input.tx ?? db;
+	const [app] = await txDb
+		.select({ id: applications.id, stage: applications.stage })
+		.from(applications)
+		.where(eq(applications.id, input.applicationId))
+		.limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	const handler = await activeHandlerFor(app.id, app.stage, txDb);
+	return createOrGetHandoff({
+		applicationId: app.id,
+		stage: "travel_assistance",
+		source: "travel_consent_continue",
+		fromOpsUserId: handler?.opsUserId ?? null,
+		tx: txDb,
+	});
+}
+
+/**
+ * Resolve any pending `travel_assistance` handoff for an application after a
+ * handler is assigned directly on the travel request. Mirrors the resolution
+ * that `resolveStageHandoff` performs for the other stages, so the handoff
+ * disappears from the Workspace queue once the case is staffed.
+ */
+export async function resolveTravelHandoffForApplication(input: {
+	applicationId: string;
+	opsUserId: string;
+	actor: Actor;
+}): Promise<void> {
+	const [pending] = await db
+		.select()
+		.from(stageHandoffs)
+		.where(
+			and(
+				eq(stageHandoffs.applicationId, input.applicationId),
+				eq(stageHandoffs.stage, "travel_assistance"),
+				eq(stageHandoffs.status, "pending"),
+			),
+		)
+		.limit(1);
+	if (!pending) return;
+	await db
+		.update(stageHandoffs)
+		.set({
+			status: "resolved",
+			decision: "assign",
+			resolvedOpsUserId: input.opsUserId,
+			decidedBy: input.actor.opsUserId,
+			decidedAt: new Date(),
+			updatedAt: new Date(),
+		})
+		.where(eq(stageHandoffs.id, pending.id));
+}
+
 async function serializeHandoff(row: HandoffRow): Promise<StageHandoff> {
 	const [app] = await db
 		.select({ applicationNumber: applications.appNumber, applicantName: applicants.name })
@@ -388,6 +453,21 @@ export async function resolveStageHandoff(input: {
 				email: input.actor.email,
 			}).catch(() => {});
 		}
+	} else if (row.stage === "travel_assistance") {
+		// Travel handoff resolved from the Workspace queue: mirror the
+		// assignment onto the travel assistance request so the Travel page
+		// (which reads `assignedOpsUserId`) stays in sync. The stage_assignment
+		// written by assignStageOfficer above is the source of truth.
+		const { travelAssistanceRequests } = await import("../db/schema.js");
+		await db
+			.update(travelAssistanceRequests)
+			.set({ assignedOpsUserId: resolvedOpsUserId, updatedAt: new Date() })
+			.where(
+				and(
+					eq(travelAssistanceRequests.applicationId, row.applicationId),
+					eq(travelAssistanceRequests.status, "review"),
+				),
+			);
 	} else {
 		// Finance/travel boundary stages gate on entry: the case was parked at
 		// its predecessor. It is staffed now, so complete the transition.

@@ -981,6 +981,11 @@ export const applicationsApi = {
 			...json(input),
 		});
 	},
+	issueTravelInvoice(id: string): Promise<TravelAssistanceRequest> {
+		return request(`${API_PREFIX}/applications/travel-assistance/${id}/issue-invoice`, {
+			method: "POST",
+		});
+	},
 	recordTravelBooking(
 		id: string,
 		input: TravelAssistanceBookingInput,

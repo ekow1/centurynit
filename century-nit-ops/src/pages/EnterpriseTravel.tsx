@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
@@ -7,7 +6,6 @@ import { branchName } from "century-nit-core/ops";
 import { applicationsApi, staffApi, ApiError } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
-import { Toast } from "./OpsDialogs";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -45,27 +43,6 @@ export function EnterpriseTravel() {
 	const [taError, setTaError] = useState<string | null>(null);
 	const [selectedTa, setSelectedTa] = useState<TravelAssistanceRequest | null>(null);
 	const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
-
-	// Search params for direct linking (?id=...)
-	const [searchParams, setSearchParams] = useSearchParams();
-	const idParam = searchParams.get("id");
-	const openedRef = useRef<string | null>(null);
-
-	// Detail pane Travel Assistance action states
-	const [detailBusy, setDetailBusy] = useState(false);
-	const [detailError, setDetailError] = useState<string | null>(null);
-	const [detailAssignOpsUserId, setDetailAssignOpsUserId] = useState("");
-	const [showDetailAssign, setShowDetailAssign] = useState(false);
-	const [showDetailInvoice, setShowDetailInvoice] = useState(false);
-	const [showDetailBooking, setShowDetailBooking] = useState(false);
-	const [detailCarrier, setDetailCarrier] = useState("");
-	const [detailFlightNumber, setDetailFlightNumber] = useState("");
-	const [detailTicketAmount, setDetailTicketAmount] = useState("");
-	const [detailNotes, setDetailNotes] = useState("");
-	const [detailBookingCarrier, setDetailBookingCarrier] = useState("");
-	const [detailConfirmationCode, setDetailConfirmationCode] = useState("");
-	const [detailBookingNotes, setDetailBookingNotes] = useState("");
-	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 
 	const loadQueue = useCallback(async () => {
 		setTaLoading(true);
@@ -110,6 +87,10 @@ export function EnterpriseTravel() {
 
 
 	const canSeeAll = canSeeAllBranches;
+	// Only managers/coordinators/admins can approve (issue) a proforma travel
+	// invoice — same role gate as the application invoice issue endpoint.
+	const canIssueTravelInvoice =
+		opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
 
 	const travelApps = useMemo(() => {
 		// "Mine" is the travel handler (stage assignment) or the case owner.
@@ -149,103 +130,12 @@ export function EnterpriseTravel() {
 		? applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp
 		: null;
 
-	useEffect(() => {
-		if (!idParam || applications.length === 0) return;
-		if (openedRef.current === idParam) return;
-		const target = applications.find(
-			(a) => a.id === idParam || a.appId === idParam,
-		);
-		if (target) {
-			setSelectedApp(target);
-			openedRef.current = idParam;
-		}
-	}, [idParam, applications]);
-
 	function openDetail(app: MockApplication) {
 		setSelectedApp(app);
-		setSearchParams({ id: app.id }, { replace: true });
-	}
-
-	function closeDetail() {
-		setSelectedApp(null);
-		setSearchParams({}, { replace: true });
 	}
 
 	const active = liveSelected ?? selectedApp;
 	const pdProg = active ? preDepartureProgress(active.preDepartureTasks) : 0;
-
-	const reloadDetailTa = useCallback(async (appId: string) => {
-		try {
-			const ta = await applicationsApi.getTravelAssistance(appId);
-			setSelectedTa(ta);
-		} catch {
-			/* ignore */
-		}
-		void loadQueue();
-	}, [loadQueue]);
-
-	async function handleDetailAssign(requestId: string) {
-		if (!detailAssignOpsUserId || !active) return;
-		setDetailBusy(true);
-		setDetailError(null);
-		try {
-			await applicationsApi.assignTravelHandler(requestId, detailAssignOpsUserId);
-			setToast({ type: "success", message: "Travel handler assigned successfully." });
-			setShowDetailAssign(false);
-			await reloadDetailTa(active.id);
-		} catch (err) {
-			const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to assign handler";
-			setDetailError(msg);
-			setToast({ type: "error", message: msg });
-		} finally {
-			setDetailBusy(false);
-		}
-	}
-
-	async function handleDetailRaiseInvoice(requestId: string) {
-		if (!detailTicketAmount || !active) return;
-		setDetailBusy(true);
-		setDetailError(null);
-		try {
-			await applicationsApi.raiseTravelInvoice(requestId, {
-				carrier: detailCarrier || undefined,
-				flightNumber: detailFlightNumber || undefined,
-				ticketAmountCents: Math.round(Number(detailTicketAmount) * 100),
-				notes: detailNotes || undefined,
-			});
-			setToast({ type: "success", message: "Flight ticket invoice raised successfully." });
-			setShowDetailInvoice(false);
-			await reloadDetailTa(active.id);
-		} catch (err) {
-			const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to raise invoice";
-			setDetailError(msg);
-			setToast({ type: "error", message: msg });
-		} finally {
-			setDetailBusy(false);
-		}
-	}
-
-	async function handleDetailRecordBooking(requestId: string) {
-		if (!active) return;
-		setDetailBusy(true);
-		setDetailError(null);
-		try {
-			await applicationsApi.recordTravelBooking(requestId, {
-				carrier: detailBookingCarrier || undefined,
-				confirmationCode: detailConfirmationCode || undefined,
-				notes: detailBookingNotes || undefined,
-			});
-			setToast({ type: "success", message: "Flight booking confirmed successfully." });
-			setShowDetailBooking(false);
-			await reloadDetailTa(active.id);
-		} catch (err) {
-			const msg = err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to record booking";
-			setDetailError(msg);
-			setToast({ type: "error", message: msg });
-		} finally {
-			setDetailBusy(false);
-		}
-	}
 
 	useEffect(() => {
 		if (!active) {
@@ -331,7 +221,7 @@ export function EnterpriseTravel() {
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					{taQueue.map((ta) => (
-						<TaQueueRow key={ta.id} ta={ta} staff={staff} onChanged={() => {
+						<TaQueueRow key={ta.id} ta={ta} staff={staff} canIssue={canIssueTravelInvoice} onChanged={() => {
 							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
 						}} onSelectApp={() => {
 							const app = applications.find((a) => a.id === ta.applicationId);
@@ -482,7 +372,7 @@ export function EnterpriseTravel() {
 								</div>
 								<button
 									type="button"
-									onClick={closeDetail}
+									onClick={() => setSelectedApp(null)}
 									aria-label="Close detail"
 									style={{
 										width: "40px",
@@ -513,272 +403,6 @@ export function EnterpriseTravel() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-							{/* Travel Assistance & Flight Ticketing */}
-							<div className="card" style={{ background: "var(--background)", border: "1px solid var(--border-light)" }}>
-								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-									<div>
-										<p className="eyebrow">Travel Assistance & Flight Ticketing</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-											Direct-invoice flight booking flow for applicant.
-										</p>
-									</div>
-									<span className="portal-pill" style={{
-										background: selectedTa?.status === "booked" || selectedTa?.status === "cleared" ? "#dcfce7" : selectedTa?.status === "ticket_paid" ? "#fef3c7" : undefined,
-										color: selectedTa?.status === "booked" || selectedTa?.status === "cleared" ? "#166534" : selectedTa?.status === "ticket_paid" ? "#92400e" : undefined,
-									}}>
-										{selectedTa ? (TA_STATUS_LABELS[selectedTa.status] ?? selectedTa.status) : "No request on file"}
-									</span>
-								</div>
-
-								{detailError && (
-									<div style={{ padding: "0.6rem 0.8rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "4px", color: "#991b1b", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
-										{detailError}
-									</div>
-								)}
-
-								{!selectedTa ? (
-									<div style={{ padding: "0.75rem", background: "var(--muted)", borderRadius: "6px" }}>
-										<p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)" }}>
-											No travel assistance request has been recorded for this application. The applicant can request travel assistance or opt to arrange their own flight from their portal.
-										</p>
-									</div>
-								) : (
-									<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-										{/* Status Banner */}
-										{selectedTa.status === "review" && !selectedTa.assignedOpsUserId && (
-											<div style={{ padding: "0.85rem", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "6px" }}>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#92400e" }}>
-													Awaiting Travel Handler Assignment
-												</p>
-												<p style={{ fontSize: "var(--text-xs)", color: "#b45309", marginTop: "0.25rem" }}>
-													Applicant has requested flight booking assistance. Assign a travel handler to issue the flight ticket invoice.
-												</p>
-												<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-													<select
-														className="input input--sm"
-														value={detailAssignOpsUserId}
-														onChange={(e) => setDetailAssignOpsUserId(e.target.value)}
-														style={{ maxWidth: "250px" }}
-													>
-														<option value="">Select travel handler…</option>
-														{staff.map((s) => (
-															<option key={s.id} value={s.id}>{s.name}</option>
-														))}
-													</select>
-													<button
-														className="btn btn--sm btn--primary"
-														onClick={() => void handleDetailAssign(selectedTa.id)}
-														disabled={detailBusy || !detailAssignOpsUserId}
-													>
-														{detailBusy ? "Assigning…" : "Assign Handler"}
-													</button>
-												</div>
-											</div>
-										)}
-
-										{selectedTa.status === "review" && selectedTa.assignedOpsUserId && (
-											<div style={{ padding: "0.85rem", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px" }}>
-												<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-													<div>
-														<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>
-															Handler Assigned · Ready for Ticket Invoice
-														</p>
-														<p style={{ fontSize: "var(--text-xs)", color: "#15803d", marginTop: "0.15rem" }}>
-															Assigned to: <strong>{selectedTa.assignedOpsUserName ?? "Staff"}</strong>
-														</p>
-													</div>
-													<div style={{ display: "flex", gap: "0.4rem" }}>
-														<button
-															className="btn btn--sm btn--ghost"
-															onClick={() => setShowDetailAssign((v) => !v)}
-														>
-															Reassign
-														</button>
-														<button
-															className="btn btn--sm btn--primary"
-															onClick={() => setShowDetailInvoice((v) => !v)}
-														>
-															{showDetailInvoice ? "Close form" : "Raise Ticket Invoice"}
-														</button>
-													</div>
-												</div>
-
-												{showDetailAssign && (
-													<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid #bbf7d0", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-														<select
-															className="input input--sm"
-															value={detailAssignOpsUserId}
-															onChange={(e) => setDetailAssignOpsUserId(e.target.value)}
-															style={{ maxWidth: "250px" }}
-														>
-															<option value="">Select new handler…</option>
-															{staff.map((s) => (
-																<option key={s.id} value={s.id}>{s.name}</option>
-															))}
-														</select>
-														<button
-															className="btn btn--sm btn--primary"
-															onClick={() => void handleDetailAssign(selectedTa.id)}
-															disabled={detailBusy || !detailAssignOpsUserId}
-														>
-															{detailBusy ? "Saving…" : "Confirm Reassign"}
-														</button>
-													</div>
-												)}
-
-												{showDetailInvoice && (
-													<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid #bbf7d0", display: "grid", gap: "0.5rem" }}>
-														<p style={{ fontSize: "var(--text-xs)", fontWeight: 600, color: "#166534" }}>
-															Enter Flight & Fare Details (USD):
-														</p>
-														<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-															<input
-																className="input input--sm"
-																placeholder="Airline Carrier (e.g. Delta, KLM)"
-																value={detailCarrier}
-																onChange={(e) => setDetailCarrier(e.target.value)}
-															/>
-															<input
-																className="input input--sm"
-																placeholder="Flight Number (e.g. DL 157)"
-																value={detailFlightNumber}
-																onChange={(e) => setDetailFlightNumber(e.target.value)}
-															/>
-														</div>
-														<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-															<input
-																className="input input--sm"
-																placeholder="Ticket Amount in USD (e.g. 850)"
-																type="number"
-																value={detailTicketAmount}
-																onChange={(e) => setDetailTicketAmount(e.target.value)}
-															/>
-															<input
-																className="input input--sm"
-																placeholder="Notes (e.g. Economy Flex, 2 bags)"
-																value={detailNotes}
-																onChange={(e) => setDetailNotes(e.target.value)}
-															/>
-														</div>
-														<button
-															className="btn btn--sm btn--primary"
-															style={{ justifySelf: "start" }}
-															onClick={() => void handleDetailRaiseInvoice(selectedTa.id)}
-															disabled={detailBusy || !detailTicketAmount}
-														>
-															{detailBusy ? "Issuing Invoice…" : "Issue Flight Ticket Invoice"}
-														</button>
-													</div>
-												)}
-											</div>
-										)}
-
-										{selectedTa.status === "invoiced" && (
-											<div style={{ padding: "0.85rem", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "6px" }}>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#1e40af" }}>
-													Flight Ticket Invoice Issued
-												</p>
-												<p style={{ fontSize: "var(--text-xs)", color: "#1d4ed8", marginTop: "0.25rem" }}>
-													Invoice raised for <strong>{selectedTa.ticketAmountCents ? `$${(selectedTa.ticketAmountCents / 100).toFixed(2)}` : "—"}</strong>
-													{selectedTa.quote?.carrier ? ` · ${selectedTa.quote.carrier}` : ""}
-													{selectedTa.quote?.flightNumber ? ` (${selectedTa.quote.flightNumber})` : ""}.
-												</p>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
-													Awaiting applicant payment from their portal. Once paid, this will advance to booking confirmation.
-												</p>
-											</div>
-										)}
-
-										{selectedTa.status === "ticket_paid" && (
-											<div style={{ padding: "0.85rem", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "6px" }}>
-												<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-													<div>
-														<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#92400e" }}>
-															Ticket Paid · Ready to Book Flight
-														</p>
-														<p style={{ fontSize: "var(--text-xs)", color: "#b45309", marginTop: "0.15rem" }}>
-															The applicant has settled the ticket invoice. Book the ticket and record the confirmation PNR below.
-														</p>
-													</div>
-													<button
-														className="btn btn--sm btn--primary"
-														onClick={() => setShowDetailBooking((v) => !v)}
-													>
-														{showDetailBooking ? "Close form" : "Record Booking"}
-													</button>
-												</div>
-
-												{showDetailBooking && (
-													<div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid #fde68a", display: "grid", gap: "0.5rem" }}>
-														<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-															<input
-																className="input input--sm"
-																placeholder="Airline Carrier"
-																value={detailBookingCarrier}
-																onChange={(e) => setDetailBookingCarrier(e.target.value)}
-															/>
-															<input
-																className="input input--sm"
-																placeholder="Confirmation / PNR Code"
-																value={detailConfirmationCode}
-																onChange={(e) => setDetailConfirmationCode(e.target.value)}
-															/>
-														</div>
-														<input
-															className="input input--sm"
-															placeholder="Booking notes (optional)"
-															value={detailBookingNotes}
-															onChange={(e) => setDetailBookingNotes(e.target.value)}
-														/>
-														<button
-															className="btn btn--sm btn--primary"
-															style={{ justifySelf: "start" }}
-															onClick={() => void handleDetailRecordBooking(selectedTa.id)}
-															disabled={detailBusy}
-														>
-															{detailBusy ? "Saving…" : "Confirm Booking"}
-														</button>
-													</div>
-												)}
-											</div>
-										)}
-
-										{(selectedTa.status === "booked" || selectedTa.status === "cleared") && (
-											<div style={{ padding: "0.85rem", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px" }}>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>
-													Flight Booking Confirmed ✓
-												</p>
-												<p style={{ fontSize: "var(--text-xs)", color: "#15803d", marginTop: "0.25rem" }}>
-													{selectedTa.bookingConfirmation?.carrier ? `Carrier: ${selectedTa.bookingConfirmation.carrier}` : ""}
-													{selectedTa.bookingConfirmation?.confirmationCode ? ` · PNR / Ref: ${selectedTa.bookingConfirmation.confirmationCode}` : ""}
-												</p>
-												{selectedTa.bookingConfirmation?.notes && (
-													<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-														Notes: {selectedTa.bookingConfirmation.notes}
-													</p>
-												)}
-											</div>
-										)}
-
-										{selectedTa.status === "on_hold" && (
-											<div style={{ padding: "0.75rem", background: "var(--muted)", borderRadius: "6px" }}>
-												<p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)" }}>
-													Applicant put their travel assistance request on hold. They can resume anytime from their portal.
-												</p>
-											</div>
-										)}
-
-										{selectedTa.status === "declined" && (
-											<div style={{ padding: "0.75rem", background: "var(--muted)", borderRadius: "6px" }}>
-												<p style={{ fontSize: "var(--text-xs)", color: "var(--muted-foreground)" }}>
-													Applicant declined flight booking assistance and will arrange their own travel.
-												</p>
-											</div>
-										)}
-									</div>
-								)}
-							</div>
-
 							{/* Travel Clearance */}
 							{(active.stage === "travel_assistance" || active.stage === "completed") && (
 								<div className="card" style={{ background: "var(--muted)" }}>
@@ -921,7 +545,6 @@ export function EnterpriseTravel() {
 					)}
 				</div>
 			</div>
-			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }
@@ -929,7 +552,7 @@ export function EnterpriseTravel() {
 const TA_STATUS_LABELS: Record<string, string> = {
 	decision_pending: "Decision pending",
 	review: "In review",
-	quote_prepared: "Quote ready",
+	quote_prepared: "Pending approval",
 	quote_approved: "Approved",
 	invoiced: "Invoiced",
 	ticket_paid: "Ticket paid",
@@ -944,14 +567,15 @@ function TaQueueRow({
 	onChanged,
 	onSelectApp,
 	staff,
+	canIssue,
 }: {
 	ta: TravelAssistanceRequest;
 	onChanged: () => void;
 	onSelectApp?: () => void;
 	staff: { id: string; name: string }[];
+	canIssue?: boolean;
 }) {
 	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
 	const [showInvoiceForm, setShowInvoiceForm] = useState(false);
 	const [showBookingForm, setShowBookingForm] = useState(false);
 	const [showAssignForm, setShowAssignForm] = useState(false);
@@ -967,13 +591,12 @@ function TaQueueRow({
 	async function assignHandler() {
 		if (!assignOpsUserId) return;
 		setBusy(true);
-		setError(null);
 		try {
 			await applicationsApi.assignTravelHandler(ta.id, assignOpsUserId);
 			onChanged();
 			setShowAssignForm(false);
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to assign handler");
+		} catch {
+			/* ignore */
 		} finally {
 			setBusy(false);
 		}
@@ -981,7 +604,6 @@ function TaQueueRow({
 
 	async function raiseInvoice() {
 		setBusy(true);
-		setError(null);
 		try {
 			await applicationsApi.raiseTravelInvoice(ta.id, {
 				carrier: carrier || undefined,
@@ -991,8 +613,20 @@ function TaQueueRow({
 			});
 			onChanged();
 			setShowInvoiceForm(false);
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to raise invoice");
+		} catch {
+			/* ignore */
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function issueInvoice() {
+		setBusy(true);
+		try {
+			await applicationsApi.issueTravelInvoice(ta.id);
+			onChanged();
+		} catch {
+			/* ignore */
 		} finally {
 			setBusy(false);
 		}
@@ -1000,7 +634,6 @@ function TaQueueRow({
 
 	async function recordBooking() {
 		setBusy(true);
-		setError(null);
 		try {
 			await applicationsApi.recordTravelBooking(ta.id, {
 				carrier: bookingCarrier || undefined,
@@ -1009,8 +642,8 @@ function TaQueueRow({
 			});
 			onChanged();
 			setShowBookingForm(false);
-		} catch (err) {
-			setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to record booking");
+		} catch {
+			/* ignore */
 		} finally {
 			setBusy(false);
 		}
@@ -1021,13 +654,17 @@ function TaQueueRow({
 			? "Waiting for applicant decision"
 			: ta.status === "review" && !ta.assignedOpsUserId
 				? "Assign a handler before raising the ticket invoice."
-				: ta.status === "invoiced"
-					? "Waiting for applicant to pay the ticket"
-					: ta.status === "booked"
-						? "Booking confirmed — waiting for applicant to choose a payment plan"
-						: ta.status === "cleared"
-							? "Cleared to travel"
-							: null;
+				: ta.status === "review" && ta.assignedOpsUserId
+					? "Handler assigned — raise the ticket invoice (proforma) for manager approval."
+					: ta.status === "quote_prepared"
+						? "Proforma raised — a manager must approve & issue it before the applicant can pay."
+						: ta.status === "invoiced"
+							? "Waiting for applicant to pay the ticket"
+							: ta.status === "booked"
+								? "Booking confirmed — waiting for applicant to choose a payment plan"
+								: ta.status === "cleared"
+									? "Cleared to travel"
+									: null;
 
 	return (
 		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
@@ -1065,6 +702,11 @@ function TaQueueRow({
 							Raise invoice
 						</button>
 					)}
+					{ta.status === "quote_prepared" && canIssue && (
+						<button className="btn btn--sm btn--primary" onClick={() => void issueInvoice()} disabled={busy}>
+							{busy ? "Issuing…" : "Approve & issue"}
+						</button>
+					)}
 					{ta.status === "ticket_paid" && (
 						<button className="btn btn--sm btn--primary" onClick={() => setShowBookingForm((v) => !v)}>
 							Record booking
@@ -1077,12 +719,6 @@ function TaQueueRow({
 				<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", fontStyle: "italic" }}>
 					{pendingHint}
 				</p>
-			)}
-
-			{error && (
-				<div style={{ marginTop: "0.5rem", padding: "0.4rem 0.6rem", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "4px", color: "#991b1b", fontSize: "var(--text-xs)" }}>
-					{error}
-				</div>
 			)}
 
 			{showAssignForm && ta.status === "review" && (

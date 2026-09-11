@@ -42,7 +42,10 @@ function TravelAssistanceInner() {
 	}, []);
 
 	const trip = serverInv ?? null;
-	const tripDue = Boolean(trip) && trip?.status !== "paid" && (trip?.balanceCents ?? 0) > 0;
+	// A proforma invoice is not payable yet — the manager must approve & issue
+	// it first. Show "Awaiting approval" instead of a Pay button.
+	const tripProforma = Boolean(trip) && trip?.status === "proforma";
+	const tripDue = Boolean(trip) && trip?.status !== "paid" && !tripProforma && (trip?.balanceCents ?? 0) > 0;
 	const tripAmountCents = trip ? (trip.balanceCents > 0 ? trip.balanceCents : trip.subtotalCents) : 0;
 	const ticketingEffectivePaid = ticketingPaid || (trip?.status === "paid");
 
@@ -242,16 +245,22 @@ function TravelAssistanceInner() {
 								<p className="muted" style={{ fontSize: "0.85rem" }}>
 									{ticketingEffectivePaid
 										? "Paid — your flight ticket is settled. Your handler will confirm the booking shortly."
-										: tripDue
-											? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting payment`
-											: "Awaiting invoice from your handler."}
+										: tripProforma
+											? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting manager approval`
+											: tripDue
+												? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting payment`
+												: "Awaiting invoice from your handler."}
 								</p>
 							</div>
 							<div className="row" style={{ marginLeft: "auto" }}>
 								{!ticketingEffectivePaid ? (
-									<Button variant="primary" onClick={() => void payTicketing()} disabled={!tripDue}>
-										{!tripDue && !trip ? "Awaiting invoice…" : "Pay ticket"}
-									</Button>
+									tripProforma ? (
+										<span className="portal-pill" style={{ background: "var(--muted)" }}>Pending approval</span>
+									) : (
+										<Button variant="primary" onClick={() => void payTicketing()} disabled={!tripDue}>
+											{!tripDue && !trip ? "Awaiting invoice…" : "Pay ticket"}
+										</Button>
+									)
 								) : (
 									<span className="success-check" aria-hidden>
 										✓

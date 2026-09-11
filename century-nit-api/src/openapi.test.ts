@@ -113,12 +113,4 @@ describe("/api/openapi.json", () => {
 		expect(dangling).toEqual([]);
 		expect(Object.keys(doc.components?.securitySchemes ?? {}).length).toBeGreaterThan(0);
 	});
-
-	it("routes /applications/travel-assistance correctly without 400 UUID param collision", async () => {
-		const app = createApp();
-		// Without auth, it must reach the requireAuth middleware (401), NOT fail on /{id} param validation (400)
-		const res = await app.request(`${API_PREFIX}/applications/travel-assistance`);
-		expect(res.status).toBe(401);
-	});
 });
-

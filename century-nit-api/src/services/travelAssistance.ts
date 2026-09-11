@@ -267,6 +267,12 @@ export async function recordDecision(input: {
 			.returning();
 		if (input.decision === "yes") {
 			await autoAdvanceToTravelAssistance(input.applicationId, app.stage, app.visaStage);
+			// Re-create the handoff if the applicant resumes from hold/declined
+			// and no handler is assigned yet (idempotent via createOrGetHandoff).
+			if (!existing.assignedOpsUserId) {
+				const { ensureTravelHandoffForApplication } = await import("./handoffs.js");
+				await ensureTravelHandoffForApplication({ applicationId: input.applicationId }).catch(() => {});
+			}
 		}
 		return serialize(updated);
 	}
@@ -283,6 +289,12 @@ export async function recordDecision(input: {
 
 	if (input.decision === "yes") {
 		await autoAdvanceToTravelAssistance(input.applicationId, app.stage, app.visaStage);
+		// Create a `travel_assistance` handoff so the case appears in the same
+		// Workspace "Needs assignment" queue and on the Cases board handoff
+		// column as application and visa — one assignment pattern, not two.
+		// `createOrGetHandoff` dedupes on pending, so this is idempotent.
+		const { ensureTravelHandoffForApplication } = await import("./handoffs.js");
+		await ensureTravelHandoffForApplication({ applicationId: input.applicationId }).catch(() => {});
 	}
 
 	// Notify the applicant that their decision was recorded.
@@ -345,6 +357,19 @@ export async function assignHandler(input: {
 		assignedBy: input.actor.opsUserId ?? input.opsUserId,
 		reason: "travel request",
 	});
+	// Resolve any pending `travel_assistance` handoff so the case disappears
+	// from the Workspace "Needs assignment" queue — same pattern as
+	// resolveStageHandoff for application/visa.
+	const { resolveTravelHandoffForApplication } = await import("./handoffs.js");
+	await resolveTravelHandoffForApplication({
+		applicationId: existing.applicationId,
+		opsUserId: input.opsUserId,
+		actor: {
+			opsUserId: input.actor.opsUserId ?? input.opsUserId,
+			name: input.actor.name,
+			email: input.actor.email,
+		},
+	}).catch(() => {});
 	const [updated] = await db
 		.update(travelAssistanceRequests)
 		.set({
@@ -418,10 +443,11 @@ export async function assignHandler(input: {
 }
 
 /**
- * Handler/manager raises the ticket invoice directly from the `review` status.
- * The handler specifies the airline fare when raising the invoice — there is
- * no separate quote-approval step. The service fee is already collected
- * upfront, so only the airline fare is invoiced here.
+ * Handler raises the ticket invoice as a **proforma** from the `review` status.
+ * The handler specifies the airline fare; a manager then approves/issues it
+ * via `issueTicketInvoice` before the applicant can pay — same proforma →
+ * issued pattern as the application invoice. The service fee is already
+ * collected upfront, so only the airline fare is invoiced here.
  */
 export async function raiseTicketInvoice(input: {
 	requestId: string;
@@ -488,7 +514,7 @@ export async function raiseTicketInvoice(input: {
 				clientUserId: applicant.userId ?? undefined,
 				applicationId: existing.applicationId,
 				type: "travel",
-				status: "issued",
+				status: "proforma",
 				lines: [
 					{
 						label: "Flight ticket",
@@ -515,7 +541,9 @@ export async function raiseTicketInvoice(input: {
 					notes: input.notes?.trim() || undefined,
 				} as TravelAssistanceQuote,
 				opsNote: input.notes?.trim() || null,
-				status: "invoiced",
+				// Proforma raised — awaiting manager approval before the
+				// applicant can pay.
+				status: "quote_prepared",
 				updatedAt: new Date(),
 			})
 			.where(eq(travelAssistanceRequests.id, existing.id));
@@ -531,8 +559,83 @@ export async function raiseTicketInvoice(input: {
 		.where(eq(travelAssistanceRequests.id, existing.id))
 		.limit(1);
 
+	// Notify managers that a travel invoice is pending approval, mirroring
+	// the application invoice proforma flow.
+	try {
+		const { getManagerAndCoordinatorUserIds } = await import("./notify.js");
+		const managers = await getManagerAndCoordinatorUserIds();
+		for (const m of managers) {
+			if (m.userId) {
+				await notify({
+					recipientUserId: m.userId,
+					type: "stage.changed",
+					title: "Travel invoice pending approval",
+					body: `A flight ticket invoice for ${applicant.name} is pending approval. Review and issue it so the applicant can pay.`,
+					link: "/ops/travel",
+				}).catch(() => {});
+			}
+		}
+	} catch (err) {
+		console.error("[travelAssistance] failed to notify managers of proforma:", err);
+	}
+
+	return serialize(updated);
+}
+
+/**
+ * Manager approves/issues a proforma travel invoice. Changes the invoice from
+ * `proforma` → `issued` and the request from `quote_prepared` → `invoiced`,
+ * which unlocks payment for the applicant. Mirrors the application invoice
+ * `/issue-application-invoice` flow.
+ */
+export async function issueTicketInvoice(input: {
+	requestId: string;
+	actor: Actor;
+}): Promise<TravelAssistanceRequest> {
+	const [existing] = await db
+		.select()
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.id, input.requestId))
+		.limit(1);
+	if (!existing) {
+		throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
+	}
+	if (existing.status !== "quote_prepared") {
+		throw new HttpError(
+			409,
+			TRAVEL_ERROR_CODES.NOT_APPROVED,
+			"Only a proforma invoice can be issued.",
+		);
+	}
+	if (!existing.invoiceId) {
+		throw new HttpError(
+			409,
+			TRAVEL_ERROR_CODES.VALIDATION_ERROR,
+			"No invoice is linked to this request.",
+		);
+	}
+
+	// Flip the invoice from proforma to issued.
+	const { issueInvoiceByOps } = await import("./invoice.js");
+	await issueInvoiceByOps({
+		invoiceId: existing.invoiceId,
+		actorName: input.actor.name,
+		auditNote: "Travel ticket invoice issued by manager",
+	});
+
+	const [updated] = await db
+		.update(travelAssistanceRequests)
+		.set({ status: "invoiced", updatedAt: new Date() })
+		.where(eq(travelAssistanceRequests.id, existing.id))
+		.returning();
+
 	// Notify the applicant that their ticket invoice is ready to pay.
-	if (applicant.userId) {
+	const [applicant] = await db
+		.select()
+		.from(applicants)
+		.where(eq(applicants.id, existing.applicantId))
+		.limit(1);
+	if (applicant?.userId) {
 		notify({
 			recipientUserId: applicant.userId,
 			type: "stage.changed",

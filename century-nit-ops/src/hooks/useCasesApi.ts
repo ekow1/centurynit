@@ -23,6 +23,7 @@ import {
 	type UpdateSchoolStatus,
 	type StageHandoff,
 	type StageHandoffDecision,
+	type TravelAssistanceRequest,
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
@@ -159,6 +160,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
 		journey: row.journey ?? null,
+		stageHandlers: row.stageHandlers ?? [],
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: row.consultationNumber ?? null,
@@ -241,6 +243,7 @@ export function useCasesApi() {
 	const [applicants, setApplicants] = useState<MockApplicant[]>([]);
 	const [assignees, setAssignees] = useState<Assignee[]>([]);
 	const [handoffs, setHandoffs] = useState<StageHandoff[]>([]);
+	const [travelRequests, setTravelRequests] = useState<TravelAssistanceRequest[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -248,12 +251,13 @@ export function useCasesApi() {
 	const refresh = useCallback(async () => {
 		setError(null);
 		try {
-			const [c, a, p, staff, hf] = await Promise.all([
+			const [c, a, p, staff, hf, ta] = await Promise.all([
 				consultationsApi.list(),
 				applicationsApi.list(),
 				applicantsApi.list(),
 				staffApi.list().catch(() => ({ staff: [] })),
 				apiFetch<{ handoffs: StageHandoff[] }>(`${API_PREFIX}/applications/handoffs?status=pending`).catch(() => ({ handoffs: [] })),
+				applicationsApi.listTravelAssistance().catch(() => [] as TravelAssistanceRequest[]),
 			]);
 			const apps = Array.isArray(a?.applications) ? a.applications : [];
 			const rawConsultations = Array.isArray(c?.consultations) ? c.consultations : [];
@@ -264,6 +268,7 @@ export function useCasesApi() {
 			setApplications(apps.map(toApplication));
 			setApplicants(rawApplicants.map((row) => toApplicant(row, apps)));
 			setHandoffs(Array.isArray(hf?.handoffs) ? hf.handoffs : []);
+			setTravelRequests(Array.isArray(ta) ? ta : []);
 			setAssignees(
 				rawStaff
 					.filter((s) => s.active)
@@ -365,6 +370,7 @@ export function useCasesApi() {
 		applicants,
 		assignees,
 		handoffs,
+		travelRequests,
 		loading,
 		error,
 		refresh,

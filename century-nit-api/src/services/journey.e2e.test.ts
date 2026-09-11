@@ -15,11 +15,15 @@ import {
 	users,
 } from "../db/schema.js";
 import {
+	assignApplication,
+	canAccessApplication,
 	completeConsultationAssessment,
 	getApplicantByUserId,
 	latestApplicationForApplicant,
+	listApplications,
 	setApplicationPackage,
 } from "./cases.js";
+import { releaseOfficerCases } from "./caseOwnership.js";
 import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js";
 import { issueProformaByOps, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
@@ -45,7 +49,7 @@ import { processConsentDecision } from "../routes/cases.js";
 
 const SUFFIX = "@journey-e2e.local";
 const CLIENT_ID = "journey-e2e-client";
-const staff = { manager: "", handler: "" };
+const staff = { manager: "", handler: "", visa: "", finance: "" };
 const ACTOR = { opsUserId: "", name: "Manager", email: `manager${SUFFIX}` };
 
 const dbAvailable = await (async () => {
@@ -82,8 +86,18 @@ async function seed() {
 		.insert(opsUsers)
 		.values({ userId: "journey-e2e-handler", email: `handler${SUFFIX}`, name: "Handler", role: "consultant", branch: "accra" })
 		.returning();
+	const [visa] = await db
+		.insert(opsUsers)
+		.values({ email: `visa${SUFFIX}`, name: "Visa Specialist", role: "consultant", branch: "accra" })
+		.returning();
+	const [finance] = await db
+		.insert(opsUsers)
+		.values({ email: `finance${SUFFIX}`, name: "Finance", role: "finance", branch: "accra" })
+		.returning();
 	staff.manager = manager.id;
 	staff.handler = handler.id;
+	staff.visa = visa.id;
+	staff.finance = finance.id;
 	ACTOR.opsUserId = manager.id;
 
 	await db
@@ -238,6 +252,48 @@ describe("the applicant journey, end to end", () => {
 		expect(journey.stageStatuses.application_invoice).toBe("done");
 		expect(journey.stageStatuses.visa_invoice).toBe("current");
 		expect(Object.values(journey.stageStatuses)).not.toContain("skipped");
+	});
+
+	maybe()("stage specialists see their case; roles that cannot own a stage are refused; leaving releases work", async () => {
+		const applicant = (await getApplicantByUserId(CLIENT_ID))!;
+		const app = (await latestApplicationForApplicant(applicant.id))!;
+		const asStaff = (opsUserId: string, role: string) =>
+			({ opsUserId, role, name: "", email: "", branch: "accra" }) as unknown as Parameters<typeof canAccessApplication>[2];
+
+		// The visa consent raised a visa_processing handoff. Resolve it to a
+		// second consultant who is NOT the case owner.
+		const pendingVisa = (await db.select().from(stageHandoffs).where(eq(stageHandoffs.applicationId, app.id))).find(
+			(h) => h.status === "pending" && h.stage === "visa_processing",
+		);
+		expect(pendingVisa).toBeTruthy();
+		await resolveStageHandoff({ handoffId: pendingVisa!.id, decision: "assign", opsUserId: staff.visa, actor: ACTOR });
+
+		// Read and write agree: the specialist can open the case, and it is in
+		// their list, without being the whole-case owner.
+		expect(await canAccessApplication(app.id, "nobody", asStaff(staff.visa, "consultant"))).toBe(true);
+		expect((await listApplications(asStaff(staff.visa, "consultant") as never)).map((a) => a.id)).toContain(app.id);
+		const [afterVisa] = await db.select().from(applications).where(eq(applications.id, app.id));
+		expect(afterVisa.assignedStaffId).toBe(staff.handler);
+		// An unrelated consultant still cannot.
+		expect(await canAccessApplication(app.id, "nobody", asStaff(staff.finance, "consultant"))).toBe(false);
+
+		// A finance user cannot be made the school handler.
+		await expect(assignApplication({ id: app.id, employeeId: staff.finance, actor: ACTOR })).rejects.toMatchObject({
+			code: "ROLE_CANNOT_OWN_STAGE",
+		});
+
+		// The school handler leaves: the case is released and queued for a
+		// manager, the applicant's contact is cleared, history is ended.
+		const released = await releaseOfficerCases({ opsUserId: staff.handler, actor: { opsUserId: staff.manager, name: "Manager" } });
+		expect(released.applications).toBe(1);
+		const [afterRelease] = await db.select().from(applications).where(eq(applications.id, app.id));
+		expect(afterRelease.assignedStaffId).toBeNull();
+		const handoffs = await db.select().from(stageHandoffs).where(eq(stageHandoffs.applicationId, app.id));
+		expect(handoffs.some((h) => h.status === "pending" && h.source === "offboarding")).toBe(true);
+		const [contact] = await db.select({ officer: applicants.assignedOfficerId }).from(applicants).where(eq(applicants.id, applicant.id));
+		expect(contact.officer).toBeNull();
+		// The visa specialist is untouched.
+		expect(await canAccessApplication(app.id, "nobody", asStaff(staff.visa, "consultant"))).toBe(true);
 	});
 
 	maybe()("a returning client's second application starts clean", async () => {

@@ -105,6 +105,17 @@ async function autoAdvanceToTravelAssistance(
 	});
 }
 
+/** The application a travel request belongs to (for access checks). */
+export async function applicationIdOfTravelRequest(requestId: string): Promise<string> {
+	const [row] = await db
+		.select({ applicationId: travelAssistanceRequests.applicationId })
+		.from(travelAssistanceRequests)
+		.where(eq(travelAssistanceRequests.id, requestId))
+		.limit(1);
+	if (!row) throw new HttpError(404, TRAVEL_ERROR_CODES.NOT_FOUND, "Travel assistance request not found");
+	return row.applicationId;
+}
+
 /** Find the active travel assistance request for an application. */
 export async function getForApplication(
 	applicationId: string,
@@ -319,15 +330,21 @@ export async function assignHandler(input: {
 		);
 	}
 
-	const [handler] = await db
-		.select({ id: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
-		.from(opsUsers)
-		.where(eq(opsUsers.id, input.opsUserId))
-		.limit(1);
-	if (!handler) {
-		throw new HttpError(404, "OPS_USER_NOT_FOUND", "Handler not found");
-	}
+	const { loadAssignableStaff } = await import("./cases.js");
+	const handler = await loadAssignableStaff(input.opsUserId, "travel_assistance");
 
+	// The travel handler is the travel-stage specialist. Recording them in
+	// stage_assignments (the one place stage ownership lives) is what makes
+	// activeHandlerFor, case access and chat routing recognise them; the
+	// column on the request is a convenience mirror for the Travel page.
+	const { assignStageOfficer } = await import("./communication.js");
+	await assignStageOfficer({
+		applicationId: existing.applicationId,
+		stage: "travel_assistance",
+		opsUserId: input.opsUserId,
+		assignedBy: input.actor.opsUserId ?? input.opsUserId,
+		reason: "travel request",
+	});
 	const [updated] = await db
 		.update(travelAssistanceRequests)
 		.set({

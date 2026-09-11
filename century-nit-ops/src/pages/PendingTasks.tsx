@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, bookingsApi } from "century-nit-core/api";
+import { ApiError, applicationsApi, bookingsApi } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
 import type { Booking } from "century-nit-shared";
 import type { Lead } from "century-nit-core";
@@ -8,12 +8,13 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { apiFetch } from "../lib/api";
-import { API_PREFIX } from "century-nit-shared";
+import { API_PREFIX, canOwnStage } from "century-nit-shared";
 import { AssignDialog } from "./UnassignedBookings";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
 	formatBookingWhenCompact,
+	handoffOffersKeep,
 	PRIORITY,
 	sortTasks,
 	taskActionLabel,
@@ -48,14 +49,20 @@ export function AssignTaskDialog({
 	onAssign: (to: Assignee, reason?: string) => Promise<unknown>;
 	onKeepHandler?: (reason?: string) => Promise<unknown>;
 }) {
-	const eligibleAssignees = assignees.filter(
-		(a) => a.branch === task.branch || !task.branch || task.branch === "",
-	);
-	// Fall back to all staff when the branch filter produces an empty list —
-	// otherwise the dropdown says "No staff are configured for this branch"
-	// and the manager cannot assign at all (e.g. consultation branch has no
-	// matching staff, or the applicant's branch was never set).
-	const assigneeOptions = eligibleAssignees.length > 0 ? eligibleAssignees : assignees;
+	// Who may take this item: a role that can own the stage (a rule the server
+	// enforces too), preferring the same branch (a preference — fall back to
+	// everyone who can own the stage rather than an empty list).
+	const stageForRoles =
+		task.kind === "handoff"
+			? task.record.stage
+			: task.kind === "travel"
+				? "travel_assistance"
+				: task.kind === "application"
+					? "school_submission"
+					: "consultation";
+	const roleMatches = assignees.filter((a) => canOwnStage(a.role, stageForRoles));
+	const eligibleAssignees = roleMatches.filter((a) => a.branch === task.branch || !task.branch);
+	const assigneeOptions = eligibleAssignees.length > 0 ? eligibleAssignees : roleMatches;
 	const [assigneeId, setAssigneeId] = useState("");
 	const [reason, setReason] = useState("");
 	const [assigning, setAssigning] = useState(false);
@@ -143,7 +150,7 @@ export function AssignTaskDialog({
 				)}
 
 				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", flexWrap: "wrap" }}>
-					{task.kind === "handoff" && onKeepHandler && (
+					{task.kind === "handoff" && onKeepHandler && handoffOffersKeep(task.record) && (
 						<button
 							type="button"
 							className="btn btn--ghost btn--sm"
@@ -373,6 +380,7 @@ export function PendingTasks({
 		applicants,
 		assignees,
 		handoffs,
+		travelRequests,
 		loading: casesLoading,
 		error: casesError,
 		refresh,
@@ -488,6 +496,7 @@ export function PendingTasks({
 			applications: inBranch(scopedApplications),
 			applicants: inBranch(scopedApplicants),
 			handoffs,
+			travelRequests,
 			invoiceRows,
 			invoices,
 			leads,
@@ -515,6 +524,7 @@ export function PendingTasks({
 		scopedApplications,
 		scopedApplicants,
 		handoffs,
+		travelRequests,
 		invoiceRows,
 		invoices,
 		leads,
@@ -536,6 +546,9 @@ export function PendingTasks({
 					opsUserId: to.opsUserId,
 					reason: reason || undefined,
 				});
+			}
+			if (task.kind === "travel" && to.opsUserId) {
+				return applicationsApi.assignTravelHandler(task.record.id, to.opsUserId);
 			}
 			throw new Error("This task cannot be assigned from here.");
 		},

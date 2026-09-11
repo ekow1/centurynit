@@ -8,13 +8,12 @@ import {
 	addCaseComment,
 	advanceToPaymentPlanFromTravel,
 	completeFromPaymentPlan,
-	applicantUserIdOfApplication,
 	applicantUserIdOfConsultation,
 	assignApplication,
 	assignConsultation,
 	cancelConsultation,
 	canSeeAllCases,
-	canSeeApplication,
+	canAccessApplication,
 	canSeeConsultation,
 	completeConsultationAssessment,
 	acceptProceedForApplication,
@@ -59,6 +58,7 @@ import {
 	recordBooking as recordTravelBooking,
 	updateOpsChecklist as updateTravelOpsChecklist,
 	assignHandler as assignTravelHandler,
+	applicationIdOfTravelRequest,
 	choosePlanAndClear as chooseTravelPlanAndClear,
 } from "../services/travelAssistance.js";
 import {
@@ -187,6 +187,21 @@ const STAFF_ONLY_NOTIFICATION_TYPES = [
 ] as const;
 
 const idParams = z.object({ id: z.string().uuid() });
+
+/**
+ * Every read and write of one application goes through this. Access is the
+ * same on both sides: the applicant, anyone who sees all cases, the case
+ * owner, an active stage specialist, or the travel handler.
+ */
+async function assertApplicationAccess(
+	c: { get(key: "user"): { id: string }; get(key: "staff"): StaffContext | null | undefined },
+	applicationId: string,
+	what = "work on",
+): Promise<void> {
+	if (!(await canAccessApplication(applicationId, c.get("user").id, c.get("staff") ?? null))) {
+		throw new HttpError(403, "FORBIDDEN", `Not allowed to ${what} this application`);
+	}
+}
 
 function actorFrom(staff: StaffContext) {
 	return { opsUserId: staff.opsUserId, name: staff.name, email: staff.email };
@@ -484,7 +499,7 @@ applicationsRouter.openapi(
 		method: "get",
 		path: "/handoffs",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
 		request: {
 			query: listStageHandoffsQuerySchema,
 		},
@@ -506,7 +521,7 @@ applicationsRouter.openapi(
 		method: "get",
 		path: "/handoffs/{id}",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -523,7 +538,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/handoffs/{id}/resolve",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
 		request: {
 			params: idParams,
 			body: { content: { "application/json": { schema: resolveStageHandoffSchema } }, required: true },
@@ -554,7 +569,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/handoffs/{id}/defer",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
 		request: {
 			params: idParams,
 			body: { content: { "application/json": { schema: deferStageHandoffSchema } }, required: true },
@@ -596,10 +611,7 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const row = await getApplication(id);
 		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		const ownerUserId = await applicantUserIdOfApplication(id);
-		if (!canSeeApplication({ ...row, applicantUserId: ownerUserId }, c.get("user").id, c.get("staff"))) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this application");
-		}
+		await assertApplicationAccess(c, id, "view");
 		return c.json(await serializeApplication(row));
 	},
 );
@@ -626,10 +638,7 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const row = await getApplication(id);
 		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		const ownerUserId = await applicantUserIdOfApplication(id);
-		if (!canSeeApplication({ ...row, applicantUserId: ownerUserId }, c.get("user").id, staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to update this application");
-		}
+		await assertApplicationAccess(c, id, "update");
 		const updated = await updateApplication(id, c.req.valid("json"), actorFrom(staff));
 		return c.json(await serializeApplication(updated));
 	},
@@ -705,11 +714,8 @@ applicationsRouter.openapi(
 			.where(eq(schema.applicants.id, app.applicantId))
 			.limit(1);
 
-		// Only staff who can see this application may issue its invoice.
-		const ownerUserId = await applicantUserIdOfApplication(id);
-		if (!canSeeApplication({ ...app, applicantUserId: ownerUserId }, c.get("user").id, staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to issue an invoice for this application");
-		}
+		// Only staff who can work this application may issue its invoice.
+		await assertApplicationAccess(c, id, "issue an invoice for");
 
 		// Find the proforma application invoice for this application.
 		let [appInvoice] = await db
@@ -810,6 +816,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const updated = await acceptApplication(c.req.valid("param").id, actorFrom(c.get("staff")!));
 		return c.json(await serializeApplication(updated));
 	},
@@ -833,6 +840,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const updated = await setApplicationStage(
 			c.req.valid("param").id,
 			c.req.valid("json").stage,
@@ -860,6 +868,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const body = c.req.valid("json");
 		const updated = await toggleApplicationChecklist(c.req.valid("param").id, body.itemId, body.checked);
 		return c.json(await serializeApplication(updated));
@@ -884,6 +893,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const body = c.req.valid("json");
 		const updated = await setApplicationVisaStage(
 			c.req.valid("param").id,
@@ -913,6 +923,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const updated = await setApplicationTravelClearance(
 			c.req.valid("param").id,
 			c.req.valid("json").cleared,
@@ -940,6 +951,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const { id } = c.req.valid("param");
 		if (!(await getApplication(id))) {
 			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
@@ -972,6 +984,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const { id } = c.req.valid("param");
 		await requestCaseDocuments({
 			targetType: "application",
@@ -1020,6 +1033,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
 		const { id } = c.req.valid("param");
 		const req = await getTravelAssistanceForApplicationOps(id);
 		return c.json(req);
@@ -1031,7 +1045,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/travel-assistance/{id}/assign",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -1093,6 +1107,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
@@ -1129,6 +1144,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
@@ -1162,6 +1178,7 @@ applicationsRouter.openapi(
 		},
 	}),
 	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;

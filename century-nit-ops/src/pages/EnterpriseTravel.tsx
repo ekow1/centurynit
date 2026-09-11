@@ -5,7 +5,7 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import { applicationsApi, staffApi, ApiError } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -66,7 +66,13 @@ export function EnterpriseTravel() {
 		staffApi
 			.list()
 			.then((res) => {
-				if (!cancelled) setStaff(res.staff.map((s) => ({ id: s.id, name: s.name })));
+				// Only staff whose role may own the travel stage are offered.
+				if (!cancelled)
+					setStaff(
+						res.staff
+							.filter((s) => s.active && canOwnStage(s.role, "travel_assistance"))
+							.map((s) => ({ id: s.id, name: s.name })),
+					);
 			})
 			.catch(() => {});
 		const onFocus = () => loadQueue();
@@ -83,9 +89,13 @@ export function EnterpriseTravel() {
 	const canSeeAll = canSeeAllBranches;
 
 	const travelApps = useMemo(() => {
+		// "Mine" is the travel handler (stage assignment) or the case owner.
 		const scoped = scopeRecords(
 			applications,
-			(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
+			(a) =>
+				a.assignedStaffEmail === opsUser?.email ||
+				a.assignedStaff === opsUser?.name ||
+				(a.stageHandlers ?? []).some((h) => h.stage === "travel_assistance" && h.opsUserEmail === opsUser?.email),
 		);
 		const filtered = branchFilter === "all" ? scoped : scoped.filter((a) => a.branch === branchFilter);
 		// Include applications at the travel/completed stage, plus any that have

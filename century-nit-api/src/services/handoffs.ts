@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
 	JOURNEY_STAGE_LABELS,
+	STAGE_OWNER_CLASS,
+	isOwnerClassBoundary,
 	type JourneyStage,
 	type StageHandoff,
 	type StageHandoffPreview,
@@ -17,25 +19,9 @@ import {
 import { HttpError } from "../middleware/error.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
 
-/**
- * Which class of specialist owns each journey stage. A handoff is required
- * when an application crosses from one owner class to another
- * (`from consultant to visa officer`), so the new specialist is never
- * silently carried over or left missing.
- */
-export const STAGE_OWNER_CLASS: Record<JourneyStage, string> = {
-	document_verification: "consultant",
-	school_submission: "consultant",
-	offer_letter_review: "consultant",
-	visa_processing: "visa_officer",
-	payment_execution: "finance_officer",
-	travel_assistance: "travel_officer",
-	completed: "none",
-};
-
-export function isOwnerClassBoundary(from: JourneyStage, to: JourneyStage): boolean {
-	return STAGE_OWNER_CLASS[from] !== STAGE_OWNER_CLASS[to];
-}
+// Owner classes and the boundary rule live in century-nit-shared (journey.ts)
+// so the ops console applies the same rule when it offers "keep".
+export { STAGE_OWNER_CLASS, isOwnerClassBoundary };
 
 /**
  * Boundary stages that hard-gate on entry — the case stays parked at its
@@ -312,6 +298,12 @@ export async function resolveStageHandoff(input: {
 				: "opsUserId is required when assigning a handler.",
 		);
 	}
+
+	// The chosen handler must hold a role that may own this stage — "keep"
+	// included: a consultant carried across the visa boundary is only fine if
+	// consultants may own visa work (see STAGE_ASSIGNABLE_ROLES).
+	const { loadAssignableStaff } = await import("./cases.js");
+	await loadAssignableStaff(resolvedOpsUserId, row.stage);
 
 	// Claim the handoff atomically. Two managers resolving the same handoff at
 	// once must not both proceed: a plain SELECT ... FOR UPDATE outside a

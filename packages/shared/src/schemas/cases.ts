@@ -554,6 +554,21 @@ export const applicationSchema = z.object({
 	visaConsent: stageConsentSchema.nullable(),
 	travelConsent: stageConsentSchema.nullable(),
 	/**
+	 * Active per-stage specialists (visa, travel, finance) — from
+	 * stage_assignments. The whole-case owner is `assignedStaffId`; a case is
+	 * "mine" for staff when either points at them.
+	 */
+	stageHandlers: z
+		.array(
+			z.object({
+				stage: z.string(),
+				opsUserId: z.string().uuid(),
+				opsUserName: z.string(),
+				opsUserEmail: z.string(),
+			}),
+		)
+		.default([]),
+	/**
 	 * The applicant's journey as the portal shows it — the same derivation
 	 * (`deriveJourney`) the portal reads, so ops and the client name the same
 	 * step. Optional only so older clients keep parsing.

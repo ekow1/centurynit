@@ -15,12 +15,13 @@ import type {
 import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
-import { bookingsApi } from "century-nit-core/api";
+import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage, type StageHandoff } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
+	handoffOffersKeep,
 	taskActionLabel,
 	timeAgo,
 	VISA_STEP_LABELS,
@@ -44,6 +45,7 @@ export function Workspace() {
 		applicants,
 		assignees,
 		handoffs,
+		travelRequests,
 		loading: casesLoading,
 		error: casesError,
 		refresh,
@@ -144,12 +146,13 @@ export function Workspace() {
 			applications: scopedApplications,
 			applicants: scopedApplicants,
 			handoffs,
+			travelRequests,
 			invoiceRows,
 			invoices,
 			leads,
 			liveBookingIds: liveBookingIds,
 		});
-	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs]);
+	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs, travelRequests]);
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
@@ -188,9 +191,14 @@ export function Workspace() {
 					reason: reason || undefined,
 				});
 			}
+			if (task.kind === "travel" && to.opsUserId) {
+				await applicationsApi.assignTravelHandler(task.record.id, to.opsUserId);
+				await refresh();
+				return;
+			}
 			throw new Error("This task cannot be assigned from here.");
 		},
-		[assignConsultation, assignApplication, resolveHandoff],
+		[assignConsultation, assignApplication, resolveHandoff, refresh],
 	);
 
 	return (
@@ -357,10 +365,20 @@ function PreviewPane({
 	const [assignError, setAssignError] = useState<string | null>(null);
 	const [reason, setReason] = useState<string>("");
 
-	const branchMatches = assignees.filter((a) => a.branch === item.branch || !item.branch || item.branch === "");
-	// Fall back to all staff when the branch filter produces an empty list —
-	// otherwise the dropdown renders nothing and the manager cannot assign.
-	const eligibleAssignees = branchMatches.length > 0 ? branchMatches : assignees;
+	// Who may take this item: a role that can own the stage, in the same
+	// branch. Branch is a preference (fall back to everyone who can own the
+	// stage); role is a rule the server enforces too.
+	const stageForRoles =
+		item.kind === "handoff"
+			? item.record.stage
+			: item.kind === "travel"
+				? "travel_assistance"
+				: item.kind === "application"
+					? "school_submission"
+					: "consultation";
+	const roleMatches = assignees.filter((a) => canOwnStage(a.role, stageForRoles));
+	const branchMatches = roleMatches.filter((a) => a.branch === item.branch || !item.branch);
+	const eligibleAssignees = branchMatches.length > 0 ? branchMatches : roleMatches;
 
 	async function doAssign() {
 		const to = assignees.find((a) => a.email === assigneeId || a.opsUserId === assigneeId);
@@ -374,6 +392,8 @@ function PreviewPane({
 				await onAssignApplication(item.record.id, to);
 			} else if (item.kind === "handoff" && item.action === "resolve") {
 				await onResolveHandoff(item.record.id, "assign", { opsUserId: to.opsUserId, reason: reason || undefined });
+			} else if (item.kind === "travel" && to.opsUserId) {
+				await applicationsApi.assignTravelHandler(item.record.id, to.opsUserId);
 			}
 			await onAssigned();
 		} catch (err) {
@@ -489,7 +509,7 @@ function PreviewPane({
 						>
 							{assigning ? "Assigning…" : "Assign ↗"}
 						</button>
-						{item.record.fromOpsUserName && (
+						{handoffOffersKeep(item.record) && (
 							<button
 								className="btn btn--ghost btn--sm"
 								onClick={keepHandler}

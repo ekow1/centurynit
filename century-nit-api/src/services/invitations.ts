@@ -456,6 +456,16 @@ export async function updateStaff(input: {
 		.where(eq(opsUsers.id, target.id))
 		.returning();
 
+	// Leaving releases their casework into the managers' queue.
+	if (input.patch.active === false && target.active) {
+		const { releaseOfficerCases } = await import("./caseOwnership.js");
+		const [actor] = await db.select({ name: opsUsers.name }).from(opsUsers).where(eq(opsUsers.id, input.actor.opsUserId)).limit(1);
+		await releaseOfficerCases({
+			opsUserId: target.id,
+			actor: { opsUserId: input.actor.opsUserId, name: actor?.name ?? "Manager" },
+		});
+	}
+
 	return updated;
 }
 

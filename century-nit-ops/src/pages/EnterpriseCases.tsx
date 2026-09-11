@@ -15,12 +15,14 @@ import {
 	JOURNEY_STAGE_LABELS,
 	PORTAL_STAGE_LABELS,
 	PORTAL_STAGE_ORDER,
+	canOwnStage,
 	schoolDecisionNote,
 	type JourneyStage,
 	type SchoolApplication,
 	type SchoolOutcome,
 } from "century-nit-shared";
 import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
+import { handoffOffersKeep } from "../lib/pendingTasks";
 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
 	const { updateSchoolApplication } = useCases();
@@ -716,23 +718,31 @@ export function EnterpriseCases() {
 							})()}
 							{(() => {
 								const app = liveSelected ?? selectedApp;
-								const handoff = handoffs.find(
-									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
-								);
+								// Any pending handoff on this case — school, visa, travel or
+								// finance — not just the school one.
+								const handoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending");
 								if (!handoff) return null;
+								const stageLabel = JOURNEY_STAGE_LABELS[handoff.stage as JourneyStage] ?? handoff.stage;
+								const why =
+									handoff.source === "deposit_payment"
+										? "10% deposit received — this case needs a handler before school selection can proceed."
+										: handoff.source === "visa_payment" || handoff.source === "visa_consent_continue"
+											? "The applicant is ready for visa processing — assign a visa specialist."
+											: handoff.source === "offboarding"
+												? "The previous handler has left — this stage needs a new owner."
+												: `This case needs a handler for ${stageLabel}.`;
+								const eligible = assignees.filter((a) => canOwnStage(a.role, handoff.stage));
 								return (
 									<div className="card" style={{ border: "1px solid var(--accent)", background: "var(--accent-bg, #f0f7ff)" }}>
-										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Handler Assignment Required</p>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
-											10% deposit received — this case needs a handler before school selection can proceed.
-										</p>
+										<p className="eyebrow mb-1" style={{ color: "var(--accent)" }}>Handler Assignment Required · {stageLabel}</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>{why}</p>
 										{handoff.fromOpsUserName && (
 											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
 												Previous handler: <strong>{handoff.fromOpsUserName}</strong>
 											</p>
 										)}
 										<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-											{handoff.fromOpsUserName && (
+											{handoffOffersKeep(handoff) && (
 												<button
 													className="btn btn--sm btn--ghost"
 													onClick={() => {
@@ -756,7 +766,7 @@ export function EnterpriseCases() {
 												}}
 											>
 												<option value="">Assign New Handler…</option>
-												{assignees.map((a) => (
+												{eligible.map((a) => (
 													<option key={a.opsUserId} value={a.opsUserId}>
 														{a.name} {a.email ? `(${a.email})` : ""}
 													</option>
@@ -871,7 +881,7 @@ export function EnterpriseCases() {
 									}
 									actor={opsUser?.name ?? "Staff"}
 									isMine={(liveSelected ?? selectedApp).assignedStaffEmail === opsUser?.email}
-									assignees={assignees}
+									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
 									onAssign={(to) => void assignApplication(selectedApp.id, to)}
 									onComment={(kind, text) =>
 										void commentOnApplication(selectedApp.id, kind, text)

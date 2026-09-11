@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, not, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, not, or, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -11,6 +11,7 @@ import {
 	type AcceptProceedResponse,
 	canAdvanceToStage,
 	JOURNEY_STAGES,
+	canOwnStage,
 	JOURNEY_STAGE_LABELS,
 	type JourneyStage,
 	patchApplicationSchema,
@@ -34,6 +35,7 @@ import {
 	opsUsers,
 	schoolApplications,
 	servicePackages,
+	stageAssignments,
 	stageHandoffs,
 	travelAssistanceRequests,
 } from "../db/schema.js";
@@ -87,6 +89,23 @@ async function loadStaff(id: string | null) {
 	return row ?? null;
 }
 
+/**
+ * The staff member being made handler of `stage` — must exist, be active,
+ * and hold a role that may own that stage (STAGE_ASSIGNABLE_ROLES).
+ */
+export async function loadAssignableStaff(id: string, stage: string) {
+	const employee = await loadStaff(id);
+	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
+	if (!canOwnStage(employee.role, stage)) {
+		throw new HttpError(
+			409,
+			"ROLE_CANNOT_OWN_STAGE",
+			`${employee.name} (${employee.role}) cannot be the handler for ${JOURNEY_STAGE_LABELS[stage as JourneyStage] ?? stage}.`,
+		);
+	}
+	return employee;
+}
+
 async function commentsFor(
 	targetType: "consultation" | "application",
 	targetId: string,
@@ -108,11 +127,85 @@ function toComment(row: CommentRow) {
 	};
 }
 
+/** Roles that see, and may assign, every case. */
 export function canSeeAllCases(staff: StaffContext | null): boolean {
 	return (
 		staff?.role === "manager" ||
 		staff?.role === "coordinator" ||
+		staff?.role === "admin" ||
 		staff?.role === "super_admin"
+	);
+}
+
+/**
+ * Whether the signed-in person may see and work this application.
+ *
+ * Staff who do not see everything reach a case in one of three ways — as the
+ * whole-case owner (`applications.assignedStaffId`), as an active stage
+ * specialist (`stage_assignments`: visa, travel, finance), or as the handler
+ * of its travel request. All three count, on reads and writes alike: a visa
+ * specialist who can advance the visa stage must also be able to open the
+ * case, and vice versa.
+ */
+export async function canAccessApplication(
+	applicationId: string,
+	userId: string,
+	staff: StaffContext | null,
+): Promise<boolean> {
+	const [row] = await db
+		.select({ assignedStaffId: applications.assignedStaffId, applicantUserId: applicants.userId })
+		.from(applications)
+		.innerJoin(applicants, eq(applicants.id, applications.applicantId))
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	if (!row) return false;
+	if (row.applicantUserId && row.applicantUserId === userId) return true;
+	if (!staff) return false;
+	if (canSeeAllCases(staff)) return true;
+	if (row.assignedStaffId === staff.opsUserId) return true;
+	const [stageRow] = await db
+		.select({ id: stageAssignments.id })
+		.from(stageAssignments)
+		.where(
+			and(
+				eq(stageAssignments.applicationId, applicationId),
+				eq(stageAssignments.opsUserId, staff.opsUserId),
+				eq(stageAssignments.status, "active"),
+			),
+		)
+		.limit(1);
+	if (stageRow) return true;
+	const [travelRow] = await db
+		.select({ id: travelAssistanceRequests.id })
+		.from(travelAssistanceRequests)
+		.where(
+			and(
+				eq(travelAssistanceRequests.applicationId, applicationId),
+				eq(travelAssistanceRequests.assignedOpsUserId, staff.opsUserId),
+			),
+		)
+		.limit(1);
+	return Boolean(travelRow);
+}
+
+/** Applications a non-manager may see: owned, stage-assigned, or travel-handled. */
+function accessibleApplicationsFilter(staff: StaffContext) {
+	return or(
+		eq(applications.assignedStaffId, staff.opsUserId),
+		inArray(
+			applications.id,
+			db
+				.select({ id: stageAssignments.applicationId })
+				.from(stageAssignments)
+				.where(and(eq(stageAssignments.opsUserId, staff.opsUserId), eq(stageAssignments.status, "active"))),
+		),
+		inArray(
+			applications.id,
+			db
+				.select({ id: travelAssistanceRequests.applicationId })
+				.from(travelAssistanceRequests)
+				.where(eq(travelAssistanceRequests.assignedOpsUserId, staff.opsUserId)),
+		),
 	);
 }
 
@@ -128,17 +221,6 @@ export function canSeeConsultation(
 	return false;
 }
 
-export function canSeeApplication(
-	row: { assignedStaffId: string | null; applicantUserId?: string | null },
-	userId: string,
-	staff: StaffContext | null,
-): boolean {
-	if (row.applicantUserId && row.applicantUserId === userId) return true;
-	if (!staff) return false;
-	if (canSeeAllCases(staff)) return true;
-	if (staff.role === "consultant") return row.assignedStaffId === staff.opsUserId;
-	return false;
-}
 
 /* ── Ensure from booking ─────────────────────────────────────────────────── */
 
@@ -525,6 +607,18 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		getStageConsent(row.id, "travel"),
 	]);
 
+	// Who owns which stage right now (visa / travel / finance specialists).
+	const stageHandlers = await db
+		.select({
+			stage: stageAssignments.stage,
+			opsUserId: stageAssignments.opsUserId,
+			opsUserName: opsUsers.name,
+			opsUserEmail: opsUsers.email,
+		})
+		.from(stageAssignments)
+		.innerJoin(opsUsers, eq(opsUsers.id, stageAssignments.opsUserId))
+		.where(and(eq(stageAssignments.applicationId, row.id), eq(stageAssignments.status, "active")));
+
 	// The same journey the portal shows, so ops sees the client's step.
 	const { journeyForApplicant } = await import("./journey.js");
 	const journey = applicant
@@ -577,6 +671,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		applicationConsent,
 		visaConsent,
 		travelConsent,
+		stageHandlers,
 		journey: journey
 			? {
 					portalStage: journey.portalStage,
@@ -664,7 +759,7 @@ export async function listApplications(staff: StaffContext): Promise<Application
 	return db
 		.select()
 		.from(applications)
-		.where(and(depositFilter, eq(applications.assignedStaffId, staff.opsUserId)))
+		.where(and(depositFilter, accessibleApplicationsFilter(staff)))
 		.orderBy(desc(applications.createdAt));
 }
 
@@ -743,42 +838,66 @@ export async function assignConsultation(input: {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
 	}
 
-	const employee = await loadStaff(input.employeeId);
-	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
+	const employee = await loadAssignableStaff(input.employeeId, "consultation");
 
-	const [updated] = await db
-		.update(consultations)
-		.set({
-			assignedOfficerId: input.employeeId,
-			assignedAt: new Date(),
-			assignedBy: input.actor.opsUserId,
-			status: row.status === "IN_ASSESSMENT" ? "IN_ASSESSMENT" : "ASSIGNED",
-			updatedAt: new Date(),
-		})
-		.where(eq(consultations.id, row.id))
-		.returning();
+	// Availability is checked *before* anything is written. Previously the
+	// consultation was reassigned first and the booking assignment then
+	// refused the clash, leaving the case pointing at someone who could not
+	// take the slot.
+	if (row.bookingId) {
+		const [booking] = await db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1);
+		if (booking && booking.employeeId !== input.employeeId) {
+			const { isEmployeeAvailable } = await import("./availability.js");
+			const check = await isEmployeeAvailable(input.employeeId, booking.startsAt, booking.durationMinutes, {
+				excludeBookingId: booking.id,
+				timezone: booking.timezone,
+			});
+			if (!check.available) {
+				throw new HttpError(
+					409,
+					"EMPLOYEE_UNAVAILABLE",
+					`${employee.name} is not available at the consultation's time`,
+					{ reason: check.reason },
+				);
+			}
+		}
+	}
 
-	// Record the assignment in the append-only history table.
+	// Officer, applicant contact, history and audit line change together.
 	const { startAssignment } = await import("./caseAssignments.js");
-	await startAssignment({
-		targetType: "consultation",
-		targetId: row.id,
-		opsUserId: input.employeeId,
-		assignedBy: input.actor.opsUserId,
-	});
-
-	await db
-		.update(applicants)
-		.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
-		.where(eq(applicants.id, row.applicantId));
-
-	await db.insert(caseComments).values({
-		targetType: "consultation",
-		targetId: row.id,
-		kind: "assignment",
-		text: `Assigned to ${employee.name}`,
-		authorName: input.actor.name,
-		authorOpsUserId: input.actor.opsUserId,
+	const updated = await db.transaction(async (tx) => {
+		const txDb = tx as unknown as typeof db;
+		const [c] = await txDb
+			.update(consultations)
+			.set({
+				assignedOfficerId: input.employeeId,
+				assignedAt: new Date(),
+				assignedBy: input.actor.opsUserId,
+				status: row.status === "IN_ASSESSMENT" ? "IN_ASSESSMENT" : "ASSIGNED",
+				updatedAt: new Date(),
+			})
+			.where(eq(consultations.id, row.id))
+			.returning();
+		await startAssignment({
+			targetType: "consultation",
+			targetId: row.id,
+			opsUserId: input.employeeId,
+			assignedBy: input.actor.opsUserId,
+			tx: txDb,
+		});
+		await txDb
+			.update(applicants)
+			.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
+			.where(eq(applicants.id, row.applicantId));
+		await txDb.insert(caseComments).values({
+			targetType: "consultation",
+			targetId: row.id,
+			kind: "assignment",
+			text: `Assigned to ${employee.name}`,
+			authorName: input.actor.name,
+			authorOpsUserId: input.actor.opsUserId,
+		});
+		return c;
 	});
 
 	if (updated.bookingId) {
@@ -1557,8 +1676,8 @@ export async function assignApplication(input: {
 }): Promise<ApplicationRow> {
 	const row = await getApplication(input.id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	const employee = await loadStaff(input.employeeId);
-	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
+	const employee = await loadAssignableStaff(input.employeeId, "school_submission");
+
 	const applicant = await getApplicant(row.applicantId);
 
 	// The owner change and the pending handoff it answers must land together.

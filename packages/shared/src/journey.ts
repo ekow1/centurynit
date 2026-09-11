@@ -290,3 +290,47 @@ export function emptyJourney(): DerivedJourney {
 		nextUnlock: null,
 	};
 }
+
+/* ── Who may own which stage ─────────────────────────────────────────────── */
+
+/**
+ * Roles allowed to be assigned as the handler of each stage. There are no
+ * dedicated visa/travel roles yet, so the service stages are open to the
+ * consultant tier; the plan chapter belongs to finance. Roles absent from a
+ * list (customer_service, admin, super_admin) never own casework — they
+ * triage, invite and configure.
+ */
+export const STAGE_ASSIGNABLE_ROLES: Record<JourneyStage | "consultation", readonly string[]> = {
+	consultation: ["consultant", "coordinator", "manager"],
+	document_verification: ["consultant", "coordinator", "manager"],
+	school_submission: ["consultant", "coordinator", "manager"],
+	offer_letter_review: ["consultant", "coordinator", "manager"],
+	visa_processing: ["consultant", "coordinator", "manager"],
+	travel_assistance: ["consultant", "coordinator", "manager"],
+	payment_execution: ["finance", "coordinator", "manager"],
+	completed: [],
+};
+
+export function canOwnStage(role: string | null | undefined, stage: string): boolean {
+	const allowed = STAGE_ASSIGNABLE_ROLES[stage as keyof typeof STAGE_ASSIGNABLE_ROLES];
+	return Boolean(role && allowed?.includes(role));
+}
+
+/**
+ * Which class of specialist owns each journey stage. A handoff crossing from
+ * one class to another (consultant → visa officer) must never carry the
+ * previous handler over by default.
+ */
+export const STAGE_OWNER_CLASS: Record<JourneyStage, string> = {
+	document_verification: "consultant",
+	school_submission: "consultant",
+	offer_letter_review: "consultant",
+	visa_processing: "visa_officer",
+	payment_execution: "finance_officer",
+	travel_assistance: "travel_officer",
+	completed: "none",
+};
+
+export function isOwnerClassBoundary(from: JourneyStage, to: JourneyStage): boolean {
+	return STAGE_OWNER_CLASS[from] !== STAGE_OWNER_CLASS[to];
+}

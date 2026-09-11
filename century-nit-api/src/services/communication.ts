@@ -43,7 +43,7 @@ import {
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import type { SessionUser, StaffContext } from "../middleware/auth.js";
-import { canSeeApplication } from "./cases.js";
+import { canAccessApplication } from "./cases.js";
 import { publishChatEvent, notifyOfflineParticipants } from "./chat.js";
 import { notifyMany, getCustomerServiceUserIds, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { serializeMessageRow, hydrateMessages } from "./message-serializer.js";
@@ -204,26 +204,7 @@ export async function canAccessConversation(
 
 	// Case-linked: may access if they can see the case (manager/coordinator/assignee).
 	if (conv.linkedEntityType === "application" && conv.linkedEntityId) {
-		const [app] = await db
-			.select({
-				assignedStaffId: applications.assignedStaffId,
-				applicantId: applications.applicantId,
-			})
-			.from(applications)
-			.where(eq(applications.id, conv.linkedEntityId))
-			.limit(1);
-		if (app) {
-			const [applicant] = await db
-				.select({ userId: applicants.userId })
-				.from(applicants)
-				.where(eq(applicants.id, app.applicantId))
-				.limit(1);
-			return canSeeApplication(
-				{ assignedStaffId: app.assignedStaffId, applicantUserId: applicant?.userId ?? null },
-				user.id,
-				staff,
-			);
-		}
+		return canAccessApplication(conv.linkedEntityId, user.id, staff);
 	}
 	// Consultation-linked: delegate to assigned-officer / coordinator visibility.
 	if (conv.linkedEntityType === "consultation" && conv.linkedEntityId) {
@@ -1053,17 +1034,29 @@ export async function assignStageOfficer(input: {
 	reason?: string;
 	scope?: "stage" | "all";
 }): Promise<StageAssignment> {
-	// "All stages" — a whole-case owner. Writes case_assignments (single active
-	// row per target), which access control treats as covering every stage.
+	// "All stages" — the whole-case owner. Goes through setCaseOwner so
+	// applications.assignedStaffId, the applicant's point of contact and the
+	// case_assignments history change together (see caseOwnership.ts).
 	if (input.scope === "all") {
-		const { startAssignment } = await import("./caseAssignments.js");
-		const created = await startAssignment({
-			targetType: "application",
-			targetId: input.applicationId,
+		const { setCaseOwner } = await import("./caseOwnership.js");
+		await setCaseOwner({
+			applicationId: input.applicationId,
 			opsUserId: input.opsUserId,
 			assignedBy: input.assignedBy,
 			note: input.reason,
 		});
+		const { caseAssignments } = await import("../db/schema.js");
+		const [created] = await db
+			.select({ id: caseAssignments.id })
+			.from(caseAssignments)
+			.where(
+				and(
+					eq(caseAssignments.targetType, "application"),
+					eq(caseAssignments.targetId, input.applicationId),
+					eq(caseAssignments.status, "active"),
+				),
+			)
+			.limit(1);
 		await recordEvent({
 			action: "staff_assigned",
 			actorOpsUserId: input.assignedBy,
@@ -1071,12 +1064,12 @@ export async function assignStageOfficer(input: {
 			metadata: { assignmentId: created.id, officer: input.opsUserId, scope: "all", reason: input.reason },
 		});
 		return {
-			id: created.id,
+			id: created?.id ?? input.applicationId,
 			applicationId: input.applicationId,
 			stage: "all",
 			opsUserId: input.opsUserId,
 			status: "active",
-			assignedAt: created.createdAt.toISOString(),
+			assignedAt: new Date().toISOString(),
 			assignedBy: input.assignedBy,
 			endedAt: null,
 			endedReason: null,

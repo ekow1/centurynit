@@ -12,6 +12,8 @@ import {
 	type JourneyStage,
 	type StageHandoff,
 	type Booking,
+	type TravelAssistanceRequest,
+	isOwnerClassBoundary,
 } from "century-nit-shared";
 import { fmtGhs, money } from "../pages/currency";
 
@@ -117,6 +119,20 @@ export type BaseTask =
 			kind: "lead";
 			action: "followup";
 			record: Lead;
+			title: string;
+			subtitle: string;
+			meta: string;
+			branch: string;
+			owner: string;
+			linkTo: string;
+			priority: number;
+	  }
+	| {
+			id: string;
+			category: string;
+			kind: "travel";
+			action: "assign";
+			record: TravelAssistanceRequest;
 			title: string;
 			subtitle: string;
 			meta: string;
@@ -247,8 +263,22 @@ export function taskActionLabel(task: PendingTask): string {
 	return task.action;
 }
 
+/**
+ * Whether the "keep previous handler" shortcut makes sense for a handoff:
+ * only where the previous handler's role may own the new stage and the
+ * stage is not an owner-class boundary (school handler → visa specialist is
+ * a deliberate choice, not a default).
+ */
+export function handoffOffersKeep(h: StageHandoff, previousStage?: string | null): boolean {
+	if (!h.fromOpsUserId) return false;
+	if (h.source === "offboarding") return false;
+	if (previousStage && isOwnerClassBoundary(previousStage as never, h.stage as never)) return false;
+	return h.stage === "school_submission";
+}
+
 export const TASK_KIND_LABEL: Record<PendingTask["kind"], string> = {
 	booking: "Booking",
+	travel: "Travel",
 	consultation: "Consultation",
 	application: "Application",
 	visa: "Visa",
@@ -286,6 +316,8 @@ export type PendingTaskInputs = {
 	applications: MockApplication[];
 	applicants: MockApplicant[];
 	handoffs: StageHandoff[];
+	/** Travel requests; those in review with no handler need assigning. */
+	travelRequests?: TravelAssistanceRequest[];
 	/** Derived rows from `buildInvoiceRows`. */
 	invoiceRows: ReturnType<typeof buildInvoiceRows>;
 	/** Raw invoices, needed for the visa filter. */
@@ -315,6 +347,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		applications,
 		applicants,
 		handoffs,
+		travelRequests = [],
 		invoiceRows,
 		invoices,
 		leads,
@@ -322,6 +355,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		excludeBookingIds,
 	} = inputs;
 	const q: PendingTask[] = [];
+	const appById = new Map(applications.map((a) => [a.id, a]));
 	const excluded = excludeBookingIds ?? new Set<string>();
 
 	for (const c of consultations) {
@@ -543,6 +577,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 						.split("_")
 						.map((s) => s.charAt(0).toUpperCase() + s.slice(1))
 						.join(" ");
+		const handoffApp = h.applicationId ? appById.get(h.applicationId) : undefined;
 		q.push({
 			id: `handoff-${h.id}`,
 			category: "needs_assignment",
@@ -550,12 +585,34 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			action: "resolve",
 			record: h,
 			title: h.applicantName ?? "Applicant",
-			subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""}`,
+			subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""}${h.source === "offboarding" ? " · previous handler left" : ""}`,
 			meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
-			branch: "",
+			branch: handoffApp?.branch ?? "",
 			owner: h.fromOpsUserName ?? "No previous handler",
 			linkTo: h.stage === "visa_processing" ? `/visa?id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
 			priority: PRIORITY.assign_consultation,
+		});
+	}
+
+	// Travel requests the applicant has sent ("yes, help me book") that no
+	// handler has picked up yet — the one assignment item that only lived on
+	// the Travel page.
+	for (const ta of travelRequests) {
+		if (ta.status !== "review" || ta.assignedOpsUserId) continue;
+		const app = appById.get(ta.applicationId);
+		q.push({
+			id: `travel-${ta.id}`,
+			category: "needs_assignment",
+			kind: "travel",
+			action: "assign",
+			record: ta,
+			title: ta.applicantName ?? app?.applicantName ?? "Applicant",
+			subtitle: `Travel handler required · ${ta.applicationReference ?? app?.appId ?? ""}`,
+			meta: "Applicant asked us to book their flight",
+			branch: app?.branch ?? "",
+			owner: "Unassigned",
+			linkTo: `/travel?id=${ta.applicationId}`,
+			priority: PRIORITY.assign_application,
 		});
 	}
 

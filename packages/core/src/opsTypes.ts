@@ -236,6 +236,8 @@ export interface MockApplication {
 	proceedStatus?: ProceedStatus;
 	/** Number of target schools requested in service package */
 	targetSchoolCount?: number | null;
+	/** Active per-stage specialists (visa / travel / finance) from stage_assignments. */
+	stageHandlers?: { stage: string; opsUserId: string; opsUserName: string; opsUserEmail: string }[];
 	/**
 	 * The step the applicant sees in the portal — same derivation the portal
 	 * reads (`deriveJourney`), so ops and the client name the same step.

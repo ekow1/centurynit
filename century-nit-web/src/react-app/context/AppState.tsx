@@ -377,6 +377,14 @@ export type BookingData = {
 	eligibilityOutcome: EligibilityOutcome;
 	eligibilityNote: string | null;
 	outcomeAt: string | null;
+	assessmentResult?: {
+		outcome?: string | null;
+		notes?: string | null;
+		recCountry?: string | null;
+		recUniversity?: string | null;
+		recProgram?: string | null;
+		recPackage?: string | null;
+	} | null;
 	// Legacy aliases used by old storage
 	serviceId?: string;
 	destinationId?: string;
@@ -569,6 +577,7 @@ const defaultBooking: BookingData = {
 	eligibilityOutcome: "pending",
 	eligibilityNote: null,
 	outcomeAt: null,
+	assessmentResult: null,
 };
 
 const defaultInterview: InterviewBooking = {
@@ -2183,6 +2192,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		}
 	}, []);
 
+	// ── Server-driven journey stage ───────────────────────────────────────
+	type ServerJourney = {
+		currentStage: string;
+		portalStage?: string;
+		chapterUnlocks: Record<string, boolean>;
+		stageStatuses?: Record<string, "done" | "current" | "locked" | "skipped">;
+		label: string;
+		nextUnlock: string | null;
+	};
+	const [serverJourney, setServerJourney] = useState<ServerJourney | null>(
+		null,
+	);
+
+	const refreshJourney = useCallback(async () => {
+		try {
+			const j = await meApi.journey();
+			setServerJourney(j);
+		} catch {
+			/* keep existing data */
+		}
+	}, []);
+
 	/**
 	 * Sync real server consultation, assignment, eligibility and applicant profile
 	 * with AppState. Runs on mount and then polls every 30 seconds so assignment
@@ -2192,13 +2223,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		if (!authUser) return;
 		let hasApplication = false;
 		try {
-			const [res, fetchedFees] = await Promise.all([
+			const [res, fetchedFees, fetchedJourney] = await Promise.all([
 				meApi.application(),
-				meApi.fees().catch(() => null)
+				meApi.fees().catch(() => null),
+				meApi.journey().catch(() => null),
 			]);
 			hasApplication = Boolean(res.application);
 			if (fetchedFees) {
 				setFees(fetchedFees);
+			}
+			if (fetchedJourney) {
+				setServerJourney(fetchedJourney);
 			}
 			if (res.consultation) {
 				const c = res.consultation;
@@ -2240,6 +2275,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						(c.status === "COMPLETED"
 							? "Assessment complete. You are eligible to continue."
 							: "Your consultation case is under review by your advisor."),
+					assessmentResult: c.assessmentResult ?? prev.assessmentResult ?? null,
 					outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
 					paymentStatus: "success",
 					paidAt: c.createdAt,
@@ -2577,23 +2613,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// API and prefer it over the locally computed one.  Falls back to local
 	// on network error so the portal never breaks.
 	//
-	// The server may return either:
-	//   • `currentStage` — the coarse `JourneyStage` enum value (e.g.
-	//     "visa_processing"), which we map via `JOURNEY_STAGE_TO_PORTAL`, or
-	//   • `portalStage` — the already-mapped fine-grained `ProcessStageId`,
-	//     preferred when present (lets the server override the mapping).
-	type ServerJourney = {
-		currentStage: string;
-		portalStage?: string;
-		chapterUnlocks: Record<string, boolean>;
-		stageStatuses?: Record<string, "done" | "current" | "locked" | "skipped">;
-		label: string;
-		nextUnlock: string | null;
-	};
-	const [serverJourney, setServerJourney] = useState<ServerJourney | null>(
-		null,
-	);
-
 	useEffect(() => {
 		if (!authUser) {
 			setServerJourney(null);
@@ -2670,14 +2689,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	// this kills the two-competing-server-reads flaw (#1) where chapter
 	// unlocks (from meApi.application()) and the displayed phase (from
 	// meApi.journey()) could disagree.
-	const refreshJourney = useCallback(async () => {
-		try {
-			const j = await meApi.journey();
-			setServerJourney(j);
-		} catch {
-			/* keep existing data */
-		}
-	}, []);
 
 	const chapterUnlocks = useMemo(
 		() => serverJourney?.chapterUnlocks ?? localChapterUnlocks,

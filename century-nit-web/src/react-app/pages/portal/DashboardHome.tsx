@@ -3,7 +3,7 @@ import { Button } from "../../components/ui/Button";
 import { useAppState, type PendingAction } from "../../context/AppState";
 import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
-import { StageConsentCard } from "../../components/StageConsentCard";
+import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
 
 /**
  * Where "continue" goes for the current stage, with a verb that names the
@@ -20,7 +20,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	awaiting_handler: { to: "/portal/awaiting-handler", label: "Awaiting handler" },
 	school_select: { to: "/portal/application", label: "Select schools" },
 	awaiting_invoice: { to: "/portal/application", label: "Awaiting invoice" },
-	application_invoice: { to: "/portal/financial", label: "Pay invoice" },
+	application_invoice: { to: "/portal/application", label: "Pay invoice" },
 	school_tracking: { to: "/portal/tracking", label: "View applications" },
 	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
 	visa: { to: "/portal/visa/tracking", label: "View visa" },
@@ -128,23 +128,21 @@ export function DashboardHome() {
 				</div>
 		</header>
 
-			{/* Application consent gate — the applicant must say "continue"
-				before the case is sent to Ops for handler assignment. */}
-			{current === "proceed" &&
-				application.applicationId &&
-				(application.applicationConsent?.decision ?? null) !== "continue" &&
-				(application.applicationConsent?.decision ?? null) !== "opt_out" && (
-					<StageConsentCard
-						stage="application"
-						currentDecision={application.applicationConsent?.decision ?? null}
-						title="Continue with your application?"
-						lead="Your consultation is complete and your application is ready to start. Continue so we can assign a handler and begin processing your application."
-						continueDetail="A handler will be assigned to your case. They'll guide you through document verification, school submission, and offer review. An application fee invoice will be raised for you to pay."
-						holdDetail="You can come back and continue with your application whenever you're ready. Nothing is sent to our team until you continue."
-						optOutDetail="Your application will be withdrawn. You'll need to start a new consultation if you change your mind later."
-						onDecided={() => syncFromServer()}
-					/>
-				)}
+			{/* Assessment Outcome & Consent Decision */}
+			{current === "proceed" && (
+				<AssessmentOutcomeCard
+					outcome={booking.eligibilityOutcome === "conditional" ? "Conditionally Eligible" : "Eligible"}
+					notes={booking.eligibilityNote}
+					recommendations={{
+						country: booking.assessmentResult?.recCountry,
+						university: booking.assessmentResult?.recUniversity,
+						program: booking.assessmentResult?.recProgram,
+						package: booking.assessmentResult?.recPackage,
+					}}
+					currentDecision={application.applicationConsent?.decision ?? null}
+					onDecided={() => void syncFromServer()}
+				/>
+			)}
 
 			{/* Action required OR You are here - unified block to prevent duplicate competing banners */}
 			{current !== "proceed" && (pendingAction ? (

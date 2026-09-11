@@ -1,0 +1,438 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { meApi, ApiError } from "century-nit-core/api";
+import { Button } from "./ui/Button";
+import { useAppState } from "../context/AppState";
+import { useNotifier } from "./notifier/Notifier";
+
+export type AssessmentResultData = {
+	outcome?: string | null;
+	notes?: string | null;
+	recCountry?: string | null;
+	recUniversity?: string | null;
+	recProgram?: string | null;
+	recPackage?: string | null;
+};
+
+type Props = {
+	outcome?: string | null;
+	notes?: string | null;
+	recommendations?: {
+		country?: string | null;
+		university?: string | null;
+		program?: string | null;
+		package?: string | null;
+	} | null;
+	currentDecision?: "continue" | "hold" | "opt_out" | "pending" | null;
+	onDecided?: () => void;
+};
+
+export function AssessmentOutcomeCard({
+	outcome = "Eligible",
+	notes,
+	recommendations,
+	currentDecision,
+	onDecided,
+}: Props) {
+	const { updateApplication, syncFromServer, refreshJourney } = useAppState();
+	const { toast } = useNotifier();
+	const navigate = useNavigate();
+
+	const [busy, setBusy] = useState(false);
+	const [showReason, setShowReason] = useState<"hold" | "opt_out" | null>(null);
+	const [reason, setReason] = useState("");
+
+	const isEligible =
+		outcome?.toLowerCase() === "eligible" ||
+		outcome?.toLowerCase().includes("conditional");
+
+	const effectiveDecision = currentDecision ?? null;
+
+	async function submitDecision(decision: "continue" | "hold" | "opt_out", optionalReason?: string) {
+		setBusy(true);
+		try {
+			await meApi.consent("application", {
+				decision,
+				reason: optionalReason || reason || undefined,
+			});
+
+			if (decision === "continue") {
+				try {
+					await meApi.proceed({ acceptQuotation: true });
+				} catch {
+					/* fallback */
+				}
+				updateApplication({
+					proceedStatus: "accepted",
+					applicationConsent: {
+						decision: "continue",
+					},
+				});
+				toast.success("Decision recorded! Opening your school package…");
+				setShowReason(null);
+				setReason("");
+				if (onDecided) onDecided();
+				void Promise.all([syncFromServer(), refreshJourney()]);
+				navigate("/portal/package");
+				return;
+			} else if (decision === "hold") {
+				try {
+					await meApi.holdProceed({ reason: optionalReason || reason || "Applicant requested time" });
+				} catch {
+					/* fallback */
+				}
+				updateApplication({
+					proceedStatus: "paused",
+					applicationConsent: {
+						decision: "hold",
+					},
+				});
+				toast.success("Application placed on hold. Take all the time you need.");
+			} else if (decision === "opt_out") {
+				try {
+					await meApi.declineProceed({ reason: optionalReason || reason || "Applicant opted out" });
+				} catch {
+					/* fallback */
+				}
+				updateApplication({
+					proceedStatus: "declined",
+					applicationConsent: {
+						decision: "opt_out",
+					},
+				});
+				toast.success("You have opted out of this application cycle.");
+			}
+
+			setShowReason(null);
+			setReason("");
+			if (onDecided) onDecided();
+			void Promise.all([syncFromServer(), refreshJourney()]);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: "Could not save your decision. Please try again.";
+			toast.error(msg);
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	const hasRecs = Boolean(
+		recommendations?.country ||
+		recommendations?.university ||
+		recommendations?.program ||
+		recommendations?.package,
+	);
+
+	const formatPkg = (pkg?: string | null) => {
+		if (!pkg) return null;
+		if (pkg === "scholarship") return "Scholarship Track";
+		if (pkg === "hybrid") return "Hybrid Track (Partial Award)";
+		if (pkg === "non_scholarship") return "Non-Scholarship Track";
+		return pkg.charAt(0).toUpperCase() + pkg.slice(1).replace(/_/g, " ");
+	};
+
+	return (
+		<div
+			className="card card--pad mb-4"
+			style={{
+				background: isEligible ? "rgba(22, 101, 52, 0.03)" : "#fff",
+				border: `1px solid ${isEligible ? "#86efac" : "var(--border)"}`,
+				boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
+			}}
+		>
+			{/* Top Bar: Title + Outcome Pill */}
+			<div
+				style={{
+					display: "flex",
+					justifyContent: "space-between",
+					alignItems: "center",
+					flexWrap: "wrap",
+					gap: "0.5rem",
+				}}
+			>
+				<div>
+					<span
+						className="eyebrow"
+						style={{ color: isEligible ? "#166534" : "var(--foreground)", fontWeight: 700 }}
+					>
+						Official Counselor Assessment Result
+					</span>
+					<h3 className="display mt-1" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0" }}>
+						Assessment Outcome & Recommendations
+					</h3>
+				</div>
+				<span
+					className="portal-pill"
+					style={{
+						background: isEligible ? "#dcfce7" : "#fef3c7",
+						color: isEligible ? "#166534" : "#92400e",
+						fontWeight: 700,
+						fontSize: "0.95rem",
+						padding: "0.35rem 0.85rem",
+					}}
+				>
+					{outcome || "Eligible"}
+				</span>
+			</div>
+
+			{/* Counselor Notes */}
+			{notes && (
+				<div className="mt-3">
+					<p className="eyebrow mb-1" style={{ fontSize: "0.75rem", color: "#64748b" }}>
+						Counselor Assessment Notes
+					</p>
+					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, margin: 0, color: "var(--foreground)" }}>
+						{notes}
+					</p>
+				</div>
+			)}
+
+			{/* Recommendations Grid */}
+			{hasRecs && (
+				<div
+					style={{
+						display: "grid",
+						gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+						gap: "1rem",
+						marginTop: "1.25rem",
+						paddingTop: "1rem",
+						borderTop: "1px dashed var(--border)",
+					}}
+				>
+					{recommendations?.country && (
+						<div>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
+								Recommended Destination
+							</span>
+							<strong style={{ fontSize: "0.95rem" }}>{recommendations.country}</strong>
+						</div>
+					)}
+					{recommendations?.university && (
+						<div>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
+								Recommended Institution
+							</span>
+							<strong style={{ fontSize: "0.95rem" }}>{recommendations.university}</strong>
+						</div>
+					)}
+					{recommendations?.program && (
+						<div>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
+								Recommended Program
+							</span>
+							<strong style={{ fontSize: "0.95rem" }}>{recommendations.program}</strong>
+						</div>
+					)}
+					{recommendations?.package && (
+						<div>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
+								Recommended Package
+							</span>
+							<strong style={{ fontSize: "0.95rem", color: "var(--primary, #2563eb)" }}>
+								{formatPkg(recommendations.package)}
+							</strong>
+						</div>
+					)}
+				</div>
+			)}
+
+			{/* Decision & Action Buttons Section */}
+			<div
+				className="mt-4 pt-3"
+				style={{ borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.75rem" }}
+			>
+				{showReason ? (
+					<div className="card card--pad" style={{ background: "rgba(0,0,0,0.02)" }}>
+						<p className="eyebrow">
+							{showReason === "hold" ? "Hold on — reason (optional)" : "Opt out — reason (optional)"}
+						</p>
+						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
+							{showReason === "hold"
+								? "Let us know if there's anything specific you need time for (e.g. exams, finances, family discussion)."
+								: "Please let us know why you are choosing to close your application for this cycle."}
+						</p>
+						<textarea
+							value={reason}
+							onChange={(e) => setReason(e.target.value)}
+							rows={2}
+							className="input mt-2"
+							placeholder="Optional notes…"
+							style={{ width: "100%", fontSize: "0.9rem" }}
+						/>
+						<div className="row mt-3" style={{ gap: "0.5rem" }}>
+							<Button
+								type="button"
+								variant={showReason === "hold" ? "primary" : "secondary"}
+								disabled={busy}
+								onClick={() => submitDecision(showReason)}
+							>
+								{busy ? "Saving…" : showReason === "hold" ? "Confirm Hold" : "Confirm Opt Out"}
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								disabled={busy}
+								onClick={() => {
+									setShowReason(null);
+									setReason("");
+								}}
+							>
+								Cancel
+							</Button>
+						</div>
+					</div>
+				) : effectiveDecision === "continue" ? (
+					<div>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								flexWrap: "wrap",
+								gap: "0.75rem",
+							}}
+						>
+							<div>
+								<span
+									className="portal-pill portal-pill--verified mb-1"
+									style={{ fontSize: "0.75rem", display: "inline-block" }}
+								>
+									✓ Application Confirmed
+								</span>
+								<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
+									You have decided to proceed with your application. Proceed to select your school package.
+								</p>
+							</div>
+							<div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+								<Button to="/portal/package" arrow>
+									Next · School Package →
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									disabled={busy}
+									onClick={() => setShowReason("hold")}
+									style={{ fontSize: "0.85rem" }}
+								>
+									Need time? Put on hold
+								</Button>
+							</div>
+						</div>
+					</div>
+				) : effectiveDecision === "hold" ? (
+					<div style={{ background: "rgba(245, 158, 11, 0.05)", padding: "0.85rem", borderRadius: "8px" }}>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								flexWrap: "wrap",
+								gap: "0.75rem",
+							}}
+						>
+							<div>
+								<span
+									className="portal-pill portal-pill--needs_info mb-1"
+									style={{ fontSize: "0.75rem", display: "inline-block" }}
+								>
+									Application on Hold
+								</span>
+								<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
+									Your application is currently on hold. Take all the time you need. When you are ready, continue below.
+								</p>
+							</div>
+							<div className="row" style={{ gap: "0.5rem", flexWrap: "wrap" }}>
+								<Button
+									type="button"
+									arrow
+									disabled={busy}
+									onClick={() => submitDecision("continue")}
+								>
+									{busy ? "Continuing…" : "Resume & Continue to Package →"}
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									disabled={busy}
+									onClick={() => setShowReason("opt_out")}
+								>
+									Opt Out
+								</Button>
+							</div>
+						</div>
+					</div>
+				) : effectiveDecision === "opt_out" ? (
+					<div style={{ background: "rgba(107, 114, 128, 0.05)", padding: "0.85rem", borderRadius: "8px" }}>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								flexWrap: "wrap",
+								gap: "0.75rem",
+							}}
+						>
+							<div>
+								<span className="portal-pill mb-1" style={{ fontSize: "0.75rem", display: "inline-block" }}>
+									Application Closed for This Cycle
+								</span>
+								<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
+									You chose to opt out of this cycle. If your plans change, you can resume at any time.
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="secondary"
+								disabled={busy}
+								onClick={() => submitDecision("continue")}
+							>
+								{busy ? "Resuming…" : "Change Mind & Resume"}
+							</Button>
+						</div>
+					</div>
+				) : (
+					<div>
+						<p className="muted mb-3" style={{ fontSize: "0.9rem" }}>
+							Confirm whether you want to proceed with your application to configure your school package:
+						</p>
+						<div
+							style={{
+								display: "flex",
+								gap: "0.75rem",
+								flexWrap: "wrap",
+								alignItems: "center",
+							}}
+						>
+							<Button
+								type="button"
+								arrow
+								disabled={busy}
+								onClick={() => submitDecision("continue")}
+							>
+								{busy ? "Saving…" : "Continue to School Package →"}
+							</Button>
+							<Button
+								type="button"
+								variant="secondary"
+								disabled={busy}
+								onClick={() => setShowReason("hold")}
+							>
+								Hold on / Need time
+							</Button>
+							<Button
+								type="button"
+								variant="ghost"
+								disabled={busy}
+								onClick={() => setShowReason("opt_out")}
+							>
+								Opt out
+							</Button>
+						</div>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}

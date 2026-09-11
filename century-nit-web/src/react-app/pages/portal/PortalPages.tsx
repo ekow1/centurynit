@@ -7,6 +7,7 @@ import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
 import { StageInvoiceCard } from "../../components/StageInvoiceCard";
 import { StageConsentCard } from "../../components/StageConsentCard";
+import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
 import {
 	hasAcceptedOffer,
 	hasSchoolPackage,
@@ -67,16 +68,37 @@ export function PortalJourney() {
 /* ========== Awaiting handler assignment (after 10% deposit) ========== */
 
 export function PortalAwaitingHandler() {
-	const { application, journeyPhase } = useAppState();
+	const { application, journeyPhase, syncFromServer, refreshJourney } = useAppState();
 	const navigate = useNavigate();
+	const [checking, setChecking] = useState(false);
 
 	const hasHandler = Boolean(application.assignedStaffId);
 	const stageAdvanced =
-		journeyPhase.stage !== "awaiting_handler" &&
+		(journeyPhase.stage !== "awaiting_handler" &&
 		journeyPhase.stage !== "school_package" &&
 		journeyPhase.stage !== "proceed" &&
 		journeyPhase.stage !== "consultation" &&
-		journeyPhase.stage !== "eligibility";
+		journeyPhase.stage !== "eligibility") ||
+		(!application.pendingHandoff && application.agencyDepositPaid);
+
+	const checkStatus = useCallback(async () => {
+		setChecking(true);
+		try {
+			await Promise.all([syncFromServer(), refreshJourney()]);
+		} catch {
+			/* keep polling */
+		} finally {
+			setChecking(false);
+		}
+	}, [syncFromServer, refreshJourney]);
+
+	useEffect(() => {
+		void checkStatus();
+		const timer = window.setInterval(() => {
+			void checkStatus();
+		}, 3000);
+		return () => window.clearInterval(timer);
+	}, [checkStatus]);
 
 	useEffect(() => {
 		if (hasHandler || stageAdvanced) {
@@ -128,6 +150,19 @@ export function PortalAwaitingHandler() {
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
 					You don't need to do anything right now — check back shortly.
 				</p>
+				<div className="mt-4 row" style={{ gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+					<Button
+						type="button"
+						variant="secondary"
+						disabled={checking}
+						onClick={() => void checkStatus()}
+					>
+						{checking ? "Checking status…" : "Check Status Now ⟳"}
+					</Button>
+					<Link to="/portal/journey" className="btn btn--ghost">
+						View Application Journey
+					</Link>
+				</div>
 			</div>
 		</div>
 	);
@@ -169,7 +204,7 @@ export function PortalPackage() {
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, payAgencyInstallment } = useAppState();
+	const { application, chooseSchoolPackage, payAgencyInstallment, booking } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
@@ -182,9 +217,13 @@ function SchoolPackageInner() {
 	const [targetSchoolCount, setTargetSchoolCount] = useState<number>(
 		application.targetSchoolCount || 3,
 	);
+	const [recommendedTrack, setRecommendedTrack] = useState<SchoolFundingTrack | null>(null);
+	const [recommendedLevel, setRecommendedLevel] = useState<SchoolDegreeLevel | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [payingDeposit, setPayingDeposit] = useState(false);
 	const chosen = hasSchoolPackage(application);
+	const isDepositPaid = Boolean(application.agencyDepositPaid);
+	const isLocked = isDepositPaid;
 
 	useEffect(() => {
 		packagesApi.list()
@@ -195,6 +234,53 @@ function SchoolPackageInner() {
 			})
 			.catch(console.error);
 	}, []);
+
+	useEffect(() => {
+		const applyRec = (rec?: { recPackage?: string | null; recProgram?: string | null }) => {
+			if (!rec) return;
+			if (rec.recPackage) {
+				const p = rec.recPackage.toLowerCase();
+				let track: SchoolFundingTrack | null = null;
+				if (p.includes("non")) track = "non_scholarship";
+				else if (p.includes("hybrid")) track = "hybrid";
+				else if (p.includes("scholarship")) track = "scholarship";
+				if (track) {
+					setRecommendedTrack(track);
+					if (!application.schoolFundingTrack && !funding) {
+						setFunding(track);
+					}
+				}
+			}
+			if (rec.recProgram) {
+				const prog = rec.recProgram.toLowerCase();
+				let lvl: SchoolDegreeLevel | null = null;
+				if (prog.includes("master") || prog.includes("msc") || prog.includes("mba") || prog.includes("postgraduate")) {
+					lvl = "masters";
+				} else if (prog.includes("bachelor") || prog.includes("bsc") || prog.includes("undergraduate")) {
+					lvl = "bachelor";
+				} else if (prog.includes("phd") || prog.includes("doctor")) {
+					lvl = "phd";
+				}
+				if (lvl) {
+					setRecommendedLevel(lvl);
+					if (!application.schoolDegreeLevel && !level) {
+						setLevel(lvl);
+					}
+				}
+			}
+		};
+
+		if (booking.assessmentResult) {
+			applyRec(booking.assessmentResult);
+		}
+		meApi.application()
+			.then((res) => {
+				if (res.consultation?.assessmentResult) {
+					applyRec(res.consultation.assessmentResult);
+				}
+			})
+			.catch(() => {});
+	}, [booking.assessmentResult, application.schoolFundingTrack, application.schoolDegreeLevel]);
 
 	const activeFunding = (funding || application.schoolFundingTrack || "scholarship") as SchoolFundingTrack;
 	const activeLevel = (level || application.schoolDegreeLevel || "masters") as SchoolDegreeLevel;
@@ -277,19 +363,27 @@ function SchoolPackageInner() {
 			</header>
 
 			{chosen ? (
-				<div className="alert alert--success mb-4" role="status">
-					Package locked:{" "}
-					<strong>
-						{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name)} ·{" "}
-						{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name} ·{" "}
-						{application.targetSchoolCount ?? targetSchoolCount} Target Schools
-					</strong>
-					{application.agencyDepositPaid ? (
+				isDepositPaid ? (
+					<div className="alert alert--success mb-4" role="status">
+						Package locked:{" "}
+						<strong>
+							{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name)} ·{" "}
+							{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name} ·{" "}
+							{application.targetSchoolCount ?? targetSchoolCount} Target Schools
+						</strong>
 						<span> · Deposit paid. You can now select schools.</span>
-					) : (
-						<span> · Please pay the 10% commitment deposit to unlock school selection.</span>
-					)}
-				</div>
+					</div>
+				) : (
+					<div className="alert alert--info mb-4" role="status">
+						Selected Package:{" "}
+						<strong>
+							{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === activeFunding)?.name)} ·{" "}
+							{SCHOOL_DEGREE_LEVELS.find((d) => d.id === activeLevel)?.name} ·{" "}
+							{targetSchoolCount} Target Schools
+						</strong>
+						<span> · You can freely adjust your package, track, and degree level below before paying the 10% deposit.</span>
+					</div>
+				)
 			) : null}
 
 			{/* 1 · Funding track */}
@@ -300,14 +394,22 @@ function SchoolPackageInner() {
 						<button
 							key={f.id}
 							type="button"
-							className={`card card--pad card--selectable school-pkg-card${funding === f.id ? " card--selected" : ""}`}
-							onClick={() => !chosen && setFunding(f.id)}
-							disabled={chosen}
-							aria-pressed={funding === f.id}
+							className={`card card--pad card--selectable school-pkg-card${activeFunding === f.id ? " card--selected" : ""}`}
+							onClick={() => !isLocked && setFunding(f.id)}
+							disabled={isLocked}
+							aria-pressed={activeFunding === f.id}
 						>
 							<span className="school-pkg-card__check" aria-hidden>
 								✓
 							</span>
+							{recommendedTrack === f.id && (
+								<span
+									className="portal-pill portal-pill--verified mb-1"
+									style={{ fontSize: "0.72rem", alignSelf: "flex-start", fontWeight: 700 }}
+								>
+									★ Advisor Recommendation
+								</span>
+							)}
 							<span className="eyebrow">{f.tagline}</span>
 							<span className="school-pkg-card__name display">{f.name}</span>
 							<p className="school-pkg-card__blurb muted">{f.blurb}</p>
@@ -329,16 +431,21 @@ function SchoolPackageInner() {
 						<button
 							key={d.id}
 							type="button"
-							className={`degree-chip${level === d.id ? " degree-chip--selected" : ""}`}
-							onClick={() => !chosen && setLevel(d.id)}
-							disabled={chosen}
-							aria-pressed={level === d.id}
+							className={`degree-chip${activeLevel === d.id ? " degree-chip--selected" : ""}`}
+							onClick={() => !isLocked && setLevel(d.id)}
+							disabled={isLocked}
+							aria-pressed={activeLevel === d.id}
 						>
 							<span className="degree-chip__check" aria-hidden>
 								✓
 							</span>
 							<strong>{d.short}</strong>
 							<span className="muted">{d.name}</span>
+							{recommendedLevel === d.id && (
+								<span style={{ fontSize: "0.68rem", color: "var(--primary, #2563eb)", fontWeight: 700, display: "block" }}>
+									★ Recommended
+								</span>
+							)}
 						</button>
 					))}
 				</div>
@@ -356,8 +463,8 @@ function SchoolPackageInner() {
 							key={count}
 							type="button"
 							className={`degree-chip${targetSchoolCount === count ? " degree-chip--selected" : ""}`}
-							onClick={() => !chosen && setTargetSchoolCount(count)}
-							disabled={chosen}
+							onClick={() => !isLocked && setTargetSchoolCount(count)}
+							disabled={isLocked}
 							aria-pressed={targetSchoolCount === count}
 						>
 							<span className="degree-chip__check" aria-hidden>
@@ -465,26 +572,10 @@ function SchoolPackageInner() {
 			) : null}
 
 			<div className="row mt-4" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
-				{chosen ? (
-					application.agencyDepositPaid ? (
-						<Button type="button" arrow onClick={() => nav("/portal/application")}>
-							Next · Schools & Applications →
-						</Button>
-					) : (
-						<>
-							<Button
-								type="button"
-								onClick={() => void confirm(true)}
-								arrow
-								disabled={payingDeposit}
-							>
-								{payingDeposit ? "Connecting to Paystack…" : <>Pay 10% Deposit (<MoneyInline usd={depositUsd} />) →</>}
-							</Button>
-							<Button type="button" variant="secondary" onClick={() => nav("/portal/application")}>
-								View School Catalog
-							</Button>
-						</>
-					)
+				{isDepositPaid ? (
+					<Button type="button" arrow onClick={() => nav("/portal/application")}>
+						Next · Schools & Applications →
+					</Button>
 				) : (
 					<>
 						<Button
@@ -493,7 +584,7 @@ function SchoolPackageInner() {
 							arrow
 							disabled={!funding || !level || saving || payingDeposit}
 						>
-							{payingDeposit ? "Connecting to Paystack…" : <>Lock Package & Pay 10% Deposit (<MoneyInline usd={depositUsd} />)</>}
+							{payingDeposit ? "Connecting to Paystack…" : <>Lock Package & Pay 10% Deposit (<MoneyInline usd={depositUsd} />) →</>}
 						</Button>
 						<Button
 							type="button"
@@ -502,6 +593,9 @@ function SchoolPackageInner() {
 							disabled={!funding || !level || saving || payingDeposit}
 						>
 							{saving ? "Saving…" : "Save Package & Pay Later"}
+						</Button>
+						<Button type="button" variant="ghost" onClick={() => nav("/portal/application")}>
+							View School Catalog
 						</Button>
 					</>
 				)}
@@ -2193,13 +2287,11 @@ export function PortalConsultationBookingFlow() {
 
 
 export function PortalConsultation() {
-	const { booking, updateApplication } = useAppState();
-	const { toast } = useNotifier();
+	const { booking } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [consentBusy, setConsentBusy] = useState(false);
 
 	const refreshLiveCase = useCallback(async () => {
 		try {
@@ -2218,45 +2310,6 @@ export function PortalConsultation() {
 	}, [refreshLiveCase]);
 
 	const applicationConsent = liveApplication?.applicationConsent?.decision ?? null;
-
-	const submitConsent = useCallback(
-		async (decision: "continue" | "hold" | "opt_out", reason?: string) => {
-			if (!liveApplication?.id) {
-				toast.error("Your application is not ready yet. Please wait for the consultation to be completed.");
-				return;
-			}
-			setConsentBusy(true);
-			try {
-				await meApi.consent("application", { decision, reason });
-				toast.success(
-					decision === "continue"
-						? "Your case has been sent to our team."
-						: decision === "hold"
-							? "This stage is on hold."
-							: "You've opted out of this stage.",
-				);
-				if (decision === "continue") {
-					updateApplication({ proceedStatus: "accepted" });
-					await refreshLiveCase();
-				} else if (decision === "hold") {
-					updateApplication({ proceedStatus: "paused" });
-					await refreshLiveCase();
-				} else {
-					updateApplication({ proceedStatus: "declined" });
-					await refreshLiveCase();
-				}
-			} catch (err) {
-				toast.error(
-					err instanceof ApiError
-						? err.message
-						: "Could not submit your decision. Please try again.",
-				);
-			} finally {
-				setConsentBusy(false);
-			}
-		},
-		[liveApplication?.id, toast, updateApplication, refreshLiveCase],
-	);
 
 	// An active case exists if there's a consultation OR an application. Ops
 	// can create the application directly (bypassing consultation), and a
@@ -2423,128 +2476,20 @@ export function PortalConsultation() {
 						)}
 					</div>
 
-					{/* Assessment Outcome & Recommendations */}
+					{/* Assessment Outcome & Recommendations Card with Integrated Consent Buttons */}
 					{activeOutcome && (
-						<div
-							className="card card--pad"
-							style={{
-								background: activeOutcome === "Eligible" ? "rgba(22, 101, 52, 0.04)" : "#fff",
-								border: `1px solid ${activeOutcome === "Eligible" ? "#86efac" : "var(--border)"}`,
+						<AssessmentOutcomeCard
+							outcome={activeOutcome}
+							notes={activeNotes}
+							recommendations={{
+								country: liveConsultation?.assessmentResult?.recCountry,
+								university: liveConsultation?.assessmentResult?.recUniversity,
+								program: liveConsultation?.assessmentResult?.recProgram,
+								package: liveConsultation?.assessmentResult?.recPackage,
 							}}
-						>
-							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
-								<span className="eyebrow" style={{ color: "#166534", fontWeight: 700 }}>
-									Official Counselor Assessment Result
-								</span>
-								<span
-									className="portal-pill"
-									style={{
-										background: activeOutcome === "Eligible" ? "#dcfce7" : "#fef3c7",
-										color: activeOutcome === "Eligible" ? "#166534" : "#92400e",
-										fontWeight: 700,
-										fontSize: "0.9rem",
-									}}
-								>
-									{activeOutcome}
-								</span>
-							</div>
-
-							{activeNotes && (
-								<div className="mt-3">
-									<p className="eyebrow mb-1" style={{ fontSize: "0.75rem", color: "#64748b" }}>
-										Counselor Assessment Notes
-									</p>
-									<p style={{ fontSize: "0.95rem", lineHeight: 1.6, margin: 0 }}>{activeNotes}</p>
-								</div>
-							)}
-
-							{liveConsultation?.assessmentResult && (
-								<div
-									style={{
-										display: "grid",
-										gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-										gap: "1rem",
-										marginTop: "1.25rem",
-										paddingTop: "1rem",
-										borderTop: "1px dashed var(--border)",
-									}}
-								>
-									{liveConsultation.assessmentResult.recCountry && (
-										<div>
-											<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>Recommended Destination</span>
-											<strong style={{ fontSize: "0.95rem" }}>{liveConsultation.assessmentResult.recCountry}</strong>
-										</div>
-									)}
-									{liveConsultation.assessmentResult.recUniversity && (
-										<div>
-											<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>Recommended Institution</span>
-											<strong style={{ fontSize: "0.95rem" }}>{liveConsultation.assessmentResult.recUniversity}</strong>
-										</div>
-									)}
-									{liveConsultation.assessmentResult.recProgram && (
-										<div>
-											<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>Recommended Program</span>
-											<strong style={{ fontSize: "0.95rem" }}>{liveConsultation.assessmentResult.recProgram}</strong>
-										</div>
-									)}
-									{liveConsultation.assessmentResult.recPackage && (
-										<div>
-											<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>Recommended Package</span>
-											<strong style={{ fontSize: "0.95rem", color: "var(--primary, #2563eb)" }}>
-												{liveConsultation.assessmentResult.recPackage}
-											</strong>
-										</div>
-									)}
-								</div>
-							)}
-
-							{applicationConsent === "continue" && (
-								<div className="row mt-4" style={{ justifyContent: "flex-end" }}>
-									<Button to="/portal/package" arrow>
-										Next · School Package →
-									</Button>
-								</div>
-							)}
-						</div>
-					)}
-
-					{/* Consent gate — the applicant must explicitly continue before
-						package selection is available. Shows the same card as the
-						dashboard so the question is answered in place. */}
-					{activeOutcome && applicationConsent !== "continue" && applicationConsent !== "opt_out" && (
-						<StageConsentCard
-							stage="application"
 							currentDecision={applicationConsent}
-							title="Continue with your application?"
-							lead="Your consultation is complete and your application is ready to start. Continue so we can assign a handler and begin processing your application."
-							continueDetail="A handler will be assigned to your case. They'll guide you through document verification, school submission, and offer review. An application fee invoice will be raised for you to pay."
-							holdDetail="You can come back and continue with your application whenever you're ready. Nothing is sent to our team until you continue."
-							optOutDetail="Your application will be withdrawn. You'll need to start a new consultation if you change your mind later."
 							onDecided={refreshLiveCase}
 						/>
-					)}
-
-					{/* Opted-out state */}
-					{activeOutcome && applicationConsent === "opt_out" && (
-						<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--border-light, #9ca3af)" }}>
-							<p className="eyebrow">Your decision</p>
-							<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>
-								Application Closed for This Cycle
-							</h3>
-							<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-								You chose to opt out of the application stage for this cycle. If your plans change, you can resume at any time.
-							</p>
-							<div className="row mt-3">
-								<Button
-									type="button"
-									variant="secondary"
-									disabled={consentBusy}
-									onClick={() => void submitConsent("continue")}
-								>
-									{consentBusy ? "Resuming…" : "Change Mind & Resume"}
-								</Button>
-							</div>
-						</div>
 					)}
 
 					{/* Requested Documents — consultant + handler combined */}
@@ -2746,10 +2691,14 @@ function ApplicationHubInner() {
 	const previewAmount =
 		Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
 
-	if (!hasPkg) {
+	// If the applicant already locked their school selection (or has a server
+	// invoice), they are past the package/deposit gate — show the invoice
+	// instead of bouncing them back to package selection. The redirects below
+	// only apply to applicants who haven't started school selection yet.
+	if (!selectionDone && !hasPkg) {
 		return <Navigate to="/portal/package" replace />;
 	}
-	if (!depositPaid) {
+	if (!selectionDone && !depositPaid) {
 		return <Navigate to="/portal/package" replace />;
 	}
 	if (

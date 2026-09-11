@@ -2970,8 +2970,8 @@ async function processConsentDecision(input: {
 
 		// If the applicant is continuing with the application stage, mark
 		// the application as accepted (proceedStatus = "accepted") so the
-		// portal doesn't show the "invited" gate anymore.
-		if (input.stage === "application" && application.proceedStatus === "invited") {
+		// portal doesn't show the "invited" or "paused" gate anymore.
+		if (input.stage === "application" && application.proceedStatus !== "accepted") {
 			await db
 				.update(schema.applications)
 				.set({ proceedStatus: "accepted", proceededAt: new Date(), updatedAt: new Date() })
@@ -2987,6 +2987,12 @@ async function processConsentDecision(input: {
 			authorName: applicant.name ?? "Applicant",
 		});
 	} else if (input.decision === "hold") {
+		if (input.stage === "application" && application.proceedStatus !== "paused") {
+			await db
+				.update(schema.applications)
+				.set({ proceedStatus: "paused", updatedAt: new Date() })
+				.where(eq(schema.applications.id, application.id));
+		}
 		await db.insert(schema.caseComments).values({
 			targetType: "application",
 			targetId: application.id,
@@ -2995,6 +3001,12 @@ async function processConsentDecision(input: {
 			authorName: applicant.name ?? "Applicant",
 		});
 	} else if (input.decision === "opt_out") {
+		if (input.stage === "application" && application.proceedStatus !== "declined") {
+			await db
+				.update(schema.applications)
+				.set({ proceedStatus: "declined", updatedAt: new Date() })
+				.where(eq(schema.applications.id, application.id));
+		}
 		await db.insert(schema.caseComments).values({
 			targetType: "application",
 			targetId: application.id,

@@ -217,6 +217,20 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		if (coarse && coarse !== "completed" && idx(coarse) > idx(portalStage)) {
 			portalStage = coarse;
 		}
+
+		// `school_select` is a hard gate: you cannot track schools you never
+		// selected. A handler can issue (and the applicant can pay) the
+		// application invoice without the applicant locking a selection —
+		// in that case the invoice is paid but `hasSelection` is still false.
+		// Without this cap the ladder would jump past `school_select` to
+		// `school_tracking`, landing the applicant on a locked Tracking page
+		// (the tracking chapter unlock requires `hasSelection`). Cap the stage
+		// at `school_select` so they are sent to pick schools first; the
+		// paid invoice is still reflected in `stageStatuses` (the step is
+		// "done") and the tracking chapter unlocks the moment schools exist.
+		if (!f.hasSelection && idx(portalStage) > idx("school_select")) {
+			portalStage = "school_select";
+		}
 	}
 
 	const chapterUnlocks: JourneyChapterUnlocks = {

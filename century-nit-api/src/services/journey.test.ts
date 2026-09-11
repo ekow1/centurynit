@@ -143,11 +143,28 @@ describe("deriveJourney — gates", () => {
 		expect(j.portalStage).not.toBe("completed");
 		expect(j.chapterUnlocks.complete).toBe(false);
 	});
+
+	it("caps at school_select when the application invoice is paid but no schools were selected", () => {
+		// The handler can issue (and the applicant can pay) the application
+		// invoice without the applicant locking a selection. Without this
+		// gate the ladder would jump to school_tracking and land the
+		// applicant on a locked Tracking page (the tracking chapter unlock
+		// requires hasSelection). Cap at school_select so they pick schools
+		// first; the paid invoice is still "done" in stageStatuses.
+		const j = deriveJourney({ ...upTo("appPaid"), hasSelection: false });
+		expect(j.portalStage).toBe("school_select");
+		expect(j.stageStatuses.application_invoice).toBe("done");
+		expect(j.stageStatuses.school_select).toBe("current");
+		expect(j.chapterUnlocks.tracking).toBe(false);
+	});
 });
 
 describe("deriveJourney — the coarse stage is a floor, signals are the truth", () => {
 	it("pushes forward to the first step of a coarse stage that signals have not reached", () => {
-		const j = deriveJourney({ ...upTo("proceeded"), coarseStage: "offer_letter_review" });
+		// `hasSelection` is true because being at `offer_letter_review`
+		// implies schools were selected — `school_select` is a hard gate
+		// the coarse stage cannot push past without it.
+		const j = deriveJourney({ ...upTo("proceeded"), hasSelection: true, coarseStage: "offer_letter_review" });
 		expect(j.portalStage).toBe("school_tracking");
 		expect(j.stageStatuses.awaiting_handler).toBe("skipped");
 		expect(j.stageStatuses.application_invoice).toBe("skipped");

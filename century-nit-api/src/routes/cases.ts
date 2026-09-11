@@ -55,6 +55,7 @@ import {
 	listForOps as listTravelAssistanceForOps,
 	recordDecision as recordTravelAssistanceDecision,
 	raiseTicketInvoice as raiseTravelTicketInvoice,
+	issueTicketInvoice as issueTravelTicketInvoice,
 	recordBooking as recordTravelBooking,
 	updateOpsChecklist as updateTravelOpsChecklist,
 	assignHandler as assignTravelHandler,
@@ -1117,6 +1118,37 @@ applicationsRouter.openapi(
 			carrier: body.carrier,
 			flightNumber: body.flightNumber,
 			notes: body.notes,
+			actor: actorFrom(staff),
+		});
+		return c.json(updated);
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/travel-assistance/{id}/issue-invoice",
+		tags: ["Applications"],
+		middleware: [
+			requireAuth,
+			requireMfa,
+			requireModule("applications"),
+			requireRole("manager", "coordinator", "admin", "super_admin"),
+		] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: travelAssistanceRequestSchema } },
+				description: "Ticket invoice issued (approved)",
+			},
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
+		const { id } = c.req.valid("param");
+		const staff = c.get("staff")!;
+		const updated = await issueTravelTicketInvoice({
+			requestId: id,
 			actor: actorFrom(staff),
 		});
 		return c.json(updated);

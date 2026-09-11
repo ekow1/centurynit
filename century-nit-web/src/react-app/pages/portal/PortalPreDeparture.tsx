@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useAppState } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
@@ -149,6 +149,11 @@ function TravelAssistanceInner() {
 	const showReview =
 		(status === "review" || status === "quote_prepared" || status === "quote_approved") && !trip;
 	const showInvoice = status === "invoiced" || status === "ticket_paid" || status === "booked" || Boolean(trip);
+	// Booking tracker: visible once the ticket is paid, all the way through
+	// booked. Gives the applicant a progress indicator instead of a blank
+	// "waiting" gap between paid and booked.
+	const showBookingTracker =
+		status === "ticket_paid" || status === "booked" || status === "cleared";
 	const showBooked = status === "booked";
 	const showCleared = status === "cleared";
 
@@ -267,6 +272,46 @@ function TravelAssistanceInner() {
 									</span>
 								)}
 							</div>
+						</div>
+					</div>
+				</section>
+			)}
+
+			{/* Booking tracker — progress between ticket paid and booked */}
+			{showBookingTracker && (
+				<section className="mt-4">
+					<div className="card card--pad">
+						<p className="eyebrow">Booking tracker</p>
+						<div className="mt-3" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+							<TrackerStep
+								done={ticketingEffectivePaid}
+								label="Ticket paid"
+								detail={ticketingEffectivePaid ? "Your flight ticket invoice is settled." : "Awaiting ticket payment."}
+							/>
+							<TrackerStep
+								done={status === "booked" || status === "cleared"}
+								active={status === "ticket_paid"}
+								label="Booking in progress"
+								detail={
+									status === "ticket_paid"
+										? "Your handler is booking your flight. You'll see the confirmation here once it's done."
+										: status === "booked" || status === "cleared"
+											? "Your flight is booked."
+											: "Starts once the ticket is paid."
+								}
+							/>
+							<TrackerStep
+								done={status === "cleared"}
+								active={status === "booked"}
+								label="Choose payment plan"
+								detail={
+									status === "cleared"
+										? "Payment plan chosen — you're cleared to travel."
+										: status === "booked"
+											? "Choose how to settle your service fee below."
+											: "Available once your booking is confirmed."
+								}
+							/>
 						</div>
 					</div>
 				</section>
@@ -428,6 +473,43 @@ function QuoteRow({ label, value }: { label: string; value: string }) {
 		<div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
 			<span className="muted">{label}</span>
 			<span style={{ fontWeight: 500 }}>{value}</span>
+		</div>
+	);
+}
+
+function TrackerStep({
+	done,
+	active,
+	label,
+	detail,
+}: {
+	done: boolean;
+	active?: boolean;
+	label: string;
+	detail: string;
+}) {
+	const dotStyle: CSSProperties = {
+		width: "1.5rem",
+		height: "1.5rem",
+		borderRadius: "50%",
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		flexShrink: 0,
+		fontSize: "0.8rem",
+		fontWeight: 600,
+		background: done ? "var(--success, #16a34a)" : active ? "var(--primary, #2563eb)" : "var(--muted, #e5e7eb)",
+		color: done || active ? "#fff" : "var(--text-muted, #6b7280)",
+	};
+	return (
+		<div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+			<div style={dotStyle}>{done ? "✓" : active ? "•" : ""}</div>
+			<div>
+				<p style={{ fontWeight: 500, fontSize: "0.95rem" }}>{label}</p>
+				<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.15rem" }}>
+					{detail}
+				</p>
+			</div>
 		</div>
 	);
 }

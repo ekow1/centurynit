@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { CaseDetail } from "./CaseDetail";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, VisaStage, Invoice } from "century-nit-core/ops";
-import { INVOICE_STATUS_LABELS, invoiceBalance } from "century-nit-core/ops";
+import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { invoiceBalance } from "century-nit-core/ops";
 import { fmtBoth } from "./currency";
-import { JOURNEY_STAGE_LABELS, VISA_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
-import { AssignControl, CaseHeader } from "century-nit-core/ui";
-
-import { handoffOffersKeep } from "../lib/pendingTasks";
 
 const VISA_STEPS: { id: VisaStage; label: string }[] = [
 	{ id: "pending", label: "Case opened" },
@@ -20,7 +18,6 @@ const VISA_STEPS: { id: VisaStage; label: string }[] = [
 	{ id: "complete", label: "Complete" },
 ];
 
-const VISA_ORDER: VisaStage[] = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"];
 
 function visaStepLabel(stage?: VisaStage): string {
 	if (!stage || stage === "locked") return "Awaiting payment";
@@ -37,21 +34,12 @@ function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | un
 
 export function EnterpriseVisa() {
 	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const {
-		applications,
-		assignees,
-		handoffs,
-		resolveHandoff,
-		setVisaStage,
-		setVisaCounselorNote,
-	} = useCases();
+	const { applications } = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
-	const [noteDraft, setNoteDraft] = useState("");
-	const [editingNote, setEditingNote] = useState(false);
 
 	const canSeeAll = canSeeAllBranches;
 
@@ -110,28 +98,9 @@ export function EnterpriseVisa() {
 
 	function openDetail(app: MockApplication) {
 		setSelectedApp(app);
-		setNoteDraft("");
-		setEditingNote(false);
-	}
-
-	function advanceVisa(app: MockApplication) {
-		const cur = app.visaStage ?? "locked";
-		if (cur === "awaiting_handler") return;
-		const idx = VISA_ORDER.indexOf(cur);
-		const next = VISA_ORDER[idx + 1];
-		if (next) setVisaStage(app.appId, next);
-	}
-
-	function saveNote() {
-		if (selectedApp && noteDraft.trim()) {
-			setVisaCounselorNote(selectedApp.appId, noteDraft.trim());
-			setEditingNote(false);
-			setNoteDraft("");
-		}
 	}
 
 	const active = liveSelected ?? selectedApp;
-	const detailInvoice = active ? visaInvoiceFor(allInvoices, active) : undefined;
 
 	return (
 		<div className="page-content fade-in">
@@ -353,230 +322,8 @@ export function EnterpriseVisa() {
 							</div>
 
 							{/* Detail Content */}
-							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-								<div className="card" style={{ padding: "0.75rem 1rem" }}>
-									<CaseHeader
-										name={active.applicantName}
-										reference={active.appId}
-										branch={active.branch}
-										stage={active.stage}
-										portalStage={active.journey?.portalStage ?? null}
-										handlerName={
-											(active.stageHandlers ?? []).find((h) => h.stage === "visa_processing")?.opsUserName ?? active.assignedStaff ?? null
-										}
-										extra={[{ label: "Visa", value: VISA_STAGE_LABELS[active.visaStage ?? "locked"] ?? active.visaStage ?? "—" }]}
-									/>
-								</div>
-{/* Visa Invoice */}
-<div className="card" style={{ background: "var(--muted)" }}>
-  <p className="eyebrow mb-1">Visa Invoice</p>
-  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
-    <div>
-      {detailInvoice ? (
-        <>
-          <p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-            {INVOICE_STATUS_LABELS[detailInvoice.status]} · {detailInvoice.invoiceNumber}
-          </p>
-          <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-            {invoiceBalance(detailInvoice) > 0
-              ? `${fmtBoth(detailInvoice.subtotal)} total · ${fmtBoth(invoiceBalance(detailInvoice))} outstanding`
-              : detailInvoice.status === "void"
-                ? "This invoice has been voided."
-                : "Fully paid — visa processing can proceed."}
-          </p>
-          {detailInvoice.note && (
-            <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>{detailInvoice.note}</p>
-          )}
-        </>
-      ) : (
-        <>
-          <p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>No visa invoice</p>
-          <p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-            {active.visaInvoicePaid
-              ? "Invoice recorded as paid — record the real invoice in Invoices."
-              : "Issue a visa invoice in Invoices, then the applicant can pay to unlock the visa stage."}
-          </p>
-        </>
-      )}
-    </div>
-    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-      {detailInvoice && invoiceBalance(detailInvoice) > 0 && (
-        <span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>
-          {fmtBoth(invoiceBalance(detailInvoice))} due
-        </span>
-      )}
-      <Link to="/invoices" className="btn btn--ghost btn--sm" style={{ whiteSpace: "nowrap" }}>
-        {detailInvoice ? "View in Invoices" : "Open Invoices"}
-      </Link>
-    </div>
-  </div>
-</div>
-
-								{/* Visa Tracking Steps */}
-								<div className="card">
-									<p className="eyebrow mb-3">Visa Tracking</p>
-									{active.visaStage === "awaiting_handler" ? (
-										(() => {
-											const handoff = handoffs.find(
-												(h) => h.applicationId === active.id && h.status === "pending" && h.stage === "visa_processing",
-											);
-											const canResolve = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
-											return (
-												<div className="card" style={{ padding: "0.75rem 1rem" }}>
-													<p className="eyebrow mb-1">Awaiting visa specialist</p>
-													<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
-														The applicant is ready for visa processing. Assign a specialist to open tracking.
-													</p>
-													{handoff && canResolve ? (
-														<div className="mt-3">
-															<AssignControl
-																stage="visa_processing"
-																staff={assignees}
-																branch={active.branch}
-																keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
-																onAssign={(opsUserId, reason) => resolveHandoff(handoff.id, "assign", { opsUserId, reason })}
-																onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason })}
-															/>
-														</div>
-													) : (
-														<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>A manager or coordinator assigns the specialist.</p>
-													)}
-												</div>
-											);
-										})()
-									) : (
-										<>
-										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-										{VISA_STEPS.map((s, i) => {
-											const curIdx = active.visaStage ? VISA_ORDER.indexOf(active.visaStage) : -1;
-											const stepIdx = VISA_ORDER.indexOf(s.id);
-											const done = curIdx >= stepIdx && active.visaStage !== "locked";
-											const current = active.visaStage === s.id;
-											return (
-												<div
-													key={s.id}
-													style={{
-														display: "flex",
-														alignItems: "center",
-														gap: "0.75rem",
-														padding: "0.6rem 0.75rem",
-														border: "1px solid var(--border-light)",
-														opacity: done ? 1 : 0.5,
-													}}
-												>
-													<span style={{
-														width: "28px",
-														height: "28px",
-														flexShrink: 0,
-														display: "flex",
-														alignItems: "center",
-														justifyContent: "center",
-														fontSize: "0.72rem",
-														fontWeight: 700,
-														fontFamily: "var(--font-mono)",
-														border: "2px solid",
-														borderColor: done ? "#22c55e" : current ? "#06b6d4" : "var(--border)",
-														borderRadius: "50%",
-														color: done ? "#fff" : current ? "#06b6d4" : "var(--muted-foreground)",
-														background: done ? "#22c55e" : "transparent",
-													}}>
-														{done ? "\u2713" : i + 1}
-													</span>
-													<div style={{ flex: 1 }}>
-														<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
-													</div>
-													{current && active.visaStage !== "complete" && (
-														<button
-															onClick={() => advanceVisa(active)}
-															className="btn btn--ghost btn--sm"
-															style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.6rem" }}
-														>
-															{"\u2192"} {VISA_STEPS[i + 1]?.label ?? "next"}
-														</button>
-													)}
-												</div>
-											);
-										})}
-									</div>
-									</>
-									)}
-								</div>
-
-								{/* Counselor Note */}
-								<div className="card">
-									<p className="eyebrow mb-2">Counselor Note</p>
-									{active.visaCounselorNote && !editingNote ? (
-										<div>
-											<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{active.visaCounselorNote}</p>
-											<button
-												onClick={() => { setEditingNote(true); setNoteDraft(active.visaCounselorNote ?? ""); }}
-												className="btn btn--ghost btn--sm"
-												style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}
-											>
-												Edit note
-											</button>
-										</div>
-									) : (
-										<div>
-											<textarea
-												value={noteDraft}
-												onChange={(e) => setNoteDraft(e.target.value)}
-												placeholder="Add a counselor note..."
-												rows={3}
-												className="input"
-												style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }}
-											/>
-											<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-												<button
-													onClick={saveNote}
-													className="btn btn--primary btn--sm"
-													disabled={!noteDraft.trim()}
-												>
-													Save note
-												</button>
-												{editingNote && (
-													<button
-														onClick={() => { setEditingNote(false); setNoteDraft(""); }}
-														className="btn btn--ghost btn--sm"
-													>
-														Cancel
-													</button>
-												)}
-											</div>
-										</div>
-									)}
-								</div>
-
-						{active.visaStage === "complete" && (
-							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved</p>
-								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-									This visa case is complete — the applicant can proceed to the payment plan. Advance this
-									case to Payment Execution on the Workflow board when ready.
-								</p>
-							</div>
-						)}
-
-							{/* Case Meta */}
-								<div className="card">
-									<p className="eyebrow mb-2">Case Info</p>
-									<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Institution</p><p>{active.university}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Program</p><p>{active.program}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p><p>{active.assignedStaff}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(active.branch)}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{active.fundingTrack}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{active.submittedDate}</p></div>
-									</div>
-								</div>
-
-								{/* Staff Notes */}
-								{active.notes && (
-									<div className="card">
-										<p className="eyebrow mb-2">Staff Case Notes</p>
-										<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{active.notes}</p>
-									</div>
-								)}
+							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
+								<CaseDetail app={active} />
 							</div>
 						</>
 					)}

@@ -1,0 +1,1097 @@
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useOpsAuth } from "./OpsAuthContext";
+import { useCases } from "../hooks/useCases";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
+import { CaseWorkPanel } from "./CaseWorkPanel";
+import { StaffChatBadge } from "./StaffChatBadge";
+import { TaQueueRow } from "./TravelRequestCard";
+import { handoffOffersKeep } from "../lib/pendingTasks";
+import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
+import { AssignControl, CaseHeader, InvoiceCard } from "century-nit-core/ui";
+import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
+import {
+	ALLOWED_DOCUMENT_TYPES,
+	MAX_DOCUMENT_BYTES,
+	JOURNEY_STAGE_LABELS,
+	PORTAL_STAGE_LABELS,
+	PORTAL_STAGE_ORDER,
+	VISA_STAGE_LABELS,
+	canOwnStage,
+	schoolDecisionNote,
+	type JourneyStage,
+	type SchoolApplication,
+	type SchoolOutcome,
+	type VisaStage,
+} from "century-nit-shared";
+import { schoolsApi, ApiError } from "century-nit-core/api";
+
+/**
+ * One case, one view.
+ *
+ * Cases, Visa and Travel each used to render their own right-hand detail for
+ * the same application — different header, different "assigned" block,
+ * notes on some, documents on others. A handler working one case across
+ * stages watched it change shape three times. This is the single detail:
+ * header, the applicant's own journey, whatever is pending (handoff,
+ * invoice), then the stage bodies that apply — schools, visa, travel — and
+ * the shared work panel (comments, document requests, assignment).
+ *
+ * The three pages are now filters over the same list with the same detail.
+ */
+
+const VISA_STEPS: { id: VisaStage; label: string }[] = [
+	{ id: "pending", label: VISA_STAGE_LABELS.pending },
+	{ id: "biometrics", label: VISA_STAGE_LABELS.biometrics },
+	{ id: "decision", label: VISA_STAGE_LABELS.decision },
+	{ id: "complete", label: VISA_STAGE_LABELS.complete },
+];
+const VISA_ORDER: VisaStage[] = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"];
+
+const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
+	documents: { label: "Documents", icon: "📄" },
+	finances: { label: "Finances", icon: "💳" },
+	logistics: { label: "Logistics", icon: "✈️" },
+	health: { label: "Health", icon: "🩺" },
+};
+function preDepartureProgress(tasks?: PreDepartureTask[]): number {
+	if (!tasks || tasks.length === 0) return 0;
+	return Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100);
+}
+
+function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
+	const { updateSchoolApplication } = useCases();
+	const [status, setStatus] = useState<string>(school.status || "Preparing Application");
+	const [outcome, setOutcome] = useState<string>(school.outcome || "Admitted");
+	const [consultantNote, setConsultantNote] = useState(school.handlerNote ?? "");
+	const [sendUpdateEmail, setSendUpdateEmail] = useState(true);
+
+	const [isSaving, setIsSaving] = useState(false);
+	const [uploading, setUploading] = useState(false);
+	const [uploadPct, setUploadPct] = useState(0);
+	const [uploadError, setUploadError] = useState<string | null>(null);
+	const [hasLetter, setHasLetter] = useState(Boolean(school.offerLetterStorageKey));
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+	const showOfferFields = status === "Decision Reached" && outcome === "Admitted";
+	const showDecisionFields = status === "Decision Reached";
+
+	const effectiveNote = showDecisionFields
+		? consultantNote.trim() ||
+			(schoolDecisionNote({
+				outcome: outcome as SchoolOutcome,
+				universityName: school.universityName,
+				programName: school.programName,
+			}) ?? "")
+		: "";
+
+	const handleSave = async () => {
+		setIsSaving(true);
+		try {
+			await updateSchoolApplication(appId, school.id, {
+				status: status as any,
+				outcome: status === "Decision Reached" ? outcome as any : null,
+				sendUpdateEmail: status === "Decision Reached" && sendUpdateEmail,
+				handlerNote: consultantNote.trim() || null,
+				consultantNote: consultantNote.trim() || null,
+			});
+		} catch {
+			/* handled by hook */
+		} finally {
+			setIsSaving(false);
+		}
+	};
+
+	const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		setUploadError(null);
+
+		if (!ALLOWED_DOCUMENT_TYPES.includes(file.type as any)) {
+			setUploadError("Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).");
+			e.target.value = "";
+			return;
+		}
+		if (file.size > MAX_DOCUMENT_BYTES) {
+			setUploadError("That file is larger than 15 MB.");
+			e.target.value = "";
+			return;
+		}
+
+		setUploading(true);
+		setUploadPct(0);
+		try {
+			await schoolsApi.uploadAdmissionLetter(school.id, file, (p) => setUploadPct(p));
+			setHasLetter(true);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: err instanceof Error
+						? err.message
+						: "Could not upload the admission letter.";
+			setUploadError(msg);
+		} finally {
+			setUploading(false);
+			e.target.value = "";
+		}
+	};
+
+	const handleRemoveLetter = async () => {
+		setUploading(true);
+		setUploadError(null);
+		try {
+			await schoolsApi.removeAdmissionLetter(school.id);
+			setHasLetter(false);
+		} catch (err) {
+			const msg =
+				err instanceof ApiError
+					? err.message
+					: err instanceof Error
+						? err.message
+						: "Could not remove the admission letter.";
+			setUploadError(msg);
+		} finally {
+			setUploading(false);
+		}
+	};
+
+	return (
+		<div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem", fontSize: "var(--text-xs)" }}>
+			<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+				<select
+					className="input input--sm"
+					value={status}
+					onChange={(e) => setStatus(e.target.value)}
+					style={{ width: "auto" }}
+				>
+					<option value="Preparing Application">Preparing Application</option>
+					<option value="Submitted">Submitted</option>
+					<option value="Decision Reached">Decision Reached</option>
+				</select>
+
+				{status === "Decision Reached" && (
+					<select
+						className="input input--sm"
+						value={outcome}
+						onChange={(e) => setOutcome(e.target.value)}
+						style={{ width: "auto" }}
+					>
+						<option value="Admitted">Admitted</option>
+						<option value="Waitlisted">Waitlisted</option>
+						<option value="Application Rejected">Application Rejected</option>
+						<option value="Withdrawn">Withdrawn</option>
+					</select>
+				)}
+
+				<button
+					type="button"
+					className="btn btn--primary btn--sm"
+					onClick={handleSave}
+					disabled={isSaving}
+					style={{ marginLeft: "auto" }}
+				>
+					{isSaving ? "Saving..." : "Update Status"}
+				</button>
+			</div>
+
+			{showDecisionFields && (
+				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", marginTop: "0.5rem" }}>
+					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>
+						{showOfferFields ? "Offer details" : "Decision update"}
+					</p>
+					{showOfferFields ? (
+						<div style={{ gridColumn: "1 / -1" }}>
+							<p className="muted" style={{ marginBottom: "0.15rem" }}>Official admission letter (PDF / image / Word)</p>
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept={ALLOWED_DOCUMENT_TYPES.join(",")}
+									onChange={handleFileChange}
+									disabled={uploading}
+									style={{ fontSize: "var(--text-xs)" }}
+								/>
+								{hasLetter && !uploading ? (
+									<button
+										type="button"
+										className="btn btn--ghost btn--sm"
+										onClick={handleRemoveLetter}
+									>
+										Remove letter
+									</button>
+								) : null}
+								{uploading ? (
+									<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+										Uploading… {uploadPct}%
+									</span>
+								) : hasLetter ? (
+									<span style={{ color: "var(--success, #15803d)", fontSize: "var(--text-xs)" }}>
+										✓ Letter uploaded
+									</span>
+								) : null}
+							</div>
+							{uploadError ? (
+								<p style={{ color: "var(--danger, #b91c1c)", fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+									{uploadError}
+								</p>
+							) : null}
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>
+								The letter is stored in the document vault under the applicant's folder and emailed
+								to the applicant when “Send status update email” is checked.
+							</p>
+						</div>
+					) : null}
+					<div style={{ gridColumn: "1 / -1" }}>
+						<p className="muted" style={{ marginBottom: "0.15rem" }}>
+							Note to applicant (optional — leave blank to use the automated message)
+						</p>
+						<textarea
+							className="input input--sm"
+							placeholder="Leave blank for the automated message, or type a custom note…"
+							value={consultantNote}
+							onChange={(e) => setConsultantNote(e.target.value)}
+							rows={2}
+						/>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.15rem", marginTop: "0.5rem" }}>
+							Applicant will see in the portal Latest update:
+						</p>
+						<div
+							style={{
+								background: "var(--background)",
+								border: "1px solid var(--border-light)",
+								borderRadius: "var(--radius-md)",
+								padding: "0.5rem 0.6rem",
+								fontSize: "var(--text-xs)",
+								color: "var(--text)",
+								whiteSpace: "pre-wrap",
+							}}
+						>
+							{effectiveNote || <span className="muted">Waiting for first handler update…</span>}
+						</div>
+					</div>
+					<div style={{ gridColumn: "1 / -1" }}>
+						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+							<input
+								type="checkbox"
+								checked={sendUpdateEmail}
+								onChange={(e) => setSendUpdateEmail(e.target.checked)}
+							/>
+							<span>Send status update email to applicant (includes note & admission letter if uploaded)</span>
+						</label>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
+export function CaseDetail({ app }: { app: MockApplication }) {
+	const navigate = useNavigate();
+	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
+	const {
+		assignees,
+		handoffs,
+		travelRequests,
+		resolveHandoff,
+		assignApplication,
+		acceptApplication,
+		toggleApplicationChecklist,
+		commentOnApplication,
+		requestApplicationDocs,
+		recordProceed,
+		reinviteProceed,
+		declineProceed,
+		setVisaStage,
+		setVisaCounselorNote,
+		setTravelClearance,
+		togglePreDepartureTask,
+		refresh,
+	} = useCases();
+	const { invoices: allInvoices } = useInvoiceApi();
+
+	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+	const [actionError, setActionError] = useState<string | null>(null);
+	const [appInvoice, setAppInvoice] = useState<ApiInvoice | null>(null);
+	const [appInvoiceLoading, setAppInvoiceLoading] = useState(false);
+	const [issuingInvoice, setIssuingInvoice] = useState(false);
+	const [invoiceFlash, setInvoiceFlash] = useState<string | null>(null);
+	const [noteDraft, setNoteDraft] = useState("");
+	const [editingNote, setEditingNote] = useState(false);
+
+	// This case's application and visa invoices (proforma or issued).
+	const [visaApiInvoice, setVisaApiInvoice] = useState<ApiInvoice | null>(null);
+	useEffect(() => {
+		setAppInvoiceLoading(true);
+		Promise.all([listInvoices({ type: "application" }), listInvoices({ type: "visa" })])
+			.then(([apps, visas]) => {
+				setAppInvoice(apps.invoices.find((i) => i.applicationId === app.id) ?? null);
+				setVisaApiInvoice(visas.invoices.find((i) => i.applicationId === app.id && i.status !== "void") ?? null);
+			})
+			.catch(() => {
+				setAppInvoice(null);
+				setVisaApiInvoice(null);
+			})
+			.finally(() => setAppInvoiceLoading(false));
+	}, [app.id]);
+
+	function handleIssueApplicationInvoice() {
+		setIssuingInvoice(true);
+		issueApplicationInvoice(app.id)
+			.then((updated) => {
+				setAppInvoice(updated);
+				setInvoiceFlash(`Invoice ${updated.invoiceNumber} issued — applicant can now pay.`);
+				window.setTimeout(() => setInvoiceFlash(null), 5000);
+			})
+			.catch((e) => {
+				setInvoiceFlash(e instanceof Error ? e.message : "Failed to issue invoice");
+				window.setTimeout(() => setInvoiceFlash(null), 5000);
+			})
+			.finally(() => setIssuingInvoice(false));
+	}
+
+	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
+	const flash = (msg: string) => {
+		setActionError(null);
+		setActionSuccess(msg);
+		window.setTimeout(() => setActionSuccess(null), 4000);
+	};
+	const fail = (err: unknown, fallback: string) => {
+		setActionSuccess(null);
+		setActionError(err instanceof Error ? err.message : fallback);
+	};
+
+	async function handleAcceptApplication() {
+		try {
+			const updated = await acceptApplication(app.id);
+			flash(`Application ${updated.appId} has been accepted & approved.`);
+		} catch (err) {
+			fail(err, "Could not accept the application");
+		}
+	}
+	async function handleToggleChecklist(itemIndex: number) {
+		const item = app.checklist[itemIndex];
+		if (!item) return;
+		await toggleApplicationChecklist(app.id, item.id, !item.checked);
+	}
+	async function handleRecordProceed() {
+		const reason = window.prompt("Why are you recording consent on the applicant's behalf?", "");
+		if (reason === null || reason.trim() === "") return;
+		try {
+			await recordProceed(app.appId, reason.trim());
+			flash("Applicant consent recorded — the gate is now open.");
+		} catch (err) {
+			fail(err, "Could not record consent");
+		}
+	}
+	async function handleReinviteProceed() {
+		try {
+			await reinviteProceed(app.appId);
+			flash("Consent gate re-opened for the applicant.");
+		} catch (err) {
+			fail(err, "Could not re-invite");
+		}
+	}
+	async function handleDeclineProceed() {
+		const reason = window.prompt("Record why the applicant is pausing (optional):", "");
+		if (reason === null) return;
+		try {
+			await declineProceed(app.appId, reason);
+			flash("Applicant declined to proceed — the case is paused.");
+		} catch (err) {
+			fail(err, "Could not record decline");
+		}
+	}
+
+	// Which stage bodies apply to this case.
+	const stageIdx = (s: string) => ["document_verification", "school_submission", "offer_letter_review", "visa_processing", "travel_assistance", "payment_execution", "completed"].indexOf(s);
+	const visaInvoice = allInvoices.find((i) => i.type === "Visa" && i.applicationId === app.id);
+	const showVisa = (app.visaStage && app.visaStage !== "locked") || stageIdx(app.stage) >= stageIdx("visa_processing") || Boolean(visaInvoice);
+	const selectedTa = travelRequests.find((t) => t.applicationId === app.id) ?? null;
+	const showTravel = Boolean(selectedTa) || stageIdx(app.stage) >= stageIdx("travel_assistance");
+	const canIssueTravelInvoice = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
+	const pdProg = preDepartureProgress(app.preDepartureTasks);
+	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
+
+	function advanceVisa() {
+		const cur = app.visaStage ?? "locked";
+		if (cur === "awaiting_handler") return;
+		const next = VISA_ORDER[VISA_ORDER.indexOf(cur) + 1];
+		if (next) setVisaStage(app.appId, next);
+	}
+	function saveNote() {
+		if (noteDraft.trim()) {
+			setVisaCounselorNote(app.appId, noteDraft.trim());
+			setEditingNote(false);
+			setNoteDraft("");
+		}
+	}
+
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+			{actionSuccess && <p className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess}</p>}
+			{actionError && <p className="ops-modal__error" style={{ margin: 0 }}>{actionError}</p>}
+{(() => {
+								return (
+									<div className="card" style={{ padding: "0.75rem 1rem" }}>
+										<CaseHeader
+											name={app.applicantName}
+											reference={app.appId}
+											branch={app.branch}
+											stage={app.stage}
+											portalStage={app.journey?.portalStage ?? null}
+											handlerName={app.assignedStaff || null}
+											extra={[
+												{ label: "Country", value: app.country || "—" },
+												{ label: "Programme", value: app.program || "—" },
+											]}
+										/>
+									</div>
+								);
+							})()}
+							{(() => {
+								if (!app?.journey) return null;
+								// The applicant's own journey, from the same derivation the
+								// portal reads — what the client sees is what we see.
+								const { journey } = app;
+								const steps = PORTAL_STAGE_ORDER.filter((id) => id !== "new").map((id) => ({
+									id,
+									label: PORTAL_STAGE_LABELS[id],
+									status: journey.stageStatuses[id] ?? "locked",
+								}));
+								const tone = {
+									done: { bg: "#dcfce7", fg: "#16a34a", mark: "✓" },
+									current: { bg: "#fef3c7", fg: "#d97706", mark: "●" },
+									skipped: { bg: "#fee2e2", fg: "#b91c1c", mark: "↷" },
+									locked: { bg: "#f3f4f6", fg: "#9ca3af", mark: "○" },
+								} as const;
+								return (
+									<div className="card" style={{ padding: "0.75rem 1rem" }}>
+										<p className="eyebrow mb-1" style={{ fontSize: "var(--text-xs)" }}>Applicant's journey</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", margin: "0 0 0.5rem" }}>
+											{journey.label}
+											{journey.nextUnlock && (
+												<span className="muted" style={{ fontWeight: 400 }}> · next: {journey.nextUnlock}</span>
+											)}
+										</p>
+										<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+											{steps.map((s) => (
+												<span
+													key={s.id}
+													title={s.status === "skipped" ? "Passed without its signal being met" : s.status}
+													style={{
+														fontSize: "var(--text-xs)",
+														padding: "0.2rem 0.5rem",
+														borderRadius: "var(--radius-sm)",
+														background: tone[s.status].bg,
+														color: tone[s.status].fg,
+														fontWeight: s.status === "current" ? 700 : s.status === "locked" ? 400 : 600,
+													}}
+												>
+													{tone[s.status].mark} {s.label}
+												</span>
+											))}
+										</div>
+									</div>
+								);
+							})()}
+							{(() => {
+								// Any pending handoff on this case — school, visa, travel or
+								// finance — not just the school one.
+								const handoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending");
+								if (!handoff) return null;
+								const stageLabel = JOURNEY_STAGE_LABELS[handoff.stage as JourneyStage] ?? handoff.stage;
+								const why =
+									handoff.source === "deposit_payment"
+										? "10% deposit received — this case needs a handler before school selection can proceed."
+										: handoff.source === "visa_payment" || handoff.source === "visa_consent_continue"
+											? "The applicant is ready for visa processing — assign a visa specialist."
+											: handoff.source === "offboarding"
+												? "The previous handler has left — this stage needs a new owner."
+												: `This case needs a handler for ${stageLabel}.`;
+								return (
+									<div className="card">
+										<p className="eyebrow mb-1">Handler assignment required · {stageLabel}</p>
+										<p className="mt-2" style={{ fontSize: "var(--text-sm)" }}>{why}</p>
+										<div className="mt-3">
+											<AssignControl
+												stage={handoff.stage}
+												staff={assignees}
+												branch={app.branch}
+												currentName={null}
+												keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+												withReason
+												onAssign={(opsUserId, reason) =>
+													resolveHandoff(handoff.id, "assign", { opsUserId, reason }).then(() => navigate("/applications"))
+												}
+												onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason }).then(() => navigate("/applications"))}
+											/>
+										</div>
+									</div>
+								);
+							})()}
+							{(() => {
+								if (app.appFeePaid) return null;
+
+								const isProforma = appInvoice?.status === "proforma";
+								const schools = app.schoolApplications?.length ?? 0;
+
+								return (
+									<div className="card">
+										{invoiceFlash && (
+											<p className="mb-2" style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>{invoiceFlash}</p>
+										)}
+										{appInvoiceLoading ? (
+											<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading invoice…</p>
+										) : !appInvoice ? (
+											<>
+												<p className="eyebrow mb-1">Application invoice</p>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+													No invoice yet — {schools === 0 ? "no schools selected" : `${schools} school(s) selected`}
+												</p>
+												<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
+													Issue the application fee invoice so the applicant can pay. Per-school line items are added as schools are selected.
+												</p>
+												<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+													<button type="button" className="btn btn--sm btn--primary" onClick={handleIssueApplicationInvoice} disabled={issuingInvoice}>
+														{issuingInvoice ? "Issuing…" : "Issue application invoice"}
+													</button>
+												</div>
+											</>
+										) : (
+											<InvoiceCard
+												title="Application invoice"
+												invoice={appInvoice}
+												hint={isProforma ? "The applicant cannot pay until you review and issue this invoice." : undefined}
+												actions={
+													isProforma ? (
+														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--primary">
+															Review & issue
+														</Link>
+													) : (
+														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--ghost">
+															Open in Invoices →
+														</Link>
+													)
+												}
+											/>
+										)}
+									</div>
+								);
+							})()}
+							<CaseWorkPanel
+									kind="application"
+									assignedName={app.assignedStaff}
+									assignedEmail={app.assignedStaffEmail}
+									comments={app.comments ?? []}
+									requestedDocuments={app.requestedDocuments ?? []}
+									canAssign={canAssignWork}
+									pendingHandoffNote={
+										handoffs.find(
+											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
+										)
+											? "Resolve the handler assignment above first"
+											: undefined
+									}
+									actor={opsUser?.name ?? "Staff"}
+									isMine={app.assignedStaffEmail === opsUser?.email}
+									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
+									onAssign={(to) => void assignApplication(app.id, to)}
+									onComment={(kind, text) =>
+										void commentOnApplication(app.id, kind, text)
+									}
+									onRequestDocs={(docs) =>
+										void requestApplicationDocs(app.id, docs)
+									}
+								/>
+
+							{app.status !== "Accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Application Lifecycle Action</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												Status: {app.status}
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												Accepting will mark this application as Approved & create/activate the Applicant record.
+											</p>
+										</div>
+										<button
+											onClick={() => handleAcceptApplication()}
+											className="btn btn--primary"
+											style={{ whiteSpace: "nowrap" }}
+										>
+											✓ Accept & Approve
+										</button>
+									</div>
+								</div>
+							)}
+
+							{app.proceedStatus !== "accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Consent Gate</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												{app.proceedStatus === "paused"
+													? "Applicant placed application on hold (Paused)"
+													: app.proceedStatus === "declined"
+														? "Applicant opted out (Declined)"
+														: "Awaiting the applicant's consent to proceed"}
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												{app.proceedStatus === "paused"
+													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
+													: app.proceedStatus === "declined"
+														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
+														: "The applicant must confirm in the portal before document verification can advance."}
+											</p>
+										</div>
+										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
+												Record consent (override)
+											</button>
+											{app.proceedStatus === "invited" && (
+												<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Record decline
+												</button>
+											)}
+											{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
+												<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Re-invite applicant
+												</button>
+											)}
+										</div>
+									</div>
+								</div>
+							)}
+
+								{/* Target & Assignment */}
+								<div className="card">
+									<p className="eyebrow mb-3">Assignment</p>
+									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+										<div style={{ gridColumn: "1 / -1" }}>
+											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
+											<p>
+												<StaffChatBadge
+													opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
+													name={app.assignedStaff}
+													email={app.assignedStaffEmail}
+												/>
+											</p>
+										</div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(app.branch)}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{app.submittedDate}</p></div>
+									</div>
+									{app.consultationId ? (
+										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+											<button
+												type="button"
+												className="link-arrow"
+												onClick={() => navigate(`/consultations?id=${app.consultationId}`)}
+											>
+												← Opened from consultation {app.consultationNumber || app.consultationId.slice(0, 8).toUpperCase()}
+											</button>
+										</p>
+									) : null}
+								</div>
+
+								{/* School Applications */}
+								<div className="card">
+									<p className="eyebrow mb-3">School Applications</p>
+									{(() => {
+										const schools = app.schoolApplications ?? [];
+										const total = schools.length;
+										const admitted = schools.filter((s) => s.outcome === "Admitted").length;
+										const pending = schools.filter((s) => s.status !== "Decision Reached").length;
+										const rejected = schools.filter((s) => s.outcome === "Application Rejected" || s.outcome === "Withdrawn").length;
+										return (
+											<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+												<span>{total} school{total !== 1 ? "s" : ""}</span>
+												{admitted > 0 ? <span style={{ color: "#16a34a", fontWeight: 600 }}>{admitted} admitted</span> : null}
+												{pending > 0 ? <span>{pending} pending</span> : null}
+												{rejected > 0 ? <span style={{ color: "#dc2626" }}>{rejected} rejected/declined</span> : null}
+											</div>
+										);
+									})()}
+									{app.schoolApplications && app.schoolApplications.length > 0 ? (
+										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+											{app.schoolApplications.map((s) => {
+												const displayName = s.universityName || s.universityId;
+												const displayProgram = s.programName || s.programId;
+												const displayCountry = s.countryName || s.destinationId;
+												const admitted = s.outcome === "Admitted";
+												return (
+													<div
+														key={s.id}
+														style={{
+															padding: "0.6rem 0.75rem",
+															border: admitted ? "2px solid #16a34a" : "1px solid var(--border-light)",
+															background: admitted ? "#f0fdf4" : "transparent",
+															borderRadius: "var(--radius-md)",
+														}}
+													>
+														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+															<div style={{ width: "100%" }}>
+																<p style={{ fontWeight: 500 }}>{displayName}</p>
+																<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem" }}>{displayProgram} · {displayCountry} · {s.intake}</p>
+																<InlineSchoolTracker appId={app.appId} school={s} />
+															</div>
+														</div>
+													</div>
+												);
+											})}
+										</div>
+									) : (
+										<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No schools have been selected yet.</p>
+									)}
+								</div>
+
+								{/* Document Checklist */}
+								<div className="card">
+									<p className="eyebrow mb-3">Verification Checklist</p>
+									<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+										{app.checklist.map((item, idx) => (
+											<label
+												key={item.id}
+												style={{
+													display: "flex",
+													alignItems: "center",
+													gap: "0.75rem",
+													fontSize: "var(--text-sm)",
+													cursor: "pointer",
+													padding: "0.5rem",
+													border: "1px solid var(--border-light)",
+												}}
+											>
+												<input
+													type="checkbox"
+													checked={item.checked}
+													onChange={() => handleToggleChecklist(idx)}
+												/>
+												<span style={{ textDecoration: item.checked ? "line-through" : "none", opacity: item.checked ? 0.7 : 1 }}>
+													{item.label}
+												</span>
+											</label>
+										))}
+									</div>
+								</div>
+
+								{/* Staff Internal Notes */}
+								<div className="card">
+									<p className="eyebrow mb-2">Staff Case Notes</p>
+									<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{app.notes}</p>
+								</div>
+
+			{showVisa && (
+				<>
+{/* Visa invoice — the same card as every other invoice */}
+					<div className="card">
+						{visaApiInvoice ? (
+							<InvoiceCard
+								title="Visa invoice"
+								invoice={visaApiInvoice}
+								hint={visaApiInvoice.status === "proforma" ? "The applicant cannot pay until this is reviewed and issued." : undefined}
+								actions={
+									<Link to={`/invoices?open=${visaApiInvoice.id}`} className="btn btn--sm btn--ghost">
+										{visaApiInvoice.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
+									</Link>
+								}
+							/>
+						) : (
+							<>
+								<p className="eyebrow mb-1">Visa invoice</p>
+								<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+									{app.visaInvoicePaid
+										? "Recorded as paid — record the real invoice in Invoices."
+										: "Issued automatically when the applicant consents to the visa stage and a specialist is assigned."}
+								</p>
+							</>
+						)}
+					</div>
+
+					{/* Visa Tracking Steps */}
+								<div className="card">
+									<p className="eyebrow mb-3">Visa Tracking</p>
+									{app.visaStage === "awaiting_handler" ? (
+										(() => {
+											const handoff = handoffs.find(
+												(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "visa_processing",
+											);
+											const canResolve = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
+											return (
+												<div className="card" style={{ padding: "0.75rem 1rem" }}>
+													<p className="eyebrow mb-1">Awaiting visa specialist</p>
+													<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+														The applicant is ready for visa processing. Assign a specialist to open tracking.
+													</p>
+													{handoff && canResolve ? (
+														<div className="mt-3">
+															<AssignControl
+																stage="visa_processing"
+																staff={assignees}
+																branch={app.branch}
+																keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+																onAssign={(opsUserId, reason) => resolveHandoff(handoff.id, "assign", { opsUserId, reason })}
+																onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason })}
+															/>
+														</div>
+													) : (
+														<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>A manager or coordinator assigns the specialist.</p>
+													)}
+												</div>
+											);
+										})()
+									) : (
+										<>
+										<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+										{VISA_STEPS.map((s, i) => {
+											const curIdx = app.visaStage ? VISA_ORDER.indexOf(app.visaStage) : -1;
+											const stepIdx = VISA_ORDER.indexOf(s.id);
+											const done = curIdx >= stepIdx && app.visaStage !== "locked";
+											const current = app.visaStage === s.id;
+											return (
+												<div
+													key={s.id}
+													style={{
+														display: "flex",
+														alignItems: "center",
+														gap: "0.75rem",
+														padding: "0.6rem 0.75rem",
+														border: "1px solid var(--border-light)",
+														opacity: done ? 1 : 0.5,
+													}}
+												>
+													<span style={{
+														width: "28px",
+														height: "28px",
+														flexShrink: 0,
+														display: "flex",
+														alignItems: "center",
+														justifyContent: "center",
+														fontSize: "0.72rem",
+														fontWeight: 700,
+														fontFamily: "var(--font-mono)",
+														border: "2px solid",
+														borderColor: done ? "#22c55e" : current ? "#06b6d4" : "var(--border)",
+														borderRadius: "50%",
+														color: done ? "#fff" : current ? "#06b6d4" : "var(--muted-foreground)",
+														background: done ? "#22c55e" : "transparent",
+													}}>
+														{done ? "\u2713" : i + 1}
+													</span>
+													<div style={{ flex: 1 }}>
+														<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
+													</div>
+													{current && app.visaStage !== "complete" && (
+														<button
+															onClick={() => advanceVisa()}
+															className="btn btn--ghost btn--sm"
+															style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.6rem" }}
+														>
+															{"\u2192"} {VISA_STEPS[i + 1]?.label ?? "next"}
+														</button>
+													)}
+												</div>
+											);
+										})}
+									</div>
+									</>
+									)}
+								</div>
+
+								{/* Counselor Note */}
+								<div className="card">
+									<p className="eyebrow mb-2">Counselor Note</p>
+									{app.visaCounselorNote && !editingNote ? (
+										<div>
+											<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{app.visaCounselorNote}</p>
+											<button
+												onClick={() => { setEditingNote(true); setNoteDraft(app.visaCounselorNote ?? ""); }}
+												className="btn btn--ghost btn--sm"
+												style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}
+											>
+												Edit note
+											</button>
+										</div>
+									) : (
+										<div>
+											<textarea
+												value={noteDraft}
+												onChange={(e) => setNoteDraft(e.target.value)}
+												placeholder="Add a counselor note..."
+												rows={3}
+												className="input"
+												style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }}
+											/>
+											<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+												<button
+													onClick={saveNote}
+													className="btn btn--primary btn--sm"
+													disabled={!noteDraft.trim()}
+												>
+													Save note
+												</button>
+												{editingNote && (
+													<button
+														onClick={() => { setEditingNote(false); setNoteDraft(""); }}
+														className="btn btn--ghost btn--sm"
+													>
+														Cancel
+													</button>
+												)}
+											</div>
+										</div>
+									)}
+								</div>
+{app.visaStage === "complete" && (
+							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved</p>
+								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+									This visa case is complete — the applicant can proceed to the payment plan. Advance this
+									case to Payment Execution on the Workflow board when ready.
+								</p>
+							</div>
+						)}
+				</>
+			)}
+
+			{showTravel && (
+				<>
+					{selectedTa && (
+						<div className="card">
+							<p className="eyebrow mb-2">Travel request</p>
+							<TaQueueRow
+								ta={selectedTa}
+								staff={assignees}
+								branch={app.branch}
+								canIssue={canIssueTravelInvoice}
+								onChanged={() => void refresh()}
+							/>
+						</div>
+					)}
+{/* Travel Clearance */}
+							{(app.stage === "travel_assistance" || app.stage === "completed") && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Travel Clearance</p>
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
+											<div>
+												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+													{app.travelClearance === "cleared" ? "Cleared for travel" : "Pending clearance"}
+												</p>
+												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+													{app.travelClearance === "cleared"
+														? "Applicant is cleared for departure."
+														: "Grant clearance once all checks are satisfied."}
+												</p>
+											</div>
+										{app.stage === "travel_assistance" && (
+											<button
+												onClick={() => setTravelClearance(app.appId, app.travelClearance !== "cleared")}
+												className={`btn btn--sm ${app.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
+												style={{ whiteSpace: "nowrap" }}
+											>
+												{app.travelClearance === "cleared" ? "Revoke clearance" : "Grant clearance"}
+											</button>
+										)}
+										</div>
+									</div>
+								)}
+
+							{/* Pre-departure Checklist */}
+							{(app.stage === "travel_assistance" || app.stage === "completed") && (
+									<div className="card">
+										<p className="eyebrow mb-2">Pre-departure Checklist</p>
+										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+											<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>
+												{app.preDepartureTasks?.filter((t) => t.done).length ?? 0}/{app.preDepartureTasks?.length ?? 0} tasks
+											</span>
+											<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", fontWeight: 600, color: pdProg === 100 ? "#22c55e" : "var(--muted-foreground)" }}>
+												{pdProg}%
+											</span>
+										</div>
+										<div style={{ height: "6px", background: "var(--muted)", borderRadius: "999px", overflow: "hidden", marginBottom: "1rem" }}>
+											<div style={{ width: `${pdProg}%`, height: "100%", background: pdProg === 100 ? "#22c55e" : "#f97316", transition: "width 0.4s ease" }} />
+										</div>
+
+										{app.preDepartureTasks && app.preDepartureTasks.length > 0 ? (
+											<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+												{pdCats.map((cat) => {
+													const tasks = app.preDepartureTasks!.filter((t) => t.category === cat);
+													if (tasks.length === 0) return null;
+													const catDone = tasks.filter((t) => t.done).length;
+													return (
+														<div key={cat} style={{ border: "1px solid var(--border-light)", padding: "0.75rem", borderRadius: "4px" }}>
+															<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
+																<span style={{ fontSize: "0.9rem" }}>{PRE_DEPARTURE_CATEGORIES[cat].icon}</span>
+																<div>
+																	<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{PRE_DEPARTURE_CATEGORIES[cat].label}</p>
+																	<p className="muted" style={{ fontSize: "var(--text-xs)" }}>{catDone}/{tasks.length} complete</p>
+																</div>
+															</div>
+															<div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+																{tasks.map((task) => (
+																	<div
+																		key={task.id}
+																		onClick={() => app.stage === "travel_assistance" && togglePreDepartureTask(app.appId, task.id)}
+																		style={{
+																			display: "flex",
+																			alignItems: "flex-start",
+																			gap: "0.5rem",
+																			padding: "0.4rem",
+																			cursor: app.stage === "travel_assistance" ? "pointer" : "default",
+																			border: "1px solid var(--border-light)",
+																		}}
+																	>
+																		<span style={{
+																			width: "18px",
+																			height: "18px",
+																			flexShrink: 0,
+																			display: "flex",
+																			alignItems: "center",
+																			justifyContent: "center",
+																			fontSize: "0.65rem",
+																			fontWeight: 700,
+																			border: "2px solid",
+																			borderColor: task.done ? "#22c55e" : "var(--border)",
+																			borderRadius: "3px",
+																			color: task.done ? "#fff" : "transparent",
+																			background: task.done ? "#22c55e" : "transparent",
+																		}}>
+																			{task.done ? "\u2713" : ""}
+																		</span>
+																		<div>
+																			<p style={{ fontWeight: task.done ? 400 : 500, fontSize: "var(--text-xs)", textDecoration: task.done ? "line-through" : "none", opacity: task.done ? 0.6 : 1 }}>
+																				{task.label}
+																			</p>
+																			<p className="muted" style={{ fontSize: "0.68rem" }}>{task.detail}</p>
+																		</div>
+																	</div>
+																))}
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										) : (
+											<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No pre-departure tasks assigned yet.</p>
+										)}
+									</div>
+								)}
+
+						{app.stage === "travel_assistance" && app.agencySettled && app.travelClearance === "cleared" && pdProg === 100 && (
+							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
+								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear</p>
+								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
+									All milestones complete. Use the Workflow board to mark the case as Completed.
+								</p>
+							</div>
+						)}
+				</>
+			)}
+		</div>
+	);
+}

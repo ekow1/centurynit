@@ -167,6 +167,16 @@ export const VISA_STEP_LABELS: Record<string, string> = {
 	complete: "Complete",
 };
 
+/**
+ * What the applicant sees, when the API supplied it, so the queue names the
+ * same step as the portal; the coarse ops stage otherwise.
+ */
+export function stageMeta(a: MockApplication): string {
+	return a.journey
+		? `Client sees: ${a.journey.label}`
+		: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`;
+}
+
 export function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
 	return invoices.find(
 		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
@@ -395,7 +405,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				record: a,
 				title: `${a.applicantName}`,
 				subtitle: `Application ${a.appId} · Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
-				meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
+				meta: stageMeta(a),
 				branch: a.branch,
 				owner: "Unassigned",
 				linkTo: `/applications?id=${a.id}`,
@@ -410,7 +420,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				record: a,
 				title: `${a.applicantName}`,
 				subtitle: `Application under review · ${a.university || a.country || "—"}`,
-				meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
+				meta: stageMeta(a),
 				branch: a.branch,
 				owner: a.assignedStaff,
 				linkTo: `/applications?id=${a.id}`,
@@ -426,7 +436,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				record: a,
 				title: `${a.applicantName}`,
 				subtitle: `${open} open checklist item${open === 1 ? "" : "s"}`,
-				meta: `Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}`,
+				meta: stageMeta(a),
 				branch: a.branch,
 				owner: a.assignedStaff,
 				linkTo: `/applications?id=${a.id}`,

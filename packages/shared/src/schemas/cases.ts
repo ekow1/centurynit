@@ -551,6 +551,19 @@ export const applicationSchema = z.object({
 	applicationConsent: stageConsentSchema.nullable(),
 	visaConsent: stageConsentSchema.nullable(),
 	travelConsent: stageConsentSchema.nullable(),
+	/**
+	 * The applicant's journey as the portal shows it — the same derivation
+	 * (`deriveJourney`) the portal reads, so ops and the client name the same
+	 * step. Optional only so older clients keep parsing.
+	 */
+	journey: z
+		.object({
+			portalStage: z.string(),
+			label: z.string(),
+			nextUnlock: z.string().nullable(),
+			stageStatuses: z.record(z.enum(["done", "current", "locked", "skipped"])),
+		})
+		.optional(),
 	submittedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),

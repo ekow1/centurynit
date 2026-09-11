@@ -79,7 +79,7 @@ import {
 	getExchangeRate,
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
-import { listSchoolsForApplication } from "../services/schools.js";
+import { journeyForApplicant } from "../services/journey.js";
 import { syncLeadFromApplicant } from "../services/leads.js";
 import {
 	getOrCreateApplicantConversation,
@@ -104,7 +104,6 @@ import {
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
 	type JourneyStage,
-	deriveJourney,
 	emptyJourney,
 	invoiceListSchema,
 	invoiceSchema,
@@ -2360,9 +2359,10 @@ const journeySchema = z.object({
 /**
  * Applicant self-service: where they are in the journey.
  *
- * This handler only gathers facts about the current case; the rules that
- * turn facts into a portal stage, chapter unlocks and per-step statuses live
- * in `deriveJourney` (century-nit-shared), which is pure and unit-tested.
+ * The facts are gathered by `journeyForApplicant` (shared with the ops
+ * application serializer) and turned into a portal stage, chapter unlocks and
+ * per-step statuses by `deriveJourney` in century-nit-shared, which is pure
+ * and unit-tested.
  */
 meRouter.openapi(
 	createRoute({
@@ -2381,86 +2381,8 @@ meRouter.openapi(
 		const user = c.get("user");
 		const applicant = await getApplicantByUserId(user.id);
 		if (!applicant) return c.json(emptyJourney());
-
-		const [consultation, application, allInvoices] = await Promise.all([
-			latestConsultationForApplicant(applicant.id),
-			latestApplicationForApplicant(applicant.id),
-			listInvoicesForClient(user.id),
-		]);
-
-		// Every signal is scoped to the current application. A returning
-		// client's earlier application keeps its own schools and paid invoices;
-		// none of that may count towards the new one.
-		const schoolTracks = application
-			? await listSchoolsForApplication(application.id)
-			: { schools: [] as Awaited<ReturnType<typeof listSchoolsForApplication>>["schools"], total: 0 };
-		const invoices = application ? allInvoices.filter((i) => i.applicationId === application.id) : allInvoices;
-
-		const [visaConsent, taRow, handler] = await Promise.all([
-			application ? getStageConsent(application.id, "visa") : null,
-			db
-				.select({ status: schema.travelAssistanceRequests.status })
-				.from(schema.travelAssistanceRequests)
-				.where(
-					application
-						? eq(schema.travelAssistanceRequests.applicationId, application.id)
-						: eq(schema.travelAssistanceRequests.applicantId, applicant.id),
-				)
-				.orderBy(desc(schema.travelAssistanceRequests.createdAt))
-				.limit(1)
-				.then((r) => r[0] ?? null),
-			// assignedStaffId is the authoritative whole-case owner; fall back to
-			// the per-stage assignment for cases assigned the legacy way.
-			application
-				? application.assignedStaffId
-					? true
-					: activeHandlerFor(application.id, "school_submission").then(Boolean)
-				: false,
-		]);
-
-		const invoiceIs = (type: string, ...statuses: string[]) =>
-			invoices.some((i) => i.type === type && statuses.includes(i.status));
-		const hasSchools = schoolTracks.schools.length > 0;
-		const hasAppInvoice = invoices.some((i) => i.type === "application");
-
-		return c.json(
-			deriveJourney({
-				hasConsultation: Boolean(consultation),
-				isEligible:
-					consultation?.assessmentResult?.outcome === "Eligible" ||
-					consultation?.assessmentResult?.outcome === "Conditionally Eligible",
-				proceedStatus: application?.proceedStatus ?? null,
-				hasPackage: Boolean(application?.fundingTrack),
-				depositPaid: Boolean(application?.depositPaid),
-				hasHandler: handler,
-				// Locked selection: the lock raises the application invoice, and
-				// ops moving a track past "Preparing Application" implies it too.
-				hasSelection:
-					hasSchools &&
-					(hasAppInvoice || schoolTracks.schools.some((s) => s.status !== "Preparing Application")),
-				// The invoice starts as a proforma when the applicant locks
-				// schools; the handler must issue it before the applicant can pay.
-				appInvoiceIssued: invoiceIs("application", "issued", "partial", "paid"),
-				appInvoicePaid: Boolean(application?.appFeePaid) || invoiceIs("application", "paid"),
-				hasAdmitted: schoolTracks.schools.some((s) => s.outcome === "Admitted"),
-				hasVisaConsent: visaConsent?.decision === "continue",
-				visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
-				visaDone: application?.visaStage === "complete",
-				travelInvoicePaid: Boolean(application?.travelInvoicePaid) || invoiceIs("travel", "paid"),
-				travelAssistanceStatus: taRow?.status ?? null,
-				paymentPlanId: application?.paymentPlanId ?? null,
-				agencyStageIndex: application?.agencyStageIndex ?? 0,
-				agencySettled: Boolean(application?.agencySettled),
-				travelCleared: application?.travelClearance === "cleared",
-				preDepartureDone: Boolean(
-					(application?.checklist?.length ?? 0) > 0 && application?.checklist?.every((item) => item.checked),
-				),
-				coarseStage:
-					application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)
-						? (application.stage as JourneyStage)
-						: null,
-			}),
-		);
+		const application = await latestApplicationForApplicant(applicant.id);
+		return c.json(await journeyForApplicant(applicant, application));
 	},
 );
 

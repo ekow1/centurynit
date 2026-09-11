@@ -11,7 +11,15 @@ import { branchName } from "century-nit-core/ops";
 import { schoolsApi, ApiError } from "century-nit-core/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { MockApplication } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, schoolDecisionNote, type JourneyStage, type SchoolApplication, type SchoolOutcome } from "century-nit-shared";
+import {
+	JOURNEY_STAGE_LABELS,
+	PORTAL_STAGE_LABELS,
+	PORTAL_STAGE_ORDER,
+	schoolDecisionNote,
+	type JourneyStage,
+	type SchoolApplication,
+	type SchoolOutcome,
+} from "century-nit-shared";
 import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
 
 function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolApplication }) {
@@ -661,39 +669,45 @@ export function EnterpriseCases() {
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
 							{(() => {
 								const app = liveSelected ?? selectedApp;
-								if (!app) return null;
-								const hasSchools = (app.schoolApplications?.length ?? 0) > 0;
-								const depositPaid = app.depositPaid;
-								const pendingDocHandoff = handoffs.find(
-									(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
-								);
-								const hasHandler = !pendingDocHandoff && Boolean(app.assignedStaff);
-								const invoiceIssued = appInvoice && appInvoice.status !== "proforma" && appInvoice.status !== "void";
-								const appFeePaid = app.appFeePaid;
-								const steps = [
-									{ label: "10% Deposit", done: depositPaid, pending: !depositPaid },
-									{ label: "Handler Assigned", done: hasHandler, pending: depositPaid && pendingDocHandoff },
-									{ label: "Schools Selected", done: hasHandler && hasSchools, pending: hasHandler && !hasSchools },
-									{ label: "Invoice Issued", done: hasHandler && hasSchools && Boolean(invoiceIssued), pending: hasHandler && hasSchools && !invoiceIssued },
-									{ label: "App Fee Paid", done: hasHandler && hasSchools && Boolean(appFeePaid), pending: hasHandler && hasSchools && invoiceIssued && !appFeePaid },
-								];
+								if (!app?.journey) return null;
+								// The applicant's own journey, from the same derivation the
+								// portal reads — what the client sees is what we see.
+								const { journey } = app;
+								const steps = PORTAL_STAGE_ORDER.filter((id) => id !== "new").map((id) => ({
+									id,
+									label: PORTAL_STAGE_LABELS[id],
+									status: journey.stageStatuses[id] ?? "locked",
+								}));
+								const tone = {
+									done: { bg: "#dcfce7", fg: "#16a34a", mark: "✓" },
+									current: { bg: "#fef3c7", fg: "#d97706", mark: "●" },
+									skipped: { bg: "#fee2e2", fg: "#b91c1c", mark: "↷" },
+									locked: { bg: "#f3f4f6", fg: "#9ca3af", mark: "○" },
+								} as const;
 								return (
 									<div className="card" style={{ padding: "0.75rem 1rem" }}>
-										<p className="eyebrow mb-2" style={{ fontSize: "var(--text-xs)" }}>Application Progress</p>
-										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-											{steps.map((s, i) => (
+										<p className="eyebrow mb-1" style={{ fontSize: "var(--text-xs)" }}>Applicant's journey</p>
+										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", margin: "0 0 0.5rem" }}>
+											{journey.label}
+											{journey.nextUnlock && (
+												<span className="muted" style={{ fontWeight: 400 }}> · next: {journey.nextUnlock}</span>
+											)}
+										</p>
+										<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+											{steps.map((s) => (
 												<span
-													key={i}
+													key={s.id}
+													title={s.status === "skipped" ? "Passed without its signal being met" : s.status}
 													style={{
 														fontSize: "var(--text-xs)",
 														padding: "0.2rem 0.5rem",
 														borderRadius: "var(--radius-sm)",
-														background: s.done ? "#dcfce7" : s.pending ? "#fef3c7" : "#f3f4f6",
-														color: s.done ? "#16a34a" : s.pending ? "#d97706" : "#9ca3af",
-														fontWeight: s.done || s.pending ? 600 : 400,
+														background: tone[s.status].bg,
+														color: tone[s.status].fg,
+														fontWeight: s.status === "current" ? 700 : s.status === "locked" ? 400 : 600,
 													}}
 												>
-													{s.done ? "✓" : s.pending ? "●" : "○"} {s.label}
+													{tone[s.status].mark} {s.label}
 												</span>
 											))}
 										</div>

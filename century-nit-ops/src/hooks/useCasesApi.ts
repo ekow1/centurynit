@@ -158,6 +158,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		appFeePaid: row.appFeePaid,
 		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
+		journey: row.journey ?? null,
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: row.consultationNumber ?? null,

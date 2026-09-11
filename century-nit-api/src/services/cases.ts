@@ -527,6 +527,12 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		getStageConsent(row.id, "travel"),
 	]);
 
+	// The same journey the portal shows, so ops sees the client's step.
+	const { journeyForApplicant } = await import("./journey.js");
+	const journey = applicant
+		? await journeyForApplicant(applicant, row, { schoolTracks: schoolList, visaConsent }).catch(() => null)
+		: null;
+
 	return {
 		id: row.id,
 		appNumber: row.appNumber,
@@ -573,6 +579,14 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		applicationConsent,
 		visaConsent,
 		travelConsent,
+		journey: journey
+			? {
+					portalStage: journey.portalStage,
+					label: journey.label,
+					nextUnlock: journey.nextUnlock,
+					stageStatuses: journey.stageStatuses,
+				}
+			: undefined,
 		submittedAt: row.submittedAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),

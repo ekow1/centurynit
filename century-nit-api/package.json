@@ -11,6 +11,7 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:migrate:env": "tsx src/scripts/migrate.ts",
+		"db:fresh": "tsx src/scripts/db-fresh.ts",
 		"db:studio": "drizzle-kit studio",
 		"worker:email": "npm run worker",
 		"lint": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",

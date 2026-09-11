@@ -28,6 +28,13 @@ export async function sendEmail({
 	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
 
 	if (!apiKey) {
+		// Outside production every flow must stay completable without a
+		// provider account: print the message instead of sending it, so an
+		// invitation link or one-time code can be copied from the terminal.
+		if (env.NODE_ENV !== "production") {
+			console.info(`[email] (not sent — RESEND_API_KEY unset) to=${to} subject=${JSON.stringify(subject)}\n${text ?? ""}`);
+			return { id: `console-${Date.now()}` };
+		}
 		console.warn("[email] RESEND_API_KEY is not configured.", { to, subject });
 		throw new HttpError(
 			400,

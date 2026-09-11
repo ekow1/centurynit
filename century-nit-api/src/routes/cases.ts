@@ -2613,7 +2613,7 @@ meRouter.openapi(
  * which is the moment the case is actually ready for one. Visa and travel do
  * hand off on consent, because consent is what opens those stages.
  */
-async function processConsentDecision(input: {
+export async function processConsentDecision(input: {
 	userId: string;
 	stage: StageConsentStage;
 	decision: "continue" | "hold" | "opt_out";

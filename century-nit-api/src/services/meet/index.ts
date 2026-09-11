@@ -34,8 +34,38 @@ function classify(err: unknown): never {
 	throw new MeetUnavailableError(message);
 }
 
+/**
+ * The slice of the Meet API this service uses. Narrow on purpose so a test
+ * can stand in a fake without reproducing the whole googleapis surface.
+ */
+type MeetSpaceData = {
+	name?: string | null;
+	meetingUri?: string | null;
+	meetingCode?: string | null;
+	activeConference?: unknown;
+};
+export type MeetSpacesClient = {
+	spaces: {
+		create(args: { requestBody: Record<string, unknown> }): Promise<{ data: MeetSpaceData }>;
+		get(args: { name: string }): Promise<{ data: MeetSpaceData }>;
+		endActiveConference(args: { name: string; requestBody: Record<string, unknown> }): Promise<unknown>;
+	};
+};
+
+let injectedClient: MeetSpacesClient | null = null;
+
+/**
+ * Test seam: stand in a fake Meet client (or `null` to restore Google). While
+ * a fake is installed the company account counts as connected, so the
+ * booking flow can be driven end to end without credentials.
+ */
+export function setMeetClientForTests(client: MeetSpacesClient | null): void {
+	injectedClient = client;
+}
+
 /** Build an authorized Meet API client from the company account's credentials. */
-async function meetClient() {
+async function meetClient(): Promise<MeetSpacesClient> {
+	if (injectedClient) return injectedClient;
 	const account = await loadCompanyCredentials();
 	if (!account) {
 		throw new MeetNotConnectedError();
@@ -48,7 +78,7 @@ async function meetClient() {
 		expiry_date: account.credentials.accessTokenExpiresAt?.getTime(),
 	});
 
-	return google.meet({ version: "v2", auth });
+	return google.meet({ version: "v2", auth }) as unknown as MeetSpacesClient;
 }
 
 /**
@@ -187,6 +217,7 @@ export async function getMeetingStatus(spaceId: string): Promise<MeetingStatus> 
 
 /** Whether the company Google account is connected for Meet. */
 export async function meetConnected(): Promise<boolean> {
+	if (injectedClient) return true;
 	const account = await loadCompanyCredentials();
 	return Boolean(account);
 }

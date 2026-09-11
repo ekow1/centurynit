@@ -10,7 +10,6 @@ import {
 	pgEnum,
 	index,
 	uniqueIndex,
-	primaryKey,
 	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -1577,8 +1576,19 @@ export const conversationParticipants = pgTable(
 		joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
-		// Composite PK — also guarantees no duplicate (conversation, participant) rows.
-		pk: primaryKey({ columns: [t.conversationId, t.opsUserId, t.participantUserId] }),
+		// Exactly one of the two participant pointers is set. A composite
+		// primary key cannot express that (PK columns may not be null), so
+		// uniqueness is a COALESCE'd unique index and the "exactly one" rule a
+		// CHECK — matching what drizzle/0029 created in production.
+		oneParticipant: check(
+			"conversation_participants_one_participant_chk",
+			sql`(${t.opsUserId} IS NOT NULL)::int + (${t.participantUserId} IS NOT NULL)::int = 1`,
+		),
+		uniqueParticipant: uniqueIndex("conversation_participants_pk").on(
+			t.conversationId,
+			sql`COALESCE(${t.opsUserId}, '00000000-0000-0000-0000-000000000000'::uuid)`,
+			sql`COALESCE(${t.participantUserId}, '')`,
+		),
 		byOpsUser: index("conversation_participants_user_idx").on(t.opsUserId),
 		byParticipantUser: index("conversation_participants_part_user_idx").on(t.participantUserId),
 	}),

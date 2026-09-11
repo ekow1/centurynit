@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { applicantDocuments, bookings, caseAssignments, opsUsers, users } from "../db/schema.js";
+import { applicantDocuments, applicants, bookings, caseAssignments, consultations, opsUsers, users } from "../db/schema.js";
 
 /**
  * Who may read whose documents.
@@ -89,6 +89,29 @@ async function seedUser(id: string) {
 	});
 }
 
+/**
+ * The staff listing deliberately hides documents from users who never entered
+ * the pipeline (no applicant profile), so the applicants under test need one.
+ */
+async function seedApplicant(userId: string) {
+	const [applicant] = await db
+		.insert(applicants)
+		.values({
+			userId,
+			name: userId,
+			email: `${userId}${SUFFIX}`,
+			branch: "accra",
+		})
+		.returning();
+	// …and a case: the review queue lists only applicants with a consultation
+	// or application, so uploads from someone who never booked stay out of it.
+	await db.insert(consultations).values({
+		reference: `CNS-TEST-${userId.slice(-6)}`,
+		applicantId: applicant.id,
+		branch: "accra",
+	});
+}
+
 async function seedDocument(ownerUserId: string): Promise<string> {
 	const [row] = await db
 		.insert(applicantDocuments)
@@ -112,6 +135,8 @@ async function wipe() {
 	await db.execute(
 		sql`DELETE FROM applicant_documents WHERE owner_user_id IN (SELECT id FROM users WHERE email LIKE ${"%" + SUFFIX})`,
 	);
+	await db.execute(sql`DELETE FROM consultations WHERE applicant_id IN (SELECT id FROM applicants WHERE email LIKE ${"%" + SUFFIX})`);
+	await db.execute(sql`DELETE FROM applicants WHERE email LIKE ${"%" + SUFFIX}`);
 	await db.execute(sql`DELETE FROM ops_users WHERE email LIKE ${"%" + SUFFIX}`);
 	await db.execute(sql`DELETE FROM users WHERE email LIKE ${"%" + SUFFIX}`);
 }
@@ -131,6 +156,8 @@ beforeEach(async () => {
 	for (const id of [ids.applicantA, ids.applicantB, ids.consultant, ids.manager]) {
 		await seedUser(id);
 	}
+	await seedApplicant(ids.applicantA);
+	await seedApplicant(ids.applicantB);
 
 	const [consultantOps] = await db
 		.insert(opsUsers)

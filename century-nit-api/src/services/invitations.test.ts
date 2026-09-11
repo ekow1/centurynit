@@ -234,22 +234,32 @@ describe("accepting an invitation", () => {
 		).rejects.toMatchObject({ code: "INVITATION_ALREADY_ACCEPTED" });
 	});
 
-	maybe()("refuses a second outstanding invitation for the same address", async () => {
-		await createInvitation({
+	maybe()("re-inviting an address revokes the earlier outstanding invitation", async () => {
+		// Re-inviting is how a manager fixes a wrong role or a lost email; it
+		// must not demand a manual revoke first. But two live tokens for one
+		// address would be two ways in, so the earlier one dies.
+		const first = await createInvitation({
 			email: "dup@invite-test.local",
 			name: "Dup",
 			role: "consultant",
 			invitedBy: INVITER,
 		});
+		const firstToken = new URL(first.acceptUrl).searchParams.get("token")!;
 
-		await expect(
-			createInvitation({
-				email: "dup@invite-test.local",
-				name: "Dup Again",
-				role: "manager",
-				invitedBy: INVITER,
-			}),
-		).rejects.toMatchObject({ code: "EMAIL_ALREADY_REGISTERED" });
+		const second = await createInvitation({
+			email: "dup@invite-test.local",
+			name: "Dup Again",
+			role: "manager",
+			invitedBy: INVITER,
+		});
+		expect(second.invitation.role).toBe("manager");
+		expect(second.invitation.status).toBe("PENDING");
+
+		await expect(findByToken(firstToken)).rejects.toMatchObject({ code: "INVITATION_INVALID" });
+		const outstanding = (await listInvitations()).filter(
+			(i) => i.email === "dup@invite-test.local" && i.status === "PENDING",
+		);
+		expect(outstanding).toHaveLength(1);
 	});
 
 	maybe()("refuses to invite somebody who is already staff", async () => {

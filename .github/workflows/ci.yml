@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API — typecheck, build DB, test against Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The integration suites (booking, RLS, handoffs, the journey walk) skip
+    # themselves when no database is reachable. That makes a green run
+    # meaningless unless one is present, so one always is here.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: century
+          POSTGRES_PASSWORD: century
+          POSTGRES_DB: century_nit
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U century -d century_nit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+
+    env:
+      DATABASE_URL: postgres://century:century@localhost:5433/century_nit
+      REDIS_URL: redis://localhost:6380
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build shared packages
+        run: npm run build:packages
+
+      - name: Typecheck (shared, core, api)
+        run: npm run lint
+
+      - name: Build the database from schema.ts
+        # The historical migration chain does not replay from zero (see
+        # src/scripts/db-fresh.ts); existing databases keep using db:migrate.
+        run: npm run db:fresh --workspace=century-nit-api
+
+      - name: Test
+        run: npx vitest run --reporter=default --reporter=json --outputFile=/tmp/vitest.json
+        working-directory: century-nit-api
+
+      - name: Fail if any test skipped itself
+        # The integration suites skip themselves when no database is usable.
+        # A run must not pass on the strength of the pure-function tests alone.
+        run: |
+          node -e '
+            const r = require("/tmp/vitest.json");
+            const skipped = r.testResults.flatMap(f => f.assertionResults.filter(t => t.status === "skipped" || t.status === "pending").map(t => f.name + " :: " + t.fullName));
+            if (skipped.length) { console.error("Skipped tests:\n" + skipped.join("\n")); process.exit(1); }
+            console.log(`No skipped tests (${r.numPassedTests} passed).`);
+          '
+
+  frontends:
+    name: Web + Ops — typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:packages
+      - name: Typecheck
+        run: |
+          npx tsc --noEmit -p century-nit-web/tsconfig.app.json
+          npx tsc --noEmit -p century-nit-ops/tsconfig.app.json
+      - name: Build
+        run: npm run build:frontend

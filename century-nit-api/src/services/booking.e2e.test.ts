@@ -14,10 +14,11 @@ import { encrypt } from "../lib/crypto.js";
 import { addMinutes, dateKeyInZone, zonedTimeToUtc } from "../lib/time.js";
 import { FakeCalendarClient } from "./calendar/fake.js";
 import { setCalendarClient } from "./calendar/index.js";
+import { setMeetClientForTests, type MeetSpacesClient } from "./meet/index.js";
+import { getSetting, writeSettingSystem } from "./settings.js";
 import {
 	assignBooking,
 	cancelBooking,
-	cancelCalendarForBooking,
 	createBooking,
 	getBooking,
 	queuePendingCalendarSyncs,
@@ -48,6 +49,42 @@ const TZ = "Africa/Accra";
 const BRANCH = "accra-hq";
 const calendar = new FakeCalendarClient();
 let restoreCalendar: () => void;
+
+/**
+ * Stand-in for the Google Meet API. Meeting links come from a company-level
+ * Meet space (not a per-consultant calendar event), so this is what the
+ * assignment path talks to. `failNextCalls` simulates an outage,
+ * `failWithAuthError` a revoked company token.
+ */
+class FakeMeetClient implements MeetSpacesClient {
+	created = 0;
+	failNextCalls = 0;
+	failWithAuthError = false;
+	spaces = {
+		create: async () => {
+			if (this.failWithAuthError) {
+				throw Object.assign(new Error("invalid_grant"), { code: 401 });
+			}
+			if (this.failNextCalls > 0) {
+				this.failNextCalls -= 1;
+				throw Object.assign(new Error("Meet is having a moment"), { code: 503 });
+			}
+			this.created += 1;
+			const code = `e2e-${this.created}`;
+			return { data: { name: `spaces/${code}`, meetingUri: `https://meet.google.com/${code}`, meetingCode: code } };
+		},
+		get: async (args: { name: string }) => ({
+			data: { name: args.name, meetingUri: `https://meet.google.com/${args.name.replace("spaces/", "")}` },
+		}),
+		endActiveConference: async () => ({}),
+	};
+	reset() {
+		this.created = 0;
+		this.failNextCalls = 0;
+		this.failWithAuthError = false;
+	}
+}
+const meet = new FakeMeetClient();
 
 /**
  * Probed at module load, not in `beforeAll`.
@@ -172,6 +209,7 @@ async function cleanBookings() {
 beforeAll(async () => {
 	if (!dbAvailable) return;
 	restoreCalendar = setCalendarClient(calendar);
+	setMeetClientForTests(meet);
 	await cleanBookings();
 	await seed();
 });
@@ -180,11 +218,14 @@ afterAll(async () => {
 	if (!dbAvailable) return;
 	await cleanBookings();
 	restoreCalendar?.();
+	setMeetClientForTests(null);
 });
 
 beforeEach(async () => {
 	if (!dbAvailable) return;
 	calendar.reset();
+	meet.reset();
+	setMeetClientForTests(meet);
 	await cleanBookings();
 });
 
@@ -227,9 +268,6 @@ describe("required end-to-end scenario", () => {
 			});
 			const enoch = options.find((o) => o.id === employeeA)!;
 			expect(enoch.available).toBe(true);
-			// calendarConnected now reflects an iCal feed, not the legacy Google
-			// account this scenario still seeds to exercise the test calendar.
-			expect(enoch.calendarConnected).toBe(false);
 
 			/* 6–9. Assign → calendar event → Meet link saved on the booking. */
 			const assigned = await assignBooking({
@@ -241,13 +279,11 @@ describe("required end-to-end scenario", () => {
 			expect(assigned.status).toBe("ASSIGNED");
 			expect(assigned.employeeId).toBe(employeeA);
 			expect(assigned.assignedAt).toBeTruthy();
-			expect(assigned.calendarEventId).toBeTruthy();
+			// The link is a company Meet space, created on assignment.
+			expect(assigned.meetingSpace).toBeTruthy();
 			expect(assigned.meetingUrl).toMatch(/^https:\/\/meet\.google\.com\//);
 			expect(assigned.calendarSyncStatus).toBe("SYNCED");
-
-			/* 10–11. Both parties were notified — the calendar event carries both. */
-			const event = calendar.events.get(assigned.calendarEventId!)!;
-			expect(event.summary).toContain("John Doe");
+			expect(meet.created).toBe(1);
 
 			/* 12–16. Client reschedules; the event moves, the link survives. */
 			const moved = await rescheduleBooking({
@@ -261,11 +297,9 @@ describe("required end-to-end scenario", () => {
 			expect(moved.status).toBe("RESCHEDULED");
 			expect(moved.startsAt.getTime()).toBe(zonedTimeToUtc(date, "14:00", TZ).getTime());
 			expect(moved.rescheduledAt).toBeTruthy();
-			// The link the client already holds must keep working.
+			// The link the client already holds must keep working — no new space.
 			expect(moved.meetingUrl).toBe(assigned.meetingUrl);
-			expect(calendar.events.get(moved.calendarEventId!)!.startsAt.getTime()).toBe(
-				moved.startsAt.getTime(),
-			);
+			expect(meet.created).toBe(1);
 
 		/* The 10:00 slot it left is bookable again. */
 		const afterMove = await branchAvailability({
@@ -287,10 +321,6 @@ describe("required end-to-end scenario", () => {
 			});
 			expect(cancelled.status).toBe("CANCELLED");
 			expect(cancelled.cancelledAt).toBeTruthy();
-
-			// The worker performs the Google side; run it inline here.
-			await cancelCalendarForBooking(cancelled.id);
-			expect(calendar.isCancelled(moved.calendarEventId!)).toBe(true);
 
 			/* 20. The slot is free again — for the branch and for the employee. */
 			const afterCancel = await branchAvailability({
@@ -449,9 +479,9 @@ describe("§14 idempotency", () => {
 		const first = await assignBooking({ bookingId: booking.id, employeeId: employeeA, actor });
 		const retry = await assignBooking({ bookingId: booking.id, employeeId: employeeA, actor });
 
-		expect(retry.calendarEventId).toBe(first.calendarEventId);
+		expect(retry.meetingSpace).toBe(first.meetingSpace);
 		expect(retry.meetingUrl).toBe(first.meetingUrl);
-		expect(calendar.events.size).toBe(1);
+		expect(meet.created).toBe(1);
 	});
 });
 
@@ -472,7 +502,7 @@ describe("§13 failure handling", () => {
 			serviceName: "Consultation",
 		});
 
-		calendar.failNextCalls = 1;
+		meet.failNextCalls = 1;
 		const assigned = await assignBooking({
 			bookingId: booking.id,
 			employeeId: employeeA,
@@ -508,7 +538,9 @@ describe("§13 failure handling", () => {
 			serviceName: "Consultation",
 		});
 
-		calendar.failWithAuthError = true;
+		// A live company token, then Google says it is dead.
+		await writeSettingSystem("GOOGLE_COMPANY_REFRESH_TOKEN", "e2e-refresh-token");
+		meet.failWithAuthError = true;
 		const assigned = await assignBooking({
 			bookingId: booking.id,
 			employeeId: employeeB,
@@ -518,13 +550,11 @@ describe("§13 failure handling", () => {
 		expect(assigned.status).toBe("ASSIGNED"); // not lost
 		expect(assigned.calendarSyncStatus).toBe("FAILED");
 
-		const [account] = await db
-			.select()
-			.from(staffCalendarAccounts)
-			.where(eq(staffCalendarAccounts.opsUserId, employeeB));
-		expect(account.needsReconnect).toBe(true);
+		// The company account is flagged for reconnection: the refresh token
+		// is cleared, which the status endpoint reports as "not connected".
+		expect(await getSetting("GOOGLE_COMPANY_REFRESH_TOKEN")).toBeFalsy();
 
-		calendar.failWithAuthError = false;
+		meet.failWithAuthError = false;
 	});
 });
 
@@ -534,9 +564,10 @@ describe("deferred Google configuration", () => {
 		async () => {
 			const date = futureWeekday(17);
 
-			// The employee has no calendar account yet — the state a deployment is in
-			// before anyone has connected, or before GOOGLE_* is configured at all.
-			await db.delete(staffCalendarAccounts).where(eq(staffCalendarAccounts.opsUserId, employeeB));
+			// Meet is not connected yet — the state a deployment is in before the
+			// company Google account has been linked in Platform Settings.
+			setMeetClientForTests(null);
+			await writeSettingSystem("GOOGLE_COMPANY_REFRESH_TOKEN", null);
 
 			const booking = await createBooking({
 				data: {
@@ -558,23 +589,15 @@ describe("deferred Google configuration", () => {
 				actor: { opsUserId: employeeB, name: "Manager", email: "m@century-nit.com" },
 			});
 
-			// Assignment still succeeds; only the link is missing. With no calendar
-			// connection the sync is a no-op, so the booking stays PENDING.
+			// Assignment still succeeds; only the link is missing. With Meet not
+			// connected the sync is a no-op, so the booking stays PENDING.
 			expect(assigned.status).toBe("ASSIGNED");
 			expect(assigned.calendarSyncStatus).toBe("PENDING");
 			expect(assigned.meetingUrl).toBeNull();
 
-			// The employee now connects. queuePendingCalendarSyncs is what the OAuth
-			// callback calls; here we assert it finds the backlog.
-			await db.insert(staffCalendarAccounts).values({
-				opsUserId: employeeB,
-				provider: "google",
-				googleAccountEmail: "late@example.com",
-				calendarId: "primary",
-				accessTokenEncrypted: encrypt("access-token"),
-				refreshTokenEncrypted: encrypt("refresh-token"),
-				accessTokenExpiresAt: new Date(Date.now() + 3600_000),
-			});
+			// The company account is now connected. queuePendingCalendarSyncs is
+			// what the OAuth callback calls; here we assert it finds the backlog.
+			setMeetClientForTests(meet);
 
 			const queued = await queuePendingCalendarSyncs(employeeB);
 			expect(queued).toBeGreaterThanOrEqual(1);
@@ -693,14 +716,13 @@ describe("§3 editing working hours", () => {
 });
 
 describe("§12 external calendar conflicts", () => {
-	maybe()("treats an event added directly in Google as busy", async () => {
+	maybe()("ignores events that only exist in an external calendar", async () => {
+		// By design the internal calendar is the sole source of truth for
+		// availability (see availability.ts): consultants publish an iCal feed
+		// outward, and nothing pulled from Google can silently block a slot.
 		const date = futureWeekday(13);
 		const startsAt = zonedTimeToUtc(date, "10:00", TZ);
 
-		const before = await isEmployeeAvailable(employeeA, startsAt, 45, { timezone: TZ });
-		expect(before.available).toBe(true);
-
-		// What the webhook-driven refresh writes.
 		await db.insert(calendarBusyBlocks).values({
 			opsUserId: employeeA,
 			externalEventId: "ext-dentist",
@@ -710,8 +732,7 @@ describe("§12 external calendar conflicts", () => {
 		});
 
 		const after = await isEmployeeAvailable(employeeA, startsAt, 45, { timezone: TZ });
-		expect(after.available).toBe(false);
-		expect(after.reason).toBe("conflict");
+		expect(after.available).toBe(true);
 	});
 });
 

@@ -9,7 +9,6 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
-	caseAssignments,
 	caseComments,
 	opsUsers,
 	stageAssignments,
@@ -62,9 +61,10 @@ export function isAwaitingAssignmentBoundary(stage: JourneyStage): boolean {
 type Actor = { opsUserId: string; name: string; email: string };
 export type HandoffRow = typeof stageHandoffs.$inferSelect;
 
-/** Active handler (per-stage or whole-case) responsible for a stage.
- * Falls back to applications.assignedStaffId so assignment paths that only set
- * the application owner (e.g. /applications/:id/assign) are still recognised.
+/**
+ * Who handles `stage` on this application: the stage's specialist if one is
+ * assigned, otherwise the whole-case owner. Those are the only two places
+ * ownership lives (see caseOwnership.ts).
  */
 export async function activeHandlerFor(
 	applicationId: string,
@@ -85,74 +85,24 @@ export async function activeHandlerFor(
 		.limit(1);
 	if (stageRow) return stageRow;
 
-	const [wholeCase] = await tx
-		.select({ opsUserId: caseAssignments.opsUserId, name: opsUsers.name, email: opsUsers.email })
-		.from(caseAssignments)
-		.innerJoin(opsUsers, eq(caseAssignments.opsUserId, opsUsers.id))
-		.where(
-			and(
-				eq(caseAssignments.targetType, "application"),
-				eq(caseAssignments.targetId, applicationId),
-				eq(caseAssignments.status, "active"),
-			),
-		)
-		.limit(1);
-	if (wholeCase) return wholeCase;
-
-	const [appOwner] = await tx
+	const [owner] = await tx
 		.select({ opsUserId: opsUsers.id, name: opsUsers.name, email: opsUsers.email })
 		.from(applications)
 		.innerJoin(opsUsers, eq(applications.assignedStaffId, opsUsers.id))
 		.where(eq(applications.id, applicationId))
 		.limit(1);
-	return appOwner ?? null;
+	return owner ?? null;
 }
 
-/** True when the stage is already owned (per-stage specialist, whole-case, or
- * the application owner). Mirrors activeHandlerFor without returning details.
- */
+/** True when the stage has a handler — a specialist or the case owner. */
 export async function stageHasActiveHandler(
 	applicationId: string,
 	stage: string,
 	tx: typeof db = db,
 ): Promise<boolean> {
-	const [stageRow] = await tx
-		.select({ id: stageAssignments.id })
-		.from(stageAssignments)
-		.where(
-			and(
-				eq(stageAssignments.applicationId, applicationId),
-				eq(stageAssignments.stage, stage),
-				eq(stageAssignments.status, "active"),
-			),
-		)
-		.limit(1);
-	if (stageRow) return true;
-	const [wholeCase] = await tx
-		.select({ id: caseAssignments.id })
-		.from(caseAssignments)
-		.where(
-			and(
-				eq(caseAssignments.targetType, "application"),
-				eq(caseAssignments.targetId, applicationId),
-				eq(caseAssignments.status, "active"),
-			),
-		)
-		.limit(1);
-	if (wholeCase) return true;
-	const [appOwner] = await tx
-		.select({ assignedStaffId: applications.assignedStaffId })
-		.from(applications)
-		.where(eq(applications.id, applicationId))
-		.limit(1);
-	return Boolean(appOwner?.assignedStaffId);
+	return Boolean(await activeHandlerFor(applicationId, stage, tx));
 }
 
-/**
- * Create-or-get a pending handoff for (application, stage). Backfilled with the
- * continuity handler when the caller knows one. Idempotent — the partial unique
- * index on open handoffs prevents duplicates on payment/transition replays.
- */
 export async function createOrGetHandoff(input: {
 	applicationId: string;
 	stage: string;
@@ -397,14 +347,17 @@ export async function resolveStageHandoff(input: {
 	// application and unlocks school selection. Advance the stage from
 	// document_verification to school_submission and write assignedStaffId.
 	if (row.stage === "school_submission") {
+		const { setCaseOwner } = await import("./caseOwnership.js");
+		await setCaseOwner({
+			applicationId: row.applicationId,
+			opsUserId: resolvedOpsUserId,
+			assignedBy: input.actor.opsUserId,
+			note: input.reason ?? `handoff: ${input.decision}`,
+		});
 		await db
 			.update(applications)
-			.set({
-				stage: "school_submission",
-				assignedStaffId: resolvedOpsUserId,
-				updatedAt: new Date(),
-			})
-			.where(eq(applications.id, row.applicationId));
+			.set({ stage: "school_submission", updatedAt: new Date() })
+			.where(and(eq(applications.id, row.applicationId), eq(applications.stage, "document_verification")));
 
 		await db.insert(caseComments).values({
 			targetType: "application",

@@ -137,11 +137,12 @@ export async function activeApplicantUserIdsForOfficer(opsUserId: string): Promi
 		JOIN applicants a ON a.id = c.applicant_id
 		WHERE ca.ops_user_id = ${opsUserId} AND ca.status = 'active'
 		UNION
+		-- Whole-case ownership is applications.assigned_staff_id (caseOwnership.ts);
+		-- case_assignments is its history, not the authority.
 		SELECT DISTINCT a.user_id AS "userId"
-		FROM case_assignments ca
-		JOIN applications ap ON ca.target_type = 'application' AND ca.target_id = ap.id
+		FROM applications ap
 		JOIN applicants a ON a.id = ap.applicant_id
-		WHERE ca.ops_user_id = ${opsUserId} AND ca.status = 'active'
+		WHERE ap.assigned_staff_id = ${opsUserId}
 		UNION
 		SELECT DISTINCT a.user_id AS "userId"
 		FROM ${stageAssignments} sa

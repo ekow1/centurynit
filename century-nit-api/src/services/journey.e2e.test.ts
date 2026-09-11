@@ -194,6 +194,12 @@ describe("the applicant journey, end to end", () => {
 		const [afterHandler] = await db.select().from(applications).where(eq(applications.id, appId));
 		expect(afterHandler.stage).toBe("school_submission");
 		expect(afterHandler.assignedStaffId).toBe(staff.handler);
+		// Ownership is written once and read everywhere: the applicant's point
+		// of contact and the handler's document-access scope both follow.
+		const [contact] = await db.select({ officer: applicants.assignedOfficerId }).from(applicants).where(eq(applicants.userId, CLIENT_ID));
+		expect(contact.officer).toBe(staff.handler);
+		const { activeApplicantUserIdsForOfficer } = await import("./caseAssignments.js");
+		expect(await activeApplicantUserIdsForOfficer(staff.handler)).toContain(CLIENT_ID);
 
 		// ── Schools: select, lock → proforma ─────────────────────────────
 		const applicant = (await getApplicantByUserId(CLIENT_ID))!;

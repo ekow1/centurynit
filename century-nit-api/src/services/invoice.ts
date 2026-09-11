@@ -666,9 +666,17 @@ export async function recordPayment(input: {
 						// A handler was assigned ahead of the deposit (directly from
 						// the ops queue). Nothing to hand off — open the stage now,
 						// exactly as resolving a handoff would.
+						const { setCaseOwner } = await import("./caseOwnership.js");
+						await setCaseOwner({
+							applicationId: targetAppId,
+							opsUserId: handler.opsUserId,
+							assignedBy: null,
+							note: "deposit paid; handler already assigned",
+							tx: txDb,
+						});
 						await txDb
 							.update(applications)
-							.set({ stage: "school_submission", assignedStaffId: handler.opsUserId, updatedAt: new Date() })
+							.set({ stage: "school_submission", updatedAt: new Date() })
 							.where(and(eq(applications.id, targetAppId), eq(applications.stage, "document_verification")));
 						await txDb.insert(caseComments).values({
 							targetType: "application",

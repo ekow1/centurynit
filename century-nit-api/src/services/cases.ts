@@ -24,7 +24,6 @@ import {
 	applicants,
 	applications,
 	bookings,
-	caseAssignments,
 	caseComments,
 	consultationActivities,
 	consultations,
@@ -35,7 +34,6 @@ import {
 	opsUsers,
 	schoolApplications,
 	servicePackages,
-	stageAssignments,
 	stageHandoffs,
 	travelAssistanceRequests,
 } from "../db/schema.js";
@@ -1563,23 +1561,13 @@ export async function assignApplication(input: {
 	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
 	const applicant = await getApplicant(row.applicantId);
 
-	// Ownership is recorded in several places (applications.assignedStaffId,
-	// case_assignments, applicants.assignedOfficerId) and a pending handoff may
-	// need closing. They must agree, so they change together or not at all.
-	const { startAssignment: startAppAssignment } = await import("./caseAssignments.js");
+	// The owner change and the pending handoff it answers must land together.
+	const { setCaseOwner } = await import("./caseOwnership.js");
 	const stageOpened = row.stage === "document_verification" && row.depositPaid;
 	const updated = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
-		const [app] = await txDb
-			.update(applications)
-			.set({ assignedStaffId: input.employeeId, updatedAt: new Date() })
-			.where(eq(applications.id, row.id))
-			.returning();
-
-		// Append-only history.
-		await startAppAssignment({
-			targetType: "application",
-			targetId: row.id,
+		await setCaseOwner({
+			applicationId: row.id,
 			opsUserId: input.employeeId,
 			assignedBy: input.actor.opsUserId,
 			tx: txDb,
@@ -1618,11 +1606,7 @@ export async function assignApplication(input: {
 			});
 		}
 
-		await txDb
-			.update(applicants)
-			.set({ assignedOfficerId: input.employeeId, updatedAt: new Date() })
-			.where(eq(applicants.id, row.applicantId));
-
+		const [app] = await txDb.select().from(applications).where(eq(applications.id, row.id)).limit(1);
 		return app;
 	});
 
@@ -1758,40 +1742,16 @@ function markStageCompleted(
 }
 
 /**
- * After a stage transition, check whether anyone owns the new stage. If a
- * whole-case owner (`case_assignments`, target `application`) or a stage
- * specialist (`stage_assignments` for this stage) is active, stay quiet.
- * Otherwise alert managers/coordinators so the stage is not worked silently —
- * the complement to markStageCompleted, which releases the outgoing officer.
+ * After a stage transition, check whether anyone owns the new stage (the
+ * stage's specialist or the whole-case owner — see caseOwnership.ts). If so,
+ * stay quiet. Otherwise alert managers/coordinators so the stage is not
+ * worked silently — the complement to markStageCompleted, which releases the
+ * outgoing officer.
  */
 async function signalStageNeedsHandler(applicationId: string, stage: JourneyStage): Promise<void> {
 	try {
-		const [wholeCase, stageRows] = await Promise.all([
-			db
-				.select({ id: caseAssignments.id })
-				.from(caseAssignments)
-				.where(
-					and(
-						eq(caseAssignments.targetType, "application"),
-						eq(caseAssignments.targetId, applicationId),
-						eq(caseAssignments.status, "active"),
-					),
-				)
-				.limit(1)
-				.then((r) => r[0]),
-			db
-				.select({ id: stageAssignments.id })
-				.from(stageAssignments)
-				.where(
-					and(
-						eq(stageAssignments.applicationId, applicationId),
-						eq(stageAssignments.stage, stage),
-						eq(stageAssignments.status, "active"),
-					),
-				)
-				.limit(1),
-		]);
-		if (wholeCase || stageRows.length > 0) return;
+		const { stageHasActiveHandler } = await import("./handoffs.js");
+		if (await stageHasActiveHandler(applicationId, stage)) return;
 
 		const [app] = await db
 			.select({ appNumber: applications.appNumber })

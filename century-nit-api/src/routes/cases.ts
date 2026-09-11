@@ -2350,7 +2350,7 @@ meRouter.openapi(
 			email: user.email,
 			amountCents,
 			invoiceId: row.id,
-			callbackUrl: `${origin}/portal/pay?invoice=${row.id}&paystack=1`,
+			callbackUrl: `${origin}/portal/pay?invoice=${row.id}&paystack=1${!hasPaidDeposit ? "&deposit=1" : ""}`,
 		});
 		return c.json({ authorizationUrl: checkout.authorizationUrl });
 	},

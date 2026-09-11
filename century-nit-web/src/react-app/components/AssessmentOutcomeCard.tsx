@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { meApi, ApiError } from "century-nit-core/api";
 import { Button } from "./ui/Button";
@@ -28,23 +28,44 @@ type Props = {
 };
 
 export function AssessmentOutcomeCard({
-	outcome = "Eligible",
+	outcome,
 	notes,
 	recommendations,
 	currentDecision,
 	onDecided,
 }: Props) {
-	const { updateApplication, syncFromServer, refreshJourney } = useAppState();
+	const { updateApplication, syncFromServer, refreshJourney, booking } = useAppState();
 	const { toast } = useNotifier();
 	const navigate = useNavigate();
 
+	const [serverRec, setServerRec] = useState<AssessmentResultData | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [showReason, setShowReason] = useState<"hold" | "opt_out" | null>(null);
 	const [reason, setReason] = useState("");
 
+	useEffect(() => {
+		meApi.application()
+			.then((res) => {
+				if (res.consultation?.assessmentResult) {
+					setServerRec(res.consultation.assessmentResult);
+				}
+			})
+			.catch(() => {});
+	}, []);
+
+	const clean = (val?: string | null) => (val && val.trim().length > 0 ? val.trim() : null);
+
+	const effectiveOutcome = clean(outcome) || clean(serverRec?.outcome) || clean(booking.eligibilityOutcome) || "Eligible";
+	const effectiveNotes = clean(notes) || clean(serverRec?.notes) || clean(booking.eligibilityNote) || null;
+
+	const effectiveCountry = clean(recommendations?.country) || clean(serverRec?.recCountry) || clean(booking.assessmentResult?.recCountry) || null;
+	const effectiveUniversity = clean(recommendations?.university) || clean(serverRec?.recUniversity) || clean(booking.assessmentResult?.recUniversity) || null;
+	const effectiveProgram = clean(recommendations?.program) || clean(serverRec?.recProgram) || clean(booking.assessmentResult?.recProgram) || null;
+	const effectivePackage = clean(recommendations?.package) || clean(serverRec?.recPackage) || clean(booking.assessmentResult?.recPackage) || null;
+
 	const isEligible =
-		outcome?.toLowerCase() === "eligible" ||
-		outcome?.toLowerCase().includes("conditional");
+		effectiveOutcome?.toLowerCase() === "eligible" ||
+		effectiveOutcome?.toLowerCase().includes("conditional");
 
 	const effectiveDecision = currentDecision ?? null;
 
@@ -62,11 +83,21 @@ export function AssessmentOutcomeCard({
 				} catch {
 					/* fallback */
 				}
+				const mappedTrack = effectivePackage
+					? effectivePackage.toLowerCase().includes("non")
+						? "non_scholarship"
+						: effectivePackage.toLowerCase().includes("hybrid")
+							? "hybrid"
+							: effectivePackage.toLowerCase().includes("scholarship")
+								? "scholarship"
+								: undefined
+					: undefined;
 				updateApplication({
 					proceedStatus: "accepted",
 					applicationConsent: {
 						decision: "continue",
 					},
+					...(mappedTrack ? { schoolFundingTrack: mappedTrack as any } : {}),
 				});
 				toast.success("Decision recorded! Opening your school package…");
 				setShowReason(null);
@@ -119,10 +150,10 @@ export function AssessmentOutcomeCard({
 	}
 
 	const hasRecs = Boolean(
-		recommendations?.country ||
-		recommendations?.university ||
-		recommendations?.program ||
-		recommendations?.package,
+		effectiveCountry ||
+		effectiveUniversity ||
+		effectiveProgram ||
+		effectivePackage,
 	);
 
 	const formatPkg = (pkg?: string | null) => {
@@ -160,7 +191,7 @@ export function AssessmentOutcomeCard({
 						Official Counselor Assessment Result
 					</span>
 					<h3 className="display mt-1" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0" }}>
-						Assessment Outcome & Recommendations
+						Assessment Outcome &amp; Recommendations
 					</h3>
 				</div>
 				<span
@@ -173,72 +204,100 @@ export function AssessmentOutcomeCard({
 						padding: "0.35rem 0.85rem",
 					}}
 				>
-					{outcome || "Eligible"}
+					{effectiveOutcome || "Eligible"}
 				</span>
 			</div>
 
 			{/* Counselor Notes */}
-			{notes && (
+			{effectiveNotes && (
 				<div className="mt-3">
 					<p className="eyebrow mb-1" style={{ fontSize: "0.75rem", color: "#64748b" }}>
 						Counselor Assessment Notes
 					</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, margin: 0, color: "var(--foreground)" }}>
-						{notes}
+						{effectiveNotes}
 					</p>
 				</div>
 			)}
 
-			{/* Recommendations Grid */}
+			{/* Recommendations Grid (Always shown if any recommendation exists) */}
 			{hasRecs && (
 				<div
 					style={{
 						display: "grid",
 						gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-						gap: "1rem",
+						gap: "0.85rem",
 						marginTop: "1.25rem",
 						paddingTop: "1rem",
 						borderTop: "1px dashed var(--border)",
 					}}
 				>
-					{recommendations?.country && (
-						<div>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
-								Recommended Destination
+					{effectiveCountry && (
+						<div
+							style={{
+								padding: "0.75rem",
+								borderRadius: "6px",
+								background: "rgba(255, 255, 255, 0.7)",
+								border: "1px solid var(--border-light, #e5e7eb)",
+							}}
+						>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
+								🌍 Recommended Destination
 							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{recommendations.country}</strong>
+							<strong style={{ fontSize: "0.95rem" }}>{effectiveCountry}</strong>
 						</div>
 					)}
-					{recommendations?.university && (
-						<div>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
-								Recommended Institution
+					{effectiveUniversity && (
+						<div
+							style={{
+								padding: "0.75rem",
+								borderRadius: "6px",
+								background: "rgba(255, 255, 255, 0.7)",
+								border: "1px solid var(--border-light, #e5e7eb)",
+							}}
+						>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
+								🏛️ Recommended Institution
 							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{recommendations.university}</strong>
+							<strong style={{ fontSize: "0.95rem" }}>{effectiveUniversity}</strong>
 						</div>
 					)}
-					{recommendations?.program && (
-						<div>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
-								Recommended Program
+					{effectiveProgram && (
+						<div
+							style={{
+								padding: "0.75rem",
+								borderRadius: "6px",
+								background: "rgba(255, 255, 255, 0.7)",
+								border: "1px solid var(--border-light, #e5e7eb)",
+							}}
+						>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
+								🎓 Recommended Program
 							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{recommendations.program}</strong>
+							<strong style={{ fontSize: "0.95rem" }}>{effectiveProgram}</strong>
 						</div>
 					)}
-					{recommendations?.package && (
-						<div>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block" }}>
-								Recommended Package
+					{effectivePackage && (
+						<div
+							style={{
+								padding: "0.75rem",
+								borderRadius: "6px",
+								background: "rgba(37, 99, 235, 0.04)",
+								border: "1px solid rgba(37, 99, 235, 0.2)",
+							}}
+						>
+							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
+								📦 Recommended Package
 							</span>
 							<strong style={{ fontSize: "0.95rem", color: "var(--primary, #2563eb)" }}>
-								{formatPkg(recommendations.package)}
+								{formatPkg(effectivePackage)}
 							</strong>
 						</div>
 					)}
 				</div>
 			)}
 
-			{/* Decision & Action Buttons Section */}
+			{/* Decision & Action Buttons Section beneath recommendations */}
 			<div
 				className="mt-4 pt-3"
 				style={{ borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "0.75rem" }}

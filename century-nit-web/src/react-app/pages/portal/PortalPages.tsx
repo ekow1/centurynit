@@ -70,7 +70,6 @@ export function PortalJourney() {
 export function PortalAwaitingHandler() {
 	const { application, journeyPhase, syncFromServer, refreshJourney } = useAppState();
 	const navigate = useNavigate();
-	const [checking, setChecking] = useState(false);
 
 	const hasHandler = Boolean(application.assignedStaffId);
 	const stageAdvanced =
@@ -82,13 +81,10 @@ export function PortalAwaitingHandler() {
 		(!application.pendingHandoff && application.agencyDepositPaid);
 
 	const checkStatus = useCallback(async () => {
-		setChecking(true);
 		try {
 			await Promise.all([syncFromServer(), refreshJourney()]);
 		} catch {
-			/* keep polling */
-		} finally {
-			setChecking(false);
+			/* keep polling behind the scenes */
 		}
 	}, [syncFromServer, refreshJourney]);
 
@@ -96,7 +92,7 @@ export function PortalAwaitingHandler() {
 		void checkStatus();
 		const timer = window.setInterval(() => {
 			void checkStatus();
-		}, 3000);
+		}, 2500);
 		return () => window.clearInterval(timer);
 	}, [checkStatus]);
 
@@ -148,17 +144,25 @@ export function PortalAwaitingHandler() {
 					select schools and programmes. This usually happens within 1–2 business days.
 				</p>
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
-					You don't need to do anything right now — check back shortly.
+					You don't need to do anything right now — checking status automatically in the background.
 				</p>
 				<div className="mt-4 row" style={{ gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-					<Button
-						type="button"
-						variant="secondary"
-						disabled={checking}
-						onClick={() => void checkStatus()}
+					<span
+						className="portal-pill portal-pill--draft"
+						style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
 					>
-						{checking ? "Checking status…" : "Check Status Now ⟳"}
-					</Button>
+						<span
+							style={{
+								width: "8px",
+								height: "8px",
+								borderRadius: "50%",
+								background: "var(--accent, #3b82f6)",
+								display: "inline-block",
+								animation: "pulse 1.5s infinite ease-in-out",
+							}}
+						/>
+						Checking assignment behind the scenes…
+					</span>
 					<Link to="/portal/journey" className="btn btn--ghost">
 						View Application Journey
 					</Link>
@@ -171,6 +175,36 @@ export function PortalAwaitingHandler() {
 /* ========== Awaiting application invoice (after school lock) ========== */
 
 export function PortalAwaitingInvoice() {
+	const { syncFromServer, refreshJourney } = useAppState();
+	const navigate = useNavigate();
+
+	useEffect(() => {
+		let active = true;
+		const checkInvoice = async () => {
+			try {
+				const { invoices } = await meApi.invoices();
+				const inv = invoices.find((i) => i.type === "application");
+				if (inv && (inv.status === "issued" || inv.status === "partial" || inv.status === "paid")) {
+					await Promise.all([syncFromServer(), refreshJourney()]);
+					if (active) {
+						navigate("/portal/application", { replace: true });
+					}
+				}
+			} catch {
+				/* silent background retry */
+			}
+		};
+
+		void checkInvoice();
+		const timer = window.setInterval(() => {
+			void checkInvoice();
+		}, 2500);
+		return () => {
+			active = false;
+			window.clearInterval(timer);
+		};
+	}, [navigate, syncFromServer, refreshJourney]);
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
@@ -186,8 +220,29 @@ export function PortalAwaitingInvoice() {
 					invoice will be issued shortly — you'll be able to pay it once it's ready.
 				</p>
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
-					You don't need to do anything right now — check back shortly.
+					You don't need to do anything right now — checking status automatically in the background.
 				</p>
+				<div className="mt-4 row" style={{ gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+					<span
+						className="portal-pill portal-pill--draft"
+						style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+					>
+						<span
+							style={{
+								width: "8px",
+								height: "8px",
+								borderRadius: "50%",
+								background: "var(--accent, #3b82f6)",
+								display: "inline-block",
+								animation: "pulse 1.5s infinite ease-in-out",
+							}}
+						/>
+						Checking invoice status behind the scenes…
+					</span>
+					<Link to="/portal/journey" className="btn btn--ghost">
+						View Application Journey
+					</Link>
+				</div>
 			</div>
 		</div>
 	);
@@ -209,10 +264,10 @@ function SchoolPackageInner() {
 	const nav = useNavigate();
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
 	const [funding, setFunding] = useState<SchoolFundingTrack | "">(
-		application.schoolFundingTrack || "scholarship",
+		application.schoolFundingTrack || "",
 	);
 	const [level, setLevel] = useState<SchoolDegreeLevel | "">(
-		application.schoolDegreeLevel || "masters",
+		application.schoolDegreeLevel || "",
 	);
 	const [targetSchoolCount, setTargetSchoolCount] = useState<number>(
 		application.targetSchoolCount || 3,
@@ -246,7 +301,7 @@ function SchoolPackageInner() {
 				else if (p.includes("scholarship")) track = "scholarship";
 				if (track) {
 					setRecommendedTrack(track);
-					if (!application.schoolFundingTrack && !funding) {
+					if (!application.schoolFundingTrack) {
 						setFunding(track);
 					}
 				}
@@ -263,7 +318,7 @@ function SchoolPackageInner() {
 				}
 				if (lvl) {
 					setRecommendedLevel(lvl);
-					if (!application.schoolDegreeLevel && !level) {
+					if (!application.schoolDegreeLevel) {
 						setLevel(lvl);
 					}
 				}
@@ -1173,21 +1228,6 @@ const CONSULT_TABS = [
 	"Outcome",
 ] as const;
 
-const OUTCOME_LABELS: Record<EligibilityOutcome, string> = {
-	pending: "Awaiting consultant feedback",
-	eligible: "Eligible",
-	conditional: "Conditionally Eligible",
-	needs_info: "Additional Information Required",
-	not_eligible: "Not Eligible",
-};
-
-const OUTCOME_PILLS: Record<EligibilityOutcome, string> = {
-	pending: "portal-pill--draft",
-	eligible: "portal-pill--approved",
-	conditional: "portal-pill--draft",
-	needs_info: "portal-pill--needs_info",
-	not_eligible: "portal-pill--needs_info",
-};
 
 function ConsultationOutcome({
 	booking,
@@ -1200,103 +1240,13 @@ function ConsultationOutcome({
 	onRevealOutcome: () => void;
 	autopilot: boolean;
 }) {
-	const { application, updateApplication } = useAppState();
-	const nav = useNavigate();
+	const { application, syncFromServer } = useAppState();
 	const outcome = booking.eligibilityOutcome;
-	const isPending = outcome === "pending" || (booking.consultationPhase !== "outcome" && booking.consultationPhase !== "assessment_complete" && booking.consultationPhase !== "cancelled");
-	const { toast } = useNotifier();
-	// Recommendations live on the server consultation record, not in a
-	// hardcoded lookup table. Fetch them when an outcome is shown so the
-	// applicant sees what their consultant actually recommended.
-	const [recs, setRecs] = useState<{ countries: string[]; programs: string[]; university: string | null; notes: string | null }>({
-		countries: [],
-		programs: [],
-		university: null,
-		notes: null,
-	});
-	useEffect(() => {
-		if (isPending) return;
-		let active = true;
-		(async () => {
-			try {
-				const res = await meApi.application();
-				if (!active) return;
-				const r = res.consultation?.assessmentResult;
-				if (!r) return;
-				setRecs({
-					countries: r.recCountry ? [r.recCountry] : [],
-					programs: r.recProgram ? [r.recProgram] : [],
-					university: r.recUniversity || null,
-					notes: r.notes || null,
-				});
-			} catch {
-				/* keep defaults — server may be unreachable */
-			}
-		})();
-		return () => {
-			active = false;
-		};
-	}, [isPending]);
-
-	const [respondState, setRespondState] = useState<"idle" | "loading" | "done">("idle");
-	const [respondAction, setRespondAction] = useState<"accept" | "request_info" | null>(null);
-
-	async function handleRespond(action: "accept" | "request_info") {
-		setRespondState("loading");
-		setRespondAction(action);
-		try {
-			await meApi.respondToOutcome({ action });
-			setRespondState("done");
-		} catch (err) {
-			setRespondState("idle");
-			setRespondAction(null);
-			toast.error(
-				err instanceof ApiError
-					? err.message
-					: "Could not submit your response. Please try again.",
-			);
-		}
-	}
-
-	async function handleHold() {
-		setRespondState("loading");
-		try {
-			await meApi.holdProceed({ reason: "Applicant requested time after consultation" });
-			updateApplication({ proceedStatus: "paused" });
-			toast.success("Application placed on hold. Take all the time you need.");
-		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Could not place application on hold.");
-		} finally {
-			setRespondState("idle");
-		}
-	}
-
-	async function handleOptOut() {
-		setRespondState("loading");
-		try {
-			await meApi.declineProceed({ reason: "Applicant opted out after consultation" });
-			updateApplication({ proceedStatus: "declined" });
-			toast.success("You have opted out of this application cycle.");
-		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Could not opt out.");
-		} finally {
-			setRespondState("idle");
-		}
-	}
-
-	async function handleResume() {
-		setRespondState("loading");
-		try {
-			await meApi.proceed({ acceptQuotation: true });
-			updateApplication({ proceedStatus: "accepted" });
-			toast.success("Application resumed! Head to your school package.");
-			nav("/portal/package");
-		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Could not resume application.");
-		} finally {
-			setRespondState("idle");
-		}
-	}
+	const isPending =
+		outcome === "pending" ||
+		(booking.consultationPhase !== "outcome" &&
+			booking.consultationPhase !== "assessment_complete" &&
+			booking.consultationPhase !== "cancelled");
 
 	if (!booking.confirmationId) {
 		return (
@@ -1395,261 +1345,40 @@ function ConsultationOutcome({
 
 	return (
 		<>
-				<p className="eyebrow">Consultation outcome</p>
-				<div className="mt-3" style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-					<span className={`portal-pill ${OUTCOME_PILLS[outcome]}`} style={{ fontSize: "0.85rem" }}>
-						{OUTCOME_LABELS[outcome]}
-					</span>
-					{booking.outcomeAt ? (
-						<span className="mono muted" style={{ fontSize: "0.75rem" }}>
-							{new Date(booking.outcomeAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-						</span>
-					) : null}
-				</div>
+			<AssessmentOutcomeCard
+				outcome={outcome === "conditional" ? "Conditionally Eligible" : outcome === "eligible" ? "Eligible" : outcome}
+				notes={booking.eligibilityNote}
+				recommendations={{
+					country: booking.assessmentResult?.recCountry,
+					university: booking.assessmentResult?.recUniversity,
+					program: booking.assessmentResult?.recProgram,
+					package: booking.assessmentResult?.recPackage,
+				}}
+				currentDecision={application.applicationConsent?.decision ?? null}
+				onDecided={() => void syncFromServer()}
+			/>
 
-			<div className="card card--pad mt-4">
-				<p className="eyebrow">Consultant's feedback</p>
-				<p className="mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-					{booking.eligibilityNote}
-				</p>
-			</div>
-
-			{recs.notes ? (
-				<div className="card card--pad mt-3">
-					<p className="eyebrow">Recommendations</p>
-					<p className="mt-2" style={{ fontSize: "0.9rem", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-						{recs.notes}
-					</p>
-				</div>
-			) : null}
-
-			{recs.university ? (
-				<div className="card card--pad mt-3">
-					<p className="eyebrow">Recommended institution</p>
-					<p className="mt-2" style={{ fontSize: "0.95rem", fontWeight: 600 }}>{recs.university}</p>
-				</div>
-			) : null}
-
-			{recs.countries.length > 0 ? (
-				<div className="card card--pad mt-3">
-					<p className="eyebrow">Recommended destinations</p>
+			{import.meta.env.DEV && autopilot ? (
+				<details style={{ marginTop: "1rem" }}>
+					<summary className="mono muted" style={{ fontSize: "0.75rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+						Simulate other outcomes
+					</summary>
 					<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-						{recs.countries.map((c) => (
-							<span key={c} className="portal-pill" style={{ fontSize: "0.8rem" }}>{c}</span>
-						))}
+						<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("eligible")}>
+							Eligible
+						</Button>
+						<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("conditional")}>
+							Conditional
+						</Button>
+						<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("needs_info")}>
+							Needs Info
+						</Button>
+						<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("not_eligible")}>
+							Not Eligible
+						</Button>
 					</div>
-				</div>
+				</details>
 			) : null}
-
-			{recs.programs.length > 0 ? (
-				<div className="card card--pad mt-3">
-					<p className="eyebrow">Suggested programmes</p>
-					<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-						{recs.programs.map((p) => (
-							<span key={p} className="portal-pill" style={{ fontSize: "0.8rem" }}>{p}</span>
-						))}
-					</div>
-				</div>
-			) : null}
-
-			{(outcome === "eligible" || outcome === "conditional") ? (
-				application.proceedStatus === "paused" ? (
-					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--accent, #f59e0b)" }}>
-						<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-							<span className="portal-pill portal-pill--needs_info">Application on Hold</span>
-						</div>
-						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Take Your Time</h3>
-						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-							You have placed your application on hold. Review your recommendations, discuss with family, or message your consultant.
-							Whenever you are ready to continue with school selection, click resume below.
-						</p>
-						<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-							<Button type="button" onClick={() => void handleResume()} arrow disabled={respondState === "loading"}>
-								{respondState === "loading" ? "Resuming…" : "Resume Application →"}
-							</Button>
-							<Button type="button" variant="ghost" onClick={() => void handleOptOut()} disabled={respondState === "loading"}>
-								Opt Out Instead
-							</Button>
-						</div>
-					</div>
-				) : application.proceedStatus === "declined" ? (
-					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--border-light, #9ca3af)" }}>
-						<span className="portal-pill">Opted Out</span>
-						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Application Closed for This Cycle</h3>
-						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-							You chose to opt out of the application stage for this cycle. If your plans change, you can resume at any time.
-						</p>
-						<div className="row mt-3">
-							<Button type="button" variant="secondary" onClick={() => void handleResume()} disabled={respondState === "loading"}>
-								{respondState === "loading" ? "Resuming…" : "Change Mind & Resume"}
-							</Button>
-						</div>
-					</div>
-				) : application.proceedStatus === "accepted" || (respondState === "done" && respondAction === "accept") ? (
-					<div className="card card--pad mt-4" style={{ borderLeft: "4px solid var(--success, #10b981)" }}>
-						<span className="portal-pill portal-pill--verified">Ready for Package Selection</span>
-						<h3 className="display mt-2" style={{ fontSize: "1.2rem" }}>Continuing to Application Stage</h3>
-						<p className="mt-2 muted" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-							Your consultation outcome has been accepted. Head to the School Package step to configure your degree level, funding track, and target institutions.
-						</p>
-						<div className="row mt-3">
-							<Button to="/portal/package" arrow>
-								Next · School Package →
-							</Button>
-						</div>
-					</div>
-				) : (
-					<div className="card card--pad mt-4 next-action">
-						<p className="eyebrow">Next step · Post-Consultation Path</p>
-						<h3 className="display mt-2" style={{ fontSize: "1.25rem" }}>
-							How would you like to proceed with your application?
-						</h3>
-						<p className="mt-2 muted" style={{ fontSize: "0.95rem" }}>
-							{outcome === "eligible"
-								? "You are cleared to proceed! Choose whether you want to continue directly to choose your package, hold on for now, or opt out."
-								: "Address the recommendations from your consultation. Choose whether to continue, pause, or opt out:"}
-						</p>
-
-						<div className="card-grid card-grid--3 mt-4" style={{ gap: "1rem" }}>
-							{/* Option 1: Continue */}
-							<div
-								className="card card--pad"
-								style={{
-									display: "flex",
-									flexDirection: "column",
-									justifyContent: "space-between",
-									border: "1px solid var(--accent, #3b82f6)",
-									background: "rgba(59, 130, 246, 0.03)",
-								}}
-							>
-								<div>
-									<span className="portal-pill portal-pill--verified mb-2" style={{ fontSize: "0.75rem" }}>
-										Recommended
-									</span>
-									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>1. Continue to Application</h4>
-									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-										Select your degree level (BSc, Master&apos;s, PhD), funding track, and number of target schools.
-									</p>
-								</div>
-								<Button
-									type="button"
-									className="mt-3"
-									onClick={async () => {
-										await handleRespond("accept");
-										try {
-											await meApi.proceed({ acceptQuotation: true });
-											updateApplication({ proceedStatus: "accepted" });
-										} catch {
-											/* proceed fallback */
-										}
-										nav("/portal/package");
-									}}
-									arrow
-									disabled={respondState === "loading"}
-								>
-									Continue →
-								</Button>
-							</div>
-
-							{/* Option 2: Hold On */}
-							<div className="card card--pad" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-								<div>
-									<span className="portal-pill portal-pill--needs_info mb-2" style={{ fontSize: "0.75rem" }}>
-										Need time?
-									</span>
-									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>2. Hold On</h4>
-									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-										Need time to check finances or talk to family? Pause your file without losing progress.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="secondary"
-									className="mt-3"
-									onClick={() => void handleHold()}
-									disabled={respondState === "loading"}
-								>
-									Put On Hold
-								</Button>
-							</div>
-
-							{/* Option 3: Opt Out */}
-							<div className="card card--pad" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-								<div>
-									<span className="portal-pill mb-2" style={{ fontSize: "0.75rem" }}>
-										No obligations
-									</span>
-									<h4 style={{ margin: "0.5rem 0 0.25rem", fontSize: "1.05rem" }}>3. Opt Out</h4>
-									<p className="muted" style={{ fontSize: "0.85rem", lineHeight: 1.5 }}>
-										Decide not to pursue an application this cycle. You can re-open anytime.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="ghost"
-									className="mt-3"
-									onClick={() => void handleOptOut()}
-									disabled={respondState === "loading"}
-								>
-									Opt Out
-								</Button>
-							</div>
-						</div>
-					</div>
-				)
-			) : null}
-
-			{outcome === "not_eligible" ? (
-				<div className="card card--pad mt-4 next-action">
-					<p className="eyebrow">Next step</p>
-					{respondState === "done" ? (
-						<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-							Your consultant will review your request and follow up with alternative pathways or preparatory steps.
-						</p>
-					) : (
-						<>
-							<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-								You may request more information or explore alternative pathways with your consultant.
-							</p>
-							<div className="row mt-3" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-								<Button type="button" variant="secondary" onClick={() => handleRespond("request_info")} disabled={respondState === "loading"}>
-									Request more information
-								</Button>
-								<Button type="button" variant="ghost" onClick={() => void handleOptOut()} disabled={respondState === "loading"}>
-									Opt out
-								</Button>
-							</div>
-						</>
-					)}
-				</div>
-			) : null}
-
-				{/* Hidden when the Operations Center is driving - the consultant owns this call.
-    Further gated behind the build-time dev flag: a production build must not
-    let an applicant self-approve their own eligibility, which is the gate for
-    the entire downstream journey. This is a demo affordance only, so Vite
-    tree-shakes the whole block out of a production bundle. */}
-				{import.meta.env.DEV && autopilot ? (
-					<details style={{ marginTop: "1rem" }}>
-						<summary className="mono muted" style={{ fontSize: "0.75rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-							Simulate other outcomes
-						</summary>
-						<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-							<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("eligible")}>
-								Eligible
-							</Button>
-							<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("conditional")}>
-								Conditional
-							</Button>
-							<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("needs_info")}>
-								Needs Info
-							</Button>
-							<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("not_eligible")}>
-								Not Eligible
-							</Button>
-						</div>
-					</details>
-				) : null}
 		</>
 	);
 }
@@ -2320,8 +2049,12 @@ export function PortalConsultation() {
 	const activeOfficer = liveConsultation?.assignedOfficerName;
 	const workflow = liveConsultation?.workflow;
 	const workflowStatus = workflow?.status ?? "AWAITING_ASSIGNMENT";
-	const activeOutcome = liveConsultation?.assessmentResult?.outcome ?? (booking.consultationPhase === "outcome" ? "Eligible" : null);
-	const activeNotes = liveConsultation?.assessmentResult?.notes ?? booking.eligibilityNote;
+	const activeOutcome =
+		liveConsultation?.assessmentResult?.outcome ||
+		(liveConsultation?.assessmentResult && (liveConsultation.assessmentResult.recCountry || liveConsultation.assessmentResult.recPackage) ? "Eligible" : null) ||
+		(workflowStatus === "COMPLETED" ? "Eligible" : null) ||
+		(booking.consultationPhase === "outcome" ? "Eligible" : null);
+	const activeNotes = liveConsultation?.assessmentResult?.notes || booking.eligibilityNote || null;
 
 	return (
 		<div className="portal-page">
@@ -2619,7 +2352,14 @@ function ApplicationHubInner() {
 
 	useEffect(() => {
 		fetchInvoice();
-	}, [fetchInvoice]);
+		const shouldPoll = !serverInvoice || serverInvoice.status === "proforma";
+		if (shouldPoll) {
+			const timer = window.setInterval(() => {
+				fetchInvoice();
+			}, 2500);
+			return () => window.clearInterval(timer);
+		}
+	}, [fetchInvoice, serverInvoice]);
 
 	const inv = application.applicationInvoice;
 
@@ -4193,6 +3933,13 @@ export function PortalPayCallback() {
 				if (params.get("type") === "agency" || params.get("booking") === "agency") {
 					await syncFromServer();
 					if (cancelled) return;
+					if (params.get("deposit") === "1") {
+						const journey = await meApi.journey().catch(() => null);
+						const to = journey?.portalStage === "school_select" ? "/portal/application" : "/portal/awaiting-handler";
+						nav(to, { replace: true });
+						toast.success("10% deposit confirmed! A handler is being assigned to your case.");
+						return;
+					}
 					nav("/portal/financial", { replace: true });
 					toast.success("Payment confirmed. Your service fee has been updated.");
 					return;
@@ -4218,14 +3965,35 @@ export function PortalPayCallback() {
 				if (settled && invoice.type === "application") {
 					payApplicationInvoice();
 				}
+
+				if (invoice.type === "agency") {
+					// 10% commitment deposit or Stage IV post-visa settlement?
+					const journey = await meApi.journey().catch(() => null);
+					const isDeposit =
+						params.get("deposit") === "1" ||
+						!settled ||
+						journey?.portalStage === "awaiting_handler" ||
+						journey?.portalStage === "school_select" ||
+						journey?.portalStage === "school_package";
+
+					if (isDeposit) {
+						const to = journey?.portalStage === "school_select" ? "/portal/application" : "/portal/awaiting-handler";
+						nav(to, { replace: true });
+						toast.success("10% deposit confirmed! Your application is underway.");
+						return;
+					}
+
+					nav("/portal/financial", { replace: true });
+					toast.success(settled ? "Payment confirmed. Your service fee is settled." : "Payment received.");
+					return;
+				}
+
 				nav(
 					invoice.type === "visa"
 						? "/portal/visa"
-						: invoice.type === "agency"
-							? "/portal/financial"
-							: invoice.type === "travel"
-								? "/portal/pre-departure"
-								: "/portal/application",
+						: invoice.type === "travel"
+							? "/portal/pre-departure"
+							: "/portal/application",
 					{ replace: true },
 				);
 				if (settled) toast.success("Payment confirmed. Your stage is now unlocked.");

@@ -2063,21 +2063,24 @@ export const PORTAL_CHAPTERS: {
 		unlockHint: "Unlocks when admitted",
 		path: "/portal/visa",
 	},
-	{
-		id: "payment_execution",
-		step: "VI",
-		label: "Payment plan & fees",
-		blurb: "Plan · agency · travel invoice",
-		unlockHint: "Unlocks once your visa is complete",
-		path: "/portal/payment-execution",
-	},
+	// Travel comes before the plan chapter: the ticketing fee and travel
+	// clearance open Payment plan & fees, matching PORTAL_STAGE_ORDER and the
+	// server's chapter unlocks.
 	{
 		id: "travel_assistance",
-		step: "VII",
+		step: "VI",
 		label: "Travel assistance",
 		blurb: "Clearance & pre-departure",
-		unlockHint: "Unlocks after your plan, agency fee and travel invoice are settled",
+		unlockHint: "Unlocks once your visa is complete",
 		path: "/portal/pre-departure",
+	},
+	{
+		id: "payment_execution",
+		step: "VII",
+		label: "Payment plan & fees",
+		blurb: "Plan · agency · travel invoice",
+		unlockHint: "Unlocks once travel assistance is resolved",
+		path: "/portal/payment-execution",
 	},
 	{
 		id: "complete",

@@ -3724,7 +3724,7 @@ const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 	pending: "Visa payment received — your handler has opened your visa case.",
 	biometrics: "Visa case in progress. Attend your biometrics / appointment when scheduled.",
 	decision: "Visa case in progress. Awaiting the authority's decision.",
-	complete: "Visa approved. Your visa is complete — set up your payment plan to continue.",
+	complete: "Visa approved. Your visa is complete — continue to travel assistance.",
 };
 
 function VisaTrackingInner() {
@@ -3834,14 +3834,14 @@ function VisaTrackingInner() {
 						<Button
 							type="button"
 							arrow
-							onClick={() => nav("/portal/payment-execution")}
+							onClick={() => nav("/portal/pre-departure")}
 						>
-							Continue to payment plan & fees
+							Continue to travel assistance
 						</Button>
 					</div>
 				) : (
 					<p className="muted mt-1">
-						Visa tracking is in progress. Payment unlocks once your visa is complete.
+						Visa tracking is in progress. Travel assistance unlocks once your visa is complete.
 					</p>
 				)}
 			</div>
@@ -3884,7 +3884,10 @@ function CompleteInner() {
 				</header>
 				<div className="row">
 					<Button to="/portal/visa" arrow>
-						Visa & travel
+						Visa
+					</Button>
+					<Button to="/portal/pre-departure" variant="secondary">
+						Travel assistance
 					</Button>
 					<Button to="/portal/payment-execution" variant="secondary">
 						Payment plan & fees

@@ -59,7 +59,7 @@ function TravelAssistanceInner() {
 			}
 			if (!backend) {
 				toast.error(
-					"Your ticket invoice has not been issued on the server yet. Ask your handler to raise it.",
+					"Your ticket invoice has not been issued on the server yet. Ask your consultant to raise it.",
 				);
 				return;
 			}
@@ -232,14 +232,14 @@ function TravelAssistanceInner() {
 							{ta?.status === "quote_prepared"
 								? "Ticket invoice being approved"
 								: ta?.assignedOpsUserId
-									? "Your travel handler is on it"
+									? "Your consultant is on it"
 									: "Request received"}
 						</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
 							{ta?.status === "quote_prepared"
 								? "Your ticket invoice has been prepared and is with a manager for approval. You'll be able to pay it here as soon as it's issued."
 								: ta?.assignedOpsUserId
-									? `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel handler is"} preparing your flight ticket invoice. Check back here to pay it once it's ready.`
+									? `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your consultant is"} preparing your flight ticket invoice. Check back here to pay it once it's ready.`
 									: "Your request has been sent to our travel team. A handler will be assigned to issue your flight ticket invoice shortly. Check back here to pay it once it's ready."}
 						</p>
 					</div>
@@ -258,12 +258,12 @@ function TravelAssistanceInner() {
 								</p>
 								<p className="muted" style={{ fontSize: "0.85rem" }}>
 									{ticketingEffectivePaid
-										? "Paid — your flight ticket is settled. Your handler will confirm the booking shortly."
+										? "Paid — your flight ticket is settled. Your consultant will confirm the booking shortly."
 										: tripProforma
 											? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting manager approval`
 											: tripDue
 												? `Invoice ${trip?.invoiceNumber ?? ""} · awaiting payment`
-												: "Awaiting invoice from your handler."}
+												: "Awaiting invoice from your consultant."}
 								</p>
 							</div>
 							<div className="row" style={{ marginLeft: "auto" }}>
@@ -303,7 +303,7 @@ function TravelAssistanceInner() {
 								label="Booking in progress"
 								detail={
 									status === "ticket_paid"
-										? "Your handler is booking your flight. You'll see the confirmation here once it's done."
+										? "Your consultant is booking your flight. You'll see the confirmation here once it's done."
 										: status === "booked" || status === "cleared"
 											? "Your flight is booked."
 											: "Starts once the ticket is paid."
@@ -332,7 +332,7 @@ function TravelAssistanceInner() {
 					<div className="card card--pad">
 						<p className="eyebrow">Flight booked 🛫</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your handler has confirmed your booking. Choose your payment plan below to be cleared
+							Your consultant has confirmed your booking. Choose your payment plan below to be cleared
 							to travel.
 						</p>
 						<div className="mt-2" style={{ display: "grid", gap: "0.5rem" }}>
@@ -427,7 +427,7 @@ function TravelAssistanceInner() {
 			<div className="card card--pad mt-5">
 				<p className="eyebrow">Need help?</p>
 				<p className="muted mt-2">
-					Message your handler through the chat widget at the bottom right of the portal if you
+					Message your consultant through the chat widget at the bottom right of the portal if you
 					have questions about your flight or invoice.
 				</p>
 			</div>

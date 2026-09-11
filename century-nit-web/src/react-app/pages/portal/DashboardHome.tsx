@@ -56,13 +56,13 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	school_package: { title: "Choose your school package", desc: "Pick a funding track and degree level to shape school targeting." },
 	awaiting_handler: { title: "Awaiting handler assignment", desc: "Your 10% deposit has been received. A handler is being assigned to your case." },
 	school_select: { title: "Select schools & programmes", desc: "Choose where to apply, then pay the application invoice." },
-	awaiting_invoice: { title: "Awaiting application invoice", desc: "Your handler is reviewing your school selection and will issue the application invoice shortly." },
+	awaiting_invoice: { title: "Awaiting application invoice", desc: "Your consultant is reviewing your school selection and will issue the application invoice shortly." },
 	application_invoice: { title: "Pay the application invoice", desc: "Settle the Stage II invoice so tracking can begin." },
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa invoice", desc: "On admission, settle the Stage III invoice to start visa." },
-	visa: { title: "Visa tracking", desc: "Your handler processes your visa after you settle the invoice." },
+	visa: { title: "Visa tracking", desc: "Your consultant processes your visa after you settle the invoice." },
 	payment_execution: { title: "Payment plan & service fees", desc: "Choose your payment plan — settle the agency service fee in full or in installments." },
-	travel_assistance: { title: "Travel & pre-departure", desc: "Your handler clears you for travel — pay the ticketing fee and work through the pre-departure checklist." },
+	travel_assistance: { title: "Travel & pre-departure", desc: "Your consultant clears you for travel — pay the ticketing fee and work through the pre-departure checklist." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };
 

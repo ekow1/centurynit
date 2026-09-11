@@ -104,7 +104,7 @@ export function PortalAwaitingHandler() {
 				</header>
 				<div className="card card--pad">
 					<p className="display" style={{ fontSize: "1.2rem" }}>
-						Your handler has been assigned
+						Your consultant has been assigned
 					</p>
 					<p className="muted mt-2">
 						{application.assignedStaffName
@@ -206,7 +206,7 @@ export function PortalAwaitingInvoice() {
 					Your school selection has been submitted
 				</p>
 				<p className="muted mt-2">
-					Your handler is reviewing your selected schools and programmes. The application
+					Your consultant is reviewing your selected schools and programmes. The application
 					invoice will be issued shortly — you'll be able to pay it once it's ready.
 				</p>
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
@@ -2154,7 +2154,7 @@ export function PortalConsultation() {
 					{/* Assigned Advisor Info */}
 					<div className="card card--pad">
 						<h3 className="section-title mb-2" style={{ fontSize: "1.1rem" }}>
-							Assigned Academic Counselor
+							Your consultant
 						</h3>
 					{workflowStatus === "CLOSED" ? (
 						<div>
@@ -2248,7 +2248,7 @@ export function PortalConsultation() {
 					{liveConsultation?.comments && liveConsultation.comments.length > 0 && (
 						<div className="card card--pad">
 							<h3 className="section-title mb-3" style={{ fontSize: "1.05rem" }}>
-								Counselor Communications
+								Messages from your consultant
 							</h3>
 							<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 								{liveConsultation.comments.map((cm) => (
@@ -2768,7 +2768,7 @@ function ApplicationHubInner() {
 							Awaiting invoice
 						</h3>
 						<p className="muted mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-							Your school selection has been submitted. Your handler is reviewing the
+							Your school selection has been submitted. Your consultant is reviewing the
 							list and will issue the application invoice shortly.
 						</p>
 						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
@@ -2801,7 +2801,7 @@ function ApplicationHubInner() {
 					/>
 				)
 			) : (
-				<p className="mono muted mb-4">Confirm your school list to submit it to your handler for invoicing.</p>
+				<p className="mono muted mb-4">Confirm your school list to submit it to your consultant for invoicing.</p>
 			)}
 
 
@@ -2933,7 +2933,7 @@ function TrackingPageInner() {
 						We're assigning your{" "}
 						{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
 							application.pendingHandoff.stage}{" "}
-						specialist — you'll be notified once your case handler is confirmed.
+						specialist — you'll be notified once your consultant is confirmed.
 					</p>
 				</div>
 			)}
@@ -3013,7 +3013,7 @@ function TrackingPageInner() {
 							currentDecision={application.visaConsent?.decision ?? null}
 							title="Congratulations on your Admission! Continue to Visa Stage?"
 							lead={`You have been admitted to ${acceptedCount} school(s). Decide whether you would like Century NIT to handle your visa processing.`}
-							continueDetail="Your case will be sent to our Operations team to assign a dedicated visa specialist and prepare your official visa application fee invoice."
+							continueDetail="Your case will be sent to our Operations team to assign a dedicated consultant and prepare your official visa application fee invoice."
 							holdDetail="Need time to review your offers or arrange funding? You can keep your file on hold and return whenever you are ready. No invoices will be raised."
 							optOutDetail="You may choose to handle your visa application independently or decline visa processing."
 							onDecided={() => {
@@ -3567,11 +3567,11 @@ function VisaHubInner() {
 					<h1 className="page-title mt-1">{paid ? "Visa tracking" : "Visa stage · Application & Processing"}</h1>
 					<p className="lead mt-2">
 						{paid
-							? "Visa invoice settled. Your handler will open your visa case and update you through the tracking page."
+							? "Visa invoice settled. Your consultant will open your visa case and update you through the tracking page."
 							: isAwaitingSpecialist
-								? "Your consent has been recorded. Operations is assigning your dedicated visa specialist."
+								? "Your consent has been recorded. Operations is assigning your dedicated consultant."
 								: isPendingInvoice
-									? "Your visa specialist is preparing your official visa application fee invoice."
+									? "Your consultant is preparing your official visa application fee invoice."
 									: "Review and pay your official visa application invoice to begin active visa processing."}
 					</p>
 				</div>
@@ -3608,7 +3608,7 @@ function VisaHubInner() {
 						</p>
 						<p className="muted mt-2">
 							Pay the application invoice on Schools, then wait for handler tracking to reach{" "}
-							<strong>Decision Reached</strong> (your handler confirms the decision).
+							<strong>Decision Reached</strong> (your consultant confirms the decision).
 						</p>
 						<div className="row mt-3">
 							<Button to="/portal/application" arrow>
@@ -3649,7 +3649,7 @@ function VisaHubInner() {
 						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
 							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
 							<div>
-								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Matching your case with a visa specialist…</p>
+								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Matching your case with a consultant…</p>
 								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
 									Once assigned, your specialist will prepare and issue your official visa application fee invoice. This screen updates in real time.
 								</p>
@@ -3668,7 +3668,7 @@ function VisaHubInner() {
 							Pending Visa Application Fee Invoice
 						</h3>
 						<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
-							{application.assignedStaffName ? `${application.assignedStaffName} has been assigned as your visa specialist.` : "Your visa specialist has been assigned."}{" "}
+							{application.assignedStaffName ? `${application.assignedStaffName} has been assigned as your consultant.` : "Your consultant has been assigned."}{" "}
 							They are currently preparing and reviewing your official visa fee invoice.
 						</p>
 						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -3720,8 +3720,8 @@ export function PortalVisaTracking() {
 
 const VISA_UPDATE_BY_STAGE: Record<string, string> = {
 	locked: "Visa case not started yet. Settle the visa invoice to open it.",
-	awaiting_handler: "Visa payment received. We are assigning your visa specialist — you'll be notified once your case handler is confirmed.",
-	pending: "Visa payment received — your handler has opened your visa case.",
+	awaiting_handler: "Visa payment received. We are assigning your consultant — you'll be notified once your consultant is confirmed.",
+	pending: "Visa payment received — your consultant has opened your visa case.",
 	biometrics: "Visa case in progress. Attend your biometrics / appointment when scheduled.",
 	decision: "Visa case in progress. Awaiting the authority's decision.",
 	complete: "Visa approved. Your visa is complete — continue to travel assistance.",
@@ -3785,7 +3785,7 @@ function VisaTrackingInner() {
 				<div>
 					<p className="eyebrow">Dashboard · Visa</p>
 					<h1 className="page-title mt-1">Visa tracking</h1>
-					<p className="lead mt-2">Follow your visa case updates from your handler.</p>
+					<p className="lead mt-2">Follow your visa case updates from your consultant.</p>
 				</div>
 			</header>
 			<ol className="mini-steps mb-4">
@@ -3803,8 +3803,8 @@ function VisaTrackingInner() {
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
 					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your specialist</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.5rem" }}>
-						Your payment is confirmed. Centurion is matching your case to a visa specialist — you'll get a
-						notification with your handler's details once your case is open.
+						Your payment is confirmed. Centurion is matching your case to a consultant — you'll get a
+						notification with your consultant's details once your case is open.
 					</p>
 				</div>
 			)}

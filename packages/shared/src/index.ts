@@ -20,3 +20,4 @@ export * from "./scheduling.js";
 
 export * from "./schemas/catalog.js";
 export * from "./journey.js";
+export * from "./labels.js";

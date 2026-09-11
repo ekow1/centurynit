@@ -176,7 +176,7 @@ export function AssessmentOutcomeCard({
 						className="eyebrow"
 						style={{ color: isEligible ? "#166534" : "var(--foreground)", fontWeight: 700 }}
 					>
-						Official Counselor Assessment Result
+						Official Assessment Result
 					</span>
 					<h3 className="display mt-1" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0" }}>
 						Assessment Outcome &amp; Recommendations
@@ -200,7 +200,7 @@ export function AssessmentOutcomeCard({
 			{effectiveNotes && (
 				<div className="mt-3">
 					<p className="eyebrow mb-1" style={{ fontSize: "0.75rem", color: "#64748b" }}>
-						Counselor Assessment Notes
+						Assessment Notes
 					</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, margin: 0, color: "var(--foreground)" }}>
 						{effectiveNotes}

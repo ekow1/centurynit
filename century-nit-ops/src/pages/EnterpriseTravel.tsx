@@ -5,7 +5,7 @@ import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import { applicationsApi, staffApi, ApiError } from "century-nit-core/api";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, canOwnStage, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, TRAVEL_STATUS_LABELS, canOwnStage, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
 	travel: { label: "Travel", icon: "\u2708" },
@@ -549,18 +549,9 @@ export function EnterpriseTravel() {
 	);
 }
 
-const TA_STATUS_LABELS: Record<string, string> = {
-	decision_pending: "Decision pending",
-	review: "In review",
-	quote_prepared: "Pending approval",
-	quote_approved: "Approved",
-	invoiced: "Invoiced",
-	ticket_paid: "Ticket paid",
-	booked: "Booked",
-	cleared: "Cleared to travel",
-	declined: "Declined",
-	on_hold: "On hold",
-};
+// Status words come from the one vocabulary (century-nit-shared labels.ts),
+// so the Travel page and the applicant's travel card agree.
+const TA_STATUS_LABELS = TRAVEL_STATUS_LABELS;
 
 function TaQueueRow({
 	ta,

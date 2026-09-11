@@ -1240,7 +1240,7 @@ export function PortalJourney() {
 									We're assigning your{" "}
 									{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
 										application.pendingHandoff.stage}{" "}
-									specialist — you'll be notified once your case handler is confirmed.
+									specialist — you'll be notified once your consultant is confirmed.
 								</p>
 							</div>
 						)}

@@ -196,23 +196,8 @@ export function canAdvanceToStage(
  * use this (fine). Delete the duplicate label maps that used to live in
  * AppState.tsx (getJourneyPhase) and the /me/journey route.
  */
-export const PORTAL_STAGE_LABELS: Record<string, string> = {
-	new: "New",
-	consultation: "Stage I · Consultation first",
-	eligibility: "Your assessment & recommendation",
-	proceed: "Start your application",
-	school_package: "Choose your package",
-	awaiting_handler: "Awaiting handler assignment",
-	school_select: "Select schools & programmes",
-	awaiting_invoice: "Awaiting application invoice",
-	application_invoice: "Pay application invoice",
-	school_tracking: "Application process / tracking",
-	visa_invoice: "Pay visa invoice",
-	visa: "Visa tracking in progress",
-	payment_execution: "Payment plan & service fees",
-	travel_assistance: "Travel assistance & pre-departure",
-	completed: "Application complete",
-};
+// PORTAL_STAGE_LABELS now lives in ../labels.ts — the one vocabulary both
+// apps read — and is re-exported from the package index.
 
 /** Canonical portal stage order — matches PROCESS_STAGES[].index. */
 export const PORTAL_STAGE_ORDER: string[] = [

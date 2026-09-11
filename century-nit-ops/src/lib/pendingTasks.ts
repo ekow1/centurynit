@@ -13,6 +13,7 @@ import {
 	type StageHandoff,
 	type Booking,
 	type TravelAssistanceRequest,
+	VISA_STAGE_LABELS,
 	isOwnerClassBoundary,
 } from "century-nit-shared";
 import { fmtGhs, money } from "../pages/currency";
@@ -174,14 +175,8 @@ export type BookingTask = {
 
 export type PendingTask = (BaseTask | BookingTask) & { isLive?: boolean };
 
-export const VISA_STEP_LABELS: Record<string, string> = {
-	locked: "Awaiting payment",
-	awaiting_handler: "Awaiting handler assignment",
-	pending: "Case opened",
-	biometrics: "Biometrics",
-	decision: "Decision",
-	complete: "Complete",
-};
+/** Visa sub-stage names — the one vocabulary, shared with the portal. */
+export const VISA_STEP_LABELS = VISA_STAGE_LABELS;
 
 /**
  * What the applicant sees, when the API supplied it, so the queue names the

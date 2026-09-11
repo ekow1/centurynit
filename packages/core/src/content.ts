@@ -1,3 +1,4 @@
+import { PORTAL_STEP } from "century-nit-shared";
 export type Destination = {
 	id: string;
 	name: string;
@@ -1778,7 +1779,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "new",
 		index: 0,
-		label: "New",
+		label: PORTAL_STEP.new.label,
 		detail: "Start your application journey",
 		owner: "you",
 		path: "/portal/home",
@@ -1787,7 +1788,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "consultation",
 		index: 1,
-		label: "Stage I · Consultation",
+		label: PORTAL_STEP.consultation.label,
 		detail: "Type, branch, assessment & documents",
 		owner: "you",
 		path: "/portal/consultation",
@@ -1796,7 +1797,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "eligibility",
 		index: 2,
-		label: "Your assessment",
+		label: PORTAL_STEP.eligibility.label,
 		detail: "Consultant recommendation after consultation",
 		owner: "counselor",
 		path: "/portal/consultation",
@@ -1805,7 +1806,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "proceed",
 		index: 3,
-		label: "Start your application",
+		label: PORTAL_STEP.proceed.label,
 		detail: "Confirm you want to continue before choosing your school package",
 		owner: "you",
 		path: "/portal/consent",
@@ -1814,7 +1815,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "school_package",
 		index: 4,
-		label: "Choose your package",
+		label: PORTAL_STEP.school_package.label,
 		detail: "Scholarship / non-scholarship · degree level",
 		owner: "you",
 		path: "/portal/package",
@@ -1823,7 +1824,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "awaiting_handler",
 		index: 5,
-		label: "Awaiting handler",
+		label: PORTAL_STEP.awaiting_handler.label,
 		detail: "10% deposit received - handler being assigned",
 		owner: "system",
 		path: "/portal/awaiting-handler",
@@ -1832,7 +1833,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "school_select",
 		index: 6,
-		label: "Select schools",
+		label: PORTAL_STEP.school_select.label,
 		detail: "Choose schools & programmes first",
 		owner: "you",
 		path: "/portal/application",
@@ -1841,7 +1842,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "awaiting_invoice",
 		index: 7,
-		label: "Awaiting invoice",
+		label: PORTAL_STEP.awaiting_invoice.label,
 		detail: "Handler reviewing school selection - invoice coming soon",
 		owner: "counselor",
 		path: "/portal/application",
@@ -1850,7 +1851,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "application_invoice",
 		index: 8,
-		label: "Application invoice",
+		label: PORTAL_STEP.application_invoice.label,
 		detail: "Raised after selection - pay before tracking starts",
 		owner: "you",
 		path: "/portal/application",
@@ -1859,7 +1860,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "school_tracking",
 		index: 9,
-		label: "Application tracking",
+		label: PORTAL_STEP.school_tracking.label,
 		detail: "Process begins only after invoice is paid",
 		owner: "counselor",
 		path: "/portal/application",
@@ -1868,7 +1869,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "visa_invoice",
 		index: 10,
-		label: "Visa invoice",
+		label: PORTAL_STEP.visa_invoice.label,
 		detail: "Raised on admission - pay before visa process starts",
 		owner: "you",
 		path: "/portal/visa",
@@ -1877,7 +1878,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "visa",
 		index: 11,
-		label: "Visa tracking",
+		label: PORTAL_STEP.visa.label,
 		detail: "Simulated visa processing after payment",
 		owner: "counselor",
 		path: "/portal/visa",
@@ -1886,7 +1887,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "travel_assistance",
 		index: 12,
-		label: "Travel assistance",
+		label: PORTAL_STEP.travel_assistance.label,
 		detail: "Handler-led clearance & pre-departure checklist · ticketing fee",
 		owner: "counselor",
 		path: "/portal/pre-departure",
@@ -1895,7 +1896,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "payment_execution",
 		index: 13,
-		label: "Payment plan & service fees",
+		label: PORTAL_STEP.payment_execution.label,
 		detail: "Choose a plan · settle agency fees",
 		owner: "you",
 		path: "/portal/payment-execution",
@@ -1904,7 +1905,7 @@ export const PROCESS_STAGES: {
 	{
 		id: "completed",
 		index: 14,
-		label: "Complete",
+		label: PORTAL_STEP.completed.label,
 		detail: "Journey finished - last step",
 		owner: "system",
 		path: "/portal/complete",
@@ -2058,7 +2059,7 @@ export const PORTAL_CHAPTERS: {
 	{
 		id: "visa",
 		step: "V",
-		label: "Visa & travel",
+		label: "Visa",
 		blurb: "Invoice then tracking",
 		unlockHint: "Unlocks when admitted",
 		path: "/portal/visa",

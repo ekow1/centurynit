@@ -463,7 +463,7 @@ export function EnterprisePaymentsLog() {
 							LIVE TELEMETRY
 						</span>
 					</div>
-					<h1 className="page-title">Paystack & Revenue Log</h1>
+					<h1 className="page-title">Payments Log</h1>
 					<p className="lead mt-1">
 						Live mobile money settlements, card payments, webhook stream, and offline bank verifications.
 					</p>

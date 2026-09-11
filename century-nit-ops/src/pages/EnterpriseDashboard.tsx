@@ -114,7 +114,7 @@ export function EnterpriseDashboard() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem" }}>
 				<div>
-					<h1 className="page-title">Mission Control</h1>
+					<h1 className="page-title">Dashboard</h1>
 					<p className="lead mt-2">
 						{opsUser ? `Welcome back, ${opsUser.name.split(" ")[0]}.` : "Operations overview."} Here is
 						what needs your attention.

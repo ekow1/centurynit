@@ -1,29 +1,12 @@
 import type { ProcessStageId } from "century-nit-core";
+import { PORTAL_STAGE_SHORT } from "century-nit-shared";
 
 /**
- * Short stage names for tight surfaces - the mobile app bar, pills, chips.
- *
- * The full `PROCESS_STAGES[].label` ("Stage I · Consultation", "Application
- * invoice") is written for a wide desktop rail and truncates to noise on a
- * phone. These are one- or two-word names that stay legible at ~120px.
+ * Short stage names for tight surfaces — the mobile app bar, pills, chips.
+ * The short form of the same entry the spine uses (century-nit-shared
+ * labels.ts), never separate wording.
  */
-export const STAGE_SHORT: Record<ProcessStageId, string> = {
-	new: "New",
-	consultation: "Consultation",
-	eligibility: "Eligibility",
-	proceed: "Proceed",
-	school_package: "Package",
-	awaiting_handler: "Awaiting",
-	school_select: "Schools",
-	awaiting_invoice: "Invoice",
-	application_invoice: "Application fee",
-	school_tracking: "Applications",
-	visa_invoice: "Visa fee",
-	visa: "Visa",
-	payment_execution: "Plan & fees",
-	travel_assistance: "Travel",
-	completed: "Complete",
-};
+export const STAGE_SHORT: Record<ProcessStageId, string> = PORTAL_STAGE_SHORT;
 
 /** Where the applicant continues from a given stage */
 export const STAGE_PATH: Record<ProcessStageId, string> = {

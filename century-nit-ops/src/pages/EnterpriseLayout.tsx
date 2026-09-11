@@ -255,7 +255,7 @@ export function EnterpriseLayout() {
 					<Link to={opsRole ? ROLE_HOME[opsRole] : "/"} className="nav__logo">
 						Century NIT <span>Operations</span>
 					</Link>
-					<p className="portal__tagline">Mission Control</p>
+					<p className="portal__tagline">Dashboard</p>
 					<button
 						type="button"
 						className="portal__collapse-btn"

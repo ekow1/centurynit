@@ -1437,7 +1437,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			docsReadyAt: now,
 			docReviewStatus: "pending",
 			docReviewUpdatedAt: now,
-			counselorNote: "Documents received. Counselor is verifying your vault.",
+			counselorNote: "Documents received. Your consultant is verifying your vault.",
 		}));
 	}, []);
 

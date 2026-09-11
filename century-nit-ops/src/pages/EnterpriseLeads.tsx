@@ -264,7 +264,7 @@ export function EnterpriseLeads() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
 				<div>
-					<h1 className="page-title">CRM · Lead Pipeline</h1>
+					<h1 className="page-title">Leads</h1>
 					<p className="lead mt-2">
 						Drag a lead between columns, or expand a card to move it a stage at a time.
 					</p>

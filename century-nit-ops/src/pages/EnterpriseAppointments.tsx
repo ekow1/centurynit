@@ -121,7 +121,7 @@ export function EnterpriseAppointments() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
 				<div>
-					<h1 className="page-title">Appointments Calendar</h1>
+					<h1 className="page-title">Appointments</h1>
 					<p className="lead mt-2">Manage consultations, visa, and embassy appointments.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>

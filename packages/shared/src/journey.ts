@@ -1,10 +1,10 @@
 import {
 	JOURNEY_STAGES,
-	PORTAL_STAGE_LABELS,
 	PORTAL_STAGE_ORDER,
 	type JourneyStage,
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
+import { PORTAL_STAGE_LABELS } from "./labels.js";
 
 /**
  * The applicant journey, derived from facts.

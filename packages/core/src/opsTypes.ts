@@ -6,6 +6,7 @@
  */
 
 import type { SchoolApplication, ProceedStatus } from "century-nit-shared";
+import { INVOICE_STATUS_LABELS as SHARED_INVOICE_STATUS_LABELS } from "century-nit-shared";
 
 export type ConsultationStatus =
 	| "Under Review"
@@ -376,14 +377,9 @@ export type InvoiceEvent = {
 	detail?: string;
 };
 
-export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = {
-	proforma: "Pending Approval",
-	issued: "Issued",
-	partial: "Part paid",
-	paid: "Paid",
-	overdue: "Overdue",
-	void: "Void",
-};
+// The one vocabulary (century-nit-shared/labels.ts): ops tables and the
+// applicant's invoice card say the same word for the same status.
+export const INVOICE_STATUS_LABELS: Record<InvoiceStatus, string> = SHARED_INVOICE_STATUS_LABELS as Record<InvoiceStatus, string>;
 
 
 /** Total settled against an invoice */

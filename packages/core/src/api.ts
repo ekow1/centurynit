@@ -1,4 +1,5 @@
 import type {
+	DerivedJourney,
 	AssignableEmployee,
 	AvailabilityResponse,
 	ApplicantDocument,
@@ -48,7 +49,6 @@ import type {
 	AvatarUploadTicket,
 	AvatarUrl,
 	RequestAvatarUpload,
-	JourneyStage,
 	ChatMessage as ApiChatMessage,
 	ChatConversation as ApiChatConversation,
 	CommunicationContext,
@@ -1259,13 +1259,7 @@ export const meApi = {
 	 * fine-grained `ProcessStageId` via `JOURNEY_STAGE_TO_PORTAL`. The server
 	 * may also send `portalStage` — an already-mapped `ProcessStageId` that
 	 * overrides the local mapping when present. */
-	journey(): Promise<{
-		currentStage: JourneyStage;
-		portalStage?: string;
-		chapterUnlocks: Record<string, boolean>;
-		label: string;
-		nextUnlock: string | null;
-	}> {
+	journey(): Promise<DerivedJourney> {
 		return request(`${API_PREFIX}/me/journey`);
 	},
 

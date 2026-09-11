@@ -17,8 +17,8 @@ import { useNotifier } from "../components/notifier/Notifier";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import {
 	API_PREFIX,
-	JOURNEY_STAGE_TO_PORTAL,
-	PORTAL_STAGE_LABELS,
+	emptyJourney,
+	type DerivedJourney,
 	type JourneyStage,
 	type FeeSchedule,
 	DEFAULT_FEE_CENTS,
@@ -98,6 +98,23 @@ const JOURNEY_NOTIFICATION_PREFIXES = [
 ] as const;
 function isJourneyNotification(type: string): boolean {
 	return JOURNEY_NOTIFICATION_PREFIXES.some((p) => type.startsWith(p));
+}
+
+/**
+ * Per-user cache of the last `/me/journey` answer. The portal never derives
+ * its own stage: before the first fetch (or offline) it shows what the server
+ * last said, which is always something that was true, never a guess.
+ */
+const JOURNEY_CACHE_KEY = "century-nit-journey";
+function readJourneyCache(key: string | null): DerivedJourney | null {
+	if (!key) return null;
+	const cached = safeGetJSON<DerivedJourney>(key);
+	return cached && typeof cached.portalStage === "string" && cached.chapterUnlocks ? cached : null;
+}
+function writeJourneyCache(key: string | null, journey: DerivedJourney | null): void {
+	if (!key) return;
+	if (journey) safeSetJSON(key, journey);
+	else safeRemoveItem(key);
 }
 
 export type AuthMethod = "google" | "apple" | "linkedin" | "email" | "otp" | "phone" | "single_sign_on";
@@ -258,10 +275,8 @@ export type ApplicationData = {
 	referralSource: string;
 	/**
 	 * Coarse journey stage read from `applications.stage` on the server
-	 * (the shared `JourneyStage` enum). Empty until `syncFromServer`
-	 * populates it. `getCurrentProcessStage` uses this as the
-	 * authoritative floor and refines it into a fine-grained
-	 * `ProcessStageId` using invoice / school signals.
+	 * (the shared `JourneyStage` enum) — what ops calls the case. Display
+	 * only: the portal step comes from `/me/journey`, never derived here.
 	 */
 	journeyStage: JourneyStage | "";
 	/**
@@ -738,209 +753,6 @@ export function hasSettledPlan(app: ApplicationData) {
 	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyDepositPaid;
 }
 
-/**
- * Select schools → pay application invoice → tracking starts.
- * Admitted → pay visa invoice → visa tracking. Then payment plan → agency → complete.
- *
- * The authoritative coarse stage is `application.stage` (a shared `JourneyStage`)
- * which `syncFromServer` writes into `app.journeyStage`. When present it is
- * mapped via `JOURNEY_STAGE_TO_PORTAL` and used as a *floor* — the heuristic
- * invoice / school signals may only advance the fine-grained `ProcessStageId`
- * beyond that floor, never regress it. When `journeyStage` is empty (server
- * unreachable / no application yet) the pure heuristic derivation is used.
- */
-export function getCurrentProcessStage(
-	app: ApplicationData,
-	booking: BookingData,
-	schools: SchoolApplicationTrack[],
-): ProcessStageId {
-	const heuristic = computeHeuristicProcessStage(app, booking, schools);
-
-	// Consent is the first gate of the application stage — but only when an
-	// application actually exists. Without an application, the user is still in
-	// the consultation/eligibility flow and must not be forced to the consent
-	// screen.
-	if (app.applicationId && app.proceedStatus !== "accepted") {
-		return "proceed";
-	}
-
-	const coarseFromServer = app.journeyStage
-		? (JOURNEY_STAGE_TO_PORTAL[app.journeyStage] as ProcessStageId)
-		: null;
-	if (!coarseFromServer) return heuristic;
-
-	const order = PROCESS_STAGES.map((s) => s.id);
-	const coarseIdx = order.indexOf(coarseFromServer);
-	const heuristicIdx = order.indexOf(heuristic);
-	// The server stage is the authoritative minimum progress; local signals
-	// can only move the applicant forward, not backwards.
-	return heuristicIdx > coarseIdx ? heuristic : coarseFromServer;
-}
-
-/**
- * Pure local heuristic — derives a fine-grained `ProcessStageId` from
- * consultation, package, invoice, school, visa and pre-departure signals
- * without consulting the server's `JourneyStage`. Used as the fallback when
- * no server stage is available, and as the refinement candidate that the
- * server stage floors.
- */
-function computeHeuristicProcessStage(
-	app: ApplicationData,
-	booking: BookingData,
-	schools: SchoolApplicationTrack[],
-): ProcessStageId {
-	const eligible = isConsultationEligible(booking);
-	const consulted = Boolean(booking.confirmationId && booking.paymentStatus === "success");
-	const admitted = hasAcceptedOffer(schools);
-	const pkg = hasSchoolPackage(app);
-	const hasSchools = schools.length > 0;
-	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
-	const appPaid = isAppInvoicePaid(app);
-	const visaPaid = isVisaInvoicePaid(app);
-	const visaDone = app.visaStatus === "complete";
-	const preDepartureDone = Boolean(app.preDepartureCompletedAt);
-	const ticketingPaid = Boolean(app.travelInvoicePaid);
-
-	// Money is no longer a stage. The spine describes service progress; the
-	// service fee gates the plan chapter (after travel) rather than occupying
-	// two milestones of its own. Under the current model travel comes first —
-	// the ticketing fee opens the plan chapter, then the settled plan completes.
-	const hasProceeded = app.proceedStatus === "accepted";
-
-	if (app.completedAt || (visaDone && ticketingPaid && hasSettledPlan(app) && preDepartureDone)) {
-		return "completed";
-	}
-	if (admitted && visaDone && ticketingPaid) return "payment_execution";
-	if (admitted && visaDone) return "travel_assistance";
-	if (admitted && visaPaid) return "visa";
-	if (admitted && !visaPaid) return "visa_invoice";
-	if (appPaid && selectionConfirmed) return "school_tracking";
-	if (selectionConfirmed && !appPaid) return "application_invoice";
-	if (hasSchools && hasProceeded) return "school_select";
-	if (pkg && hasProceeded) return "school_select";
-	if (eligible && hasProceeded && !pkg) return "school_package";
-	if (eligible && !hasProceeded) return "proceed";
-	if (consulted) return "eligibility";
-	return "consultation";
-}
-
-export function getStageStatus(
-	stageId: ProcessStageId,
-	current: ProcessStageId,
-	app: ApplicationData,
-	booking: BookingData,
-	schools: SchoolApplicationTrack[],
-): "done" | "current" | "locked" {
-	const order = PROCESS_STAGES.map((s) => s.id);
-	const ci = order.indexOf(current);
-	const si = order.indexOf(stageId);
-	const eligible = isConsultationEligible(booking);
-	const consulted = Boolean(booking.confirmationId && booking.paymentStatus === "success");
-	const admitted = hasAcceptedOffer(schools);
-	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
-
-	if (stageId === "consultation" && consulted) return si === ci ? "current" : "done";
-	if (stageId === "eligibility" && eligible) return si === ci ? "current" : "done";
-	if (stageId === "proceed" && app.proceedStatus === "accepted") {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "school_package" && hasSchoolPackage(app)) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "school_select" && selectionConfirmed) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "application_invoice" && isAppInvoicePaid(app)) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "school_tracking" && admitted) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "visa_invoice" && isVisaInvoicePaid(app)) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "visa" && app.visaStatus === "complete") return "done";
-	if (stageId === "travel_assistance" && Boolean(app.travelInvoicePaid)) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "payment_execution" && hasSettledPlan(app) && Boolean(app.travelInvoicePaid)) {
-		return si === ci ? "current" : "done";
-	}
-	if (stageId === "completed" && app.completedAt) return "done";
-
-	if (si < ci) return "done";
-	if (si === ci) return "current";
-	return "locked";
-}
-
-/** Progressive unlocks - next stage opens when prior step is done.
- *
- * The server-driven `JourneyStage` (floored through `getCurrentProcessStage`)
- * guarantees a chapter is unlocked once the applicant has reached it on the
- * server, even before local invoice / school signals catch up. Local signal
- * gates are OR'd with the stage floor so they only ever *add* access. */
-export function getChapterUnlocks(
-	app: ApplicationData,
-	booking: BookingData,
-	schools: SchoolApplicationTrack[],
-): Record<PortalChapterId, boolean> {
-	const eligible = isConsultationEligible(booking);
-	const appPaid = isAppInvoicePaid(app);
-	const admitted = hasAcceptedOffer(schools);
-	const visaPaid = isVisaInvoicePaid(app);
-	const visaDone = app.visaStatus === "complete";
-
-	const stage = getCurrentProcessStage(app, booking, schools);
-	const order = PROCESS_STAGES.map((s) => s.id);
-	const stageIdx = order.indexOf(stage);
-	const atOrBeyond = (id: ProcessStageId) => stageIdx >= order.indexOf(id);
-
-	return {
-		journey: true,
-		consultation: true,
-		// Package chapter is gated on the applicant's explicit "continue"
-		// consent — eligible alone is not enough, they must choose to proceed.
-		package: (eligible && app.proceedStatus === "accepted") || atOrBeyond("school_package"),
-		// The application chapter stays unlocked once the applicant has a
-		// package — the awaiting_handler stage is part of this chapter, not
-		// a locked future chapter.
-		application: (eligible && app.proceedStatus === "accepted" && hasSchoolPackage(app)) || atOrBeyond("awaiting_handler"),
-		// Tracking is its own page - only after application invoice paid
-		tracking: (appPaid && Boolean(app.schoolSelectionDoneAt)) || atOrBeyond("school_tracking"),
-		visa: admitted || atOrBeyond("visa"),
-		// Travel assistance opens on visa approval; the plan chapter (Payment
-		// Execution) opens once the ticketing fee is paid — the same gates the
-		// server and the travel page enforce.
-		travel_assistance:
-			(admitted && visaPaid && visaDone) || atOrBeyond("travel_assistance"),
-		payment_execution:
-			(admitted && visaPaid && visaDone && Boolean(app.travelInvoicePaid)) ||
-			atOrBeyond("payment_execution"),
-		// Completion needs the plan settled, the ticketing fee paid and the
-		// travel checklist finished — not just a payment state.
-		complete:
-			(Boolean(app.preDepartureCompletedAt) && hasSettledPlan(app) && Boolean(app.travelInvoicePaid)) ||
-			atOrBeyond("completed"),
-	};
-}
-
-export function getJourneyPhase(
-	app: ApplicationData,
-	booking: BookingData,
-	schools: SchoolApplicationTrack[],
-): { phase: number; label: string; nextUnlock: string | null; stage: ProcessStageId } {
-	const stage = getCurrentProcessStage(app, booking, schools);
-	const meta = PROCESS_STAGES.find((s) => s.id === stage)!;
-	const next = PROCESS_STAGES.find((s) => s.index === meta.index + 1);
-
-	return {
-		phase: meta.index,
-		label: PORTAL_STAGE_LABELS[stage],
-		nextUnlock: next ? PORTAL_STAGE_LABELS[next.id] : null,
-		stage,
-	};
-}
-
 export type PendingAction = {
 	kind:
 		| "consent"
@@ -966,17 +778,16 @@ export type PendingAction = {
  * the journey is waiting on us (Ops/consular) rather than on them.
  *
  * One action at a time, in funnel order: a later gate never surfaces while an
- * earlier one is still open. Derived purely from local state signals (the same
- * ones `getCurrentProcessStage` reads), so the band can never disagree with
- * the journey band or the chapter unlocks it points into. All target routes
- * are chapters the applicant has already reached.
+ * earlier one is still open. `stage` is the server-derived portal stage, so
+ * the band can never disagree with the journey band or the chapter unlocks
+ * it points into. All target routes are chapters the applicant has already
+ * reached.
  */
 export function getPendingAction(
 	app: ApplicationData,
 	booking: BookingData,
-	schools: SchoolApplicationTrack[],
+	stage: ProcessStageId,
 ): PendingAction | null {
-	const stage = getCurrentProcessStage(app, booking, schools);
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const eligible = isConsultationEligible(booking);
 
@@ -1197,7 +1008,9 @@ type AppStateContextValue = {
 	autosaveLabel: string;
 	chapterUnlocks: Record<PortalChapterId, boolean>;
 	refreshJourney: () => Promise<void>;
-	journeyPhase: ReturnType<typeof getJourneyPhase>;
+	journeyPhase: { phase: number; label: string; nextUnlock: string | null; stage: ProcessStageId };
+	/** False until the first `/me/journey` answer (or a cached one) is in hand. */
+	journeyReady: boolean;
 	pendingAction: PendingAction | null;
 	processStage: ProcessStageId;
 	stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> | null;
@@ -2220,16 +2033,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	}, []);
 
 	// ── Server-driven journey stage ───────────────────────────────────────
-	type ServerJourney = {
-		currentStage: string;
-		portalStage?: string;
-		chapterUnlocks: Record<string, boolean>;
-		stageStatuses?: Record<string, "done" | "current" | "locked" | "skipped">;
-		label: string;
-		nextUnlock: string | null;
-	};
-	const [serverJourney, setServerJourney] = useState<ServerJourney | null>(
-		null,
+	/**
+	 * The journey as the server derived it (`deriveJourney`). This is the only
+	 * source for the portal stage, chapter unlocks and step statuses — the
+	 * portal never guesses. The last answer is cached per user so a reload or
+	 * a dropped connection shows what the server last said, not a blank.
+	 */
+	const journeyCacheKey = authUser?.id ? `${JOURNEY_CACHE_KEY}:${authUser.id}` : null;
+	const [serverJourney, setServerJourneyState] = useState<DerivedJourney | null>(() =>
+		readJourneyCache(journeyCacheKey),
+	);
+	const setServerJourney = useCallback(
+		(j: DerivedJourney | null) => {
+			setServerJourneyState(j);
+			writeJourneyCache(journeyCacheKey, j);
+		},
+		[journeyCacheKey],
 	);
 
 	const refreshJourney = useCallback(async () => {
@@ -2239,7 +2058,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		} catch {
 			/* keep existing data */
 		}
-	}, []);
+	}, [setServerJourney]);
 
 	/**
 	 * Sync real server consultation, assignment, eligibility and applicant profile
@@ -2415,9 +2234,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 								status: prev.visaInvoice.status === "paid" ? "none" : prev.visaInvoice.status,
 								paidAt: prev.visaInvoice.status === "paid" ? null : prev.visaInvoice.paidAt,
 						  },
-					// Authoritative coarse journey stage from `applications.stage`.
-					// `getCurrentProcessStage` floors the fine-grained
-					// `ProcessStageId` off this value via `JOURNEY_STAGE_TO_PORTAL`.
+					// Coarse journey stage from `applications.stage` (display only).
 					journeyStage: a.stage ?? prev.journeyStage,
 					assignedStaffId: a.assignedStaffId ?? prev.assignedStaffId,
 					assignedStaffName: a.assignedStaffName ?? prev.assignedStaffName,
@@ -2542,7 +2359,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			/* keep local values — server may be unreachable */
 		}
 		setSyncTick((n) => n + 1);
-	}, [authUser, resetJourney]);
+	}, [authUser, resetJourney, setServerJourney]);
 
 	/** Run on mount */
 	useEffect(() => {
@@ -2634,99 +2451,34 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return Math.round((done / preDepartureTasks.length) * 100);
 	}, [preDepartureTasks]);
 
-	const localProcessStage = useMemo(
-		() => getCurrentProcessStage(application, booking, schoolApplications),
-		[application, booking, schoolApplications],
-	);
-	const localChapterUnlocks = useMemo(
-		() => getChapterUnlocks(application, booking, schoolApplications),
-		[application, booking, schoolApplications],
-	);
-	const journeyPhase = useMemo(
-		() => getJourneyPhase(application, booking, schoolApplications),
-		[application, booking, schoolApplications],
-	);
-
-	// ── Server-driven journey stage ───────────────────────────────────────
-	// When the user is authenticated, fetch the authoritative stage from the
-	// API and prefer it over the locally computed one.  Falls back to local
-	// on network error so the portal never breaks.
-	//
+	// ── The journey ───────────────────────────────────────────────────────
 	// `syncFromServer` (mount + 30s + every SSE journey event) fetches
-	// `/me/journey` alongside the application, so no separate poll is needed
-	// here — only the sign-out reset.
+	// `/me/journey`; until the first answer arrives the cached one is shown,
+	// and a brand-new user gets the empty journey. On sign-out it resets.
 	useEffect(() => {
 		if (!authUser) setServerJourney(null);
-	}, [authUser]);
+	}, [authUser, setServerJourney]);
 
-	const effectiveJourneyPhase = useMemo(() => {
-		if (serverJourney) {
-			// Consent is the first gate — but only once an application exists. A
-			// brand-new applicant must still be able to see consultation before
-			// the consent card is relevant.
-			if (
-				application.applicationId &&
-				application.proceedStatus &&
-				application.proceedStatus !== "accepted"
-			) {
-				const meta = PROCESS_STAGES.find((s) => s.id === "proceed")!;
-				return {
-					phase: meta.index,
-					label: PORTAL_STAGE_LABELS["proceed"],
-					nextUnlock: serverJourney.nextUnlock,
-					stage: "proceed" as ProcessStageId,
-				};
-			}
+	const journeyReady = serverJourney !== null;
+	const journey = useMemo(() => serverJourney ?? emptyJourney(), [serverJourney]);
 
-			// The server is the single source of truth for the portal stage.
-			// Prefer an explicit `portalStage`; otherwise map the coarse
-			// `currentStage` (a `JourneyStage`) through JOURNEY_STAGE_TO_PORTAL.
-			let stageId: ProcessStageId;
-			if (serverJourney.portalStage) {
-				stageId = serverJourney.portalStage as ProcessStageId;
-			} else if (
-				serverJourney.currentStage &&
-				serverJourney.currentStage in JOURNEY_STAGE_TO_PORTAL
-			) {
-				stageId = JOURNEY_STAGE_TO_PORTAL[
-					serverJourney.currentStage as JourneyStage
-				] as ProcessStageId;
-			} else {
-				stageId = serverJourney.currentStage as ProcessStageId;
-			}
-			const meta = PROCESS_STAGES.find((s) => s.id === stageId)!;
-			return {
-				phase: meta.index,
-				label: serverJourney.label,
-				nextUnlock: serverJourney.nextUnlock,
-				stage: stageId,
-			};
-		}
-		return journeyPhase;
-	}, [serverJourney, journeyPhase, application.proceedStatus]);
-
-	// Single source of truth for chapter unlocks + process stage: the server
-	// /me/journey response. Local heuristic is the offline fallback only —
-	// this kills the two-competing-server-reads flaw (#1) where chapter
-	// unlocks (from meApi.application()) and the displayed phase (from
-	// meApi.journey()) could disagree.
-
-	const chapterUnlocks = useMemo(
-		() => serverJourney?.chapterUnlocks ?? localChapterUnlocks,
-		[serverJourney, localChapterUnlocks],
-	);
-	const processStage = useMemo(
-		() => serverJourney ? effectiveJourneyPhase.stage : localProcessStage,
-		[serverJourney, effectiveJourneyPhase, localProcessStage],
-	);
-	const stageStatuses = useMemo(
-		() => serverJourney?.stageStatuses ?? null,
-		[serverJourney],
-	);
+	const journeyPhase = useMemo(() => {
+		const stage = journey.portalStage as ProcessStageId;
+		const meta = PROCESS_STAGES.find((s) => s.id === stage);
+		return {
+			phase: meta?.index ?? 0,
+			label: journey.label,
+			nextUnlock: journey.nextUnlock,
+			stage,
+		};
+	}, [journey]);
+	const chapterUnlocks = journey.chapterUnlocks;
+	const processStage = journeyPhase.stage;
+	const stageStatuses = useMemo(() => (serverJourney ? journey.stageStatuses : null), [serverJourney, journey]);
 
 	const pendingAction = useMemo(
-		() => getPendingAction(application, booking, schoolApplications),
-		[application, booking, schoolApplications],
+		() => getPendingAction(application, booking, processStage),
+		[application, booking, processStage],
 	);
 
 	const value = useMemo(
@@ -2773,7 +2525,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			autosaveLabel,
 			refreshJourney,
 			chapterUnlocks,
-			journeyPhase: effectiveJourneyPhase,
+			journeyPhase,
+			journeyReady,
 			pendingAction,
 			processStage,
 			stageStatuses,
@@ -2843,7 +2596,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			updateSchoolTrack,
 			autosaveLabel,
 			chapterUnlocks,
-			effectiveJourneyPhase,
+			journeyPhase,
+			journeyReady,
 			pendingAction,
 			processStage,
 			stageStatuses,

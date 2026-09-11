@@ -255,11 +255,21 @@ export function ChapterGate({
 	chapter: PortalChapterId;
 	children: React.ReactNode;
 }) {
-	const { chapterUnlocks } = useAppState();
+	const { chapterUnlocks, journeyReady } = useAppState();
 	const meta = PORTAL_CHAPTERS.find((c) => c.id === chapter);
 
 	if (chapterUnlocks[chapter]) {
 		return <>{children}</>;
+	}
+
+	// No answer from the server yet (cold first load, nothing cached): say
+	// nothing rather than flash "Stage locked" at someone who may be mid-way.
+	if (!journeyReady) {
+		return (
+			<div className="chapter-gate" aria-busy="true">
+				<p className="eyebrow">Loading your journey…</p>
+			</div>
+		);
 	}
 
 	return (

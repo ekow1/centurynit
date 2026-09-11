@@ -131,7 +131,7 @@ export type BaseTask =
 			id: string;
 			category: string;
 			kind: "travel";
-			action: "assign";
+			action: "assign" | "invoice" | "issue";
 			record: TravelAssistanceRequest;
 			title: string;
 			subtitle: string;
@@ -255,8 +255,8 @@ export function taskActionLabel(task: PendingTask): string {
 	if (task.action === "checklist") return "Checklist";
 	if (task.action === "advance") return "Advance visa";
 	if (task.action === "docs") return "Documents";
-	if (task.action === "invoice") return "Invoice";
-	if (task.action === "issue") return "Issue invoice";
+	if (task.action === "invoice") return task.kind === "travel" ? "Raise ticket invoice" : "Invoice";
+	if (task.action === "issue") return task.kind === "travel" ? "Approve & issue" : "Issue invoice";
 	if (task.action === "chase") return "Chase payment";
 	if (task.action === "followup") return "Follow up";
 	if (task.action === "resolve") return "Resolve";
@@ -594,26 +594,55 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		});
 	}
 
-	// Travel requests the applicant has sent ("yes, help me book") that no
-	// handler has picked up yet — the one assignment item that only lived on
-	// the Travel page.
+	// Travel requests, each step of the way. The applicant said "yes, help me
+	// book"; from there the work moves handler → manager → applicant and
+	// every ops step is a task here, not just a card on the Travel page:
+	//   review, no handler   → assign one (unless a handoff already asks)
+	//   review, handler      → the handler raises the ticket invoice
+	//   quote_prepared       → a manager approves and issues the proforma
 	for (const ta of travelRequests) {
-		if (ta.status !== "review" || ta.assignedOpsUserId) continue;
 		const app = appById.get(ta.applicationId);
-		q.push({
-			id: `travel-${ta.id}`,
-			category: "needs_assignment",
-			kind: "travel",
-			action: "assign",
-			record: ta,
-			title: ta.applicantName ?? app?.applicantName ?? "Applicant",
-			subtitle: `Travel handler required · ${ta.applicationReference ?? app?.appId ?? ""}`,
-			meta: "Applicant asked us to book their flight",
-			branch: app?.branch ?? "",
-			owner: "Unassigned",
-			linkTo: `/travel?id=${ta.applicationId}`,
-			priority: PRIORITY.assign_application,
-		});
+		const title = ta.applicantName ?? app?.applicantName ?? "Applicant";
+		const ref = ta.applicationReference ?? app?.appId ?? "";
+		const base = { record: ta, title, branch: app?.branch ?? "", linkTo: `/travel?id=${ta.applicationId}` } as const;
+		if (ta.status === "review" && !ta.assignedOpsUserId) {
+			if (handoffAppIds.has(ta.applicationId)) continue;
+			q.push({
+				...base,
+				id: `travel-${ta.id}`,
+				category: "needs_assignment",
+				kind: "travel",
+				action: "assign",
+				subtitle: `Travel handler required · ${ref}`,
+				meta: "Applicant asked us to book their flight",
+				owner: "Unassigned",
+				priority: PRIORITY.assign_application,
+			});
+		} else if (ta.status === "review" && ta.assignedOpsUserId && !ta.invoiceId) {
+			q.push({
+				...base,
+				id: `travel-invoice-${ta.id}`,
+				category: "needs_invoice",
+				kind: "travel",
+				action: "invoice",
+				subtitle: `Ticket invoice to raise · ${ref}`,
+				meta: "Applicant is waiting for their flight ticket invoice",
+				owner: ta.assignedOpsUserName ?? "Handler",
+				priority: PRIORITY.issue,
+			});
+		} else if (ta.status === "quote_prepared") {
+			q.push({
+				...base,
+				id: `travel-issue-${ta.id}`,
+				category: "needs_invoice",
+				kind: "travel",
+				action: "issue",
+				subtitle: `Ticket proforma to approve & issue · ${ref}`,
+				meta: "Applicant cannot pay until a manager issues it",
+				owner: ta.assignedOpsUserName ?? "Handler",
+				priority: PRIORITY.issue,
+			});
+		}
 	}
 
 	for (const app of applicants) {

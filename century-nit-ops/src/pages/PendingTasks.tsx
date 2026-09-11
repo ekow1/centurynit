@@ -229,6 +229,7 @@ export function PendingTaskTable({
 		(t.kind === "booking" ||
 			t.kind === "consultation" ||
 			t.kind === "application" ||
+			(t.kind === "travel" && t.action === "assign") ||
 			t.action === "resolve");
 
 	return (

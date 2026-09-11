@@ -228,10 +228,19 @@ function TravelAssistanceInner() {
 			{showReview && (
 				<section className="mt-4">
 					<div className="card card--pad">
-						<p className="eyebrow">Request received</p>
+						<p className="eyebrow">
+							{ta?.status === "quote_prepared"
+								? "Ticket invoice being approved"
+								: ta?.assignedOpsUserId
+									? "Your travel handler is on it"
+									: "Request received"}
+						</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your request has been sent to our travel team. A handler will be assigned to issue
-							your flight ticket invoice shortly. Check back here to pay it once it's ready.
+							{ta?.status === "quote_prepared"
+								? "Your ticket invoice has been prepared and is with a manager for approval. You'll be able to pay it here as soon as it's issued."
+								: ta?.assignedOpsUserId
+									? `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel handler is"} preparing your flight ticket invoice. Check back here to pay it once it's ready.`
+									: "Your request has been sent to our travel team. A handler will be assigned to issue your flight ticket invoice shortly. Check back here to pay it once it's ready."}
 						</p>
 					</div>
 				</section>

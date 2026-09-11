@@ -2430,6 +2430,9 @@ meRouter.openapi(
 				listInvoicesForClient(user.id),
 			]);
 
+		const visaConsent = application ? await getStageConsent(application.id, "visa") : null;
+		const hasVisaConsent = visaConsent?.decision === "continue";
+
 		// Travel assistance request status — the source of truth for the
 		// travel -> payment_execution transition. The portal stage must stay at
 		// travel_assistance until the TA request is cleared (or declined/on_hold),
@@ -2543,8 +2546,10 @@ meRouter.openapi(
 			derivedPortalStage = taResolved ? "payment_execution" : "travel_assistance";
 		} else if (hasAdmitted && isVisaInvoicePaid) {
 			derivedPortalStage = "visa";
-		} else if (hasAdmitted && !isVisaInvoicePaid) {
+		} else if (hasAdmitted && !isVisaInvoicePaid && hasVisaConsent) {
 			derivedPortalStage = "visa_invoice";
+		} else if (hasAdmitted && !hasVisaConsent) {
+			derivedPortalStage = "school_tracking";
 		} else if (isAppInvoicePaid && hasSelection) {
 			derivedPortalStage = "school_tracking";
 		} else if (hasSelection && isAppInvoiceIssued && !isAppInvoicePaid) {
@@ -2605,7 +2610,8 @@ meRouter.openapi(
 					} else if (coarseStage === "offer_letter_review") {
 						portalStage = "school_tracking";
 					} else if (coarseStage === "visa_processing") {
-						if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
+						if (hasAdmitted && !hasVisaConsent) portalStage = "school_tracking";
+						else if (hasAdmitted && !isVisaInvoicePaid) portalStage = "visa_invoice";
 						else if (hasAdmitted && isVisaInvoicePaid) portalStage = "visa";
 					} else if (coarseStage === "payment_execution") {
 						if (isCompleted) portalStage = "completed";
@@ -2675,7 +2681,7 @@ meRouter.openapi(
 			else if (sid === "school_select") done = hasSelection;
 			else if (sid === "awaiting_invoice") done = isAppInvoiceIssued;
 			else if (sid === "application_invoice") done = isAppInvoicePaid;
-			else if (sid === "school_tracking") done = hasAdmitted;
+			else if (sid === "school_tracking") done = hasAdmitted && hasVisaConsent;
 			else if (sid === "visa_invoice") done = isVisaInvoicePaid;
 			else if (sid === "visa") done = isVisaDone;
 			else if (sid === "travel_assistance") done = taResolved;
@@ -2947,7 +2953,30 @@ async function processConsentDecision(input: {
 					? "visa_processing"
 					: "travel_assistance";
 
-		const existingHandler = await activeHandlerFor(application.id, handoffStage);
+		let existingHandler: { opsUserId: string; name: string; email: string } | null = null;
+		if (input.stage === "visa" || input.stage === "travel") {
+			// Check specific stage assignment! Do NOT fall back to whole-case school handler (assignedStaffId),
+			// because the school application officer is not automatically the visa specialist.
+			const [specific] = await db
+				.select({
+					opsUserId: schema.stageAssignments.opsUserId,
+					name: schema.opsUsers.name,
+					email: schema.opsUsers.email,
+				})
+				.from(schema.stageAssignments)
+				.innerJoin(schema.opsUsers, eq(schema.stageAssignments.opsUserId, schema.opsUsers.id))
+				.where(
+					and(
+						eq(schema.stageAssignments.applicationId, application.id),
+						eq(schema.stageAssignments.stage, handoffStage),
+						eq(schema.stageAssignments.status, "active"),
+					),
+				)
+				.limit(1);
+			existingHandler = specific ?? null;
+		} else {
+			existingHandler = await activeHandlerFor(application.id, handoffStage);
+		}
 
 		if (!existingHandler) {
 			// No handler yet — create a handoff so the manager sees "Assign" +
@@ -2976,6 +3005,26 @@ async function processConsentDecision(input: {
 				.update(schema.applications)
 				.set({ proceedStatus: "accepted", proceededAt: new Date(), updatedAt: new Date() })
 				.where(eq(schema.applications.id, application.id));
+		}
+
+		if (input.stage === "visa") {
+			const targetVisaStage = existingHandler ? "pending" : "awaiting_handler";
+			await db
+				.update(schema.applications)
+				.set({
+					stage: "visa_processing",
+					visaStage: targetVisaStage,
+					updatedAt: new Date(),
+				})
+				.where(eq(schema.applications.id, application.id));
+
+			if (existingHandler) {
+				await ensureVisaInvoiceForApplication(input.userId, {
+					opsUserId: existingHandler.opsUserId,
+					name: existingHandler.name,
+					email: existingHandler.email,
+				});
+			}
 		}
 
 		// Audit comment on the application.

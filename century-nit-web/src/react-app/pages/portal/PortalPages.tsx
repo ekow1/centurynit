@@ -2855,7 +2855,7 @@ export function PortalTrackingPage() {
 }
 
 function TrackingPageInner() {
-	const { schoolApplications, application, setSchoolApplications } = useAppState();
+	const { schoolApplications, application, setSchoolApplications, syncFromServer } = useAppState();
 	const paid = application.applicationInvoice.status === "paid";
 	const acceptedCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
 
@@ -2997,22 +2997,42 @@ function TrackingPageInner() {
 			</div>
 
 			{acceptedCount > 0 ? (
-				<div className="card card--pad mt-6 next-action" style={{ border: "2px solid var(--foreground)" }}>
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-						<div>
-							<p className="eyebrow">Admitted · {acceptedCount} school(s)</p>
-							<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
-								Ready for the visa stage
-							</p>
-							<p className="muted mt-2">
-								Pay the visa invoice, then visa processing begins.
-							</p>
+				application.visaConsent?.decision === "continue" ? (
+					<div className="card card--pad mt-6 next-action" style={{ border: "2px solid var(--foreground)" }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+							<div>
+								<p className="eyebrow">Admitted · {acceptedCount} school(s)</p>
+								<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
+									Visa processing requested
+								</p>
+								<p className="muted mt-2">
+									You have consented to proceed to the visa stage. Continue to your visa hub to monitor specialist assignment and invoice status.
+								</p>
+							</div>
+							<Button to="/portal/visa" arrow>
+								Next · Visa & travel
+							</Button>
 						</div>
-						<Button to="/portal/visa" arrow>
-							Next · Visa & travel
-						</Button>
 					</div>
-				</div>
+				) : (
+					<div className="mt-6">
+						<div className="mb-3">
+							<p className="eyebrow">Admitted · Next Action</p>
+						</div>
+						<StageConsentCard
+							stage="visa"
+							currentDecision={application.visaConsent?.decision ?? null}
+							title="Congratulations on your Admission! Continue to Visa Stage?"
+							lead={`You have been admitted to ${acceptedCount} school(s). Decide whether you would like Century NIT to handle your visa processing.`}
+							continueDetail="Your case will be sent to our Operations team to assign a dedicated visa specialist and prepare your official visa application fee invoice."
+							holdDetail="Need time to review your offers or arrange funding? You can keep your file on hold and return whenever you are ready. No invoices will be raised."
+							optOutDetail="You may choose to handle your visa application independently or decline visa processing."
+							onDecided={() => {
+								void syncFromServer();
+							}}
+						/>
+					</div>
+				)
 			) : (
 				<div className="card card--pad mt-6">
 					<p className="eyebrow">In progress</p>
@@ -3396,17 +3416,13 @@ export function PortalVisa() {
 }
 
 function VisaHubInner() {
-	const { application, schoolApplications, fees } = useAppState();
+	const { application, schoolApplications, fees, syncFromServer } = useAppState();
 	const inv = application.visaInvoice;
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
 	const { toast } = useNotifier();
 
-	// Fetch the real server invoice on mount so the card reflects actual status.
-	// Ensure it exists first: if nothing has been raised yet, the server raises
-	// a proforma estimate that appears in Ops for the consultant to confirm and
-	// issue. Idempotent — never duplicates an existing visa invoice.
 	const [serverInv, setServerInv] = useState<{
 		id: string;
 		invoiceNumber: string;
@@ -3417,62 +3433,85 @@ function VisaHubInner() {
 		lines: { id: string; label: string; detail: string | null; amountCents: number }[];
 	} | null>(null);
 
-	useEffect(() => {
-		let cancelled = false;
-		const apply = (visa: {
-			id: string;
-			invoiceNumber: string;
-			status: string;
-			balanceCents: number;
-			subtotalCents: number;
-			paidCents: number;
-			lines: { id: string; label: string; detail: string | null; amountCents: number }[];
-		}) => {
-			if (!cancelled) setServerInv(visa);
-		};
-		const mapVisa = (visa: {
-			id: string;
-			invoiceNumber: string;
-			status: string;
-			balanceCents: number;
-			subtotalCents: number;
-			paidCents: number;
-			lines: { id: string; label: string; detail: string | null; amountCents: number }[];
-		}) =>
-			apply({
-				id: visa.id,
-				invoiceNumber: visa.invoiceNumber,
-				status: visa.status,
-				balanceCents: visa.balanceCents,
-				subtotalCents: visa.subtotalCents,
-				paidCents: visa.paidCents,
-				lines: visa.lines,
-			});
-		// The portal drive: raise a real invoice for Ops to confirm, unless one
-		// already exists. Falls back to the plain listing on failure so an
-		// already-issued invoice still shows.
-		meApi
-			.ensureVisaInvoice()
-			.then(mapVisa)
-			.catch(() =>
-				meApi
-					.invoices()
-					.then(({ invoices }) => {
-						const visa = invoices.find((i) => i.type === "visa");
-						if (visa) mapVisa(visa);
-					})
-					.catch(() => {}),
-			);
-		return () => { cancelled = true; };
-	}, []);
-
 	const serverPaid = serverInv?.status === "paid";
 	const paid = inv.status === "paid" || serverPaid;
 
-	// Render the real server invoice lines when one exists — the local
-	// `inv` lines are placeholder breakdowns and must never be shown as an
-	// issued "actual" invoice. When there is no server invoice yet, show the
-	// single fee-schedule estimate that ops will confirm.
+	const isConsented = (application.visaConsent?.decision ?? null) === "continue";
+	const isAwaitingSpecialist =
+		isConsented &&
+		(application.pendingHandoff?.stage === "visa_processing" ||
+			application.visaStatus === "awaiting_handler");
+	const hasIssuedInvoice = Boolean(
+		serverInv &&
+			(serverInv.status === "issued" ||
+				serverInv.status === "partial" ||
+				serverInv.status === "paid"),
+	);
+	const isPendingInvoice = isConsented && !isAwaitingSpecialist && !hasIssuedInvoice && !paid;
+
+	// Initial fetch of invoices on mount
+	useEffect(() => {
+		let cancelled = false;
+		meApi
+			.invoices()
+			.then(({ invoices }) => {
+				if (cancelled) return;
+				const visa = invoices.find((i) => i.type === "visa" && i.status !== "void");
+				if (visa) {
+					setServerInv({
+						id: visa.id,
+						invoiceNumber: visa.invoiceNumber,
+						status: visa.status,
+						balanceCents: visa.balanceCents,
+						subtotalCents: visa.subtotalCents,
+						paidCents: visa.paidCents,
+						lines: visa.lines,
+					});
+				}
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	// Silent background polling: when awaiting specialist assignment, poll application state every 2.5s
+	useEffect(() => {
+		if (!isAwaitingSpecialist) return;
+		const timer = window.setInterval(() => {
+			void syncFromServer();
+		}, 2500);
+		return () => window.clearInterval(timer);
+	}, [isAwaitingSpecialist, syncFromServer]);
+
+	// Silent background polling: when specialist is assigned but invoice is still pending issuance, poll invoices every 2.5s
+	useEffect(() => {
+		if (!isPendingInvoice) return;
+		const timer = window.setInterval(() => {
+			meApi
+				.invoices()
+				.then(({ invoices }) => {
+					const visa = invoices.find((i) => i.type === "visa" && i.status !== "void");
+					if (visa) {
+						setServerInv({
+							id: visa.id,
+							invoiceNumber: visa.invoiceNumber,
+							status: visa.status,
+							balanceCents: visa.balanceCents,
+							subtotalCents: visa.subtotalCents,
+							paidCents: visa.paidCents,
+							lines: visa.lines,
+						});
+						if (visa.status === "issued" || visa.status === "paid") {
+							void syncFromServer();
+						}
+					}
+				})
+				.catch(() => {});
+		}, 2500);
+		return () => window.clearInterval(timer);
+	}, [isPendingInvoice, syncFromServer]);
+
 	const serverLines: InvoiceLine[] = (serverInv?.lines ?? []).map((l) => ({
 		id: l.id,
 		label: l.label,
@@ -3498,9 +3537,6 @@ function VisaHubInner() {
 				actualLines: serverLines,
 			}
 		: {
-				// No server invoice yet — show the fee-schedule estimate that ops
-				// will confirm and issue (sourced from the real fee schedule, not
-				// the stale local estimate with its fake number).
 				...inv,
 				id: null,
 				status: "estimated" as const,
@@ -3516,8 +3552,6 @@ function VisaHubInner() {
 	async function pay() {
 		setPayPhase("loading");
 		try {
-			// Charge the exact invoice shown on this page. If the ensure call is
-			// still pending, fall back to the first open visa invoice.
 			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
 			if (!backend) {
 				const { invoices } = await meApi.invoices();
@@ -3526,6 +3560,12 @@ function VisaHubInner() {
 			if (!backend) {
 				toast.error(
 					"Your visa invoice has not been issued on the server yet. Ask your consultant to raise it.",
+				);
+				return;
+			}
+			if (backend.status === "proforma") {
+				toast.error(
+					"Cannot pay a proforma invoice before it is reviewed and issued by staff.",
 				);
 				return;
 			}
@@ -3560,32 +3600,40 @@ function VisaHubInner() {
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">Dashboard · Visa</p>
-					<h1 className="page-title mt-1">{paid ? "Visa tracking" : "Visa invoice → then process"}</h1>
+					<h1 className="page-title mt-1">{paid ? "Visa tracking" : "Visa stage · Application & Processing"}</h1>
 					<p className="lead mt-2">
 						{paid
 							? "Visa invoice settled. Your handler will open your visa case and update you through the tracking page."
-							: "On admission an invoice is raised before the visa process starts. Pay the invoice → tracking runs. Handler posts are view-only."}
+							: isAwaitingSpecialist
+								? "Your consent has been recorded. Operations is assigning your dedicated visa specialist."
+								: isPendingInvoice
+									? "Your visa specialist is preparing your official visa application fee invoice."
+									: "Review and pay your official visa application invoice to begin active visa processing."}
 					</p>
 				</div>
 			</header>
 
 			<ol className="mini-steps mb-4">
 				<li className={hasAdmit ? "is-done" : "is-current"}>1 · Admitted</li>
-				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>2 · Visa invoice</li>
+				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>
+					2 · {paid ? "Visa fee paid" : isAwaitingSpecialist ? "Assigning specialist" : isPendingInvoice ? "Preparing invoice" : "Visa invoice"}
+				</li>
 				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
 			</ol>
 
-			{hasAdmit && !paid && (application.visaConsent?.decision ?? null) !== "continue" && (
-				<StageConsentCard
-					stage="visa"
-					currentDecision={application.visaConsent?.decision ?? null}
-					title="Continue with visa processing?"
-					lead="You've been admitted. Continue with visa processing so we can assign a visa handler and raise your visa invoice."
-					continueDetail="A visa handler will be assigned and an invoice will be raised for the visa processing fee. You'll pay the invoice before visa processing begins."
-					holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
-					optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
-					onDecided={() => window.location.reload()}
-				/>
+			{hasAdmit && !paid && !isConsented && (
+				<div className="mb-4">
+					<StageConsentCard
+						stage="visa"
+						currentDecision={application.visaConsent?.decision ?? null}
+						title="Continue with visa processing?"
+						lead="You've been admitted. Continue with visa processing so we can assign a visa handler and raise your visa invoice."
+						continueDetail="A visa handler will be assigned and an invoice will be raised for the visa processing fee. You'll pay the invoice before visa processing begins."
+						holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
+						optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
+						onDecided={() => void syncFromServer()}
+					/>
+				</div>
 			)}
 
 			<div className="portal-grid portal-grid--2 portal-grid--align-start mb-2">
@@ -3620,13 +3668,64 @@ function VisaHubInner() {
 					</div>
 				)}
 
-{/* Invoice first - process blocked until paid */}
-			<StageInvoiceCard
-				invoice={cardInvoice}
-				title="Visa invoice · pay before process starts"
-				onPay={paid ? undefined : pay}
-				paying={false}
-			/>
+				{isAwaitingSpecialist ? (
+					<div className="card card--pad">
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
+								Awaiting Visa Specialist
+							</span>
+							<span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Checking automatically</span>
+						</div>
+						<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>
+							Assigning Your Visa Specialist
+						</h3>
+						<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
+							Your consent to proceed has been received. Our Operations management team is currently assigning your dedicated visa counselor.
+						</p>
+						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
+							<div>
+								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Matching your case with a visa specialist…</p>
+								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
+									Once assigned, your specialist will prepare and issue your official visa application fee invoice. This screen updates in real time.
+								</p>
+							</div>
+						</div>
+					</div>
+				) : isPendingInvoice ? (
+					<div className="card card--pad">
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
+								Invoice in Review
+							</span>
+							<span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Checking automatically</span>
+						</div>
+						<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>
+							Pending Visa Application Fee Invoice
+						</h3>
+						<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
+							{application.assignedStaffName ? `${application.assignedStaffName} has been assigned as your visa specialist.` : "Your visa specialist has been assigned."}{" "}
+							They are currently preparing and reviewing your official visa fee invoice.
+						</p>
+						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
+							<div>
+								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Awaiting specialist review & issuance…</p>
+								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
+									{serverInv?.invoiceNumber ? `Proforma estimate #${serverInv.invoiceNumber} is under review by staff.` : "Your specialist is finalizing your invoice."}{" "}
+									Payment will unlock automatically on this page as soon as the invoice is issued.
+								</p>
+							</div>
+						</div>
+					</div>
+				) : hasIssuedInvoice || paid ? (
+					<StageInvoiceCard
+						invoice={cardInvoice}
+						title="Visa invoice · pay before process starts"
+						onPay={paid ? undefined : pay}
+						paying={false}
+					/>
+				) : null}
 			</div>
 
 			<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>

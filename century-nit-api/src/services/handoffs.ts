@@ -413,11 +413,21 @@ export async function resolveStageHandoff(input: {
 		}
 	} else if (row.stage === "visa_processing") {
 		// Visa gate is the `awaiting_handler` sub-state: opening the case makes
-		// visa tracking live for the applicant.
+		// visa tracking live for the applicant once the invoice is issued and paid.
 		await db
 			.update(applications)
 			.set({ visaStage: "pending", updatedAt: new Date() })
 			.where(and(eq(applications.id, row.applicationId), eq(applications.visaStage, "awaiting_handler")));
+
+		const { applicantUserIdOfApplication, ensureVisaInvoiceForApplication } = await import("./cases.js");
+		const clientUserId = await applicantUserIdOfApplication(row.applicationId);
+		if (clientUserId) {
+			await ensureVisaInvoiceForApplication(clientUserId, {
+				opsUserId: input.actor.opsUserId,
+				name: input.actor.name,
+				email: input.actor.email,
+			}).catch(() => {});
+		}
 	} else {
 		// Finance/travel boundary stages gate on entry: the case was parked at
 		// its predecessor. It is staffed now, so complete the transition.

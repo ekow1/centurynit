@@ -56,7 +56,6 @@ export function OpsCommandPalette() {
 		{ type: "Module", title: "Applications", subtitle: "Active Cases & Approvals", path: "/applications", module: "applications" },
 		{ type: "Module", title: "Consultations", subtitle: "Meetings & Eligibility Assessments", path: "/consultations", module: "consultations" },
 		{ type: "Module", title: "Applicants", subtitle: "Confirmed Dossiers & Timelines", path: "/applicants", module: "applicants" },
-		{ type: "Module", title: "Workflow Pipeline", subtitle: "Kanban Board", path: "/workflow", module: "workflow" },
 		{ type: "Module", title: "Finance & Invoices", subtitle: "Revenue Analytics & Ledger", path: "/finance", module: "finance" },
 		{ type: "Module", title: "Universities", subtitle: "Institutions & Programs", path: "/universities", module: "universities" },
 		{ type: "Module", title: "Service Packages", subtitle: "Pricing & Tiers", path: "/packages", module: "packages" },

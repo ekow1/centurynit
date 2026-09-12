@@ -135,7 +135,7 @@ export function EnterpriseDashboard() {
 					<Link to="/crm" className="btn btn--ghost btn--sm">Lead Pipeline</Link>
 				)}
 				{hasPermission("workflow") && (
-					<Link to="/workflow" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
+					<Link to="/applications?view=board" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
 				)}
 				{hasPermission("finance") && (
 					<Link to="/finance" className="btn btn--ghost btn--sm">Issue Invoice</Link>

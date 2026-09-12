@@ -37,7 +37,7 @@ const TAB_PREFERENCE: Record<OpsRole, string[]> = {
 	// Reaches everything, so lead with the platform console and the two views a
 	// super admin actually opens: who has access, and what the system is doing.
 	super_admin: ["/system", "/users", "/dashboard", "/settings"],
-	manager: ["/dashboard", "/consultations", "/applications", "/workflow"],
+	manager: ["/dashboard", "/consultations", "/applications", "/applicants"],
 	coordinator: ["/dashboard", "/consultations", "/appointments", "/applicants"],
 	customer_service: ["/inbox", "/leads", "/consultations", "/applications"],
 	consultant: ["/dashboard", "/consultations", "/applicants", "/documents"],

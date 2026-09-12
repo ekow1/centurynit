@@ -38,15 +38,14 @@ const OPERATIONS_NAV: NavEntry[] = [
 		group: "Cases",
 		icon: "applications",
 		blurb: "Client work & progression",
+		// Visa, Departure and the Board are views inside Cases (chapter chips and
+		// the list/board switch), not destinations — listing them here made them
+		// look like separate queues. Account admin (ban, sessions) is under
+		// Platform › Access & Security; this group is the handler's three doors.
 		children: [
-			{ to: "/clients", module: "dashboard", label: "Client accounts", blurb: "Portal access & status", icon: "users" },
-			{ to: "/applications", module: "applications", label: "Cases", blurb: "Every client's journey", icon: "applications" },
 			{ to: "/consultations", module: "consultations", label: "Consultations", blurb: "Meetings, assessments & documents", icon: "consultations" },
-			{ to: "/visa", module: "visa", label: "Visa", blurb: "Visa cases by step", icon: "visa" },
-			{ to: "/travel", module: "travel", label: "Departure", blurb: "Flights & pre-departure", icon: "travel" },
+			{ to: "/applications", module: "applications", label: "Cases", blurb: "Every client's journey — list & board", icon: "applications" },
 			{ to: "/applicants", module: "applicants", label: "Clients", blurb: "Client records", icon: "applicants" },
-			{ to: "/workflow", module: "workflow", label: "Board", blurb: "Cases by chapter", icon: "workflow" },
-			{ to: "/team", module: "reports", label: "Team", blurb: "Workload & rebalancing", icon: "reports" },
 		],
 	},
 	{
@@ -91,6 +90,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 		children: [
 			{ to: "/finance", module: "finance", label: "Finance reports", blurb: "Revenue & collections", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
+			{ to: "/team", module: "reports", label: "Team", blurb: "Workload & rebalancing", icon: "reports" },
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },

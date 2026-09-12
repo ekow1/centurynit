@@ -7,8 +7,7 @@ import { useCasesApi } from "./useCasesApi";
  * `useCasesApi` polls `/staff`, `/applications`, `/consultations`, and
  * `/applicants` every 30s. Before this provider, every page that needed case
  * data (`EnterpriseDashboard`, `EnterpriseCases`, `EnterpriseConsultations`,
- * `EnterpriseApplicants`, `EnterpriseVisa`, `EnterpriseTravel`,
- * `EnterpriseWorkflow`, `EnterpriseFinance`, `EnterpriseReports`,
+ * `EnterpriseApplicants`, `EnterpriseFinance`, `EnterpriseReports`,
  * `EnterpriseInbox`, `EnterpriseInvoices`, `EnterpriseLedger`,
  * `EnterprisePaymentsLog`, `OpsCommandPalette`, and the scholarship modals)
  * mounted its own `useCasesApi` instance. Navigating between them tore down

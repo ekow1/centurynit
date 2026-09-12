@@ -26,9 +26,6 @@ const AcceptInvite = lazyNamed(() => import("./pages/AcceptInvite"), "AcceptInvi
 const MfaSetup = lazyNamed(() => import("./pages/MfaSetup"), "MfaSetup");
 const EnterpriseLeads = lazyNamed(() => import("./pages/EnterpriseLeads"), "EnterpriseLeads");
 const EnterpriseCases = lazyNamed(() => import("./pages/EnterpriseCases"), "EnterpriseCases");
-const EnterpriseWorkflow = lazyNamed(() => import("./pages/EnterpriseWorkflow"), "EnterpriseWorkflow");
-const EnterpriseVisa = lazyNamed(() => import("./pages/EnterpriseVisa"), "EnterpriseVisa");
-const EnterpriseTravel = lazyNamed(() => import("./pages/EnterpriseTravel"), "EnterpriseTravel");
 const EnterpriseDocuments = lazyNamed(() => import("./pages/EnterpriseDocuments"), "EnterpriseDocuments");
 const EnterpriseFinance = lazyNamed(() => import("./pages/EnterpriseFinance"), "EnterpriseFinance");
 const EnterpriseInvoices = lazyNamed(() => import("./pages/EnterpriseInvoices"), "EnterpriseInvoices");
@@ -141,9 +138,10 @@ export default function App() {
 									<Route path="helpdesk" element={<Ops module="helpdesk"><EnterpriseHelpdesk /></Ops>} />
 									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									<Route path="marketing/sms" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
-									<Route path="workflow" element={<Ops module="workflow"><EnterpriseWorkflow /></Ops>} />
-									<Route path="visa" element={<Ops module="visa"><EnterpriseVisa /></Ops>} />
-									<Route path="travel" element={<Ops module="travel"><EnterpriseTravel /></Ops>} />
+									{/* The old Board, Visa and Departure queues are views inside Cases; the URLs live on as redirects. */}
+									<Route path="workflow" element={<Navigate to="/applications?view=board" replace />} />
+									<Route path="visa" element={<Navigate to="/applications?chapter=visa" replace />} />
+									<Route path="travel" element={<Navigate to="/applications?chapter=depart" replace />} />
 									<Route path="documents" element={<Ops module="documents"><EnterpriseDocuments /></Ops>} />
 									<Route path="invoices" element={<Ops module="invoices"><EnterpriseInvoices /></Ops>} />
 									<Route path="ledger" element={<Ops module="ledger"><EnterpriseLedger /></Ops>} />

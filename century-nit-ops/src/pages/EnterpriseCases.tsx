@@ -40,6 +40,11 @@ const CHAPTER_FILTERS: { id: "all" | ChapterId; label: string }[] = [
 	...CHAPTERS.filter((c) => c.id !== "consult").map((c) => ({ id: c.id, label: c.label })),
 ];
 
+/** The chapter filter named in the URL, or "all" for anything unknown. */
+function parseChapter(raw: string | null): "all" | ChapterId {
+	return CHAPTER_FILTERS.some((c) => c.id === raw) ? (raw as "all" | ChapterId) : "all";
+}
+
 /** The chapter a case is in, by its stored stage. */
 function chapterOf(app: MockApplication): ChapterId {
 	return STAGE_CHAPTER[app.stage] ?? "enrol";
@@ -98,24 +103,29 @@ function RowMeta({
 	return <span>{app.journey?.label ?? CHAPTERS.find((c) => c.id === chapterOf(app))?.label ?? app.stage}</span>;
 }
 
-export function EnterpriseCases({
-	chapter: initialChapter = "all",
-	view: initialView = "list",
-}: {
-	/** Preset by the route: /visa, /travel open the list on that chapter. */
-	chapter?: "all" | ChapterId;
-	/** Preset by the route: /workflow opens the board. */
-	view?: View;
-}) {
-	const [searchParams] = useSearchParams();
+export function EnterpriseCases() {
+	const [searchParams, setSearchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const { applications, assignees, handoffs, travelRequests, error: casesError, addApplication } = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 	// Assignment from the list: the card's chip opens the same sheet the detail uses.
 	const [assignFor, setAssignFor] = useState<MockApplication | null>(null);
 
-	const [chapter, setChapter] = useState<"all" | ChapterId>(initialChapter);
-	const [view, setView] = useState<View>(initialView);
+	// Chapter and view live in the URL (?chapter=visa&view=board), so a
+	// filtered list is a link — bookmarkable, shareable, and the old /visa,
+	// /travel and /workflow routes redirect here. Defaults are left off the URL.
+	const chapter = parseChapter(searchParams.get("chapter"));
+	const view: View = searchParams.get("view") === "board" ? "board" : "list";
+	const setParam = (key: "chapter" | "view", value: string, fallback: string) =>
+		setSearchParams((prev) => {
+			const next = new URLSearchParams(prev);
+			if (value === fallback) next.delete(key);
+			else next.set(key, value);
+			return next;
+		}, { replace: true });
+	const setChapter = (c: "all" | ChapterId) => setParam("chapter", c, "all");
+	const setView = (v: View) => setParam("view", v, "list");
+
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -124,10 +134,6 @@ export function EnterpriseCases({
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
-
-	// The routes (/applications, /visa, /travel, /workflow) mount distinct
-	// wrapper components, so moving between them remounts this page and the
-	// presets above take effect without an effect.
 
 	const queryId = searchParams.get("id");
 	useEffect(() => {

@@ -566,6 +566,11 @@ export const applicationSchema = z.object({
 			label: z.string(),
 			nextUnlock: z.string().nullable(),
 			stageStatuses: z.record(z.enum(["done", "current", "locked", "skipped"])),
+			/**
+			 * Which portal chapters are open (`deriveJourney().chapterUnlocks`).
+			 * Ops gates its case tabs on this rather than re-deriving the rule.
+			 */
+			chapterUnlocks: z.record(z.boolean()).optional(),
 		})
 		.optional(),
 	submittedAt: z.string().datetime().nullable(),
@@ -892,3 +897,51 @@ export const travelAssistanceChecklistInputSchema = z.object({
 export type TravelAssistanceChecklistInput = z.infer<
 	typeof travelAssistanceChecklistInputSchema
 >;
+
+/* ── Application activity ────────────────────────────────────────────────── */
+
+/**
+ * One event on an application's timeline. Assembled from the tables that
+ * already record history (comments, ownership, stage assignments, handoffs,
+ * consents, invoices and payments, school outcomes, travel requests) — there
+ * is no separate activity table for applications.
+ */
+export const applicationActivityEventSchema = z.object({
+	id: z.string(),
+	applicationId: z.string().uuid(),
+	type: z.enum([
+		"comment",
+		"document_request",
+		"owner_assigned",
+		"owner_released",
+		"stage_assigned",
+		"stage_assignment_ended",
+		"handoff_opened",
+		"handoff_resolved",
+		"consent_decided",
+		"invoice_created",
+		"invoice_issued",
+		"invoice_voided",
+		"payment_recorded",
+		"school_added",
+		"school_admitted",
+		"school_rejected",
+		"travel_requested",
+		"travel_decided",
+	]),
+	/** Short human line, e.g. "Visa invoice issued". */
+	summary: z.string(),
+	/** Longer free text when there is one (comment body, reason, note). */
+	detail: z.string().nullable(),
+	actorName: z.string().nullable(),
+	/** Journey stage the event belongs to, when it has one. */
+	stage: z.string().nullable(),
+	at: z.string().datetime(),
+});
+export type ApplicationActivityEvent = z.infer<typeof applicationActivityEventSchema>;
+
+export const applicationActivityResponseSchema = z.object({
+	events: z.array(applicationActivityEventSchema),
+	total: z.number().int(),
+});
+export type ApplicationActivityResponse = z.infer<typeof applicationActivityResponseSchema>;

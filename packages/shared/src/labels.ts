@@ -75,6 +75,16 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
 };
 
 /** What the applicant is told while an invoice is still a proforma. */
+/** What each invoice type is for, as a title ("Visa invoice", "Ticket invoice"). */
+export const INVOICE_TYPE_LABELS: Record<string, string> = {
+	application: "Application",
+	visa: "Visa",
+	agency: "Service package",
+	travel: "Ticket",
+	consultation: "Consultation",
+	custom: "Custom",
+};
+
 export const INVOICE_PROFORMA_HINT = "Being prepared — you'll be able to pay it here once it's issued.";
 
 /* ── Visa sub-stage ───────────────────────────────────────────────────────── */

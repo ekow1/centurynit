@@ -21,11 +21,13 @@ import {
 	getApplicantByUserId,
 	latestApplicationForApplicant,
 	listApplications,
+	serializeApplication,
 	setApplicationPackage,
 } from "./cases.js";
+import { getApplicationActivity } from "./applicationActivity.js";
 import { releaseOfficerCases } from "./caseOwnership.js";
 import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js";
-import { issueProformaByOps, recordPayment, serializeInvoice } from "./invoice.js";
+import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
 import { addSchoolForApplicant, lockSchoolsForApplicant, updateSchoolStatus } from "./schools.js";
 import { processConsentDecision } from "../routes/cases.js";
@@ -252,6 +254,29 @@ describe("the applicant journey, end to end", () => {
 		expect(journey.stageStatuses.application_invoice).toBe("done");
 		expect(journey.stageStatuses.visa_invoice).toBe("current");
 		expect(Object.values(journey.stageStatuses)).not.toContain("skipped");
+
+		// The ops serializer ships the chapter unlocks too, so the console
+		// gates its tabs on the same rule the portal gates its chapters on.
+		const serialized = await serializeApplication(final);
+		expect(serialized.journey?.chapterUnlocks).toEqual(journey.chapterUnlocks);
+		expect(serialized.journey?.chapterUnlocks?.visa).toBe(true);
+		expect(serialized.journey?.chapterUnlocks?.travel_assistance).toBe(false);
+
+		// The application timeline is assembled from what the walk wrote.
+		const events = await getApplicationActivity(appId);
+		const types = events.map((e) => e.type);
+		expect(types).toContain("invoice_issued");
+		expect(types).toContain("payment_recorded");
+		expect(types).toContain("school_admitted");
+		expect(types).toContain("consent_decided");
+		expect(types).toContain("stage_assigned");
+		// Newest first.
+		for (let i = 1; i < events.length; i++) expect(events[i - 1].at >= events[i].at).toBe(true);
+
+		// Invoices can be listed by the application they belong to.
+		const byApp = await listInvoices({ applicationId: appId, limit: 50, offset: 0 });
+		expect(byApp.rows.length).toBeGreaterThan(0);
+		expect(byApp.rows.every((r) => r.applicationId === appId)).toBe(true);
 	});
 
 	maybe()("stage specialists see their case; roles that cannot own a stage are refused; leaving releases work", async () => {

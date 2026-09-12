@@ -1,5 +1,5 @@
 import { API_PREFIX } from "century-nit-shared";
-import type { SchoolApplication, SchoolApplicationList } from "century-nit-shared";
+import type { ApplicationActivityResponse, SchoolApplication, SchoolApplicationList } from "century-nit-shared";
 /**
  * Thin fetch wrapper for the ops app.
  *
@@ -264,6 +264,8 @@ export type InvoiceListResponse = {
 export function listInvoices(params?: {
 	status?: string;
 	type?: string;
+	/** Every invoice raised on one application, all types. */
+	applicationId?: string;
 	q?: string;
 	limit?: number;
 	offset?: number;
@@ -271,11 +273,17 @@ export function listInvoices(params?: {
 	const qs = new URLSearchParams();
 	if (params?.status) qs.set("status", params.status);
 	if (params?.type) qs.set("type", params.type);
+	if (params?.applicationId) qs.set("applicationId", params.applicationId);
 	if (params?.q) qs.set("q", params.q);
 	if (params?.limit) qs.set("limit", String(params.limit));
 	if (params?.offset) qs.set("offset", String(params.offset));
 	const query = qs.toString();
 	return apiFetch<InvoiceListResponse>(`${API_PREFIX}/invoices${query ? `?${query}` : ""}`);
+}
+
+/** An application's timeline (comments, ownership, handoffs, invoices, schools…), newest first. */
+export function getApplicationActivity(applicationId: string): Promise<ApplicationActivityResponse> {
+	return apiFetch<ApplicationActivityResponse>(`${API_PREFIX}/applications/${applicationId}/activity`);
 }
 
 export function getInvoice(id: string): Promise<ApiInvoice> {

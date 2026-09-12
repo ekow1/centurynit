@@ -257,6 +257,8 @@ export interface MockApplication {
 		label: string;
 		nextUnlock: string | null;
 		stageStatuses: Record<string, "done" | "current" | "locked" | "skipped">;
+		/** Which portal chapters are open — what the case tabs unlock on. */
+		chapterUnlocks?: Record<string, boolean>;
 	} | null;
 	/** Parent consultation that opened this application, if any. */
 	consultationId?: string | null;

@@ -81,6 +81,7 @@ import {
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
 import { journeyForApplicant } from "../services/journey.js";
+import { getApplicationActivity } from "../services/applicationActivity.js";
 import { syncLeadFromApplicant } from "../services/leads.js";
 import {
 	getOrCreateApplicantConversation,
@@ -139,6 +140,7 @@ import {
 	stageConsentInputSchema,
 	type StageConsentStage,
 	type StageConsent,
+	applicationActivityResponseSchema,
 } from "century-nit-shared";
 import {
 	deferStageHandoff,
@@ -614,6 +616,30 @@ applicationsRouter.openapi(
 		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
 		await assertApplicationAccess(c, id, "view");
 		return c.json(await serializeApplication(row));
+	},
+);
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/activity",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationActivityResponseSchema } },
+				description: "Activity timeline for this application, newest first",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const row = await getApplication(id);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		await assertApplicationAccess(c, id, "view");
+		const events = await getApplicationActivity(id);
+		return c.json({ events, total: events.length });
 	},
 );
 

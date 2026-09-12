@@ -85,6 +85,8 @@ export const issueProformaSchema = z.object({
 export const listInvoicesQuerySchema = z.object({
 	status: invoiceStatusSchema.optional(),
 	type: invoiceTypeSchema.optional(),
+	/** Only invoices raised on this application (all types). */
+	applicationId: z.string().uuid().optional(),
 	/** Matches invoice number or applicant name, case-insensitively. */
 	q: z.string().max(120).optional(),
 	limit: z.coerce.number().int().min(1).max(200).default(50),

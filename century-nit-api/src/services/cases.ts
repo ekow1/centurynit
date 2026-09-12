@@ -679,6 +679,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 					label: journey.label,
 					nextUnlock: journey.nextUnlock,
 					stageStatuses: journey.stageStatuses,
+					chapterUnlocks: journey.chapterUnlocks,
 				}
 			: undefined,
 		submittedAt: row.submittedAt?.toISOString() ?? null,

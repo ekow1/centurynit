@@ -6,8 +6,8 @@ import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { TaQueueRow } from "./TravelRequestCard";
-import { handoffOffersKeep } from "../lib/pendingTasks";
-import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
+import { handoffOffersKeep, timeAgo } from "../lib/pendingTasks";
+import { listInvoices, issueApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
 import { AssignControl, CaseHeader, InvoiceCard, StatusPill } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
@@ -19,6 +19,7 @@ import {
 	VISA_STAGE_LABELS,
 	TRAVEL_STATUS_LABELS,
 	type ApplicantDocument,
+	type ApplicationActivityEvent,
 	canOwnStage,
 	schoolDecisionNote,
 	type JourneyStage,
@@ -384,27 +385,32 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const [noteDraft, setNoteDraft] = useState("");
 	const [editingNote, setEditingNote] = useState(false);
 
-	// This case's application and visa invoices (proforma or issued).
-	const [visaApiInvoice, setVisaApiInvoice] = useState<ApiInvoice | null>(null);
+	// Every invoice raised on this case, in one request; the application and
+	// visa invoices the stage blocks show are views over it.
+	const [caseInvoices, setCaseInvoices] = useState<ApiInvoice[]>([]);
+	const [invoiceRefresh, setInvoiceRefresh] = useState(0);
 	useEffect(() => {
 		setAppInvoiceLoading(true);
-		Promise.all([listInvoices({ type: "application" }), listInvoices({ type: "visa" })])
-			.then(([apps, visas]) => {
-				setAppInvoice(apps.invoices.find((i) => i.applicationId === app.id) ?? null);
-				setVisaApiInvoice(visas.invoices.find((i) => i.applicationId === app.id && i.status !== "void") ?? null);
+		listInvoices({ applicationId: app.id, limit: 50 })
+			.then((res) => {
+				const live = res.invoices.filter((i) => i.status !== "void");
+				setCaseInvoices(live);
+				setAppInvoice(res.invoices.find((i) => i.type === "application") ?? null);
 			})
 			.catch(() => {
+				setCaseInvoices([]);
 				setAppInvoice(null);
-				setVisaApiInvoice(null);
 			})
 			.finally(() => setAppInvoiceLoading(false));
-	}, [app.id]);
+	}, [app.id, invoiceRefresh]);
+	const visaApiInvoice = caseInvoices.find((i) => i.type === "visa") ?? null;
 
 	function handleIssueApplicationInvoice() {
 		setIssuingInvoice(true);
 		issueApplicationInvoice(app.id)
 			.then((updated) => {
 				setAppInvoice(updated);
+				setInvoiceRefresh((n) => n + 1);
 				setInvoiceFlash(`Invoice ${updated.invoiceNumber} issued — applicant can now pay.`);
 				window.setTimeout(() => setInvoiceFlash(null), 5000);
 			})
@@ -472,14 +478,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const [tab, setTab] = useState<TabId>(() => initialTab ?? currentTabFor(app));
 	useEffect(() => setTab(initialTab ?? currentTabFor(app)), [app.id, initialTab]);
 
-	// Every invoice on this case (all types), for the Payments tab.
-	const [caseInvoices, setCaseInvoices] = useState<ApiInvoice[]>([]);
-	useEffect(() => {
-		listInvoices({ limit: 200 })
-			.then((res) => setCaseInvoices(res.invoices.filter((i) => i.applicationId === app.id && i.status !== "void")))
-			.catch(() => setCaseInvoices([]));
-	}, [app.id, appInvoice?.status, visaApiInvoice?.status]);
-
 	// The applicant's uploads, for the Documents tab.
 	const [docs, setDocs] = useState<ApplicantDocument[]>([]);
 	const [docsLoading, setDocsLoading] = useState(false);
@@ -521,17 +519,21 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const stageIndex = stageIdx(app.stage);
 	const consultation = consultations.find((c) => c.id === app.consultationId) ?? null;
 	const hasAdmitted = (app.schoolApplications ?? []).some((s) => s.outcome === "Admitted");
+	// Tabs open on the same rule the portal opens its chapters on
+	// (`deriveJourney().chapterUnlocks`, shipped on the application). The
+	// local checks are only the fallback for a case the API has not derived.
+	const unlocks = app.journey?.chapterUnlocks;
+	const applicationOpen = unlocks
+		? unlocks.package || unlocks.application
+		: app.proceedStatus === "accepted" || app.depositPaid || stageIndex >= stageIdx("school_submission");
+	const visaOpen = unlocks ? unlocks.visa : showVisa || hasAdmitted;
+	const travelOpen = unlocks ? unlocks.travel_assistance : showTravel || app.visaStage === "complete";
 	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
 		{ id: "overview", label: "Overview", locked: false },
 		{ id: "consultation", label: "Consultation", locked: !consultation, hint: "Opened from a consultation" },
-		{
-			id: "application",
-			label: "Application",
-			locked: !(app.proceedStatus === "accepted" || app.depositPaid || stageIndex >= stageIdx("school_submission")),
-			hint: "Unlocks when the applicant consents to proceed",
-		},
-		{ id: "visa", label: "Visa", locked: !showVisa && !hasAdmitted, hint: "Unlocks on the first admission" },
-		{ id: "travel", label: "Travel", locked: !showTravel && app.visaStage !== "complete", hint: "Unlocks when the visa is complete" },
+		{ id: "application", label: "Application", locked: !applicationOpen, hint: "Unlocks when the applicant consents to proceed" },
+		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
+		{ id: "travel", label: "Travel", locked: !travelOpen, hint: "Unlocks once the visa is complete and its invoice paid" },
 		{ id: "payments", label: "Payments", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
 		{ id: "activity", label: "Activity", locked: false },
@@ -541,6 +543,19 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// started) falls back to the chapter the case is actually in.
 	const stageTab = currentTabFor(app);
 	const current = !isLocked(tab) ? tab : !isLocked(stageTab) ? stageTab : "overview";
+
+	// The case timeline, for the Activity tab; refetched when work is done here.
+	const [activity, setActivity] = useState<ApplicationActivityEvent[]>([]);
+	const [activityLoading, setActivityLoading] = useState(false);
+	useEffect(() => {
+		if (current !== "activity") return;
+		setActivityLoading(true);
+		getApplicationActivity(app.id)
+			.then((res) => setActivity(res.events))
+			.catch(() => setActivity([]))
+			.finally(() => setActivityLoading(false));
+	}, [app.id, current, app.comments?.length, app.assignedStaffId, invoiceRefresh]);
+
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -1418,6 +1433,38 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 									}
 								/>
 
+					<div className="card">
+						<div className="cn-case__top">
+							<h3 style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Timeline</h3>
+							<span className="cn-case__ref">{activity.length} events</span>
+						</div>
+						{activityLoading ? (
+							<p className="muted">Loading timeline…</p>
+						) : activity.length === 0 ? (
+							<p className="muted">Nothing recorded on this case yet.</p>
+						) : (
+							<ol className="cn-timeline">
+								{activity.map((e) => (
+									<li key={e.id} className="cn-timeline__item">
+										<div className="cn-timeline__head">
+											<span className="cn-timeline__summary">{e.summary}</span>
+											<time className="cn-timeline__when" dateTime={e.at} title={new Date(e.at).toLocaleString()}>
+												{timeAgo(e.at)}
+											</time>
+										</div>
+										{(e.actorName || e.stage) && (
+											<p className="cn-timeline__meta">
+												{e.actorName}
+												{e.actorName && e.stage ? " · " : ""}
+												{e.stage ? JOURNEY_STAGE_LABELS[e.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? e.stage : ""}
+											</p>
+										)}
+										{e.detail && <p className="cn-timeline__detail">{e.detail}</p>}
+									</li>
+								))}
+							</ol>
+						)}
+					</div>
 				</>
 			)}
 		</div>

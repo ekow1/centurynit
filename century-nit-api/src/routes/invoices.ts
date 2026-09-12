@@ -129,6 +129,7 @@ invoicesRouter.openapi(
 		const { rows, total } = await listInvoices({
 			status: query.status,
 			type: query.type,
+			applicationId: query.applicationId,
 			q: query.q,
 			limit: query.limit,
 			offset: query.offset,

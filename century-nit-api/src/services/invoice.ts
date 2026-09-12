@@ -195,12 +195,14 @@ export async function getInvoice(id: string): Promise<InvoiceRow | null> {
 export async function listInvoices(filter: {
 	status?: InvoiceStatus;
 	type?: InvoiceRow["type"];
+	applicationId?: string;
 	q?: string;
 	limit: number;
 	offset: number;
 }): Promise<{ rows: InvoiceRow[]; total: number }> {
 	const conditions = [];
 	if (filter.type) conditions.push(eq(invoices.type, filter.type));
+	if (filter.applicationId) conditions.push(eq(invoices.applicationId, filter.applicationId));
 	if (filter.q) {
 		const term = `%${filter.q}%`;
 		conditions.push(
@@ -1031,6 +1033,8 @@ if (row.status !== "proforma") {
 			.set({
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
+				reviewedByName: input.userName,
+				reviewedAt: new Date(),
 				updatedAt: new Date(),
 			})
 			.where(eq(invoices.id, row.id))
@@ -1079,6 +1083,9 @@ export async function issueProformaByOps(input: {
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+				issuedByName: row.issuedByName ?? input.actorName,
+				reviewedByName: input.actorName,
+				reviewedAt: new Date(),
 				updatedAt: new Date(),
 			})
 			.where(eq(invoices.id, row.id))
@@ -1127,6 +1134,9 @@ export async function issueInvoiceByOps(input: {
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+				issuedByName: row.issuedByName ?? input.actorName,
+				reviewedByName: input.actorName,
+				reviewedAt: new Date(),
 				updatedAt: new Date(),
 			})
 			.where(eq(invoices.id, row.id))

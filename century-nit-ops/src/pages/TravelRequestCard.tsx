@@ -167,6 +167,7 @@ export function TravelCard({
 	invoice,
 	canWork,
 	canIssueInvoices,
+	feeBlock = null,
 	onChanged,
 }: {
 	ta: TravelAssistanceRequest;
@@ -175,6 +176,8 @@ export function TravelCard({
 	canWork: boolean;
 	/** Holds the invoices module — sees the Review & issue link. */
 	canIssueInvoices: boolean;
+	/** Why the ticket cannot be invoiced yet (the pre-departure fee milestone), or null. */
+	feeBlock?: string | null;
 	onChanged: () => void;
 }) {
 	const [busy, setBusy] = useState(false);
@@ -251,10 +254,11 @@ export function TravelCard({
 			)}
 
 			{canWork && form === "none" && status === "review" && ta.assignedOpsUserId && (
-				<div>
-					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")}>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")} disabled={Boolean(feeBlock)} title={feeBlock ?? undefined}>
 						Raise ticket invoice
 					</button>
+					{feeBlock && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{feeBlock}</span>}
 				</div>
 			)}
 			{canWork && form === "none" && status === "ticket_paid" && (

@@ -27,13 +27,17 @@ export const journeyStageSchema = z.enum([
 export type JourneyStage = z.infer<typeof journeyStageSchema>;
 
 /** Ordered array for pipeline display / "advance to next" logic. */
+/**
+ * `payment_execution` is no longer a stage a case sits in: the service fee
+ * milestone is paid inside Departure, before the ticket. The enum keeps the
+ * value so old rows parse; the order does not include it.
+ */
 export const JOURNEY_STAGES: JourneyStage[] = [
 	"document_verification",
 	"school_submission",
 	"offer_letter_review",
 	"visa_processing",
 	"travel_assistance",
-	"payment_execution",
 	"completed",
 ];
 
@@ -62,6 +66,34 @@ export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
  * completion, matching the current ops UI buttons, so the server and the
  * Workflow board share the same rule set.
  */
+/**
+ * The pre-departure service fee milestone: on a full plan the 90% balance,
+ * on instalments the 50% second milestone (the deposit is the first). Due
+ * after the visa is approved and before the ticket is issued — where the
+ * agency's leverage is. The post-arrival remainder is aftercare.
+ */
+export function preDepartureFeePaid(checks: {
+	paymentPlanId?: string | null;
+	agencyStageIndex?: number;
+	agencySettled?: boolean;
+}): boolean {
+	if (!checks.paymentPlanId) return false;
+	if (checks.paymentPlanId === "installment") return (checks.agencyStageIndex ?? 0) >= 2;
+	return Boolean(checks.agencySettled);
+}
+
+/** Why the fee milestone still holds things up, or null. */
+export function feeMilestoneBlockReason(
+	checks: { paymentPlanId?: string | null; agencyStageIndex?: number; agencySettled?: boolean },
+	prefix: string,
+): string | null {
+	if (!checks.paymentPlanId) return `${prefix}: no payment plan has been chosen.`;
+	if (preDepartureFeePaid(checks)) return null;
+	return checks.paymentPlanId === "installment"
+		? `${prefix}: the pre-departure instalment (50%) is not paid.`
+		: `${prefix}: the service fee balance is not paid.`;
+}
+
 /** Travel is settled when the flight is booked, or the applicant is handling it, or has paused it. */
 export function isTravelResolved(status: string | null | undefined): boolean {
 	return status === "booked" || status === "declined" || status === "on_hold";
@@ -142,20 +174,10 @@ export function canAdvanceToStage(
 		case "travel_assistance":
 			return checks.visaStage === "complete"
 				? null
-				: "Cannot advance to Travel Assistance: visa processing must be complete.";
-		case "payment_execution":
-			return travelBlockReason(checks.travelAssistanceStatus, "Cannot advance to Payment Execution");
+				: "Cannot advance to Departure: the visa must be approved.";
 		case "completed": {
-			if (!checks.paymentPlanId) return "Cannot mark complete: applicant has not chosen a payment plan.";
-			if (checks.paymentPlanId === "installment") {
-				if ((checks.agencyStageIndex ?? 0) < 1) {
-					return "Cannot mark complete: the first installment has not been paid.";
-				}
-			} else {
-				if (!checks.agencySettled) {
-					return "Cannot mark complete: agency settlement is not complete.";
-				}
-			}
+			const feeBlock = feeMilestoneBlockReason(checks, "Cannot mark complete");
+			if (feeBlock) return feeBlock;
 			const travelBlock = travelBlockReason(checks.travelAssistanceStatus, "Cannot mark complete");
 			if (travelBlock) return travelBlock;
 			if (checks.preDepartureTasks && checks.preDepartureTasks.length > 0) {
@@ -180,6 +202,8 @@ export function canAdvanceToStage(
 // apps read — and is re-exported from the package index.
 
 /** Canonical portal stage order — matches PROCESS_STAGES[].index. */
+// The fee milestone comes before the flight: it is due once the visa is
+// approved and the ticket is not issued until it is paid.
 export const PORTAL_STAGE_ORDER: string[] = [
 	"new",
 	"consultation",
@@ -193,8 +217,8 @@ export const PORTAL_STAGE_ORDER: string[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"travel_assistance",
 	"payment_execution",
+	"travel_assistance",
 	"completed",
 ];
 

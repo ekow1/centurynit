@@ -6,8 +6,7 @@ import * as schema from "../db/schema.js";
 import {
 	acceptApplication,
 	addCaseComment,
-	advanceToPaymentPlanFromTravel,
-	completeFromPaymentPlan,
+	completeFromDeparture,
 	applicantUserIdOfConsultation,
 	assignApplication,
 	assignConsultation,
@@ -1915,46 +1914,6 @@ meRouter.openapi(
 	},
 );
 
-/**
- * Applicant self-service: advance from Travel Assistance to Payment Execution
- * (the plan chapter).
- *
- * Open once the ticketing fee is paid (`canAdvanceToStage` enforces it
- * server-side). Unlike the ops stage endpoint, this never parks the case on a
- * handoff: the ticketing fee is self-serve and has no assignment to wait for.
- * The finance handoff is still queued for the handled plan work.
- */
-meRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/application/advance-to-plan",
-		tags: ["Applicants"],
-		middleware: [requireAuth] as const,
-		request: {},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "The application, now at Payment Execution (plan chapter)",
-			},
-		},
-	}),
-	async (c) => {
-		const user = c.get("user");
-		const applicant = await getApplicantByUserId(user.id);
-		if (!applicant) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
-		}
-		const application = await latestApplicationForApplicant(applicant.id);
-		if (!application) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
-		}
-		const updated = await advanceToPaymentPlanFromTravel({
-			id: application.id,
-			applicantUserId: user.id,
-		});
-		return c.json(await serializeApplication(updated));
-	},
-);
 
 /**
  * Applicant self-service: complete the journey from Payment Execution.
@@ -1988,7 +1947,7 @@ meRouter.openapi(
 		if (!application) {
 			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
 		}
-		const updated = await completeFromPaymentPlan({
+		const updated = await completeFromDeparture({
 			id: application.id,
 			applicantUserId: user.id,
 		});

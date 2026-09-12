@@ -1,8 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import {
-	JOURNEY_STAGES,
-	type JourneyStage,
-} from "century-nit-shared";
+import { JOURNEY_STAGES, feeMilestoneBlockReason, type JourneyStage } from "century-nit-shared";
 import type {
 	TravelAssistanceBookingInput,
 	TravelAssistanceDecisionInput,
@@ -45,6 +42,7 @@ export const TRAVEL_ERROR_CODES = {
 	ALREADY_BOOKED: "ALREADY_BOOKED",
 	NOT_APPROVED: "QUOTE_NOT_APPROVED",
 	HANDLER_NOT_ASSIGNED: "HANDLER_NOT_ASSIGNED",
+	FEE_MILESTONE_DUE: "FEE_MILESTONE_DUE",
 	VALIDATION_ERROR: "VALIDATION_ERROR",
 } as const;
 
@@ -508,6 +506,19 @@ export async function raiseTicketInvoice(input: {
 			"A ticket invoice has already been raised for this request.",
 		);
 	}
+
+	// The pre-departure service fee milestone is due before the ticket: the
+	// visa is granted, the flight is not yet bought — this is where the
+	// agency's leverage is, so the ticket waits on it.
+	const [feeApp] = await db
+		.select({ paymentPlanId: applications.paymentPlanId, agencyStageIndex: applications.agencyStageIndex, agencySettled: applications.agencySettled })
+		.from(applications)
+		.where(eq(applications.id, existing.applicationId))
+		.limit(1);
+	const feeBlock = feeMilestoneBlockReason(feeApp ?? {}, "The ticket cannot be invoiced yet");
+	if (feeBlock) {
+		throw new HttpError(409, TRAVEL_ERROR_CODES.FEE_MILESTONE_DUE, feeBlock);
+	}
 	if (input.fareCents <= 0) {
 		throw new HttpError(400, TRAVEL_ERROR_CODES.VALIDATION_ERROR, "The fare must be greater than zero.");
 	}
@@ -704,10 +715,17 @@ export async function recordBooking(input: {
  * a case that is not at travel_assistance is left where it is.
  */
 async function settleTravel(applicationId: string, why: string, actorName: string): Promise<void> {
+	// Departure is the last chapter: nothing to advance to. Completion needs
+	// the fee milestone and the checklist as well, and is recorded by the
+	// client or the console. The history line is still worth writing.
 	const [app] = await db.select().from(applications).where(eq(applications.id, applicationId)).limit(1);
 	if (!app || app.stage !== "travel_assistance") return;
-	const { enterPaymentExecution } = await import("./cases.js");
-	await enterPaymentExecution(app, why, actorName).catch((err) => {
-		console.error("[travelAssistance] could not advance to payment_execution:", err);
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: applicationId,
+		kind: "status",
+		text: `Travel settled (${why})`,
+		authorName: actorName,
+		authorOpsUserId: null,
 	});
 }

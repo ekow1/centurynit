@@ -2,6 +2,7 @@ import {
 	JOURNEY_STAGES,
 	PORTAL_STAGE_ORDER,
 	isTravelResolved,
+	preDepartureFeePaid,
 	type JourneyStage,
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
@@ -126,8 +127,9 @@ export const JOURNEY_STAGE_FLOOR: Record<JourneyStage, JourneyPortalStage> = {
 	school_submission: "awaiting_handler",
 	offer_letter_review: "school_tracking",
 	visa_processing: "visa_invoice",
-	travel_assistance: "travel_assistance",
-	payment_execution: "travel_assistance",
+	// Departure opens on the fee milestone; the flight follows it.
+	travel_assistance: "payment_execution",
+	payment_execution: "payment_execution",
 	completed: "completed",
 };
 
@@ -144,8 +146,8 @@ const LADDER: JourneyPortalStage[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"travel_assistance",
 	"payment_execution",
+	"travel_assistance",
 ];
 
 type Facts = JourneySignals & {
@@ -171,8 +173,8 @@ const STAGE_DONE: Record<JourneyPortalStage, (f: Facts) => boolean> = {
 	school_tracking: (f) => f.hasAdmitted && f.hasVisaConsent,
 	visa_invoice: (f) => f.visaInvoicePaid,
 	visa: (f) => f.visaDone,
+	payment_execution: (f) => f.planSettled,
 	travel_assistance: (f) => f.taResolved,
-	payment_execution: (f) => f.planSettled && f.taResolved,
 	completed: (f) => f.isCompleted,
 };
 
@@ -180,11 +182,9 @@ function facts(s: JourneySignals): Facts {
 	// Travel is done when the flight is booked, or the applicant is booking
 	// their own, or has paused it — the request's status is the one signal.
 	const taResolved = isTravelResolved(s.travelAssistanceStatus);
-	// Per-plan settlement: a full plan needs the agency fee settled in full,
-	// an installment plan only its first installment (the deposit).
-	const planSettled =
-		Boolean(s.paymentPlanId) &&
-		(s.paymentPlanId === "installment" ? s.agencyStageIndex >= 1 : s.agencySettled);
+	// The pre-departure milestone: the balance on a full plan, the second
+	// milestone on instalments. Post-arrival is aftercare and never gates.
+	const planSettled = preDepartureFeePaid(s);
 	const isCompleted = taResolved && planSettled && s.preDepartureDone;
 	return {
 		...s,
@@ -208,7 +208,8 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		LADDER.forEach((stage, i) => {
 			if (STAGE_DONE[stage](f)) highestDone = i;
 		});
-		portalStage = highestDone + 1 < LADDER.length ? LADDER[highestDone + 1] : "payment_execution";
+		// Every step done but not complete (the checklist, say): stand on the last step.
+		portalStage = highestDone + 1 < LADDER.length ? LADDER[highestDone + 1] : LADDER[LADDER.length - 1];
 
 		// The coarse stage may only push forward.
 		const coarse =
@@ -229,9 +230,10 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		application: f.isEligible && f.hasPackage,
 		tracking: f.appInvoicePaid && f.hasSelection,
 		visa: f.hasAdmitted,
+		// Both Departure pages open with the visa; the fee milestone gates the
+		// ticket, not the page.
+		payment_execution: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
 		travel_assistance: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
-		// Opens once travel is resolved: booked, booking their own, or on hold.
-		payment_execution: f.hasAdmitted && f.visaInvoicePaid && f.visaDone && f.taResolved,
 		complete: f.isCompleted,
 	};
 

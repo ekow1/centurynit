@@ -2090,13 +2090,10 @@ export function canAdvanceTo(
 			return signals.hasAdmitted
 				? null
 				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
-		case "payment_execution":
-			// Travel is the one gate: booked, booking their own, or on hold.
-			return travelBlockReason(signals.travelAssistanceStatus, "Cannot advance to Payment Execution");
 		case "travel_assistance":
 			return signals.visaDone
 				? null
-				: "Cannot advance to Travel Assistance: visa stage is not complete.";
+				: "Cannot advance to Departure: the visa must be approved.";
 		case "completed": {
 			const travelBlock = travelBlockReason(signals.travelAssistanceStatus, "Cannot advance to Completed");
 			if (travelBlock) return travelBlock;
@@ -2851,115 +2848,6 @@ export async function setApplicationPaymentPlan(input: {
 }
 
 /**
- * The one transition out of Travel Assistance. Travel is settled (booked,
- * booking their own, or on hold) so the case moves to Payment Execution and
- * the finance owner is queued for the handled plan work — the pending
- * assignment never parks the transition. Returns null when the case was not
- * at travel_assistance (already moved, or not there yet).
- */
-export async function enterPaymentExecution(
-	row: ApplicationRow,
-	why: string,
-	actorName: string,
-): Promise<ApplicationRow | null> {
-	const [updated] = await db
-		.update(applications)
-		.set({ stage: "payment_execution", updatedAt: new Date() })
-		.where(and(eq(applications.id, row.id), eq(applications.stage, "travel_assistance")))
-		.returning();
-	if (!updated) return null;
-	await db.insert(caseComments).values({
-		targetType: "application",
-		targetId: row.id,
-		kind: "status",
-		text: `Stage → payment_execution (${why})`,
-		authorName: actorName,
-		authorOpsUserId: null,
-	});
-	const continuity = row.assignedStaffId ? await loadStaff(row.assignedStaffId) : null;
-	await createOrGetHandoff({
-		applicationId: row.id,
-		stage: "payment_execution",
-		source: "applicant_advance",
-		fromOpsUserId: continuity?.id ?? null,
-	});
-	void signalStageNeedsHandler(row.id, "payment_execution");
-	return updated;
-}
-
-/**
- * Applicant self-service: advance from Travel Assistance to Payment Execution
- * (the plan chapter) once the ticketing fee is paid.
- *
- * This path is deliberately NOT parked on a handoff, unlike the ops stage
- * endpoint (`setApplicationStage`). Travel Assistance is self-serve for the
- * ticketing fee, so there is nothing for a specialist to assign before the
- * case moves. The shared `canAdvanceToStage` gate re-validates the ticketing
- * invoice, then the case advances immediately and the finance handoff is
- * queued (idempotent) so the handled plan work gets staffed — the pending
- * assignment never blocks the applicant's entry. The travel specialist's
- * owned work (clearance + pre-departure checklist) stays in progress and is
- * concluded when the journey completes.
- */
-export async function advanceToPaymentPlanFromTravel(input: {
-	id: string;
-	applicantUserId: string;
-}): Promise<ApplicationRow> {
-	const row = await getApplication(input.id);
-	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-
-	const applicant = await getApplicant(row.applicantId);
-	if (!applicant || applicant.userId !== input.applicantUserId) {
-		throw new HttpError(403, "FORBIDDEN", "Not your application");
-	}
-
-	if (row.stage === "payment_execution" || row.stage === "completed") {
-		return row;
-	}
-	if (row.stage !== "travel_assistance") {
-		throw new HttpError(
-			409,
-			"STAGE_ADVANCE_BLOCKED",
-			`Payment Execution opens from Travel Assistance. Current stage: ${JOURNEY_STAGE_LABELS[row.stage]}.`,
-		);
-	}
-
-	const travelAssistanceStatus = await getTravelAssistanceStatusForApplication(input.id);
-	const gateReason = canAdvanceToStage(row.stage, "payment_execution", {
-		visaStage: row.visaStage,
-		agencySettled: row.agencySettled,
-		agencyStageIndex: row.agencyStageIndex,
-		appFeePaid: row.appFeePaid,
-		paymentPlanId: row.paymentPlanId,
-		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
-		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
-	});
-	if (gateReason) {
-		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", gateReason);
-	}
-
-	const updated = await enterPaymentExecution(row, "applicant moved on from travel", applicant.name ?? "Applicant");
-	if (!updated) return row;
-
-	notify({
-		recipientUserId: input.applicantUserId,
-		type: "stage.changed",
-		title: "Payment plan is open",
-		body: "Your ticketing fee is settled. Choose your payment plan to continue.",
-		link: "/portal/payment-execution",
-	}).catch(() => {});
-
-	const actor: Actor = {
-		opsUserId: "",
-		name: applicant.name ?? "Applicant",
-		email: applicant.email ?? "",
-	};
-	await broadcastCaseUpdate(updated, actor);
-
-	return updated;
-}
-
-/**
  * Applicant self-service: complete the journey from Payment Execution.
  *
  * The gate is per-plan — a full plan needs the agency service fee settled in
@@ -2969,7 +2857,7 @@ export async function advanceToPaymentPlanFromTravel(input: {
  * server-side. Admission to `completed` is terminal: the owned assignments
  * for the finance and travel work are concluded.
  */
-export async function completeFromPaymentPlan(input: {
+export async function completeFromDeparture(input: {
 	id: string;
 	applicantUserId: string;
 }): Promise<ApplicationRow> {
@@ -2984,11 +2872,11 @@ export async function completeFromPaymentPlan(input: {
 	if (row.stage === "completed") {
 		return row;
 	}
-	if (row.stage !== "payment_execution") {
+	if (row.stage !== "travel_assistance") {
 		throw new HttpError(
 			409,
 			"STAGE_ADVANCE_BLOCKED",
-			`Completion opens from Payment Execution. Current stage: ${JOURNEY_STAGE_LABELS[row.stage]}.`,
+			`Completion opens from Departure. Current stage: ${JOURNEY_STAGE_LABELS[row.stage]}.`,
 		);
 	}
 
@@ -3009,7 +2897,7 @@ export async function completeFromPaymentPlan(input: {
 	const [updated] = await db
 		.update(applications)
 		.set({ stage: "completed", updatedAt: new Date() })
-		.where(and(eq(applications.id, row.id), eq(applications.stage, "payment_execution")))
+		.where(and(eq(applications.id, row.id), eq(applications.stage, "travel_assistance")))
 		.returning();
 	if (!updated) return row;
 
@@ -3022,7 +2910,7 @@ export async function completeFromPaymentPlan(input: {
 		authorOpsUserId: null,
 	});
 
-	// Terminal: conclude the finance and travel owners.
+	// Terminal: conclude the travel owner (and any legacy finance owner).
 	markStageCompleted(row.id, "payment_execution", null);
 	markStageCompleted(row.id, "travel_assistance", null);
 

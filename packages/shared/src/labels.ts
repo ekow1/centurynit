@@ -71,7 +71,8 @@ export const STAGE_LABELS: Record<string, string> = {
 	offer_letter_review: "Applications · Offers",
 	visa_processing: "Visa",
 	travel_assistance: "Departure",
-	payment_execution: "Departure · Fees",
+	// Legacy stored value: cases were moved to travel_assistance (0079).
+	payment_execution: "Departure",
 	completed: "Complete",
 };
 
@@ -111,8 +112,8 @@ export const PORTAL_STEP: Record<PortalStepId, { chapter: ChapterId; label: stri
 	school_tracking: { chapter: "apply", label: "Submissions & offers", short: "Offers" },
 	visa_invoice: { chapter: "visa", label: "Pay the visa fee", short: "Visa fee" },
 	visa: { chapter: "visa", label: "Visa tracking", short: "Visa" },
-	travel_assistance: { chapter: "depart", label: "Flight & pre-departure", short: "Departure" },
-	payment_execution: { chapter: "depart", label: "Service fee milestone", short: "Fees" },
+	payment_execution: { chapter: "depart", label: "Pay your pre-departure fee milestone", short: "Fee milestone" },
+	travel_assistance: { chapter: "depart", label: "Flight & pre-departure", short: "Flight" },
 	completed: { chapter: "done", label: "Complete", short: "Complete" },
 };
 

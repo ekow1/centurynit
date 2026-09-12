@@ -43,9 +43,11 @@ const milestones = {
 	admitted: { hasAdmitted: true, coarseStage: "offer_letter_review" as const },
 	visaConsented: { hasVisaConsent: true, coarseStage: "visa_processing" as const },
 	visaPaid: { visaInvoicePaid: true },
-	visaDone: { visaDone: true },
-	booked: { travelAssistanceStatus: "booked", coarseStage: "travel_assistance" as const },
-	planned: { paymentPlanId: "installment", agencyStageIndex: 1, coarseStage: "payment_execution" as const },
+	visaDone: { visaDone: true, coarseStage: "travel_assistance" as const },
+	// The plan was chosen at enrolment; the pre-departure instalment is the
+	// second milestone (the deposit was the first) and comes before the flight.
+	feePaid: { paymentPlanId: "installment", agencyStageIndex: 2 },
+	booked: { travelAssistanceStatus: "booked" },
 	cleared: { preDepartureDone: true },
 } satisfies Record<string, Partial<JourneySignals>>;
 
@@ -75,9 +77,9 @@ describe("deriveJourney — the happy path, one milestone at a time", () => {
 		["admitted", "school_tracking"],
 		["visaConsented", "visa_invoice"],
 		["visaPaid", "visa"],
-		["visaDone", "travel_assistance"],
-		["booked", "payment_execution"],
-		["planned", "payment_execution"],
+		["visaDone", "payment_execution"],
+		["feePaid", "travel_assistance"],
+		["booked", "travel_assistance"],
 		["cleared", "completed"],
 	];
 
@@ -131,23 +133,26 @@ describe("deriveJourney — gates", () => {
 		expect(reopened.label).not.toBe("Visa refused");
 	});
 
-	it("keeps the plan chapter closed until travel is settled", () => {
-		const j = deriveJourney({
-			...upTo("visaDone"),
-			travelAssistanceStatus: "ticket_paid",
-			coarseStage: "payment_execution",
-		});
-		expect(j.portalStage).toBe("travel_assistance");
-		expect(j.chapterUnlocks.payment_execution).toBe(false);
+	it("opens both Departure pages with the visa; the fee milestone is a step, not a lock", () => {
+		const j = deriveJourney(upTo("visaDone"));
+		expect(j.portalStage).toBe("payment_execution");
+		expect(j.chapterUnlocks.payment_execution).toBe(true);
+		expect(j.chapterUnlocks.travel_assistance).toBe(true);
 	});
 
-	it("opens the plan chapter when the applicant is booking their own flight", () => {
-		const j = deriveJourney({ ...upTo("visaDone"), travelAssistanceStatus: "declined" });
-		expect(j.chapterUnlocks.payment_execution).toBe(true);
+	it("does not complete on the deposit alone: the pre-departure milestone is what counts", () => {
+		const j = deriveJourney({ ...upTo("cleared"), agencyStageIndex: 1 });
+		expect(j.portalStage).not.toBe("completed");
+		expect(j.stageStatuses.payment_execution).not.toBe("done");
+	});
+
+	it("completes a full plan once the balance is settled", () => {
+		const j = deriveJourney({ ...upTo("cleared"), paymentPlanId: "full", agencyStageIndex: 0, agencySettled: true });
+		expect(j.portalStage).toBe("completed");
 	});
 
 	it("does not report completion from the coarse stage alone", () => {
-		const j = deriveJourney({ ...upTo("planned"), coarseStage: "completed" });
+		const j = deriveJourney({ ...upTo("booked"), coarseStage: "completed" });
 		expect(j.portalStage).not.toBe("completed");
 		expect(j.chapterUnlocks.complete).toBe(false);
 	});
@@ -168,7 +173,7 @@ describe("deriveJourney — the coarse stage is a floor, signals are the truth",
 
 	it("lets later evidence count without an earlier tick, and calls the earlier step skipped", () => {
 		const j = deriveJourney({ ...upTo("visaDone"), appInvoicePaid: false });
-		expect(j.portalStage).toBe("travel_assistance");
+		expect(j.portalStage).toBe("payment_execution");
 		expect(j.stageStatuses.application_invoice).toBe("skipped");
 		expect(j.stageStatuses.visa).toBe("done");
 	});

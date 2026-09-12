@@ -1553,13 +1553,13 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 			) : null}
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">{planView ? "Payment execution" : "Financial"}</p>
+					<p className="eyebrow">{planView ? "Chapter V · Departure · Fees" : "Money"}</p>
 					<h1 className="page-title mt-1">
-						{planView ? "Payment plan & service fees" : "Payments & settlements"}
+						{planView ? "Your pre-departure fee milestone" : "Payments & settlements"}
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "How will you settle your service fee? In full, or in instalments — once settled, your journey is complete."
+							? "Your visa is approved. This milestone is due before your ticket is issued — the balance on a full plan, the pre-departure instalment otherwise. Any post-arrival remainder follows on your schedule."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>

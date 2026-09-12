@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { InvoiceCard, formatMoney } from "century-nit-core/ui";
 import { downloadReceipt } from "../../lib/receipt";
-import { useAppState } from "../../context/AppState";
+import { useAppState, hasSettledPlan } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
 import { meApi, ApiError } from "century-nit-core/api";
@@ -94,13 +94,13 @@ function TravelAssistanceInner() {
 		}
 	}
 
-	async function handleAdvanceToPlan() {
+	async function handleComplete() {
 		try {
-			await meApi.advanceToPaymentPlan();
+			await meApi.completeApplication();
 			await syncFromServer();
-			toast.success("Your payment plan chapter is now open.");
+			toast.success("Your journey is complete. Safe travels!");
 		} catch (err) {
-			toast.error(err instanceof ApiError ? err.message : "Could not open your payment plan. Please try again.");
+			toast.error(err instanceof ApiError ? err.message : "Could not complete your journey yet. Please try again.");
 		}
 	}
 
@@ -121,6 +121,11 @@ function TravelAssistanceInner() {
 	const showInvoice = status === "invoiced" || status === "ticket_paid" || (status === "booked" && Boolean(trip));
 	const showBooked = status === "booked";
 	const settled = status === "booked" || status === "declined" || status === "on_hold";
+	// The pre-departure service fee milestone is due before the ticket is
+	// issued; the decision can be made either way, the invoice waits.
+	const feePaid = hasSettledPlan(application);
+	const checklistDone = Boolean(application.preDepartureCompletedAt);
+	const canComplete = settled && feePaid && checklistDone;
 
 	const waitingLine = !ta?.assignedOpsUserId
 		? "Your request has been sent to our travel team. A travel officer will be assigned and will prepare your ticket invoice."
@@ -143,6 +148,24 @@ function TravelAssistanceInner() {
 			{/* The one decision for this stage. Choosing "yes" is the applicant's
 				consent to travel assistance and what puts the case in front of the
 				travel team. */}
+			{!feePaid && (
+				<section className="mt-4">
+					<div className="card card--pad" style={{ borderColor: "var(--accent, #3b82f6)" }}>
+						<p className="eyebrow">Before your ticket</p>
+						<p className="mt-2" style={{ fontSize: "0.95rem" }}>
+							{application.paymentPlanId
+								? "Your pre-departure service fee milestone is due now that your visa is approved. Your ticket is issued once it's paid — you can still tell us how you'd like to book below."
+								: "Choose your payment plan and settle the pre-departure milestone; your ticket is issued once it's paid."}
+						</p>
+						<div className="row mt-3">
+							<Button to="/portal/payment-execution" variant="primary" arrow>
+								{application.paymentPlanId ? "Pay the fee milestone" : "Choose plan & pay"}
+							</Button>
+						</div>
+					</div>
+				</section>
+			)}
+
 			{showDecision && (
 				<section className="mt-4">
 					<div className="card card--pad">
@@ -263,22 +286,37 @@ function TravelAssistanceInner() {
 				<div className="card card--pad mt-5 next-action">
 					<p className="eyebrow">Next step</p>
 					<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-						{showBooked ? "You're set to fly 🛫" : status === "declined" ? "Travel arranged independently" : "Travel on hold"}
+						{canComplete
+							? "Everything is settled 🛫"
+							: showBooked
+								? "You're set to fly 🛫"
+								: status === "declined"
+									? "Travel arranged independently"
+									: "Travel on hold"}
 					</p>
 					<p className="muted mt-1">
-						{showBooked
-							? "Your flight is booked. Next, choose your payment plan and settle your service fee to complete your journey."
-							: status === "declined"
-								? "You're booking your own flight. Next, choose your payment plan and settle your service fee to complete your journey."
-								: "Travel assistance is paused. You can still move on to your payment plan and come back to this later."}
+						{canComplete
+							? "Your fee milestone is paid, your travel is settled and your checklist is done. Complete your journey and we'll hand over to post-arrival support."
+							: !feePaid
+								? "Settle your pre-departure fee milestone to finish."
+								: !checklistDone
+									? "Work through your pre-departure checklist to finish."
+									: "Travel assistance is paused. You can resume it above whenever you're ready."}
 					</p>
 					<div className="row mt-3">
-						<Button className="btn btn--primary" onClick={() => void handleAdvanceToPlan()}>
-							Move to Payment Plan →
-						</Button>
-						<Button to="/portal/payment-execution" variant="ghost">
-							See payment plan
-						</Button>
+						{canComplete ? (
+							<Button className="btn btn--primary" onClick={() => void handleComplete()}>
+								Complete my journey →
+							</Button>
+						) : !feePaid ? (
+							<Button to="/portal/payment-execution" variant="primary" arrow>
+								Pay the fee milestone
+							</Button>
+						) : (
+							<Button to="/portal/journey" variant="ghost">
+								See your journey
+							</Button>
+						)}
 					</div>
 				</div>
 			)}

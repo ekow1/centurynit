@@ -24,7 +24,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	school_tracking: { to: "/portal/tracking", label: "View applications" },
 	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
 	visa: { to: "/portal/visa/tracking", label: "View visa" },
-	payment_execution: { to: "/portal/payment-execution", label: "Choose plan & pay" },
+	payment_execution: { to: "/portal/payment-execution", label: "Pay fee milestone" },
 	travel_assistance: { to: "/portal/pre-departure", label: "View checklist" },
 	completed: { to: "/portal/complete", label: "View summary" },
 };
@@ -61,7 +61,7 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa invoice", desc: "On admission, settle the Stage III invoice to start visa." },
 	visa: { title: "Visa tracking", desc: "Your consultant processes your visa after you settle the invoice." },
-	payment_execution: { title: "Service fee", desc: "Settle your service fee milestone — in full or in instalments." },
+	payment_execution: { title: "Pre-departure fee milestone", desc: "Due once your visa is approved — your ticket is issued after it." },
 	travel_assistance: { title: "Departure", desc: "Choose how to book your flight, pay the ticket, and work through the pre-departure checklist." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };

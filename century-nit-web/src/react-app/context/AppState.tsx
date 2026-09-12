@@ -749,13 +749,15 @@ export function isAgencySettled(app: ApplicationData) {
 }
 
 /**
- * The plan's settlement gate for journey progression — per-plan. A full plan
- * needs the agency service fee settled in full; an installment plan only its
- * first installment (the deposit). Either satisfied state counts.
+ * The pre-departure service fee milestone — the same rule as the server's
+ * `preDepartureFeePaid`: on a full plan the balance is settled; on
+ * instalments the second milestone (the deposit was the first) is paid. Due
+ * once the visa is approved and before the ticket is issued. The
+ * post-arrival remainder is aftercare and never gates anything.
  */
 export function hasSettledPlan(app: ApplicationData) {
 	if (!hasPaymentPlan(app)) return false;
-	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyDepositPaid;
+	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyStageIndex >= 2;
 }
 
 export type PendingAction = {
@@ -898,31 +900,29 @@ export function getPendingAction(
 		};
 	}
 
-	// Travel assistance — pay the ticketing fee, then open the plan chapter.
-	if (stage === "travel_assistance") {
-		const ticketingDue = !app.travelInvoicePaid;
+	// Departure · Fees — the pre-departure milestone is due before the ticket.
+	if (stage === "payment_execution") {
+		const hasPlan = hasPaymentPlan(app);
 		return {
-			kind: "travel",
-			label: ticketingDue ? "Pay ticketing fee" : "Open payment plan",
-			title: ticketingDue
-				? "Pay your ticketing fee"
-				: "Open your payment plan",
-			detail: ticketingDue
-				? "Settle your ticketing fee so your payment plan chapter opens."
-				: "Your ticketing fee is settled. Move to your payment plan to choose how you'll settle the agency service fee.",
-			to: "/portal/pre-departure",
+			kind: "payment_execution",
+			label: hasPlan ? "Pay fee milestone" : "Choose plan",
+			title: hasPlan ? "Pay your pre-departure fee milestone" : "Choose your payment plan",
+			detail: hasPlan
+				? "Your visa is approved. Settle this milestone and your ticket can be issued."
+				: "Choose a plan, then settle the pre-departure milestone so your ticket can be issued.",
+			to: "/portal/payment-execution",
 		};
 	}
 
-	// Payment execution (plan chapter) — choose the plan, settle it per-plan,
-	// finish any open travel checklist, then complete the journey.
-	if (stage === "payment_execution") {
+	// Departure · Flight — decide, pay the ticket, see the booking, finish
+	// the checklist, then complete the journey.
+	if (stage === "travel_assistance") {
 		const hasPlan = hasPaymentPlan(app);
 		const planDue = !hasSettledPlan(app);
 		const travelLeft = !app.preDepartureCompletedAt;
 		const ready = hasPlan && !planDue && !travelLeft;
 		return {
-			kind: "payment_execution",
+			kind: "travel",
 			label: !hasPlan
 				? "Choose plan"
 				: planDue

@@ -1089,16 +1089,6 @@ export const meApi = {
 		});
 	},
 
-	/**
-	 * Advance from Travel Assistance to Payment Execution (the plan chapter)
-	 * once the ticketing fee is paid. Travel Assistance is self-serve for the
-	 * ticketing fee — the server does not park this on an assignment handoff.
-	 */
-	advanceToPaymentPlan(): Promise<ApiApplication> {
-		return request(`${API_PREFIX}/me/application/advance-to-plan`, {
-			method: "POST",
-		});
-	},
 
 	/**
 	 * Complete the journey from Payment Execution. The gate is per-plan — full

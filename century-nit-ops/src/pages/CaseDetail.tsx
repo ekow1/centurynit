@@ -19,6 +19,8 @@ import {
 	CASE_STATUS_LABELS,
 	VISA_STAGE_LABELS,
 	canAdvanceToStage,
+	feeMilestoneBlockReason,
+	PAYMENT_PLAN_LABELS,
 	type ApplicationActivityEvent,
 	schoolDecisionNote,
 	type JourneyStage,
@@ -524,7 +526,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	};
 
 	// Which stage bodies apply to this case.
-	const stageIdx = (s: string) => ["document_verification", "school_submission", "offer_letter_review", "visa_processing", "travel_assistance", "payment_execution", "completed"].indexOf(s);
+	const stageIdx = (s: string) => (JOURNEY_STAGES as string[]).indexOf(s === "payment_execution" ? "travel_assistance" : s);
 	const visaInvoice = allInvoices.find((i) => i.type === "Visa" && i.applicationId === app.id);
 	const showVisa = (app.visaStage && app.visaStage !== "locked") || stageIdx(app.stage) >= stageIdx("visa_processing") || Boolean(visaInvoice);
 	const selectedTa = travelRequests.find((t) => t.applicationId === app.id) ?? null;
@@ -535,7 +537,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 	// Why a control is off, in the words the server would use to refuse it.
-	const completeBlock = app.stage === "payment_execution" ? canAdvanceToStage("payment_execution", "completed", app) : null;
+	const completeBlock = app.stage === "travel_assistance" ? canAdvanceToStage("travel_assistance", "completed", app) : null;
+	// The pre-departure fee milestone gates the ticket; the same words the API refuses with.
+	const feeBlock = feeMilestoneBlockReason(app, "The ticket cannot be invoiced yet");
 	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
 
 	function advanceVisa() {
@@ -1395,9 +1399,26 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			{current === "travel" && (
 				<>
-					{/* Flight — status, the flight, the one next action. Travel is
-					    settled by booking (or the applicant booking their own); the
-					    case then moves to Payment Execution on its own. */}
+					{/* The pre-departure fee milestone comes first: due once the visa
+					    is approved, before the ticket is issued. */}
+					<div className="card">
+						<p className="eyebrow mb-1">Pre-departure fee milestone</p>
+						<p style={{ fontSize: "var(--text-sm)" }}>
+							{feeBlock
+								? feeBlock.replace(/^The ticket cannot be invoiced yet: /, "")
+								: app.paymentPlanId === "installment"
+									? "Pre-departure instalment paid — the ticket can be invoiced."
+									: "Service fee balance paid — the ticket can be invoiced."}
+						</p>
+						<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>
+							Plan: {PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "not chosen"} · {app.agencyStageIndex ?? 0} milestone{(app.agencyStageIndex ?? 0) === 1 ? "" : "s"} paid
+							{app.agencySettled ? " · settled" : ""}
+						</p>
+					</div>
+
+					{/* Flight — status, the flight, the one next action. Departure is
+					    the last chapter; completion is recorded from the Money tab or
+					    by the client. */}
 					<div className="card">
 						<p className="eyebrow mb-2">Flight</p>
 						{selectedTa ? (
@@ -1406,6 +1427,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								invoice={caseInvoices.find((i) => i.type === "travel") ?? null}
 								canWork={canWork}
 								canIssueInvoices={canIssueInvoices}
+								feeBlock={feeBlock}
 								onChanged={() => {
 									void refresh();
 									setInvoiceRefresh((n) => n + 1);
@@ -1523,7 +1545,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
 							Paid state follows the ledger: record payments against the invoice below and these figures update.
 						</p>
-						{app.stage === "payment_execution" && canWork && (
+						{app.stage === "travel_assistance" && canWork && (
 							<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
 								{!app.paymentPlanId && (
 									<>

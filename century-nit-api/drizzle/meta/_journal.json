@@ -540,6 +540,13 @@
       "when": 1789600005000,
       "tag": "0078_package_required_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1789600006000,
+      "tag": "0079_fold_payment_execution",
+      "breakpoints": true
     }
   ]
 }

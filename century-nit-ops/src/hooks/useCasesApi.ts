@@ -27,6 +27,7 @@ import {
 	API_PREFIX,
 } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
+import { useOpsAuth } from "../pages/OpsAuthContext";
 import { useOpsSSE } from "./useChatStream";
 import type {
 	Assignee,
@@ -246,6 +247,9 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 }
 
 export function useCasesApi() {
+	// The pending-handoff queue is manager-only on the server; handlers get
+	// an empty list without a request that would only be refused.
+	const { canAssignWork } = useOpsAuth();
 	const [consultations, setConsultations] = useState<MockConsultation[]>([]);
 	const [applications, setApplications] = useState<MockApplication[]>([]);
 	const [applicants, setApplicants] = useState<MockApplicant[]>([]);
@@ -264,7 +268,9 @@ export function useCasesApi() {
 				applicationsApi.list(),
 				applicantsApi.list(),
 				staffApi.list().catch(() => ({ staff: [] })),
-				apiFetch<{ handoffs: StageHandoff[] }>(`${API_PREFIX}/applications/handoffs?status=pending`).catch(() => ({ handoffs: [] })),
+				canAssignWork
+					? apiFetch<{ handoffs: StageHandoff[] }>(`${API_PREFIX}/applications/handoffs?status=pending`).catch(() => ({ handoffs: [] }))
+					: Promise.resolve({ handoffs: [] as StageHandoff[] }),
 				applicationsApi.listTravelAssistance().catch(() => [] as TravelAssistanceRequest[]),
 			]);
 			const apps = Array.isArray(a?.applications) ? a.applications : [];
@@ -293,7 +299,7 @@ export function useCasesApi() {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [canAssignWork]);
 
 	useEffect(() => {
 		void refresh();

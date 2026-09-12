@@ -596,6 +596,29 @@ applicationsRouter.openapi(
 	},
 );
 
+// Static paths must be registered before `/{id}`: the id route validates its
+// param as a uuid, so a later `/travel-assistance` would be answered 400 by
+// it first (`/handoffs` above only works because it comes first).
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/travel-assistance",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.array(travelAssistanceRequestSchema) } },
+				description: "Travel assistance queue",
+			},
+		},
+	}),
+	async (c) => {
+		const list = await listTravelAssistanceForOps();
+		return c.json(list);
+	},
+);
+
 applicationsRouter.openapi(
 	createRoute({
 		method: "get",
@@ -1025,26 +1048,6 @@ applicationsRouter.openapi(
 );
 
 /* ── Travel Assistance (Ops side, direct-invoice) ─────────────────────────── */
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/travel-assistance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {},
-		responses: {
-			200: {
-				content: { "application/json": { schema: z.array(travelAssistanceRequestSchema) } },
-				description: "Travel assistance queue",
-			},
-		},
-	}),
-	async (c) => {
-		const list = await listTravelAssistanceForOps();
-		return c.json(list);
-	},
-);
 
 applicationsRouter.openapi(
 	createRoute({

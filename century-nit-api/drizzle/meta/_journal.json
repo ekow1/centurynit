@@ -512,6 +512,13 @@
       "when": 1789600001000,
       "tag": "0074_visa_outcome",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1789600002000,
+      "tag": "0075_comment_visibility",
+      "breakpoints": true
     }
   ]
 }

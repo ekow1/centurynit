@@ -180,7 +180,21 @@ interface OpsAuthContextValue {
 	canEditPackages: boolean;
 	/** Only the manager can add or edit universities and programs. */
 	canEditUniversities: boolean;
+	/** Every role the server knows, system and custom, as last fetched. */
+	roleCatalog: RoleSummary[];
+	/** Re-fetch roles and permissions — call after editing a role. */
+	refreshPermissions: () => Promise<void>;
 }
+
+export type RoleSummary = {
+	id: string;
+	name: string;
+	description: string | null;
+	isSystem: boolean;
+	permissions: OpsModule[];
+	createdAt: string;
+	updatedAt: string;
+};
 
 const OpsAuthContext = createContext<OpsAuthContextValue | null>(null);
 
@@ -199,19 +213,23 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
 	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, OpsModule[]>>({});
+	const [roleCatalog, setRoleCatalog] = useState<RoleSummary[]>([]);
 
 	const opsRole = opsUser?.role ?? null;
 
 	const refreshPermissions = useCallback(async () => {
 		try {
-			const res = await apiFetch<{ roles: Array<{ id: string; permissions: OpsModule[] }> }>(
-				`${API_PREFIX}/roles`,
-			);
+			const res = await apiFetch<{ roles: RoleSummary[] }>(`${API_PREFIX}/roles`);
 			const map: Record<string, OpsModule[]> = {};
 			for (const r of res.roles) {
 				map[r.id] = r.permissions;
+				// The label maps are static for the built-in roles; custom roles
+				// are only known once fetched, so their names are filled in here.
+				ROLE_LABELS[r.id] = r.name;
+				if (r.description) ROLE_DESCRIPTIONS[r.id] = r.description;
 			}
 			setDynamicPermissions(map);
+			setRoleCatalog(res.roles);
 		} catch {
 			// API error or unauthenticated, fallback to built-in map
 		}
@@ -375,6 +393,8 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				canAssignWork: opsRole !== null && ASSIGN_WORK.includes(opsRole),
 				canEditPackages: opsRole !== null && EDIT_PACKAGES.includes(opsRole),
 				canEditUniversities: opsRole !== null && EDIT_UNIVERSITIES.includes(opsRole),
+				roleCatalog,
+				refreshPermissions,
 			}}
 		>
 			{children}

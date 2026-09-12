@@ -1,6 +1,6 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { AUTH_ERROR_CODES, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
+import { AUTH_ERROR_CODES, SYSTEM_ROLES, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, staffInvitations, users } from "../db/schema.js";
 import { env } from "../env.js";
@@ -10,6 +10,7 @@ import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "./availability.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderInvitationEmail } from "../lib/email-templates.js";
+import { roleExists } from "./roles.js";
 
 /**
  * Staff invitations.
@@ -47,6 +48,21 @@ export function canInviteRole(inviterRole: string, target: OpsRole): boolean {
 	return (CAN_INVITE[inviterRole] ?? []).includes(target);
 }
 
+const isSystemRole = (role: string): boolean => (SYSTEM_ROLES as readonly string[]).includes(role);
+
+/**
+ * `canInviteRole`, extended to custom roles. A system role follows the
+ * ladder above. A custom role has no rung, so until roles carry a rank the
+ * rule is: it must exist, and only the two administrator roles may hand it
+ * out. A role id that names nothing is refused outright — a typo used to
+ * create a staff member whom every permission check silently denied.
+ */
+export async function canAssignRole(actorRole: string, target: string): Promise<boolean> {
+	if (isSystemRole(target)) return canInviteRole(actorRole, target);
+	if (!(await roleExists(target))) return false;
+	return actorRole === "super_admin" || actorRole === "admin";
+}
+
 
 function hashToken(token: string): string {
 	return createHash("sha256").update(token).digest("hex");
@@ -70,11 +86,11 @@ export async function createInvitation(input: {
 }): Promise<{ invitation: InvitationRow; acceptUrl: string }> {
 	const email = input.email.trim().toLowerCase();
 
-	if (!canInviteRole(input.invitedBy.role, input.role)) {
+	if (!(await canAssignRole(input.invitedBy.role, input.role))) {
 		throw new HttpError(
 			403,
 			AUTH_ERROR_CODES.CANNOT_INVITE_ROLE,
-			`Your role cannot invite a ${input.role}`,
+			(await roleExists(input.role)) ? `Your role cannot invite a ${input.role}` : `Unknown role "${input.role}"`,
 		);
 	}
 
@@ -431,12 +447,15 @@ export async function updateStaff(input: {
 		if (input.patch.active === false) {
 			throw new HttpError(403, "FORBIDDEN", "You cannot deactivate your own account");
 		}
-	} else if (!canInviteRole(input.actor.role, currentRole)) {
+	} else if (!(await canAssignRole(input.actor.role, currentRole))) {
 		throw new HttpError(403, "FORBIDDEN", "You cannot change a staff member at or above your role");
 	}
 
 	if (input.patch.role !== undefined && input.patch.role !== currentRole) {
-		if (!canInviteRole(input.actor.role, input.patch.role)) {
+		if (!(await roleExists(input.patch.role))) {
+			throw new HttpError(400, "VALIDATION_ERROR", `Unknown role "${input.patch.role}"`);
+		}
+		if (!(await canAssignRole(input.actor.role, input.patch.role))) {
 			throw new HttpError(
 				403,
 				AUTH_ERROR_CODES.CANNOT_INVITE_ROLE,

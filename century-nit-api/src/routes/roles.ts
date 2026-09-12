@@ -51,6 +51,9 @@ rolesRouter.openapi(
 		path: "/",
 		tags: ["Roles"],
 		summary: "List all roles and their granular permissions",
+		// Every signed-in staff member needs their own role's permissions to
+		// draw the console; the full matrix is read-only here and the write
+		// routes below are admin-only.
 		middleware: [requireAuth] as const,
 		responses: {
 			200: {
@@ -90,12 +93,14 @@ rolesRouter.openapi(
 	}),
 	async (c) => {
 		const body = c.req.valid("json" as never) as z.infer<typeof createRoleBody>;
+		const staff = c.get("staff")!;
 		try {
 			const role = await createRole({
 				id: body.id,
 				name: body.name,
 				description: body.description,
 				permissions: body.permissions as OpsModule[],
+				actor: { opsUserId: staff.opsUserId, email: staff.email },
 			});
 			return c.json(role, 201);
 		} catch (err) {
@@ -135,11 +140,18 @@ rolesRouter.openapi(
 	async (c) => {
 		const { id } = c.req.valid("param" as never) as { id: string };
 		const body = c.req.valid("json" as never) as z.infer<typeof updateRoleBody>;
+		const staff = c.get("staff")!;
+		// The root role bypasses every check, so its permission list is not a
+		// thing to edit; the console hides the controls, the server refuses too.
+		if (id === "super_admin" && body.permissions !== undefined) {
+			throw new HttpError(400, "VALIDATION_ERROR", "The super_admin role always has every permission.");
+		}
 		try {
 			const role = await updateRole(id, {
 				name: body.name,
 				description: body.description,
 				permissions: body.permissions as OpsModule[] | undefined,
+				actor: { opsUserId: staff.opsUserId, email: staff.email },
 			});
 			return c.json(role);
 		} catch (err) {
@@ -174,8 +186,9 @@ rolesRouter.openapi(
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param" as never) as { id: string };
+		const staff = c.get("staff")!;
 		try {
-			await deleteRole(id);
+			await deleteRole(id, { opsUserId: staff.opsUserId, email: staff.email });
 			return c.json({ ok: true });
 		} catch (err) {
 			throw new HttpError(

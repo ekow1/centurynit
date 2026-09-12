@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
-import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsRole, type OpsModule } from "./OpsAuthContext";
-import { roleCanAccess } from "century-nit-shared";
+import { useOpsAuth, ROLE_LABELS, ROLE_HOME, type OpsModule } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 
 import { usePushNotifications } from "../hooks/usePushNotifications";
@@ -425,7 +424,7 @@ export function EnterpriseLayout() {
 			)}
 
 			{/* Floating communication hub — context-aware case chat (§6) */}
-			{roleCanAccess(opsRole as OpsRole, "chat") && <CommunicationHub />}
+			{hasPermission("chat") && <CommunicationHub />}
 		</div>
 		</ChatHubProvider>
 		</CasesProvider>

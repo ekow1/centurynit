@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { opsRoles, opsUsers } from "../db/schema.js";
+import { opsRoles, opsUsers, settingsAudit } from "../db/schema.js";
 import {
 	SYSTEM_ROLES,
 	ROLE_PERMISSIONS,
@@ -54,49 +54,49 @@ let permissionsCacheLoadedAt = 0;
 const CACHE_TTL_MS = 30_000;
 
 /**
- * Ensures built-in system roles exist in the database with their default permissions.
+ * Ensures every built-in system role exists. Runs once at startup.
+ *
+ * It only ever inserts. The database is the source of truth for a role's
+ * permissions once it exists: `ROLE_PERMISSIONS` is the starting point and
+ * the "reset to defaults" action, not a value the server keeps forcing back.
+ * (It used to re-apply the defaults on every cache refresh, which silently
+ * undid every edit made to a system role in the console.)
  */
 export async function seedSystemRoles(): Promise<void> {
 	for (const roleKey of SYSTEM_ROLES) {
 		const [existing] = await db
-			.select()
+			.select({ id: opsRoles.id })
 			.from(opsRoles)
 			.where(eq(opsRoles.id, roleKey))
 			.limit(1);
-
+		if (existing) continue;
 		const meta = ROLE_LABELS[roleKey];
-		const expectedPermissions = ROLE_PERMISSIONS[roleKey];
-
-		if (!existing) {
-			await db.insert(opsRoles).values({
+		await db
+			.insert(opsRoles)
+			.values({
 				id: roleKey,
 				name: meta.name,
 				description: meta.description,
 				isSystem: true,
-				permissions: expectedPermissions,
-			});
-			continue;
-		}
-
-		const existingPerms = (existing.permissions ?? []) as OpsModule[];
-		const needsUpdate =
-			existing.name !== meta.name ||
-			existing.description !== meta.description ||
-			existingPerms.length !== expectedPermissions.length ||
-			!expectedPermissions.every((p) => existingPerms.includes(p));
-
-		if (needsUpdate) {
-			await db
-				.update(opsRoles)
-				.set({
-					name: meta.name,
-					description: meta.description,
-					permissions: expectedPermissions,
-					updatedAt: new Date(),
-				})
-				.where(eq(opsRoles.id, roleKey));
-		}
+				permissions: ROLE_PERMISSIONS[roleKey],
+			})
+			.onConflictDoNothing();
 	}
+}
+
+/** The built-in default for a system role — what "reset to defaults" restores. */
+export function defaultPermissionsFor(roleId: string): OpsModule[] | null {
+	return (ROLE_PERMISSIONS as Record<string, OpsModule[] | undefined>)[roleId] ?? null;
+}
+
+/** Whether a role id names a role that exists (system or custom). */
+export async function roleExists(id: string): Promise<boolean> {
+	const [row] = await db.select({ id: opsRoles.id }).from(opsRoles).where(eq(opsRoles.id, id)).limit(1);
+	return Boolean(row);
+}
+
+function rememberRole(row: { id: string; permissions: string[] | null }): void {
+	cachedPermissions.set(row.id, (row.permissions ?? []) as OpsModule[]);
 }
 
 /**
@@ -108,7 +108,6 @@ export async function getRolePermissionsMap(force = false): Promise<Map<string, 
 	}
 
 	try {
-		await seedSystemRoles();
 		const rows = await db.select().from(opsRoles);
 		const next = new Map<string, OpsModule[]>();
 		for (const row of rows) {
@@ -145,7 +144,6 @@ export async function checkRolePermission(role: string, module: OpsModule): Prom
  * List all roles for administration display.
  */
 export async function listRoles(): Promise<RoleRecord[]> {
-	await seedSystemRoles();
 	const rows = await db.select().from(opsRoles).orderBy(desc(opsRoles.isSystem), opsRoles.name);
 	return rows.map((r) => ({
 		id: r.id,
@@ -158,6 +156,22 @@ export async function listRoles(): Promise<RoleRecord[]> {
 	}));
 }
 
+export type RoleActor = { opsUserId: string | null; email: string | null };
+
+/**
+ * Role changes go on the same audit trail as settings changes, so the
+ * Administration → Audit page answers "who changed which permission".
+ */
+async function auditRole(actor: RoleActor, roleId: string, before: string[] | null, after: string[] | null): Promise<void> {
+	await db.insert(settingsAudit).values({
+		key: `role:${roleId}`.slice(0, 64),
+		actorId: actor.opsUserId,
+		actorEmail: actor.email,
+		oldValueMasked: before === null ? null : before.length ? [...before].sort().join(", ") : "(none)",
+		newValueMasked: after === null ? null : after.length ? [...after].sort().join(", ") : "(none)",
+	});
+}
+
 /**
  * Create a custom role.
  */
@@ -166,6 +180,7 @@ export async function createRole(input: {
 	name: string;
 	description?: string;
 	permissions: OpsModule[];
+	actor: RoleActor;
 }): Promise<RoleRecord> {
 	const slug = input.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
 	if (!slug) throw new Error("A valid unique role key is required (e.g. auditor)");
@@ -191,7 +206,8 @@ export async function createRole(input: {
 		})
 		.returning();
 
-	await getRolePermissionsMap(true);
+	rememberRole(created);
+	await auditRole(input.actor, created.id, null, created.permissions ?? []);
 
 	return {
 		id: created.id,
@@ -213,6 +229,7 @@ export async function updateRole(
 		name?: string;
 		description?: string;
 		permissions?: OpsModule[];
+		actor: RoleActor;
 	},
 ): Promise<RoleRecord> {
 	const [existing] = await db
@@ -236,7 +253,11 @@ export async function updateRole(
 		.where(eq(opsRoles.id, id))
 		.returning();
 
-	await getRolePermissionsMap(true);
+	// This process sees the change at once; the others within the cache TTL.
+	rememberRole(updated);
+	if (input.permissions !== undefined) {
+		await auditRole(input.actor, id, existing.permissions ?? [], updated.permissions ?? []);
+	}
 
 	return {
 		id: updated.id,
@@ -252,7 +273,7 @@ export async function updateRole(
 /**
  * Delete a custom role.
  */
-export async function deleteRole(id: string): Promise<void> {
+export async function deleteRole(id: string, actor: RoleActor): Promise<void> {
 	const [existing] = await db
 		.select()
 		.from(opsRoles)
@@ -273,5 +294,6 @@ export async function deleteRole(id: string): Promise<void> {
 	}
 
 	await db.delete(opsRoles).where(eq(opsRoles.id, id));
-	await getRolePermissionsMap(true);
+	cachedPermissions.delete(id);
+	await auditRole(actor, id, existing.permissions ?? [], null);
 }

@@ -5,16 +5,19 @@ import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "century-nit-core/api";
-import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, opsModuleSchema, type OpsModule } from "century-nit-shared";
+import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, type OpsModule } from "century-nit-shared";
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 import { ClientDirectory } from "./ClientDirectory";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
+// Mirrors the server's CAN_INVITE ladder (services/invitations.ts) — the
+// server is the authority; this only decides what the picker offers.
 const INVITEABLE: Record<string, OpsRole[]> = {
 	super_admin: ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance"],
 	admin: ["manager", "coordinator", "customer_service", "consultant", "finance"],
 	manager: ["coordinator", "customer_service", "consultant", "finance"],
+	coordinator: ["customer_service"],
 };
 
 /**
@@ -319,63 +322,6 @@ type StaffRow = {
 	mfaEnabled: boolean;
 };
 
-const DEFAULT_SYSTEM_ROLES: DynamicRole[] = [
-	{
-		id: "super_admin",
-		name: "System Administrator (Super Admin)",
-		description: "Full system authority across all business operations, platform configurations, and database governance.",
-		isSystem: true,
-		permissions: opsModuleSchema.options as unknown as OpsModule[],
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: "manager",
-		name: "Operations Manager",
-		description: "Coordinates client journey, monitors workflow, reviews invoices, and assigns tasks to staff.",
-		isSystem: true,
-		permissions: ROLE_PERMISSIONS.manager,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: "coordinator",
-		name: "Coordinator",
-		description: "Manages CRM leads, assigns consultants to bookings, and tracks applicant journey.",
-		isSystem: true,
-		permissions: ROLE_PERMISSIONS.coordinator,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: "consultant",
-		name: "Consultant",
-		description: "Advises assigned clients, reviews documentation, and handles visa guidance.",
-		isSystem: true,
-		permissions: ROLE_PERMISSIONS.consultant,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: "finance",
-		name: "Finance Officer",
-		description: "Manages invoices, accounting ledger, payments, and financial reports.",
-		isSystem: true,
-		permissions: ROLE_PERMISSIONS.finance,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-	{
-		id: "admin",
-		name: "Platform Administrator",
-		description: "Manages staff accounts, authentication policies, CMS content, and system configuration.",
-		isSystem: true,
-		permissions: ROLE_PERMISSIONS.admin,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
-	},
-];
-
 interface DynamicRole {
 	id: string;
 	name: string;
@@ -387,14 +333,16 @@ interface DynamicRole {
 }
 
 function UsersAndRoles() {
-	const { opsUser, opsRole } = useOpsAuth();
+	const { opsUser, opsRole, roleCatalog, refreshPermissions } = useOpsAuth();
 	const [activeSubTab, setActiveSubTab] = useState<"staff" | "clients" | "matrix">("staff");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
 	const [roleSearch, setRoleSearch] = useState("");
 	const [moduleSearch, setModuleSearch] = useState("");
 	const [staff, setStaff] = useState<StaffRow[]>([]);
-	const [roles, setRoles] = useState<DynamicRole[]>(DEFAULT_SYSTEM_ROLES);
+	// Seeded from the auth context's copy so the matrix is not blank while
+	// this page's own fetch is in flight; the fetch is the fresh one.
+	const [roles, setRoles] = useState<DynamicRole[]>(roleCatalog);
 	const [selectedRoleId, setSelectedRoleId] = useState<string>("super_admin");
 	const [invitations, setInvitations] = useState<
 		{ id: string; email: string; name: string | null; role: string; status: string; expiresAt: string; acceptUrl?: string }[]
@@ -467,8 +415,6 @@ function UsersAndRoles() {
 			setInvitations(inviteRes.invitations);
 			if (rolesRes.roles && rolesRes.roles.length > 0) {
 				setRoles(rolesRes.roles);
-			} else {
-				setRoles(DEFAULT_SYSTEM_ROLES);
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not load staff or roles");
@@ -635,10 +581,12 @@ function UsersAndRoles() {
 		);
 
 		try {
-			await apiFetch(`${API_PREFIX}/roles/${roleId}`, {
+			const saved = await apiFetch<DynamicRole>(`${API_PREFIX}/roles/${roleId}`, {
 				method: "PUT",
 				body: JSON.stringify({ permissions: nextPermissions }),
 			});
+			setRoles((prev) => prev.map((r) => (r.id === roleId ? saved : r)));
+			void refreshPermissions();
 			say(`Updated ${target.name} permissions for ${module}.`);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to update permission");
@@ -662,10 +610,12 @@ function UsersAndRoles() {
 		);
 
 		try {
-			await apiFetch(`${API_PREFIX}/roles/${roleId}`, {
+			const saved = await apiFetch<DynamicRole>(`${API_PREFIX}/roles/${roleId}`, {
 				method: "PUT",
 				body: JSON.stringify({ permissions: nextPermissions }),
 			});
+			setRoles((prev) => prev.map((r) => (r.id === roleId ? saved : r)));
+			void refreshPermissions();
 			say(`Updated ${target.name} permissions.`);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to update permissions");
@@ -673,12 +623,24 @@ function UsersAndRoles() {
 		}
 	}
 
+	// One write, one audit entry: the built-in list replaces whatever is there.
 	async function handleResetRoleDefaults(roleId: string) {
 		const def = ROLE_PERMISSIONS[roleId as keyof typeof ROLE_PERMISSIONS];
-		if (!def) return;
-		await bulkSetRolePermissions(roleId, opsModuleSchema.options as unknown as OpsModule[], false);
-		await bulkSetRolePermissions(roleId, def, true);
-		say("Role reset to system defaults.");
+		const target = roles.find((r) => r.id === roleId);
+		if (!def || !target) return;
+		setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, permissions: def } : r)));
+		try {
+			const saved = await apiFetch<DynamicRole>(`${API_PREFIX}/roles/${roleId}`, {
+				method: "PUT",
+				body: JSON.stringify({ permissions: def }),
+			});
+			setRoles((prev) => prev.map((r) => (r.id === roleId ? saved : r)));
+			void refreshPermissions();
+			say(`${target.name} reset to system defaults.`);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to reset permissions");
+			void refresh();
+		}
 	}
 
 	async function handleCreateRole(e: React.FormEvent) {
@@ -696,6 +658,7 @@ function UsersAndRoles() {
 				}),
 			});
 			say(`Custom role "${newRoleDraft.name}" created successfully.`);
+			void refreshPermissions();
 			setCreatingRole(false);
 			const newId = newRoleDraft.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
 			setNewRoleDraft({ id: "", name: "", description: "", permissions: ["dashboard"] });
@@ -713,6 +676,7 @@ function UsersAndRoles() {
 			async () => {
 				try {
 					await apiFetch(`${API_PREFIX}/roles/${roleId}`, { method: "DELETE" });
+					void refreshPermissions();
 					say(`Role "${roleName}" deleted.`);
 					setSelectedRoleId("super_admin");
 					await refresh();
@@ -756,12 +720,12 @@ function UsersAndRoles() {
 	}, [roles, roleSearch]);
 
 	const selectedRole = useMemo(() => {
-		return roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? DEFAULT_SYSTEM_ROLES[0];
+		return roles.find((r) => r.id === selectedRoleId) ?? roles[0] ?? null;
 	}, [roles, selectedRoleId]);
 
 	const selectedRoleStats = useMemo(() => {
 		const total = allModuleIds.length;
-		const count = selectedRole.id === "super_admin" ? total : (selectedRole.permissions?.length ?? 0);
+		const count = !selectedRole ? 0 : selectedRole.id === "super_admin" ? total : (selectedRole.permissions?.length ?? 0);
 		const pct = total > 0 ? Math.round((count / total) * 100) : 0;
 		return { count, total, pct };
 	}, [selectedRole, allModuleIds]);
@@ -1264,7 +1228,7 @@ function UsersAndRoles() {
 					</div>
 
 					{/* Right Column: Focused Permissions Panel for Selected Role */}
-					<div>
+					{selectedRole && <div>
 						{/* Selected Role Header Card */}
 						<div className="card" style={{ padding: "1.25rem 1.5rem", marginBottom: "1.25rem" }}>
 							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
@@ -1462,7 +1426,7 @@ function UsersAndRoles() {
 								);
 							})
 						)}
-					</div>
+					</div>}
 				</div>
 			)}
 

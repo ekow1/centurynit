@@ -8,7 +8,7 @@ import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
 import { ApplicationAssignSheet } from "./case/ApplicationAssignSheet";
 import { HistorySheet } from "./case/HistorySheet";
 import { tasksForApplication, taskActionLabel, type PendingTask } from "../lib/pendingTasks";
-import { listInvoices, issueApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
+import { listInvoices, issueApplicationInvoice, raiseApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
 import { CaseHeader, InvoiceCard, NextActionBand, Sheet, StatusPill, type NextAction } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
@@ -355,7 +355,10 @@ const INVOICE_TYPE_TITLES: Record<string, string> = {
  */
 export function CaseDetail({ app, initialTab }: { app: MockApplication; initialTab?: TabId }) {
 	const navigate = useNavigate();
-	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
+	const { opsRole, opsUser, canAssignWork, hasPermission } = useOpsAuth();
+	// Issuing an invoice (what lets the applicant pay) is finance work; raising
+	// the proforma is handler work. The buttons follow the same split as the API.
+	const canIssueInvoices = hasPermission("invoices");
 	const {
 		assignees,
 		handoffs,
@@ -413,11 +416,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 	function handleIssueApplicationInvoice() {
 		setIssuingInvoice(true);
-		issueApplicationInvoice(app.id)
+		(canIssueInvoices ? issueApplicationInvoice(app.id) : raiseApplicationInvoice(app.id))
 			.then((updated) => {
 				setAppInvoice(updated);
 				setInvoiceRefresh((n) => n + 1);
-				setInvoiceFlash(`Invoice ${updated.invoiceNumber} issued — applicant can now pay.`);
+				setInvoiceFlash(
+					updated.status === "proforma"
+						? `Proforma ${updated.invoiceNumber} raised — finance will review and issue it.`
+						: `Invoice ${updated.invoiceNumber} issued — applicant can now pay.`,
+				);
 				window.setTimeout(() => setInvoiceFlash(null), 5000);
 			})
 			.catch((e) => {
@@ -1052,7 +1059,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 												</p>
 												<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 													<button type="button" className="btn btn--sm btn--primary" onClick={handleIssueApplicationInvoice} disabled={issuingInvoice}>
-														{issuingInvoice ? "Issuing…" : "Issue application invoice"}
+														{issuingInvoice ? (canIssueInvoices ? "Issuing…" : "Raising…") : canIssueInvoices ? "Issue application invoice" : "Raise application invoice"}
 													</button>
 												</div>
 											</>
@@ -1060,17 +1067,23 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 											<InvoiceCard
 												title="Application invoice"
 												invoice={appInvoice}
-												hint={isProforma ? "The applicant cannot pay until you review and issue this invoice." : undefined}
+												hint={
+													isProforma
+														? canIssueInvoices
+															? "The applicant cannot pay until you review and issue this invoice."
+															: "Raised — the applicant cannot pay until finance reviews and issues it."
+														: undefined
+												}
 												actions={
-													isProforma ? (
+													isProforma && canIssueInvoices ? (
 														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--primary">
 															Review & issue
 														</Link>
-													) : (
+													) : canIssueInvoices ? (
 														<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--ghost">
 															Open in Invoices →
 														</Link>
-													)
+													) : undefined
 												}
 											/>
 										)}
@@ -1181,9 +1194,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								invoice={visaApiInvoice}
 								hint={visaApiInvoice.status === "proforma" ? "The applicant cannot pay until this is reviewed and issued." : undefined}
 								actions={
-									<Link to={`/invoices?open=${visaApiInvoice.id}`} className="btn btn--sm btn--ghost">
-										{visaApiInvoice.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
-									</Link>
+									canIssueInvoices ? (
+										<Link to={`/invoices?open=${visaApiInvoice.id}`} className="btn btn--sm btn--ghost">
+											{visaApiInvoice.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
+										</Link>
+									) : undefined
 								}
 							/>
 						) : (
@@ -1583,9 +1598,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 									title={`${INVOICE_TYPE_TITLES[inv.type] ?? inv.type} invoice`}
 									invoice={inv}
 									actions={
-										<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
-											{inv.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
-										</Link>
+										canIssueInvoices ? (
+											<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
+												{inv.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
+											</Link>
+										) : undefined
 									}
 								/>
 							</div>

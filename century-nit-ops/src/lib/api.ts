@@ -334,7 +334,14 @@ export function issueInvoice(
 	});
 }
 
-/** Ops: issue the proforma application invoice for a case directly by application ID. */
+/** Ops: raise the application invoice as a proforma (handler step; no invoices module needed). */
+export function raiseApplicationInvoice(applicationId: string): Promise<ApiInvoice> {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/raise-application-invoice`, {
+		method: "POST",
+	});
+}
+
+/** Ops: issue the application invoice so the applicant can pay (needs the invoices module). */
 export function issueApplicationInvoice(applicationId: string): Promise<ApiInvoice> {
 	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/issue-application-invoice`, {
 		method: "POST",

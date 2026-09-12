@@ -726,17 +726,146 @@ applicationsRouter.openapi(
 );
 
 /**
- * Ops action: issue a proforma application invoice, turning it into a payable
- * invoice. This is the handler's explicit "issue" step after reviewing the
- * applicant's school selection. Only managers/coordinators (or the assigned
- * handler) can call this. The applicant cannot pay until the invoice is issued.
+ * The application invoice as a proforma: the existing one, a legacy unlinked
+ * one, or a new one built from the selected schools. Raising it is handler
+ * work; turning it into a payable invoice is a separate, finance-gated step.
+ */
+async function ensureApplicationProforma(id: string): Promise<typeof schema.invoices.$inferSelect> {
+	// Load the application and applicant.
+	const [app] = await db
+		.select()
+		.from(schema.applications)
+		.where(eq(schema.applications.id, id))
+		.limit(1);
+	if (!app) {
+		throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	}
+	const [applicant] = await db
+		.select()
+		.from(schema.applicants)
+		.where(eq(schema.applicants.id, app.applicantId))
+		.limit(1);
+
+
+	// Find the proforma application invoice for this application.
+	let [appInvoice] = await db
+		.select()
+		.from(schema.invoices)
+		.where(
+			and(
+				eq(schema.invoices.applicationId, id),
+				eq(schema.invoices.type, "application"),
+			),
+		)
+		.orderBy(desc(schema.invoices.createdAt))
+		.limit(1);
+
+	// Fallback: a legacy invoice raised before invoices carried
+	// application_id. Only an *unlinked* one qualifies — an invoice linked
+	// to a different application is that application's, not this one's.
+	if (!appInvoice && applicant?.userId) {
+		[appInvoice] = await db
+			.select()
+			.from(schema.invoices)
+			.where(
+				and(
+					eq(schema.invoices.clientUserId, applicant.userId),
+					eq(schema.invoices.type, "application"),
+					isNull(schema.invoices.applicationId),
+					not(eq(schema.invoices.status, "void")),
+				),
+			)
+			.orderBy(desc(schema.invoices.createdAt))
+			.limit(1);
+	}
+
+	// If no proforma exists yet, create one from the selected schools.
+	// This lets the handler issue the invoice directly without waiting for
+	// the applicant to formally "lock" school selection — breaking the
+	// deadlock where the handler can't issue, the applicant can't pay, and
+	// school processing is blocked. A baseline application fee line is used
+	// when no schools are selected yet, so the handler can always bill the
+	// applicant and get processing unblocked.
+	if (!appInvoice) {
+		const schools = await db
+			.select()
+			.from(schema.schoolApplications)
+			.where(eq(schema.schoolApplications.applicationId, app.id));
+		const fees = await getFeeSchedule();
+		const schoolLines = schools.map((s) => ({
+			label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
+			detail: `Direct institutional submission & processing (${s.intake})`,
+			amountCents: fees.appPerSchoolCents,
+		}));
+		const proforma = await createProforma({
+			data: {
+				applicantName: applicant?.name ?? "Applicant",
+				applicantEmail: applicant?.email ?? undefined,
+				clientUserId: applicant?.userId ?? undefined,
+				applicationId: app.id,
+				type: "application",
+				status: "proforma",
+				lines: schoolLines.length > 0
+					? schoolLines
+					: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
+				note: schools.length > 0
+					? `Application invoice for ${schools.length} university application(s).`
+					: "Application fee invoice. Per-school line items will follow as schools are added.",
+			},
+		});
+		appInvoice = proforma;
+	}
+
+	// Backfill applicationId if missing.
+	if (!appInvoice.applicationId) {
+		await db
+			.update(schema.invoices)
+			.set({ applicationId: id, updatedAt: new Date() })
+			.where(eq(schema.invoices.id, appInvoice.id));
+	}
+	return appInvoice;
+}
+
+/**
+ * Handler action: raise the application invoice as a proforma so it can be
+ * reviewed and issued. Anyone who can work the application may raise it;
+ * issuing — which is what lets the applicant pay — needs the invoices module
+ * (below), the same two-step the visa and ticket invoices follow.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/raise-application-invoice",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: invoiceSchema } },
+				description: "The application invoice (proforma, or already issued)",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id, "raise an invoice for");
+		const appInvoice = await ensureApplicationProforma(id);
+		return c.json(await serializeInvoice(appInvoice));
+	},
+);
+
+/**
+ * Finance action: issue the application invoice, turning the proforma into a
+ * payable invoice. Raises it first if nobody has. The applicant cannot pay
+ * until this has happened. Gated on the invoices module, not the applications
+ * module — a consultant who can work the case must not be able to bill it.
  */
 applicationsRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/{id}/issue-application-invoice",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireModule("invoices")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {
@@ -748,101 +877,8 @@ applicationsRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
-
-		// Load the application and applicant.
-		const [app] = await db
-			.select()
-			.from(schema.applications)
-			.where(eq(schema.applications.id, id))
-			.limit(1);
-		if (!app) {
-			throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
-		}
-		const [applicant] = await db
-			.select()
-			.from(schema.applicants)
-			.where(eq(schema.applicants.id, app.applicantId))
-			.limit(1);
-
-		// Only staff who can work this application may issue its invoice.
 		await assertApplicationAccess(c, id, "issue an invoice for");
-
-		// Find the proforma application invoice for this application.
-		let [appInvoice] = await db
-			.select()
-			.from(schema.invoices)
-			.where(
-				and(
-					eq(schema.invoices.applicationId, id),
-					eq(schema.invoices.type, "application"),
-				),
-			)
-			.orderBy(desc(schema.invoices.createdAt))
-			.limit(1);
-
-		// Fallback: a legacy invoice raised before invoices carried
-		// application_id. Only an *unlinked* one qualifies — an invoice linked
-		// to a different application is that application's, not this one's.
-		if (!appInvoice && applicant?.userId) {
-			[appInvoice] = await db
-				.select()
-				.from(schema.invoices)
-				.where(
-					and(
-						eq(schema.invoices.clientUserId, applicant.userId),
-						eq(schema.invoices.type, "application"),
-						isNull(schema.invoices.applicationId),
-						not(eq(schema.invoices.status, "void")),
-					),
-				)
-				.orderBy(desc(schema.invoices.createdAt))
-				.limit(1);
-		}
-
-		// If no proforma exists yet, create one from the selected schools.
-		// This lets the handler issue the invoice directly without waiting for
-		// the applicant to formally "lock" school selection — breaking the
-		// deadlock where the handler can't issue, the applicant can't pay, and
-		// school processing is blocked. A baseline application fee line is used
-		// when no schools are selected yet, so the handler can always bill the
-		// applicant and get processing unblocked.
-		if (!appInvoice) {
-			const schools = await db
-				.select()
-				.from(schema.schoolApplications)
-				.where(eq(schema.schoolApplications.applicationId, app.id));
-			const fees = await getFeeSchedule();
-			const schoolLines = schools.map((s) => ({
-				label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
-				detail: `Direct institutional submission & processing (${s.intake})`,
-				amountCents: fees.appPerSchoolCents,
-			}));
-			const proforma = await createProforma({
-				data: {
-					applicantName: applicant?.name ?? "Applicant",
-					applicantEmail: applicant?.email ?? undefined,
-					clientUserId: applicant?.userId ?? undefined,
-					applicationId: app.id,
-					type: "application",
-					status: "proforma",
-					lines: schoolLines.length > 0
-						? schoolLines
-						: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
-					note: schools.length > 0
-						? `Application invoice for ${schools.length} university application(s).`
-						: "Application fee invoice. Per-school line items will follow as schools are added.",
-				},
-			});
-			appInvoice = proforma;
-		}
-
-		// Backfill applicationId if missing.
-		if (!appInvoice.applicationId) {
-			await db
-				.update(schema.invoices)
-				.set({ applicationId: id, updatedAt: new Date() })
-				.where(eq(schema.invoices.id, appInvoice.id));
-		}
+		const appInvoice = await ensureApplicationProforma(id);
 		const updated = await issueProformaByOps({
 			invoiceId: appInvoice.id,
 			actorName: staff.name ?? "Handler",

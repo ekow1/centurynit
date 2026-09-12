@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { applicationsApi, ApiError } from "century-nit-core/api";
 import { InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
-import type { ApiInvoice } from "../lib/api";
+import type { ApiInvoice } from "../../lib/api";
 
 /**
  * One travel request as ops works it — one path, one card:

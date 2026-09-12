@@ -490,8 +490,8 @@ export function useCasesApi() {
 			if (res.application) replaceApplication(res.application);
 			return res;
 		},
-		commentOnConsultation: async (id: string, kind: CommentKind, text: string) =>
-			replaceConsultation(await consultationsApi.comment(id, { kind, text })),
+		commentOnConsultation: async (id: string, kind: CommentKind, text: string, visibility: "internal" | "applicant" = "internal") =>
+			replaceConsultation(await consultationsApi.comment(id, { kind, text, visibility })),
 		requestConsultationDocs: async (id: string, documents: string[]) =>
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
 		cancelConsultation: async (id: string, reason?: string) =>

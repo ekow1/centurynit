@@ -88,6 +88,10 @@
 .cn-case__contact a:hover { color: var(--foreground); text-decoration: underline; }
 
 /* ── Tabs (case detail, applicant dossier) ─────────────────────────────── */
+/* The bar sticks under the pane's top edge; it bleeds to the pane's edges so
+   scrolling content never peeks out beside it. The inset matches the pane's
+   own horizontal padding. */
+.cn-tabs-sticky { position: sticky; top: 0; z-index: 10; background: var(--background); margin: 0 calc(-1 * clamp(1.5rem, 3vw, 2.75rem)); padding: 0.5rem clamp(1.5rem, 3vw, 2.75rem) 0; }
 .cn-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border-light); overflow-x: auto; }
 .cn-tab {
 	appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;

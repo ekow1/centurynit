@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useOpsAuth } from "./OpsAuthContext";
-import { useCases } from "../hooks/useCases";
-import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { TravelCard } from "./TravelRequestCard";
-import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
-import { ApplicationAssignSheet } from "./case/ApplicationAssignSheet";
-import { HistorySheet } from "./case/HistorySheet";
-import { tasksForApplication, taskActionLabel, type PendingTask } from "../lib/pendingTasks";
-import { listInvoices, issueApplicationInvoice, raiseApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
+import { Link, useNavigate } from "react-router-dom";
+import { useOpsAuth } from "../OpsAuthContext";
+import { useCases } from "../../hooks/useCases";
+import { useInvoiceApi } from "../../hooks/useInvoiceApi";
+import { TravelCard } from "./TravelCard";
+import { CaseDocumentsPanel } from "./CaseDocumentsPanel";
+import { ApplicationAssignSheet } from "./ApplicationAssignSheet";
+import { HistorySheet } from "./HistorySheet";
+import { CaseTabs, useCaseTab } from "./CaseTabs";
+import { tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
+import { listInvoices, issueApplicationInvoice, raiseApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, InvoiceCard, NextActionBand, Sheet, StatusPill, type NextAction } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
@@ -298,7 +299,6 @@ type TabId = "overview" | "consultation" | "enrolment" | "application" | "visa" 
 
 /** The chapter a case is currently in — where the detail opens. */
 const TAB_IDS: TabId[] = ["overview", "consultation", "enrolment", "application", "visa", "travel", "payments", "documents"];
-const isTabId = (v: string): v is TabId => (TAB_IDS as string[]).includes(v);
 
 /** Which tab a portal stage lives on — the case opens where the applicant is. */
 const TAB_FOR_PORTAL_STAGE: Record<string, TabId> = {
@@ -508,24 +508,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
 	// host's chapter, then where the case is.
-	const [searchParams, setSearchParams] = useSearchParams();
-	const urlTab = searchParams.get("tab");
-	const [tab, setTabState] = useState<TabId>(() => (urlTab && isTabId(urlTab) ? urlTab : initialTab ?? currentTabFor(app)));
-	useEffect(() => {
-		setTabState(urlTab && isTabId(urlTab) ? urlTab : initialTab ?? currentTabFor(app));
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive only when the case or host changes
-	}, [app.id, initialTab]);
-	const setTab = (next: TabId) => {
-		setTabState(next);
-		setSearchParams(
-			(prev) => {
-				const p = new URLSearchParams(prev);
-				p.set("tab", next);
-				return p;
-			},
-			{ replace: true },
-		);
-	};
+	const [tab, setTab] = useCaseTab<TabId>(TAB_IDS, () => currentTabFor(app), app.id, initialTab);
 
 	// Which stage bodies apply to this case.
 	const stageIdx = (s: string) => (JOURNEY_STAGES as string[]).indexOf(s === "payment_execution" ? "travel_assistance" : s);
@@ -779,31 +762,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								);
 							})()}
 
-			<div className="card" style={{ padding: "0.5rem 1rem 0.75rem" }}>
-				<div className="cn-stepper cn-stepper--compact">
-					<ol className="cn-stepper__track">
-						{JOURNEY_STAGES.map((s, i) => {
-							const sIdx = stageIdx(s);
-							const cIdx = stageIdx(app.stage);
-							const status = cIdx > sIdx ? "done" : cIdx === sIdx ? "current" : "locked";
-							return (
-								<li
-									key={s}
-									className={`cn-step cn-step--${status}`}
-									aria-current={status === "current" ? "step" : undefined}
-									title={JOURNEY_STAGE_LABELS[s]}
-								>
-									<span className="cn-step__marker" aria-hidden>
-										{status === "done" ? "✓" : i + 1}
-									</span>
-									<span className="cn-step__label">{JOURNEY_STAGE_LABELS[s]}</span>
-								</li>
-							);
-						})}
-					</ol>
-				</div>
-			</div>
-
 			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
@@ -854,35 +812,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</form>
 			</Sheet>
 
-			<div
-				style={{
-					position: "sticky",
-					top: 0,
-					zIndex: 10,
-					background: "var(--background)",
-					margin: "0 calc(-1 * clamp(1.5rem, 3vw, 2.75rem))",
-					padding: "0.5rem clamp(1.5rem, 3vw, 2.75rem) 0",
-				}}
-			>
-				<div className="cn-tabs" role="tablist">
-				{tabs.map((t) => (
-					<button
-						key={t.id}
-						type="button"
-						role="tab"
-						aria-selected={current === t.id}
-						aria-disabled={t.locked}
-						title={t.locked ? t.hint : undefined}
-						className={`cn-tab${current === t.id ? " cn-tab--active" : ""}${t.locked ? " cn-tab--locked" : ""}`}
-						onClick={() => !t.locked && setTab(t.id)}
-					>
-						{t.locked && <span aria-hidden>🔒 </span>}
-						{t.label}
-						{t.id === stageTab && !t.locked && <span className="cn-tab__now" title="Current stage" aria-label="current stage" />}
-					</button>
-				))}
-				</div>
-			</div>
+			<CaseTabs tabs={tabs} current={current} onChange={setTab} nowId={stageTab} />
 
 
 			{current === "overview" && (

@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { JOURNEY_STAGE_LABELS, type ApplicationActivityEvent, type CommentVisibility } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, type CommentVisibility } from "century-nit-shared";
 import { COMMENT_KIND_LABELS, type CommentKind } from "century-nit-core/ops";
 import { Sheet, StatusPill } from "century-nit-core/ui";
 import { timeAgo } from "../../lib/pendingTasks";
 
 const POSTABLE_KINDS: CommentKind[] = ["comment", "recommendation", "status"];
+
+/** One line of a case's history — what both timelines (application, consultation) reduce to. */
+export type HistoryEvent = {
+	id: string;
+	at: string;
+	summary: string;
+	detail?: string | null;
+	actorName?: string | null;
+	stage?: string | null;
+	visibility?: CommentVisibility | null;
+};
 
 /**
  * The case's one history surface: the timeline the API assembles from every
@@ -25,14 +36,16 @@ export function HistorySheet({
 	canPost,
 	actor,
 	onPost,
+	emptyText = "Nothing recorded on this case yet.",
 }: {
 	open: boolean;
 	onClose: () => void;
-	events: ApplicationActivityEvent[];
+	events: HistoryEvent[];
 	loading: boolean;
 	canPost: boolean;
 	actor: string;
 	onPost: (kind: CommentKind, text: string, visibility: CommentVisibility) => Promise<unknown>;
+	emptyText?: string;
 }) {
 	const [kind, setKind] = useState<CommentKind>("comment");
 	const [visibility, setVisibility] = useState<CommentVisibility>("internal");
@@ -119,7 +132,7 @@ export function HistorySheet({
 			{loading ? (
 				<p className="muted">Loading timeline…</p>
 			) : events.length === 0 ? (
-				<p className="muted">Nothing recorded on this case yet.</p>
+				<p className="muted">{emptyText}</p>
 			) : (
 				<ol className="cn-timeline">
 					{events.map((e) => (

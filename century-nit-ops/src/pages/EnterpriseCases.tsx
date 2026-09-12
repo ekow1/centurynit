@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CaseDetail } from "./CaseDetail";
+import { CaseDetail } from "./case/CaseDetail";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseBoard } from "./case/CaseBoard";
 import { StatusPill, VisaStagePill } from "century-nit-core/ui";

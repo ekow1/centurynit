@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOpsAuth } from "../OpsAuthContext";
 import { useCases } from "../../hooks/useCases";
-import { CaseWorkPanel } from "../CaseWorkPanel";
 import { CaseDocumentsPanel } from "./CaseDocumentsPanel";
-import { ReschedulePanel } from "../ReschedulePanel";
+import { ReschedulePanel } from "./ReschedulePanel";
+import { AssignSheet } from "./AssignSheet";
+import { HistorySheet, type HistoryEvent } from "./HistorySheet";
+import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
-import { timeAgo } from "../../lib/pendingTasks";
-import { CaseHeader, JourneyStepper, NextActionBand, StatusPill, type NextAction } from "century-nit-core/ui";
+import { CaseHeader, NextActionBand, StatusPill, type NextAction } from "century-nit-core/ui";
 import { PORTAL_STAGE_ORDER } from "century-nit-shared";
 
 function isKnown(v: string | undefined | null): v is string {
@@ -85,7 +86,13 @@ export function ConsultationDetail({
 		refresh,
 	} = useCases();
 
-	const [detailTab, setDetailTab] = useState<"profile" | "documents" | "assessment" | "activity">("profile");
+	type Tab = "profile" | "documents" | "assessment";
+	const TABS: readonly Tab[] = ["profile", "documents", "assessment"];
+	const [detailTab, setDetailTab] = useCaseTab<Tab>(TABS, () => "profile", record.id);
+	// The two case-level sheets, the same as on an application: assignment
+	// (the one place a consultant is set) and history (notes read and written).
+	const [assignOpen, setAssignOpen] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 
 	const [outcome, setOutcome] = useState("Eligible");
 	const [notes, setNotes] = useState("");
@@ -106,21 +113,6 @@ export function ConsultationDetail({
 	const [savingMeetingUrl, setSavingMeetingUrl] = useState(false);
 	const [generatingMeet, setGeneratingMeet] = useState(false);
 	const [resendingMeetLink, setResendingMeetLink] = useState(false);
-	const [workOpen, setWorkOpen] = useState<boolean>(() => {
-		try {
-			return localStorage.getItem("ops.case.workOpen") !== "0";
-		} catch {
-			return true;
-		}
-	});
-	useEffect(() => {
-		try {
-			localStorage.setItem("ops.case.workOpen", workOpen ? "1" : "0");
-		} catch {
-			/* private mode */
-		}
-	}, [workOpen]);
-
 	/** Result recorded this session, shown until the refreshed row carries it. */
 	const [completedResult, setCompletedResult] = useState<MockConsultation["assessmentResult"] | null>(null);
 	const consultation: MockConsultation = completedResult
@@ -131,13 +123,19 @@ export function ConsultationDetail({
 	const [activity, setActivity] = useState<ConsultationActivityEvent[]>([]);
 	const [activityLoading, setActivityLoading] = useState(false);
 	useEffect(() => {
-		if (detailTab !== "activity") return;
+		if (!historyOpen) return;
 		setActivityLoading(true);
 		getConsultationActivity(consultation.id)
 			.then((res) => setActivity(res.activities))
 			.catch(() => setActivity([]))
 			.finally(() => setActivityLoading(false));
-	}, [consultation.id, detailTab, consultation.status, consultation.assignedOfficer, (consultation.comments ?? []).length]);
+	}, [consultation.id, historyOpen, consultation.status, consultation.assignedOfficer, (consultation.comments ?? []).length]);
+	const historyEvents: HistoryEvent[] = activity.map((e) => ({
+		id: e.id,
+		at: e.createdAt,
+		summary: activitySummary(e),
+		actorName: e.actorName,
+	}));
 
 	// Reset per-record state when a different consultation is shown.
 	useEffect(() => {
@@ -147,7 +145,6 @@ export function ConsultationDetail({
 		setRecUniversity(consultation.assessmentResult?.recUniversity || "");
 		setRecProgram(consultation.assessmentResult?.recProgram || `${consultation.goals.degreeLevel || ""} in ${consultation.goals.major || ""}`.trim() || "");
 		setRecPackage(consultation.assessmentResult?.recPackage || "");
-		setDetailTab("profile");
 		setIsSubmitted(false);
 		setShowReschedule(false);
 		setEditingMeetingUrl(false);
@@ -313,6 +310,18 @@ export function ConsultationDetail({
 					branch={consultation.branch}
 					portalStage={journey?.portalStage ?? (consultation.status === "Completed" ? "eligibility" : "consultation")}
 					handlerName={consultation.assignedOfficer || null}
+					handlerAction={
+						canAssignWork && consultation.status !== "Completed" && consultation.status !== "In Assessment" && consultation.status !== "Cancelled" ? (
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
+								{consultation.assignedOfficer ? "Change" : "Assign"}
+							</button>
+						) : undefined
+					}
+					actions={
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
+							History{(consultation.comments ?? []).length > 0 ? ` · ${(consultation.comments ?? []).length}` : ""}
+						</button>
+					}
 					stageHandlers={consultation.coordinatorName ? [{ stage: "coordinator", name: consultation.coordinatorName }] : undefined}
 					contact={{ email: consultation.email, phone: consultation.phone }}
 					extra={[
@@ -343,13 +352,38 @@ export function ConsultationDetail({
 				</CaseHeader>
 			</div>
 
-			{journey && (
-				<div className="card" style={{ padding: "0.5rem 1rem 0.75rem" }}>
-					<JourneyStepper stageStatuses={journey.stageStatuses} nextUnlock={journey.nextUnlock} />
-				</div>
-			)}
+			<NextActionBand
+				items={nextActions}
+				waitingOn={waitingOn}
+				blockedBy={consultation.status === "Under Review" ? "The assessment opens once a consultant is assigned." : null}
+			/>
 
-			<NextActionBand items={nextActions} waitingOn={waitingOn} />
+			<AssignSheet
+				open={assignOpen}
+				onClose={() => setAssignOpen(false)}
+				title={consultation.assignedOfficer ? "Change consultant" : "Assign consultant"}
+				stage="consultation"
+				staff={assignees}
+				branch={consultation.branch}
+				currentName={consultation.assignedOfficer || null}
+				onAssign={async (opsUserId) => {
+					const to = assignees.find((a) => a.opsUserId === opsUserId);
+					if (!to) throw new Error("That staff member is no longer available");
+					await assignConsultation(consultation.id, to);
+					onToast("success", "Consultant assigned.");
+				}}
+			/>
+
+			<HistorySheet
+				open={historyOpen}
+				onClose={() => setHistoryOpen(false)}
+				events={historyEvents}
+				loading={activityLoading}
+				canPost={isMine || canAssignWork}
+				actor={opsUser?.name ?? "Staff"}
+				onPost={(kind, text, visibility) => commentOnConsultation(consultation.id, kind, text, visibility)}
+				emptyText="Nothing recorded on this consultation yet."
+			/>
 
 		{showReschedule && (
 			<ReschedulePanel
@@ -710,79 +744,17 @@ export function ConsultationDetail({
 			);
 		})()}
 
-			<details className="cn-work" open={workOpen} onToggle={(e) => setWorkOpen((e.currentTarget as HTMLDetailsElement).open)}>
-				<summary className="cn-work__summary">
-					<span className="cn-work__title">Work panel</span>
-					<span className="cn-work__facts">
-						{consultation.assignedOfficer ? `Consultant ${consultation.assignedOfficer}` : "Unassigned"} · {(consultation.comments ?? []).length} note{(consultation.comments ?? []).length === 1 ? "" : "s"}
-						{(consultation.requestedDocuments?.length ?? 0) > 0 ? ` · ${consultation.requestedDocuments!.length} document${consultation.requestedDocuments!.length === 1 ? "" : "s"} requested` : ""}
-					</span>
-					<span className="cn-work__hint">{workOpen ? "Hide" : "Assign · Comment · Request documents · Reschedule"}</span>
-				</summary>
-				<div className="cn-work__body">
-				<CaseWorkPanel
-					kind="consultation"
-					assignedName={consultation.assignedOfficer}
-					assignedEmail={consultation.assignedOfficerEmail}
-					comments={consultation.comments ?? []}
-					requestedDocuments={consultation.requestedDocuments ?? []}
-				canAssign={canAssignWork && consultation.status !== "Completed" && consultation.status !== "In Assessment" && consultation.status !== "Cancelled"}
-				closedNote={
-					consultation.status === "Completed"
-						? "Read-only - this consultation is completed. Reopen it to make changes."
-						: consultation.status === "Cancelled"
-							? "Read-only - this consultation has been cancelled."
-							: undefined
-				}
-					actor={opsUser?.name ?? "Staff"}
-					isMine={isMine}
-					assignees={assignees}
-					onAssign={(to) => void assignConsultation(consultation.id, to)}
-					onComment={(kind, text) =>
-						void commentOnConsultation(consultation.id, kind, text)
-					}
-					onRequestDocs={(docs) =>
-						void requestConsultationDocs(consultation.id, docs)
-					}
-					branchLabel={consultation.branch}
-					currentWhen={consultation.dateTime}
-					onReschedule={
-						consultation.bookingId
-							? (date, time, reason) =>
-									void rescheduleConsultation(
-										consultation.id,
-										consultation.bookingId!,
-										date,
-										time,
-										reason,
-									)
-							: undefined
-					}
-				/>
-				</div>
-			</details>
 
-			<div className="cn-tabs" role="tablist">
-				{(["profile", "documents", "assessment", "activity"] as const).map((t) => {
-					const labels = { profile: "Background", documents: `Documents${realDocs.length ? ` (${realDocs.length})` : ""}`, assessment: "Decision", activity: "Activity" };
-					const locked = t === "assessment" && consultation.status === "Under Review";
-					return (
-						<button
-							key={t}
-							type="button"
-							role="tab"
-							aria-selected={detailTab === t}
-							aria-disabled={locked}
-							title={locked ? "Unlocks once the consultation is assigned" : undefined}
-							className={`cn-tab${detailTab === t ? " cn-tab--active" : ""}${locked ? " cn-tab--locked" : ""}`}
-							onClick={() => !locked && setDetailTab(t)}
-						>
-							{locked && <span aria-hidden>🔒 </span>}
-							{labels[t]}
-						</button>
-					);
-				})}
-			</div>
+			<CaseTabs
+				tabs={[
+					{ id: "profile", label: "Background" },
+					{ id: "documents", label: `Documents${realDocs.length ? ` (${realDocs.length})` : ""}` },
+					{ id: "assessment", label: "Decision", locked: consultation.status === "Under Review", hint: "Unlocks once the consultation is assigned" },
+				]}
+				current={detailTab}
+				onChange={setDetailTab}
+				nowId={consultation.status === "Completed" ? "assessment" : consultation.status === "Under Review" ? "profile" : "assessment"}
+			/>
 
 			<div>
 
@@ -835,9 +807,14 @@ export function ConsultationDetail({
 						reference={consultation.ref}
 						requestedDocuments={consultation.requestedDocuments ?? []}
 						canReview={isMine || opsRole === "manager" || opsRole === "coordinator"}
-						requestHint="Nothing requested yet — use Request documents in the work panel."
+						requestHint="Nothing requested yet."
 						onChange={setRealDocs}
 						checklist={consultation.documentChecklist}
+						onRequest={
+							(isMine || canAssignWork) && consultation.status !== "Completed" && consultation.status !== "Cancelled"
+								? (docs) => requestConsultationDocs(consultation.id, docs).then(() => onToast("success", "Document request sent."))
+								: undefined
+						}
 					/>
 				</div>
 			)}
@@ -850,34 +827,6 @@ export function ConsultationDetail({
 						</p>
 					</div>
 				)}
-
-			{detailTab === "activity" && (
-				<div className="card" style={{ marginTop: "1rem" }}>
-					<div className="cn-case__top">
-						<h3 style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Timeline</h3>
-						<span className="cn-case__ref">{activity.length} events</span>
-					</div>
-					{activityLoading ? (
-						<p className="muted">Loading timeline…</p>
-					) : activity.length === 0 ? (
-						<p className="muted">Nothing recorded on this consultation yet.</p>
-					) : (
-						<ol className="cn-timeline">
-							{activity.map((e) => (
-								<li key={e.id} className="cn-timeline__item">
-									<div className="cn-timeline__head">
-										<span className="cn-timeline__summary">{activitySummary(e)}</span>
-										<time className="cn-timeline__when" dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()}>
-											{timeAgo(e.createdAt)}
-										</time>
-									</div>
-									{e.actorName && <p className="cn-timeline__meta">{e.actorName}</p>}
-								</li>
-							))}
-						</ol>
-					)}
-				</div>
-			)}
 
 			{detailTab === "assessment" && canAssess && (
 			<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>

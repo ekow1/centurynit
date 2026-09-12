@@ -582,7 +582,7 @@ export async function raiseTicketInvoice(input: {
 				recipientUserId: applicant.userId,
 				type: "stage.changed",
 				title: "Flight ticket invoice raised",
-				body: "Your handler has prepared your flight ticket invoice. You will be able to pay it here once finance issues it.",
+				body: "Your travel officer has prepared your ticket invoice. You will be able to pay it here once it is issued.",
 				link: "/portal/pre-departure",
 			}).catch(() => {});
 		}
@@ -642,7 +642,7 @@ export async function markTicketPaid(requestId: string): Promise<void> {
 				recipientUserId: handler.userId,
 				type: "stage.changed",
 				title: "Flight ticket paid — ready to book",
-				body: "The applicant has paid their flight ticket. Confirm the booking to update the portal.",
+				body: "The client has paid their flight ticket. Record the booking to update the portal.",
 				link: "/ops/travel",
 			}).catch(() => {});
 		}

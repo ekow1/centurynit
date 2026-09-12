@@ -16,6 +16,7 @@ import {
 	MAX_DOCUMENT_BYTES,
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
+	CASE_STATUS_LABELS,
 	VISA_STAGE_LABELS,
 	canAdvanceToStage,
 	type ApplicationActivityEvent,
@@ -568,10 +569,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
 		{ id: "overview", label: "Overview", locked: false },
 		{ id: "consultation", label: "Consultation", locked: !consultation, hint: "Opened from a consultation" },
-		{ id: "application", label: "Application", locked: !applicationOpen, hint: "Unlocks when the applicant consents to proceed" },
+		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks when the client confirms their enrolment" },
 		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
-		{ id: "travel", label: "Travel", locked: !travelOpen, hint: "Unlocks once the visa is complete and its invoice paid" },
-		{ id: "payments", label: "Payments", locked: false },
+		{ id: "travel", label: "Departure", locked: !travelOpen, hint: "Unlocks once the visa is approved" },
+		{ id: "payments", label: "Money", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
 	];
 	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
@@ -589,20 +590,20 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		const stageLabel = JOURNEY_STAGE_LABELS[pendingHandoff.stage as JourneyStage] ?? pendingHandoff.stage;
 		const why =
 			pendingHandoff.source === "deposit_payment"
-				? "10% deposit received — this case needs a handler before school selection can proceed."
+				? "Deposit received — this case needs a consultant before school selection can proceed."
 				: pendingHandoff.source === "visa_payment" || pendingHandoff.source === "visa_consent_continue"
-					? "The applicant is ready for visa processing — assign a visa specialist."
+					? "The client is ready for their visa — assign a visa officer."
 					: pendingHandoff.source === "offboarding"
-						? "The previous handler has left — this stage needs a new owner."
-						: `This case needs a handler for ${stageLabel}.`;
+						? "The previous owner has left — this chapter needs a new one."
+						: `This case needs an owner for ${stageLabel}.`;
 		nextActions.push({
 			id: `handoff-${pendingHandoff.id}`,
-			title: `Handler assignment required · ${stageLabel}`,
+			title: `Needs an owner · ${stageLabel}`,
 			detail: why,
 			tone: "blocked",
 			action: canAssignWork ? (
 				<button type="button" className="btn btn--sm btn--primary" onClick={() => setAssignOpen(true)}>
-					Assign handler
+					Assign owner
 				</button>
 			) : undefined,
 		});
@@ -612,21 +613,21 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			id: "consent",
 			title:
 				app.proceedStatus === "paused"
-					? "Applicant placed the application on hold"
+					? "Client put their enrolment on hold"
 					: app.proceedStatus === "declined"
-						? "Applicant opted out"
-						: "Awaiting the applicant's consent to proceed",
+						? "Client declined to enrol"
+						: "Awaiting the client's enrolment confirmation",
 			detail:
 				app.proceedStatus === "paused"
-					? "They can resume from their portal, or you can record consent or re-invite them."
+					? "They can resume from their portal, or you can record their confirmation or re-invite them."
 					: app.proceedStatus === "declined"
-						? "Re-invite to let the applicant reopen it, or record consent on their behalf."
-						: "The applicant must confirm in the portal before the application can start.",
+						? "Re-invite to let the client reopen it, or record their confirmation on their behalf."
+						: "The client must confirm in the portal before the case can start.",
 			tone: "waiting",
 			action: (
 				<>
 					<button type="button" onClick={handleRecordProceed} className="btn btn--sm btn--primary">
-						Record consent
+						Record confirmation
 					</button>
 					{app.proceedStatus === "invited" && (
 						<button type="button" onClick={handleDeclineProceed} className="btn btn--sm btn--ghost">
@@ -635,7 +636,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					)}
 					{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
 						<button type="button" onClick={() => void handleReinviteProceed()} className="btn btn--sm btn--ghost">
-							Re-invite applicant
+							Re-invite client
 						</button>
 					)}
 				</>
@@ -644,8 +645,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	} else if (app.status !== "Accepted") {
 		nextActions.push({
 			id: "accept",
-			title: `Application is ${app.status} — accept it to activate the applicant`,
-			detail: "Accepting marks the application approved and creates or activates the applicant record.",
+			title: `Case is ${CASE_STATUS_LABELS[app.status] ?? app.status} — accept it to activate the client`,
+			detail: "Accepting activates the case and the client's record.",
 			action: (
 				<button type="button" onClick={() => handleAcceptApplication()} className="btn btn--sm btn--primary">
 					Accept & approve

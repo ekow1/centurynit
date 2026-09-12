@@ -30,7 +30,7 @@ const MAIN_NAV = [
 	{ to: "/portal/journey", label: "Journey", blurb: "All stages & tracking", Icon: IconRoute },
 	{ to: "/portal/appointments", label: "Appointments", blurb: "Book, reschedule, join", Icon: IconRoute },
 	{ to: "/portal/documents", label: "Documents", blurb: "Upload & verification", Icon: IconDoc },
-	{ to: "/portal/financial", label: "Financial", blurb: "Payments & balances", Icon: IconWallet },
+	{ to: "/portal/financial", label: "Money", blurb: "Invoices, fees & balances", Icon: IconWallet },
 	// Support is now the floating CommunicationCenter chat (bottom-right), not a page.
 ] as const;
 
@@ -233,7 +233,7 @@ function stagePill(s: ProcessStageId) {
 		eligibility: "Eligibility review",
 		proceed: "Start your application",
 		school_package: "School package",
-		awaiting_handler: "Awaiting handler",
+		awaiting_handler: "Consultant being assigned",
 		school_select: "School selection",
 		awaiting_invoice: "Awaiting invoice",
 		application_invoice: "Application invoice",

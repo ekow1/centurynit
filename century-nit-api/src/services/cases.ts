@@ -1634,7 +1634,7 @@ export async function requestCaseDocuments(input: {
 					recipientUserId: applicant.userId,
 					type: "document.requested",
 					title: "Documents required",
-					body: `Your case handler requested: ${input.documents.join(", ")}. Please upload them in your document vault.`,
+					body: `Your consultant has asked for: ${input.documents.join(", ")}. Please upload them in your document vault.`,
 					link: "/portal/documents",
 					entityType: "case",
 					entityId: input.targetId,
@@ -1737,8 +1737,8 @@ export async function assignApplication(input: {
 			notify({
 				recipientUserId: clientUserId,
 				type: "stage.changed",
-				title: "Your application handler has been assigned",
-				body: "A handler has been assigned to your case. You can now select your schools and programmes.",
+				title: "Your consultant has been assigned",
+				body: "Your consultant is now on your case. You can now choose your schools and programmes.",
 				link: "/portal/application",
 			}).catch(() => {});
 		}
@@ -1884,8 +1884,8 @@ async function signalStageNeedsHandler(applicationId: string, stage: JourneyStag
 			recipients.map((r) => ({
 				recipientUserId: r.userId,
 				type: "stage.needs_handler",
-				title: "Stage has no assigned handler",
-				body: `Stage "${JOURNEY_STAGE_LABELS[stage]}" on ${app?.appNumber ?? "an application"} has no handler.`,
+				title: "Chapter has no owner",
+				body: `${JOURNEY_STAGE_LABELS[stage]} on ${app?.appNumber ?? "a case"} has no owner.`,
 				link: "/applications",
 				entityType: "case",
 				entityId: applicationId,

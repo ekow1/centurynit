@@ -1,5 +1,6 @@
 import { schoolApplicationSchema } from "./school.js";
 import { z } from "zod";
+import { STAGE_LABELS } from "../labels.js";
 
 /**
  * Applicant journey — consultations (cases), applications, and the applicant
@@ -36,16 +37,8 @@ export const JOURNEY_STAGES: JourneyStage[] = [
 	"completed",
 ];
 
-/** Human-readable labels for the ops UI. */
-export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = {
-	document_verification: "Document Verification",
-	school_submission: "School Submission",
-	offer_letter_review: "Offer Letter Review",
-	visa_processing: "Visa Processing",
-	travel_assistance: "Travel Assistance",
-	payment_execution: "Payment Execution",
-	completed: "Completed",
-};
+/** The stored stage, named by its chapter — the vocabulary lives in ../labels.ts. */
+export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = STAGE_LABELS as Record<JourneyStage, string>;
 
 /**
  * Mapping from the coarse `JourneyStage` (stored in the DB) to the portal's

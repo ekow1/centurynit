@@ -218,9 +218,9 @@ export function Workspace() {
 
 			{/* KPI strip — first horizontal scan */}
 			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<KPICard label="Needs assignment" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon={<Users size={18} strokeWidth={1.5} />} />
-				<KPICard label="Needs action" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon={<Zap size={18} strokeWidth={1.5} />} />
-				<KPICard label="Needs invoicing" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon={<FileText size={18} strokeWidth={1.5} />} />
+				<KPICard label="Needs an owner" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon={<Users size={18} strokeWidth={1.5} />} />
+				<KPICard label="Needs you" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon={<Zap size={18} strokeWidth={1.5} />} />
+				<KPICard label="Waiting on finance" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon={<FileText size={18} strokeWidth={1.5} />} />
 				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} icon={<AlertTriangle size={18} strokeWidth={1.5} />} />
 				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon={<PhoneCall size={18} strokeWidth={1.5} />} />
 				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon={<DollarSign size={18} strokeWidth={1.5} />} />

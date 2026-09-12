@@ -1,5 +1,5 @@
 import React from "react";
-import { JOURNEY_STAGE_LABELS, PORTAL_STAGE_LABELS } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, PORTAL_STAGE_LABELS, STAGE_OWNER_LABELS } from "century-nit-shared";
 import { StatusPill } from "./StatusPill.js";
 
 /**
@@ -37,7 +37,7 @@ export function CaseHeader({
 	 * detail, so staff always look in the same place for it.
 	 */
 	handlerAction?: React.ReactNode;
-	/** Stage specialists on the case (visa officer, travel desk…), shown as chips. */
+	/** Chapter officers on the case (visa officer, travel officer…), each with their title. */
 	stageHandlers?: { stage: string; name: string }[];
 	/** Applicant contact — shown as mailto / tel links. */
 	contact?: { email?: string | null; phone?: string | null };
@@ -59,14 +59,14 @@ export function CaseHeader({
 			<dl className="cn-case__facts" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", margin: 0 }}>
 				{stage && <><dt className="muted" style={{ fontSize: "0.85rem" }}>Stage</dt><dd style={{ margin: 0 }}><strong>{JOURNEY_STAGE_LABELS[stage as keyof typeof JOURNEY_STAGE_LABELS] ?? stage}</strong></dd></>}
 				{branch && <><dt className="muted" style={{ fontSize: "0.85rem" }}>Branch</dt><dd style={{ margin: 0 }}><strong>{branch}</strong></dd></>}
-				<dt className="muted" style={{ fontSize: "0.85rem" }}>Handler</dt>
+				<dt className="muted" style={{ fontSize: "0.85rem" }}>Consultant</dt>
 				<dd style={{ margin: 0 }} className="cn-case__handler">
 					<strong>{handlerName ?? "Unassigned"}</strong>
 					{handlerAction}
 				</dd>
 				{stageHandlers?.map((h) => (
 					<React.Fragment key={h.stage}>
-						<dt className="muted" style={{ fontSize: "0.85rem" }}>{JOURNEY_STAGE_LABELS[h.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? h.stage}</dt>
+						<dt className="muted" style={{ fontSize: "0.85rem" }}>{STAGE_OWNER_LABELS[h.stage] ?? JOURNEY_STAGE_LABELS[h.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? h.stage}</dt>
 						<dd style={{ margin: 0 }}><strong>{h.name}</strong></dd>
 					</React.Fragment>
 				))}

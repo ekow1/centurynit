@@ -126,9 +126,9 @@ export function EnterpriseWorkflow() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", gap: "1rem", flexWrap: "wrap" }}>
 				<div>
-					<h1 className="page-title">Workflow</h1>
+					<h1 className="page-title">Board</h1>
 					<p className="lead mt-2">
-						Drag a case to a new stage, or use → to advance it. Changes save to the case record.
+						Cases by chapter. Drag a case to move it, or use → to advance it. Changes save to the case record.
 					</p>
 				</div>
 				{canSeeAll && (

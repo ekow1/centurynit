@@ -94,8 +94,8 @@ export function EnterpriseVisa() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
-					<h1 className="page-title">Visa Processing</h1>
-					<p className="lead mt-1">Track visa sub-steps, manage invoices, and advance cases to payment execution.</p>
+					<h1 className="page-title">Visa</h1>
+					<p className="lead mt-1">Visa cases by step — fee, officer, biometrics, decision.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
@@ -199,7 +199,7 @@ export function EnterpriseVisa() {
 															? "Invoice paid"
 															: "No visa invoice"}
 													<span> · {visaHandler ? `Visa: ${visaHandler}` : app.assignedStaff || "Unassigned"}</span>
-													{canAssignWork && need?.kind === "handoff" && <AssignChip label="Assign specialist" onClick={() => setAssignFor(app)} />}
+													{canAssignWork && need?.kind === "handoff" && <AssignChip label="Assign visa officer" onClick={() => setAssignFor(app)} />}
 												</div>
 											</div>
 											<span className="cn-row__arrow" aria-hidden>→</span>

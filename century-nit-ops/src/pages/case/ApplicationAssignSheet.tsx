@@ -24,12 +24,12 @@ export function assignmentNeeded(
 function whyHandoff(h: StageHandoff): string {
 	const stageLabel = JOURNEY_STAGE_LABELS[h.stage as JourneyStage] ?? h.stage;
 	return h.source === "deposit_payment"
-		? "10% deposit received — this case needs a handler before school selection can proceed."
+		? "Deposit received — this case needs a consultant before school selection can proceed."
 		: h.source === "visa_payment" || h.source === "visa_consent_continue"
-			? "The applicant is ready for visa processing — assign a visa specialist."
+			? "The client is ready for their visa — assign a visa officer."
 			: h.source === "offboarding"
-				? "The previous handler has left — this stage needs a new owner."
-				: `This case needs a handler for ${stageLabel}.`;
+				? "The previous owner has left — this chapter needs a new one."
+				: `This case needs an owner for ${stageLabel}.`;
 }
 
 /**
@@ -63,7 +63,7 @@ export function ApplicationAssignSheet({
 					? `Assign · ${JOURNEY_STAGE_LABELS[handoff.stage as JourneyStage] ?? handoff.stage}`
 					: app.assignedStaff
 						? "Change handler"
-						: "Assign handler"
+						: "Assign consultant"
 			}
 			stage={handoff ? handoff.stage : "school_submission"}
 			staff={assignees}
@@ -80,13 +80,13 @@ export function ApplicationAssignSheet({
 					if (!to) throw new Error("That staff member is no longer available");
 					await assignApplication(app.id, to);
 				}
-				onDone?.("Handler assigned.");
+				onDone?.("Owner assigned.");
 			}}
 			onKeep={
 				handoff
 					? async (reason) => {
 							await resolveHandoff(handoff.id, "keep", { reason });
-							onDone?.("Handler kept.");
+							onDone?.("Owner kept.");
 						}
 					: undefined
 			}

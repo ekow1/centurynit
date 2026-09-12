@@ -11,7 +11,7 @@ import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
 import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, CASE_STATUS_LABELS, type JourneyStage } from "century-nit-shared";
 import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
 import { tasksForApplication } from "../lib/pendingTasks";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
@@ -85,8 +85,8 @@ export function EnterpriseCases() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
-					<h1 className="page-title">Applications</h1>
-					<p className="lead mt-1">Manage, review, and approve staff-assigned applications.</p>
+					<h1 className="page-title">Cases</h1>
+					<p className="lead mt-1">Every client's journey — review, assign and move cases through the chapters.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					<button
@@ -176,7 +176,7 @@ export function EnterpriseCases() {
 										onClick={() => setStatusFilter(tab)}
 										className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
 									>
-										{tab}
+										{tab === "All" ? "All" : CASE_STATUS_LABELS[tab] ?? tab}
 									</button>
 								))}
 							</div>
@@ -210,7 +210,7 @@ export function EnterpriseCases() {
 											<div className="cn-row__main">
 												<div className="cn-row__top">
 													<span className="cn-row__ref">{app.appId}</span>
-													<StatusPill tone={app.status === "Accepted" ? "done" : app.status === "Rejected" ? "blocked" : "current"}>{app.status}</StatusPill>
+													<StatusPill tone={app.status === "Accepted" ? "done" : app.status === "Rejected" ? "blocked" : "current"}>{CASE_STATUS_LABELS[app.status] ?? app.status}</StatusPill>
 												</div>
 												<p className="cn-row__name">{app.applicantName}</p>
 												<p className="cn-row__sub">
@@ -228,7 +228,7 @@ export function EnterpriseCases() {
 													)}
 													<span> · {app.journey?.label ?? JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
 													{canAssignWork && need && (
-														<AssignChip label={need.kind === "handoff" ? "Assign handler" : "Assign"} onClick={() => setAssignFor(app)} />
+														<AssignChip label={need.kind === "handoff" ? "Assign owner" : "Assign"} onClick={() => setAssignFor(app)} />
 													)}
 													{todo > 0 && <span className="cn-row__needs">· {todo} to do</span>}
 												</div>

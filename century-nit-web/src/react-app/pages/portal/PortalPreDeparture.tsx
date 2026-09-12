@@ -58,7 +58,7 @@ function TravelAssistanceInner() {
 				backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
 			}
 			if (!backend) {
-				toast.error("Your ticket invoice has not been issued yet. Your handler will let you know when it is ready.");
+				toast.error("Your ticket invoice has not been issued yet. Your consultant will let you know when it is ready.");
 				return;
 			}
 			const checkout = await meApi.paystackCheckout(backend.id);
@@ -123,8 +123,8 @@ function TravelAssistanceInner() {
 	const settled = status === "booked" || status === "declined" || status === "on_hold";
 
 	const waitingLine = !ta?.assignedOpsUserId
-		? "Your request has been sent to our travel team. A handler will be assigned and will prepare your flight ticket invoice."
-		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your handler is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
+		? "Your request has been sent to our travel team. A travel officer will be assigned and will prepare your ticket invoice."
+		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel officer is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
 
 	return (
 		<div className="portal-page">
@@ -192,7 +192,7 @@ function TravelAssistanceInner() {
 			{showWaiting && (
 				<section className="mt-4">
 					<div className="card card--pad">
-						<p className="eyebrow">{ta?.assignedOpsUserId ? "Your handler is on it" : "Request received"}</p>
+						<p className="eyebrow">{ta?.assignedOpsUserId ? "Your travel officer is on it" : "Request received"}</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>{waitingLine}</p>
 					</div>
 				</section>
@@ -227,7 +227,7 @@ function TravelAssistanceInner() {
 									trip.status === "paid"
 										? showBooked
 											? "Paid."
-											: "Paid — your handler is booking the flight and will post the confirmation here."
+											: "Paid — your travel officer is booking the flight and will post the confirmation here."
 										: trip.status === "proforma"
 											? "Your ticket invoice is being issued. You'll be able to pay it here shortly."
 											: undefined
@@ -236,7 +236,7 @@ function TravelAssistanceInner() {
 						) : (
 							<>
 								<p className="eyebrow">Ticket invoice</p>
-								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Being prepared by your handler.</p>
+								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Being prepared by your travel officer.</p>
 							</>
 						)}
 					</div>

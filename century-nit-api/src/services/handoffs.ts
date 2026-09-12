@@ -431,8 +431,8 @@ export async function resolveStageHandoff(input: {
 			notify({
 				recipientUserId: clientUserId,
 				type: "stage.changed",
-				title: "Your application handler has been assigned",
-				body: "A handler has been assigned to your case. You can now select your schools and programmes.",
+				title: "Your consultant has been assigned",
+				body: "Your consultant is now on your case. You can now choose your schools and programmes.",
 				link: "/portal/application",
 			}).catch(() => {});
 		}
@@ -511,8 +511,8 @@ export async function resolveStageHandoff(input: {
 		await notify({
 			recipientUserId: staffUserId,
 			type: "assignment.handoff_resolved",
-			title: "New case handler",
-			body: `You are the handler for ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage}.`,
+			title: "You own a chapter",
+			body: `You are the owner for ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage}.`,
 			link: "/applications",
 		}).catch(() => {});
 	}
@@ -526,8 +526,8 @@ export async function resolveStageHandoff(input: {
 		await notify({
 			recipientUserId: clientUserId,
 			type: "visa.stage_changed",
-			title: "Your visa specialist is confirmed",
-			body: `Your case handler is ${officer?.name ?? "confirmed"}. Visa tracking is now live.`,
+			title: "Your visa officer is confirmed",
+			body: `Your visa officer is ${officer?.name ?? "confirmed"}. Visa tracking is now open.`,
 			link: "/portal/visa/tracking",
 		}).catch(() => {});
 	}
@@ -578,7 +578,7 @@ export async function deferStageHandoff(input: {
 		recipients.map((r) => ({
 			recipientUserId: r.userId,
 			type: "stage.needs_handler",
-			title: "Case still needs a handler",
+			title: "Case still needs an owner",
 			body: `Application ${row.applicationId} still awaits a ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage} assignment.`,
 			link: "/applications",
 			entityType: "case",

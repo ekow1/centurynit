@@ -1271,7 +1271,7 @@ export function PortalJourney() {
 									{application.visaStatus === "locked"
 										? "Not started"
 										: application.visaStatus === "awaiting_handler"
-											? "Awaiting handler assignment"
+											? "Assigning your visa officer"
 											: application.visaStatus.replace("_", " ")}
 								</p>
 								<p className="muted mt-3">
@@ -1559,7 +1559,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "How will you settle the agency service fee? Pay in full or in installments — once settled, everything else is done and you can complete your journey."
+							? "How will you settle your service fee? In full, or in instalments — once settled, your journey is complete."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>

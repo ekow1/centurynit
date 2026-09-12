@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import {
+	ROLE_LABELS as SHARED_ROLE_LABELS,
 	ROLE_PERMISSIONS,
 	ASSIGN_WORK_ROLES,
 	EDIT_PACKAGES_ROLES,
@@ -68,15 +69,8 @@ export interface OpsUser {
 	avatar: string;
 }
 
-export const ROLE_LABELS: Record<OpsRole, string> = {
-	super_admin: "Super Administrator",
-	manager: "Manager",
-	coordinator: "Coordinator",
-	customer_service: "Customer Service",
-	consultant: "Consultant",
-	finance: "Finance Officer",
-	admin: "System Administrator",
-};
+// The vocabulary's role names; custom roles are added when the roster loads.
+export const ROLE_LABELS: Record<OpsRole, string> = { ...SHARED_ROLE_LABELS };
 
 export const ROLE_DESCRIPTIONS: Record<OpsRole, string> = {
 	super_admin:

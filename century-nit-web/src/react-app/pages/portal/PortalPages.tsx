@@ -110,7 +110,7 @@ export function PortalAwaitingHandler() {
 					<p className="muted mt-2">
 						{application.assignedStaffName
 							? `${application.assignedStaffName} has been assigned to your case.`
-							: "A specialist handler has been assigned to your case."}{" "}
+							: "Your consultant has been assigned."}{" "}
 						You can now proceed to select your preferred schools and programmes.
 					</p>
 					<div className="mt-4">
@@ -127,7 +127,7 @@ export function PortalAwaitingHandler() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<p className="eyebrow">Dashboard · Application</p>
-				<h1 className="page-title mt-1">Awaiting handler assignment</h1>
+				<h1 className="page-title mt-1">Your consultant is being assigned</h1>
 			</header>
 			<div className="card card--pad">
 				<p className="display" style={{ fontSize: "1.2rem" }}>
@@ -2928,7 +2928,7 @@ function TrackingPageInner() {
 
 			{application.pendingHandoff && (
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
-					<p className="eyebrow" style={{ color: "#854d0e" }}>Awaiting specialist assignment</p>
+					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.4rem" }}>
 						We're assigning your{" "}
 						{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
@@ -3124,11 +3124,11 @@ function trackLabel(row: SchoolApplicationTrack): string {
 function decisionUpdateCopy(row: SchoolApplicationTrack, uniName: string, programName: string): string {
 	if (row.handlerNote) return row.handlerNote;
 	if (row.status !== "Decision Reached" || !row.outcome) {
-		return "Waiting for first handler update…";
+		return "Waiting for your consultant's first update…";
 	}
 	return (
 		schoolDecisionNote({ outcome: row.outcome, universityName: uniName, programName }) ??
-		"Waiting for first handler update…"
+		"Waiting for your consultant's first update…"
 	);
 }
 
@@ -3559,7 +3559,7 @@ function VisaHubInner() {
 			<ol className="mini-steps mb-4">
 				<li className={hasAdmit ? "is-done" : "is-current"}>1 · Admitted</li>
 				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>
-					2 · {paid ? "Visa fee paid" : isAwaitingSpecialist ? "Assigning specialist" : isPendingInvoice ? "Preparing invoice" : "Visa invoice"}
+					2 · {paid ? "Visa fee paid" : isAwaitingSpecialist ? "Assigning visa officer" : isPendingInvoice ? "Preparing invoice" : "Visa invoice"}
 				</li>
 				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
 			</ol>
@@ -3570,8 +3570,8 @@ function VisaHubInner() {
 						stage="visa"
 						currentDecision={application.visaConsent?.decision ?? null}
 						title="Continue with visa processing?"
-						lead="You've been admitted. Continue with visa processing so we can assign a visa handler and raise your visa invoice."
-						continueDetail="A visa handler will be assigned and an invoice will be raised for the visa processing fee. You'll pay the invoice before visa processing begins."
+						lead="You've been admitted. Continue with your visa so we can assign your visa officer and raise the visa fee."
+						continueDetail="A visa officer will be assigned and the visa fee will be raised. You'll pay it before your visa case opens."
 						holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
 						optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
 						onDecided={() => void syncFromServer()}
@@ -3653,9 +3653,9 @@ function VisaHubInner() {
 						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
 							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
 							<div>
-								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Awaiting specialist review & issuance…</p>
+								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Being reviewed and issued…</p>
 								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
-									{serverInv?.invoiceNumber ? `Proforma estimate #${serverInv.invoiceNumber} is under review by staff.` : "Your specialist is finalizing your invoice."}{" "}
+									{serverInv?.invoiceNumber ? `Draft #${serverInv.invoiceNumber} is being reviewed.` : "Your invoice is being finalised."}{" "}
 									Payment will unlock automatically on this page as soon as the invoice is issued.
 								</p>
 							</div>
@@ -3812,7 +3812,7 @@ function VisaTrackingInner() {
 			)}
 			{assigningHandler && (
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
-					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your specialist</p>
+					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.5rem" }}>
 						Your payment is confirmed. Centurion is matching your case to a consultant — you'll get a
 						notification with your consultant's details once your case is open.
@@ -3903,7 +3903,7 @@ function CompleteInner() {
 						Travel assistance
 					</Button>
 					<Button to="/portal/payment-execution" variant="secondary">
-						Payment plan & fees
+						Service fee
 					</Button>
 				</div>
 			</div>
@@ -3934,9 +3934,9 @@ function CompleteInner() {
 					<li>Visa & travel</li>
 					<li>
 						Payment plan ·{" "}
-						{application.paymentPlanId === "installment" ? "Installments" : "Full payment"}
+						{application.paymentPlanId === "installment" ? "Instalments" : "Full payment"}
 					</li>
-					<li>Agency settled</li>
+					<li>Service fee settled</li>
 				</ul>
 			</div>
 			{accepted.length ? (
@@ -4016,7 +4016,7 @@ export function PortalPayCallback() {
 						const journey = await meApi.journey().catch(() => null);
 						const to = journey?.portalStage === "school_select" ? "/portal/application" : "/portal/awaiting-handler";
 						nav(to, { replace: true });
-						toast.success("10% deposit confirmed! A handler is being assigned to your case.");
+						toast.success("Deposit confirmed. Your consultant is being assigned.");
 						return;
 					}
 					nav("/portal/financial", { replace: true });

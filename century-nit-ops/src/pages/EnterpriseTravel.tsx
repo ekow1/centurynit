@@ -115,8 +115,8 @@ export function EnterpriseTravel() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
-					<h1 className="page-title">Travel Assistance</h1>
-					<p className="lead mt-1">Manage pre-departure checklists and travel clearance for settled cases.</p>
+					<h1 className="page-title">Departure</h1>
+					<p className="lead mt-1">Flights, tickets and pre-departure checklists.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}

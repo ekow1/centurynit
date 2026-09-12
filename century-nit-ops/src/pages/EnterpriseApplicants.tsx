@@ -51,8 +51,8 @@ export function EnterpriseApplicants() {
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem" }}>
 				<div>
-					<h1 className="page-title">Applicants</h1>
-					<p className="lead mt-1">Confirmed client records, active dossiers, and journey tracking.</p>
+					<h1 className="page-title">Clients</h1>
+					<p className="lead mt-1">Client records, dossiers and where each journey stands.</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					<span className="portal-pill" style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>

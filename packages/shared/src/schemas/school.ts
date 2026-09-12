@@ -14,9 +14,9 @@ export const SCHOOL_TRACK_STAGES: SchoolTrackStatus[] = [
 ];
 
 export const SCHOOL_TRACK_STATUS_LABELS: Record<SchoolTrackStatus, string> = {
-	"Preparing Application": "Preparing Application",
+	"Preparing Application": "Preparing",
 	Submitted: "Submitted",
-	"Decision Reached": "Decision Reached",
+	"Decision Reached": "Decided",
 };
 
 export const schoolOutcomeSchema = z.enum([
@@ -27,10 +27,11 @@ export const schoolOutcomeSchema = z.enum([
 ]);
 export type SchoolOutcome = z.infer<typeof schoolOutcomeSchema>;
 
+// "Unsuccessful", never "Rejected": the client reads this word.
 export const SCHOOL_OUTCOME_LABELS: Record<SchoolOutcome, string> = {
 	Admitted: "Admitted",
 	Waitlisted: "Waitlisted",
-	"Application Rejected": "Rejected",
+	"Application Rejected": "Unsuccessful",
 	Withdrawn: "Withdrawn",
 };
 

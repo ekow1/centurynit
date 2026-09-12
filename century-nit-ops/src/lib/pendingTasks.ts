@@ -625,8 +625,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				category: "needs_assignment",
 				kind: "travel",
 				action: "assign",
-				subtitle: `Travel handler required · ${ref}`,
-				meta: "Applicant asked us to book their flight",
+				subtitle: `Travel officer needed · ${ref}`,
+				meta: "Client asked us to book their flight",
 				owner: "Unassigned",
 				priority: PRIORITY.assign_application,
 			});
@@ -638,8 +638,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				kind: "travel",
 				action: "invoice",
 				subtitle: `Ticket invoice to raise · ${ref}`,
-				meta: "Applicant is waiting for their flight ticket invoice",
-				owner: ta.assignedOpsUserName ?? "Handler",
+				meta: "Client is waiting for their ticket invoice",
+				owner: ta.assignedOpsUserName ?? "Owner",
 				priority: PRIORITY.issue,
 			});
 		} else if (ta.status === "invoiced" && ta.invoiceId) {
@@ -652,7 +652,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					kind: "travel",
 					action: "issue",
 					subtitle: `Ticket invoice to issue · ${ref}`,
-					meta: "Applicant cannot pay until finance issues it",
+					meta: "Client cannot pay until finance issues it",
 					owner: "Finance",
 					linkTo: `/invoices?open=${ta.invoiceId}`,
 					priority: PRIORITY.issue,
@@ -667,7 +667,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "book",
 				subtitle: `Flight to book · ${ref}`,
 				meta: "Ticket paid — record the booking once the airline confirms",
-				owner: ta.assignedOpsUserName ?? "Handler",
+				owner: ta.assignedOpsUserName ?? "Owner",
 				priority: PRIORITY.review_application,
 			});
 		}

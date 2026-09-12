@@ -4,7 +4,6 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
-import { StaffChatBadge } from "./StaffChatBadge";
 import { TaQueueRow } from "./TravelRequestCard";
 import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
 import { handoffOffersKeep, tasksForApplication, taskActionLabel, timeAgo, type PendingTask } from "../lib/pendingTasks";
@@ -424,7 +423,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			.finally(() => setIssuingInvoice(false));
 	}
 
-	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 	const flash = (msg: string) => {
 		setActionError(null);
 		setActionSuccess(msg);
@@ -488,6 +486,23 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		setReasonDraft("");
 		setReasonFor("decline");
 	}
+
+	// The work panel (assign, comment, request documents) stays one click
+	// away on every tab; whether it is open is a per-browser preference.
+	const [workOpen, setWorkOpen] = useState<boolean>(() => {
+		try {
+			return localStorage.getItem("ops.case.workOpen") !== "0";
+		} catch {
+			return true;
+		}
+	});
+	useEffect(() => {
+		try {
+			localStorage.setItem("ops.case.workOpen", workOpen ? "1" : "0");
+		} catch {
+			/* private mode */
+		}
+	}, [workOpen]);
 
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
@@ -722,6 +737,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 											stage={app.stage}
 											portalStage={app.journey?.portalStage ?? null}
 											handlerName={app.assignedStaff || null}
+											stageHandlers={(app.stageHandlers ?? [])
+												.filter((h) => h.opsUserName !== app.assignedStaff)
+												.map((h) => ({ stage: h.stage, name: h.opsUserName }))}
+											contact={{ email: app.email, phone: app.phone }}
 											extra={[
 												{ label: "Country", value: app.country || "—" },
 												{ label: "Programme", value: app.program || "—" },
@@ -782,6 +801,44 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</form>
 			</Sheet>
 
+			<details className="cn-work" open={workOpen} onToggle={(e) => setWorkOpen((e.currentTarget as HTMLDetailsElement).open)}>
+				<summary className="cn-work__summary">
+					<span className="cn-work__title">Work panel</span>
+					<span className="cn-work__facts">
+						{app.assignedStaff ? `Handler ${app.assignedStaff}` : "Unassigned"} · {(app.comments ?? []).length} note{(app.comments ?? []).length === 1 ? "" : "s"}
+						{(app.requestedDocuments?.length ?? 0) > 0 ? ` · ${app.requestedDocuments!.length} document${app.requestedDocuments!.length === 1 ? "" : "s"} requested` : ""}
+					</span>
+					<span className="cn-work__hint">{workOpen ? "Hide" : "Assign · Comment · Request documents"}</span>
+				</summary>
+				<div className="cn-work__body">
+					<CaseWorkPanel
+									kind="application"
+									assignedName={app.assignedStaff}
+									assignedEmail={app.assignedStaffEmail}
+									comments={app.comments ?? []}
+									requestedDocuments={app.requestedDocuments ?? []}
+									canAssign={canAssignWork}
+									pendingHandoffNote={
+										handoffs.find(
+											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
+										)
+											? "Resolve the handler assignment above first"
+											: undefined
+									}
+									actor={opsUser?.name ?? "Staff"}
+									isMine={app.assignedStaffEmail === opsUser?.email}
+									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
+									onAssign={(to) => void assignApplication(app.id, to)}
+									onComment={(kind, text) =>
+										void commentOnApplication(app.id, kind, text)
+									}
+									onRequestDocs={(docs) =>
+										void requestApplicationDocs(app.id, docs)
+									}
+								/>
+				</div>
+			</details>
+
 			<div className="cn-tabs" role="tablist">
 				{tabs.map((t) => (
 					<button
@@ -805,18 +862,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				<>
 								{/* Target & Assignment */}
 								<div className="card">
-									<p className="eyebrow mb-3">Assignment</p>
+									<p className="eyebrow mb-3">Case facts</p>
 									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-										<div style={{ gridColumn: "1 / -1" }}>
-											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
-											<p>
-												<StaffChatBadge
-													opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
-													name={app.assignedStaff}
-													email={app.assignedStaffEmail}
-												/>
-											</p>
-										</div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(app.branch)}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
@@ -1420,32 +1467,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			{current === "activity" && (
 				<>
-							<CaseWorkPanel
-									kind="application"
-									assignedName={app.assignedStaff}
-									assignedEmail={app.assignedStaffEmail}
-									comments={app.comments ?? []}
-									requestedDocuments={app.requestedDocuments ?? []}
-									canAssign={canAssignWork}
-									pendingHandoffNote={
-										handoffs.find(
-											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
-										)
-											? "Resolve the handler assignment above first"
-											: undefined
-									}
-									actor={opsUser?.name ?? "Staff"}
-									isMine={app.assignedStaffEmail === opsUser?.email}
-									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
-									onAssign={(to) => void assignApplication(app.id, to)}
-									onComment={(kind, text) =>
-										void commentOnApplication(app.id, kind, text)
-									}
-									onRequestDocs={(docs) =>
-										void requestApplicationDocs(app.id, docs)
-									}
-								/>
-
 					<div className="card">
 						<div className="cn-case__top">
 							<h3 style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Timeline</h3>

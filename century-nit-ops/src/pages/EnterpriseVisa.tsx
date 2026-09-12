@@ -1,30 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CaseDetail } from "./CaseDetail";
+import { CaseScaffold } from "./case/CaseScaffold";
+import { VisaStagePill } from "century-nit-core/ui";
 import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import type { MockApplication, VisaStage, Invoice } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import type { MockApplication, Invoice } from "century-nit-core/ops";
 import { invoiceBalance } from "century-nit-core/ops";
 import { fmtBoth } from "./currency";
-
-const VISA_STEPS: { id: VisaStage; label: string }[] = [
-	{ id: "pending", label: "Case opened" },
-	{ id: "biometrics", label: "Biometrics" },
-	{ id: "decision", label: "Decision" },
-	{ id: "complete", label: "Complete" },
-];
-
-
-function visaStepLabel(stage?: VisaStage): string {
-	if (!stage || stage === "locked") return "Awaiting payment";
-	if (stage === "awaiting_handler") return "Awaiting handler assignment";
-	const step = VISA_STEPS.find((s) => s.id === stage);
-	return step ? step.label : stage;
-}
 
 function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
 	return invoices.find(
@@ -139,196 +125,87 @@ export function EnterpriseVisa() {
 				</span>
 			</div>
 
-			{/* Split Pane Layout */}
-			<div className="ops-split" style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-				{/* LEFT: List Pane */}
-				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
-					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
-						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Unpaid", "In Progress", "Complete"].map((tab) => (
-								<button
-									key={tab}
-									onClick={() => setStatusFilter(tab)}
-									className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
-									style={{ padding: "0.3rem 0.6rem", fontSize: "var(--text-xs)" }}
-								>
-									{tab}
-								</button>
-							))}
-						</div>
-						<input
-							type="search"
-							placeholder="Search app ID, applicant, university..."
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className="input input--sm"
-							style={{ width: "100%" }}
-						/>
-					</div>
-
-					<div style={{ flex: 1, overflowY: "auto" }}>
-						{filteredApps.length === 0 ? (
-							<div style={{ padding: "3rem 1.5rem", textAlign: "center" }} className="muted">
-								No visa cases match your filter.
-							</div>
-						) : (
-							filteredApps.map((app) => {
-								const isSelected = selectedApp?.appId === app.appId;
-								const invoice = visaInvoiceFor(allInvoices, app);
-								return (
-									<div
-										key={app.id}
-										onClick={() => openDetail(app)}
-										style={{
-											padding: "0.85rem 1rem",
-											borderBottom: "1px solid var(--border-light)",
-											cursor: "pointer",
-											transition: "background 100ms",
-											background: isSelected ? "var(--foreground)" : "transparent",
-											color: isSelected ? "var(--background)" : "var(--foreground)",
-											borderLeft: isSelected ? "4px solid #06b6d4" : "4px solid transparent",
-										}}
-										onMouseEnter={(e) => {
-											if (!isSelected) e.currentTarget.style.background = "var(--muted)";
-										}}
-										onMouseLeave={(e) => {
-											if (!isSelected) e.currentTarget.style.background = "transparent";
-										}}
+			<CaseScaffold
+				onClose={() => {
+					setSelectedApp(null);
+					setSearchParams({}, { replace: true });
+				}}
+				emptyHint="Select a visa case from the list to review it and take action."
+				list={
+					<>
+						<div className="cn-scaffold__filters">
+							<div className="cn-scaffold__chips">
+								{["All", "Unpaid", "In Progress", "Complete"].map((tab) => (
+									<button
+										key={tab}
+										type="button"
+										onClick={() => setStatusFilter(tab)}
+										className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
 									>
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-											<div style={{ minWidth: 0, flex: 1 }}>
-												<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.2rem" }}>
-													<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600, opacity: 0.8 }}>
-														{app.appId}
-													</span>
-													<span className="portal-pill" style={{
-														fontSize: "var(--text-xs)",
-														padding: "0.15rem 0.4rem",
-														background: isSelected ? "var(--background)" : undefined,
-														color: isSelected ? "var(--foreground)" : undefined,
-														border: isSelected ? "none" : undefined,
-													}}>
-														{visaStepLabel(app.visaStage)}
-													</span>
-												</div>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{app.applicantName}</p>
-												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
-													{app.university} {"\u00b7"} {app.program}
-												</p>
-<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-                                <span>
-                                  {invoice
-                                    ? invoice.status === "void"
-                                      ? "Invoice void"
-                                      : invoice.status === "paid"
-                                        ? "Invoice paid"
-                                        : invoiceBalance(invoice) > 0
-                                          ? `${invoice.invoiceNumber} · ${fmtBoth(invoiceBalance(invoice))} due`
-                                          : "Invoice settled"
-                                    : app.visaInvoicePaid
-                                      ? "Invoice paid"
-                                      : "No visa invoice"}
-                                </span>
-                                <span>{"\u00b7"}</span>
-                                <span>{app.assignedStaff || "Unassigned"}</span>
-                              </div>
-											</div>
-											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>{"\u2192"}</span>
-										</div>
-									</div>
-								);
-							})
-						)}
-					</div>
-				</div>
-
-				{/* RIGHT: Detail Pane */}
-				<div className="ops-split__detail" style={{
-					flex: 1,
-					display: "flex",
-					flexDirection: "column",
-					overflow: "hidden",
-					border: "1px solid var(--border-light)",
-					background: "var(--background)",
-					height: "calc(100dvh - 11rem)",
-				}}>
-					{!active ? (
-						<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-							<span style={{ fontSize: "2.5rem", opacity: 0.15, marginBottom: "1rem" }}>{"\u2708"}</span>
-							<p className="muted" style={{ fontSize: "var(--text-sm)", textAlign: "center" }}>
-								Select a case from the list to view visa tracking and take action.
-							</p>
+										{tab}
+									</button>
+								))}
+							</div>
+							<input
+								type="search"
+								placeholder="Search app ID, applicant, university..."
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								className="input input--sm"
+							/>
 						</div>
-					) : (
-						<>
-							{/* Detail Header */}
-							<div style={{
-								padding: "1rem 1.25rem",
-								background: "var(--foreground)",
-								color: "var(--background)",
-								display: "flex",
-								justifyContent: "space-between",
-								alignItems: "flex-start",
-								flexShrink: 0,
-							}}>
-								<div>
-									<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
-										<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", opacity: 0.7 }}>
-											{active.appId}
-										</span>
-									<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>
-										{JOURNEY_STAGE_LABELS[active.stage as JourneyStage]}
-									</span>
-									</div>
-									<h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-xl)", color: "var(--background)", margin: 0 }}>
-										{active.applicantName}
-									</h2>
-									<p style={{ opacity: 0.75, fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
-										{active.university} {"\u00b7"} {active.program} ({active.country})
-									</p>
-								</div>
-								<button
-									type="button"
-									onClick={() => {
-										setSelectedApp(null);
-										setSearchParams({}, { replace: true });
-									}}
-									aria-label="Close detail"
-									style={{
-										width: "40px",
-										height: "40px",
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "center",
-										border: "1px solid rgba(255, 255, 255, 0.25)",
-										background: "transparent",
-										color: "var(--background)",
-										fontSize: "1.1rem",
-										cursor: "pointer",
-										transition: "all 100ms",
-										flexShrink: 0,
-									}}
-									onMouseEnter={(e) => {
-										e.currentTarget.style.background = "var(--background)";
-										e.currentTarget.style.color = "var(--foreground)";
-									}}
-									onMouseLeave={(e) => {
-										e.currentTarget.style.background = "transparent";
-										e.currentTarget.style.color = "var(--background)";
-									}}
-								>
-									{"\u2715"}
-								</button>
-							</div>
-
-							{/* Detail Content */}
-							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
-								<CaseDetail app={active} initialTab="visa" />
-							</div>
-						</>
-					)}
-				</div>
-			</div>
+						<div className="cn-scaffold__rows">
+							{filteredApps.length === 0 ? (
+								<div className="cn-scaffold__none">No visa cases match your filter.</div>
+							) : (
+								filteredApps.map((app) => {
+									const isSelected = selectedApp?.appId === app.appId;
+									const invoice = visaInvoiceFor(allInvoices, app);
+									return (
+										<div
+											key={app.id}
+											role="button"
+											tabIndex={0}
+											onClick={() => openDetail(app)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" || e.key === " ") openDetail(app);
+											}}
+											className={`cn-row${isSelected ? " cn-row--selected" : ""}`}
+										>
+											<div className="cn-row__main">
+												<div className="cn-row__top">
+													<span className="cn-row__ref">{app.appId}</span>
+													<VisaStagePill stage={app.visaStage ?? "locked"} />
+												</div>
+												<p className="cn-row__name">{app.applicantName}</p>
+												<p className="cn-row__sub">
+													{app.university} · {app.program}
+												</p>
+												<div className="cn-row__meta">
+													{invoice
+														? invoice.status === "void"
+															? "Invoice void"
+															: invoice.status === "paid"
+																? "Invoice paid"
+																: invoiceBalance(invoice) > 0
+																	? `${invoice.invoiceNumber} · ${fmtBoth(invoiceBalance(invoice))} due`
+																	: "Invoice settled"
+														: app.visaInvoicePaid
+															? "Invoice paid"
+															: "No visa invoice"}
+													<span> · {app.assignedStaff || "Unassigned"}</span>
+												</div>
+											</div>
+											<span className="cn-row__arrow" aria-hidden>→</span>
+										</div>
+									);
+								})
+							)}
+						</div>
+					</>
+				}
+				detail={active ? <CaseDetail app={active} initialTab="visa" /> : null}
+			/>
 		</div>
 	);
 }

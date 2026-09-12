@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { CaseDetail } from "./CaseDetail";
+import { CaseScaffold } from "./case/CaseScaffold";
+import { StatusPill } from "century-nit-core/ui";
 import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
@@ -152,82 +154,59 @@ export function EnterpriseCases() {
 				</span>
 			</div>
 
-			{/* Split Pane Layout */}
-			<div className="ops-split" style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-				{/* LEFT: List Pane */}
-				<div className="ops-split__list" style={{ flex: "0 0 40%", minWidth: "360px", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid var(--border-light)", height: "var(--ops-pane-h)" }}>
-					<div style={{ padding: "0.75rem", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", flexShrink: 0 }}>
-						<div style={{ display: "flex", gap: "0.35rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
-							{["All", "Under Review", "Accepted", "Action Required", "Rejected"].map((tab) => (
-								<button
-									key={tab}
-									onClick={() => setStatusFilter(tab)}
-									className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
-									style={{ padding: "0.3rem 0.6rem", fontSize: "var(--text-xs)" }}
-								>
-									{tab}
-								</button>
-							))}
-						</div>
-						<input
-							type="search"
-							placeholder="Search app ID, applicant, university..."
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className="input input--sm"
-							style={{ width: "100%" }}
-						/>
-					</div>
-
-					<div style={{ flex: 1, overflowY: "auto" }}>
-						{filteredApps.length === 0 ? (
-							<div style={{ padding: "3rem 1.5rem", textAlign: "center" }} className="muted">
-								No applications match your filter.
-							</div>
-						) : (
-							filteredApps.map((app) => {
-								const isSelected = selectedApp?.appId === app.appId;
-								return (
-									<div
-										key={app.id}
-										onClick={() => setSelectedApp(app)}
-										style={{
-											padding: "0.85rem 1rem",
-											borderBottom: "1px solid var(--border-light)",
-											cursor: "pointer",
-											transition: "background 100ms",
-											background: isSelected ? "var(--foreground)" : "transparent",
-											color: isSelected ? "var(--background)" : "var(--foreground)",
-											borderLeft: isSelected ? "4px solid var(--accent, #6366f1)" : "4px solid transparent",
-										}}
-										onMouseEnter={(e) => {
-											if (!isSelected) e.currentTarget.style.background = "var(--muted)";
-										}}
-										onMouseLeave={(e) => {
-											if (!isSelected) e.currentTarget.style.background = "transparent";
-										}}
+			<CaseScaffold
+				onClose={() => setSelectedApp(null)}
+				emptyHint="Select an application from the list to review it and take action."
+				list={
+					<>
+						<div className="cn-scaffold__filters">
+							<div className="cn-scaffold__chips">
+								{["All", "Under Review", "Accepted", "Action Required", "Rejected"].map((tab) => (
+									<button
+										key={tab}
+										type="button"
+										onClick={() => setStatusFilter(tab)}
+										className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
 									>
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-											<div style={{ minWidth: 0, flex: 1 }}>
-												<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.2rem" }}>
-													<span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", fontWeight: 600, opacity: 0.8 }}>
-														{app.appId}
-													</span>
-													<span className="portal-pill" style={{
-														fontSize: "var(--text-xs)",
-														padding: "0.15rem 0.4rem",
-														background: isSelected ? "var(--background)" : app.status === "Accepted" ? "var(--foreground)" : undefined,
-														color: isSelected ? "var(--foreground)" : app.status === "Accepted" ? "var(--background)" : undefined,
-														border: isSelected ? "none" : undefined,
-													}}>
-														{app.status}
-													</span>
+										{tab}
+									</button>
+								))}
+							</div>
+							<input
+								type="search"
+								placeholder="Search app ID, applicant, university..."
+								value={searchQuery}
+								onChange={(e) => setSearchQuery(e.target.value)}
+								className="input input--sm"
+							/>
+						</div>
+						<div className="cn-scaffold__rows">
+							{filteredApps.length === 0 ? (
+								<div className="cn-scaffold__none">No applications match your filter.</div>
+							) : (
+								filteredApps.map((app) => {
+									const isSelected = selectedApp?.appId === app.appId;
+									return (
+										<div
+											key={app.id}
+											role="button"
+											tabIndex={0}
+											onClick={() => setSelectedApp(app)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" || e.key === " ") setSelectedApp(app);
+											}}
+											className={`cn-row${isSelected ? " cn-row--selected" : ""}`}
+										>
+											<div className="cn-row__main">
+												<div className="cn-row__top">
+													<span className="cn-row__ref">{app.appId}</span>
+													<StatusPill tone={app.status === "Accepted" ? "done" : app.status === "Rejected" ? "blocked" : "current"}>{app.status}</StatusPill>
 												</div>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{app.applicantName}</p>
-												<p style={{ fontSize: "var(--text-xs)", opacity: 0.65, marginTop: "0.15rem" }}>
+												<p className="cn-row__name">{app.applicantName}</p>
+												<p className="cn-row__sub">
 													{app.university} · {app.program}
 												</p>
-												<div style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												<div className="cn-row__meta">
 													{app.assignedStaff ? (
 														<StaffChatBadge
 															opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
@@ -237,95 +216,19 @@ export function EnterpriseCases() {
 													) : (
 														<span>Unassigned</span>
 													)}
-													<span style={{ marginLeft: "0.4rem" }}>· {JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
+													<span> · {app.journey?.label ?? JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
 												</div>
 											</div>
-											<span style={{ fontSize: "0.9rem", flexShrink: 0, marginLeft: "0.5rem" }}>→</span>
+											<span className="cn-row__arrow" aria-hidden>→</span>
 										</div>
-									</div>
-								);
-							})
-						)}
-					</div>
-				</div>
-
-				{/* RIGHT: Detail Pane */}
-				<div className="ops-split__detail" style={{
-					flex: 1,
-					display: "flex",
-					flexDirection: "column",
-					overflow: "hidden",
-					border: "1px solid var(--border-light)",
-					background: "var(--background)",
-					height: "calc(100dvh - 11rem)",
-				}}>
-					{!selectedApp ? (
-						<div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-							<span style={{ fontSize: "2.5rem", opacity: 0.15, marginBottom: "1rem" }}>◈</span>
-							<p className="muted" style={{ fontSize: "var(--text-sm)", textAlign: "center" }}>
-								Select an application from the list to review details and take action.
-							</p>
+									);
+								})
+							)}
 						</div>
-					) : (
-						<>
-							{/* Detail Header */}
-							<div style={{
-								padding: "1rem 1.25rem",
-								background: "var(--foreground)",
-								color: "var(--background)",
-								display: "flex",
-								justifyContent: "space-between",
-								alignItems: "flex-start",
-								flexShrink: 0,
-							}}>
-									<div style={{ flex: 1, minWidth: 0 }}>
-										<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
-											<h2 style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--background)", margin: 0 }}>{(liveSelected ?? selectedApp).applicantName}</h2>
-											<span className="portal-pill" style={{ background: "var(--background)", color: "var(--foreground)", border: "none", fontSize: "var(--text-xs)" }}>{(liveSelected ?? selectedApp).appId}</span>
-										</div>
-										<p style={{ fontSize: "var(--text-sm)", opacity: 0.7, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-											{selectedApp.targetSchoolCount ? `Tracking ${selectedApp.targetSchoolCount} School${selectedApp.targetSchoolCount === 1 ? "" : "s"}` : "No schools selected yet"}
-										</p>
-									</div>
-								<button
-									type="button"
-									onClick={() => setSelectedApp(null)}
-									aria-label="Close detail"
-									style={{
-										width: "40px",
-										height: "40px",
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "center",
-										border: "1px solid rgba(255, 255, 255, 0.25)",
-										background: "transparent",
-										color: "var(--background)",
-										fontSize: "1.1rem",
-										cursor: "pointer",
-										transition: "all 100ms",
-										flexShrink: 0,
-									}}
-									onMouseEnter={(e) => {
-										e.currentTarget.style.background = "var(--background)";
-										e.currentTarget.style.color = "var(--foreground)";
-									}}
-									onMouseLeave={(e) => {
-										e.currentTarget.style.background = "transparent";
-										e.currentTarget.style.color = "var(--background)";
-									}}
-								>
-									✕
-								</button>
-							</div>
-
-							{/* Detail Content */}
-							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
-								<CaseDetail app={liveSelected ?? selectedApp} />
-							</div>
-						</>
-					)}
-				</div>
-			</div>
+					</>
+				}
+				detail={selectedApp ? <CaseDetail app={liveSelected ?? selectedApp} /> : null}
+			/>
 		</div>
 	);
 }

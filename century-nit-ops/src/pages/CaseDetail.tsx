@@ -17,6 +17,8 @@ import {
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
 	CASE_STATUS_LABELS,
+	DECISION_LABELS,
+	decisionOf,
 	VISA_STAGE_LABELS,
 	canAdvanceToStage,
 	feeMilestoneBlockReason,
@@ -292,10 +294,10 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	);
 }
 
-type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents";
+type TabId = "overview" | "consultation" | "enrolment" | "application" | "visa" | "travel" | "payments" | "documents";
 
 /** The chapter a case is currently in — where the detail opens. */
-const TAB_IDS: TabId[] = ["overview", "consultation", "application", "visa", "travel", "payments", "documents"];
+const TAB_IDS: TabId[] = ["overview", "consultation", "enrolment", "application", "visa", "travel", "payments", "documents"];
 const isTabId = (v: string): v is TabId => (TAB_IDS as string[]).includes(v);
 
 /** Which tab a portal stage lives on — the case opens where the applicant is. */
@@ -303,9 +305,9 @@ const TAB_FOR_PORTAL_STAGE: Record<string, TabId> = {
 	new: "consultation",
 	consultation: "consultation",
 	eligibility: "consultation",
-	proceed: "overview",
-	school_package: "application",
-	awaiting_handler: "application",
+	proceed: "enrolment",
+	school_package: "enrolment",
+	awaiting_handler: "enrolment",
 	school_select: "application",
 	awaiting_invoice: "application",
 	application_invoice: "application",
@@ -337,7 +339,7 @@ function currentTabFor(app: MockApplication): TabId {
 		case "completed":
 			return "payments";
 		default:
-			return app.proceedStatus === "accepted" ? "application" : "overview";
+			return app.proceedStatus === "accepted" && app.depositPaid ? "application" : "enrolment";
 	}
 }
 
@@ -568,15 +570,19 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// (`deriveJourney().chapterUnlocks`, shipped on the application). The
 	// local checks are only the fallback for a case the API has not derived.
 	const unlocks = app.journey?.chapterUnlocks;
+	// Enrolment opens with the assessment (the client can confirm before a
+	// deposit); Applications opens once the deposit is paid and a consultant is on it.
+	const enrolOpen = unlocks ? unlocks.package : true;
 	const applicationOpen = unlocks
-		? unlocks.package || unlocks.application
-		: app.proceedStatus === "accepted" || app.depositPaid || stageIndex >= stageIdx("school_submission");
+		? unlocks.application
+		: app.depositPaid || stageIndex >= stageIdx("school_submission");
 	const visaOpen = unlocks ? unlocks.visa : showVisa || hasAdmitted;
 	const travelOpen = unlocks ? unlocks.travel_assistance : showTravel || app.visaStage === "complete";
 	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
 		{ id: "overview", label: "Overview", locked: false },
 		{ id: "consultation", label: "Consultation", locked: !consultation, hint: "Opened from a consultation" },
-		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks when the client confirms their enrolment" },
+		{ id: "enrolment", label: "Enrolment", locked: !enrolOpen, hint: "Unlocks after the assessment" },
+		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks once the deposit is paid" },
 		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
 		{ id: "travel", label: "Departure", locked: !travelOpen, hint: "Unlocks once the visa is approved" },
 		{ id: "payments", label: "Money", locked: false },
@@ -1008,31 +1014,67 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</>
 			)}
 
-			{current === "application" && (
+			{current === "enrolment" && (
 				<>
+					{/* Enrolment — the four steps the client takes on one page: confirm, package & plan, deposit, consultant. */}
 					<div className="card">
-						<p className="eyebrow mb-2">Package & deposit</p>
+						<p className="eyebrow mb-2">Enrolment</p>
+						<ol style={{ listStyle: "none", padding: 0, margin: "0 0 0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+							{[
+								{ label: "Confirmed", done: app.proceedStatus === "accepted" },
+								{ label: "Package & plan", done: Boolean(app.fundingTrack) && Boolean(app.paymentPlanId) },
+								{ label: "Deposit paid", done: Boolean(app.depositPaid) },
+								{ label: "Consultant assigned", done: Boolean(app.assignedStaff) },
+							].map((st, i, all) => {
+								const cur = !st.done && all.slice(0, i).every((x) => x.done);
+								return (
+									<li key={st.label}>
+										<StatusPill tone={st.done ? "done" : cur ? "current" : "neutral"} dot={st.done || cur}>
+											{i + 1} · {st.label}
+										</StatusPill>
+									</li>
+								);
+							})}
+						</ol>
 						<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+							<div>
+								<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Decision</p>
+								<p>
+									{(() => {
+										const d = decisionOf(app.applicationConsent?.decision ?? app.proceedStatus);
+										return d ? DECISION_LABELS[d] : "Awaiting the client";
+									})()}
+									{app.applicationConsent?.reason ? ` — “${app.applicationConsent.reason}”` : ""}
+								</p>
+							</div>
 							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Package</p><p>{app.fundingTrack || "Not chosen"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Payment plan</p><p>{PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "Not chosen"}</p></div>
 							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
-							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>10% deposit</p><p>{app.depositPaid ? "Paid" : "Not paid"}</p></div>
-							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Handler</p><p>{app.assignedStaff || "Unassigned"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Deposit (10%)</p><p>{app.depositPaid ? "Paid" : "Not paid"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Consultant</p><p>{app.assignedStaff || "Unassigned"}</p></div>
 						</div>
 						{caseInvoices.find((i) => i.type === "agency") && (
 							<div className="mt-3">
 								<InvoiceCard
 									compact
-									title="Service package invoice"
+									title="Service fee invoice"
 									invoice={caseInvoices.find((i) => i.type === "agency")!}
 									actions={
-										<Link to={`/invoices?open=${caseInvoices.find((i) => i.type === "agency")!.id}`} className="btn btn--sm btn--ghost">
-											Open in Invoices →
-										</Link>
+										canIssueInvoices ? (
+											<Link to={`/invoices?open=${caseInvoices.find((i) => i.type === "agency")!.id}`} className="btn btn--sm btn--ghost">
+												Open in Invoices →
+											</Link>
+										) : undefined
 									}
 								/>
 							</div>
 						)}
 					</div>
+				</>
+			)}
+
+			{current === "application" && (
+				<>
 							{(() => {
 								if (app.appFeePaid) return null;
 

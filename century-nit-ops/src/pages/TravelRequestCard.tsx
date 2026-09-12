@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { applicationsApi, ApiError } from "century-nit-core/api";
-import type { Assignee } from "century-nit-core/ops";
-import { AssignControl, InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
+import { InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../lib/api";
 
@@ -290,63 +289,6 @@ export function TravelCard({
 				/>
 			)}
 			{error && <p className="cn-assign__error">{error}</p>}
-		</div>
-	);
-}
-
-/** The Travel queue's row: who, then the card; assignment is offered here because the queue is where triage happens. */
-export function TaQueueRow({
-	ta,
-	onChanged,
-	onSelectApp,
-	staff,
-	branch,
-	canWork,
-	canIssueInvoices,
-}: {
-	ta: TravelAssistanceRequest;
-	onChanged: () => void;
-	onSelectApp?: () => void;
-	staff: Assignee[];
-	branch?: string;
-	canWork: boolean;
-	canIssueInvoices: boolean;
-}) {
-	const [showAssign, setShowAssign] = useState(false);
-	return (
-		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-				<div onClick={onSelectApp} style={{ cursor: onSelectApp ? "pointer" : "default", flex: 1, minWidth: 0 }} title={onSelectApp ? "View full case detail" : undefined}>
-					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", margin: 0 }}>
-						{ta.applicantName ?? ta.applicantId.slice(0, 8)}
-						{onSelectApp && <span style={{ opacity: 0.4, marginLeft: "0.35rem" }}>{"→"}</span>}
-					</p>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
-						{ta.applicationReference ?? ""}
-						{ta.university ? ` · ${ta.university}` : ""}
-						{ta.assignedOpsUserName ? ` · ${ta.assignedOpsUserName}` : " · Unassigned"}
-					</p>
-				</div>
-				{canWork && ta.status === "review" && (
-					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setShowAssign((v) => !v)}>
-						{ta.assignedOpsUserId ? "Reassign handler" : "Assign handler"}
-					</button>
-				)}
-			</div>
-			{showAssign && ta.status === "review" && (
-				<AssignControl
-					stage="travel_assistance"
-					staff={staff}
-					branch={branch}
-					currentName={ta.assignedOpsUserName ?? null}
-					onAssign={async (opsUserId) => {
-						await applicationsApi.assignTravelHandler(ta.id, opsUserId);
-						setShowAssign(false);
-						onChanged();
-					}}
-				/>
-			)}
-			<TravelCard ta={ta} canWork={canWork} canIssueInvoices={canIssueInvoices} onChanged={onChanged} />
 		</div>
 	);
 }

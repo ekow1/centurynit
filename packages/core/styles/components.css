@@ -2,20 +2,22 @@
  * Shared components — the pieces both apps kept re-implementing by hand:
  * status pill, money, invoice card, assignment control, case header.
  *
- * Styled only with tokens. Status tone is functional (it says done / waiting
- * / blocked), so the five tones are the one place the system uses hue; they
- * are defined here once and nowhere else. No page should contain a hex.
+ * Styled only with tokens. The system is ink on paper — square corners,
+ * monochrome. Status is told by weight and shape, not hue: filled black is
+ * the live thing, grey is settled or waiting, and the single red is kept
+ * for blocked/error only (it matches the danger colour already in use).
+ * No page should contain a hex.
  */
 
 :root {
 	--tone-neutral-bg: var(--muted);
 	--tone-neutral-fg: var(--muted-foreground);
-	--tone-done-bg: #e6f4ea;
-	--tone-done-fg: #1e6b3a;
-	--tone-current-bg: #fff4d6;
-	--tone-current-fg: #7a4d00;
-	--tone-waiting-bg: #e8f0fb;
-	--tone-waiting-fg: #1f4e8c;
+	--tone-done-bg: var(--muted);
+	--tone-done-fg: var(--muted-foreground);
+	--tone-current-bg: var(--foreground);
+	--tone-current-fg: var(--background);
+	--tone-waiting-bg: var(--background);
+	--tone-waiting-fg: var(--muted-foreground);
 	--tone-blocked-bg: #fde8e8;
 	--tone-blocked-fg: #9b1c1c;
 	--tone-void-bg: var(--muted);
@@ -227,3 +229,11 @@
 .cn-outcome__rec--package { border-color: var(--tone-done-fg); background: var(--tone-done-bg); }
 .cn-outcome__rec--package dd { color: var(--tone-done-fg); }
 
+
+/* ── Text-size and layout utilities the case tabs share ─────────────────── */
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-sm--strong { font-size: var(--text-sm); font-weight: 600; }
+.cn-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: var(--text-sm); }
+.cn-facts__full { grid-column: 1 / -1; }
+.cn-stack { display: flex; flex-direction: column; gap: 0.5rem; }

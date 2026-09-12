@@ -30,6 +30,7 @@ import {
 	voidInvoice,
 } from "../services/invoice.js";
 import { getApplicantByUserId } from "../services/cases.js";
+import { checkRolePermission } from "../services/roles.js";
 import { postPaymentSettlement } from "../services/paymentSettlement.js";
 
 
@@ -119,10 +120,11 @@ invoicesRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Staff access required");
 		}
 
-		// Staff: module-gated — same rule requireModule enforces, applied here
-		// because this route serves both audiences.
-		const { roleCanAccess } = await import("century-nit-shared");
-		if (!roleCanAccess(staff.role, "invoices")) {
+		// Staff: module-gated — the same lookup requireModule makes (the roles
+		// table, not the built-in matrix — otherwise a permission granted in
+		// the console would never reach this route), applied here because
+		// this route serves both audiences.
+		if (!(await checkRolePermission(staff.role, "invoices"))) {
 			throw new HttpError(403, "FORBIDDEN", 'Your role does not include the "invoices" module');
 		}
 
@@ -165,9 +167,8 @@ invoicesRouter.openapi(
 		const row = await getInvoice(id);
 		if (!row) throw new HttpError(404, "INVOICE_NOT_FOUND", "Invoice not found");
 
-		const { roleCanAccess } = await import("century-nit-shared");
 		const isOwner = row.clientUserId === user.id;
-		const isStaffAllowed = staff ? roleCanAccess(staff.role, "invoices") : false;
+		const isStaffAllowed = staff ? await checkRolePermission(staff.role, "invoices") : false;
 		if (!isOwner && !isStaffAllowed) {
 			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this invoice");
 		}

@@ -519,6 +519,13 @@
       "when": 1789600002000,
       "tag": "0075_comment_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1789600003000,
+      "tag": "0076_visa_stage_not_opened_by_accept",
+      "breakpoints": true
     }
   ]
 }

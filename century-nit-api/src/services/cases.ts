@@ -2021,9 +2021,13 @@ export async function updateApplication(
 export async function acceptApplication(id: string, actor: Actor): Promise<ApplicationRow> {
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	// Accepting the application activates the applicant; it says nothing
+	// about the visa. Visa tracking opens on its own path — consent, paid
+	// visa invoice, specialist assigned — and used to be forced to "pending"
+	// here, which opened the visa chapter on every case at document review.
 	const [updated] = await db
 		.update(applications)
-		.set({ status: "ACCEPTED" satisfies CaseApplicationStatus, visaStage: "pending", updatedAt: new Date() })
+		.set({ status: "ACCEPTED" satisfies CaseApplicationStatus, updatedAt: new Date() })
 		.where(eq(applications.id, id))
 		.returning();
 	await db.insert(caseComments).values({

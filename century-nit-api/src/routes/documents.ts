@@ -33,6 +33,7 @@ import {
 } from "../middleware/auth.js";
 import { getDocumentStorage, StorageNotConfiguredError } from "../services/storage/index.js";
 import { documentReviewedForClient } from "../services/notifications.js";
+import { checkRolePermission } from "../services/roles.js";
 import {
 	notify,
 	notifyMany,
@@ -88,15 +89,9 @@ function toResponse(row: DocumentRow, enrichment?: StaffEnrichment) {
 	};
 }
 
-/** Staff who may review documents at all. Matches ROLE_PERMISSIONS.documents. */
-function canReview(role: string | undefined): boolean {
-	return (
-		role === "manager" ||
-		role === "coordinator" ||
-		role === "consultant" ||
-		role === "super_admin" ||
-		role === "customer_service"
-	);
+/** Staff who may review documents at all: whoever holds the documents module. */
+async function canReview(role: string | undefined): Promise<boolean> {
+	return role ? checkRolePermission(role, "documents") : false;
 }
 
 /**
@@ -118,7 +113,7 @@ function canReview(role: string | undefined): boolean {
  * already modelled there and a second copy would drift.
  */
 async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] | null> {
-	if (!staff || !canReview(staff.role)) return [];
+	if (!staff || !(await canReview(staff.role))) return [];
 	if (staff.role !== "consultant") return null;
 
 	// Single source of truth: case_assignments with status = 'active'.
@@ -471,7 +466,7 @@ documentsRouter.openapi(
 		let ownerScope;
 		if (ownerUserId) {
 			ownerScope = eq(applicantDocuments.ownerUserId, ownerUserId);
-		} else if (!canReview(staff?.role)) {
+		} else if (!(await canReview(staff?.role))) {
 			ownerScope = eq(applicantDocuments.ownerUserId, user.id);
 		} else if (reachable !== null) {
 			// An empty caseload must mean no documents, not every document — which
@@ -480,7 +475,7 @@ documentsRouter.openapi(
 			ownerScope = inArray(applicantDocuments.ownerUserId, reachable);
 		}
 
-		const isStaff = canReview(staff?.role);
+		const isStaff = await canReview(staff?.role);
 
 		if (!isStaff) {
 			// Applicants get the lean query — no joins needed.

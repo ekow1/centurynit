@@ -44,19 +44,23 @@ export function CaseHeader({
 				{reference && <span className="cn-case__ref">{reference}</span>}
 				{portalStage && <StatusPill tone="current" dot>{PORTAL_STAGE_LABELS[portalStage] ?? portalStage}</StatusPill>}
 			</div>
-			<div className="cn-case__facts">
-				{stage && <span>Stage <strong>{JOURNEY_STAGE_LABELS[stage as keyof typeof JOURNEY_STAGE_LABELS] ?? stage}</strong></span>}
-				{branch && <span>Branch <strong>{branch}</strong></span>}
-				<span>Handler <strong>{handlerName ?? "Unassigned"}</strong></span>
+			<dl className="cn-case__facts" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", margin: 0 }}>
+				{stage && <><dt className="muted" style={{ fontSize: "0.85rem" }}>Stage</dt><dd style={{ margin: 0 }}><strong>{JOURNEY_STAGE_LABELS[stage as keyof typeof JOURNEY_STAGE_LABELS] ?? stage}</strong></dd></>}
+				{branch && <><dt className="muted" style={{ fontSize: "0.85rem" }}>Branch</dt><dd style={{ margin: 0 }}><strong>{branch}</strong></dd></>}
+				<dt className="muted" style={{ fontSize: "0.85rem" }}>Handler</dt><dd style={{ margin: 0 }}><strong>{handlerName ?? "Unassigned"}</strong></dd>
 				{stageHandlers?.map((h) => (
-					<span key={h.stage}>
-						{JOURNEY_STAGE_LABELS[h.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? h.stage} <strong>{h.name}</strong>
-					</span>
+					<React.Fragment key={h.stage}>
+						<dt className="muted" style={{ fontSize: "0.85rem" }}>{JOURNEY_STAGE_LABELS[h.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? h.stage}</dt>
+						<dd style={{ margin: 0 }}><strong>{h.name}</strong></dd>
+					</React.Fragment>
 				))}
 				{extra?.map((f) => (
-					<span key={f.label}>{f.label} <strong>{f.value}</strong></span>
+					<React.Fragment key={f.label}>
+						<dt className="muted" style={{ fontSize: "0.85rem" }}>{f.label}</dt>
+						<dd style={{ margin: 0 }}><strong>{f.value}</strong></dd>
+					</React.Fragment>
 				))}
-			</div>
+			</dl>
 			{(contact?.email || contact?.phone) && (
 				<div className="cn-case__contact">
 					{contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}

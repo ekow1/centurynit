@@ -3802,6 +3802,14 @@ function VisaTrackingInner() {
 					</p>
 				)}
 			</div>
+			{application.visaCounselorNote && (
+				<div className="card card--pad mb-4">
+					<p className="eyebrow">Message from your consultant</p>
+					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+						{application.visaCounselorNote}
+					</p>
+				</div>
+			)}
 			{assigningHandler && (
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
 					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your specialist</p>

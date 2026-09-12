@@ -864,6 +864,7 @@ export const caseCommentKindEnum = pgEnum("case_comment_kind", [
 ]);
 
 export const caseTargetEnum = pgEnum("case_target", ["consultation", "application"]);
+export const caseCommentVisibilityEnum = pgEnum("case_comment_visibility", ["internal", "applicant"]);
 
 export const applicants = pgTable(
 	"applicants",
@@ -1071,6 +1072,7 @@ export const caseComments = pgTable(
 		authorOpsUserId: uuid("author_ops_user_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
+		visibility: caseCommentVisibilityEnum("visibility").notNull().default("internal"),
 		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({

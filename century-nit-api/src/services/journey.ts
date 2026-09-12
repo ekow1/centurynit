@@ -111,7 +111,7 @@ export async function journeyForApplicant(
 		hasAdmitted: schoolTracks.schools.some((s) => s.outcome === "Admitted"),
 		hasVisaConsent: visaConsent?.decision === "continue",
 		visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
-		visaDone: application?.visaStage === "complete",
+		visaDone: application?.visaStage === "complete" && application?.visaOutcome === "approved",
 		visaRefused: application?.visaOutcome === "refused",
 		travelInvoicePaid: Boolean(application?.travelInvoicePaid) || invoiceIs("travel", "paid"),
 		travelAssistanceStatus: taRow?.status ?? null,

@@ -109,11 +109,16 @@ export async function loadAssignableStaff(id: string, stage: string) {
 async function commentsFor(
 	targetType: "consultation" | "application",
 	targetId: string,
+	forApplicant = false,
 ): Promise<CommentRow[]> {
+	let conditions = and(eq(caseComments.targetType, targetType), eq(caseComments.targetId, targetId));
+	if (forApplicant) {
+		conditions = and(conditions, eq(caseComments.visibility, "applicant"));
+	}
 	return db
 		.select()
 		.from(caseComments)
-		.where(and(eq(caseComments.targetType, targetType), eq(caseComments.targetId, targetId)))
+		.where(conditions)
 		.orderBy(caseComments.at);
 }
 
@@ -491,7 +496,7 @@ export async function cancelConsultation(
 
 /* ── Serialise ───────────────────────────────────────────────────────────── */
 
-async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultation> {
+async function serializeConsultation(row: ConsultationRow, forApplicant = false): Promise<ApiConsultation> {
 	const [applicant, coordinator, coordinatorAssigner, booking, comments, linkedApplication] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.coordinatorId),
@@ -499,7 +504,7 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 		row.bookingId
 			? db.select().from(bookings).where(eq(bookings.id, row.bookingId)).limit(1).then((r) => r[0] ?? null)
 			: Promise.resolve(null),
-		commentsFor("consultation", row.id),
+		commentsFor("consultation", row.id, forApplicant),
 		db
 			.select({ id: applications.id, appNumber: applications.appNumber, stage: applications.stage })
 			.from(applications)
@@ -585,11 +590,11 @@ async function serializeConsultation(row: ConsultationRow): Promise<ApiConsultat
 	};
 }
 
-async function serializeApplication(row: ApplicationRow): Promise<ApiApplication> {
+async function serializeApplication(row: ApplicationRow, forApplicant = false): Promise<ApiApplication> {
 	const [applicant, staff, comments] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.assignedStaffId),
-		commentsFor("application", row.id),
+		commentsFor("application", row.id, forApplicant),
 	]);
 
 	// Scoped to this application, not the applicant — an earlier application's
@@ -601,10 +606,11 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 	// Load consent status for all three stages so the portal can decide
 	// whether to show the consent card.
 	const { getStageConsent } = await import("./stageConsents.js");
-	const [applicationConsent, visaConsent, travelConsent] = await Promise.all([
+	const [applicationConsent, visaConsent, travelConsent, travelAssistanceStatus] = await Promise.all([
 		getStageConsent(row.id, "application"),
 		getStageConsent(row.id, "visa"),
 		getStageConsent(row.id, "travel"),
+		getTravelAssistanceStatusForApplication(row.id),
 	]);
 
 	// Who owns which stage right now (visa / travel / finance specialists).
@@ -614,6 +620,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 			opsUserId: stageAssignments.opsUserId,
 			opsUserName: opsUsers.name,
 			opsUserEmail: opsUsers.email,
+			assignedAt: sql<string>`${stageAssignments.assignedAt}::text`,
 		})
 		.from(stageAssignments)
 		.innerJoin(opsUsers, eq(opsUsers.id, stageAssignments.opsUserId))
@@ -673,6 +680,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		applicationConsent,
 		visaConsent,
 		travelConsent,
+		travelAssistanceStatus,
 		stageHandlers,
 		journey: journey
 			? {
@@ -2359,7 +2367,7 @@ export async function setApplicationStage(
 		hasAdmitted,
 		hasAppInvoice,
 		hasVisaInvoice,
-		visaDone: row.visaStage === "complete",
+		visaDone: row.visaStage === "complete" && row.visaOutcome === "approved",
 		travelClearance: row.travelClearance,
 		hasPaymentPlan: Boolean(row.paymentPlanId),
 		agencySettled: row.agencySettled,
@@ -2634,7 +2642,7 @@ export async function setApplicationVisaStage(
 			type: "visa.stage_changed",
 			title: "Visa processing update",
 			body: `Your visa processing stage is now: ${stage}.`,
-			link: "/portal/tracking",
+			link: "/portal/visa/tracking",
 		}).catch(() => {});
 	}
 

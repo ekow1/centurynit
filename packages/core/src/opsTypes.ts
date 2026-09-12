@@ -244,10 +244,11 @@ export interface MockApplication {
 	/** Whole-case owner (applications.assignedStaffId). */
 	assignedStaffId?: string | null;
 	travelInvoicePaid?: boolean;
+	travelAssistanceStatus?: string | null;
 	/** Stage consents recorded by the applicant. */
-	applicationConsent?: { decision: string } | null;
-	visaConsent?: { decision: string } | null;
-	travelConsent?: { decision: string } | null;
+	applicationConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;
+	visaConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;
+	travelConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;
 	/** Active per-stage specialists (visa / travel / finance) from stage_assignments. */
 	stageHandlers?: { stage: string; opsUserId: string; opsUserName: string; opsUserEmail: string }[];
 	/**

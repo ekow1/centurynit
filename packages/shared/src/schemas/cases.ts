@@ -483,6 +483,25 @@ export const stageConsentInputSchema = z.object({
 });
 export type StageConsentInput = z.infer<typeof stageConsentInputSchema>;
 
+/* ── Travel Assistance (direct-invoice flow) ─────────────────────────────── */
+
+export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
+export type TravelDecision = z.infer<typeof travelDecisionSchema>;
+
+export const travelAssistanceStatusSchema = z.enum([
+	"decision_pending",
+	"review",
+	"quote_prepared",
+	"quote_approved",
+	"invoiced",
+	"ticket_paid",
+	"booked",
+	"cleared",
+	"declined",
+	"on_hold",
+]);
+export type TravelAssistanceStatus = z.infer<typeof travelAssistanceStatusSchema>;
+
 export const applicationSchema = z.object({
 	id: z.string().uuid(),
 	appNumber: z.string(),
@@ -521,6 +540,7 @@ export const applicationSchema = z.object({
 	depositPaid: z.boolean(),
 	appFeePaid: z.boolean(),
 	travelInvoicePaid: z.boolean(),
+	travelAssistanceStatus: travelAssistanceStatusSchema.nullable().optional(),
 	travelClearance: z.enum(["pending", "cleared"]),
 	requestedDocuments: z.array(z.string()),
 	preDepartureTasks: z.array(
@@ -556,6 +576,7 @@ export const applicationSchema = z.object({
 				opsUserId: z.string().uuid(),
 				opsUserName: z.string(),
 				opsUserEmail: z.string(),
+				assignedAt: z.string().datetime(),
 			}),
 		)
 		.default([]),
@@ -794,25 +815,6 @@ export const escalationConfigSchema = z.object({
 	maxCapacityPerCoordinator: z.number().int().min(1).max(50).default(10),
 });
 export type EscalationConfig = z.infer<typeof escalationConfigSchema>;
-
-/* ── Travel Assistance (direct-invoice flow) ─────────────────────────────── */
-
-export const travelDecisionSchema = z.enum(["yes", "hold", "no"]);
-export type TravelDecision = z.infer<typeof travelDecisionSchema>;
-
-export const travelAssistanceStatusSchema = z.enum([
-	"decision_pending",
-	"review",
-	"quote_prepared",
-	"quote_approved",
-	"invoiced",
-	"ticket_paid",
-	"booked",
-	"cleared",
-	"declined",
-	"on_hold",
-]);
-export type TravelAssistanceStatus = z.infer<typeof travelAssistanceStatusSchema>;
 
 export const travelAssistanceQuoteSchema = z.object({
 	carrier: z.string().optional(),

@@ -230,7 +230,7 @@ consultationsRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const rows = await listConsultations(staff);
-		const list = await Promise.all(rows.map(serializeConsultation));
+		const list = await Promise.all(rows.map((r) => serializeConsultation(r)));
 		return c.json({ consultations: list, total: list.length });
 	},
 );
@@ -490,7 +490,7 @@ applicationsRouter.openapi(
 	}),
 	async (c) => {
 		const rows = await listApplications(c.get("staff")!);
-		const list = await Promise.all(rows.map(serializeApplication));
+		const list = await Promise.all(rows.map((r) => serializeApplication(r)));
 		return c.json({ applications: list, total: list.length });
 	},
 );
@@ -1550,8 +1550,8 @@ meRouter.openapi(
 		]);
 		return c.json({
 			applicant: await serializeApplicant(applicant),
-			consultation: consultation ? await serializeConsultation(consultation) : null,
-			application: application ? await serializeApplication(application) : null,
+			consultation: consultation ? await serializeConsultation(consultation, true) : null,
+			application: application ? await serializeApplication(application, true) : null,
 		});
 	},
 );

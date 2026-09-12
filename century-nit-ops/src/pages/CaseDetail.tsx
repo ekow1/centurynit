@@ -51,10 +51,12 @@ const VISA_STEPS: { id: VisaStage; label: string }[] = [
 const VISA_ORDER: VisaStage[] = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"];
 
 const PRE_DEPARTURE_CATEGORIES: Record<string, { label: string; icon: string }> = {
+	travel: { label: "Travel", icon: "✈️" },
+	accommodation: { label: "Accommodation", icon: "🏠" },
 	documents: { label: "Documents", icon: "📄" },
-	finances: { label: "Finances", icon: "💳" },
-	logistics: { label: "Logistics", icon: "✈️" },
 	health: { label: "Health", icon: "🩺" },
+	finance: { label: "Finance", icon: "💳" },
+	orientation: { label: "Orientation", icon: "🎓" },
 };
 function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 	if (!tasks || tasks.length === 0) return 0;
@@ -544,7 +546,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		const cur = app.visaStage ?? "locked";
 		if (cur === "awaiting_handler") return;
 		const next = VISA_ORDER[VISA_ORDER.indexOf(cur) + 1];
-		if (next) setVisaStage(app.appId, next);
+		if (next) {
+			setVisaStage(app.appId, next)
+				.then(() => flash(`Visa tracking advanced to ${next}.`))
+				.catch((e) => fail(e, "Could not advance visa stage"));
+		}
 	}
 	function saveNote() {
 		if (noteDraft.trim()) {
@@ -612,9 +618,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					keepName={handoffOffersKeep(pendingHandoff) ? pendingHandoff.fromOpsUserName : null}
 					withReason
 					onAssign={(opsUserId, reason) =>
-						resolveHandoff(pendingHandoff.id, "assign", { opsUserId, reason }).then(() => navigate("/applications"))
+						resolveHandoff(pendingHandoff.id, "assign", { opsUserId, reason })
 					}
-					onKeep={(reason) => resolveHandoff(pendingHandoff.id, "keep", { reason }).then(() => navigate("/applications"))}
+					onKeep={(reason) => resolveHandoff(pendingHandoff.id, "keep", { reason })}
 				/>
 			),
 		});
@@ -754,20 +760,32 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								);
 							})()}
 
-			{app.journey && (
-				<div className="card" style={{ padding: "0.5rem 1rem 0.75rem" }}>
-					<JourneyStepper
-						stageStatuses={app.journey.stageStatuses}
-						nextUnlock={app.journey.nextUnlock}
-						onStep={(stage) => {
-							const t = TAB_FOR_PORTAL_STAGE[stage];
-							if (t && !isLocked(t)) setTab(t);
-						}}
-					/>
+			<div className="card" style={{ padding: "0.5rem 1rem 0.75rem" }}>
+				<div className="cn-stepper cn-stepper--compact">
+					<ol className="cn-stepper__track">
+						{JOURNEY_STAGES.map((s, i) => {
+							const sIdx = stageIdx(s);
+							const cIdx = stageIdx(app.stage);
+							const status = cIdx > sIdx ? "done" : cIdx === sIdx ? "current" : "locked";
+							return (
+								<li
+									key={s}
+									className={`cn-step cn-step--${status}`}
+									aria-current={status === "current" ? "step" : undefined}
+									title={JOURNEY_STAGE_LABELS[s]}
+								>
+									<span className="cn-step__marker" aria-hidden>
+										{status === "done" ? "✓" : i + 1}
+									</span>
+									<span className="cn-step__label">{JOURNEY_STAGE_LABELS[s]}</span>
+								</li>
+							);
+						})}
+					</ol>
 				</div>
-			)}
+			</div>
 
-			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />
+			{nextActions.length > 0 && <NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />}
 
 			<Sheet
 				open={reasonFor !== null}
@@ -804,6 +822,25 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					</div>
 				</form>
 			</Sheet>
+
+			<div className="cn-tabs" role="tablist" style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--background)" }}>
+				{tabs.map((t) => (
+					<button
+						key={t.id}
+						type="button"
+						role="tab"
+						aria-selected={current === t.id}
+						aria-disabled={t.locked}
+						title={t.locked ? t.hint : undefined}
+						className={`cn-tab${current === t.id ? " cn-tab--active" : ""}${t.locked ? " cn-tab--locked" : ""}`}
+						onClick={() => !t.locked && setTab(t.id)}
+					>
+						{t.locked && <span aria-hidden>🔒 </span>}
+						{t.label}
+						{t.id === stageTab && !t.locked && <span className="cn-tab__now" title="Current stage" aria-label="current stage" />}
+					</button>
+				))}
+			</div>
 
 			<details className="cn-work" open={workOpen} onToggle={(e) => setWorkOpen((e.currentTarget as HTMLDetailsElement).open)}>
 				<summary className="cn-work__summary">
@@ -843,25 +880,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</div>
 			</details>
 
-			<div className="cn-tabs" role="tablist">
-				{tabs.map((t) => (
-					<button
-						key={t.id}
-						type="button"
-						role="tab"
-						aria-selected={current === t.id}
-						aria-disabled={t.locked}
-						title={t.locked ? t.hint : undefined}
-						className={`cn-tab${current === t.id ? " cn-tab--active" : ""}${t.locked ? " cn-tab--locked" : ""}`}
-						onClick={() => !t.locked && setTab(t.id)}
-					>
-						{t.locked && <span aria-hidden>🔒 </span>}
-						{t.label}
-						{t.id === stageTab && !t.locked && <span className="cn-tab__now" title="Current stage" aria-label="current stage" />}
-					</button>
-				))}
-			</div>
-
 			{current === "overview" && (
 				<>
 								{/* Target & Assignment */}
@@ -869,9 +887,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 									<p className="eyebrow mb-3">Case facts</p>
 									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(app.branch)}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack || "Not specified"}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
 										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{app.submittedDate}</p></div>
+										{app.applicationConsent && <div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Application Consent</p><p>{app.applicationConsent.decision === "continue" ? "✓ Continuing" : app.applicationConsent.decision}</p></div>}
+										{app.visaConsent && <div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Visa Consent</p><p>{app.visaConsent.decision === "continue" ? "✓ Continuing" : app.visaConsent.decision}</p></div>}
 									</div>
 									{app.consultationId ? (
 										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
@@ -1200,16 +1220,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 														The applicant is ready for visa processing. Assign a specialist to open tracking.
 													</p>
 													{handoff && canResolve ? (
-														<div className="mt-3">
-															<AssignControl
-																stage="visa_processing"
-																staff={assignees}
-																branch={app.branch}
-																keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
-																onAssign={(opsUserId, reason) => resolveHandoff(handoff.id, "assign", { opsUserId, reason })}
-																onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason })}
-															/>
-														</div>
+														<p className="muted mt-2" style={{ fontSize: "var(--text-sm)", color: "var(--primary)" }}>Pending assignment — resolve from the action band above.</p>
 													) : (
 														<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>A manager or coordinator assigns the specialist.</p>
 													)}

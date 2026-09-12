@@ -673,6 +673,33 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		}
 	}
 
+	// The standard documents are collected at consultation and verified
+	// before anything is invoiced. An enrolled case with any outstanding is
+	// a task for its consultant, ahead of the invoice it is holding up.
+	for (const a of applications) {
+		if (a.proceedStatus !== "accepted") continue;
+		const outstanding = (a.documentChecklist ?? []).filter((d) => d.status !== "VERIFIED");
+		if (outstanding.length === 0) continue;
+		const toReview = outstanding.filter((d) => d.status === "UPLOADED").length;
+		q.push({
+			id: `a-docs-${a.id}`,
+			category: toReview > 0 ? "needs_action" : "needs_followup",
+			kind: "application",
+			action: "checklist",
+			record: a,
+			title: a.applicantName,
+			subtitle:
+				toReview > 0
+					? `${toReview} document${toReview === 1 ? "" : "s"} to verify · ${outstanding.length} outstanding`
+					: `${outstanding.length} document${outstanding.length === 1 ? "" : "s"} not uploaded yet`,
+			meta: outstanding.map((d) => d.name).join(", "),
+			branch: a.branch,
+			owner: a.assignedStaff || "—",
+			linkTo: `/applications?id=${a.id}&tab=documents`,
+			priority: toReview > 0 ? PRIORITY.review_application : PRIORITY.chase,
+		});
+	}
+
 	for (const app of applicants) {
 		const pendingDocs = app.documents.filter((d) => d.status === "Pending Review").length;
 		if (pendingDocs > 0) {

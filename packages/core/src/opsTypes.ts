@@ -5,7 +5,7 @@
  * Enterprise* pages can both import them without a circular reference.
  */
 
-import type { SchoolApplication, ProceedStatus } from "century-nit-shared";
+import type { SchoolApplication, ProceedStatus, DocumentChecklistItem } from "century-nit-shared";
 import { INVOICE_STATUS_LABELS as SHARED_INVOICE_STATUS_LABELS } from "century-nit-shared";
 
 export type ConsultationStatus =
@@ -135,6 +135,8 @@ export interface MockConsultation {
 	/** Set when a consultant moves an assigned consultation. */
 	rescheduledTo?: string | null;
 	requestedDocuments?: string[];
+	/** The standard documents for this client, collected at consultation, with their verification state. */
+	documentChecklist?: DocumentChecklistItem[];
 	/** Set on the record projected from the live applicant portal session */
 	isLive?: boolean;
 	/**
@@ -212,6 +214,8 @@ export interface MockApplication {
 	notes: string;
 	comments?: CaseComment[];
 	requestedDocuments?: string[];
+	/** The standard documents for this client, collected at consultation, with their verification state. */
+	documentChecklist?: DocumentChecklistItem[];
 	isLive?: boolean;
 	/** Post-acceptance: visa processing sub-stage */
 	visaStage?: VisaStage;

@@ -95,6 +95,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		slotConfirmed: row.slotConfirmed,
 		comments: row.comments,
 		requestedDocuments: row.requestedDocuments,
+		documentChecklist: row.documentChecklist ?? [],
 		meetingLink: row.meetingUrl ?? undefined,
 		slotDate: row.startsAt ? row.startsAt.slice(0, 10) : undefined,
 		slotTime: row.startsAt
@@ -150,6 +151,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		notes: row.notes ?? "",
 		comments: row.comments,
 		requestedDocuments: row.requestedDocuments,
+		documentChecklist: row.documentChecklist ?? [],
 		visaStage: row.visaStage,
 		visaOutcome: row.visaOutcome ?? null,
 		visaInvoicePaid: row.visaInvoicePaid,

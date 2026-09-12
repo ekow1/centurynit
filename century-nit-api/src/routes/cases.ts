@@ -153,6 +153,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
 import { checkRolePermission } from "../services/roles.js";
+import { documentChecklistForApplication, outstandingDocuments } from "../services/documentChecklist.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -727,6 +728,16 @@ applicationsRouter.openapi(
  * work; turning it into a payable invoice is a separate, finance-gated step.
  */
 async function ensureApplicationProforma(id: string): Promise<typeof schema.invoices.$inferSelect> {
+	// Documents first: they were collected at consultation so applications
+	// never wait on paperwork. Nothing is invoiced while any is outstanding.
+	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
+	if (outstanding.length > 0) {
+		throw new HttpError(
+			409,
+			"DOCUMENTS_OUTSTANDING",
+			`Verify the client's documents before invoicing applications. Outstanding: ${outstanding.join(", ")}.`,
+		);
+	}
 	// Load the application and applicant.
 	const [app] = await db
 		.select()

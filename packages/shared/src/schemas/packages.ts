@@ -32,6 +32,8 @@ export const servicePackageSchema = z.object({
 	features: z.array(z.string()),
 	exclusions: z.array(z.string()),
 	includedFeeKeys: z.array(z.string()),
+	/** Document type ids the client must have verified before applications start. */
+	requiredDocuments: z.array(z.string().min(1).max(64)).default([]),
 	maxSchools: z.number().int().nonnegative().default(0),
 	sortOrder: z.number().int().default(0),
 	active: z.boolean().default(true),
@@ -48,6 +50,7 @@ export const createServicePackageSchema = servicePackageSchema
 		maxSchools: true,
 		currency: true,
 		includedFeeKeys: true,
+		requiredDocuments: true,
 		features: true,
 		exclusions: true,
 		tagline: true,

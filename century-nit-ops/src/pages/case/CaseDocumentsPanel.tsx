@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { documentsApi } from "century-nit-core/api";
-import type { ApplicantDocument } from "century-nit-shared";
+import type { ApplicantDocument, DocumentChecklistItem } from "century-nit-shared";
 import { StatusPill, type Tone } from "century-nit-core/ui";
 import { DocPreviewInline, type DocPreviewData } from "../DocPreviewInline";
 
@@ -33,7 +33,10 @@ export function CaseDocumentsPanel({
 	requestHint = "Nothing requested yet.",
 	onChange,
 	onRequest,
+	checklist,
 }: {
+	/** The standard documents this client must have verified; collected at consultation. */
+	checklist?: DocumentChecklistItem[];
 	/** Portal user who owns the uploads; null until the applicant has an account. */
 	ownerUserId: string | null | undefined;
 	applicantName: string;
@@ -136,10 +139,32 @@ export function CaseDocumentsPanel({
 		);
 	}
 
+	const requiredVerified = checklist?.filter((d) => d.status === "VERIFIED").length ?? 0;
 	return (
 		<>
+			{checklist && checklist.length > 0 && (
+				<div className="card">
+					<div className="cn-docs__head">
+						<p className="eyebrow">Required documents</p>
+						<StatusPill tone={requiredVerified === checklist.length ? "done" : "waiting"} dot>
+							{requiredVerified}/{checklist.length} verified
+						</StatusPill>
+					</div>
+					<p className="muted cn-docs__meta">Collected at consultation. Applications cannot be invoiced until every one is verified.</p>
+					<ul className="cn-docs__requested">
+						{checklist.map((d) => (
+							<li key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "baseline" }}>
+								<span title={d.hint}>{d.name}</span>
+								<StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "waiting" : d.status === "REJECTED" ? "blocked" : "neutral"}>
+									{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "To review" : d.status === "REJECTED" ? "Rejected" : "Not uploaded"}
+								</StatusPill>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
 			<div className="card">
-				<p className="eyebrow mb-2">Requested from the applicant</p>
+				<p className="eyebrow mb-2">Requested from the client</p>
 				{requestedDocuments.length > 0 ? (
 					<ul className="cn-docs__requested">
 						{requestedDocuments.map((d) => (

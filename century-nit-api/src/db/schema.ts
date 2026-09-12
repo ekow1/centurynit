@@ -960,6 +960,8 @@ export const servicePackages = pgTable(
 		features: jsonb("features").$type<string[]>().notNull().default([]),
 		exclusions: jsonb("exclusions").$type<string[]>().notNull().default([]),
 		includedFeeKeys: jsonb("included_fee_keys").$type<string[]>().notNull().default([]),
+		/** Document type ids the client must have verified before applications start. */
+		requiredDocuments: jsonb("required_documents").$type<string[]>().notNull().default([]),
 		maxSchools: integer("max_schools").notNull().default(0),
 		sortOrder: integer("sort_order").notNull().default(0),
 		active: boolean("active").notNull().default(true),

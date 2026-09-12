@@ -2356,26 +2356,32 @@ export {
 	schoolDecisionNote,
 } from "century-nit-shared";
 
-export const REQUIRED_DOCUMENTS = [
+/**
+ * Every document the agency knows how to ask for. A package names the ones
+ * it needs (`requiredDocuments`); the standard set below is the default for
+ * a client who has not chosen a package yet — collected during the
+ * Consultation chapter so nothing is chased later.
+ */
+export const DOCUMENT_TYPES = [
 	{
 		id: "passport",
 		name: "Passport bio page",
-		hint: "Clear colour scan of the photo page — all four corners visible, valid 6+ months beyond travel",
+		hint: "Clear colour scan of the photo page — must be valid for at least 6 months",
 	},
 	{
 		id: "transcript",
 		name: "Academic transcript",
-		hint: "Official or certified copy — every page, with legible stamps and signatures",
+		hint: "Official transcript from your most recent institution",
 	},
 	{
 		id: "diploma",
 		name: "Diploma / certificate",
-		hint: "Highest completed qualification — the final award certificate, not a result slip",
+		hint: "Your highest completed qualification",
 	},
 	{
 		id: "statement",
 		name: "Personal statement",
-		hint: "PDF preferred, 500–800 words — why this course, and why this country",
+		hint: "500–800 words on your goals and why this programme",
 	},
 	{
 		id: "recommendation",
@@ -2387,7 +2393,40 @@ export const REQUIRED_DOCUMENTS = [
 		name: "English proficiency",
 		hint: "IELTS / TOEFL score report, or a waiver letter from your institution",
 	},
+	{
+		id: "cv",
+		name: "CV / résumé",
+		hint: "Education, work and achievements, most recent first",
+	},
+	{
+		id: "financial",
+		name: "Proof of funds",
+		hint: "Bank statement or sponsor letter covering tuition and living costs",
+	},
+	{
+		id: "certificates",
+		name: "Other certificates",
+		hint: "Professional or short-course certificates that support your application",
+	},
+	{
+		id: "photo",
+		name: "Passport photograph",
+		hint: "Recent, plain background, as required for visa forms",
+	},
 ] as const;
+
+export type DocumentTypeId = (typeof DOCUMENT_TYPES)[number]["id"];
+
+/** The standard set, asked of every client at consultation unless their package says otherwise. */
+export const DEFAULT_REQUIRED_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "transcript", "diploma", "statement", "recommendation", "english"];
+
+/** The standard set with its names and hints — what the vault renders when no package applies. */
+export const REQUIRED_DOCUMENTS = DOCUMENT_TYPES.filter((d) => (DEFAULT_REQUIRED_DOCUMENT_IDS as string[]).includes(d.id));
+
+/** Names and hints for a list of document type ids, in the given order; unknown ids are kept with the id as their name. */
+export function documentTypesFor(ids: readonly string[]): { id: string; name: string; hint: string }[] {
+	return ids.map((id) => DOCUMENT_TYPES.find((d) => d.id === id) ?? { id, name: id, hint: "" });
+}
 
 /**
  * Maps a document‑type id (the `documentType` stored on the row) to a
@@ -2408,6 +2447,7 @@ export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
 	statement: "FINANCIAL",
 	sponsorship: "FINANCIAL",
 	recommendation: "ACADEMIC",
+	photo: "IDENTITY",
 	additional: "OTHER",
 };
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PACKAGE_CODE_LABELS, type PackageCode, type ServicePackage } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
+import { DOCUMENT_TYPES, DEFAULT_REQUIRED_DOCUMENT_IDS } from "century-nit-core";
 import { GHS_PER_USD } from "./currency";
 
 function formatCents(cents: number, currency = "USD") {
@@ -32,6 +33,7 @@ function emptyForm() {
 		features: "",
 		exclusions: "",
 		includedFeeKeys: "",
+		requiredDocuments: [...DEFAULT_REQUIRED_DOCUMENT_IDS] as string[],
 		maxSchools: 1,
 		sortOrder: 0,
 		active: true,
@@ -73,6 +75,7 @@ export function EnterprisePackages() {
 			features: arrToStr(pkg.features),
 			exclusions: arrToStr(pkg.exclusions),
 			includedFeeKeys: arrToStr(pkg.includedFeeKeys),
+			requiredDocuments: pkg.requiredDocuments ?? [],
 			maxSchools: pkg.maxSchools,
 			sortOrder: pkg.sortOrder,
 			active: pkg.active,
@@ -97,6 +100,7 @@ export function EnterprisePackages() {
 			features: strToArr(form.features),
 			exclusions: strToArr(form.exclusions),
 			includedFeeKeys: strToArr(form.includedFeeKeys),
+			requiredDocuments: form.requiredDocuments,
 			maxSchools: form.maxSchools,
 			sortOrder: form.sortOrder,
 			active: form.active,
@@ -219,6 +223,31 @@ export function EnterprisePackages() {
 				<div>
 					<label style={{ display: "block", fontSize: "0.75rem", textTransform: "uppercase", marginBottom: "0.35rem" }}>Included fee keys (one per line)</label>
 					<textarea value={form.includedFeeKeys} onChange={(e) => setForm((f) => ({ ...f, includedFeeKeys: e.target.value }))} className="input" style={{ width: "100%", minHeight: "80px" }} />
+				</div>
+				<div>
+					<label style={{ display: "block", fontSize: "0.75rem", textTransform: "uppercase", marginBottom: "0.35rem" }}>Required documents</label>
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem" }}>
+						Collected and verified during the Consultation chapter. Applications cannot be invoiced until every one is verified.
+					</p>
+					<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(14rem, 1fr))", gap: "0.35rem 1rem" }}>
+						{DOCUMENT_TYPES.map((d) => (
+							<label key={d.id} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "var(--text-sm)" }} title={d.hint}>
+								<input
+									type="checkbox"
+									checked={form.requiredDocuments.includes(d.id)}
+									onChange={(e) =>
+										setForm((f) => ({
+											...f,
+											requiredDocuments: e.target.checked
+												? [...f.requiredDocuments, d.id]
+												: f.requiredDocuments.filter((x) => x !== d.id),
+										}))
+									}
+								/>
+								<span>{d.name}</span>
+							</label>
+						))}
+					</div>
 				</div>
 				<div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
 					<label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem" }}>

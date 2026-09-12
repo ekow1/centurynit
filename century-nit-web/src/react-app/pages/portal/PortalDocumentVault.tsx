@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { REQUIRED_DOCUMENTS } from "century-nit-core";
-import { ApiError, documentsApi } from "century-nit-core/api";
+import { ApiError, documentsApi, meApi } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
@@ -77,10 +77,16 @@ export function PortalDocumentVault() {
 	const pickDragCounter = useRef(0);
 	const [pickDragOver, setPickDragOver] = useState(false);
 
+	// Which documents this client needs: their package's list (or the one the
+	// assessment recommended), falling back to the standard set.
+	const [required, setRequired] = useState<{ id: string; name: string; hint: string }[]>(REQUIRED_DOCUMENTS.map((d) => ({ ...d })));
+
 	const loadLive = useCallback(async () => {
 		setLoadError(null);
 		try {
-			const res = await documentsApi.list();
+			const [res, me] = await Promise.all([documentsApi.list(), meApi.application().catch(() => null)]);
+			const list = me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [];
+			if (list.length > 0) setRequired(list.map((d) => ({ id: d.id, name: d.name, hint: d.hint })));
 			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
 		} catch (err) {
 			// Signed-out is no longer reachable here (RequireAuth gates the
@@ -96,7 +102,7 @@ export function PortalDocumentVault() {
 
 	const loading = liveDocs === null && !loadError;
 
-	const rows: VaultRow[] = REQUIRED_DOCUMENTS.map((meta) => {
+	const rows: VaultRow[] = required.map((meta) => {
 		const live = liveDocs?.get(meta.id) ?? null;
 		return {
 			id: meta.id,

@@ -21,6 +21,7 @@ import {
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { normalizeTravelStatus } from "./travelAssistance.js";
+import { documentChecklistFor, documentChecklistForApplication } from "./documentChecklist.js";
 import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
@@ -523,6 +524,11 @@ async function serializeConsultation(row: ConsultationRow, forApplicant = false)
 	const isBookingCancelled = booking?.status === "CANCELLED";
 	const effectiveStatus = isBookingCancelled ? "CANCELLED" : (row.status as ApiConsultation["status"]);
 	const officer = isBookingCancelled ? null : await loadStaff(row.assignedOfficerId);
+	// The standard documents are collected here, in the Consultation chapter.
+	const documentChecklist = await documentChecklistFor({
+		ownerUserId: applicant?.userId ?? null,
+		recommendedPackage: (row.assessmentResult as { recPackage?: string } | null)?.recPackage ?? null,
+	});
 
 	const workflow = ((): ApiConsultation["workflow"] => {
 		const base = { stage: "CONSULTATION", closureReason: null as string | null, nextAction: null as string | null };
@@ -582,6 +588,7 @@ async function serializeConsultation(row: ConsultationRow, forApplicant = false)
 		rescheduleRequestReason: booking?.rescheduleRequestReason ?? null,
 		assessmentResult: row.assessmentResult ?? null,
 		requestedDocuments: row.requestedDocuments ?? [],
+		documentChecklist,
 		comments: comments.map(toComment),
 		profile: (applicant?.profile as ApplicantProfile) ?? emptyProfile(),
 		workflow,
@@ -594,10 +601,11 @@ async function serializeConsultation(row: ConsultationRow, forApplicant = false)
 }
 
 async function serializeApplication(row: ApplicationRow, forApplicant = false): Promise<ApiApplication> {
-	const [applicant, staff, comments] = await Promise.all([
+	const [applicant, staff, comments, documentChecklist] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.assignedStaffId),
 		commentsFor("application", row.id, forApplicant),
+		documentChecklistForApplication(row.id),
 	]);
 
 	// Scoped to this application, not the applicant — an earlier application's
@@ -674,6 +682,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		appFeePaid: row.appFeePaid,
 		travelInvoicePaid: row.travelInvoicePaid,
 		requestedDocuments: row.requestedDocuments ?? [],
+		documentChecklist,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
 		comments: comments.map(toComment),
 		pendingHandoff,

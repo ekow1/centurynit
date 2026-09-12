@@ -171,6 +171,24 @@ export function PortalAwaitingHandler() {
 export function PortalAwaitingInvoice() {
 	const { syncFromServer, syncTick } = useAppState();
 	const navigate = useNavigate();
+	// The invoice waits on the standard documents (collected at consultation);
+	// if any is still outstanding, say so — it is the client's move, not ours.
+	const [outstandingDocs, setOutstandingDocs] = useState<{ name: string; status: string }[]>([]);
+	useEffect(() => {
+		let active = true;
+		meApi
+			.application()
+			.then((me) => {
+				if (!active) return;
+				const list = me.application?.documentChecklist ?? me.consultation?.documentChecklist ?? [];
+				setOutstandingDocs(list.filter((d) => d.status !== "VERIFIED").map((d) => ({ name: d.name, status: d.status })));
+			})
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, [syncTick]);
+	const toUpload = outstandingDocs.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
 
 	// Re-check whenever AppState syncs — which happens on the `invoice.issued`
 	// SSE event — plus a slow fallback interval.
@@ -206,10 +224,27 @@ export function PortalAwaitingInvoice() {
 				<p className="display" style={{ fontSize: "1.2rem" }}>
 					Your school selection has been submitted
 				</p>
-				<p className="muted mt-2">
-					Your consultant is reviewing your selected schools and programmes. The application
-					invoice will be issued shortly — you'll be able to pay it once it's ready.
-				</p>
+				{outstandingDocs.length > 0 ? (
+					<>
+						<p className="muted mt-2">
+							{toUpload.length > 0
+								? `Before the application fee can be raised, ${toUpload.length === 1 ? "one document still needs" : `${toUpload.length} documents still need`} uploading: ${toUpload.map((d) => d.name).join(", ")}.`
+								: `Your consultant is verifying your documents (${outstandingDocs.map((d) => d.name).join(", ")}). The application fee is raised once they are all verified.`}
+						</p>
+						{toUpload.length > 0 && (
+							<div className="row mt-3">
+								<Link to="/portal/documents" className="btn btn--primary">
+									Upload in the vault →
+								</Link>
+							</div>
+						)}
+					</>
+				) : (
+					<p className="muted mt-2">
+						Your consultant is reviewing your selected schools and programmes. The application
+						fee will be raised shortly — you'll be able to pay it once it's issued.
+					</p>
+				)}
 				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
 					You don't need to do anything right now — checking status automatically in the background.
 				</p>
@@ -2073,6 +2108,13 @@ export function PortalConsultation() {
 					const consultationDocs = liveConsultation?.requestedDocuments ?? [];
 					const applicationDocs = liveApplication?.requestedDocuments ?? [];
 					const allRequested = Array.from(new Set([...consultationDocs, ...applicationDocs]));
+					// The standard documents are collected here, in this chapter, so
+					// nothing waits on paperwork later. Not uploaded and rejected are
+					// the client's to act on; uploaded is with the consultant.
+					const checklist = liveApplication?.documentChecklist ?? liveConsultation?.documentChecklist ?? [];
+					const toUpload = checklist.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
+					const toVerify = checklist.filter((d) => d.status === "UPLOADED");
+					const verifiedDocs = checklist.filter((d) => d.status === "VERIFIED");
 					const statusTone: Tone =
 						workflowStatus === "CLOSED" ? "void" : workflowStatus === "COMPLETED" ? "done" : workflowStatus === "IN_PROGRESS" ? "current" : "waiting";
 					const statusLabel =
@@ -2112,10 +2154,22 @@ export function PortalConsultation() {
 							),
 						});
 					}
+					if (toUpload.length > 0) {
+						actions.push({
+							id: "standard-documents",
+							title: `Upload your ${toUpload.length === checklist.length ? "documents" : `${toUpload.length} remaining document${toUpload.length === 1 ? "" : "s"}`}`,
+							detail: toUpload.map((d) => d.name).join(" · "),
+							action: (
+								<Button to="/portal/documents" variant="primary">
+									Open vault →
+								</Button>
+							),
+						});
+					}
 					if (allRequested.length > 0) {
 						actions.push({
 							id: "documents",
-							title: `Upload ${allRequested.length} document${allRequested.length === 1 ? "" : "s"}`,
+							title: `Upload ${allRequested.length} requested document${allRequested.length === 1 ? "" : "s"}`,
 							detail: allRequested.join(" · "),
 							action: (
 								<Button to="/portal/documents" variant="secondary">
@@ -2215,6 +2269,37 @@ export function PortalConsultation() {
 									title="Your next steps"
 									emptyTitle="Nothing needed from you right now"
 								/>
+
+								{checklist.length > 0 && (
+									<div className="card card--pad">
+										<div className="cn-case__top">
+											<p className="eyebrow" style={{ margin: 0 }}>Your documents</p>
+											<StatusPill tone={verifiedDocs.length === checklist.length ? "done" : toVerify.length > 0 ? "current" : "waiting"} dot>
+												{verifiedDocs.length}/{checklist.length} verified
+											</StatusPill>
+										</div>
+										<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
+											We collect these now so your applications never wait on paperwork.
+										</p>
+										<ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0", display: "grid", gap: "0.4rem" }}>
+											{checklist.map((d) => (
+												<li key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", fontSize: "0.9rem" }}>
+													<span title={d.hint}>{d.name}</span>
+													<StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "current" : d.status === "REJECTED" ? "blocked" : "neutral"}>
+														{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "Being checked" : d.status === "REJECTED" ? "Needs re-upload" : "To upload"}
+													</StatusPill>
+												</li>
+											))}
+										</ul>
+										{toUpload.length > 0 && (
+											<div className="row mt-3">
+												<Button to="/portal/documents" variant="secondary">
+													Upload in the vault →
+												</Button>
+											</div>
+										)}
+									</div>
+								)}
 
 								<div className="card card--pad">
 									<div className="cn-case__top">

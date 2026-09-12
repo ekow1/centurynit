@@ -533,6 +533,13 @@
       "when": 1789600004000,
       "tag": "0077_travel_one_path",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1789600005000,
+      "tag": "0078_package_required_documents",
+      "breakpoints": true
     }
   ]
 }

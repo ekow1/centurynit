@@ -837,6 +837,7 @@ export function ConsultationDetail({
 						canReview={isMine || opsRole === "manager" || opsRole === "coordinator"}
 						requestHint="Nothing requested yet — use Request documents in the work panel."
 						onChange={setRealDocs}
+						checklist={consultation.documentChecklist}
 					/>
 				</div>
 			)}

@@ -529,6 +529,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const showVisa = (app.visaStage && app.visaStage !== "locked") || stageIdx(app.stage) >= stageIdx("visa_processing") || Boolean(visaInvoice);
 	const selectedTa = travelRequests.find((t) => t.applicationId === app.id) ?? null;
 	const showTravel = Boolean(selectedTa) || stageIdx(app.stage) >= stageIdx("travel_assistance");
+	// The standard documents were collected at consultation; nothing is
+	// invoiced while any is still unverified (the API refuses too).
+	const outstandingDocs = (app.documentChecklist ?? []).filter((d) => d.status !== "VERIFIED").map((d) => d.name);
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 	// Why a control is off, in the words the server would use to refuse it.
@@ -1049,9 +1052,20 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 													Issue the application fee invoice so the applicant can pay. Per-school line items are added as schools are selected.
 												</p>
 												<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-													<button type="button" className="btn btn--sm btn--primary" onClick={handleIssueApplicationInvoice} disabled={issuingInvoice}>
+													<button
+														type="button"
+														className="btn btn--sm btn--primary"
+														onClick={handleIssueApplicationInvoice}
+														disabled={issuingInvoice || outstandingDocs.length > 0}
+														title={outstandingDocs.length > 0 ? `Verify first: ${outstandingDocs.join(", ")}` : undefined}
+													>
 														{issuingInvoice ? (canIssueInvoices ? "Issuing…" : "Raising…") : canIssueInvoices ? "Issue application invoice" : "Raise application invoice"}
 													</button>
+													{outstandingDocs.length > 0 && (
+														<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>
+															Verify documents first · {outstandingDocs.length} outstanding →
+														</button>
+													)}
 												</div>
 											</>
 										) : (
@@ -1584,6 +1598,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					canReview={app.assignedStaffEmail === opsUser?.email || opsRole === "manager" || opsRole === "coordinator"}
 					requestHint="Nothing requested yet."
 					onRequest={canWork ? (docs) => requestApplicationDocs(app.id, docs).then(() => flash("Document request sent.")) : undefined}
+					checklist={app.documentChecklist}
 				/>
 			)}
 		</div>

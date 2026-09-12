@@ -368,6 +368,16 @@ export const applicantSchema = z.object({
 });
 export type ApiApplicant = z.infer<typeof applicantSchema>;
 
+/** One required document and where the client's upload of it stands. */
+export const documentChecklistItemSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	hint: z.string(),
+	status: z.enum(["PENDING_UPLOAD", "UPLOADED", "VERIFIED", "REJECTED"]),
+	documentId: z.string().uuid().nullable(),
+});
+export type DocumentChecklistItem = z.infer<typeof documentChecklistItemSchema>;
+
 export const consultationSchema = z.object({
 	id: z.string().uuid(),
 	reference: z.string(),
@@ -400,6 +410,8 @@ export const consultationSchema = z.object({
 	rescheduleRequestReason: z.string().nullable().optional(),
 	assessmentResult: assessmentResultSchema.nullable(),
 	requestedDocuments: z.array(z.string()),
+	/** The standard documents for this client, collected at consultation, with their verification state. */
+	documentChecklist: z.array(documentChecklistItemSchema).default([]),
 	comments: z.array(caseCommentSchema),
 	profile: applicantProfileSchema,
 	workflow: consultationWorkflowSchema,
@@ -524,6 +536,8 @@ export const applicationSchema = z.object({
 	travelInvoicePaid: z.boolean(),
 	travelAssistanceStatus: travelAssistanceStatusSchema.nullable().optional(),
 	requestedDocuments: z.array(z.string()),
+	/** The standard documents for this client, collected at consultation, with their verification state. */
+	documentChecklist: z.array(documentChecklistItemSchema).default([]),
 	preDepartureTasks: z.array(
 		z.object({
 			id: z.string(),

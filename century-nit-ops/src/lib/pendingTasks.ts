@@ -739,3 +739,39 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 
 	return sortTasks(q);
 }
+
+/**
+ * The pending tasks for one application — the same rules as the dashboard,
+ * scoped to one case, so a handler who opens the case from a task sees the
+ * same next step they were sent to do. Consultation, applicant and lead
+ * tasks are not case-scoped and are left out.
+ */
+export function tasksForApplication(
+	app: MockApplication,
+	inputs: Pick<PendingTaskInputs, "handoffs" | "travelRequests" | "invoices">,
+): PendingTask[] {
+	const all = buildPendingTasks({
+		consultations: [],
+		applications: [app],
+		applicants: [],
+		handoffs: inputs.handoffs.filter((h) => h.applicationId === app.id),
+		travelRequests: (inputs.travelRequests ?? []).filter((t) => t.applicationId === app.id),
+		invoiceRows: buildInvoiceRows(inputs.invoices.filter((i) => i.applicationId === app.id)),
+		invoices: inputs.invoices,
+		leads: [],
+		liveBookingIds: new Set(),
+	});
+	return all.filter((t) => {
+		switch (t.kind) {
+			case "application":
+			case "visa":
+				return t.record.id === app.id;
+			case "handoff":
+			case "travel":
+			case "invoice":
+				return t.record.applicationId === app.id;
+			default:
+				return false;
+		}
+	});
+}

@@ -1,24 +1,24 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { CaseWorkPanel } from "./CaseWorkPanel";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { TaQueueRow } from "./TravelRequestCard";
-import { handoffOffersKeep, timeAgo } from "../lib/pendingTasks";
+import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
+import { handoffOffersKeep, tasksForApplication, taskActionLabel, timeAgo, type PendingTask } from "../lib/pendingTasks";
 import { listInvoices, issueApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
-import { AssignControl, CaseHeader, InvoiceCard, StatusPill } from "century-nit-core/ui";
+import { AssignControl, CaseHeader, InvoiceCard, JourneyStepper, NextActionBand, Sheet, type NextAction } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
 	ALLOWED_DOCUMENT_TYPES,
 	MAX_DOCUMENT_BYTES,
+	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
-	PORTAL_STAGE_LABELS,
-	PORTAL_STAGE_ORDER,
 	VISA_STAGE_LABELS,
+	canAdvanceToStage,
 	TRAVEL_STATUS_LABELS,
-	type ApplicantDocument,
 	type ApplicationActivityEvent,
 	canOwnStage,
 	schoolDecisionNote,
@@ -27,7 +27,7 @@ import {
 	type SchoolOutcome,
 	type VisaStage,
 } from "century-nit-shared";
-import { schoolsApi, documentsApi, ApiError } from "century-nit-core/api";
+import { schoolsApi, ApiError } from "century-nit-core/api";
 
 /**
  * One case, one view.
@@ -292,6 +292,9 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents" | "activity";
 
 /** The chapter a case is currently in — where the detail opens. */
+const TAB_IDS: TabId[] = ["overview", "consultation", "application", "visa", "travel", "payments", "documents", "activity"];
+const isTabId = (v: string): v is TabId => (TAB_IDS as string[]).includes(v);
+
 /** Which tab a portal stage lives on — the case opens where the applicant is. */
 const TAB_FOR_PORTAL_STAGE: Record<string, TabId> = {
 	new: "consultation",
@@ -445,14 +448,32 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		if (!item) return;
 		await toggleApplicationChecklist(app.id, item.id, !item.checked);
 	}
-	async function handleRecordProceed() {
-		const reason = window.prompt("Why are you recording consent on the applicant's behalf?", "");
-		if (reason === null || reason.trim() === "") return;
+	// Consent override and decline both need a reason; a sheet asks for it
+	// (a browser prompt cannot be styled, validated or read by a screen reader).
+	const [reasonFor, setReasonFor] = useState<"record" | "decline" | null>(null);
+	const [reasonDraft, setReasonDraft] = useState("");
+	const [reasonBusy, setReasonBusy] = useState(false);
+	function handleRecordProceed() {
+		setReasonDraft("");
+		setReasonFor("record");
+	}
+	async function submitReason() {
+		const reason = reasonDraft.trim();
+		if (reasonFor === "record" && !reason) return;
+		setReasonBusy(true);
 		try {
-			await recordProceed(app.appId, reason.trim());
-			flash("Applicant consent recorded — the gate is now open.");
+			if (reasonFor === "record") {
+				await recordProceed(app.appId, reason);
+				flash("Applicant consent recorded — the gate is now open.");
+			} else if (reasonFor === "decline") {
+				await declineProceed(app.appId, reason);
+				flash("Applicant declined to proceed — the case is paused.");
+			}
+			setReasonFor(null);
 		} catch (err) {
-			fail(err, "Could not record consent");
+			fail(err, reasonFor === "record" ? "Could not record consent" : "Could not record decline");
+		} finally {
+			setReasonBusy(false);
 		}
 	}
 	async function handleReinviteProceed() {
@@ -463,33 +484,32 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			fail(err, "Could not re-invite");
 		}
 	}
-	async function handleDeclineProceed() {
-		const reason = window.prompt("Record why the applicant is pausing (optional):", "");
-		if (reason === null) return;
-		try {
-			await declineProceed(app.appId, reason);
-			flash("Applicant declined to proceed — the case is paused.");
-		} catch (err) {
-			fail(err, "Could not record decline");
-		}
+	function handleDeclineProceed() {
+		setReasonDraft("");
+		setReasonFor("decline");
 	}
 
-	// Tab state: the host's chapter if it asked for one, else where the case is.
-	const [tab, setTab] = useState<TabId>(() => initialTab ?? currentTabFor(app));
-	useEffect(() => setTab(initialTab ?? currentTabFor(app)), [app.id, initialTab]);
-
-	// The applicant's uploads, for the Documents tab.
-	const [docs, setDocs] = useState<ApplicantDocument[]>([]);
-	const [docsLoading, setDocsLoading] = useState(false);
+	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
+	// the right chapter and a refresh keeps it. Precedence: the URL, then the
+	// host's chapter, then where the case is.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const urlTab = searchParams.get("tab");
+	const [tab, setTabState] = useState<TabId>(() => (urlTab && isTabId(urlTab) ? urlTab : initialTab ?? currentTabFor(app)));
 	useEffect(() => {
-		if (!app.applicantUserId) return;
-		setDocsLoading(true);
-		documentsApi
-			.list({ ownerUserId: app.applicantUserId })
-			.then((res) => setDocs(res.documents))
-			.catch(() => setDocs([]))
-			.finally(() => setDocsLoading(false));
-	}, [app.applicantUserId]);
+		setTabState(urlTab && isTabId(urlTab) ? urlTab : initialTab ?? currentTabFor(app));
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive only when the case or host changes
+	}, [app.id, initialTab]);
+	const setTab = (next: TabId) => {
+		setTabState(next);
+		setSearchParams(
+			(prev) => {
+				const p = new URLSearchParams(prev);
+				p.set("tab", next);
+				return p;
+			},
+			{ replace: true },
+		);
+	};
 
 	// Which stage bodies apply to this case.
 	const stageIdx = (s: string) => ["document_verification", "school_submission", "offer_letter_review", "visa_processing", "travel_assistance", "payment_execution", "completed"].indexOf(s);
@@ -544,6 +564,137 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const stageTab = currentTabFor(app);
 	const current = !isLocked(tab) ? tab : !isLocked(stageTab) ? stageTab : "overview";
 
+	// What this case is waiting on from us — the same tasks the dashboard
+	// lists for it, plus the three gates that only exist here (handoff,
+	// consent, acceptance), each with the control that clears it.
+	const pendingHandoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending") ?? null;
+	const nextActions: NextAction[] = [];
+	if (pendingHandoff) {
+		const stageLabel = JOURNEY_STAGE_LABELS[pendingHandoff.stage as JourneyStage] ?? pendingHandoff.stage;
+		const why =
+			pendingHandoff.source === "deposit_payment"
+				? "10% deposit received — this case needs a handler before school selection can proceed."
+				: pendingHandoff.source === "visa_payment" || pendingHandoff.source === "visa_consent_continue"
+					? "The applicant is ready for visa processing — assign a visa specialist."
+					: pendingHandoff.source === "offboarding"
+						? "The previous handler has left — this stage needs a new owner."
+						: `This case needs a handler for ${stageLabel}.`;
+		nextActions.push({
+			id: `handoff-${pendingHandoff.id}`,
+			title: `Handler assignment required · ${stageLabel}`,
+			detail: why,
+			tone: "blocked",
+			action: (
+				<AssignControl
+					stage={pendingHandoff.stage}
+					staff={assignees}
+					branch={app.branch}
+					currentName={null}
+					keepName={handoffOffersKeep(pendingHandoff) ? pendingHandoff.fromOpsUserName : null}
+					withReason
+					onAssign={(opsUserId, reason) =>
+						resolveHandoff(pendingHandoff.id, "assign", { opsUserId, reason }).then(() => navigate("/applications"))
+					}
+					onKeep={(reason) => resolveHandoff(pendingHandoff.id, "keep", { reason }).then(() => navigate("/applications"))}
+				/>
+			),
+		});
+	}
+	if (app.proceedStatus !== "accepted") {
+		nextActions.push({
+			id: "consent",
+			title:
+				app.proceedStatus === "paused"
+					? "Applicant placed the application on hold"
+					: app.proceedStatus === "declined"
+						? "Applicant opted out"
+						: "Awaiting the applicant's consent to proceed",
+			detail:
+				app.proceedStatus === "paused"
+					? "They can resume from their portal, or you can record consent or re-invite them."
+					: app.proceedStatus === "declined"
+						? "Re-invite to let the applicant reopen it, or record consent on their behalf."
+						: "The applicant must confirm in the portal before the application can start.",
+			tone: "waiting",
+			action: (
+				<>
+					<button type="button" onClick={handleRecordProceed} className="btn btn--sm btn--primary">
+						Record consent
+					</button>
+					{app.proceedStatus === "invited" && (
+						<button type="button" onClick={handleDeclineProceed} className="btn btn--sm btn--ghost">
+							Record decline
+						</button>
+					)}
+					{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
+						<button type="button" onClick={() => void handleReinviteProceed()} className="btn btn--sm btn--ghost">
+							Re-invite applicant
+						</button>
+					)}
+				</>
+			),
+		});
+	} else if (app.status !== "Accepted") {
+		nextActions.push({
+			id: "accept",
+			title: `Application is ${app.status} — accept it to activate the applicant`,
+			detail: "Accepting marks the application approved and creates or activates the applicant record.",
+			action: (
+				<button type="button" onClick={() => handleAcceptApplication()} className="btn btn--sm btn--primary">
+					Accept & approve
+				</button>
+			),
+		});
+	}
+	// Stage advance lives here too, so nobody is sent to the Workflow board.
+	// The shared guard says why it is blocked; ready cases get the button.
+	const coarseStage = (JOURNEY_STAGES.find((st) => st === app.stage) ?? JOURNEY_STAGES[0]) as JourneyStage;
+	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
+	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
+	if (nextStage && !advanceBlock && (canAssignWork || app.assignedStaffEmail === opsUser?.email)) {
+		nextActions.push({
+			id: "advance",
+			title: `Ready to advance to ${JOURNEY_STAGE_LABELS[nextStage]}`,
+			detail: `Every requirement for ${JOURNEY_STAGE_LABELS[coarseStage]} is met.`,
+			tone: "done",
+			action: (
+				<button
+					type="button"
+					className="btn btn--sm btn--primary"
+					onClick={() =>
+						void setApplicationStage(app.appId, nextStage)
+							.then(() => flash(`Advanced to ${JOURNEY_STAGE_LABELS[nextStage]}.`))
+							.catch((e) => fail(e, "Could not advance the case"))
+					}
+				>
+					Advance →
+				</button>
+			),
+		});
+	}
+	for (const task of tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices })) {
+		// The three gates above already cover these.
+		if (task.kind === "handoff") continue;
+		if (task.kind === "application" && (task.action === "assign" || task.action === "review")) continue;
+		const tabFor: Partial<Record<PendingTask["kind"], TabId>> = { application: "application", visa: "visa", travel: "travel" };
+		const target = tabFor[task.kind];
+		nextActions.push({
+			id: task.id,
+			title: task.subtitle,
+			detail: task.meta || null,
+			action:
+				target && !isLocked(target) ? (
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab(target)}>
+						{taskActionLabel(task)} →
+					</button>
+				) : (
+					<Link to={task.linkTo} className="btn btn--sm btn--ghost">
+						{taskActionLabel(task)} →
+					</Link>
+				),
+		});
+	}
+
 	// The case timeline, for the Activity tab; refetched when work is done here.
 	const [activity, setActivity] = useState<ApplicationActivityEvent[]>([]);
 	const [activityLoading, setActivityLoading] = useState(false);
@@ -580,6 +731,57 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								);
 							})()}
 
+			{app.journey && (
+				<div className="card" style={{ padding: "0.5rem 1rem 0.75rem" }}>
+					<JourneyStepper
+						stageStatuses={app.journey.stageStatuses}
+						nextUnlock={app.journey.nextUnlock}
+						onStep={(stage) => {
+							const t = TAB_FOR_PORTAL_STAGE[stage];
+							if (t && !isLocked(t)) setTab(t);
+						}}
+					/>
+				</div>
+			)}
+
+			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />
+
+			<Sheet
+				open={reasonFor !== null}
+				onClose={() => (reasonBusy ? undefined : setReasonFor(null))}
+				title={reasonFor === "record" ? "Record consent on the applicant's behalf" : "Record that the applicant is not proceeding"}
+			>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						void submitReason();
+					}}
+					className="cn-assign"
+				>
+					<p className="cn-assign__current">
+						{reasonFor === "record"
+							? "Only after the applicant confirmed by phone or in person. Say who confirmed and when — it goes on the case record."
+							: "Why the applicant is pausing, if they said (optional). They can resume from the portal at any time."}
+					</p>
+					<textarea
+						className="input"
+						rows={3}
+						value={reasonDraft}
+						onChange={(e) => setReasonDraft(e.target.value)}
+						placeholder={reasonFor === "record" ? "e.g. Confirmed by phone with the applicant on 12 Sep" : "Reason (optional)"}
+						autoFocus
+					/>
+					<div className="cn-assign__row">
+						<button type="submit" className="btn btn--primary" disabled={reasonBusy || (reasonFor === "record" && !reasonDraft.trim())}>
+							{reasonBusy ? "Saving…" : reasonFor === "record" ? "Record consent" : "Record decline"}
+						</button>
+						<button type="button" className="btn btn--ghost" onClick={() => setReasonFor(null)} disabled={reasonBusy}>
+							Cancel
+						</button>
+					</div>
+				</form>
+			</Sheet>
+
 			<div className="cn-tabs" role="tablist">
 				{tabs.map((t) => (
 					<button
@@ -601,147 +803,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			{current === "overview" && (
 				<>
-							{(() => {
-								if (!app?.journey) return null;
-								// The applicant's own journey, from the same derivation the
-								// portal reads — what the client sees is what we see.
-								const { journey } = app;
-								const steps = PORTAL_STAGE_ORDER.filter((id) => id !== "new").map((id) => ({
-									id,
-									label: PORTAL_STAGE_LABELS[id],
-									status: journey.stageStatuses[id] ?? "locked",
-								}));
-								const tone = {
-									done: { bg: "#dcfce7", fg: "#16a34a", mark: "✓" },
-									current: { bg: "#fef3c7", fg: "#d97706", mark: "●" },
-									skipped: { bg: "#fee2e2", fg: "#b91c1c", mark: "↷" },
-									locked: { bg: "#f3f4f6", fg: "#9ca3af", mark: "○" },
-								} as const;
-								return (
-									<div className="card" style={{ padding: "0.75rem 1rem" }}>
-										<p className="eyebrow mb-1" style={{ fontSize: "var(--text-xs)" }}>Applicant's journey</p>
-										<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", margin: "0 0 0.5rem" }}>
-											{journey.label}
-											{journey.nextUnlock && (
-												<span className="muted" style={{ fontWeight: 400 }}> · next: {journey.nextUnlock}</span>
-											)}
-										</p>
-										<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-											{steps.map((s) => (
-												<span
-													key={s.id}
-													title={s.status === "skipped" ? "Passed without its signal being met" : s.status}
-													style={{
-														fontSize: "var(--text-xs)",
-														padding: "0.2rem 0.5rem",
-														borderRadius: "var(--radius-sm)",
-														background: tone[s.status].bg,
-														color: tone[s.status].fg,
-														fontWeight: s.status === "current" ? 700 : s.status === "locked" ? 400 : 600,
-													}}
-												>
-													{tone[s.status].mark} {s.label}
-												</span>
-											))}
-										</div>
-									</div>
-								);
-							})()}
-							{(() => {
-								// Any pending handoff on this case — school, visa, travel or
-								// finance — not just the school one.
-								const handoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending");
-								if (!handoff) return null;
-								const stageLabel = JOURNEY_STAGE_LABELS[handoff.stage as JourneyStage] ?? handoff.stage;
-								const why =
-									handoff.source === "deposit_payment"
-										? "10% deposit received — this case needs a handler before school selection can proceed."
-										: handoff.source === "visa_payment" || handoff.source === "visa_consent_continue"
-											? "The applicant is ready for visa processing — assign a visa specialist."
-											: handoff.source === "offboarding"
-												? "The previous handler has left — this stage needs a new owner."
-												: `This case needs a handler for ${stageLabel}.`;
-								return (
-									<div className="card">
-										<p className="eyebrow mb-1">Handler assignment required · {stageLabel}</p>
-										<p className="mt-2" style={{ fontSize: "var(--text-sm)" }}>{why}</p>
-										<div className="mt-3">
-											<AssignControl
-												stage={handoff.stage}
-												staff={assignees}
-												branch={app.branch}
-												currentName={null}
-												keepName={handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
-												withReason
-												onAssign={(opsUserId, reason) =>
-													resolveHandoff(handoff.id, "assign", { opsUserId, reason }).then(() => navigate("/applications"))
-												}
-												onKeep={(reason) => resolveHandoff(handoff.id, "keep", { reason }).then(() => navigate("/applications"))}
-											/>
-										</div>
-									</div>
-								);
-							})()}
-							{app.proceedStatus !== "accepted" && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Consent Gate</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												{app.proceedStatus === "paused"
-													? "Applicant placed application on hold (Paused)"
-													: app.proceedStatus === "declined"
-														? "Applicant opted out (Declined)"
-														: "Awaiting the applicant's consent to proceed"}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												{app.proceedStatus === "paused"
-													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
-													: app.proceedStatus === "declined"
-														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
-														: "The applicant must confirm in the portal before document verification can advance."}
-											</p>
-										</div>
-										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
-												Record consent (override)
-											</button>
-											{app.proceedStatus === "invited" && (
-												<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-													Record decline
-												</button>
-											)}
-											{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
-												<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-													Re-invite applicant
-												</button>
-											)}
-										</div>
-									</div>
-								</div>
-							)}
-							{app.status !== "Accepted" && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Application Lifecycle Action</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												Status: {app.status}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												Accepting will mark this application as Approved & create/activate the Applicant record.
-											</p>
-										</div>
-										<button
-											onClick={() => handleAcceptApplication()}
-											className="btn btn--primary"
-											style={{ whiteSpace: "nowrap" }}
-										>
-											✓ Accept & Approve
-										</button>
-									</div>
-								</div>
-							)}
 								{/* Target & Assignment */}
 								<div className="card">
 									<p className="eyebrow mb-3">Assignment</p>
@@ -1155,15 +1216,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 										</div>
 									)}
 								</div>
-{app.visaStage === "complete" && (
-							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>Visa approved</p>
-								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-									This visa case is complete — the applicant can proceed to the payment plan. Advance this
-									case to Payment Execution on the Workflow board when ready.
-								</p>
-							</div>
-						)}
 				</>
 			)}
 
@@ -1300,14 +1352,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 									</div>
 								)}
 
-						{app.stage === "travel_assistance" && app.agencySettled && app.travelClearance === "cleared" && pdProg === 100 && (
-							<div className="card" style={{ background: "#dcfce7", borderColor: "#86efac" }}>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: "#166534" }}>All clear</p>
-								<p style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem", color: "#166534" }}>
-									All milestones complete. Use the Workflow board to mark the case as Completed.
-								</p>
-							</div>
-						)}
 				</>
 			)}
 
@@ -1364,45 +1408,14 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			)}
 
 			{current === "documents" && (
-				<>
-					<div className="card">
-						<p className="eyebrow mb-2">Requested from the applicant</p>
-						{(app.requestedDocuments?.length ?? 0) > 0 ? (
-							<ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "var(--text-sm)" }}>
-								{app.requestedDocuments!.map((d) => <li key={d}>{d}</li>)}
-							</ul>
-						) : (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Nothing requested yet — use Activity → Request documents.</p>
-						)}
-					</div>
-					<div className="card">
-						<p className="eyebrow mb-2">Uploaded</p>
-						{docsLoading ? (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</p>
-						) : docs.length === 0 ? (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>The applicant has not uploaded any documents.</p>
-						) : (
-							<table className="ops-table" style={{ width: "100%", fontSize: "var(--text-sm)" }}>
-								<thead><tr><th>Type</th><th>File</th><th>Status</th><th>Uploaded</th></tr></thead>
-								<tbody>
-									{docs.map((d) => (
-										<tr key={d.id}>
-											<td>{d.documentType}</td>
-											<td>{d.fileName}</td>
-											<td><StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "REJECTED" ? "blocked" : d.status === "UPLOADED" ? "waiting" : "neutral"}>{d.status.replace(/_/g, " ").toLowerCase()}</StatusPill></td>
-											<td>{d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : "—"}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						)}
-						{app.applicantUserId && (
-							<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
-								<Link to={`/documents?owner=${app.applicantUserId}`} className="link-arrow">Review in Document Vault →</Link>
-							</p>
-						)}
-					</div>
-				</>
+				<CaseDocumentsPanel
+					ownerUserId={app.applicantUserId}
+					applicantName={app.applicantName}
+					reference={app.appId}
+					requestedDocuments={app.requestedDocuments ?? []}
+					canReview={app.assignedStaffEmail === opsUser?.email || opsRole === "manager" || opsRole === "coordinator"}
+					requestHint="Nothing requested yet — use Activity → Request documents."
+				/>
 			)}
 
 			{current === "activity" && (

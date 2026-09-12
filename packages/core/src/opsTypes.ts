@@ -233,8 +233,6 @@ export interface MockApplication {
 	agencySettled?: boolean;
 	/** Pre-departure checklist tasks */
 	preDepartureTasks?: PreDepartureTask[];
-	/** Travel clearance status */
-	travelClearance?: TravelClearance;
 	/** Consent gate: "invited" (awaiting applicant), "accepted", "declined", "paused" */
 	proceedStatus?: ProceedStatus;
 	/** Number of target schools requested in service package */
@@ -323,8 +321,6 @@ export interface MockApplicant {
 	agencySettled?: boolean;
 	/** Pre-departure checklist tasks */
 	preDepartureTasks?: PreDepartureTask[];
-	/** Travel clearance status */
-	travelClearance?: TravelClearance;
 	/** Number of target schools tracking */
 	targetSchoolCount?: number | null;
 }

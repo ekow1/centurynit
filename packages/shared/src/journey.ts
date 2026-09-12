@@ -1,6 +1,7 @@
 import {
 	JOURNEY_STAGES,
 	PORTAL_STAGE_ORDER,
+	isTravelResolved,
 	type JourneyStage,
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
@@ -76,7 +77,6 @@ export type JourneySignals = {
 	visaDone: boolean;
 	/** The authority refused the visa; the case waits at the decision step for a reapplication. */
 	visaRefused?: boolean;
-	travelInvoicePaid: boolean;
 	/** Latest travel assistance request status, if any. */
 	travelAssistanceStatus: TravelAssistanceStatus | string | null;
 	/** Chosen payment plan id (`"full"` / `"installment"`), if any. */
@@ -84,8 +84,6 @@ export type JourneySignals = {
 	/** Number of agency milestones paid. */
 	agencyStageIndex: number;
 	agencySettled: boolean;
-	/** `applications.travelClearance === "cleared"`. */
-	travelCleared: boolean;
 	/** The pre-departure checklist exists and every item is ticked. */
 	preDepartureDone: boolean;
 	/** `applications.stage`, when an application exists. */
@@ -179,14 +177,15 @@ const STAGE_DONE: Record<JourneyPortalStage, (f: Facts) => boolean> = {
 };
 
 function facts(s: JourneySignals): Facts {
-	const ta = s.travelAssistanceStatus;
-	const taResolved = ta === "cleared" || ta === "declined" || ta === "on_hold";
+	// Travel is done when the flight is booked, or the applicant is booking
+	// their own, or has paused it — the request's status is the one signal.
+	const taResolved = isTravelResolved(s.travelAssistanceStatus);
 	// Per-plan settlement: a full plan needs the agency fee settled in full,
 	// an installment plan only its first installment (the deposit).
 	const planSettled =
 		Boolean(s.paymentPlanId) &&
 		(s.paymentPlanId === "installment" ? s.agencyStageIndex >= 1 : s.agencySettled);
-	const isCompleted = s.travelCleared && planSettled && s.travelInvoicePaid && s.preDepartureDone;
+	const isCompleted = taResolved && planSettled && s.preDepartureDone;
 	return {
 		...s,
 		hasProceeded: s.proceedStatus === "accepted",
@@ -231,13 +230,8 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		tracking: f.appInvoicePaid && f.hasSelection,
 		visa: f.hasAdmitted,
 		travel_assistance: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
-		// Opens once the travel-assistance request is resolved, or — for a case
-		// that never raised one — once the ticket is paid.
-		payment_execution:
-			f.hasAdmitted &&
-			f.visaInvoicePaid &&
-			f.visaDone &&
-			(f.taResolved || (f.travelInvoicePaid && !f.travelAssistanceStatus)),
+		// Opens once travel is resolved: booked, booking their own, or on hold.
+		payment_execution: f.hasAdmitted && f.visaInvoicePaid && f.visaDone && f.taResolved,
 		complete: f.isCompleted,
 	};
 

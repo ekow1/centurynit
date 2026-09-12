@@ -63,7 +63,7 @@ import type {
 	TravelAssistanceRequest,
 	TravelAssistanceDecisionInput,
 	TravelAssistanceBookingInput,
-	TravelAssistanceChecklistInput,
+	TravelAssistanceInvoiceInput,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
 
@@ -931,12 +931,6 @@ export const applicationsApi = {
 			...json({ stage, note, outcome }),
 		});
 	},
-	setTravelClearance(id: string, cleared: boolean): Promise<ApiApplication> {
-		return request(`${API_PREFIX}/applications/${id}/travel-clearance`, {
-			method: "POST",
-			...json({ cleared }),
-		});
-	},
 	comment(id: string, input: AddCommentInput): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/comments`, {
 			method: "POST",
@@ -967,23 +961,11 @@ export const applicationsApi = {
 			...json({ opsUserId }),
 		});
 	},
-	raiseTravelInvoice(
-		id: string,
-		input: {
-			ticketAmountCents: number;
-			carrier?: string;
-			flightNumber?: string;
-			notes?: string;
-		},
-	): Promise<TravelAssistanceRequest> {
+	/** Raise the ticket invoice (fare + flight). Issued at once when the caller holds the invoices module. */
+	raiseTravelInvoice(id: string, input: TravelAssistanceInvoiceInput): Promise<TravelAssistanceRequest> {
 		return request(`${API_PREFIX}/applications/travel-assistance/${id}/invoice`, {
 			method: "POST",
 			...json(input),
-		});
-	},
-	issueTravelInvoice(id: string): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/applications/travel-assistance/${id}/issue-invoice`, {
-			method: "POST",
 		});
 	},
 	recordTravelBooking(
@@ -992,15 +974,6 @@ export const applicationsApi = {
 	): Promise<TravelAssistanceRequest> {
 		return request(`${API_PREFIX}/applications/travel-assistance/${id}/booking`, {
 			method: "POST",
-			...json(input),
-		});
-	},
-	updateTravelChecklist(
-		id: string,
-		input: TravelAssistanceChecklistInput,
-	): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/applications/travel-assistance/${id}/checklist`, {
-			method: "PATCH",
 			...json(input),
 		});
 	},
@@ -1154,13 +1127,6 @@ export const meApi = {
 		});
 	},
 
-	/** Choose a payment plan after the flight is booked — clears to travel. */
-	chooseTravelPlan(input: { paymentPlanId: "full" | "installment" }): Promise<TravelAssistanceRequest> {
-		return request(`${API_PREFIX}/me/application/travel-assistance/plan`, {
-			method: "POST",
-			...json(input),
-		});
-	},
 
 	/** Respond to a completed consultation outcome (accept or request more info). */
 	respondToOutcome(input: { action: "accept" | "request_info"; note?: string }): Promise<{ ok: boolean }> {

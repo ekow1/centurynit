@@ -526,6 +526,13 @@
       "when": 1789600003000,
       "tag": "0076_visa_stage_not_opened_by_accept",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1789600004000,
+      "tag": "0077_travel_one_path",
+      "breakpoints": true
     }
   ]
 }

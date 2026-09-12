@@ -113,12 +113,10 @@ export async function journeyForApplicant(
 		visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
 		visaDone: application?.visaStage === "complete" && application?.visaOutcome === "approved",
 		visaRefused: application?.visaOutcome === "refused",
-		travelInvoicePaid: Boolean(application?.travelInvoicePaid) || invoiceIs("travel", "paid"),
 		travelAssistanceStatus: taRow?.status ?? null,
 		paymentPlanId: application?.paymentPlanId ?? null,
 		agencyStageIndex: application?.agencyStageIndex ?? 0,
 		agencySettled: Boolean(application?.agencySettled),
-		travelCleared: application?.travelClearance === "cleared",
 		preDepartureDone: Boolean(
 			(application?.checklist?.length ?? 0) > 0 && application?.checklist?.every((item) => item.checked),
 		),

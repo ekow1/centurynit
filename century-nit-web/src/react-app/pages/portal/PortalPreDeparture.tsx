@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { InvoiceCard, formatMoney } from "century-nit-core/ui";
 import { downloadReceipt } from "../../lib/receipt";
 import { useAppState } from "../../context/AppState";
@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
 import { meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
-import type { ApiInvoice } from "century-nit-shared";
+import type { ApiInvoice, TravelFlight } from "century-nit-shared";
 
 export function PortalPreDeparture() {
 	return (
@@ -16,6 +16,11 @@ export function PortalPreDeparture() {
 	);
 }
 
+/**
+ * The travel chapter, one path: decide → we raise the ticket invoice → you
+ * pay it → we book → done. The payment plan is chosen in the Payment
+ * Execution chapter, where the money is; this page ends at "booked".
+ */
 function TravelAssistanceInner() {
 	const { application, syncFromServer, recordTravelDecision } = useAppState();
 	const { toast } = useNotifier();
@@ -23,13 +28,10 @@ function TravelAssistanceInner() {
 	const ta = application.travelAssistance;
 	const [busy, setBusy] = useState(false);
 
-	const ticketingPaid = Boolean(application.travelInvoicePaid);
-
-	// Fetch the real server travel invoice on mount so the card reflects
-	// actual status and a real Paystack checkout can be charged against it.
-	const [serverInv, setServerInv] = useState<ApiInvoice | null>(null);
+	// The real ticket invoice from the server: its status (proforma / issued /
+	// paid) is what decides whether there is anything to pay.
+	const [trip, setTrip] = useState<ApiInvoice | null>(null);
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
-	const [planChoice, setPlanChoice] = useState<"full" | "installment">("full");
 
 	useEffect(() => {
 		let cancelled = false;
@@ -37,31 +39,26 @@ function TravelAssistanceInner() {
 			.invoices()
 			.then(({ invoices }) => {
 				if (cancelled) return;
-				setServerInv(invoices.find((i) => i.type === "travel") ?? null);
+				setTrip(invoices.find((i) => i.type === "travel" && i.status !== "void") ?? null);
 			})
 			.catch(() => {});
-		return () => { cancelled = true; };
-	}, []);
+		return () => {
+			cancelled = true;
+		};
+	}, [ta?.status]);
 
-	const trip = serverInv ?? null;
-	// A proforma invoice is not payable yet — the manager must approve & issue
-	// it first. Show "Awaiting approval" instead of a Pay button.
-	const tripProforma = Boolean(trip) && trip?.status === "proforma";
-	const tripDue = Boolean(trip) && trip?.status !== "paid" && !tripProforma && (trip?.balanceCents ?? 0) > 0;
-	const ticketingEffectivePaid = ticketingPaid || (trip?.status === "paid");
+	const tripDue = Boolean(trip) && trip?.status !== "paid" && trip?.status !== "proforma" && (trip?.balanceCents ?? 0) > 0;
 
 	async function payTicketing() {
 		setPayPhase("loading");
 		try {
-			let backend = serverInv && serverInv.balanceCents > 0 ? serverInv : null;
+			let backend = trip && trip.balanceCents > 0 ? trip : null;
 			if (!backend) {
 				const { invoices } = await meApi.invoices();
 				backend = invoices.find((i) => i.type === "travel" && i.balanceCents > 0) ?? null;
 			}
 			if (!backend) {
-				toast.error(
-					"Your ticket invoice has not been issued on the server yet. Ask your consultant to raise it.",
-				);
+				toast.error("Your ticket invoice has not been issued yet. Your handler will let you know when it is ready.");
 				return;
 			}
 			const checkout = await meApi.paystackCheckout(backend.id);
@@ -71,9 +68,7 @@ function TravelAssistanceInner() {
 			}
 			toast.error("Could not initialize Paystack checkout.");
 		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.",
-			);
+			toast.error(err instanceof ApiError ? err.message : "Payment could not be processed. Please try again.");
 		} finally {
 			setPayPhase("idle");
 		}
@@ -99,31 +94,13 @@ function TravelAssistanceInner() {
 		}
 	}
 
-	async function handleChoosePlan() {
-		if (busy) return;
-		setBusy(true);
-		try {
-			await meApi.chooseTravelPlan({ paymentPlanId: planChoice });
-			await syncFromServer();
-			toast.success("Payment plan chosen. You're cleared to travel!");
-		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Could not choose your payment plan. Please try again.",
-			);
-		} finally {
-			setBusy(false);
-		}
-	}
-
 	async function handleAdvanceToPlan() {
 		try {
 			await meApi.advanceToPaymentPlan();
 			await syncFromServer();
 			toast.success("Your payment plan chapter is now open.");
 		} catch (err) {
-			toast.error(
-				err instanceof ApiError ? err.message : "Could not open your payment plan. Please try again.",
-			);
+			toast.error(err instanceof ApiError ? err.message : "Could not open your payment plan. Please try again.");
 		}
 	}
 
@@ -139,24 +116,15 @@ function TravelAssistanceInner() {
 	}
 
 	const status = ta?.status ?? "decision_pending";
-	const showDecision =
-		!ta || status === "decision_pending" || status === "on_hold" || status === "declined";
-	// If a travel invoice exists on the server, always surface it — even if
-	// the TA request status hasn't been updated to "invoiced" yet. The
-	// server invoice is the source of truth for payment.
-	// `quote_prepared`/`quote_approved` are legacy statuses from the removed
-	// quote flow; keep them covered here so a stray legacy row never renders
-	// a blank page between the header and the help card.
-	const showReview =
-		(status === "review" || status === "quote_prepared" || status === "quote_approved") && !trip;
-	const showInvoice = status === "invoiced" || status === "ticket_paid" || status === "booked" || Boolean(trip);
-	// Booking tracker: visible once the ticket is paid, all the way through
-	// booked. Gives the applicant a progress indicator instead of a blank
-	// "waiting" gap between paid and booked.
-	const showBookingTracker =
-		status === "ticket_paid" || status === "booked" || status === "cleared";
+	const showDecision = !ta || status === "decision_pending" || status === "on_hold" || status === "declined";
+	const showWaiting = status === "review";
+	const showInvoice = status === "invoiced" || status === "ticket_paid" || (status === "booked" && Boolean(trip));
 	const showBooked = status === "booked";
-	const showCleared = status === "cleared";
+	const settled = status === "booked" || status === "declined" || status === "on_hold";
+
+	const waitingLine = !ta?.assignedOpsUserId
+		? "Your request has been sent to our travel team. A handler will be assigned and will prepare your flight ticket invoice."
+		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your handler is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
 
 	return (
 		<div className="portal-page">
@@ -165,45 +133,41 @@ function TravelAssistanceInner() {
 					<p className="eyebrow">Travel assistance</p>
 					<h1 className="page-title mt-1">Flight booking</h1>
 					<p className="lead mt-2">
-						Your visa is sorted. Let us know how you'd like to handle your flight, and we'll take it
-						from there. The flight booking service fee is already included in your payment plan —
-						any invoice here is only for the airline ticket itself.
+						Your visa is sorted. Tell us how you'd like to handle your flight and we'll take it from
+						there. The flight booking service is already part of your package — the only invoice on
+						this page is for the airline ticket itself.
 					</p>
 				</div>
 			</header>
 
 			{/* The one decision for this stage. Choosing "yes" is the applicant's
-				consent to travel assistance (recorded server-side with the
-				request) and what puts the case in front of the travel team. */}
+				consent to travel assistance and what puts the case in front of the
+				travel team. */}
 			{showDecision && (
 				<section className="mt-4">
 					<div className="card card--pad">
 						<p className="eyebrow">Your decision</p>
 						<h2 className="mt-1" style={{ fontSize: "1.35rem" }}>How would you like to book your flight?</h2>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Choose whether you'd like our team to help book your flight, hold for now, or arrange
-							your own travel.
-						</p>
 						<div className="portal-grid portal-grid--3 mt-4">
 							<DecisionCard
-								title="Yes, help me book"
-								description="Our travel team will assign a handler to issue your flight ticket invoice. You pay it and we book your flight."
+								title="Book with us"
+								description="We find the flight, you pay the ticket invoice here, and we book it for you."
 								icon="✈"
 								onClick={() => void handleDecision("yes")}
 								disabled={busy}
 								highlighted={ta?.decision === "yes"}
 							/>
 							<DecisionCard
-								title="Hold for now"
-								description="Park your travel assistance. No invoice is raised and no handler is assigned. You can resume anytime."
+								title="Not now"
+								description="Put travel assistance on hold. Nothing is raised and nobody is assigned until you come back."
 								icon="⏸"
 								onClick={() => void handleDecision("hold")}
 								disabled={busy}
 								highlighted={ta?.decision === "hold"}
 							/>
 							<DecisionCard
-								title="I'll arrange my own"
-								description="Opt out of travel assistance. Your journey continues without a flight booking from us."
+								title="I'll book myself"
+								description="Arrange your own flight. Your journey moves straight on to your payment plan."
 								icon="✕"
 								onClick={() => void handleDecision("no")}
 								disabled={busy}
@@ -217,32 +181,19 @@ function TravelAssistanceInner() {
 						)}
 						{status === "declined" && (
 							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-								You've opted out of travel assistance. Choose "Yes" above if you'd like us to help
-								after all.
+								You're booking your own flight. Choose "Book with us" if you'd like our help after all.
 							</p>
 						)}
 					</div>
 				</section>
 			)}
 
-			{/* Review — request sent to ops, awaiting handler */}
-			{showReview && (
+			{/* Waiting on the travel team — one card, one line */}
+			{showWaiting && (
 				<section className="mt-4">
 					<div className="card card--pad">
-						<p className="eyebrow">
-							{ta?.status === "quote_prepared"
-								? "Ticket invoice being approved"
-								: ta?.assignedOpsUserId
-									? "Your consultant is on it"
-									: "Request received"}
-						</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							{ta?.status === "quote_prepared"
-								? "Your ticket invoice has been prepared and is with a manager for approval. You'll be able to pay it here as soon as it's issued."
-								: ta?.assignedOpsUserId
-									? `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your consultant is"} preparing your flight ticket invoice. Check back here to pay it once it's ready.`
-									: "Your request has been sent to our travel team. A handler will be assigned to issue your flight ticket invoice shortly. Check back here to pay it once it's ready."}
-						</p>
+						<p className="eyebrow">{ta?.assignedOpsUserId ? "Your handler is on it" : "Request received"}</p>
+						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>{waitingLine}</p>
 					</div>
 				</section>
 			)}
@@ -251,6 +202,12 @@ function TravelAssistanceInner() {
 			{showInvoice && (
 				<section className="mt-4">
 					<div className="card card--pad">
+						{ta?.flight && !showBooked && (
+							<div className="mb-3">
+								<p className="eyebrow">Your flight</p>
+								<FlightRows flight={ta.flight} />
+							</div>
+						)}
 						{trip ? (
 							<InvoiceCard
 								title="Ticket invoice"
@@ -268,148 +225,52 @@ function TravelAssistanceInner() {
 								}
 								hint={
 									trip.status === "paid"
-										? "Paid — your consultant will confirm the booking shortly."
-										: tripProforma
-											? "Your ticket invoice is with a manager for approval. You'll be able to pay it here once it's issued."
+										? showBooked
+											? "Paid."
+											: "Paid — your handler is booking the flight and will post the confirmation here."
+										: trip.status === "proforma"
+											? "Your ticket invoice is being issued. You'll be able to pay it here shortly."
 											: undefined
 								}
 							/>
 						) : (
 							<>
 								<p className="eyebrow">Ticket invoice</p>
-								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Awaiting invoice from your consultant.</p>
+								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Being prepared by your handler.</p>
 							</>
 						)}
 					</div>
 				</section>
 			)}
 
-			{/* Booking tracker — progress between ticket paid and booked */}
-			{showBookingTracker && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Booking tracker</p>
-						<div className="mt-3" style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-							<TrackerStep
-								done={ticketingEffectivePaid}
-								label="Ticket paid"
-								detail={ticketingEffectivePaid ? "Your flight ticket invoice is settled." : "Awaiting ticket payment."}
-							/>
-							<TrackerStep
-								done={status === "booked" || status === "cleared"}
-								active={status === "ticket_paid"}
-								label="Booking in progress"
-								detail={
-									status === "ticket_paid"
-										? "Your consultant is booking your flight. You'll see the confirmation here once it's done."
-										: status === "booked" || status === "cleared"
-											? "Your flight is booked."
-											: "Starts once the ticket is paid."
-								}
-							/>
-							<TrackerStep
-								done={status === "cleared"}
-								active={status === "booked"}
-								label="Choose payment plan"
-								detail={
-									status === "cleared"
-										? "Payment plan chosen — you're cleared to travel."
-										: status === "booked"
-											? "Choose how to settle your service fee below."
-											: "Available once your booking is confirmed."
-								}
-							/>
-						</div>
-					</div>
-				</section>
-			)}
-
-			{/* Booked — confirmation from handler */}
-			{showBooked && ta?.bookingConfirmation && (
+			{/* Booked — the flight as booked, with its PNR */}
+			{showBooked && ta?.booking && (
 				<section className="mt-4">
 					<div className="card card--pad">
 						<p className="eyebrow">Flight booked 🛫</p>
 						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your consultant has confirmed your booking. Choose your payment plan below to be cleared
-							to travel.
+							Your flight is booked. Keep the confirmation code for check-in.
 						</p>
-						<div className="mt-2" style={{ display: "grid", gap: "0.5rem" }}>
-							{ta.bookingConfirmation.carrier && (
-								<QuoteRow label="Carrier" value={ta.bookingConfirmation.carrier} />
-							)}
-							{ta.bookingConfirmation.confirmationCode && (
-								<QuoteRow label="Confirmation code" value={ta.bookingConfirmation.confirmationCode} />
-							)}
-							{ta.bookingConfirmation.notes && (
-								<p className="muted" style={{ fontSize: "0.85rem" }}>
-									{ta.bookingConfirmation.notes}
-								</p>
-							)}
+						<div className="mt-3">
+							<FlightRows flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
 						</div>
 					</div>
 				</section>
 			)}
 
-			{/* Choose payment plan → cleared to travel */}
-			{showBooked && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Choose your payment plan</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Choose how you'd like to settle your service fee. You'll be cleared to travel once
-							you've paid the full amount or your first installment.
-						</p>
-						<div className="portal-grid portal-grid--2 mt-3">
-							<DecisionCard
-								title="Full payment"
-								description="Pay the full service fee now and be cleared to travel immediately."
-								icon="✓"
-								onClick={() => setPlanChoice("full")}
-								disabled={busy}
-								highlighted={planChoice === "full"}
-							/>
-							<DecisionCard
-								title="Installments"
-								description="Pay the first installment now to be cleared to travel. The rest follows your plan."
-								icon="≣"
-								onClick={() => setPlanChoice("installment")}
-								disabled={busy}
-								highlighted={planChoice === "installment"}
-							/>
-						</div>
-						<div className="row mt-3">
-							<Button variant="primary" onClick={() => void handleChoosePlan()} disabled={busy}>
-								{busy ? "Saving…" : `Choose ${planChoice === "full" ? "full payment" : "installments"}`}
-							</Button>
-						</div>
-					</div>
-				</section>
-			)}
-
-			{/* Cleared to travel */}
-			{showCleared && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Cleared to travel 🛫</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your flight is booked and your payment plan is in place. You're cleared to travel.
-							Complete your remaining plan payments in the payment plan chapter.
-						</p>
-					</div>
-				</section>
-			)}
-
-			{/* Next action: move on to the payment plan */}
-			{(showCleared || status === "declined") && (
+			{/* Travel is settled — the plan chapter is next */}
+			{settled && (
 				<div className="card card--pad mt-5 next-action">
 					<p className="eyebrow">Next step</p>
 					<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-						{showCleared ? "You're cleared to fly 🛫" : "Travel arranged independently"}
+						{showBooked ? "You're set to fly 🛫" : status === "declined" ? "Travel arranged independently" : "Travel on hold"}
 					</p>
 					<p className="muted mt-1">
-						{showCleared
-							? "Your flight is booked and you're cleared. Move to your payment plan to settle your service fee and complete your journey."
-							: "You've opted out of travel assistance. Move to your payment plan to settle your service fee and complete your journey."}
+						{showBooked
+							? "Your flight is booked. Next, choose your payment plan and settle your service fee to complete your journey."
+							: status === "declined"
+								? "You're booking your own flight. Next, choose your payment plan and settle your service fee to complete your journey."
+								: "Travel assistance is paused. You can still move on to your payment plan and come back to this later."}
 					</p>
 					<div className="row mt-3">
 						<Button className="btn btn--primary" onClick={() => void handleAdvanceToPlan()}>
@@ -429,6 +290,34 @@ function TravelAssistanceInner() {
 					have questions about your flight or invoice.
 				</p>
 			</div>
+		</div>
+	);
+}
+
+function fmtWhen(iso?: string): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function FlightRows({ flight, confirmationCode }: { flight: TravelFlight; confirmationCode?: string }) {
+	const route = [flight.from, flight.to].filter(Boolean).join(" → ");
+	const rows: [string, string][] = [];
+	if (confirmationCode) rows.push(["Confirmation code", confirmationCode]);
+	if (flight.carrier || flight.flightNumber) rows.push(["Flight", [flight.carrier, flight.flightNumber].filter(Boolean).join(" ")]);
+	if (route) rows.push(["Route", route]);
+	if (flight.departAt) rows.push(["Departs", fmtWhen(flight.departAt)]);
+	if (flight.arriveAt) rows.push(["Arrives", fmtWhen(flight.arriveAt)]);
+	return (
+		<div style={{ display: "grid", gap: "0.5rem" }}>
+			{rows.map(([k, v]) => (
+				<QuoteRow key={k} label={k} value={v} />
+			))}
+			{flight.notes && (
+				<p className="muted" style={{ fontSize: "0.85rem" }}>
+					{flight.notes}
+				</p>
+			)}
 		</div>
 	);
 }
@@ -480,43 +369,6 @@ function QuoteRow({ label, value }: { label: string; value: string }) {
 		<div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.9rem" }}>
 			<span className="muted">{label}</span>
 			<span style={{ fontWeight: 500 }}>{value}</span>
-		</div>
-	);
-}
-
-function TrackerStep({
-	done,
-	active,
-	label,
-	detail,
-}: {
-	done: boolean;
-	active?: boolean;
-	label: string;
-	detail: string;
-}) {
-	const dotStyle: CSSProperties = {
-		width: "1.5rem",
-		height: "1.5rem",
-		borderRadius: "50%",
-		display: "flex",
-		alignItems: "center",
-		justifyContent: "center",
-		flexShrink: 0,
-		fontSize: "0.8rem",
-		fontWeight: 600,
-		background: done ? "var(--success, #16a34a)" : active ? "var(--primary, #2563eb)" : "var(--muted, #e5e7eb)",
-		color: done || active ? "#fff" : "var(--text-muted, #6b7280)",
-	};
-	return (
-		<div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-			<div style={dotStyle}>{done ? "✓" : active ? "•" : ""}</div>
-			<div>
-				<p style={{ fontWeight: 500, fontSize: "0.95rem" }}>{label}</p>
-				<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.15rem" }}>
-					{detail}
-				</p>
-			</div>
 		</div>
 	);
 }

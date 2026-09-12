@@ -85,6 +85,13 @@ export const INVOICE_TYPE_LABELS: Record<string, string> = {
 	custom: "Custom",
 };
 
+/**
+ * Invoice types whose money is not the agency's: collected and passed on
+ * (the airline fare on a ticket invoice). Reports keep them out of revenue.
+ */
+export const PASS_THROUGH_INVOICE_TYPES: readonly string[] = ["travel"];
+export const isPassThroughInvoice = (type: string): boolean => PASS_THROUGH_INVOICE_TYPES.includes(type);
+
 export const INVOICE_PROFORMA_HINT = "Being prepared — you'll be able to pay it here once it's issued.";
 
 /* ── Visa sub-stage ───────────────────────────────────────────────────────── */
@@ -107,15 +114,12 @@ export const VISA_OUTCOME_LABELS: Record<string, string> = {
 };
 
 export const TRAVEL_STATUS_LABELS: Record<string, string> = {
-	decision_pending: "Awaiting your decision",
+	decision_pending: "Awaiting decision",
 	review: "Request received",
-	quote_prepared: "Ticket invoice awaiting approval",
-	quote_approved: "Ticket invoice awaiting approval",
-	invoiced: "Ticket invoice issued",
+	invoiced: "Ticket invoice raised",
 	ticket_paid: "Ticket paid",
 	booked: "Flight booked",
-	cleared: "Cleared to travel",
-	declined: "Arranging own travel",
+	declined: "Booking their own flight",
 	on_hold: "On hold",
 };
 

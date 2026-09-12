@@ -21,12 +21,10 @@ const blank: JourneySignals = {
 	hasVisaConsent: false,
 	visaInvoicePaid: false,
 	visaDone: false,
-	travelInvoicePaid: false,
 	travelAssistanceStatus: null,
 	paymentPlanId: null,
 	agencyStageIndex: 0,
 	agencySettled: false,
-	travelCleared: false,
 	preDepartureDone: false,
 	coarseStage: null,
 };
@@ -46,9 +44,9 @@ const milestones = {
 	visaConsented: { hasVisaConsent: true, coarseStage: "visa_processing" as const },
 	visaPaid: { visaInvoicePaid: true },
 	visaDone: { visaDone: true },
-	taCleared: { travelAssistanceStatus: "cleared", travelInvoicePaid: true, coarseStage: "travel_assistance" as const },
+	booked: { travelAssistanceStatus: "booked", coarseStage: "travel_assistance" as const },
 	planned: { paymentPlanId: "installment", agencyStageIndex: 1, coarseStage: "payment_execution" as const },
-	cleared: { travelCleared: true, preDepartureDone: true },
+	cleared: { preDepartureDone: true },
 } satisfies Record<string, Partial<JourneySignals>>;
 
 const order = Object.keys(milestones) as (keyof typeof milestones)[];
@@ -78,7 +76,7 @@ describe("deriveJourney — the happy path, one milestone at a time", () => {
 		["visaConsented", "visa_invoice"],
 		["visaPaid", "visa"],
 		["visaDone", "travel_assistance"],
-		["taCleared", "payment_execution"],
+		["booked", "payment_execution"],
 		["planned", "payment_execution"],
 		["cleared", "completed"],
 	];
@@ -133,10 +131,9 @@ describe("deriveJourney — gates", () => {
 		expect(reopened.label).not.toBe("Visa refused");
 	});
 
-	it("keeps the plan chapter closed until the travel-assistance request is resolved", () => {
+	it("keeps the plan chapter closed until travel is settled", () => {
 		const j = deriveJourney({
 			...upTo("visaDone"),
-			travelInvoicePaid: true,
 			travelAssistanceStatus: "ticket_paid",
 			coarseStage: "payment_execution",
 		});
@@ -144,8 +141,8 @@ describe("deriveJourney — gates", () => {
 		expect(j.chapterUnlocks.payment_execution).toBe(false);
 	});
 
-	it("opens the plan chapter for a legacy case with a paid ticket and no travel-assistance request", () => {
-		const j = deriveJourney({ ...upTo("visaDone"), travelInvoicePaid: true });
+	it("opens the plan chapter when the applicant is booking their own flight", () => {
+		const j = deriveJourney({ ...upTo("visaDone"), travelAssistanceStatus: "declined" });
 		expect(j.chapterUnlocks.payment_execution).toBe(true);
 	});
 

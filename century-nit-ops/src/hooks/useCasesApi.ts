@@ -159,7 +159,6 @@ function toApplication(row: ApiApplication): MockApplication {
 		agencySettled: row.agencySettled,
 		depositPaid: row.depositPaid,
 		appFeePaid: row.appFeePaid,
-		travelClearance: row.travelClearance,
 		proceedStatus: row.proceedStatus ?? "invited",
 		journey: row.journey ?? null,
 		stageHandlers: row.stageHandlers ?? [],
@@ -241,7 +240,6 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 		paymentPlanId: (app?.paymentPlanId as MockApplicant["paymentPlanId"]) ?? undefined,
 		agencyStageIndex: app?.agencyStageIndex,
 		agencySettled: app?.agencySettled,
-		travelClearance: app?.travelClearance as MockApplicant["travelClearance"],
 		targetSchoolCount: app?.targetSchoolCount ?? null,
 	};
 }
@@ -465,12 +463,6 @@ export function useCasesApi() {
 				method: "PATCH",
 				body: JSON.stringify({ paymentPlanId: plan }),
 			});
-			await refresh();
-		},
-		setTravelClearance: async (appId: string, cleared: boolean) => {
-			const app = applications.find((a) => a.appId === appId);
-			if (!app) return;
-			replaceApplication(await applicationsApi.setTravelClearance(app.id, cleared));
 			await refresh();
 		},
 		togglePreDepartureTask: async (appId: string, taskId: string) => {

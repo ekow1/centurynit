@@ -5,7 +5,7 @@ import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, canAdvanceToStage, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, canAdvanceToStage, isTravelResolved, type JourneyStage } from "century-nit-shared";
 
 /**
  * The pipeline every application moves through. Cards can be dragged between
@@ -400,7 +400,7 @@ export function EnterpriseWorkflow() {
 														<div style={{ width: "100%", height: "3px", background: "var(--muted)", overflow: "hidden" }}>
 															<div style={{ width: `${pdProg}%`, height: "100%", background: pdProg === 100 ? "#22c55e" : STAGE_COLORS[stage], transition: "width 0.4s ease" }} />
 														</div>
-														{app.travelClearance === "pending" && (
+														{!isTravelResolved(app.travelAssistanceStatus) && (
 															<span className="wf-badge wf-badge--warn" style={{ marginTop: "0.3rem" }}>Travel pending</span>
 														)}
 													</div>

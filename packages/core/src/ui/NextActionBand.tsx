@@ -21,17 +21,24 @@ export type NextAction = {
 export function NextActionBand({
 	items,
 	waitingOn,
+	blockedBy,
 	title = "Needs attention",
 	emptyTitle = "Nothing needed from you right now",
 }: {
 	items: NextAction[];
 	/** Shown when `items` is empty: what the other side has to do first. */
 	waitingOn?: string | null;
+	/**
+	 * Why the next stage is out of reach. A state, not a task: it is shown
+	 * as a footer when there are no items (the items are the explanation
+	 * when there are any) and is never counted.
+	 */
+	blockedBy?: string | null;
 	title?: string;
 	emptyTitle?: string;
 }) {
 	if (items.length === 0) {
-		if (!waitingOn) return null;
+		if (!waitingOn && !blockedBy) return null;
 		return (
 			<section className="cn-next cn-next--waiting" aria-label={title}>
 				<div className="cn-next__row">
@@ -40,7 +47,8 @@ export function NextActionBand({
 					</StatusPill>
 					<div className="cn-next__text">
 						<p className="cn-next__title">{emptyTitle}</p>
-						<p className="cn-next__detail">{waitingOn}</p>
+						{waitingOn && <p className="cn-next__detail">{waitingOn}</p>}
+						{blockedBy && <p className="cn-next__detail">{blockedBy}</p>}
 					</div>
 				</div>
 			</section>

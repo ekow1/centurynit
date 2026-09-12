@@ -132,7 +132,7 @@ export type BaseTask =
 			id: string;
 			category: string;
 			kind: "travel";
-			action: "assign" | "invoice" | "issue";
+			action: "assign" | "invoice" | "issue" | "book";
 			record: TravelAssistanceRequest;
 			title: string;
 			subtitle: string;
@@ -251,7 +251,8 @@ export function taskActionLabel(task: PendingTask): string {
 	if (task.action === "advance") return "Advance visa";
 	if (task.action === "docs") return "Documents";
 	if (task.action === "invoice") return task.kind === "travel" ? "Raise ticket invoice" : "Invoice";
-	if (task.action === "issue") return task.kind === "travel" ? "Approve & issue" : "Issue invoice";
+	if (task.action === "issue") return "Issue invoice";
+	if (task.action === "book") return "Record booking";
 	if (task.action === "chase") return "Chase payment";
 	if (task.action === "followup") return "Follow up";
 	if (task.action === "resolve") return "Resolve";
@@ -609,7 +610,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 	// every ops step is a task here, not just a card on the Travel page:
 	//   review, no handler   → assign one (unless a handoff already asks)
 	//   review, handler      → the handler raises the ticket invoice
-	//   quote_prepared       → a manager approves and issues the proforma
+	//   invoiced (proforma)  → finance issues it (a task for whoever holds invoices)
+	//   ticket_paid          → the handler records the booking
 	for (const ta of travelRequests) {
 		const app = appById.get(ta.applicationId);
 		const title = ta.applicantName ?? app?.applicantName ?? "Applicant";
@@ -640,17 +642,33 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: ta.assignedOpsUserName ?? "Handler",
 				priority: PRIORITY.issue,
 			});
-		} else if (ta.status === "quote_prepared") {
+		} else if (ta.status === "invoiced" && ta.invoiceId) {
+			const inv = invoices.find((i) => i.id === ta.invoiceId);
+			if (inv?.status === "proforma") {
+				q.push({
+					...base,
+					id: `travel-issue-${ta.id}`,
+					category: "needs_invoice",
+					kind: "travel",
+					action: "issue",
+					subtitle: `Ticket invoice to issue · ${ref}`,
+					meta: "Applicant cannot pay until finance issues it",
+					owner: "Finance",
+					linkTo: `/invoices?open=${ta.invoiceId}`,
+					priority: PRIORITY.issue,
+				});
+			}
+		} else if (ta.status === "ticket_paid") {
 			q.push({
 				...base,
-				id: `travel-issue-${ta.id}`,
-				category: "needs_invoice",
+				id: `travel-book-${ta.id}`,
+				category: "needs_action",
 				kind: "travel",
-				action: "issue",
-				subtitle: `Ticket proforma to approve & issue · ${ref}`,
-				meta: "Applicant cannot pay until a manager issues it",
+				action: "book",
+				subtitle: `Flight to book · ${ref}`,
+				meta: "Ticket paid — record the booking once the airline confirms",
 				owner: ta.assignedOpsUserName ?? "Handler",
-				priority: PRIORITY.issue,
+				priority: PRIORITY.review_application,
 			});
 		}
 	}

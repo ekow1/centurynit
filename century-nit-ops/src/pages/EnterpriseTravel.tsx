@@ -10,7 +10,7 @@ import { branchName } from "century-nit-core/ops";
 import { applicationsApi, ApiError } from "century-nit-core/api";
 
 import type { MockApplication, PreDepartureTask } from "century-nit-core/ops";
-import { JOURNEY_STAGE_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, TRAVEL_STATUS_LABELS, type JourneyStage, type TravelAssistanceRequest } from "century-nit-shared";
 
 function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 	if (!tasks || tasks.length === 0) return 0;
@@ -24,7 +24,7 @@ function paymentPlanLabel(plan?: string): string {
 }
 
 export function EnterpriseTravel() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope, canAssignWork, hasPermission } = useOpsAuth();
 	const { applications, assignees } = useCases();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -63,10 +63,9 @@ export function EnterpriseTravel() {
 
 
 	const canSeeAll = canSeeAllBranches;
-	// Only managers/coordinators/admins can approve (issue) a proforma travel
-	// invoice — same role gate as the application invoice issue endpoint.
-	const canIssueTravelInvoice =
-		opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
+	// Issuing the ticket invoice is finance work — the invoices module, the
+	// same gate as every other invoice.
+	const canIssueInvoices = hasPermission("invoices");
 
 	const travelApps = useMemo(() => {
 		// "Mine" is the travel handler (stage assignment) or the case owner.
@@ -174,7 +173,7 @@ export function EnterpriseTravel() {
 			) : (
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					{taQueue.map((ta) => (
-						<TaQueueRow key={ta.id} ta={ta} staff={assignees} branch={applications.find((a) => a.id === ta.applicationId)?.branch} canIssue={canIssueTravelInvoice} onChanged={() => {
+						<TaQueueRow key={ta.id} ta={ta} staff={assignees} branch={applications.find((a) => a.id === ta.applicationId)?.branch} canWork={canAssignWork || (ta.assignedOpsUserId !== null && assignees.some((a) => a.opsUserId === ta.assignedOpsUserId && a.email === opsUser?.email))} canIssueInvoices={canIssueInvoices} onChanged={() => {
 							applicationsApi.listTravelAssistance().then(setTaQueue).catch(() => {});
 						}} onSelectApp={() => {
 							const app = applications.find((a) => a.id === ta.applicationId);
@@ -240,7 +239,7 @@ export function EnterpriseTravel() {
 												</p>
 												<div className="cn-row__meta">
 													{app.agencySettled ? "Settled" : `${(app.agencyStageIndex ?? 0) + 1}/3 agency`} · {prog}% pre-departure ·{" "}
-													{app.travelClearance === "cleared" ? "Cleared" : "Pending"}
+													{TRAVEL_STATUS_LABELS[app.travelAssistanceStatus ?? ""] ?? "No travel request"}
 												</div>
 											</div>
 											<span className="cn-row__arrow" aria-hidden>→</span>

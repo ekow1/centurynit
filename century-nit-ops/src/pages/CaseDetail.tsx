@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { TaQueueRow } from "./TravelRequestCard";
+import { TravelCard } from "./TravelRequestCard";
 import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
 import { ApplicationAssignSheet } from "./case/ApplicationAssignSheet";
 import { HistorySheet } from "./case/HistorySheet";
@@ -18,7 +18,6 @@ import {
 	JOURNEY_STAGE_LABELS,
 	VISA_STAGE_LABELS,
 	canAdvanceToStage,
-	TRAVEL_STATUS_LABELS,
 	type ApplicationActivityEvent,
 	schoolDecisionNote,
 	type JourneyStage,
@@ -360,7 +359,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// the proforma is handler work. The buttons follow the same split as the API.
 	const canIssueInvoices = hasPermission("invoices");
 	const {
-		assignees,
 		handoffs,
 		travelRequests,
 		consultations,
@@ -373,7 +371,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		declineProceed,
 		setVisaStage,
 		setVisaCounselorNote,
-		setTravelClearance,
 		togglePreDepartureTask,
 		setPaymentPlan,
 		setApplicationNotes,
@@ -531,12 +528,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const showVisa = (app.visaStage && app.visaStage !== "locked") || stageIdx(app.stage) >= stageIdx("visa_processing") || Boolean(visaInvoice);
 	const selectedTa = travelRequests.find((t) => t.applicationId === app.id) ?? null;
 	const showTravel = Boolean(selectedTa) || stageIdx(app.stage) >= stageIdx("travel_assistance");
-	const canIssueTravelInvoice = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 	// Why a control is off, in the words the server would use to refuse it.
-	const clearanceBlock =
-		(app.preDepartureTasks?.length ?? 0) > 0 && pdProg < 100 ? "Complete the pre-departure checklist before granting clearance." : null;
 	const completeBlock = app.stage === "payment_execution" ? canAdvanceToStage("payment_execution", "completed", app) : null;
 	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
 
@@ -665,16 +659,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
 	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
 	const mayAdvance = canAssignWork || app.assignedStaffEmail === opsUser?.email;
-	if (nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff) {
-		// Not an action — the reason the next stage is out of reach, so a
-		// handler is never left with an empty band and no explanation.
-		nextActions.push({
-			id: "advance-blocked",
-			title: `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet`,
-			detail: advanceBlock,
-			tone: "waiting",
-		});
-	}
+	// Why the next stage is out of reach — a state, not a task. The band shows
+	// it only when there is nothing to do; when there is, the task explains it.
+	const blockedBy =
+		nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff
+			? `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet — ${advanceBlock.replace(/^Cannot (advance to [^:]+|mark complete): /, "")}`
+			: null;
 	if (nextStage && !advanceBlock && mayAdvance) {
 		nextActions.push({
 			id: "advance",
@@ -800,7 +790,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</div>
 			</div>
 
-			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />
+			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
 
@@ -1390,63 +1380,36 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			{current === "travel" && (
 				<>
+					{/* Flight — status, the flight, the one next action. Travel is
+					    settled by booking (or the applicant booking their own); the
+					    case then moves to Payment Execution on its own. */}
 					<div className="card">
-						<p className="eyebrow mb-1">Travel decision</p>
-						<p style={{ fontSize: "var(--text-sm)" }}>
-							{selectedTa
-								? TRAVEL_STATUS_LABELS[selectedTa.status] ?? selectedTa.status
-								: app.visaStage === "complete"
-									? "Awaiting the applicant's decision on travel assistance."
-									: "Opens once the visa is complete."}
-						</p>
-					</div>
-					{selectedTa && (
-						<div className="card">
-							<p className="eyebrow mb-2">Travel request</p>
-							<TaQueueRow
+						<p className="eyebrow mb-2">Flight</p>
+						{selectedTa ? (
+							<TravelCard
 								ta={selectedTa}
-								staff={assignees}
-								branch={app.branch}
-								canIssue={canIssueTravelInvoice}
-								showAssign={false}
-								onChanged={() => void refresh()}
+								invoice={caseInvoices.find((i) => i.type === "travel") ?? null}
+								canWork={canWork}
+								canIssueInvoices={canIssueInvoices}
+								onChanged={() => {
+									void refresh();
+									setInvoiceRefresh((n) => n + 1);
+								}}
 							/>
-						</div>
-					)}
-{/* Travel Clearance — shown whenever the chapter is open; granted only while the case is in it */}
-							{travelOpen && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Travel Clearance</p>
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
-											<div>
-												<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-													{app.travelClearance === "cleared" ? "Cleared for travel" : "Pending clearance"}
-												</p>
-												<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-													{app.travelClearance === "cleared"
-														? "Applicant is cleared for departure."
-														: "Grant clearance once all checks are satisfied."}
-												</p>
-											</div>
-										{app.stage === "travel_assistance" && canWork && (
-											<button
-												type="button"
-												onClick={() =>
-													void setTravelClearance(app.appId, app.travelClearance !== "cleared")
-														.then(() => flash(app.travelClearance === "cleared" ? "Clearance revoked." : "Cleared for travel."))
-														.catch((e) => fail(e, "Could not update clearance"))
-												}
-												className={`btn btn--sm ${app.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
-												style={{ whiteSpace: "nowrap" }}
-												disabled={app.travelClearance !== "cleared" && Boolean(clearanceBlock)}
-												title={app.travelClearance !== "cleared" ? (clearanceBlock ?? undefined) : undefined}
-											>
-												{app.travelClearance === "cleared" ? "Revoke clearance" : "Grant clearance"}
-											</button>
-										)}
-										</div>
-									</div>
-								)}
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+								{app.visaStage === "complete"
+									? "Waiting for the applicant to decide how they want to book their flight."
+									: "Opens once the visa is complete."}
+							</p>
+						)}
+						{selectedTa?.decision && (
+							<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>
+								Decided {new Date(selectedTa.updatedAt).toLocaleDateString()} · {selectedTa.decision === "yes" ? "asked us to book" : selectedTa.decision === "hold" ? "on hold" : "booking their own"}
+								{selectedTa.applicantNote ? ` · "${selectedTa.applicantNote}"` : ""}
+							</p>
+						)}
+					</div>
 
 							{/* Pre-departure Checklist */}
 							{travelOpen && (

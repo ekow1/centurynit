@@ -15,21 +15,19 @@ import {
 import { sql } from "drizzle-orm";
 
 /**
- * Flight option prepared by Ops for the applicant to approve before any ticket
- * invoice is raised. Kept as a JSONB column on `travel_assistance_requests`
- * because the shape is advisory — it is shown to the applicant, not used as a
- * source of truth for billing. The authoritative amount lives in
- * `ticketAmountCents` and the raised invoice.
+ * The flight a ticket invoice is for, and — with a PNR — the flight that was
+ * booked. Advisory JSON: the fare itself lives on the invoice.
  */
-export type TravelAssistanceQuote = {
+export type TravelFlight = {
 	carrier?: string;
 	flightNumber?: string;
-	departure?: { at?: string; from?: string };
-	arrival?: { at?: string; to?: string };
-	fareBreakdown?: { label: string; amountCents: number }[];
+	from?: string;
+	to?: string;
+	departAt?: string;
+	arriveAt?: string;
 	notes?: string;
-	validUntil?: string;
 };
+export type TravelBooking = TravelFlight & { confirmationCode?: string };
 
 export const users = pgTable("users", {
 	id: text("id").primaryKey(),
@@ -1039,7 +1037,6 @@ export const applications = pgTable(
 		depositPaid: boolean("deposit_paid").notNull().default(false),
 		appFeePaid: boolean("app_fee_paid").notNull().default(false),
 		travelInvoicePaid: boolean("travel_invoice_paid").notNull().default(false),
-		travelClearance: varchar("travel_clearance", { length: 16 }).notNull().default("pending"),
 		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
 		preDepartureTasks: jsonb("pre_departure_tasks")
 			.$type<{ id: string; category?: "travel" | "accommodation" | "documents" | "health" | "finance" | "orientation"; label: string; detail?: string; done: boolean }[]>()
@@ -1120,10 +1117,8 @@ export const travelAssistanceRequests = pgTable(
 			.references(() => applications.id, { onDelete: "cascade" }),
 		decision: travelDecisionEnum("decision"),
 		status: travelAssistanceStatusEnum("status").notNull().default("decision_pending"),
-		/** Flight option prepared by Ops: carrier, itinerary, fare breakdown, validity, notes. */
-		quote: jsonb("quote").$type<TravelAssistanceQuote | null>(),
-		/** Airline fare in cents — set by the handler when raising the ticket invoice. */
-		ticketAmountCents: integer("ticket_amount_cents"),
+		/** The flight on the ticket invoice; set when the handler raises it. */
+		flight: jsonb("flight").$type<TravelFlight | null>(),
 		currency: varchar("currency", { length: 8 }).notNull().default("USD"),
 		/** The ticket invoice raised by the handler once the applicant opts in. */
 		invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
@@ -1131,28 +1126,11 @@ export const travelAssistanceRequests = pgTable(
 		assignedOpsUserId: uuid("assigned_ops_user_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
-		/** Booking confirmation: PNR/confirmation code, carrier, notes. */
-		bookingConfirmation: jsonb("booking_confirmation").$type<{
-			confirmationCode?: string;
-			carrier?: string;
-			notes?: string;
-		} | null>(),
-		/** Ops-only 12-item pre-departure checklist. */
-		opsChecklist: jsonb("ops_checklist")
-			.$type<
-				{
-					id: string;
-					category?: "travel" | "accommodation" | "documents" | "health" | "finance" | "orientation";
-					label: string;
-					detail?: string;
-					done: boolean;
-				}[]
-			>()
-			.notNull()
-			.default([]),
-		/** Applicant note when requesting quote changes. */
+		/** The booked flight and its PNR; set when the handler records the booking. */
+		booking: jsonb("booking_confirmation").$type<TravelBooking | null>(),
+		/** Applicant note sent with the request. */
 		applicantNote: text("applicant_note"),
-		/** Ops note visible to the applicant alongside the quote. */
+		/** Ops note visible to the applicant alongside the invoice. */
 		opsNote: text("ops_note"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

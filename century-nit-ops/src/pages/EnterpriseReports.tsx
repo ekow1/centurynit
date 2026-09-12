@@ -4,7 +4,7 @@ import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { branchName } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER, type Lead } from "century-nit-core";
-import { JOURNEY_STAGE_LABELS, API_PREFIX, LEAD_STAGE_FROM_DB } from "century-nit-shared";
+import { JOURNEY_STAGE_LABELS, API_PREFIX, LEAD_STAGE_FROM_DB, INVOICE_TYPE_LABELS, isPassThroughInvoice } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
 
@@ -241,8 +241,11 @@ export function EnterpriseReports() {
 		const total = invoices.length;
 		const paid = invoices.filter((i) => i.status === "paid").length;
 		const outstanding = invoices.filter((i) => i.status === "issued" || i.status === "overdue").length;
-		const totalAmount = invoices.reduce((n, i) => n + i.subtotal, 0);
-		return { total, paid, outstanding, totalAmount };
+		// Revenue is the agency's money: ticket fares are collected for the
+		// airline and pass straight through, so they are counted but not billed.
+		const totalAmount = invoices.filter((i) => !isPassThroughInvoice(i.type)).reduce((n, i) => n + i.subtotal, 0);
+		const passThrough = invoices.filter((i) => isPassThroughInvoice(i.type)).reduce((n, i) => n + i.subtotal, 0);
+		return { total, paid, outstanding, totalAmount, passThrough };
 	}, [invoices]);
 
 	const revenueByType = useMemo(() => {
@@ -368,7 +371,7 @@ export function EnterpriseReports() {
 
 				{/* Invoice Summary */}
 				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
-					<KPICard label="Invoices Issued" value={String(invoiceStats.total)} note={`${fmtBoth(invoiceStats.totalAmount)} total billed`} />
+					<KPICard label="Invoices Issued" value={String(invoiceStats.total)} note={`${fmtBoth(invoiceStats.totalAmount)} revenue billed${invoiceStats.passThrough > 0 ? ` · ${fmtBoth(invoiceStats.passThrough)} collected for airlines` : ""}`} />
 					<KPICard label="Paid Invoices" value={String(invoiceStats.paid)} note="Settled accounts" />
 					<KPICard label="Outstanding Invoices" value={String(invoiceStats.outstanding)} note="Awaiting payment" />
 				</div>
@@ -397,7 +400,10 @@ export function EnterpriseReports() {
 										return (
 											<tr key={type} style={{ borderBottom: "1px solid var(--border-light)" }}>
 												<td style={{ padding: "0.75rem", fontWeight: 500 }}>
-													<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{type}</span>
+													<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{INVOICE_TYPE_LABELS[type] ?? type}</span>
+													{isPassThroughInvoice(type) && (
+														<span className="muted" style={{ fontSize: "var(--text-xs)", marginLeft: "0.4rem" }}>pass-through · not revenue</span>
+													)}
 												</td>
 												<td style={{ padding: "0.75rem" }}>{d.count}</td>
 												<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{fmtBoth(d.billed)}</td>

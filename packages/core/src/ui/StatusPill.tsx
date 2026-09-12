@@ -39,9 +39,9 @@ export function visaTone(stage: string): Tone {
 
 export function travelTone(status: string): Tone {
 	switch (status) {
-		case "cleared": case "booked": case "ticket_paid": return "done";
-		case "invoiced": return "current";
-		case "review": case "quote_prepared": case "quote_approved": case "decision_pending": return "waiting";
+		case "booked": return "done";
+		case "invoiced": case "ticket_paid": return "current";
+		case "review": case "decision_pending": return "waiting";
 		case "on_hold": return "neutral";
 		case "declined": return "void";
 		default: return "neutral";

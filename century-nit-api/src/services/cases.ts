@@ -10,6 +10,8 @@ import {
 	type CaseApplicationStatus,
 	type AcceptProceedResponse,
 	canAdvanceToStage,
+	travelBlockReason,
+	type TravelAssistanceStatus,
 	JOURNEY_STAGES,
 	canOwnStage,
 	JOURNEY_STAGE_LABELS,
@@ -18,6 +20,7 @@ import {
 	type ProceedQuotation,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
+import { normalizeTravelStatus } from "./travelAssistance.js";
 import type { z } from "zod";
 import { db } from "../db/index.js";
 import {
@@ -670,7 +673,6 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		depositPaid: row.depositPaid,
 		appFeePaid: row.appFeePaid,
 		travelInvoicePaid: row.travelInvoicePaid,
-		travelClearance: row.travelClearance === "cleared" ? "cleared" : "pending",
 		requestedDocuments: row.requestedDocuments ?? [],
 		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
 		comments: comments.map(toComment),
@@ -808,31 +810,18 @@ export async function getApplicantByUserId(userId: string): Promise<ApplicantRow
 
 /**
  * Travel assistance status for an application, used by the journey gate.
- * Returns `null` when no request exists (legacy applications) so the gate
- * falls back to the old `travelInvoicePaid` / `travelClearance` signals.
+ * `null` when the applicant has not decided yet (no request exists).
  */
 async function getTravelAssistanceStatusForApplication(
 	applicationId: string,
-): Promise<
-	| "decision_pending"
-	| "review"
-	| "quote_prepared"
-	| "quote_approved"
-	| "invoiced"
-	| "ticket_paid"
-	| "booked"
-	| "cleared"
-	| "declined"
-	| "on_hold"
-	| null
-> {
+): Promise<TravelAssistanceStatus | null> {
 	const [row] = await db
 		.select({ status: travelAssistanceRequests.status })
 		.from(travelAssistanceRequests)
 		.where(eq(travelAssistanceRequests.applicationId, applicationId))
 		.orderBy(desc(travelAssistanceRequests.createdAt))
 		.limit(1);
-	return row?.status ?? null;
+	return row ? normalizeTravelStatus(row.status) : null;
 }
 
 export { serializeConsultation, serializeApplication, serializeApplicant };
@@ -1992,7 +1981,6 @@ export async function updateApplication(
 	};
 	if (input.visaCounselorNote !== undefined) set.visaCounselorNote = input.visaCounselorNote;
 	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
-	if (input.travelClearance !== undefined) set.travelClearance = input.travelClearance;
 	if (input.preDepartureTasks !== undefined) set.preDepartureTasks = input.preDepartureTasks;
 	if (input.notes !== undefined) set.notes = input.notes;
 
@@ -2067,38 +2055,17 @@ export function canAdvanceTo(
 		hasAppInvoice: boolean;
 		hasVisaInvoice: boolean;
 		visaDone: boolean;
-		travelClearance: string | null;
 		hasPaymentPlan?: boolean;
 		agencySettled?: boolean;
-		travelInvoicePaid?: boolean;
 		preDepartureDone?: boolean;
 		/**
-		 * Travel assistance request status from the direct-invoice flow.
-	 * When present, this overrides the legacy `travelInvoicePaid` /
-		 * `travelClearance` / `preDepartureDone` signals for travel gating.
-		 *
-		 * - `booked` or `declined` → travel is resolved, never blocks.
-		 * - `on_hold` → applicant parked; does not block (opt-out unblocks).
-		 * - `invoiced` → ticket invoice raised; blocks `payment_execution`
-		 *   until paid (mirrors legacy `travelInvoicePaid`).
-		 * - `quote_prepared`/`quote_approved` (legacy, removed flow)/`review`/`decision_pending` →
-		 *   travel not yet resolved; blocks `completed` but not `payment_execution`.
+		 * The travel request's status — the one travel signal. Resolved
+		 * (never blocks) when booked, declined or on hold; everything else
+		 * says what is still owed.
 		 */
-		travelAssistanceStatus?:
-			| "decision_pending"
-			| "review"
-			| "quote_prepared"
-			| "quote_approved"
-			| "invoiced"
-			| "ticket_paid"
-			| "booked"
-			| "cleared"
-			| "declined"
-			| "on_hold";
+		travelAssistanceStatus?: TravelAssistanceStatus | null;
 	},
 ): string | null {
-	const ta = signals.travelAssistanceStatus;
-	const travelResolved = ta === "cleared" || ta === "booked" || ta === "declined" || ta === "on_hold";
 	switch (stage) {
 		case "document_verification":
 			return null;
@@ -2114,37 +2081,16 @@ export function canAdvanceTo(
 			return signals.hasAdmitted
 				? null
 				: "Cannot advance to Visa Processing: no accepted offer (admitted).";
-		case "payment_execution": {
-			// New flow: if a travel assistance request exists, the ticket invoice
-			// must be paid (status `ticket_paid`, `booked`, or `cleared`) before
-			// advancing. `declined`/`on_hold` never block.
-			if (ta) {
-				if (travelResolved) return null;
-				if (ta === "invoiced" || ta === "ticket_paid") {
-					return signals.travelInvoicePaid
-						? null
-						: "Cannot advance to Payment Execution: the ticket invoice is not paid.";
-				}
-				return "Cannot advance to Payment Execution: your flight is still being processed.";
-			}
-			return signals.travelInvoicePaid
-				? null
-				: "Cannot advance to Payment Execution: the travel invoice (ticketing fee) is not paid.";
-		}
+		case "payment_execution":
+			// Travel is the one gate: booked, booking their own, or on hold.
+			return travelBlockReason(signals.travelAssistanceStatus, "Cannot advance to Payment Execution");
 		case "travel_assistance":
 			return signals.visaDone
 				? null
 				: "Cannot advance to Travel Assistance: visa stage is not complete.";
 		case "completed": {
-			// New flow: travel is resolved when the request is cleared, booked,
-			// declined, or on hold. Otherwise the legacy clearance + checklist signals apply.
-			if (ta) {
-				if (travelResolved) return null;
-				return "Cannot advance to Completed: your travel is not cleared yet.";
-			}
-			if (signals.travelClearance !== "cleared") {
-				return "Cannot advance to Completed: travel clearance is not 'cleared'.";
-			}
+			const travelBlock = travelBlockReason(signals.travelAssistanceStatus, "Cannot advance to Completed");
+			if (travelBlock) return travelBlock;
 			return signals.preDepartureDone
 				? null
 				: "Cannot advance to Completed: pre-departure checklist is not finished.";
@@ -2357,8 +2303,6 @@ export async function setApplicationStage(
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
-		travelInvoicePaid: row.travelInvoicePaid,
-		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
@@ -2374,10 +2318,8 @@ export async function setApplicationStage(
 		hasAppInvoice,
 		hasVisaInvoice,
 		visaDone: row.visaStage === "complete" && row.visaOutcome === "approved",
-		travelClearance: row.travelClearance,
 		hasPaymentPlan: Boolean(row.paymentPlanId),
 		agencySettled: row.agencySettled,
-		travelInvoicePaid: row.travelInvoicePaid,
 		preDepartureDone:
 			Array.isArray(row.preDepartureTasks) &&
 			row.preDepartureTasks.length > 0 &&
@@ -2489,6 +2431,7 @@ export async function setApplicationStage(
 	return updated;
 }
 
+
 /**
  * Complete a boundary transition that hard-gated on entry: once its handoff is
  * resolved and the new stage staffed, move the parked application into it.
@@ -2516,8 +2459,6 @@ export async function applyHandoffResolvedTransition(input: {
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
-		travelInvoicePaid: row.travelInvoicePaid,
-		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
 	});
@@ -2653,35 +2594,6 @@ export async function setApplicationVisaStage(
 	}
 
 	if (stage === "complete") markStageCompleted(id, "visa_processing", actor.opsUserId);
-
-	return updated;
-}
-
-export async function setApplicationTravelClearance(
-	id: string,
-	cleared: boolean,
-	actor: Actor,
-): Promise<ApplicationRow> {
-	const row = await getApplication(id);
-	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	const [updated] = await db
-		.update(applications)
-		.set({
-			travelClearance: cleared ? "cleared" : "pending",
-			updatedAt: new Date(),
-		})
-		.where(eq(applications.id, id))
-		.returning();
-	await db.insert(caseComments).values({
-		targetType: "application",
-		targetId: id,
-		kind: "status",
-		text: cleared ? "Travel cleared" : "Travel clearance withdrawn",
-		authorName: actor.name,
-		authorOpsUserId: actor.opsUserId,
-	});
-
-	if (cleared) markStageCompleted(id, "travel_assistance", actor.opsUserId);
 
 	return updated;
 }
@@ -2930,6 +2842,43 @@ export async function setApplicationPaymentPlan(input: {
 }
 
 /**
+ * The one transition out of Travel Assistance. Travel is settled (booked,
+ * booking their own, or on hold) so the case moves to Payment Execution and
+ * the finance owner is queued for the handled plan work — the pending
+ * assignment never parks the transition. Returns null when the case was not
+ * at travel_assistance (already moved, or not there yet).
+ */
+export async function enterPaymentExecution(
+	row: ApplicationRow,
+	why: string,
+	actorName: string,
+): Promise<ApplicationRow | null> {
+	const [updated] = await db
+		.update(applications)
+		.set({ stage: "payment_execution", updatedAt: new Date() })
+		.where(and(eq(applications.id, row.id), eq(applications.stage, "travel_assistance")))
+		.returning();
+	if (!updated) return null;
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: row.id,
+		kind: "status",
+		text: `Stage → payment_execution (${why})`,
+		authorName: actorName,
+		authorOpsUserId: null,
+	});
+	const continuity = row.assignedStaffId ? await loadStaff(row.assignedStaffId) : null;
+	await createOrGetHandoff({
+		applicationId: row.id,
+		stage: "payment_execution",
+		source: "applicant_advance",
+		fromOpsUserId: continuity?.id ?? null,
+	});
+	void signalStageNeedsHandler(row.id, "payment_execution");
+	return updated;
+}
+
+/**
  * Applicant self-service: advance from Travel Assistance to Payment Execution
  * (the plan chapter) once the ticketing fee is paid.
  *
@@ -2972,8 +2921,6 @@ export async function advanceToPaymentPlanFromTravel(input: {
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
-		travelInvoicePaid: row.travelInvoicePaid,
-		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
@@ -2982,32 +2929,8 @@ export async function advanceToPaymentPlanFromTravel(input: {
 		throw new HttpError(409, "STAGE_PREREQUISITES_NOT_MET", gateReason);
 	}
 
-	const [updated] = await db
-		.update(applications)
-		.set({ stage: "payment_execution", updatedAt: new Date() })
-		.where(and(eq(applications.id, row.id), eq(applications.stage, "travel_assistance")))
-		.returning();
+	const updated = await enterPaymentExecution(row, "applicant moved on from travel", applicant.name ?? "Applicant");
 	if (!updated) return row;
-
-	await db.insert(caseComments).values({
-		targetType: "application",
-		targetId: row.id,
-		kind: "status",
-		text: "Stage → payment_execution (applicant advanced after paying the ticketing fee)",
-		authorName: applicant.name ?? "Applicant",
-		authorOpsUserId: null,
-	});
-
-	// The applicant drove entry; queue the finance owner for the handled plan
-	// work. The handoff must NOT park the transition.
-	const continuity = row.assignedStaffId ? await loadStaff(row.assignedStaffId) : null;
-	await createOrGetHandoff({
-		applicationId: row.id,
-		stage: "payment_execution",
-		source: "applicant_advance",
-		fromOpsUserId: continuity?.id ?? null,
-	});
-	void signalStageNeedsHandler(row.id, "payment_execution");
 
 	notify({
 		recipientUserId: input.applicantUserId,
@@ -3066,8 +2989,6 @@ export async function completeFromPaymentPlan(input: {
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
-		travelInvoicePaid: row.travelInvoicePaid,
-		travelClearance: row.travelClearance,
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,

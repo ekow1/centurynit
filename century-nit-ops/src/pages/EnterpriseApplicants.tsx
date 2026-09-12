@@ -493,7 +493,7 @@ function paymentPlanLabel(plan?: PaymentPlanId): string {
 
 function VisaTravelTab({ applicant }: { applicant: MockApplicant }) {
 	const hasVisaData = applicant.visaStage || applicant.visaInvoicePaid !== undefined;
-	const hasTravelData = applicant.paymentPlanId || applicant.agencyStageIndex !== undefined || applicant.preDepartureTasks || applicant.travelClearance;
+	const hasTravelData = applicant.paymentPlanId || applicant.agencyStageIndex !== undefined || applicant.preDepartureTasks;
 
 	if (!hasVisaData && !hasTravelData) {
 		return (
@@ -619,19 +619,6 @@ function VisaTravelTab({ applicant }: { applicant: MockApplicant }) {
 							);
 						})}
 					</div>
-				</div>
-			)}
-
-			{/* Travel Clearance */}
-			{applicant.travelClearance && (
-				<div className="card" style={{
-					background: applicant.travelClearance === "cleared" ? "#dcfce7" : "#fef3c7",
-					borderColor: applicant.travelClearance === "cleared" ? "#86efac" : "#fcd34d",
-				}}>
-					<p className="eyebrow" style={{ marginBottom: "0.3rem" }}>Travel Clearance</p>
-					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", color: applicant.travelClearance === "cleared" ? "#166534" : "#92400e" }}>
-						{applicant.travelClearance === "cleared" ? "Cleared for travel" : "Pending clearance"}
-					</p>
 				</div>
 			)}
 

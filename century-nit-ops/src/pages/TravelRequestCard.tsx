@@ -1,249 +1,348 @@
 import { useState } from "react";
-import { applicationsApi } from "century-nit-core/api";
+import { Link } from "react-router-dom";
+import { applicationsApi, ApiError } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
-import { AssignControl } from "century-nit-core/ui";
-import { TRAVEL_STATUS_LABELS, type TravelAssistanceRequest } from "century-nit-shared";
-
-const TA_STATUS_LABELS = TRAVEL_STATUS_LABELS;
+import { AssignControl, InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
+import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
+import type { ApiInvoice } from "../lib/api";
 
 /**
- * One travel request as ops works it: decision → handler → ticket invoice
- * (proforma → issued) → payment → booking. Used by the Travel queue and by
- * the case detail, so both show the same card.
+ * One travel request as ops works it — one path, one card:
+ *
+ *   decide → handler assigned → ticket invoice raised (and issued) → paid →
+ *   booked. "Booking their own" and "on hold" leave the path.
+ *
+ * `TravelCard` is the case-tab view: status, the flight, and the single
+ * next action. `TaQueueRow` wraps it for the Travel queue with the
+ * applicant's name and the assign control (assignment inside a case lives
+ * in the case header).
  */
+
+function fmtWhen(iso?: string): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** The flight as a few rows; the same rendering for the invoice's flight and the booked one. */
+export function FlightSummary({ flight, confirmationCode }: { flight: TravelFlight | null; confirmationCode?: string }) {
+	if (!flight && !confirmationCode) return null;
+	const route = [flight?.from, flight?.to].filter(Boolean).join(" → ");
+	const rows: [string, string][] = [];
+	if (confirmationCode) rows.push(["PNR", confirmationCode]);
+	if (flight?.carrier || flight?.flightNumber) rows.push(["Flight", [flight.carrier, flight.flightNumber].filter(Boolean).join(" ")]);
+	if (route) rows.push(["Route", route]);
+	if (flight?.departAt) rows.push(["Departs", fmtWhen(flight.departAt)]);
+	if (flight?.arriveAt) rows.push(["Arrives", fmtWhen(flight.arriveAt)]);
+	return (
+		<dl className="cn-case__facts" style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.2rem 1rem", margin: 0 }}>
+			{rows.map(([k, v]) => (
+				<span key={k} style={{ display: "contents" }}>
+					<dt className="muted" style={{ fontSize: "var(--text-xs)" }}>{k}</dt>
+					<dd style={{ margin: 0, fontSize: "var(--text-sm)" }}>{v}</dd>
+				</span>
+			))}
+			{flight?.notes && (
+				<span style={{ display: "contents" }}>
+					<dt className="muted" style={{ fontSize: "var(--text-xs)" }}>Notes</dt>
+					<dd style={{ margin: 0, fontSize: "var(--text-sm)", whiteSpace: "pre-wrap" }}>{flight.notes}</dd>
+				</span>
+			)}
+		</dl>
+	);
+}
+
+/** Datetime-local wants "YYYY-MM-DDTHH:mm"; the API wants ISO with an offset. */
+const toLocalInput = (iso?: string) => (iso ? new Date(iso).toISOString().slice(0, 16) : "");
+const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : undefined);
+
+/**
+ * The flight form — raising the ticket invoice (fare + flight) or recording
+ * the booking (PNR + the flight as actually booked, prefilled from the
+ * invoice's flight).
+ */
+export function FlightForm({
+	mode,
+	initial,
+	busy,
+	onSubmit,
+	onCancel,
+}: {
+	mode: "raise" | "book";
+	initial?: TravelFlight | null;
+	busy: boolean;
+	onSubmit: (input: { flight: TravelFlight; fareCents?: number; confirmationCode?: string }) => void;
+	onCancel: () => void;
+}) {
+	const [carrier, setCarrier] = useState(initial?.carrier ?? "");
+	const [flightNumber, setFlightNumber] = useState(initial?.flightNumber ?? "");
+	const [from, setFrom] = useState(initial?.from ?? "");
+	const [to, setTo] = useState(initial?.to ?? "");
+	const [departAt, setDepartAt] = useState(toLocalInput(initial?.departAt));
+	const [arriveAt, setArriveAt] = useState(toLocalInput(initial?.arriveAt));
+	const [notes, setNotes] = useState(initial?.notes ?? "");
+	const [fare, setFare] = useState("");
+	const [pnr, setPnr] = useState("");
+
+	const fareCents = Math.round(Number(fare) * 100);
+	const ready = mode === "raise" ? fareCents > 0 : pnr.trim().length > 0;
+
+	return (
+		<form
+			className="cn-assign"
+			onSubmit={(e) => {
+				e.preventDefault();
+				if (!ready) return;
+				onSubmit({
+					flight: {
+						carrier: carrier || undefined,
+						flightNumber: flightNumber || undefined,
+						from: from || undefined,
+						to: to || undefined,
+						departAt: fromLocalInput(departAt),
+						arriveAt: fromLocalInput(arriveAt),
+						notes: notes || undefined,
+					},
+					fareCents: mode === "raise" ? fareCents : undefined,
+					confirmationCode: mode === "book" ? pnr.trim() : undefined,
+				});
+			}}
+		>
+			{mode === "book" && (
+				<input className="input input--sm" placeholder="PNR / confirmation code" value={pnr} onChange={(e) => setPnr(e.target.value)} disabled={busy} autoFocus />
+			)}
+			<div className="cn-assign__row">
+				<input className="input input--sm" placeholder="Airline" value={carrier} onChange={(e) => setCarrier(e.target.value)} disabled={busy} />
+				<input className="input input--sm" placeholder="Flight no." value={flightNumber} onChange={(e) => setFlightNumber(e.target.value)} disabled={busy} style={{ flex: "0 1 8rem", minWidth: "6rem" }} />
+			</div>
+			<div className="cn-assign__row">
+				<input className="input input--sm" placeholder="From (e.g. ACC)" value={from} onChange={(e) => setFrom(e.target.value)} disabled={busy} />
+				<input className="input input--sm" placeholder="To (e.g. LHR)" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} />
+			</div>
+			<div className="cn-assign__row">
+				<label className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1 }}>
+					Departs
+					<input type="datetime-local" className="input input--sm" value={departAt} onChange={(e) => setDepartAt(e.target.value)} disabled={busy} />
+				</label>
+				<label className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1 }}>
+					Arrives
+					<input type="datetime-local" className="input input--sm" value={arriveAt} onChange={(e) => setArriveAt(e.target.value)} disabled={busy} />
+				</label>
+			</div>
+			{mode === "raise" && (
+				<input
+					type="number"
+					min="0"
+					step="0.01"
+					className="input input--sm"
+					placeholder="Fare (USD) — the airline ticket only; the service fee is in the package"
+					value={fare}
+					onChange={(e) => setFare(e.target.value)}
+					disabled={busy}
+					autoFocus
+				/>
+			)}
+			<textarea className="input" rows={2} placeholder="Notes for the applicant (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} />
+			<div className="cn-assign__row">
+				<button type="submit" className="btn btn--sm btn--primary" disabled={busy || !ready}>
+					{busy ? "Saving…" : mode === "raise" ? "Raise ticket invoice" : "Record booking"}
+				</button>
+				<button type="button" className="btn btn--sm btn--ghost" onClick={onCancel} disabled={busy}>
+					Cancel
+				</button>
+			</div>
+		</form>
+	);
+}
+
+/**
+ * Status, the flight, and the one next action. `invoice` is the ticket
+ * invoice when the caller has it (the case detail does; the queue does
+ * not) — it decides whether "raised" means "awaiting issue" or "awaiting
+ * payment" and gives finance the link to issue it.
+ */
+export function TravelCard({
+	ta,
+	invoice,
+	canWork,
+	canIssueInvoices,
+	onChanged,
+}: {
+	ta: TravelAssistanceRequest;
+	invoice?: ApiInvoice | null;
+	/** May raise the invoice and record the booking (the handler or a manager). */
+	canWork: boolean;
+	/** Holds the invoices module — sees the Review & issue link. */
+	canIssueInvoices: boolean;
+	onChanged: () => void;
+}) {
+	const [busy, setBusy] = useState(false);
+	const [form, setForm] = useState<"none" | "raise" | "book">("none");
+	const [error, setError] = useState<string | null>(null);
+
+	async function run(fn: () => Promise<unknown>) {
+		setBusy(true);
+		setError(null);
+		try {
+			await fn();
+			setForm("none");
+			onChanged();
+		} catch (e) {
+			setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Something went wrong");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	const status = ta.status;
+	const line =
+		status === "decision_pending"
+			? "Waiting for the applicant to decide how they want to book."
+			: status === "review" && !ta.assignedOpsUserId
+				? "Assign a travel handler to raise the ticket invoice."
+				: status === "review"
+					? `${ta.assignedOpsUserName ?? "The handler"} raises the ticket invoice for the flight.`
+					: status === "invoiced"
+						? invoice?.status === "proforma"
+							? "Ticket invoice raised — finance reviews and issues it, then the applicant can pay."
+							: "Ticket invoice issued — waiting for the applicant to pay."
+						: status === "ticket_paid"
+							? "Ticket paid — record the booking once the airline confirms it."
+							: status === "booked"
+								? "Flight booked. The case has moved on to Payment Execution."
+								: status === "declined"
+									? "The applicant is booking their own flight. Travel is settled."
+									: "Travel assistance is on hold — the applicant can resume from the portal.";
+
+	return (
+		<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+			<div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+				<TravelStatusPill status={status} />
+				<p className="muted" style={{ fontSize: "var(--text-sm)", margin: 0 }}>{line}</p>
+			</div>
+
+			{status === "booked" && ta.booking ? (
+				<FlightSummary flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
+			) : ta.flight ? (
+				<FlightSummary flight={ta.flight} />
+			) : null}
+
+			{invoice && (
+				<InvoiceCard
+					compact
+					title="Ticket invoice"
+					invoice={invoice}
+					hint={
+						invoice.status === "proforma"
+							? canIssueInvoices
+								? "The applicant cannot pay until you review and issue this invoice."
+								: "Raised — the applicant cannot pay until finance issues it."
+							: undefined
+					}
+					actions={
+						canIssueInvoices ? (
+							<Link to={`/invoices?open=${invoice.id}`} className="btn btn--sm btn--ghost">
+								{invoice.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
+							</Link>
+						) : undefined
+					}
+				/>
+			)}
+
+			{canWork && form === "none" && status === "review" && ta.assignedOpsUserId && (
+				<div>
+					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")}>
+						Raise ticket invoice
+					</button>
+				</div>
+			)}
+			{canWork && form === "none" && status === "ticket_paid" && (
+				<div>
+					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("book")}>
+						Record booking
+					</button>
+				</div>
+			)}
+			{form === "raise" && (
+				<FlightForm
+					mode="raise"
+					busy={busy}
+					onCancel={() => setForm("none")}
+					onSubmit={({ flight, fareCents }) =>
+						void run(() => applicationsApi.raiseTravelInvoice(ta.id, { fareCents: fareCents ?? 0, flight }))
+					}
+				/>
+			)}
+			{form === "book" && (
+				<FlightForm
+					mode="book"
+					initial={ta.flight}
+					busy={busy}
+					onCancel={() => setForm("none")}
+					onSubmit={({ flight, confirmationCode }) =>
+						void run(() => applicationsApi.recordTravelBooking(ta.id, { ...flight, confirmationCode }))
+					}
+				/>
+			)}
+			{error && <p className="cn-assign__error">{error}</p>}
+		</div>
+	);
+}
+
+/** The Travel queue's row: who, then the card; assignment is offered here because the queue is where triage happens. */
 export function TaQueueRow({
 	ta,
 	onChanged,
 	onSelectApp,
 	staff,
 	branch,
-	canIssue,
-	showAssign = true,
+	canWork,
+	canIssueInvoices,
 }: {
 	ta: TravelAssistanceRequest;
 	onChanged: () => void;
 	onSelectApp?: () => void;
 	staff: Assignee[];
 	branch?: string;
-	canIssue?: boolean;
-	/** Off inside the case detail, where the header's assign sheet is the one assignment surface. */
-	showAssign?: boolean;
+	canWork: boolean;
+	canIssueInvoices: boolean;
 }) {
-	const [busy, setBusy] = useState(false);
-	const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-	const [showBookingForm, setShowBookingForm] = useState(false);
-	const [showAssignForm, setShowAssignForm] = useState(false);
-	const [carrier, setCarrier] = useState("");
-	const [flightNumber, setFlightNumber] = useState("");
-	const [ticketAmount, setTicketAmount] = useState("");
-	const [notes, setNotes] = useState("");
-	const [confirmationCode, setConfirmationCode] = useState("");
-	const [bookingCarrier, setBookingCarrier] = useState("");
-	const [bookingNotes, setBookingNotes] = useState("");
-	async function assignHandler(opsUserId: string) {
-		await applicationsApi.assignTravelHandler(ta.id, opsUserId);
-		onChanged();
-		setShowAssignForm(false);
-	}
-
-	async function raiseInvoice() {
-		setBusy(true);
-		try {
-			await applicationsApi.raiseTravelInvoice(ta.id, {
-				carrier: carrier || undefined,
-				flightNumber: flightNumber || undefined,
-				ticketAmountCents: Math.round(Number(ticketAmount) * 100),
-				notes: notes || undefined,
-			});
-			onChanged();
-			setShowInvoiceForm(false);
-		} catch {
-			/* ignore */
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	async function issueInvoice() {
-		setBusy(true);
-		try {
-			await applicationsApi.issueTravelInvoice(ta.id);
-			onChanged();
-		} catch {
-			/* ignore */
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	async function recordBooking() {
-		setBusy(true);
-		try {
-			await applicationsApi.recordTravelBooking(ta.id, {
-				carrier: bookingCarrier || undefined,
-				confirmationCode: confirmationCode || undefined,
-				notes: bookingNotes || undefined,
-			});
-			onChanged();
-			setShowBookingForm(false);
-		} catch {
-			/* ignore */
-		} finally {
-			setBusy(false);
-		}
-	}
-
-	const pendingHint =
-		ta.status === "decision_pending"
-			? "Waiting for applicant decision"
-			: ta.status === "review" && !ta.assignedOpsUserId
-				? "Assign a handler before raising the ticket invoice."
-				: ta.status === "review" && ta.assignedOpsUserId
-					? "Handler assigned — raise the ticket invoice (proforma) for manager approval."
-					: ta.status === "quote_prepared"
-						? "Proforma raised — a manager must approve & issue it before the applicant can pay."
-						: ta.status === "invoiced"
-							? "Waiting for applicant to pay the ticket"
-							: ta.status === "booked"
-								? "Booking confirmed — waiting for applicant to choose a payment plan"
-								: ta.status === "cleared"
-									? "Cleared to travel"
-									: null;
-
+	const [showAssign, setShowAssign] = useState(false);
 	return (
-		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-				<div
-					onClick={onSelectApp}
-					style={{ cursor: onSelectApp ? "pointer" : "default", flex: 1, minWidth: 0 }}
-					title={onSelectApp ? "View full case detail" : undefined}
-				>
-					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+		<div style={{ padding: "0.75rem", border: "1px solid var(--border-light)", borderRadius: "6px", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+				<div onClick={onSelectApp} style={{ cursor: onSelectApp ? "pointer" : "default", flex: 1, minWidth: 0 }} title={onSelectApp ? "View full case detail" : undefined}>
+					<p style={{ fontWeight: 600, fontSize: "var(--text-sm)", margin: 0 }}>
 						{ta.applicantName ?? ta.applicantId.slice(0, 8)}
-						{onSelectApp && <span style={{ opacity: 0.4, marginLeft: "0.35rem" }}>{"\u2192"}</span>}
+						{onSelectApp && <span style={{ opacity: 0.4, marginLeft: "0.35rem" }}>{"→"}</span>}
 					</p>
-					<p className="muted" style={{ fontSize: "var(--text-xs)" }}>
+					<p className="muted" style={{ fontSize: "var(--text-xs)", margin: 0 }}>
 						{ta.applicationReference ?? ""}
 						{ta.university ? ` · ${ta.university}` : ""}
-						{" — "}
-						{TA_STATUS_LABELS[ta.status] ?? ta.status}
-						{ta.decision ? ` · ${ta.decision}` : ""}
+						{ta.assignedOpsUserName ? ` · ${ta.assignedOpsUserName}` : " · Unassigned"}
 					</p>
-					{ta.assignedOpsUserName && (
-						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-							Handler: {ta.assignedOpsUserName}
-						</p>
-					)}
 				</div>
-				<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-					{showAssign && ta.status === "review" && (
-						<button className="btn btn--sm btn--ghost" onClick={() => setShowAssignForm((v) => !v)}>
-							{ta.assignedOpsUserId ? "Reassign handler" : "Assign handler"}
-						</button>
-					)}
-					{ta.status === "review" && ta.assignedOpsUserId && (
-						<button className="btn btn--sm btn--primary" onClick={() => setShowInvoiceForm((v) => !v)}>
-							Raise invoice
-						</button>
-					)}
-					{ta.status === "quote_prepared" && canIssue && (
-						<button className="btn btn--sm btn--primary" onClick={() => void issueInvoice()} disabled={busy}>
-							{busy ? "Issuing…" : "Approve & issue"}
-						</button>
-					)}
-					{ta.status === "ticket_paid" && (
-						<button className="btn btn--sm btn--primary" onClick={() => setShowBookingForm((v) => !v)}>
-							Record booking
-						</button>
-					)}
-				</div>
+				{canWork && ta.status === "review" && (
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setShowAssign((v) => !v)}>
+						{ta.assignedOpsUserId ? "Reassign handler" : "Assign handler"}
+					</button>
+				)}
 			</div>
-
-			{pendingHint && (
-				<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", fontStyle: "italic" }}>
-					{pendingHint}
-				</p>
+			{showAssign && ta.status === "review" && (
+				<AssignControl
+					stage="travel_assistance"
+					staff={staff}
+					branch={branch}
+					currentName={ta.assignedOpsUserName ?? null}
+					onAssign={async (opsUserId) => {
+						await applicationsApi.assignTravelHandler(ta.id, opsUserId);
+						setShowAssign(false);
+						onChanged();
+					}}
+				/>
 			)}
-
-			{showAssign && showAssignForm && ta.status === "review" && (
-				<div className="mt-3">
-					<AssignControl
-						stage="travel_assistance"
-						staff={staff}
-						branch={branch}
-						currentName={ta.assignedOpsUserName ?? null}
-						busy={busy}
-						onAssign={(opsUserId) => assignHandler(opsUserId)}
-					/>
-				</div>
-			)}
-
-			{showInvoiceForm && ta.status === "review" && ta.assignedOpsUserId && (
-				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
-					<input
-						className="input input--sm"
-						placeholder="Carrier (optional)"
-						value={carrier}
-						onChange={(e) => setCarrier(e.target.value)}
-					/>
-					<input
-						className="input input--sm"
-						placeholder="Flight number (optional)"
-						value={flightNumber}
-						onChange={(e) => setFlightNumber(e.target.value)}
-					/>
-					<input
-						className="input input--sm"
-						placeholder="Ticket amount (USD)"
-						type="number"
-						value={ticketAmount}
-						onChange={(e) => setTicketAmount(e.target.value)}
-					/>
-					<input
-						className="input input--sm"
-						placeholder="Notes (optional)"
-						value={notes}
-						onChange={(e) => setNotes(e.target.value)}
-					/>
-					<button
-						className="btn btn--sm btn--primary"
-						onClick={() => void raiseInvoice()}
-						disabled={busy || !ticketAmount}
-					>
-						{busy ? "Raising…" : "Raise invoice"}
-					</button>
-				</div>
-			)}
-
-			{showBookingForm && ta.status === "ticket_paid" && (
-				<div style={{ marginTop: "0.75rem", display: "grid", gap: "0.4rem" }}>
-					<input
-						className="input input--sm"
-						placeholder="Carrier"
-						value={bookingCarrier}
-						onChange={(e) => setBookingCarrier(e.target.value)}
-					/>
-					<input
-						className="input input--sm"
-						placeholder="Confirmation code"
-						value={confirmationCode}
-						onChange={(e) => setConfirmationCode(e.target.value)}
-					/>
-					<input
-						className="input input--sm"
-						placeholder="Notes (optional)"
-						value={bookingNotes}
-						onChange={(e) => setBookingNotes(e.target.value)}
-					/>
-					<button
-						className="btn btn--sm btn--primary"
-						onClick={() => void recordBooking()}
-						disabled={busy}
-					>
-						{busy ? "Saving…" : "Confirm booking"}
-					</button>
-				</div>
-			)}
+			<TravelCard ta={ta} canWork={canWork} canIssueInvoices={canIssueInvoices} onChanged={onChanged} />
 		</div>
 	);
 }

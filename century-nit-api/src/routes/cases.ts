@@ -43,7 +43,6 @@ import {
 	setApplicationPackage,
 	setApplicationPaymentPlan,
 	setApplicationStage,
-	setApplicationTravelClearance,
 	setApplicationVisaStage,
 	startConsultationAssessment,
 	toggleApplicationChecklist,
@@ -55,12 +54,9 @@ import {
 	listForOps as listTravelAssistanceForOps,
 	recordDecision as recordTravelAssistanceDecision,
 	raiseTicketInvoice as raiseTravelTicketInvoice,
-	issueTicketInvoice as issueTravelTicketInvoice,
 	recordBooking as recordTravelBooking,
-	updateOpsChecklist as updateTravelOpsChecklist,
 	assignHandler as assignTravelHandler,
 	applicationIdOfTravelRequest,
-	choosePlanAndClear as chooseTravelPlanAndClear,
 } from "../services/travelAssistance.js";
 import {
 	getInvoice,
@@ -118,7 +114,6 @@ import {
 	reassignCoordinatorSchema,
 	requestDocumentsSchema,
 	setStageSchema,
-	setTravelClearanceSchema,
 	setVisaStageSchema,
 	toggleChecklistSchema,
 	updateMyProfileSchema,
@@ -135,7 +130,7 @@ import {
 	travelAssistanceRequestSchema,
 	travelAssistanceDecisionInputSchema,
 	travelAssistanceBookingInputSchema,
-	travelAssistanceChecklistInputSchema,
+	travelAssistanceInvoiceInputSchema,
 	stageConsentSchema,
 	stageConsentInputSchema,
 	type StageConsentStage,
@@ -157,6 +152,7 @@ import {
 } from "../services/stageConsents.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
+import { checkRolePermission } from "../services/roles.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -992,33 +988,6 @@ applicationsRouter.openapi(
 	},
 );
 
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/travel-clearance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: setTravelClearanceSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Travel clearance updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const updated = await setApplicationTravelClearance(
-			c.req.valid("param").id,
-			c.req.valid("json").cleared,
-			actorFrom(c.get("staff")!),
-		);
-		return c.json(await serializeApplication(updated));
-	},
-);
 
 applicationsRouter.openapi(
 	createRoute({
@@ -1155,12 +1124,7 @@ applicationsRouter.openapi(
 			body: {
 				content: {
 					"application/json": {
-						schema: z.object({
-							ticketAmountCents: z.number().int().min(1),
-							carrier: z.string().max(120).optional(),
-							flightNumber: z.string().max(64).optional(),
-							notes: z.string().max(2000).optional(),
-						}),
+						schema: travelAssistanceInvoiceInputSchema,
 					},
 				},
 				required: true,
@@ -1178,48 +1142,20 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
 		const staff = c.get("staff")!;
+		// Raising is handler work; issuing — what lets the applicant pay — needs
+		// the invoices module, the same split as the application invoice. A
+		// handler who holds both does it in one step.
 		const updated = await raiseTravelTicketInvoice({
 			requestId: id,
-			ticketAmountCents: body.ticketAmountCents,
-			carrier: body.carrier,
-			flightNumber: body.flightNumber,
-			notes: body.notes,
+			fareCents: body.fareCents,
+			flight: body.flight,
+			issueNow: await checkRolePermission(staff.role, "invoices"),
 			actor: actorFrom(staff),
 		});
 		return c.json(updated);
 	},
 );
 
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/issue-invoice",
-		tags: ["Applications"],
-		middleware: [
-			requireAuth,
-			requireMfa,
-			requireModule("applications"),
-			requireRole("manager", "coordinator", "admin", "super_admin"),
-		] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ticket invoice issued (approved)",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const staff = c.get("staff")!;
-		const updated = await issueTravelTicketInvoice({
-			requestId: id,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
 
 applicationsRouter.openapi(
 	createRoute({
@@ -1255,39 +1191,6 @@ applicationsRouter.openapi(
 	},
 );
 
-applicationsRouter.openapi(
-	createRoute({
-		method: "patch",
-		path: "/travel-assistance/{id}/checklist",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: travelAssistanceChecklistInputSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ops pre-departure checklist updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await updateTravelOpsChecklist({
-			requestId: id,
-			checklist: body.checklist,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
 
 /* ── Applicants ──────────────────────────────────────────────────────────── */
 
@@ -2152,59 +2055,6 @@ meRouter.openapi(
 	},
 );
 
-meRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/application/travel-assistance/plan",
-		tags: ["Applicants"],
-		middleware: [requireAuth] as const,
-		request: {
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							paymentPlanId: z.enum(["full", "installment"]),
-						}),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Payment plan chosen — applicant is cleared to travel",
-			},
-		},
-	}),
-	async (c) => {
-		const user = c.get("user");
-		const applicant = await getApplicantByUserId(user.id);
-		if (!applicant) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
-		}
-		const application = await latestApplicationForApplicant(applicant.id);
-		if (!application) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
-		}
-		const body = c.req.valid("json");
-		const [ta] = await db
-			.select()
-			.from(schema.travelAssistanceRequests)
-			.where(eq(schema.travelAssistanceRequests.applicationId, application.id))
-			.orderBy(desc(schema.travelAssistanceRequests.createdAt))
-			.limit(1);
-		if (!ta) {
-			throw new HttpError(404, "TRAVEL_ASSISTANCE_NOT_FOUND", "No travel assistance request found");
-		}
-		const updated = await chooseTravelPlanAndClear({
-			requestId: ta.id,
-			paymentPlanId: body.paymentPlanId,
-			applicantUserId: user.id,
-		});
-		return c.json(updated);
-	},
-);
 
 // NOTE: there is deliberately no applicant-side "record a payment" route.
 // Applicants only settle invoices through Paystack (checkout + verify +

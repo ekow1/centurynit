@@ -31,6 +31,7 @@ export function CaseDocumentsPanel({
 	requestedDocuments,
 	canReview,
 	requestHint = "Nothing requested yet — use Request documents in the work panel.",
+	onChange,
 }: {
 	/** Portal user who owns the uploads; null until the applicant has an account. */
 	ownerUserId: string | null | undefined;
@@ -40,11 +41,17 @@ export function CaseDocumentsPanel({
 	/** Only the assigned handler (or a manager) may verify. */
 	canReview: boolean;
 	requestHint?: string;
+	/** Fires with the current list whenever it loads or a verdict changes it. */
+	onChange?: (docs: ApplicantDocument[]) => void;
 }) {
 	const [docs, setDocs] = useState<ApplicantDocument[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [previewing, setPreviewing] = useState<(DocPreviewData & { documentId: string }) | null>(null);
+	useEffect(() => {
+		onChange?.(docs);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- notify on list changes only
+	}, [docs]);
 
 	useEffect(() => {
 		if (!ownerUserId) {

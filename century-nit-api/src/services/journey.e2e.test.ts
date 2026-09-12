@@ -30,7 +30,7 @@ import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js
 import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
 import { addSchoolForApplicant, lockSchoolsForApplicant, updateSchoolStatus } from "./schools.js";
-import { processConsentDecision } from "../routes/cases.js";
+import { processConsentDecision } from "../routes/me.js";
 
 /**
  * The applicant journey, walked end to end through the real services against

@@ -1,61 +1,61 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull, not } from "drizzle-orm";
+import { and, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
-	acceptApplication,
-	addCaseComment,
+
+
 	completeFromDeparture,
-	applicantUserIdOfConsultation,
-	assignApplication,
-	assignConsultation,
-	cancelConsultation,
-	canSeeAllCases,
-	canAccessApplication,
-	canSeeConsultation,
-	completeConsultationAssessment,
+
+
+
+
+
+
+
+
 	acceptProceedForApplication,
-	confirmConsultationSlot,
+
 	declineProceedForApplication,
-	delegateCoordinator,
+
 	ensureVisaInvoiceForApplication,
-	getApplicant,
+
 	getApplicantByUserId,
-	getApplication,
-	getConsultation,
-	getConsultationActivity,
-	getStaffWorkload,
+
+
+
+
 	latestApplicationForApplicant,
 	latestConsultationForApplicant,
-	listApplicants,
-	listApplications,
-	listConsultations,
+
+
+
 	patchApplicant,
 	pauseProceedForApplication,
-	reassignCoordinator,
+
 	respondToOutcome,
-	requestCaseDocuments,
+
 	serializeApplicant,
 	serializeApplication,
 	serializeConsultation,
 	setApplicationPackage,
 	setApplicationPaymentPlan,
-	setApplicationStage,
-	setApplicationVisaStage,
-	startConsultationAssessment,
-	toggleApplicationChecklist,
-	updateApplication,
+
+
+
+
+
 } from "../services/cases.js";
 import {
 	getForApplication as getTravelAssistanceForApplication,
-	getForApplicationWithContext as getTravelAssistanceForApplicationOps,
-	listForOps as listTravelAssistanceForOps,
+
+
 	recordDecision as recordTravelAssistanceDecision,
-	raiseTicketInvoice as raiseTravelTicketInvoice,
-	recordBooking as recordTravelBooking,
-	assignHandler as assignTravelHandler,
-	applicationIdOfTravelRequest,
+
+
+
+
 } from "../services/travelAssistance.js";
 import {
 	getInvoice,
@@ -63,9 +63,9 @@ import {
 	paymentWithReferenceExists,
 	serializeInvoice,
 	acceptProformaClient,
-	issueProformaByOps,
-	createProforma,
-	getFeeSchedule,
+
+
+
 } from "../services/invoice.js";
 import {
 	createPaystackCheckout,
@@ -76,7 +76,7 @@ import {
 	settleInvoicePayment,
 } from "../services/paymentSettlement.js";
 import { journeyForApplicant } from "../services/journey.js";
-import { getApplicationActivity } from "../services/applicationActivity.js";
+
 import { syncLeadFromApplicant } from "../services/leads.js";
 import {
 	getOrCreateApplicantConversation,
@@ -84,20 +84,20 @@ import {
 	sendApplicantMessage,
 } from "../services/chat.js";
 import {
-	addCommentSchema,
-	applicantListSchema,
+
+
 	applicantSchema,
-	applicationListSchema,
+
 	applicationSchema,
-	assignCaseSchema,
+
 	CASE_ERROR_CODES,
-	cancelConsultationSchema,
+
 	choosePackageSchema,
 	choosePaymentPlanSchema,
-	completeAssessmentSchema,
-	consultationListSchema,
-	consultationSchema,
-	delegateConsultationSchema,
+
+
+
+
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
 	type JourneyStage,
@@ -108,39 +108,39 @@ import {
 	paystackCheckoutSchema,
 	paystackVerifyResponseSchema,
 	paystackVerifySchema,
-	patchApplicantSchema,
-	patchApplicationSchema,
-	reassignCoordinatorSchema,
-	requestDocumentsSchema,
-	setStageSchema,
-	setVisaStageSchema,
-	toggleChecklistSchema,
+
+
+
+
+
+
+
 	updateMyProfileSchema,
 	requestEmailChangeSchema,
 	confirmEmailChangeSchema,
 	portalStateSchema,
 	updatePortalStateSchema,
 	notificationSchema,
-	deferStageHandoffSchema,
-	stageHandoffListSchema,
-	stageHandoffSchema,
-	listStageHandoffsQuerySchema,
-	resolveStageHandoffSchema,
+
+
+
+
+
 	travelAssistanceRequestSchema,
 	travelAssistanceDecisionInputSchema,
-	travelAssistanceBookingInputSchema,
-	travelAssistanceInvoiceInputSchema,
+
+
 	stageConsentSchema,
 	stageConsentInputSchema,
 	type StageConsentStage,
 	type StageConsent,
-	applicationActivityResponseSchema,
+
 } from "century-nit-shared";
 import {
-	deferStageHandoff,
-	getStageHandoff,
-	listStageHandoffs,
-	resolveStageHandoff,
+
+
+
+
 	createOrGetHandoff,
 	activeHandlerFor,
 } from "../services/handoffs.js";
@@ -151,15 +151,15 @@ import {
 } from "../services/stageConsents.js";
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../middleware/error.js";
-import { checkRolePermission } from "../services/roles.js";
-import { documentChecklistForApplication, outstandingDocuments } from "../services/documentChecklist.js";
+
+
 import {
 	requireAuth,
 	requireMfa,
-	requireModule,
-	requireRole,
+
+
 	type AuthVariables,
-	type StaffContext,
+
 } from "../middleware/auth.js";
 import { env } from "../env.js";
 import { sendEmail } from "../lib/resend.js";
@@ -176,1271 +176,7 @@ import { renderOtpEmail } from "../lib/email-templates.js";
  * `chat.reply`, which is intentionally NOT listed here so applicants still see
  * their own consultant replies.
  */
-const STAFF_ONLY_NOTIFICATION_TYPES = [
-	"lead.new",
-	"booking.new",
-	"booking.assigned",
-	"consultation.assigned",
-	"document.uploaded",
-	"chat.message",
-] as const;
-
-const idParams = z.object({ id: z.string().uuid() });
-
-/**
- * Every read and write of one application goes through this. Access is the
- * same on both sides: the applicant, anyone who sees all cases, the case
- * owner, an active stage specialist, or the travel handler.
- */
-async function assertApplicationAccess(
-	c: { get(key: "user"): { id: string }; get(key: "staff"): StaffContext | null | undefined },
-	applicationId: string,
-	what = "work on",
-): Promise<void> {
-	if (!(await canAccessApplication(applicationId, c.get("user").id, c.get("staff") ?? null))) {
-		throw new HttpError(403, "FORBIDDEN", `Not allowed to ${what} this application`);
-	}
-}
-
-function actorFrom(staff: StaffContext) {
-	return { opsUserId: staff.opsUserId, name: staff.name, email: staff.email };
-}
-
-/* ── Consultations ───────────────────────────────────────────────────────── */
-
-export const consultationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationListSchema } },
-				description: "Consultations visible to this role",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		const rows = await listConsultations(staff);
-		const list = await Promise.all(rows.map((r) => serializeConsultation(r)));
-		return c.json({ consultations: list, total: list.length });
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Consultation",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const row = await getConsultation(id);
-		if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
-		const ownerUserId = await applicantUserIdOfConsultation(id);
-		if (!canSeeConsultation({ ...row, applicantUserId: ownerUserId }, c.get("user").id, c.get("staff"))) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this consultation");
-		}
-		return c.json(await serializeConsultation(row));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/assign",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: assignCaseSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Assigned",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign consultations");
-		}
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const updated = await assignConsultation({
-			id,
-			employeeId: body.employeeId,
-			actor: actorFrom(staff),
-		});
-		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/confirm-slot",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Slot confirmed",
-			},
-		},
-	}),
-	async (c) => {
-		const updated = await confirmConsultationSlot(c.req.valid("param").id, actorFrom(c.get("staff")!));
-		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/start-assessment",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Assessment started",
-			},
-		},
-	}),
-	async (c) => {
-		const updated = await startConsultationAssessment(
-			c.req.valid("param").id,
-			actorFrom(c.get("staff")!),
-		);
-		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/complete-assessment",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: completeAssessmentSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							consultation: consultationSchema,
-							application: applicationSchema.nullable(),
-						}),
-					},
-				},
-				description: "Assessment completed",
-			},
-		},
-	}),
-	async (c) => {
-		const result = await completeConsultationAssessment({
-			id: c.req.valid("param").id,
-			result: c.req.valid("json"),
-			actor: actorFrom(c.get("staff")!),
-		});
-		return c.json({
-			consultation: await serializeConsultation(result.consultation),
-			application: result.application ? await serializeApplication(result.application) : null,
-		});
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/comments",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: addCommentSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Comment added",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		if (!(await getConsultation(id))) {
-			throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
-		}
-		await addCaseComment({
-			targetType: "consultation",
-			targetId: id,
-			data: c.req.valid("json"),
-			actor: actorFrom(c.get("staff")!),
-		});
-		return c.json(await serializeConsultation((await getConsultation(id))!));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/request-documents",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: requestDocumentsSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Documents requested",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		await requestCaseDocuments({
-			targetType: "consultation",
-			targetId: id,
-			documents: c.req.valid("json").documents,
-			actor: actorFrom(c.get("staff")!),
-		});
-		return c.json(await serializeConsultation((await getConsultation(id))!));
-	},
-);
-
-/* ── PATCH /consultations/:id/cancel ─────────────────────────────────────── */
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "patch",
-		path: "/{id}/cancel",
-		tags: ["Consultations"],
-		summary: "Force-cancel a consultation (ops only)",
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: cancelConsultationSchema } },
-				description: "Cancellation reason",
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Consultation cancelled",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json") as { reason?: string };
-		const staff = c.get("staff");
-		const actor = staff
-			? { opsUserId: staff.opsUserId, name: staff.name, email: staff.email }
-			: { opsUserId: "", name: c.get("user").name ?? c.get("user").email, email: c.get("user").email };
-		await cancelConsultation(id, actor, body?.reason);
-		return c.json(await serializeConsultation((await getConsultation(id))!));
-	},
-);
-
-/* ── Applications ────────────────────────────────────────────────────────── */
-
-export const applicationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationListSchema } },
-				description: "Applications visible to this role",
-			},
-		},
-	}),
-	async (c) => {
-		const rows = await listApplications(c.get("staff")!);
-		const list = await Promise.all(rows.map((r) => serializeApplication(r)));
-		return c.json({ applications: list, total: list.length });
-	},
-);
-
-/* ── Stage handoffs (assignment decision queue) ──────────────────────────── */
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/handoffs",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: {
-			query: listStageHandoffsQuerySchema,
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: stageHandoffListSchema } },
-				description: "Stage handoffs (assignment decisions) awaiting resolution",
-			},
-		},
-	}),
-	async (c) => {
-		const handoffs = await listStageHandoffs(c.req.valid("query"));
-		return c.json({ handoffs, total: handoffs.length });
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/handoffs/{id}",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: stageHandoffSchema } },
-				description: "Single stage handoff",
-			},
-		},
-	}),
-	async (c) => c.json(await getStageHandoff(c.req.valid("param").id)),
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/handoffs/{id}/resolve",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: resolveStageHandoffSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: stageHandoffSchema } },
-				description: "Handoff resolved — stage assignment written, stage activated",
-			},
-		},
-	}),
-	async (c) => {
-		const body = c.req.valid("json");
-		return c.json(
-			await resolveStageHandoff({
-				handoffId: c.req.valid("param").id,
-				decision: body.decision,
-				opsUserId: body.opsUserId,
-				reason: body.reason,
-				actor: actorFrom(c.get("staff")!),
-			}),
-		);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/handoffs/{id}/defer",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: deferStageHandoffSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: stageHandoffSchema } },
-				description: "Handoff deferred — still pending, managers re-alerted",
-			},
-		},
-	}),
-	async (c) => {
-		const body = c.req.valid("json");
-		return c.json(
-			await deferStageHandoff({
-				handoffId: c.req.valid("param").id,
-				reason: body.reason,
-				actor: actorFrom(c.get("staff")!),
-			}),
-		);
-	},
-);
-
-// Static paths must be registered before `/{id}`: the id route validates its
-// param as a uuid, so a later `/travel-assistance` would be answered 400 by
-// it first (`/handoffs` above only works because it comes first).
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/travel-assistance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {},
-		responses: {
-			200: {
-				content: { "application/json": { schema: z.array(travelAssistanceRequestSchema) } },
-				description: "Travel assistance queue",
-			},
-		},
-	}),
-	async (c) => {
-		const list = await listTravelAssistanceForOps();
-		return c.json(list);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Application",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const row = await getApplication(id);
-		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		await assertApplicationAccess(c, id, "view");
-		return c.json(await serializeApplication(row));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/activity",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationActivityResponseSchema } },
-				description: "Activity timeline for this application, newest first",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const row = await getApplication(id);
-		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		await assertApplicationAccess(c, id, "view");
-		const events = await getApplicationActivity(id);
-		return c.json({ events, total: events.length });
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "patch",
-		path: "/{id}",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: patchApplicationSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Application updated",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		const { id } = c.req.valid("param");
-		const row = await getApplication(id);
-		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		await assertApplicationAccess(c, id, "update");
-		const updated = await updateApplication(id, c.req.valid("json"), actorFrom(staff));
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/assign",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: assignCaseSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Assigned",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign applications");
-		}
-		const updated = await assignApplication({
-			id: c.req.valid("param").id,
-			employeeId: c.req.valid("json").employeeId,
-			actor: actorFrom(staff),
-		});
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-/**
- * The application invoice as a proforma: the existing one, a legacy unlinked
- * one, or a new one built from the selected schools. Raising it is handler
- * work; turning it into a payable invoice is a separate, finance-gated step.
- */
-async function ensureApplicationProforma(id: string): Promise<typeof schema.invoices.$inferSelect> {
-	// Documents first: they were collected at consultation so applications
-	// never wait on paperwork. Nothing is invoiced while any is outstanding.
-	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
-	if (outstanding.length > 0) {
-		throw new HttpError(
-			409,
-			"DOCUMENTS_OUTSTANDING",
-			`Verify the client's documents before invoicing applications. Outstanding: ${outstanding.join(", ")}.`,
-		);
-	}
-	// Load the application and applicant.
-	const [app] = await db
-		.select()
-		.from(schema.applications)
-		.where(eq(schema.applications.id, id))
-		.limit(1);
-	if (!app) {
-		throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
-	}
-	const [applicant] = await db
-		.select()
-		.from(schema.applicants)
-		.where(eq(schema.applicants.id, app.applicantId))
-		.limit(1);
-
-
-	// Find the proforma application invoice for this application.
-	let [appInvoice] = await db
-		.select()
-		.from(schema.invoices)
-		.where(
-			and(
-				eq(schema.invoices.applicationId, id),
-				eq(schema.invoices.type, "application"),
-			),
-		)
-		.orderBy(desc(schema.invoices.createdAt))
-		.limit(1);
-
-	// Fallback: a legacy invoice raised before invoices carried
-	// application_id. Only an *unlinked* one qualifies — an invoice linked
-	// to a different application is that application's, not this one's.
-	if (!appInvoice && applicant?.userId) {
-		[appInvoice] = await db
-			.select()
-			.from(schema.invoices)
-			.where(
-				and(
-					eq(schema.invoices.clientUserId, applicant.userId),
-					eq(schema.invoices.type, "application"),
-					isNull(schema.invoices.applicationId),
-					not(eq(schema.invoices.status, "void")),
-				),
-			)
-			.orderBy(desc(schema.invoices.createdAt))
-			.limit(1);
-	}
-
-	// If no proforma exists yet, create one from the selected schools.
-	// This lets the handler issue the invoice directly without waiting for
-	// the applicant to formally "lock" school selection — breaking the
-	// deadlock where the handler can't issue, the applicant can't pay, and
-	// school processing is blocked. A baseline application fee line is used
-	// when no schools are selected yet, so the handler can always bill the
-	// applicant and get processing unblocked.
-	if (!appInvoice) {
-		const schools = await db
-			.select()
-			.from(schema.schoolApplications)
-			.where(eq(schema.schoolApplications.applicationId, app.id));
-		const fees = await getFeeSchedule();
-		const schoolLines = schools.map((s) => ({
-			label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
-			detail: `Direct institutional submission & processing (${s.intake})`,
-			amountCents: fees.appPerSchoolCents,
-		}));
-		const proforma = await createProforma({
-			data: {
-				applicantName: applicant?.name ?? "Applicant",
-				applicantEmail: applicant?.email ?? undefined,
-				clientUserId: applicant?.userId ?? undefined,
-				applicationId: app.id,
-				type: "application",
-				status: "proforma",
-				lines: schoolLines.length > 0
-					? schoolLines
-					: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
-				note: schools.length > 0
-					? `Application invoice for ${schools.length} university application(s).`
-					: "Application fee invoice. Per-school line items will follow as schools are added.",
-			},
-		});
-		appInvoice = proforma;
-	}
-
-	// Backfill applicationId if missing.
-	if (!appInvoice.applicationId) {
-		await db
-			.update(schema.invoices)
-			.set({ applicationId: id, updatedAt: new Date() })
-			.where(eq(schema.invoices.id, appInvoice.id));
-	}
-	return appInvoice;
-}
-
-/**
- * Handler action: raise the application invoice as a proforma so it can be
- * reviewed and issued. Anyone who can work the application may raise it;
- * issuing — which is what lets the applicant pay — needs the invoices module
- * (below), the same two-step the visa and ticket invoices follow.
- */
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/raise-application-invoice",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: invoiceSchema } },
-				description: "The application invoice (proforma, or already issued)",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		await assertApplicationAccess(c, id, "raise an invoice for");
-		const appInvoice = await ensureApplicationProforma(id);
-		return c.json(await serializeInvoice(appInvoice));
-	},
-);
-
-/**
- * Finance action: issue the application invoice, turning the proforma into a
- * payable invoice. Raises it first if nobody has. The applicant cannot pay
- * until this has happened. Gated on the invoices module, not the applications
- * module — a consultant who can work the case must not be able to bill it.
- */
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/issue-application-invoice",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireModule("invoices")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: invoiceSchema } },
-				description: "The issued application invoice",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		const { id } = c.req.valid("param");
-		await assertApplicationAccess(c, id, "issue an invoice for");
-		const appInvoice = await ensureApplicationProforma(id);
-		const updated = await issueProformaByOps({
-			invoiceId: appInvoice.id,
-			actorName: staff.name ?? "Handler",
-		});
-		return c.json(await serializeInvoice(updated));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/accept",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Accepted",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const updated = await acceptApplication(c.req.valid("param").id, actorFrom(c.get("staff")!));
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/stage",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: setStageSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Stage updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const updated = await setApplicationStage(
-			c.req.valid("param").id,
-			c.req.valid("json").stage,
-			actorFrom(c.get("staff")!),
-		);
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/checklist",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: toggleChecklistSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Checklist updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const body = c.req.valid("json");
-		const updated = await toggleApplicationChecklist(c.req.valid("param").id, body.itemId, body.checked);
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/visa-stage",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: setVisaStageSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Visa stage updated",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const body = c.req.valid("json");
-		const updated = await setApplicationVisaStage(
-			c.req.valid("param").id,
-			body.stage,
-			body.note,
-			actorFrom(c.get("staff")!),
-			body.outcome,
-		);
-		return c.json(await serializeApplication(updated));
-	},
-);
-
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/comments",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: addCommentSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Comment added",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const { id } = c.req.valid("param");
-		if (!(await getApplication(id))) {
-			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-		}
-		await addCaseComment({
-			targetType: "application",
-			targetId: id,
-			data: c.req.valid("json"),
-			actor: actorFrom(c.get("staff")!),
-		});
-		return c.json(await serializeApplication((await getApplication(id))!));
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/request-documents",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: requestDocumentsSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Documents requested",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const { id } = c.req.valid("param");
-		await requestCaseDocuments({
-			targetType: "application",
-			targetId: id,
-			documents: c.req.valid("json").documents,
-			actor: actorFrom(c.get("staff")!),
-		});
-		return c.json(await serializeApplication((await getApplication(id))!));
-	},
-);
-
-/* ── Travel Assistance (Ops side, direct-invoice) ─────────────────────────── */
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/travel-assistance",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema.nullable() } },
-				description: "The travel assistance request for this application",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const { id } = c.req.valid("param");
-		const req = await getTravelAssistanceForApplicationOps(id);
-		return c.json(req);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/assign",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: {
-					"application/json": {
-						schema: z.object({ opsUserId: z.string().uuid() }),
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Handler assigned to the travel assistance request",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await assignTravelHandler({
-			requestId: id,
-			opsUserId: body.opsUserId,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/invoice",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: {
-					"application/json": {
-						schema: travelAssistanceInvoiceInputSchema,
-					},
-				},
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Ticket invoice raised",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		// Raising is handler work; issuing — what lets the applicant pay — needs
-		// the invoices module, the same split as the application invoice. A
-		// handler who holds both does it in one step.
-		const updated = await raiseTravelTicketInvoice({
-			requestId: id,
-			fareCents: body.fareCents,
-			flight: body.flight,
-			issueNow: await checkRolePermission(staff.role, "invoices"),
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/travel-assistance/{id}/booking",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: travelAssistanceBookingInputSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: travelAssistanceRequestSchema } },
-				description: "Booking confirmation recorded",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, await applicationIdOfTravelRequest(c.req.valid("param").id));
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const staff = c.get("staff")!;
-		const updated = await recordTravelBooking({
-			requestId: id,
-			booking: body,
-			actor: actorFrom(staff),
-		});
-		return c.json(updated);
-	},
-);
-
-
-/* ── Applicants ──────────────────────────────────────────────────────────── */
-
-export const applicantsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-
-applicantsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/",
-		tags: ["Applicants"],
-		middleware: [requireAuth, requireMfa, requireModule("applicants")] as const,
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicantListSchema } },
-				description: "Applicants visible to this role",
-			},
-		},
-	}),
-	async (c) => {
-		const rows = await listApplicants(c.get("staff")!);
-		const list = await Promise.all(rows.map(serializeApplicant));
-		return c.json({ applicants: list, total: list.length });
-	},
-);
-
-applicantsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}",
-		tags: ["Applicants"],
-		middleware: [requireAuth, requireMfa, requireModule("applicants")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicantSchema } },
-				description: "Applicant",
-			},
-		},
-	}),
-	async (c) => {
-		const row = await getApplicant(c.req.valid("param").id);
-		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "Applicant not found");
-		const staff = c.get("staff")!;
-		if (!canSeeAllCases(staff) && row.assignedOfficerId !== staff.opsUserId) {
-			throw new HttpError(403, "FORBIDDEN", "Not allowed to view this applicant");
-		}
-		return c.json(await serializeApplicant(row));
-	},
-);
-
-applicantsRouter.openapi(
-	createRoute({
-		method: "patch",
-		path: "/{id}",
-		tags: ["Applicants"],
-		middleware: [requireAuth, requireMfa, requireModule("applicants")] as const,
-		request: {
-			params: idParams,
-			body: { content: { "application/json": { schema: patchApplicantSchema } }, required: true },
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicantSchema } },
-				description: "Updated",
-			},
-		},
-	}),
-	async (c) => {
-		const updated = await patchApplicant(c.req.valid("param").id, c.req.valid("json"));
-		return c.json(await serializeApplicant(updated));
-	},
-);
-
-/* ── Coordinator delegation ─────────────────────────────────────────────── */
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/delegate",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: delegateConsultationSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Consultation delegated to coordinator",
-			},
-			404: { description: "Consultation or coordinator not found" },
-			409: { description: "Consultation is closed" },
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may delegate consultations");
-		}
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const updated = await delegateCoordinator({
-			consultationId: id,
-			coordinatorOpsUserId: body.coordinatorOpsUserId,
-			note: body.delegationNote,
-			actor: actorFrom(staff),
-		});
-		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "put",
-		path: "/{id}/delegate",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: reassignCoordinatorSchema } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Coordinator reassigned",
-			},
-			404: { description: "Consultation or coordinator not found" },
-			409: { description: "Consultation is closed" },
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may reassign coordinators");
-		}
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const updated = await reassignCoordinator({
-			consultationId: id,
-			newCoordinatorOpsUserId: body.newCoordinatorOpsUserId,
-			reason: body.reason,
-			actor: actorFrom(staff),
-		});
-		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/workload",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							coordinators: z.array(
-								z.object({
-									opsUserId: z.string().uuid(),
-									name: z.string(),
-									email: z.string(),
-									role: z.string(),
-									activeCases: z.number().int(),
-									overdueCases: z.number().int(),
-									maxCapacity: z.number().int(),
-									capacityPercent: z.number(),
-								}),
-							),
-							maxCapacityPerCoordinator: z.number().int(),
-						}),
-					},
-				},
-				description: "Workload per coordinator",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		return c.json(await getStaffWorkload(staff.branch ?? undefined));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/activity",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							activities: z.array(
-								z.object({
-									id: z.string().uuid(),
-									consultationId: z.string().uuid(),
-									type: z.string(),
-									actorName: z.string().nullable(),
-									payload: z.any().nullable(),
-									createdAt: z.string().datetime(),
-								}),
-							),
-							total: z.number().int(),
-						}),
-					},
-				},
-				description: "Activity timeline for this consultation",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		const user = c.get("user");
-		if (!staff && !user) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		const { id } = c.req.valid("param");
-		const consultation = await getConsultation(id);
-		if (!consultation) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
-		const activities = await getConsultationActivity(id);
-		return c.json({
-			activities: activities.map((a) => ({
-				...a,
-				createdAt: a.createdAt.toISOString(),
-			})),
-			total: activities.length,
-		});
-	},
-);
+import { STAFF_ONLY_NOTIFICATION_TYPES, idParams } from "./caseShared.js";
 
 /* ── /me ─────────────────────────────────────────────────────────────────── */
 

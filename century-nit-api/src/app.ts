@@ -21,12 +21,10 @@ import { schedulingRouter } from "./routes/scheduling.js";
 import { lookupsRouter } from "./routes/lookups.js";
 import { catalogRoutes } from "./routes/catalog.js";
 import { webhooksRouter } from "./routes/webhooks.js";
-import {
-	applicantsRouter,
-	applicationsRouter,
-	consultationsRouter,
-	meRouter,
-} from "./routes/cases.js";
+import { applicantsRouter } from "./routes/applicants.js";
+import { applicationsRouter } from "./routes/applications.js";
+import { consultationsRouter } from "./routes/consultations.js";
+import { meRouter } from "./routes/me.js";
 import { meSchoolsRouter, opsSchoolsRouter } from "./routes/schools.js";
 import { meProceedRouter, opsProceedRouter } from "./routes/proceed.js";
 import { paymentsRouter } from "./routes/payments.js";

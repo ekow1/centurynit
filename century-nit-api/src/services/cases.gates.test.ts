@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-	JOURNEY_STAGE_TO_PORTAL,
+	JOURNEY_STAGE_FLOOR,
 	PORTAL_STAGE_ORDER,
 	canAdvanceToStage,
 	isTravelResolved,
@@ -149,12 +149,12 @@ describe("canAdvanceToStage (shared adjacency + sub-step guard)", () => {
 	});
 });
 
-describe("JOURNEY_STAGE_TO_PORTAL (server journey routing)", () => {
-	it("maps the coarse stages onto distinct portal steps", () => {
-		expect(JOURNEY_STAGE_TO_PORTAL.visa_processing).toBe("visa");
-		expect(JOURNEY_STAGE_TO_PORTAL.payment_execution).toBe("payment_execution");
-		expect(JOURNEY_STAGE_TO_PORTAL.travel_assistance).toBe("travel_assistance");
-		expect(JOURNEY_STAGE_TO_PORTAL.completed).toBe("completed");
+describe("JOURNEY_STAGE_FLOOR (server journey routing)", () => {
+	it("maps the coarse stages onto portal steps", () => {
+		expect(JOURNEY_STAGE_FLOOR.visa_processing).toBe("visa_invoice");
+		expect(JOURNEY_STAGE_FLOOR.payment_execution).toBe("payment_execution");
+		expect(JOURNEY_STAGE_FLOOR.travel_assistance).toBe("payment_execution");
+		expect(JOURNEY_STAGE_FLOOR.completed).toBe("completed");
 	});
 
 	it("orders the portal stages chronologically — the fee milestone before the flight", () => {
@@ -168,7 +168,7 @@ describe("JOURNEY_STAGE_TO_PORTAL (server journey routing)", () => {
 	});
 
 	it("every mapped value is a known portal stage", () => {
-		for (const value of Object.values(JOURNEY_STAGE_TO_PORTAL)) {
+		for (const value of Object.values(JOURNEY_STAGE_FLOOR)) {
 			expect(PORTAL_STAGE_ORDER, value).toContain(value);
 		}
 	});
@@ -184,7 +184,7 @@ describe("JOURNEY_STAGE_TO_PORTAL (server journey routing)", () => {
 			"completed",
 		];
 		for (const stage of stages) {
-			expect(JOURNEY_STAGE_TO_PORTAL[stage], stage).toBeTruthy();
+			expect(JOURNEY_STAGE_FLOOR[stage], stage).toBeTruthy();
 		}
 	});
 });

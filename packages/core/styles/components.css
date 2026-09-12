@@ -92,3 +92,4 @@
 .cn-tab--active { border-bottom-color: var(--foreground); font-weight: 700; }
 .cn-tab--locked { color: var(--muted-foreground); cursor: not-allowed; }
 .cn-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.cn-tab__now { display: inline-block; width: 0.45em; height: 0.45em; border-radius: 50%; background: var(--tone-current-fg); margin-left: 0.45em; vertical-align: middle; }

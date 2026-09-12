@@ -323,7 +323,7 @@ export function EnterpriseVisa() {
 
 							{/* Detail Content */}
 							<div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
-								<CaseDetail app={active} />
+								<CaseDetail app={active} initialTab="visa" />
 							</div>
 						</>
 					)}

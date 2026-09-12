@@ -291,7 +291,33 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents" | "activity";
 
 /** The chapter a case is currently in — where the detail opens. */
-function defaultTabFor(app: MockApplication): TabId {
+/** Which tab a portal stage lives on — the case opens where the applicant is. */
+const TAB_FOR_PORTAL_STAGE: Record<string, TabId> = {
+	new: "consultation",
+	consultation: "consultation",
+	eligibility: "consultation",
+	proceed: "overview",
+	school_package: "application",
+	awaiting_handler: "application",
+	school_select: "application",
+	awaiting_invoice: "application",
+	application_invoice: "application",
+	school_tracking: "application",
+	visa_invoice: "visa",
+	visa: "visa",
+	travel_assistance: "travel",
+	payment_execution: "payments",
+	completed: "payments",
+};
+
+/**
+ * The tab a case should open on: the chapter the applicant is currently in
+ * (from the derived journey), falling back to the coarse ops stage when the
+ * journey has not been computed yet.
+ */
+function currentTabFor(app: MockApplication): TabId {
+	const fromJourney = app.journey?.portalStage ? TAB_FOR_PORTAL_STAGE[app.journey.portalStage] : undefined;
+	if (fromJourney) return fromJourney;
 	switch (app.stage) {
 		case "school_submission":
 		case "offer_letter_review":
@@ -301,6 +327,7 @@ function defaultTabFor(app: MockApplication): TabId {
 		case "travel_assistance":
 			return "travel";
 		case "payment_execution":
+		case "completed":
 			return "payments";
 		default:
 			return app.proceedStatus === "accepted" ? "application" : "overview";
@@ -316,7 +343,12 @@ const INVOICE_TYPE_TITLES: Record<string, string> = {
 	custom: "Custom",
 };
 
-export function CaseDetail({ app }: { app: MockApplication }) {
+/**
+ * One detail for Cases, Visa and Travel. `initialTab` lets a host page open
+ * on its own chapter (the Visa queue opens the Visa tab); otherwise the case
+ * opens on the chapter the applicant is currently in.
+ */
+export function CaseDetail({ app, initialTab }: { app: MockApplication; initialTab?: TabId }) {
 	const navigate = useNavigate();
 	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
 	const {
@@ -436,9 +468,9 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		}
 	}
 
-	// Tab state, defaulting to the chapter the case is in.
-	const [tab, setTab] = useState<TabId>(() => defaultTabFor(app));
-	useEffect(() => setTab(defaultTabFor(app)), [app.id]);
+	// Tab state: the host's chapter if it asked for one, else where the case is.
+	const [tab, setTab] = useState<TabId>(() => initialTab ?? currentTabFor(app));
+	useEffect(() => setTab(initialTab ?? currentTabFor(app)), [app.id, initialTab]);
 
 	// Every invoice on this case (all types), for the Payments tab.
 	const [caseInvoices, setCaseInvoices] = useState<ApiInvoice[]>([]);
@@ -505,7 +537,10 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		{ id: "activity", label: "Activity", locked: false },
 	];
 	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
-	const current = isLocked(tab) ? "overview" : tab;
+	// A locked request (e.g. the Visa queue opening a case whose visa has not
+	// started) falls back to the chapter the case is actually in.
+	const stageTab = currentTabFor(app);
+	const current = !isLocked(tab) ? tab : !isLocked(stageTab) ? stageTab : "overview";
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -544,6 +579,7 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 					>
 						{t.locked && <span aria-hidden>🔒 </span>}
 						{t.label}
+						{t.id === stageTab && !t.locked && <span className="cn-tab__now" title="Current stage" aria-label="current stage" />}
 					</button>
 				))}
 			</div>

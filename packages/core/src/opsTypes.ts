@@ -179,7 +179,7 @@ export type VisaStage = "locked" | "awaiting_handler" | "pending" | "biometrics"
  * (API_MIGRATION_PLAN §7 "Risks"), not by making one silently assignable to the
  * other now.
  */
-export type PaymentPlanId = "full" | "installments" | "";
+export type PaymentPlanId = "full" | "installment" | "";
 
 export type TravelClearance = "pending" | "cleared";
 
@@ -237,6 +237,15 @@ export interface MockApplication {
 	proceedStatus?: ProceedStatus;
 	/** Number of target schools requested in service package */
 	targetSchoolCount?: number | null;
+	/** The applicant's login id — documents and chat are keyed on it. */
+	applicantUserId?: string | null;
+	/** Whole-case owner (applications.assignedStaffId). */
+	assignedStaffId?: string | null;
+	travelInvoicePaid?: boolean;
+	/** Stage consents recorded by the applicant. */
+	applicationConsent?: { decision: string } | null;
+	visaConsent?: { decision: string } | null;
+	travelConsent?: { decision: string } | null;
 	/** Active per-stage specialists (visa / travel / finance) from stage_assignments. */
 	stageHandlers?: { stage: string; opsUserId: string; opsUserName: string; opsUserEmail: string }[];
 	/**

@@ -8,7 +8,7 @@ import { StaffChatBadge } from "./StaffChatBadge";
 import { TaQueueRow } from "./TravelRequestCard";
 import { handoffOffersKeep } from "../lib/pendingTasks";
 import { listInvoices, issueApplicationInvoice, type ApiInvoice } from "../lib/api";
-import { AssignControl, CaseHeader, InvoiceCard } from "century-nit-core/ui";
+import { AssignControl, CaseHeader, InvoiceCard, StatusPill } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
 	ALLOWED_DOCUMENT_TYPES,
@@ -17,6 +17,8 @@ import {
 	PORTAL_STAGE_LABELS,
 	PORTAL_STAGE_ORDER,
 	VISA_STAGE_LABELS,
+	TRAVEL_STATUS_LABELS,
+	type ApplicantDocument,
 	canOwnStage,
 	schoolDecisionNote,
 	type JourneyStage,
@@ -24,7 +26,7 @@ import {
 	type SchoolOutcome,
 	type VisaStage,
 } from "century-nit-shared";
-import { schoolsApi, ApiError } from "century-nit-core/api";
+import { schoolsApi, documentsApi, ApiError } from "century-nit-core/api";
 
 /**
  * One case, one view.
@@ -286,6 +288,34 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	);
 }
 
+type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents" | "activity";
+
+/** The chapter a case is currently in — where the detail opens. */
+function defaultTabFor(app: MockApplication): TabId {
+	switch (app.stage) {
+		case "school_submission":
+		case "offer_letter_review":
+			return "application";
+		case "visa_processing":
+			return "visa";
+		case "travel_assistance":
+			return "travel";
+		case "payment_execution":
+			return "payments";
+		default:
+			return app.proceedStatus === "accepted" ? "application" : "overview";
+	}
+}
+
+const INVOICE_TYPE_TITLES: Record<string, string> = {
+	application: "Application",
+	visa: "Visa",
+	agency: "Service package",
+	travel: "Ticket",
+	consultation: "Consultation",
+	custom: "Custom",
+};
+
 export function CaseDetail({ app }: { app: MockApplication }) {
 	const navigate = useNavigate();
 	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
@@ -293,6 +323,7 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		assignees,
 		handoffs,
 		travelRequests,
+		consultations,
 		resolveHandoff,
 		assignApplication,
 		acceptApplication,
@@ -306,6 +337,8 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		setVisaCounselorNote,
 		setTravelClearance,
 		togglePreDepartureTask,
+		setPaymentPlan,
+		setApplicationStage,
 		refresh,
 	} = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
@@ -403,6 +436,31 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		}
 	}
 
+	// Tab state, defaulting to the chapter the case is in.
+	const [tab, setTab] = useState<TabId>(() => defaultTabFor(app));
+	useEffect(() => setTab(defaultTabFor(app)), [app.id]);
+
+	// Every invoice on this case (all types), for the Payments tab.
+	const [caseInvoices, setCaseInvoices] = useState<ApiInvoice[]>([]);
+	useEffect(() => {
+		listInvoices({ limit: 200 })
+			.then((res) => setCaseInvoices(res.invoices.filter((i) => i.applicationId === app.id && i.status !== "void")))
+			.catch(() => setCaseInvoices([]));
+	}, [app.id, appInvoice?.status, visaApiInvoice?.status]);
+
+	// The applicant's uploads, for the Documents tab.
+	const [docs, setDocs] = useState<ApplicantDocument[]>([]);
+	const [docsLoading, setDocsLoading] = useState(false);
+	useEffect(() => {
+		if (!app.applicantUserId) return;
+		setDocsLoading(true);
+		documentsApi
+			.list({ ownerUserId: app.applicantUserId })
+			.then((res) => setDocs(res.documents))
+			.catch(() => setDocs([]))
+			.finally(() => setDocsLoading(false));
+	}, [app.applicantUserId]);
+
 	// Which stage bodies apply to this case.
 	const stageIdx = (s: string) => ["document_verification", "school_submission", "offer_letter_review", "visa_processing", "travel_assistance", "payment_execution", "completed"].indexOf(s);
 	const visaInvoice = allInvoices.find((i) => i.type === "Visa" && i.applicationId === app.id);
@@ -427,6 +485,28 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 		}
 	}
 
+	// ── Tabs: one per chapter of the case, unlocked as the case reaches it ──
+	const stageIndex = stageIdx(app.stage);
+	const consultation = consultations.find((c) => c.id === app.consultationId) ?? null;
+	const hasAdmitted = (app.schoolApplications ?? []).some((s) => s.outcome === "Admitted");
+	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
+		{ id: "overview", label: "Overview", locked: false },
+		{ id: "consultation", label: "Consultation", locked: !consultation, hint: "Opened from a consultation" },
+		{
+			id: "application",
+			label: "Application",
+			locked: !(app.proceedStatus === "accepted" || app.depositPaid || stageIndex >= stageIdx("school_submission")),
+			hint: "Unlocks when the applicant consents to proceed",
+		},
+		{ id: "visa", label: "Visa", locked: !showVisa && !hasAdmitted, hint: "Unlocks on the first admission" },
+		{ id: "travel", label: "Travel", locked: !showTravel && app.visaStage !== "complete", hint: "Unlocks when the visa is complete" },
+		{ id: "payments", label: "Payments", locked: false },
+		{ id: "documents", label: "Documents", locked: false },
+		{ id: "activity", label: "Activity", locked: false },
+	];
+	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
+	const current = isLocked(tab) ? "overview" : tab;
+
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 			{actionSuccess && <p className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess}</p>}
@@ -449,6 +529,27 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 									</div>
 								);
 							})()}
+
+			<div className="cn-tabs" role="tablist">
+				{tabs.map((t) => (
+					<button
+						key={t.id}
+						type="button"
+						role="tab"
+						aria-selected={current === t.id}
+						aria-disabled={t.locked}
+						title={t.locked ? t.hint : undefined}
+						className={`cn-tab${current === t.id ? " cn-tab--active" : ""}${t.locked ? " cn-tab--locked" : ""}`}
+						onClick={() => !t.locked && setTab(t.id)}
+					>
+						{t.locked && <span aria-hidden>🔒 </span>}
+						{t.label}
+					</button>
+				))}
+			</div>
+
+			{current === "overview" && (
+				<>
 							{(() => {
 								if (!app?.journey) return null;
 								// The applicant's own journey, from the same derivation the
@@ -530,6 +631,175 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 									</div>
 								);
 							})()}
+							{app.proceedStatus !== "accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Consent Gate</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												{app.proceedStatus === "paused"
+													? "Applicant placed application on hold (Paused)"
+													: app.proceedStatus === "declined"
+														? "Applicant opted out (Declined)"
+														: "Awaiting the applicant's consent to proceed"}
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												{app.proceedStatus === "paused"
+													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
+													: app.proceedStatus === "declined"
+														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
+														: "The applicant must confirm in the portal before document verification can advance."}
+											</p>
+										</div>
+										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
+												Record consent (override)
+											</button>
+											{app.proceedStatus === "invited" && (
+												<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Record decline
+												</button>
+											)}
+											{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
+												<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
+													Re-invite applicant
+												</button>
+											)}
+										</div>
+									</div>
+								</div>
+							)}
+							{app.status !== "Accepted" && (
+								<div className="card" style={{ background: "var(--muted)" }}>
+									<p className="eyebrow mb-1">Application Lifecycle Action</p>
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
+												Status: {app.status}
+											</p>
+											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+												Accepting will mark this application as Approved & create/activate the Applicant record.
+											</p>
+										</div>
+										<button
+											onClick={() => handleAcceptApplication()}
+											className="btn btn--primary"
+											style={{ whiteSpace: "nowrap" }}
+										>
+											✓ Accept & Approve
+										</button>
+									</div>
+								</div>
+							)}
+								{/* Target & Assignment */}
+								<div className="card">
+									<p className="eyebrow mb-3">Assignment</p>
+									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+										<div style={{ gridColumn: "1 / -1" }}>
+											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
+											<p>
+												<StaffChatBadge
+													opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
+													name={app.assignedStaff}
+													email={app.assignedStaffEmail}
+												/>
+											</p>
+										</div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(app.branch)}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
+										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{app.submittedDate}</p></div>
+									</div>
+									{app.consultationId ? (
+										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+											<button
+												type="button"
+												className="link-arrow"
+												onClick={() => navigate(`/consultations?id=${app.consultationId}`)}
+											>
+												← Opened from consultation {app.consultationNumber || app.consultationId.slice(0, 8).toUpperCase()}
+											</button>
+										</p>
+									) : null}
+								</div>
+								{/* Staff Internal Notes */}
+								<div className="card">
+									<p className="eyebrow mb-2">Staff Case Notes</p>
+									<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{app.notes}</p>
+								</div>
+				</>
+			)}
+
+			{current === "consultation" && consultation && (
+				<>
+					<div className="card">
+						<p className="eyebrow mb-2">Consultation {consultation.ref}</p>
+						<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Officer</p><p>{consultation.assignedOfficer || "—"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>When</p><p>{consultation.dateTime}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Type</p><p>{consultation.type}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Status</p><p>{consultation.status}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target country</p><p>{consultation.targetCountry || "—"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Degree level</p><p>{consultation.goals?.degreeLevel || app.degreeLevel || "—"}</p></div>
+						</div>
+						<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+							<button type="button" className="link-arrow" onClick={() => navigate(`/consultations?id=${consultation.id}`)}>
+								Open consultation →
+							</button>
+						</p>
+					</div>
+					<div className="card">
+						<p className="eyebrow mb-2">Assessment & recommendation</p>
+						{consultation.assessmentResult ? (
+							<>
+								<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{consultation.assessmentResult.outcome}</p>
+								{consultation.assessmentResult.notes && (
+									<p className="muted mt-1" style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{consultation.assessmentResult.notes}</p>
+								)}
+								<div className="ops-grid mt-3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended country</p><p>{consultation.assessmentResult.recCountry || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended university</p><p>{consultation.assessmentResult.recUniversity || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended programme</p><p>{consultation.assessmentResult.recProgram || "—"}</p></div>
+									<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Recommended package</p><p>{consultation.assessmentResult.recPackage || "—"}</p></div>
+								</div>
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>The assessment has not been completed yet.</p>
+						)}
+						{(consultation.requestedDocuments?.length ?? 0) > 0 && (
+							<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
+								Documents requested at consultation: {consultation.requestedDocuments!.join(", ")}
+							</p>
+						)}
+					</div>
+				</>
+			)}
+
+			{current === "application" && (
+				<>
+					<div className="card">
+						<p className="eyebrow mb-2">Package & deposit</p>
+						<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Package</p><p>{app.fundingTrack || "Not chosen"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>10% deposit</p><p>{app.depositPaid ? "Paid" : "Not paid"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Handler</p><p>{app.assignedStaff || "Unassigned"}</p></div>
+						</div>
+						{caseInvoices.find((i) => i.type === "agency") && (
+							<div className="mt-3">
+								<InvoiceCard
+									compact
+									title="Service package invoice"
+									invoice={caseInvoices.find((i) => i.type === "agency")!}
+									actions={
+										<Link to={`/invoices?open=${caseInvoices.find((i) => i.type === "agency")!.id}`} className="btn btn--sm btn--ghost">
+											Open in Invoices →
+										</Link>
+									}
+								/>
+							</div>
+						)}
+					</div>
 							{(() => {
 								if (app.appFeePaid) return null;
 
@@ -579,126 +849,6 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 									</div>
 								);
 							})()}
-							<CaseWorkPanel
-									kind="application"
-									assignedName={app.assignedStaff}
-									assignedEmail={app.assignedStaffEmail}
-									comments={app.comments ?? []}
-									requestedDocuments={app.requestedDocuments ?? []}
-									canAssign={canAssignWork}
-									pendingHandoffNote={
-										handoffs.find(
-											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
-										)
-											? "Resolve the handler assignment above first"
-											: undefined
-									}
-									actor={opsUser?.name ?? "Staff"}
-									isMine={app.assignedStaffEmail === opsUser?.email}
-									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
-									onAssign={(to) => void assignApplication(app.id, to)}
-									onComment={(kind, text) =>
-										void commentOnApplication(app.id, kind, text)
-									}
-									onRequestDocs={(docs) =>
-										void requestApplicationDocs(app.id, docs)
-									}
-								/>
-
-							{app.status !== "Accepted" && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Application Lifecycle Action</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												Status: {app.status}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												Accepting will mark this application as Approved & create/activate the Applicant record.
-											</p>
-										</div>
-										<button
-											onClick={() => handleAcceptApplication()}
-											className="btn btn--primary"
-											style={{ whiteSpace: "nowrap" }}
-										>
-											✓ Accept & Approve
-										</button>
-									</div>
-								</div>
-							)}
-
-							{app.proceedStatus !== "accepted" && (
-								<div className="card" style={{ background: "var(--muted)" }}>
-									<p className="eyebrow mb-1">Consent Gate</p>
-									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginTop: "0.75rem", flexWrap: "wrap" }}>
-										<div>
-											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>
-												{app.proceedStatus === "paused"
-													? "Applicant placed application on hold (Paused)"
-													: app.proceedStatus === "declined"
-														? "Applicant opted out (Declined)"
-														: "Awaiting the applicant's consent to proceed"}
-											</p>
-											<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
-												{app.proceedStatus === "paused"
-													? "The applicant placed this case on hold. They can resume anytime from their portal, or you can record consent / re-invite them."
-													: app.proceedStatus === "declined"
-														? "The case is opted out. Re-invite to let the applicant reopen it, or record consent on their behalf."
-														: "The applicant must confirm in the portal before document verification can advance."}
-											</p>
-										</div>
-										<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-											<button onClick={() => void handleRecordProceed()} className="btn btn--primary" style={{ whiteSpace: "nowrap" }}>
-												Record consent (override)
-											</button>
-											{app.proceedStatus === "invited" && (
-												<button onClick={() => void handleDeclineProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-													Record decline
-												</button>
-											)}
-											{(app.proceedStatus === "declined" || app.proceedStatus === "paused") && (
-												<button onClick={() => void handleReinviteProceed()} className="btn btn--ghost" style={{ whiteSpace: "nowrap" }}>
-													Re-invite applicant
-												</button>
-											)}
-										</div>
-									</div>
-								</div>
-							)}
-
-								{/* Target & Assignment */}
-								<div className="card">
-									<p className="eyebrow mb-3">Assignment</p>
-									<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-										<div style={{ gridColumn: "1 / -1" }}>
-											<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Assigned Staff</p>
-											<p>
-												<StaffChatBadge
-													opsUserId={opsUserIdByEmail(app.assignedStaffEmail)}
-													name={app.assignedStaff}
-													email={app.assignedStaffEmail}
-												/>
-											</p>
-										</div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Branch</p><p>{branchName(app.branch)}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Funding Track</p><p>{app.fundingTrack}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Schools</p><p>{app.targetSchoolCount ? `${app.targetSchoolCount} institution${app.targetSchoolCount === 1 ? "" : "s"}` : "Not specified"}</p></div>
-										<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Submitted Date</p><p>{app.submittedDate}</p></div>
-									</div>
-									{app.consultationId ? (
-										<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
-											<button
-												type="button"
-												className="link-arrow"
-												onClick={() => navigate(`/consultations?id=${app.consultationId}`)}
-											>
-												← Opened from consultation {app.consultationNumber || app.consultationId.slice(0, 8).toUpperCase()}
-											</button>
-										</p>
-									) : null}
-								</div>
-
 								{/* School Applications */}
 								<div className="card">
 									<p className="eyebrow mb-3">School Applications</p>
@@ -749,7 +899,6 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 										<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No schools have been selected yet.</p>
 									)}
 								</div>
-
 								{/* Document Checklist */}
 								<div className="card">
 									<p className="eyebrow mb-3">Verification Checklist</p>
@@ -779,15 +928,23 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 										))}
 									</div>
 								</div>
+				</>
+			)}
 
-								{/* Staff Internal Notes */}
-								<div className="card">
-									<p className="eyebrow mb-2">Staff Case Notes</p>
-									<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{app.notes}</p>
-								</div>
-
-			{showVisa && (
+			{current === "visa" && (
 				<>
+					<div className="card">
+						<p className="eyebrow mb-1">Visa consent</p>
+						<p style={{ fontSize: "var(--text-sm)" }}>
+							{app.visaConsent?.decision === "continue"
+								? "The applicant has consented to visa processing."
+								: app.visaConsent?.decision === "hold"
+									? "The applicant put the visa stage on hold."
+									: app.visaConsent?.decision === "opt_out"
+										? "The applicant opted out of visa processing."
+										: "Awaiting the applicant's decision to continue with visa processing."}
+						</p>
+					</div>
 {/* Visa invoice — the same card as every other invoice */}
 					<div className="card">
 						{visaApiInvoice ? (
@@ -959,8 +1116,18 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 				</>
 			)}
 
-			{showTravel && (
+			{current === "travel" && (
 				<>
+					<div className="card">
+						<p className="eyebrow mb-1">Travel decision</p>
+						<p style={{ fontSize: "var(--text-sm)" }}>
+							{selectedTa
+								? TRAVEL_STATUS_LABELS[selectedTa.status] ?? selectedTa.status
+								: app.visaStage === "complete"
+									? "Awaiting the applicant's decision on travel assistance."
+									: "Opens once the visa is complete."}
+						</p>
+					</div>
 					{selectedTa && (
 						<div className="card">
 							<p className="eyebrow mb-2">Travel request</p>
@@ -1090,6 +1257,131 @@ export function CaseDetail({ app }: { app: MockApplication }) {
 								</p>
 							</div>
 						)}
+				</>
+			)}
+
+			{current === "payments" && (
+				<>
+					<div className="card">
+						<p className="eyebrow mb-2">Payment plan & service fee</p>
+						<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Plan</p><p>{app.paymentPlanId === "full" ? "Full payment" : app.paymentPlanId === "installment" ? "Installments" : "Not chosen"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Milestones paid</p><p>{app.agencyStageIndex ?? 0} · {app.agencySettled ? "settled" : "outstanding"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Application fee</p><p>{app.appFeePaid ? "Paid" : "Unpaid"}</p></div>
+							<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Visa invoice</p><p>{app.visaInvoicePaid ? "Paid" : "Unpaid"}</p></div>
+						</div>
+						<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
+							Paid state follows the ledger: record payments against the invoice below and these figures update.
+						</p>
+						{app.stage === "payment_execution" && (
+							<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+								{!app.paymentPlanId && (
+									<>
+										<button type="button" className="btn btn--sm btn--ghost" onClick={() => void setPaymentPlan(app.appId, "full")}>Record plan: full</button>
+										<button type="button" className="btn btn--sm btn--ghost" onClick={() => void setPaymentPlan(app.appId, "installment")}>Record plan: installments</button>
+									</>
+								)}
+								<button
+									type="button"
+									className="btn btn--sm btn--primary"
+									onClick={() => void setApplicationStage(app.appId, "completed").then(() => flash("Case marked complete.")).catch((e) => fail(e, "Could not complete the case"))}
+								>
+									Mark case complete
+								</button>
+							</div>
+						)}
+					</div>
+					{caseInvoices.length === 0 ? (
+						<div className="card"><p className="muted" style={{ fontSize: "var(--text-sm)" }}>No invoices on this case yet.</p></div>
+					) : (
+						caseInvoices.map((inv) => (
+							<div className="card" key={inv.id}>
+								<InvoiceCard
+									compact
+									title={`${INVOICE_TYPE_TITLES[inv.type] ?? inv.type} invoice`}
+									invoice={inv}
+									actions={
+										<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
+											{inv.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
+										</Link>
+									}
+								/>
+							</div>
+						))
+					)}
+				</>
+			)}
+
+			{current === "documents" && (
+				<>
+					<div className="card">
+						<p className="eyebrow mb-2">Requested from the applicant</p>
+						{(app.requestedDocuments?.length ?? 0) > 0 ? (
+							<ul style={{ margin: 0, paddingLeft: "1.1rem", fontSize: "var(--text-sm)" }}>
+								{app.requestedDocuments!.map((d) => <li key={d}>{d}</li>)}
+							</ul>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Nothing requested yet — use Activity → Request documents.</p>
+						)}
+					</div>
+					<div className="card">
+						<p className="eyebrow mb-2">Uploaded</p>
+						{docsLoading ? (
+							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</p>
+						) : docs.length === 0 ? (
+							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>The applicant has not uploaded any documents.</p>
+						) : (
+							<table className="ops-table" style={{ width: "100%", fontSize: "var(--text-sm)" }}>
+								<thead><tr><th>Type</th><th>File</th><th>Status</th><th>Uploaded</th></tr></thead>
+								<tbody>
+									{docs.map((d) => (
+										<tr key={d.id}>
+											<td>{d.documentType}</td>
+											<td>{d.fileName}</td>
+											<td><StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "REJECTED" ? "blocked" : d.status === "UPLOADED" ? "waiting" : "neutral"}>{d.status.replace(/_/g, " ").toLowerCase()}</StatusPill></td>
+											<td>{d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : "—"}</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						)}
+						{app.applicantUserId && (
+							<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+								<Link to={`/documents?owner=${app.applicantUserId}`} className="link-arrow">Review in Document Vault →</Link>
+							</p>
+						)}
+					</div>
+				</>
+			)}
+
+			{current === "activity" && (
+				<>
+							<CaseWorkPanel
+									kind="application"
+									assignedName={app.assignedStaff}
+									assignedEmail={app.assignedStaffEmail}
+									comments={app.comments ?? []}
+									requestedDocuments={app.requestedDocuments ?? []}
+									canAssign={canAssignWork}
+									pendingHandoffNote={
+										handoffs.find(
+											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
+										)
+											? "Resolve the handler assignment above first"
+											: undefined
+									}
+									actor={opsUser?.name ?? "Staff"}
+									isMine={app.assignedStaffEmail === opsUser?.email}
+									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
+									onAssign={(to) => void assignApplication(app.id, to)}
+									onComment={(kind, text) =>
+										void commentOnApplication(app.id, kind, text)
+									}
+									onRequestDocs={(docs) =>
+										void requestApplicationDocs(app.id, docs)
+									}
+								/>
+
 				</>
 			)}
 		</div>

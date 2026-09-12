@@ -629,6 +629,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		id: row.id,
 		appNumber: row.appNumber,
 		applicantId: row.applicantId,
+		applicantUserId: applicant?.userId ?? null,
 		applicantName: applicant?.name ?? "",
 		email: applicant?.email ?? "",
 		phone: applicant?.phone ?? null,

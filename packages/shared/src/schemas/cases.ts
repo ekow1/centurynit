@@ -492,6 +492,8 @@ export const applicationSchema = z.object({
 	program: z.string(),
 	country: z.string(),
 	degreeLevel: z.string(),
+	/** The applicant's login id — documents and chat are keyed on it. */
+	applicantUserId: z.string().nullable().optional(),
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable(),
 	assignedStaffEmail: z.string().email().nullable(),

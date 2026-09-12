@@ -161,6 +161,12 @@ function toApplication(row: ApiApplication): MockApplication {
 		proceedStatus: row.proceedStatus ?? "invited",
 		journey: row.journey ?? null,
 		stageHandlers: row.stageHandlers ?? [],
+		applicantUserId: row.applicantUserId ?? null,
+		assignedStaffId: row.assignedStaffId ?? null,
+		travelInvoicePaid: row.travelInvoicePaid,
+		applicationConsent: row.applicationConsent ? { decision: row.applicationConsent.decision } : null,
+		visaConsent: row.visaConsent ? { decision: row.visaConsent.decision } : null,
+		travelConsent: row.travelConsent ? { decision: row.travelConsent.decision } : null,
 		targetSchoolCount: row.targetSchoolCount ?? null,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: row.consultationNumber ?? null,
@@ -440,16 +446,6 @@ export function useCasesApi() {
 			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
 				method: "PATCH",
 				body: JSON.stringify({ paymentPlanId: plan }),
-			});
-			await refresh();
-		},
-		advanceAgencyStage: async (appId: string) => {
-			const app = applications.find((a) => a.appId === appId);
-			if (!app) return;
-			const nextIdx = Math.min((app.agencyStageIndex ?? 0) + 1, 2);
-			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
-				method: "PATCH",
-				body: JSON.stringify({ agencyStageIndex: nextIdx, agencySettled: nextIdx >= 2 }),
 			});
 			await refresh();
 		},

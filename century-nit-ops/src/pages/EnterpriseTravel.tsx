@@ -17,7 +17,7 @@ function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 
 function paymentPlanLabel(plan?: string): string {
 	if (plan === "full") return "Full";
-	if (plan === "installments") return "Installments";
+	if (plan === "installment") return "Installments";
 	return "Not set";
 }
 

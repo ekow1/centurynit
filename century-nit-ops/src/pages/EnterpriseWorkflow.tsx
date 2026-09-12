@@ -386,7 +386,7 @@ export function EnterpriseWorkflow() {
 												<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
 													<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
 													<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)" }}>
-														{app.paymentPlanId === "installments" ? "Installments" : app.paymentPlanId === "full" ? "Full payment" : "Not selected"}
+														{app.paymentPlanId === "installment" ? "Installments" : app.paymentPlanId === "full" ? "Full payment" : "Not selected"}
 													</span>
 												</div>
 											)}

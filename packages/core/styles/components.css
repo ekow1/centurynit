@@ -81,3 +81,14 @@
 .cn-case__ref { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
 .cn-case__facts { display: flex; gap: 1rem; flex-wrap: wrap; font-size: var(--text-sm); color: var(--muted-foreground); }
 .cn-case__facts strong { color: var(--foreground); font-weight: 600; }
+
+/* ── Tabs (case detail, applicant dossier) ─────────────────────────────── */
+.cn-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border-light); overflow-x: auto; }
+.cn-tab {
+	appearance: none; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+	padding: 0.6rem 0.9rem; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase;
+	letter-spacing: 0.03em; color: var(--foreground); white-space: nowrap;
+}
+.cn-tab--active { border-bottom-color: var(--foreground); font-weight: 700; }
+.cn-tab--locked { color: var(--muted-foreground); cursor: not-allowed; }
+.cn-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }

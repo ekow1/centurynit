@@ -255,7 +255,7 @@ export function EnterpriseApplicants() {
 							</div>
 
 							{/* Detail Tabs */}
-							<div style={{ display: "flex", borderBottom: "1px solid var(--border-light)", background: "var(--muted)", overflowX: "auto", flexShrink: 0 }}>
+							<div className="cn-tabs" role="tablist" style={{ flexShrink: 0, padding: "0 0.5rem" }}>
 								{[
 									["overview", "Overview"],
 									["timeline", "Timeline"],
@@ -267,22 +267,11 @@ export function EnterpriseApplicants() {
 								].map(([key, label]) => (
 									<button
 										key={key}
+										type="button"
+										role="tab"
+										aria-selected={dossierTab === key}
+										className={`cn-tab${dossierTab === key ? " cn-tab--active" : ""}`}
 										onClick={() => setDossierTab(key as typeof dossierTab)}
-										style={{
-											padding: "0.7rem 1rem",
-											fontFamily: "var(--font-mono)",
-											fontSize: "var(--text-xs)",
-											textTransform: "uppercase",
-											whiteSpace: "nowrap",
-											borderBottom: dossierTab === key ? "2px solid var(--foreground)" : "2px solid transparent",
-											fontWeight: dossierTab === key ? 600 : 400,
-											background: "none",
-											border: "none",
-											borderBottomWidth: "2px",
-											borderBottomStyle: "solid",
-											cursor: "pointer",
-											color: "var(--foreground)",
-										}}
 									>
 										{label}
 									</button>
@@ -498,7 +487,7 @@ function visaStepLabel(stage?: VisaStage): string {
 
 function paymentPlanLabel(plan?: PaymentPlanId): string {
 	if (plan === "full") return "Full payment";
-	if (plan === "installments") return "Installment plan";
+	if (plan === "installment") return "Installment plan";
 	return "Not selected";
 }
 

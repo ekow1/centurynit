@@ -18,7 +18,7 @@ import type {
 	UpdateWorkingHours,
 	UploadTicket,
 	WorkingHoursResponse,
-	AddComment,
+	AddCommentInput,
 	ApiApplicant,
 	ApiApplication,
 	ApiConsultation,
@@ -823,7 +823,7 @@ export const consultationsApi = {
 			...json(result),
 		});
 	},
-	comment(id: string, input: AddComment): Promise<ApiConsultation> {
+	comment(id: string, input: AddCommentInput): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/comments`, {
 			method: "POST",
 			...json(input),
@@ -937,7 +937,7 @@ export const applicationsApi = {
 			...json({ cleared }),
 		});
 	},
-	comment(id: string, input: AddComment): Promise<ApiApplication> {
+	comment(id: string, input: AddCommentInput): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/comments`, {
 			method: "POST",
 			...json(input),

@@ -18,6 +18,7 @@ export function TaQueueRow({
 	staff,
 	branch,
 	canIssue,
+	showAssign = true,
 }: {
 	ta: TravelAssistanceRequest;
 	onChanged: () => void;
@@ -25,6 +26,8 @@ export function TaQueueRow({
 	staff: Assignee[];
 	branch?: string;
 	canIssue?: boolean;
+	/** Off inside the case detail, where the header's assign sheet is the one assignment surface. */
+	showAssign?: boolean;
 }) {
 	const [busy, setBusy] = useState(false);
 	const [showInvoiceForm, setShowInvoiceForm] = useState(false);
@@ -133,7 +136,7 @@ export function TaQueueRow({
 					)}
 				</div>
 				<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-					{ta.status === "review" && (
+					{showAssign && ta.status === "review" && (
 						<button className="btn btn--sm btn--ghost" onClick={() => setShowAssignForm((v) => !v)}>
 							{ta.assignedOpsUserId ? "Reassign handler" : "Assign handler"}
 						</button>
@@ -162,7 +165,7 @@ export function TaQueueRow({
 				</p>
 			)}
 
-			{showAssignForm && ta.status === "review" && (
+			{showAssign && showAssignForm && ta.status === "review" && (
 				<div className="mt-3">
 					<AssignControl
 						stage="travel_assistance"

@@ -620,11 +620,12 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 			opsUserId: stageAssignments.opsUserId,
 			opsUserName: opsUsers.name,
 			opsUserEmail: opsUsers.email,
-			assignedAt: sql<string>`${stageAssignments.assignedAt}::text`,
+			assignedAt: stageAssignments.assignedAt,
 		})
 		.from(stageAssignments)
 		.innerJoin(opsUsers, eq(opsUsers.id, stageAssignments.opsUserId))
-		.where(and(eq(stageAssignments.applicationId, row.id), eq(stageAssignments.status, "active")));
+		.where(and(eq(stageAssignments.applicationId, row.id), eq(stageAssignments.status, "active")))
+		.then((rows) => rows.map((r) => ({ ...r, assignedAt: r.assignedAt.toISOString() })));
 
 	// The same journey the portal shows, so ops sees the client's step.
 	const { journeyForApplicant } = await import("./journey.js");
@@ -1584,6 +1585,7 @@ export async function addCaseComment(input: {
 			targetId: input.targetId,
 			kind: input.data.kind,
 			text: input.data.text,
+			visibility: input.data.visibility,
 			authorName: input.actor.name,
 			authorOpsUserId: input.actor.opsUserId,
 		})

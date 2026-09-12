@@ -11,6 +11,7 @@ import { branchName } from "century-nit-core/ops";
 import type { MockApplication, Invoice } from "century-nit-core/ops";
 import { invoiceBalance } from "century-nit-core/ops";
 import { fmtBoth } from "./currency";
+import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
 
 function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | undefined {
 	return invoices.find(
@@ -19,8 +20,9 @@ function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoice | un
 }
 
 export function EnterpriseVisa() {
-	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applications } = useCases();
+	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
+	const { applications, handoffs } = useCases();
+	const [assignFor, setAssignFor] = useState<MockApplication | null>(null);
 	const { invoices: allInvoices } = useInvoiceApi();
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
@@ -161,6 +163,9 @@ export function EnterpriseVisa() {
 								filteredApps.map((app) => {
 									const isSelected = selectedApp?.appId === app.appId;
 									const invoice = visaInvoiceFor(allInvoices, app);
+									// On this queue only the visa handoff is ours to staff.
+									const need = assignmentNeeded(app, handoffs.filter((h) => h.stage === "visa_processing"));
+									const visaHandler = (app.stageHandlers ?? []).find((h) => h.stage === "visa_processing")?.opsUserName;
 									return (
 										<div
 											key={app.id}
@@ -193,7 +198,8 @@ export function EnterpriseVisa() {
 														: app.visaInvoicePaid
 															? "Invoice paid"
 															: "No visa invoice"}
-													<span> · {app.assignedStaff || "Unassigned"}</span>
+													<span> · {visaHandler ? `Visa: ${visaHandler}` : app.assignedStaff || "Unassigned"}</span>
+													{canAssignWork && need?.kind === "handoff" && <AssignChip label="Assign specialist" onClick={() => setAssignFor(app)} />}
 												</div>
 											</div>
 											<span className="cn-row__arrow" aria-hidden>→</span>
@@ -206,6 +212,13 @@ export function EnterpriseVisa() {
 				}
 				detail={active ? <CaseDetail app={active} initialTab="visa" /> : null}
 			/>
+			{assignFor && (
+				<ApplicationAssignSheet
+					app={applications.find((a) => a.id === assignFor.id) ?? assignFor}
+					open
+					onClose={() => setAssignFor(null)}
+				/>
+			)}
 		</div>
 	);
 }

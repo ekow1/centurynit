@@ -271,6 +271,7 @@ export type ApplicationData = {
 	/** Set once every pre-departure task is ticked — the travel stage's done signal */
 	preDepartureCompletedAt: string | null;
 	counselorNote: string | null;
+	visaCounselorNote: string | null;
 	pipelineStatus: string;
 	pipelineUpdatedAt: string | null;
 	onboardingCompleted: boolean;
@@ -529,6 +530,7 @@ const defaultApplication: ApplicationData = {
 	completedAt: null,
 	preDepartureCompletedAt: null,
 	counselorNote: null,
+	visaCounselorNote: null,
 	pipelineStatus: "draft",
 	pipelineUpdatedAt: null,
 	onboardingCompleted: false,
@@ -2227,6 +2229,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 					visaOutcome: a.visaOutcome ?? null,
+					visaCounselorNote: a.visaCounselorNote ?? prev.visaCounselorNote,
 					visaInvoice: a.visaInvoicePaid
 						? {
 								...prev.visaInvoice,

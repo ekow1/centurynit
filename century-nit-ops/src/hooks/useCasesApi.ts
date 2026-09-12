@@ -516,8 +516,8 @@ export function useCasesApi() {
 		acceptApplication: async (id: string) => replaceApplication(await applicationsApi.accept(id)),
 		toggleApplicationChecklist: async (id: string, itemId: string, checked: boolean) =>
 			replaceApplication(await applicationsApi.toggleChecklist(id, itemId, checked)),
-		commentOnApplication: async (id: string, kind: CommentKind, text: string) =>
-			replaceApplication(await applicationsApi.comment(id, { kind, text })),
+		commentOnApplication: async (id: string, kind: CommentKind, text: string, visibility: "internal" | "applicant" = "internal") =>
+			replaceApplication(await applicationsApi.comment(id, { kind, text, visibility })),
 		requestApplicationDocs: async (id: string, documents: string[]) =>
 			replaceApplication(await applicationsApi.requestDocuments(id, documents)),
 		delegateCoordinator: async (id: string, coordinatorOpsUserId: string, note?: string) =>

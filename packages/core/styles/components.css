@@ -81,6 +81,8 @@
 .cn-case__ref { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
 .cn-case__facts { display: flex; gap: 1rem; flex-wrap: wrap; font-size: var(--text-sm); color: var(--muted-foreground); }
 .cn-case__facts strong { color: var(--foreground); font-weight: 600; }
+.cn-case__actions { margin-left: auto; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.cn-case__handler { display: inline-flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .cn-case__contact { display: flex; gap: 1rem; flex-wrap: wrap; font-size: var(--text-xs); font-family: var(--font-mono); }
 .cn-case__contact a { color: var(--muted-foreground); text-decoration: none; }
 .cn-case__contact a:hover { color: var(--foreground); text-decoration: underline; }
@@ -192,6 +194,10 @@
 .cn-row__meta { font-size: var(--text-xs); margin-top: 0.15rem; }
 .cn-row__arrow { font-size: 0.9rem; flex-shrink: 0; }
 .cn-row--selected .cn-pill { background: var(--background); color: var(--foreground); }
+.cn-row__assign { margin-left: 0.5rem; padding: 0.1rem 0.5rem; font-size: var(--text-xs); font-weight: 600; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
+.cn-row__assign:hover { background: var(--tone-current-bg); color: var(--tone-current-fg); border-color: var(--tone-current-fg); }
+.cn-row__needs { margin-left: 0.5rem; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--tone-current-fg); }
+.cn-row--selected .cn-row__needs { color: inherit; }
 
 /* ── Work panel (collapsible, above the tabs) ───────────────────────────── */
 .cn-work { border: 1px solid var(--border-light); background: var(--background); }

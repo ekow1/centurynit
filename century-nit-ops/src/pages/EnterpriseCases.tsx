@@ -12,6 +12,9 @@ import { AssignScholarshipModal } from "./AssignScholarshipModal";
 import { branchName } from "century-nit-core/ops";
 import type { MockApplication } from "century-nit-core/ops";
 import { JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
+import { tasksForApplication } from "../lib/pendingTasks";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
 
 export function EnterpriseCases() {
 	const [searchParams] = useSearchParams();
@@ -19,9 +22,14 @@ export function EnterpriseCases() {
 	const {
 		applications,
 		assignees,
+		handoffs,
+		travelRequests,
 		error: casesError,
 		addApplication,
 	} = useCases();
+	const { invoices: allInvoices } = useInvoiceApi();
+	// Assignment from the list: the card's chip opens the same sheet the detail uses.
+	const [assignFor, setAssignFor] = useState<MockApplication | null>(null);
 
 	/**
 	 * The pipeline a case advances through. Mirrors the Workflow Board columns
@@ -186,6 +194,8 @@ export function EnterpriseCases() {
 							) : (
 								filteredApps.map((app) => {
 									const isSelected = selectedApp?.appId === app.appId;
+									const need = assignmentNeeded(app, handoffs);
+									const todo = tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices }).length;
 									return (
 										<div
 											key={app.id}
@@ -217,6 +227,10 @@ export function EnterpriseCases() {
 														<span>Unassigned</span>
 													)}
 													<span> · {app.journey?.label ?? JOURNEY_STAGE_LABELS[app.stage as JourneyStage]}</span>
+													{canAssignWork && need && (
+														<AssignChip label={need.kind === "handoff" ? "Assign handler" : "Assign"} onClick={() => setAssignFor(app)} />
+													)}
+													{todo > 0 && <span className="cn-row__needs">· {todo} to do</span>}
 												</div>
 											</div>
 											<span className="cn-row__arrow" aria-hidden>→</span>
@@ -229,6 +243,14 @@ export function EnterpriseCases() {
 				}
 				detail={selectedApp ? <CaseDetail app={liveSelected ?? selectedApp} /> : null}
 			/>
+			{assignFor && (
+				<ApplicationAssignSheet
+					app={applications.find((a) => a.id === assignFor.id) ?? assignFor}
+					open
+					onClose={() => setAssignFor(null)}
+					onDone={(msg) => setActionSuccess(msg)}
+				/>
+			)}
 		</div>
 	);
 }

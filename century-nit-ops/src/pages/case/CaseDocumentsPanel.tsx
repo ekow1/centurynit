@@ -30,8 +30,9 @@ export function CaseDocumentsPanel({
 	reference,
 	requestedDocuments,
 	canReview,
-	requestHint = "Nothing requested yet — use Request documents in the work panel.",
+	requestHint = "Nothing requested yet.",
 	onChange,
+	onRequest,
 }: {
 	/** Portal user who owns the uploads; null until the applicant has an account. */
 	ownerUserId: string | null | undefined;
@@ -43,7 +44,26 @@ export function CaseDocumentsPanel({
 	requestHint?: string;
 	/** Fires with the current list whenever it loads or a verdict changes it. */
 	onChange?: (docs: ApplicantDocument[]) => void;
+	/** Ask the applicant for more documents; absent when the viewer may not. */
+	onRequest?: (documents: string[]) => Promise<unknown>;
 }) {
+	const [requestDraft, setRequestDraft] = useState("");
+	const [requesting, setRequesting] = useState(false);
+	const [requestError, setRequestError] = useState<string | null>(null);
+	async function sendRequest() {
+		const list = requestDraft.split(",").map((d) => d.trim()).filter(Boolean);
+		if (!onRequest || list.length === 0) return;
+		setRequesting(true);
+		setRequestError(null);
+		try {
+			await onRequest(list);
+			setRequestDraft("");
+		} catch (e) {
+			setRequestError(e instanceof Error ? e.message : "Could not send the request");
+		} finally {
+			setRequesting(false);
+		}
+	}
 	const [docs, setDocs] = useState<ApplicantDocument[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -128,6 +148,30 @@ export function CaseDocumentsPanel({
 					</ul>
 				) : (
 					<p className="muted cn-docs__meta">{requestHint}</p>
+				)}
+				{onRequest && (
+					<form
+						className="cn-assign mt-3"
+						onSubmit={(e) => {
+							e.preventDefault();
+							void sendRequest();
+						}}
+					>
+						<div className="cn-assign__row">
+							<input
+								className="input input--sm"
+								placeholder="Documents needed, comma separated — e.g. Bank statement, Sponsor letter"
+								value={requestDraft}
+								onChange={(e) => setRequestDraft(e.target.value)}
+								disabled={requesting}
+								aria-label="Documents to request"
+							/>
+							<button type="submit" className="btn btn--sm btn--primary" disabled={requesting || !requestDraft.trim()}>
+								{requesting ? "Sending…" : "Request documents"}
+							</button>
+						</div>
+						{requestError && <p className="cn-assign__error">{requestError}</p>}
+					</form>
 				)}
 			</div>
 

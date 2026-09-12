@@ -97,7 +97,8 @@ export function canAdvanceToStage(
 			| "booked"
 			| "cleared"
 			| "declined"
-			| "on_hold";
+			| "on_hold"
+			| null;
 	},
 ): string | null {
 	const currentIdx = JOURNEY_STAGES.indexOf(current);
@@ -625,11 +626,17 @@ export const cancelConsultationSchema = z.object({
 	reason: z.string().max(1000).optional(),
 });
 export type CancelConsultation = z.infer<typeof cancelConsultationSchema>;
+export const commentVisibilitySchema = z.enum(["internal", "applicant"]);
+export type CommentVisibility = z.infer<typeof commentVisibilitySchema>;
 export const addCommentSchema = z.object({
 	kind: commentKindSchema.default("comment"),
 	text: z.string().min(1).max(4000),
+	/** Who may read it: staff only (default) or the applicant too. */
+	visibility: commentVisibilitySchema.default("internal"),
 });
 export type AddComment = z.infer<typeof addCommentSchema>;
+/** What a caller sends — `visibility` may be left out and defaults to staff-only. */
+export type AddCommentInput = z.input<typeof addCommentSchema>;
 export const requestDocumentsSchema = z.object({
 	documents: z.array(z.string().min(1).max(200)).min(1).max(20),
 });
@@ -948,6 +955,8 @@ export const applicationActivityEventSchema = z.object({
 	actorName: z.string().nullable(),
 	/** Journey stage the event belongs to, when it has one. */
 	stage: z.string().nullable(),
+	/** For notes: whether the applicant can read it. Null for every other event. */
+	visibility: commentVisibilitySchema.nullable().optional(),
 	at: z.string().datetime(),
 });
 export type ApplicationActivityEvent = z.infer<typeof applicationActivityEventSchema>;

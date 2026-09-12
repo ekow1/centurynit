@@ -3,12 +3,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { CaseWorkPanel } from "./CaseWorkPanel";
 import { TaQueueRow } from "./TravelRequestCard";
 import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
-import { handoffOffersKeep, tasksForApplication, taskActionLabel, timeAgo, type PendingTask } from "../lib/pendingTasks";
+import { ApplicationAssignSheet } from "./case/ApplicationAssignSheet";
+import { HistorySheet } from "./case/HistorySheet";
+import { tasksForApplication, taskActionLabel, type PendingTask } from "../lib/pendingTasks";
 import { listInvoices, issueApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
-import { AssignControl, CaseHeader, InvoiceCard, JourneyStepper, NextActionBand, Sheet, StatusPill, type NextAction } from "century-nit-core/ui";
+import { CaseHeader, InvoiceCard, NextActionBand, Sheet, StatusPill, type NextAction } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
 	ALLOWED_DOCUMENT_TYPES,
@@ -19,7 +20,6 @@ import {
 	canAdvanceToStage,
 	TRAVEL_STATUS_LABELS,
 	type ApplicationActivityEvent,
-	canOwnStage,
 	schoolDecisionNote,
 	type JourneyStage,
 	type SchoolApplication,
@@ -290,10 +290,10 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 	);
 }
 
-type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents" | "activity";
+type TabId = "overview" | "consultation" | "application" | "visa" | "travel" | "payments" | "documents";
 
 /** The chapter a case is currently in — where the detail opens. */
-const TAB_IDS: TabId[] = ["overview", "consultation", "application", "visa", "travel", "payments", "documents", "activity"];
+const TAB_IDS: TabId[] = ["overview", "consultation", "application", "visa", "travel", "payments", "documents"];
 const isTabId = (v: string): v is TabId => (TAB_IDS as string[]).includes(v);
 
 /** Which tab a portal stage lives on — the case opens where the applicant is. */
@@ -361,8 +361,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		handoffs,
 		travelRequests,
 		consultations,
-		resolveHandoff,
-		assignApplication,
 		acceptApplication,
 		toggleApplicationChecklist,
 		commentOnApplication,
@@ -493,22 +491,10 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		setReasonFor("decline");
 	}
 
-	// The work panel (assign, comment, request documents) stays one click
-	// away on every tab; whether it is open is a per-browser preference.
-	const [workOpen, setWorkOpen] = useState<boolean>(() => {
-		try {
-			return localStorage.getItem("ops.case.workOpen") !== "0";
-		} catch {
-			return true;
-		}
-	});
-	useEffect(() => {
-		try {
-			localStorage.setItem("ops.case.workOpen", workOpen ? "1" : "0");
-		} catch {
-			/* private mode */
-		}
-	}, [workOpen]);
+	// The two case-level sheets: assignment (the one place a handler is set)
+	// and history (the one place notes are read and written).
+	const [assignOpen, setAssignOpen] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(false);
 
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
@@ -541,6 +527,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const canIssueTravelInvoice = opsRole === "manager" || opsRole === "coordinator" || opsRole === "admin" || opsRole === "super_admin";
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
+	// Why a control is off, in the words the server would use to refuse it.
+	const clearanceBlock =
+		(app.preDepartureTasks?.length ?? 0) > 0 && pdProg < 100 ? "Complete the pre-departure checklist before granting clearance." : null;
+	const completeBlock = app.stage === "payment_execution" ? canAdvanceToStage("payment_execution", "completed", app) : null;
+	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
 
 	function advanceVisa() {
 		const cur = app.visaStage ?? "locked";
@@ -581,7 +572,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		{ id: "travel", label: "Travel", locked: !travelOpen, hint: "Unlocks once the visa is complete and its invoice paid" },
 		{ id: "payments", label: "Payments", locked: false },
 		{ id: "documents", label: "Documents", locked: false },
-		{ id: "activity", label: "Activity", locked: false },
 	];
 	const isLocked = (id: TabId) => tabs.find((t) => t.id === id)?.locked ?? false;
 	// A locked request (e.g. the Visa queue opening a case whose visa has not
@@ -609,20 +599,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			title: `Handler assignment required · ${stageLabel}`,
 			detail: why,
 			tone: "blocked",
-			action: (
-				<AssignControl
-					stage={pendingHandoff.stage}
-					staff={assignees}
-					branch={app.branch}
-					currentName={null}
-					keepName={handoffOffersKeep(pendingHandoff) ? pendingHandoff.fromOpsUserName : null}
-					withReason
-					onAssign={(opsUserId, reason) =>
-						resolveHandoff(pendingHandoff.id, "assign", { opsUserId, reason })
-					}
-					onKeep={(reason) => resolveHandoff(pendingHandoff.id, "keep", { reason })}
-				/>
-			),
+			action: canAssignWork ? (
+				<button type="button" className="btn btn--sm btn--primary" onClick={() => setAssignOpen(true)}>
+					Assign handler
+				</button>
+			) : undefined,
 		});
 	}
 	if (app.proceedStatus !== "accepted") {
@@ -676,7 +657,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const coarseStage = (JOURNEY_STAGES.find((st) => st === app.stage) ?? JOURNEY_STAGES[0]) as JourneyStage;
 	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
 	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
-	if (nextStage && !advanceBlock && (canAssignWork || app.assignedStaffEmail === opsUser?.email)) {
+	const mayAdvance = canAssignWork || app.assignedStaffEmail === opsUser?.email;
+	if (nextStage && advanceBlock && mayAdvance && app.proceedStatus === "accepted" && !pendingHandoff) {
+		// Not an action — the reason the next stage is out of reach, so a
+		// handler is never left with an empty band and no explanation.
+		nextActions.push({
+			id: "advance-blocked",
+			title: `${JOURNEY_STAGE_LABELS[nextStage]} is not open yet`,
+			detail: advanceBlock,
+			tone: "waiting",
+		});
+	}
+	if (nextStage && !advanceBlock && mayAdvance) {
 		nextActions.push({
 			id: "advance",
 			title: `Ready to advance to ${JOURNEY_STAGE_LABELS[nextStage]}`,
@@ -720,17 +712,21 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		});
 	}
 
-	// The case timeline, for the Activity tab; refetched when work is done here.
+	// The case timeline, for the history sheet; refetched when work is done here.
 	const [activity, setActivity] = useState<ApplicationActivityEvent[]>([]);
 	const [activityLoading, setActivityLoading] = useState(false);
 	useEffect(() => {
-		if (current !== "activity") return;
+		if (!historyOpen) return;
 		setActivityLoading(true);
 		getApplicationActivity(app.id)
 			.then((res) => setActivity(res.events))
 			.catch(() => setActivity([]))
 			.finally(() => setActivityLoading(false));
-	}, [app.id, current, app.comments?.length, app.assignedStaffId, invoiceRefresh]);
+	}, [app.id, historyOpen, app.comments?.length, app.assignedStaffId, invoiceRefresh]);
+
+	// Who may act on the case at all — the handler, or anyone who can route work.
+	const canWork = canAssignWork || app.assignedStaffEmail === opsUser?.email;
+	const noteCount = (app.comments ?? []).length;
 
 
 	return (
@@ -747,6 +743,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 											stage={app.stage}
 											portalStage={app.journey?.portalStage ?? null}
 											handlerName={app.assignedStaff || null}
+											handlerAction={
+												canAssignWork ? (
+													<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
+														{pendingHandoff ? "Assign" : app.assignedStaff ? "Change" : "Assign"}
+													</button>
+												) : undefined
+											}
+											actions={
+												<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
+													History{noteCount > 0 ? ` · ${noteCount}` : ""}
+												</button>
+											}
 											stageHandlers={(app.stageHandlers ?? [])
 												.filter((h) => h.opsUserName !== app.assignedStaff)
 												.map((h) => ({ stage: h.stage, name: h.opsUserName }))}
@@ -785,7 +793,19 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</div>
 			</div>
 
-			{nextActions.length > 0 && <NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />}
+			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} />
+
+			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
+
+			<HistorySheet
+				open={historyOpen}
+				onClose={() => setHistoryOpen(false)}
+				events={activity}
+				loading={activityLoading}
+				canPost={canWork}
+				actor={opsUser?.name ?? "Staff"}
+				onPost={(kind, text, visibility) => commentOnApplication(app.id, kind, text, visibility)}
+			/>
 
 			<Sheet
 				open={reasonFor !== null}
@@ -823,7 +843,17 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</form>
 			</Sheet>
 
-			<div className="cn-tabs" role="tablist" style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--background)" }}>
+			<div
+				style={{
+					position: "sticky",
+					top: 0,
+					zIndex: 10,
+					background: "var(--background)",
+					margin: "0 calc(-1 * clamp(1.5rem, 3vw, 2.75rem))",
+					padding: "0.5rem clamp(1.5rem, 3vw, 2.75rem) 0",
+				}}
+			>
+				<div className="cn-tabs" role="tablist">
 				{tabs.map((t) => (
 					<button
 						key={t.id}
@@ -840,45 +870,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						{t.id === stageTab && !t.locked && <span className="cn-tab__now" title="Current stage" aria-label="current stage" />}
 					</button>
 				))}
+				</div>
 			</div>
 
-			<details className="cn-work" open={workOpen} onToggle={(e) => setWorkOpen((e.currentTarget as HTMLDetailsElement).open)}>
-				<summary className="cn-work__summary">
-					<span className="cn-work__title">Work panel</span>
-					<span className="cn-work__facts">
-						{app.assignedStaff ? `Handler ${app.assignedStaff}` : "Unassigned"} · {(app.comments ?? []).length} note{(app.comments ?? []).length === 1 ? "" : "s"}
-						{(app.requestedDocuments?.length ?? 0) > 0 ? ` · ${app.requestedDocuments!.length} document${app.requestedDocuments!.length === 1 ? "" : "s"} requested` : ""}
-					</span>
-					<span className="cn-work__hint">{workOpen ? "Hide" : "Assign · Comment · Request documents"}</span>
-				</summary>
-				<div className="cn-work__body">
-					<CaseWorkPanel
-									kind="application"
-									assignedName={app.assignedStaff}
-									assignedEmail={app.assignedStaffEmail}
-									comments={app.comments ?? []}
-									requestedDocuments={app.requestedDocuments ?? []}
-									canAssign={canAssignWork}
-									pendingHandoffNote={
-										handoffs.find(
-											(h) => h.applicationId === app.id && h.status === "pending" && h.stage === "school_submission",
-										)
-											? "Resolve the handler assignment above first"
-											: undefined
-									}
-									actor={opsUser?.name ?? "Staff"}
-									isMine={app.assignedStaffEmail === opsUser?.email}
-									assignees={assignees.filter((a) => canOwnStage(a.role, "school_submission"))}
-									onAssign={(to) => void assignApplication(app.id, to)}
-									onComment={(kind, text) =>
-										void commentOnApplication(app.id, kind, text)
-									}
-									onRequestDocs={(docs) =>
-										void requestApplicationDocs(app.id, docs)
-									}
-								/>
-				</div>
-			</details>
 
 			{current === "overview" && (
 				<>
@@ -1399,12 +1393,13 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								staff={assignees}
 								branch={app.branch}
 								canIssue={canIssueTravelInvoice}
+								showAssign={false}
 								onChanged={() => void refresh()}
 							/>
 						</div>
 					)}
-{/* Travel Clearance */}
-							{(app.stage === "travel_assistance" || app.stage === "completed") && (
+{/* Travel Clearance — shown whenever the chapter is open; granted only while the case is in it */}
+							{travelOpen && (
 								<div className="card" style={{ background: "var(--muted)" }}>
 									<p className="eyebrow mb-1">Travel Clearance</p>
 										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -1418,11 +1413,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 														: "Grant clearance once all checks are satisfied."}
 												</p>
 											</div>
-										{app.stage === "travel_assistance" && (
+										{app.stage === "travel_assistance" && canWork && (
 											<button
-												onClick={() => setTravelClearance(app.appId, app.travelClearance !== "cleared")}
+												type="button"
+												onClick={() =>
+													void setTravelClearance(app.appId, app.travelClearance !== "cleared")
+														.then(() => flash(app.travelClearance === "cleared" ? "Clearance revoked." : "Cleared for travel."))
+														.catch((e) => fail(e, "Could not update clearance"))
+												}
 												className={`btn btn--sm ${app.travelClearance === "cleared" ? "btn--ghost" : "btn--primary"}`}
 												style={{ whiteSpace: "nowrap" }}
+												disabled={app.travelClearance !== "cleared" && Boolean(clearanceBlock)}
+												title={app.travelClearance !== "cleared" ? (clearanceBlock ?? undefined) : undefined}
 											>
 												{app.travelClearance === "cleared" ? "Revoke clearance" : "Grant clearance"}
 											</button>
@@ -1432,7 +1434,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 								)}
 
 							{/* Pre-departure Checklist */}
-							{(app.stage === "travel_assistance" || app.stage === "completed") && (
+							{travelOpen && (
 									<div className="card">
 										<p className="eyebrow mb-2">Pre-departure Checklist</p>
 										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
@@ -1528,21 +1530,46 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>
 							Paid state follows the ledger: record payments against the invoice below and these figures update.
 						</p>
-						{app.stage === "payment_execution" && (
-							<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+						{app.stage === "payment_execution" && canWork && (
+							<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
 								{!app.paymentPlanId && (
 									<>
-										<button type="button" className="btn btn--sm btn--ghost" onClick={() => void setPaymentPlan(app.appId, "full")}>Record plan: full</button>
-										<button type="button" className="btn btn--sm btn--ghost" onClick={() => void setPaymentPlan(app.appId, "installment")}>Record plan: installments</button>
+										<select
+											className="select input input--sm"
+											value={planDraft}
+											onChange={(e) => setPlanDraft(e.target.value as "" | "full" | "installment")}
+											aria-label="Payment plan"
+											style={{ width: "auto" }}
+										>
+											<option value="">Payment plan…</option>
+											<option value="full">Full payment</option>
+											<option value="installment">Installments</option>
+										</select>
+										<button
+											type="button"
+											className="btn btn--sm btn--ghost"
+											disabled={!planDraft}
+											onClick={() =>
+												planDraft &&
+												void setPaymentPlan(app.appId, planDraft)
+													.then(() => { setPlanDraft(""); flash("Payment plan recorded."); })
+													.catch((e) => fail(e, "Could not record the plan"))
+											}
+										>
+											Record plan
+										</button>
 									</>
 								)}
 								<button
 									type="button"
 									className="btn btn--sm btn--primary"
+									disabled={Boolean(completeBlock)}
+									title={completeBlock ?? undefined}
 									onClick={() => void setApplicationStage(app.appId, "completed").then(() => flash("Case marked complete.")).catch((e) => fail(e, "Could not complete the case"))}
 								>
 									Mark case complete
 								</button>
+								{completeBlock && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{completeBlock}</span>}
 							</div>
 						)}
 					</div>
@@ -1574,45 +1601,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					reference={app.appId}
 					requestedDocuments={app.requestedDocuments ?? []}
 					canReview={app.assignedStaffEmail === opsUser?.email || opsRole === "manager" || opsRole === "coordinator"}
-					requestHint="Nothing requested yet — use Activity → Request documents."
+					requestHint="Nothing requested yet."
+					onRequest={canWork ? (docs) => requestApplicationDocs(app.id, docs).then(() => flash("Document request sent.")) : undefined}
 				/>
-			)}
-
-			{current === "activity" && (
-				<>
-					<div className="card">
-						<div className="cn-case__top">
-							<h3 style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Timeline</h3>
-							<span className="cn-case__ref">{activity.length} events</span>
-						</div>
-						{activityLoading ? (
-							<p className="muted">Loading timeline…</p>
-						) : activity.length === 0 ? (
-							<p className="muted">Nothing recorded on this case yet.</p>
-						) : (
-							<ol className="cn-timeline">
-								{activity.map((e) => (
-									<li key={e.id} className="cn-timeline__item">
-										<div className="cn-timeline__head">
-											<span className="cn-timeline__summary">{e.summary}</span>
-											<time className="cn-timeline__when" dateTime={e.at} title={new Date(e.at).toLocaleString()}>
-												{timeAgo(e.at)}
-											</time>
-										</div>
-										{(e.actorName || e.stage) && (
-											<p className="cn-timeline__meta">
-												{e.actorName}
-												{e.actorName && e.stage ? " · " : ""}
-												{e.stage ? JOURNEY_STAGE_LABELS[e.stage as keyof typeof JOURNEY_STAGE_LABELS] ?? e.stage : ""}
-											</p>
-										)}
-										{e.detail && <p className="cn-timeline__detail">{e.detail}</p>}
-									</li>
-								))}
-							</ol>
-						)}
-					</div>
-				</>
 			)}
 		</div>
 	);

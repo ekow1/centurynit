@@ -78,6 +78,7 @@ export async function getApplicationActivity(applicationId: string, limit = 100)
 			detail: c.text,
 			actorName: c.authorName,
 			stage: null,
+			visibility: c.visibility,
 			at: c.at,
 		});
 	}

@@ -244,7 +244,7 @@ export interface MockApplication {
 	/** Whole-case owner (applications.assignedStaffId). */
 	assignedStaffId?: string | null;
 	travelInvoicePaid?: boolean;
-	travelAssistanceStatus?: string | null;
+	travelAssistanceStatus?: "decision_pending" | "review" | "quote_prepared" | "quote_approved" | "invoiced" | "ticket_paid" | "booked" | "cleared" | "declined" | "on_hold" | null;
 	/** Stage consents recorded by the applicant. */
 	applicationConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;
 	visaConsent?: { decision: string; reason?: string | null; decidedAt?: string | null } | null;

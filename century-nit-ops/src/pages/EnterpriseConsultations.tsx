@@ -5,10 +5,12 @@ import { useCases } from "../hooks/useCases";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { ConsultationDetail } from "./case/ConsultationDetail";
 import { StatusPill } from "century-nit-core/ui";
+import { AssignSheet } from "./case/AssignSheet";
+import { AssignChip } from "./case/ApplicationAssignSheet";
+import type { MockConsultation } from "century-nit-core/ops";
 import { Toast } from "./OpsDialogs";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { branchName } from "century-nit-core/ops";
-import type { MockConsultation } from "century-nit-core/ops";
 import { StaffChatBadge } from "./StaffChatBadge";
 
 /** Placeholder values shouldn't be joined into a meta line as bare em-dashes */
@@ -20,7 +22,9 @@ function isKnown(v: string | undefined | null): v is string {
 export function EnterpriseConsultations() {
 	const [searchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { consultations, assignees, error: casesError } = useCases();
+	const { consultations, assignees, assignConsultation, error: casesError } = useCases();
+	// Assignment from the list: the card's chip opens the same control the detail uses.
+	const [assignFor, setAssignFor] = useState<MockConsultation | null>(null);
 	const [statusFilter, setStatusFilter] = useState<string>("All");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedConsultation, setSelectedConsultation] = useState<MockConsultation | null>(null);
@@ -179,6 +183,9 @@ export function EnterpriseConsultations() {
 													) : (
 														<span>Unassigned</span>
 													)}
+													{canAssignWork && !c.assignedOfficer && c.status !== "Completed" && c.status !== "Cancelled" && (
+														<AssignChip onClick={() => setAssignFor(c)} />
+													)}
 													{c.coordinatorName && (
 														<span>
 															{" · "}Coord: <StaffChatBadge opsUserId={c.coordinatorEmail} name={c.coordinatorName} email={c.coordinatorEmail} />
@@ -201,6 +208,23 @@ export function EnterpriseConsultations() {
 					) : null
 				}
 			/>
+			{assignFor && (
+				<AssignSheet
+					open
+					onClose={() => setAssignFor(null)}
+					title="Assign consultant"
+					stage="consultation"
+					staff={assignees}
+					branch={assignFor.branch}
+					currentName={assignFor.assignedOfficer || null}
+					onAssign={async (opsUserId) => {
+						const to = assignees.find((a) => a.opsUserId === opsUserId);
+						if (!to) throw new Error("That staff member is no longer available");
+						await assignConsultation(assignFor.id, to);
+						showToast("success", "Consultant assigned.");
+					}}
+				/>
+			)}
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, type JourneyStage } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, PAYMENT_PLAN_LABELS, decisionOf, type JourneyStage } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
 import { InvoiceCard, JourneyStepper, NextActionBand, StatusPill, formatMoney, type NextAction, type Tone } from "century-nit-core/ui";
 import { downloadReceipt } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
+import { EnrolmentDecision } from "../../components/EnrolmentDecision";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
 import {
 	hasAcceptedOffer,
@@ -33,6 +34,8 @@ import {
 	programsForUniversity,
 	SCHOOL_DEGREE_LEVELS,
 	SCHOOL_FUNDING_TRACKS,
+	PAYMENT_PLANS,
+	type PaymentPlanId,
 	serviceFeeForPackage,
 	filterProgramsForPackage,
 	universitiesForPrograms,
@@ -285,7 +288,7 @@ export function PortalPackage() {
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, payAgencyInstallment, booking } = useAppState();
+	const { application, chooseSchoolPackage, payAgencyInstallment, booking, choosePaymentPlan } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
@@ -305,6 +308,29 @@ function SchoolPackageInner() {
 	const chosen = hasSchoolPackage(application);
 	const isDepositPaid = Boolean(application.agencyDepositPaid);
 	const isLocked = isDepositPaid;
+	// Enrolment in four steps: confirm · package & plan · deposit · consultant.
+	const confirmed = decisionOf(application.applicationConsent?.decision ?? application.proceedStatus) === "confirmed";
+	const [plan, setPlan] = useState<PaymentPlanId>((application.paymentPlanId as PaymentPlanId) || "full");
+	const [savingPlan, setSavingPlan] = useState(false);
+	const enrolSteps = [
+		{ label: "Confirmed", done: confirmed },
+		{ label: "Package & plan", done: chosen && Boolean(application.paymentPlanId) },
+		{ label: "Deposit paid", done: isDepositPaid },
+		{ label: "Consultant assigned", done: Boolean(application.assignedStaffId) },
+	];
+	async function savePlan(next: PaymentPlanId) {
+		setPlan(next);
+		if (next === application.paymentPlanId) return;
+		setSavingPlan(true);
+		try {
+			await meApi.choosePaymentPlan({ paymentPlanId: next });
+			choosePaymentPlan(next);
+		} catch (err) {
+			toast.error(err instanceof ApiError ? err.message : "Could not save your payment plan.");
+		} finally {
+			setSavingPlan(false);
+		}
+	}
 
 	useEffect(() => {
 		packagesApi.list()
@@ -409,13 +435,17 @@ function SchoolPackageInner() {
 				targetSchoolCount,
 			});
 			chooseSchoolPackage(funding, level, targetSchoolCount, totalServiceFeeCents);
+			if (plan !== application.paymentPlanId) {
+				await meApi.choosePaymentPlan({ paymentPlanId: plan });
+				choosePaymentPlan(plan);
+			}
 
 			if (andPayDeposit) {
 				setPayingDeposit(true);
 				await payAgencyInstallment();
 				return;
 			}
-			toast.success("Package locked. Pay deposit to begin school selection.");
+			toast.success("Package and plan saved. Pay the deposit to begin choosing schools.");
 			nav("/portal/application", { replace: true });
 		} catch (err) {
 			const msg =
@@ -433,15 +463,42 @@ function SchoolPackageInner() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">After eligibility · School package</p>
-					<h1 className="page-title mt-1">Your school application package</h1>
+					<p className="eyebrow">Chapter II · Enrolment</p>
+					<h1 className="page-title mt-1">Enrol with Century NIT</h1>
 					<p className="lead mt-2">
-						Configure your <strong>academic path package</strong>: funding track (scholarship / non-scholarship / hybrid),
-						degree level (BSc, Master&apos;s, PhD), and target school count. This sets your comprehensive advisory fee and
-						tailors your institution catalog on the next screen.
+						One page: confirm you're enrolling, choose your package and payment plan, and pay the deposit.
+						Your consultant is assigned as soon as the deposit lands.
 					</p>
 				</div>
 			</header>
+
+			<ol className="mt-3" style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+				{enrolSteps.map((st, i) => {
+					const current = !st.done && enrolSteps.slice(0, i).every((x) => x.done);
+					return (
+						<li key={st.label}>
+							<StatusPill tone={st.done ? "done" : current ? "current" : "neutral"} dot={st.done || current}>
+								{i + 1} · {st.label}
+							</StatusPill>
+						</li>
+					);
+				})}
+			</ol>
+
+			<section className="mt-4">
+				<div className="card card--pad">
+					<p className="eyebrow">1 · Confirm your enrolment</p>
+					<div className="mt-2">
+						<EnrolmentDecision />
+					</div>
+				</div>
+			</section>
+
+			{!confirmed && (
+				<p className="muted mt-4" style={{ fontSize: "0.9rem" }}>
+					Confirm above to choose your package and plan.
+				</p>
+			)}
 
 			{chosen ? (
 				isDepositPaid ? (
@@ -467,7 +524,8 @@ function SchoolPackageInner() {
 				)
 			) : null}
 
-			{/* 1 · Funding track */}
+			{confirmed && (<>
+			{/* 2 · Package: funding track, level, target schools */}
 			<section className="mb-5">
 				<p className="eyebrow mb-2">1 · Funding track</p>
 				<div className="card-grid card-grid--3">
@@ -596,9 +654,9 @@ function SchoolPackageInner() {
 						</li>
 						<li className="pkg-cost__line" style={{ borderTop: "1px dashed var(--border, #e5e7eb)", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
 							<span className="pkg-cost__label">
-								<strong>10% Commitment Deposit (Due Now)</strong>
+								<strong>Deposit (10%) — due now</strong>
 								<span className="pkg-cost__when">
-									Required upfront to unlock School Selection (Stage 3) and begin filing
+									Assigns your consultant and opens school selection
 								</span>
 							</span>
 							<span style={{ color: "var(--accent, #3b82f6)", fontWeight: 700 }}>
@@ -609,7 +667,7 @@ function SchoolPackageInner() {
 							<span className="pkg-cost__label">
 								Remaining 90% balance
 								<span className="pkg-cost__when">
-									Settled later via the Payment Execution chapter (full or installment plan)
+									{plan === "full" ? "Due before you depart" : "50% before you depart · 40% after you arrive"}
 								</span>
 							</span>
 							<Money usd={remainingUsd} className="pkg-cost__amt" />
@@ -652,10 +710,49 @@ function SchoolPackageInner() {
 				</section>
 			) : null}
 
+			{/* 3 · Payment plan — chosen here, so the money is agreed before any work starts */}
+			<section className="mt-4">
+				<div className="card card--pad">
+					<p className="eyebrow">3 · Payment plan</p>
+					<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
+						The deposit (10%) is due now either way. The rest of your service fee follows your plan.
+					</p>
+					<div className="portal-grid portal-grid--2 mt-3">
+						{PAYMENT_PLANS.map((pl) => {
+							const on = plan === pl.id;
+							return (
+								<button
+									key={pl.id}
+									type="button"
+									className={`card card--pad${on ? " card--selected" : ""}`}
+									style={{ textAlign: "left", cursor: isLocked ? "default" : "pointer", borderColor: on ? "var(--accent, #3b82f6)" : undefined }}
+									disabled={isLocked || savingPlan}
+									onClick={() => void savePlan(pl.id)}
+									aria-pressed={on}
+								>
+									<p style={{ fontWeight: 600, margin: 0 }}>{PAYMENT_PLAN_LABELS[pl.id] ?? pl.name}</p>
+									<p className="muted mt-1" style={{ fontSize: "0.85rem", margin: 0 }}>
+										{pl.id === "full"
+											? "10% now · the remaining 90% before you depart."
+											: "10% now · 50% before you depart · 40% after you arrive, on a schedule you choose."}
+									</p>
+								</button>
+							);
+						})}
+					</div>
+					{isLocked && (
+						<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+							Plan: <strong>{PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—"}</strong>. To change it, message your consultant.
+						</p>
+					)}
+				</div>
+			</section>
+
+			{/* 4 · Deposit */}
 			<div className="row mt-4" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
 				{isDepositPaid ? (
 					<Button type="button" arrow onClick={() => nav("/portal/application")}>
-						Next · Schools & Applications →
+						Next · Applications →
 					</Button>
 				) : (
 					<>
@@ -665,7 +762,7 @@ function SchoolPackageInner() {
 							arrow
 							disabled={!funding || !level || saving || payingDeposit}
 						>
-							{payingDeposit ? "Connecting to Paystack…" : <>Lock Package & Pay 10% Deposit (<MoneyInline usd={depositUsd} />) →</>}
+							{payingDeposit ? "Connecting to Paystack…" : <>Pay the deposit (<MoneyInline usd={depositUsd} />) →</>}
 						</Button>
 						<Button
 							type="button"
@@ -673,10 +770,7 @@ function SchoolPackageInner() {
 							onClick={() => void confirm(false)}
 							disabled={!funding || !level || saving || payingDeposit}
 						>
-							{saving ? "Saving…" : "Save Package & Pay Later"}
-						</Button>
-						<Button type="button" variant="ghost" onClick={() => nav("/portal/application")}>
-							View School Catalog
+							{saving ? "Saving…" : "Save & pay later"}
 						</Button>
 					</>
 				)}
@@ -684,6 +778,7 @@ function SchoolPackageInner() {
 					← Consultation
 				</Button>
 			</div>
+			</>)}
 		</div>
 	);
 }

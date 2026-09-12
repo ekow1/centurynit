@@ -1809,7 +1809,7 @@ export const PROCESS_STAGES: {
 		label: PORTAL_STEP.proceed.label,
 		detail: "Confirm you're enrolling with us",
 		owner: "you",
-		path: "/portal/consent",
+		path: "/portal/package",
 		band: "application",
 	},
 	{

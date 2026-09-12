@@ -1,3 +1,4 @@
+import { PORTAL_STAGE_LABELS } from "century-nit-shared";
 import { NavLink, Outlet, Link, useLocation } from "react-router-dom";
 import { useAppState } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -225,26 +226,9 @@ export function PortalLayout() {
 	);
 }
 
-/** Desktop-width stage name. Phones use the shorter STAGE_SHORT names instead. */
+/** Desktop-width step name — the vocabulary's, so it matches every other surface. */
 function stagePill(s: ProcessStageId) {
-	const map: Record<ProcessStageId, string> = {
-		new: "New",
-		consultation: "Consultation",
-		eligibility: "Eligibility review",
-		proceed: "Start your application",
-		school_package: "School package",
-		awaiting_handler: "Consultant being assigned",
-		school_select: "School selection",
-		awaiting_invoice: "Awaiting invoice",
-		application_invoice: "Application invoice",
-		school_tracking: "Application tracking",
-		visa_invoice: "Visa invoice",
-		visa: "Visa tracking",
-		payment_execution: "Payment plan & service fees",
-		travel_assistance: "Travel assistance",
-		completed: "Completed",
-	};
-	return map[s];
+	return PORTAL_STAGE_LABELS[s] ?? s;
 }
 
 /** Locked stages show a sealed gate until prior step unlocks them */

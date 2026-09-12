@@ -9,6 +9,8 @@ import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "../StaffChatBadge";
+import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
+import { timeAgo } from "../../lib/pendingTasks";
 import { CaseHeader, JourneyStepper, NextActionBand, StatusPill, type NextAction } from "century-nit-core/ui";
 import { PORTAL_STAGE_ORDER } from "century-nit-shared";
 
@@ -24,6 +26,28 @@ function docSummary(c: MockConsultation, realDocs: ApplicantDocument[]) {
 	const pending = realDocs.filter((d) => d.status === "UPLOADED").length;
 	const rejected = realDocs.filter((d) => d.status === "REJECTED").length;
 	return { total: Math.max(requested, realDocs.length), verified, pending, uploaded, rejected };
+}
+
+/** A readable line for a consultation activity row; the payload carries the specifics. */
+function activitySummary(e: ConsultationActivityEvent): string {
+	const p = (e.payload ?? {}) as Record<string, unknown>;
+	const str = (k: string) => (typeof p[k] === "string" ? (p[k] as string) : null);
+	switch (e.type) {
+		case "status_changed":
+			return `Status ${str("fromStatus") ?? "—"} → ${str("toStatus") ?? "—"}`;
+		case "consultant_assigned":
+			return `${str("officerName") ?? "A consultant"} assigned`;
+		case "coordinator_delegated":
+			return `Delegated to coordinator ${str("coordinatorName") ?? ""}${str("note") ? ` — ${str("note")}` : ""}`;
+		case "coordinator_reassigned":
+			return `Coordinator ${str("fromCoordinatorName") ?? "—"} → ${str("toCoordinatorName") ?? "—"}${str("reason") ? ` — ${str("reason")}` : ""}`;
+		case "auto_escalated":
+			return `Escalated automatically${str("toCoordinatorName") ? ` to ${str("toCoordinatorName")}` : ""}`;
+		default: {
+			const words = e.type.replace(/[._]/g, " ");
+			return words.charAt(0).toUpperCase() + words.slice(1);
+		}
+	}
 }
 
 /**
@@ -61,7 +85,7 @@ export function ConsultationDetail({
 		refresh,
 	} = useCases();
 
-	const [detailTab, setDetailTab] = useState<"profile" | "documents" | "assessment">("profile");
+	const [detailTab, setDetailTab] = useState<"profile" | "documents" | "assessment" | "activity">("profile");
 
 	const [outcome, setOutcome] = useState("Eligible");
 	const [notes, setNotes] = useState("");
@@ -102,6 +126,18 @@ export function ConsultationDetail({
 	const consultation: MockConsultation = completedResult
 		? { ...record, status: "Completed", assessmentResult: completedResult }
 		: record;
+
+	// The consultation's own timeline (the API has kept one all along).
+	const [activity, setActivity] = useState<ConsultationActivityEvent[]>([]);
+	const [activityLoading, setActivityLoading] = useState(false);
+	useEffect(() => {
+		if (detailTab !== "activity") return;
+		setActivityLoading(true);
+		getConsultationActivity(consultation.id)
+			.then((res) => setActivity(res.activities))
+			.catch(() => setActivity([]))
+			.finally(() => setActivityLoading(false));
+	}, [consultation.id, detailTab, consultation.status, consultation.assignedOfficer, (consultation.comments ?? []).length]);
 
 	// Reset per-record state when a different consultation is shown.
 	useEffect(() => {
@@ -727,8 +763,8 @@ export function ConsultationDetail({
 			</details>
 
 			<div className="cn-tabs" role="tablist">
-				{(["profile", "documents", "assessment"] as const).map((t) => {
-					const labels = { profile: "Background", documents: `Documents${realDocs.length ? ` (${realDocs.length})` : ""}`, assessment: "Decision" };
+				{(["profile", "documents", "assessment", "activity"] as const).map((t) => {
+					const labels = { profile: "Background", documents: `Documents${realDocs.length ? ` (${realDocs.length})` : ""}`, assessment: "Decision", activity: "Activity" };
 					const locked = t === "assessment" && consultation.status === "Under Review";
 					return (
 						<button
@@ -813,6 +849,34 @@ export function ConsultationDetail({
 						</p>
 					</div>
 				)}
+
+			{detailTab === "activity" && (
+				<div className="card" style={{ marginTop: "1rem" }}>
+					<div className="cn-case__top">
+						<h3 style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>Timeline</h3>
+						<span className="cn-case__ref">{activity.length} events</span>
+					</div>
+					{activityLoading ? (
+						<p className="muted">Loading timeline…</p>
+					) : activity.length === 0 ? (
+						<p className="muted">Nothing recorded on this consultation yet.</p>
+					) : (
+						<ol className="cn-timeline">
+							{activity.map((e) => (
+								<li key={e.id} className="cn-timeline__item">
+									<div className="cn-timeline__head">
+										<span className="cn-timeline__summary">{activitySummary(e)}</span>
+										<time className="cn-timeline__when" dateTime={e.createdAt} title={new Date(e.createdAt).toLocaleString()}>
+											{timeAgo(e.createdAt)}
+										</time>
+									</div>
+									{e.actorName && <p className="cn-timeline__meta">{e.actorName}</p>}
+								</li>
+							))}
+						</ol>
+					)}
+				</div>
+			)}
 
 			{detailTab === "assessment" && canAssess && (
 			<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>

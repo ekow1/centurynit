@@ -286,6 +286,20 @@ export function getApplicationActivity(applicationId: string): Promise<Applicati
 	return apiFetch<ApplicationActivityResponse>(`${API_PREFIX}/applications/${applicationId}/activity`);
 }
 
+export type ConsultationActivityEvent = {
+	id: string;
+	consultationId: string;
+	type: string;
+	actorName: string | null;
+	payload: unknown;
+	createdAt: string;
+};
+
+/** A consultation's activity timeline (assignment, scheduling, assessment…), newest first. */
+export function getConsultationActivity(consultationId: string): Promise<{ activities: ConsultationActivityEvent[]; total: number }> {
+	return apiFetch(`${API_PREFIX}/consultations/${consultationId}/activity`);
+}
+
 export function getInvoice(id: string): Promise<ApiInvoice> {
 	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}`);
 }

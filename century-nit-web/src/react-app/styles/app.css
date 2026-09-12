@@ -1861,6 +1861,20 @@ body.nav-open {
 	align-items: start;
 }
 
+/* ── Case view: the journey and outcome, with facts and next steps beside ── */
+.portal-case { display: grid; gap: 1.25rem; align-items: start; }
+.portal-case__main, .portal-case__side { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
+@media (min-width: 900px) {
+	.portal-case { grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem); }
+	.portal-case__side { position: sticky; top: 1rem; }
+}
+.portal-case__facts { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.9rem; margin: 0.75rem 0 0; font-size: var(--text-sm); }
+.portal-case__facts dt { color: var(--muted-foreground); }
+.portal-case__facts dd { margin: 0; }
+.portal-case__person { display: flex; gap: 0.6rem; align-items: flex-start; }
+.portal-case__avatar { width: 2rem; height: 2rem; border-radius: 50%; background: var(--foreground); color: var(--background); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+
+
 @media (min-width: 900px) {
 .application-select {
 		display: grid;

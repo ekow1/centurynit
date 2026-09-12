@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { StatusPill } from "century-nit-core/ui";
 import { useNavigate } from "react-router-dom";
 import { meApi, ApiError } from "century-nit-core/api";
 import { Button } from "./ui/Button";
@@ -153,136 +154,51 @@ export function AssessmentOutcomeCard({
 	};
 
 	return (
-		<div
-			className="card card--pad mb-4"
-			style={{
-				background: isEligible ? "rgba(22, 101, 52, 0.03)" : "#fff",
-				border: `1px solid ${isEligible ? "#86efac" : "var(--border)"}`,
-				boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-			}}
-		>
-			{/* Top Bar: Title + Outcome Pill */}
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					flexWrap: "wrap",
-					gap: "0.5rem",
-				}}
-			>
+		<div className={`card card--pad mb-4 cn-outcome${isEligible ? " cn-outcome--eligible" : ""}`}>
+			<div className="cn-outcome__head">
 				<div>
-					<span
-						className="eyebrow"
-						style={{ color: isEligible ? "#166534" : "var(--foreground)", fontWeight: 700 }}
-					>
-						Official Assessment Result
-					</span>
-					<h3 className="display mt-1" style={{ fontSize: "1.25rem", margin: "0.2rem 0 0" }}>
-						Assessment Outcome &amp; Recommendations
-					</h3>
+					<span className="eyebrow">Official assessment result</span>
+					<h3 className="display mt-1 cn-outcome__title">Assessment outcome &amp; recommendation</h3>
 				</div>
-				<span
-					className="portal-pill"
-					style={{
-						background: isEligible ? "#dcfce7" : "#fef3c7",
-						color: isEligible ? "#166534" : "#92400e",
-						fontWeight: 700,
-						fontSize: "0.95rem",
-						padding: "0.35rem 0.85rem",
-					}}
-				>
+				<StatusPill tone={isEligible ? "done" : "current"} dot>
 					{effectiveOutcome || "Eligible"}
-				</span>
+				</StatusPill>
 			</div>
 
-			{/* Counselor Notes */}
 			{effectiveNotes && (
 				<div className="mt-3">
-					<p className="eyebrow mb-1" style={{ fontSize: "0.75rem", color: "#64748b" }}>
-						Assessment Notes
-					</p>
-					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, margin: 0, color: "var(--foreground)" }}>
-						{effectiveNotes}
-					</p>
+					<p className="eyebrow mb-1">Assessment notes</p>
+					<p className="cn-outcome__notes">{effectiveNotes}</p>
 				</div>
 			)}
 
-			{/* Recommendations Grid (Always shown if any recommendation exists) */}
 			{hasRecs && (
-				<div
-					style={{
-						display: "grid",
-						gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-						gap: "0.85rem",
-						marginTop: "1.25rem",
-						paddingTop: "1rem",
-						borderTop: "1px dashed var(--border)",
-					}}
-				>
+				<dl className="cn-outcome__recs">
 					{effectiveCountry && (
-						<div
-							style={{
-								padding: "0.75rem",
-								borderRadius: "6px",
-								background: "rgba(255, 255, 255, 0.7)",
-								border: "1px solid var(--border-light, #e5e7eb)",
-							}}
-						>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
-								🌍 Recommended Destination
-							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{effectiveCountry}</strong>
+						<div className="cn-outcome__rec">
+							<dt>Destination</dt>
+							<dd>{effectiveCountry}</dd>
 						</div>
 					)}
 					{effectiveUniversity && (
-						<div
-							style={{
-								padding: "0.75rem",
-								borderRadius: "6px",
-								background: "rgba(255, 255, 255, 0.7)",
-								border: "1px solid var(--border-light, #e5e7eb)",
-							}}
-						>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
-								🏛️ Recommended Institution
-							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{effectiveUniversity}</strong>
+						<div className="cn-outcome__rec">
+							<dt>Institution</dt>
+							<dd>{effectiveUniversity}</dd>
 						</div>
 					)}
 					{effectiveProgram && (
-						<div
-							style={{
-								padding: "0.75rem",
-								borderRadius: "6px",
-								background: "rgba(255, 255, 255, 0.7)",
-								border: "1px solid var(--border-light, #e5e7eb)",
-							}}
-						>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
-								🎓 Recommended Program
-							</span>
-							<strong style={{ fontSize: "0.95rem" }}>{effectiveProgram}</strong>
+						<div className="cn-outcome__rec">
+							<dt>Programme</dt>
+							<dd>{effectiveProgram}</dd>
 						</div>
 					)}
 					{effectivePackage && (
-						<div
-							style={{
-								padding: "0.75rem",
-								borderRadius: "6px",
-								background: "rgba(37, 99, 235, 0.04)",
-								border: "1px solid rgba(37, 99, 235, 0.2)",
-							}}
-						>
-							<span className="muted" style={{ fontSize: "0.75rem", display: "block", marginBottom: "0.2rem" }}>
-								📦 Recommended Package
-							</span>
-							<strong style={{ fontSize: "0.95rem", color: "var(--primary, #2563eb)" }}>
-								{formatPkg(effectivePackage)}
-							</strong>
+						<div className="cn-outcome__rec cn-outcome__rec--package">
+							<dt>Package</dt>
+							<dd>{formatPkg(effectivePackage)}</dd>
 						</div>
 					)}
-				</div>
+				</dl>
 			)}
 
 			{/* Decision & Action Buttons Section beneath recommendations */}

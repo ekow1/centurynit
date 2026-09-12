@@ -204,3 +204,16 @@
 .cn-work__hint { font-size: var(--text-xs); color: var(--muted-foreground); }
 .cn-work__body { padding: 0.75rem 1rem 0; border-top: 1px solid var(--border-light); }
 
+/* ── Assessment outcome (portal) ────────────────────────────────────────── */
+.cn-outcome { border-left: 4px solid var(--tone-current-fg); }
+.cn-outcome--eligible { border-left-color: var(--tone-done-fg); }
+.cn-outcome__head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.cn-outcome__title { font-size: var(--text-lg); margin: 0.2rem 0 0; }
+.cn-outcome__notes { font-size: var(--text-sm); line-height: 1.6; margin: 0; white-space: pre-wrap; }
+.cn-outcome__recs { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; margin: 1.25rem 0 0; padding-top: 1rem; border-top: 1px dashed var(--border-light); }
+.cn-outcome__rec { padding: 0.75rem; border: 1px solid var(--border-light); background: var(--background); }
+.cn-outcome__rec dt { font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); margin-bottom: 0.25rem; }
+.cn-outcome__rec dd { margin: 0; font-weight: 600; font-size: var(--text-sm); }
+.cn-outcome__rec--package { border-color: var(--tone-done-fg); background: var(--tone-done-bg); }
+.cn-outcome__rec--package dd { color: var(--tone-done-fg); }
+

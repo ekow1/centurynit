@@ -5,7 +5,7 @@ import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, type JourneyStage } from
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
-import { InvoiceCard, formatMoney } from "century-nit-core/ui";
+import { InvoiceCard, JourneyStepper, NextActionBand, StatusPill, formatMoney, type NextAction, type Tone } from "century-nit-core/ui";
 import { downloadReceipt } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
@@ -2007,7 +2007,7 @@ export function PortalConsultationBookingFlow() {
 
 
 export function PortalConsultation() {
-	const { booking } = useAppState();
+	const { booking, stageStatuses, journeyPhase, pendingAction } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
@@ -2068,213 +2068,202 @@ export function PortalConsultation() {
 			) : !hasActiveCase ? (
 				<PortalConsultationBookingFlow />
 			) : (
-				/* ── Live Consultation File Dashboard ── */
-				<div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginTop: "1rem" }}>
-					{/* Status Header Card */}
-					<div
-						className="card card--pad"
-						style={{
-							borderLeft: "4px solid var(--primary, #2563eb)",
-							display: "flex",
-							justifyContent: "space-between",
-							alignItems: "flex-start",
-							flexWrap: "wrap",
-							gap: "1rem",
-						}}
-					>
-						<div>
-							<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-								<span className="portal-pill portal-pill--active" style={{ fontWeight: 600 }}>
-									Case Ref: {activeRef}
-								</span>
-								<span
-									className="portal-pill"
-									style={{
-										background:
-											workflowStatus === "CLOSED"
-												? "#fee2e2"
-												: workflowStatus === "COMPLETED"
-													? "#dcfce7"
-													: workflowStatus === "IN_PROGRESS"
-														? "#e0e7ff"
-														: "#fef3c7",
-										color:
-											workflowStatus === "CLOSED"
-												? "#991b1b"
-												: workflowStatus === "COMPLETED"
-													? "#166534"
-													: workflowStatus === "IN_PROGRESS"
-														? "#3730a3"
-														: "#92400e",
-										fontWeight: 600,
-									}}
-								>
-									{workflowStatus === "CLOSED"
-										? "Appointment Closed"
-										: workflowStatus === "COMPLETED"
-											? "✓ Assessment Completed"
-											: workflowStatus === "IN_PROGRESS"
-												? "In Progress"
-												: "Awaiting Staff Assignment"}
-								</span>
-							</div>
+				/* ── The case: journey spine, outcome and messages; facts and next steps beside ── */
+				(() => {
+					const consultationDocs = liveConsultation?.requestedDocuments ?? [];
+					const applicationDocs = liveApplication?.requestedDocuments ?? [];
+					const allRequested = Array.from(new Set([...consultationDocs, ...applicationDocs]));
+					const statusTone: Tone =
+						workflowStatus === "CLOSED" ? "void" : workflowStatus === "COMPLETED" ? "done" : workflowStatus === "IN_PROGRESS" ? "current" : "waiting";
+					const statusLabel =
+						workflowStatus === "CLOSED"
+							? "Appointment closed"
+							: workflowStatus === "COMPLETED"
+								? "Assessment complete"
+								: workflowStatus === "IN_PROGRESS"
+									? "In progress"
+									: "Awaiting your consultant";
+					const when = liveConsultation?.startsAt
+						? new Date(liveConsultation.startsAt).toLocaleString(undefined, {
+								weekday: "short",
+								year: "numeric",
+								month: "short",
+								day: "numeric",
+								hour: "2-digit",
+								minute: "2-digit",
+							})
+						: booking.date
+							? `${booking.date} at ${booking.time}`
+							: "Scheduled";
+					const decisionOpen = Boolean(activeOutcome) && (applicationConsent === null || applicationConsent === "pending");
 
-							<h2 className="section-title mt-2 mb-1">
-								{liveConsultation?.type === "in_person" ? "In-Person Consultation" : "Online Advisory Session"}
-							</h2>
-							<p className="muted" style={{ fontSize: "0.9rem" }}>
-								Branch: <strong>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</strong> ·{" "}
-								{liveConsultation?.startsAt
-									? new Date(liveConsultation.startsAt).toLocaleString(undefined, {
-											weekday: "short",
-											year: "numeric",
-											month: "short",
-											day: "numeric",
-											hour: "2-digit",
-											minute: "2-digit",
-										})
-									: booking.date
-										? `${booking.date} at ${booking.time}`
-										: "Scheduled"}
-							</p>
-						</div>
-
-						{liveConsultation?.meetingUrl && (
-							<a
-								href={liveConsultation.meetingUrl}
-								target="_blank"
-								rel="noopener noreferrer"
-								className="btn btn--primary btn--sm"
-								style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
-							>
-								📹 Join Video Meeting
-							</a>
-						)}
-					</div>
-
-					{/* Assigned Advisor Info */}
-					<div className="card card--pad">
-						<h3 className="section-title mb-2" style={{ fontSize: "1.1rem" }}>
-							Your consultant
-						</h3>
-					{workflowStatus === "CLOSED" ? (
-						<div>
-							<h4 style={{ margin: "0 0 0.5rem 0" }}>Appointment Closed</h4>
-							<p className="muted" style={{ fontSize: "0.9rem", margin: "0 0 0.75rem 0" }}>
-								This appointment was cancelled. You can rebook if you would like to continue.
-							</p>
-							<Button to="/portal/appointments" variant="secondary" arrow>
-								Rebook Appointment →
-							</Button>
-						</div>
-					) : activeOfficer ? (
-							<div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-								<div
-									style={{
-										width: "44px",
-										height: "44px",
-										borderRadius: "50%",
-										background: "var(--primary, #2563eb)",
-										color: "#fff",
-										display: "flex",
-										alignItems: "center",
-										justifyContent: "center",
-										fontWeight: 700,
-										fontSize: "1.1rem",
-									}}
-								>
-									{activeOfficer.slice(0, 1)}
-								</div>
-								<div>
-									<p style={{ fontWeight: 600, margin: 0 }}>{activeOfficer}</p>
-									<p className="muted" style={{ fontSize: "0.85rem", margin: "0.15rem 0 0" }}>
-										{liveConsultation?.assignedOfficerEmail ?? "Senior Admissions & Visa Specialist"}
-									</p>
-								</div>
-							</div>
-						) : (
-							<p className="muted" style={{ fontSize: "0.9rem", margin: 0 }}>
-								Your file is currently in the intake queue. A designated advisor at the{" "}
-								<strong>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</strong> is being assigned.
-							</p>
-						)}
-					</div>
-
-					{/* Assessment Outcome & Recommendations Card with Integrated Consent Buttons */}
-					{activeOutcome && (
-						<AssessmentOutcomeCard
-							outcome={activeOutcome}
-							notes={activeNotes}
-							recommendations={{
-								country: liveConsultation?.assessmentResult?.recCountry,
-								university: liveConsultation?.assessmentResult?.recUniversity,
-								program: liveConsultation?.assessmentResult?.recProgram,
-								package: liveConsultation?.assessmentResult?.recPackage,
-							}}
-							currentDecision={applicationConsent}
-							onDecided={refreshLiveCase}
-						/>
-					)}
-
-					{/* Requested Documents — consultant + handler combined */}
-					{(() => {
-						const consultationDocs = liveConsultation?.requestedDocuments ?? [];
-						const applicationDocs = liveApplication?.requestedDocuments ?? [];
-						const allRequested = Array.from(new Set([...consultationDocs, ...applicationDocs]));
-						if (allRequested.length === 0) return null;
-						return (
-							<div
-								className="card card--pad"
-								style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
-							>
-								<h3 className="section-title mb-1" style={{ color: "#92400e", fontSize: "1.05rem" }}>
-									Action Required: Documents Needed
-								</h3>
-								<p className="muted mb-3" style={{ fontSize: "0.85rem", color: "#b45309" }}>
-									Please upload these items to your document vault for verification:
-								</p>
-								<ul style={{ paddingLeft: "1.2rem", margin: "0 0 1rem 0", color: "#92400e" }}>
-									{allRequested.map((doc) => (
-										<li key={doc} style={{ marginBottom: "0.25rem" }}>{doc}</li>
-									))}
-								</ul>
+					// What the applicant has to do now — the same derivation the
+					// dashboard uses, plus the two things only this chapter asks for.
+					const actions: NextAction[] = [];
+					if (decisionOpen) {
+						actions.push({
+							id: "decide",
+							title: "Decide whether to proceed",
+							detail: "Your assessment is ready. Continue to start your application, or put it on hold.",
+							action: (
+								<a href="#assessment-outcome" className="btn btn--primary btn--sm">
+									Review outcome →
+								</a>
+							),
+						});
+					}
+					if (allRequested.length > 0) {
+						actions.push({
+							id: "documents",
+							title: `Upload ${allRequested.length} document${allRequested.length === 1 ? "" : "s"}`,
+							detail: allRequested.join(" · "),
+							action: (
 								<Button to="/portal/documents" variant="secondary">
-									Upload Documents in Vault →
+									Open vault →
 								</Button>
-							</div>
-						);
-					})()}
+							),
+						});
+					}
+					if (pendingAction && pendingAction.kind !== "documents") {
+						actions.push({
+							id: pendingAction.kind,
+							title: pendingAction.title,
+							detail: pendingAction.detail,
+							action: (
+								<Button to={pendingAction.to} variant="primary">
+									{pendingAction.label} →
+								</Button>
+							),
+						});
+					}
+					if (workflowStatus === "CLOSED") {
+						actions.push({
+							id: "rebook",
+							title: "Rebook your consultation",
+							detail: "This appointment was cancelled. Book again to continue.",
+							tone: "blocked",
+							action: (
+								<Button to="/portal/appointments" variant="secondary">
+									Rebook →
+								</Button>
+							),
+						});
+					}
 
-					{/* Live Messages / Comments from Advisor */}
-					{liveConsultation?.comments && liveConsultation.comments.length > 0 && (
-						<div className="card card--pad">
-							<h3 className="section-title mb-3" style={{ fontSize: "1.05rem" }}>
-								Messages from your consultant
-							</h3>
-							<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-								{liveConsultation.comments.map((cm) => (
-									<div
-										key={cm.id}
-										style={{
-											padding: "0.75rem",
-											borderRadius: "6px",
-											background: "var(--surface-muted, #f8fafc)",
-											border: "1px solid var(--border)",
-										}}
-									>
-										<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-											<strong style={{ fontSize: "0.85rem" }}>{cm.author}</strong>
-											<span className="muted" style={{ fontSize: "0.75rem" }}>
-												{new Date(cm.at).toLocaleDateString()}
-											</span>
-										</div>
-										<p style={{ margin: 0, fontSize: "0.9rem" }}>{cm.text}</p>
+					return (
+						<div className="portal-case">
+							<div className="portal-case__main">
+								{stageStatuses && (
+									<div className="card card--pad">
+										<p className="eyebrow mb-2">Your journey</p>
+										<JourneyStepper stageStatuses={stageStatuses} nextUnlock={journeyPhase.nextUnlock} />
 									</div>
-								))}
+								)}
+
+								{activeOutcome ? (
+									<div id="assessment-outcome">
+										<AssessmentOutcomeCard
+											outcome={activeOutcome}
+											notes={activeNotes}
+											recommendations={{
+												country: liveConsultation?.assessmentResult?.recCountry,
+												university: liveConsultation?.assessmentResult?.recUniversity,
+												program: liveConsultation?.assessmentResult?.recProgram,
+												package: liveConsultation?.assessmentResult?.recPackage,
+											}}
+											currentDecision={applicationConsent}
+											onDecided={refreshLiveCase}
+										/>
+									</div>
+								) : (
+									workflowStatus !== "CLOSED" && (
+										<div className="card card--pad">
+											<p className="eyebrow mb-2">Assessment</p>
+											<p className="muted">
+												{activeOfficer
+													? `${activeOfficer} reviews your background, documents and goals during and after your session. Your outcome and recommendation appear here.`
+													: "Once a consultant is assigned they review your background, documents and goals. Your outcome and recommendation appear here."}
+											</p>
+										</div>
+									)
+								)}
+
+								{liveConsultation?.comments && liveConsultation.comments.length > 0 && (
+									<div className="card card--pad">
+										<p className="eyebrow mb-2">Messages from your consultant</p>
+										<ol className="cn-timeline">
+											{[...liveConsultation.comments].reverse().map((cm) => (
+												<li key={cm.id} className="cn-timeline__item">
+													<div className="cn-timeline__head">
+														<span className="cn-timeline__summary">{cm.author}</span>
+														<time className="cn-timeline__when" dateTime={cm.at}>
+															{new Date(cm.at).toLocaleDateString()}
+														</time>
+													</div>
+													<p className="cn-timeline__detail">{cm.text}</p>
+												</li>
+											))}
+										</ol>
+									</div>
+								)}
 							</div>
+
+							<aside className="portal-case__side">
+								<NextActionBand
+									items={actions}
+									waitingOn={journeyPhase.nextUnlock}
+									title="Your next steps"
+									emptyTitle="Nothing needed from you right now"
+								/>
+
+								<div className="card card--pad">
+									<div className="cn-case__top">
+										<span className="cn-case__ref">{activeRef}</span>
+										<StatusPill tone={statusTone} dot>
+											{statusLabel}
+										</StatusPill>
+									</div>
+									<dl className="portal-case__facts">
+										<dt>Session</dt>
+										<dd>{liveConsultation?.type === "in_person" ? "In person" : "Online"}</dd>
+										<dt>When</dt>
+										<dd>{when}</dd>
+										<dt>Branch</dt>
+										<dd>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</dd>
+										<dt>Consultant</dt>
+										<dd>
+											{activeOfficer ? (
+												<span className="portal-case__person">
+													<span className="portal-case__avatar" aria-hidden>
+														{activeOfficer.slice(0, 1)}
+													</span>
+													<span>
+														{activeOfficer}
+														{liveConsultation?.assignedOfficerEmail && (
+															<>
+																<br />
+																<a href={`mailto:${liveConsultation.assignedOfficerEmail}`} className="muted">
+																	{liveConsultation.assignedOfficerEmail}
+																</a>
+															</>
+														)}
+													</span>
+												</span>
+											) : (
+												<span className="muted">Being assigned at your branch</span>
+											)}
+										</dd>
+									</dl>
+									{liveConsultation?.meetingUrl && workflowStatus !== "CLOSED" && (
+										<a href={liveConsultation.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-3">
+											Join video meeting →
+										</a>
+									)}
+								</div>
+							</aside>
 						</div>
-					)}
-				</div>
+					);
+				})()
 			)}
 		</div>
 	);

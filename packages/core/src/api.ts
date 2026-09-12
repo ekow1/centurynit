@@ -925,10 +925,10 @@ export const applicationsApi = {
 			...json({ applicantId, ...input }),
 		});
 	},
-	setVisaStage(id: string, stage: VisaStage, note?: string): Promise<ApiApplication> {
+	setVisaStage(id: string, stage: VisaStage, note?: string, outcome?: "approved" | "refused"): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/visa-stage`, {
 			method: "POST",
-			...json({ stage, note }),
+			...json({ stage, note, outcome }),
 		});
 	},
 	setTravelClearance(id: string, cleared: boolean): Promise<ApiApplication> {

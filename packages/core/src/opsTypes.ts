@@ -215,6 +215,8 @@ export interface MockApplication {
 	isLive?: boolean;
 	/** Post-acceptance: visa processing sub-stage */
 	visaStage?: VisaStage;
+	/** `approved` once complete, `refused` when the authority said no (stage stays at decision). */
+	visaOutcome?: "approved" | "refused" | null;
 	/** Visa invoice has been paid */
 	visaInvoicePaid?: boolean;
 	/** App fee has been paid */

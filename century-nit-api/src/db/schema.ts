@@ -1025,6 +1025,12 @@ export const applications = pgTable(
 		visaStage: visaStageEnum("visa_stage").notNull().default("locked"),
 		visaInvoicePaid: boolean("visa_invoice_paid").notNull().default(false),
 		visaCounselorNote: text("visa_counselor_note"),
+		/**
+		 * How the visa decision went. `complete` means approved; a refusal
+		 * keeps the stage at `decision` and records `refused` here so the case
+		 * can be reopened for a reapplication without losing the history.
+		 */
+		visaOutcome: varchar("visa_outcome", { length: 16 }),
 		paymentPlanId: varchar("payment_plan_id", { length: 32 }),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
@@ -1046,6 +1052,10 @@ export const applications = pgTable(
 		byApplicant: index("applications_applicant_idx").on(t.applicantId),
 		byStaff: index("applications_staff_idx").on(t.assignedStaffId, t.status),
 		byStatus: index("applications_status_idx").on(t.status, t.stage),
+		visaOutcomeKnown: check(
+			"applications_visa_outcome_check",
+			sql`${t.visaOutcome} IS NULL OR ${t.visaOutcome} IN ('approved', 'refused')`,
+		),
 	}),
 );
 

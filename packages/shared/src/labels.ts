@@ -100,6 +100,12 @@ export const VISA_STAGE_LABELS: Record<string, string> = {
 
 /* ── Travel assistance request status ─────────────────────────────────────── */
 
+/** Visa decision, once the authority has answered. */
+export const VISA_OUTCOME_LABELS: Record<string, string> = {
+	approved: "Visa approved",
+	refused: "Visa refused",
+};
+
 export const TRAVEL_STATUS_LABELS: Record<string, string> = {
 	decision_pending: "Awaiting your decision",
 	review: "Request received",

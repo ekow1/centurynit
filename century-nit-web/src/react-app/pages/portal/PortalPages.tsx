@@ -3740,15 +3740,18 @@ function VisaTrackingInner() {
 	}, []);
 	const serverPaid = serverInv?.status === "paid";
 	const paid = application.visaInvoice.status === "paid" || serverPaid;
+	const refusedDetail =
+		application.visaStatus === "decision" && application.visaOutcome === "refused" ? "Refused — your consultant will advise" : "Awaiting decision";
 	const steps = [
 		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
 		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },
-		{ id: "decision", label: "Authority decision", detail: "Awaiting decision" },
+		{ id: "decision", label: "Authority decision", detail: refusedDetail },
 		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
 	] as const;
 	const order = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"] as const;
 	const currentIndex = order.indexOf(application.visaStatus);
 	const assigningHandler = application.visaStatus === "awaiting_handler";
+	const refused = application.visaStatus === "decision" && application.visaOutcome === "refused";
 
 	if (!paid) {
 		return (
@@ -3784,11 +3787,20 @@ function VisaTrackingInner() {
 				<li className="is-done">2 · Visa invoice</li>
 				<li className="is-current">3 · Visa tracking</li>
 			</ol>
-			<div className="card card--pad mb-4">
+			<div className={`card card--pad mb-4${refused ? " cn-next" : ""}`}>
 				<p className="eyebrow">Current update</p>
 				<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
-					{VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…"}
+					{refused
+						? "The visa authority refused this application."
+						: (VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…")}
 				</p>
+				{refused && (
+					<p className="muted mt-2">
+						This is not the end of the road. Your consultant will review the refusal reasons with you and, where it makes
+						sense, reopen your case for a reapplication. Check your messages, or reach your consultant from the
+						Communication Centre.
+					</p>
+				)}
 			</div>
 			{assigningHandler && (
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
@@ -3832,7 +3844,9 @@ function VisaTrackingInner() {
 					</div>
 				) : (
 					<p className="muted mt-1">
-						Visa tracking is in progress. Travel assistance unlocks once your visa is complete.
+						{refused
+							? "Travel assistance stays closed while the refusal is reviewed. Your consultant will let you know the next step."
+							: "Visa tracking is in progress. Travel assistance unlocks once your visa is complete."}
 					</p>
 				)}
 			</div>

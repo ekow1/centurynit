@@ -8,7 +8,7 @@ import { TaQueueRow } from "./TravelRequestCard";
 import { CaseDocumentsPanel } from "./case/CaseDocumentsPanel";
 import { handoffOffersKeep, tasksForApplication, taskActionLabel, timeAgo, type PendingTask } from "../lib/pendingTasks";
 import { listInvoices, issueApplicationInvoice, getApplicationActivity, type ApiInvoice } from "../lib/api";
-import { AssignControl, CaseHeader, InvoiceCard, JourneyStepper, NextActionBand, Sheet, type NextAction } from "century-nit-core/ui";
+import { AssignControl, CaseHeader, InvoiceCard, JourneyStepper, NextActionBand, Sheet, StatusPill, type NextAction } from "century-nit-core/ui";
 import { branchName, type MockApplication, type PreDepartureTask } from "century-nit-core/ops";
 import {
 	ALLOWED_DOCUMENT_TYPES,
@@ -373,6 +373,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		setTravelClearance,
 		togglePreDepartureTask,
 		setPaymentPlan,
+		setApplicationNotes,
 		setApplicationStage,
 		refresh,
 	} = useCases();
@@ -385,6 +386,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const [issuingInvoice, setIssuingInvoice] = useState(false);
 	const [invoiceFlash, setInvoiceFlash] = useState<string | null>(null);
 	const [noteDraft, setNoteDraft] = useState("");
+	const [caseNotesDraft, setCaseNotesDraft] = useState("");
+	const [editingCaseNotes, setEditingCaseNotes] = useState(false);
+	const [savingCaseNotes, setSavingCaseNotes] = useState(false);
 	const [editingNote, setEditingNote] = useState(false);
 
 	// Every invoice raised on this case, in one request; the application and
@@ -881,10 +885,61 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 										</p>
 									) : null}
 								</div>
-								{/* Staff Internal Notes */}
+								{/* Staff notes — editable in place; the next handler reads these first. */}
 								<div className="card">
-									<p className="eyebrow mb-2">Staff Case Notes</p>
-									<p style={{ fontSize: "var(--text-sm)", lineHeight: 1.5 }}>{app.notes}</p>
+									<div className="cn-docs__head">
+										<p className="eyebrow">Staff case notes</p>
+										{!editingCaseNotes && (
+											<button
+												type="button"
+												className="btn btn--sm btn--ghost"
+												onClick={() => {
+													setCaseNotesDraft(app.notes ?? "");
+													setEditingCaseNotes(true);
+												}}
+											>
+												{app.notes ? "Edit" : "Add notes"}
+											</button>
+										)}
+									</div>
+									{editingCaseNotes ? (
+										<form
+											className="cn-assign"
+											onSubmit={(e) => {
+												e.preventDefault();
+												setSavingCaseNotes(true);
+												void setApplicationNotes(app.appId, caseNotesDraft.trim())
+													.then(() => {
+														setEditingCaseNotes(false);
+														flash("Case notes saved.");
+													})
+													.catch((err) => fail(err, "Could not save notes"))
+													.finally(() => setSavingCaseNotes(false));
+											}}
+										>
+											<textarea
+												className="input"
+												rows={5}
+												maxLength={4000}
+												value={caseNotesDraft}
+												onChange={(e) => setCaseNotesDraft(e.target.value)}
+												placeholder="Context for whoever picks this case up next — what was agreed, what to watch for."
+												autoFocus
+											/>
+											<div className="cn-assign__row">
+												<button type="submit" className="btn btn--sm btn--primary" disabled={savingCaseNotes}>
+													{savingCaseNotes ? "Saving…" : "Save notes"}
+												</button>
+												<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditingCaseNotes(false)} disabled={savingCaseNotes}>
+													Cancel
+												</button>
+											</div>
+										</form>
+									) : app.notes ? (
+										<p className="cn-timeline__detail">{app.notes}</p>
+									) : (
+										<p className="muted cn-docs__meta">No notes yet.</p>
+									)}
 								</div>
 				</>
 			)}
@@ -1202,14 +1257,61 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 													<div style={{ flex: 1 }}>
 														<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.label}</p>
 													</div>
-													{current && app.visaStage !== "complete" && (
-														<button
-															onClick={() => advanceVisa()}
-															className="btn btn--ghost btn--sm"
-															style={{ fontSize: "var(--text-xs)", padding: "0.2rem 0.6rem" }}
-														>
-															{"\u2192"} {VISA_STEPS[i + 1]?.label ?? "next"}
-														</button>
+													{current && s.id === "decision" ? (
+														app.visaOutcome === "refused" ? (
+															<>
+																<StatusPill tone="blocked" dot>
+																	Refused
+																</StatusPill>
+																<button
+																	type="button"
+																	onClick={() =>
+																		void setVisaStage(app.appId, "pending")
+																			.then(() => flash("Visa case reopened for reapplication."))
+																			.catch((e) => fail(e, "Could not reopen the visa case"))
+																	}
+																	className="btn btn--ghost btn--sm"
+																>
+																	Reopen for reapplication
+																</button>
+															</>
+														) : (
+															<>
+																<button
+																	type="button"
+																	onClick={() =>
+																		void setVisaStage(app.appId, "complete", undefined, "approved")
+																			.then(() => flash("Visa approved — the applicant can continue."))
+																			.catch((e) => fail(e, "Could not record the decision"))
+																	}
+																	className="btn btn--primary btn--sm"
+																>
+																	Approved
+																</button>
+																<button
+																	type="button"
+																	onClick={() =>
+																		void setVisaStage(app.appId, "decision", undefined, "refused")
+																			.then(() => flash("Visa refusal recorded."))
+																			.catch((e) => fail(e, "Could not record the decision"))
+																	}
+																	className="btn btn--ghost btn--sm"
+																>
+																	Refused
+																</button>
+															</>
+														)
+													) : (
+														current &&
+														app.visaStage !== "complete" && (
+															<button
+																type="button"
+																onClick={() => advanceVisa()}
+																className="btn btn--ghost btn--sm"
+															>
+																→ {VISA_STEPS[i + 1]?.label ?? "next"}
+															</button>
+														)
 													)}
 												</div>
 											);

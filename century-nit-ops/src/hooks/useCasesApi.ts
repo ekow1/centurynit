@@ -150,6 +150,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		comments: row.comments,
 		requestedDocuments: row.requestedDocuments,
 		visaStage: row.visaStage,
+		visaOutcome: row.visaOutcome ?? null,
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote ?? undefined,
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
@@ -412,10 +413,10 @@ export function useCasesApi() {
 			});
 			await refresh();
 		},
-		setVisaStage: async (appId: string, stage: VisaStage, note?: string) => {
+		setVisaStage: async (appId: string, stage: VisaStage, note?: string, outcome?: "approved" | "refused") => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
-			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note));
+			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note, outcome));
 			await refresh();
 		},
 		updateSchoolApplication: async (
@@ -437,6 +438,16 @@ export function useCasesApi() {
 			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
 				method: "PATCH",
 				body: JSON.stringify({ visaCounselorNote: note }),
+			});
+			await refresh();
+		},
+		/** Staff-only case notes — the running context the next handler reads first. */
+		setApplicationNotes: async (appId: string, notes: string) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
+				method: "PATCH",
+				body: JSON.stringify({ notes }),
 			});
 			await refresh();
 		},

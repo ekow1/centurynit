@@ -512,7 +512,22 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 	for (const a of applications) {
 		const visaInv = visaInvoiceFor(invoices, a);
 		const stage = a.visaStage ?? "locked";
-		if (stage === "pending" || stage === "biometrics" || stage === "decision") {
+		if (stage === "decision" && a.visaOutcome === "refused") {
+			q.push({
+				id: `v-refused-${a.id}`,
+				category: "needs_action",
+				kind: "visa",
+				action: "advance",
+				record: a,
+				title: a.applicantName,
+				subtitle: `Visa refused · advise the applicant, then reopen for reapplication or close · ${a.university || a.country || "—"}`,
+				meta: a.appId,
+				branch: a.branch,
+				owner: a.assignedStaff || "—",
+				linkTo: `/visa?id=${a.id}`,
+				priority: PRIORITY.review_application,
+			});
+		} else if (stage === "pending" || stage === "biometrics" || stage === "decision") {
 			q.push({
 				id: `visa-adv-${a.id}`,
 				category: "needs_action",

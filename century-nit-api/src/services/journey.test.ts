@@ -122,6 +122,17 @@ describe("deriveJourney — gates", () => {
 		expect(j.chapterUnlocks.visa).toBe(true);
 	});
 
+	it("says so when the visa was refused, without moving the ladder", () => {
+		const j = deriveJourney({ ...upTo("visaPaid"), visaRefused: true });
+		expect(j.portalStage).toBe("visa");
+		expect(j.label).toBe("Visa refused");
+		expect(j.nextUnlock).toMatch(/reapply/i);
+		expect(j.chapterUnlocks.travel_assistance).toBe(false);
+		// Reopened for reapplication: the refusal is cleared and the copy reverts.
+		const reopened = deriveJourney({ ...upTo("visaPaid"), visaRefused: false });
+		expect(reopened.label).not.toBe("Visa refused");
+	});
+
 	it("keeps the plan chapter closed until the travel-assistance request is resolved", () => {
 		const j = deriveJourney({
 			...upTo("visaDone"),

@@ -262,6 +262,9 @@ export const APPLICATION_STATUS_TO_OPS: Record<CaseApplicationStatus, string> = 
 
 export const visaStageSchema = z.enum(["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"]);
 export type VisaStage = z.infer<typeof visaStageSchema>;
+/** How the visa decision went; `complete` implies approved, a refusal stays at `decision`. */
+export const visaOutcomeSchema = z.enum(["approved", "refused"]);
+export type VisaOutcome = z.infer<typeof visaOutcomeSchema>;
 
 /**
  * The explicit "start your application?" gate that sits in front of
@@ -507,6 +510,7 @@ export const applicationSchema = z.object({
 	notes: z.string().nullable(),
 	checklist: z.array(checklistItemSchema),
 	visaStage: visaStageSchema,
+	visaOutcome: visaOutcomeSchema.nullable().optional(),
 	visaInvoicePaid: z.boolean(),
 	visaCounselorNote: z.string().nullable(),
 	paymentPlanId: z.string().nullable(),
@@ -618,6 +622,12 @@ export const toggleChecklistSchema = z.object({
 export const setVisaStageSchema = z.object({
 	stage: visaStageSchema,
 	note: z.string().max(2000).optional(),
+	/**
+	 * Record the authority's decision. `refused` is only valid at the
+	 * `decision` stage and keeps the case there; moving to `complete` records
+	 * `approved`; moving back to `pending` clears it (reapplication).
+	 */
+	outcome: visaOutcomeSchema.optional(),
 });
 export const setTravelClearanceSchema = z.object({
 	cleared: z.boolean(),

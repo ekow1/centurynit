@@ -74,6 +74,8 @@ export type JourneySignals = {
 	visaInvoicePaid: boolean;
 	/** `applications.visaStage === "complete"`. */
 	visaDone: boolean;
+	/** The authority refused the visa; the case waits at the decision step for a reapplication. */
+	visaRefused?: boolean;
 	travelInvoicePaid: boolean;
 	/** Latest travel assistance request status, if any. */
 	travelAssistanceStatus: TravelAssistanceStatus | string | null;
@@ -255,13 +257,17 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 			? PORTAL_STAGE_LABELS[PORTAL_STAGE_ORDER[currentIdx + 1]]
 			: null;
 
+	// A refusal does not move the ladder — the visa chapter stays current —
+	// but the applicant must not read "Visa tracking" as if nothing happened.
+	const refused = portalStage === "visa" && Boolean(f.visaRefused);
+
 	return {
 		currentStage: f.coarseStage ?? portalStage,
 		portalStage,
 		chapterUnlocks,
 		stageStatuses,
-		label: PORTAL_STAGE_LABELS[portalStage],
-		nextUnlock,
+		label: refused ? "Visa refused" : PORTAL_STAGE_LABELS[portalStage],
+		nextUnlock: refused ? "Your consultant will advise on reapplying" : nextUnlock,
 	};
 }
 

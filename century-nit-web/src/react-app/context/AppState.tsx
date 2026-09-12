@@ -262,6 +262,8 @@ export type ApplicationData = {
 	postArrivalSchedule: string | null;
 	postArrivalPaymentIndex: number;
 	visaStatus: VisaStatus;
+	/** `refused` keeps the case at the decision step until the consultant reopens it. */
+	visaOutcome: "approved" | "refused" | null;
 	visaUpdatedAt: string | null;
 	/** Set to true once the Travel invoice (flights/ticketing) is fully paid */
 	travelInvoicePaid: boolean;
@@ -521,6 +523,7 @@ const defaultApplication: ApplicationData = {
 	postArrivalSchedule: null,
 	postArrivalPaymentIndex: 0,
 	visaStatus: "locked",
+	visaOutcome: null,
 	visaUpdatedAt: null,
 	travelInvoicePaid: false,
 	completedAt: null,
@@ -2223,6 +2226,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
+					visaOutcome: a.visaOutcome ?? null,
 					visaInvoice: a.visaInvoicePaid
 						? {
 								...prev.visaInvoice,

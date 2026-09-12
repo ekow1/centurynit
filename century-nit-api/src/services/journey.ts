@@ -112,6 +112,7 @@ export async function journeyForApplicant(
 		hasVisaConsent: visaConsent?.decision === "continue",
 		visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
 		visaDone: application?.visaStage === "complete",
+		visaRefused: application?.visaOutcome === "refused",
 		travelInvoicePaid: Boolean(application?.travelInvoicePaid) || invoiceIs("travel", "paid"),
 		travelAssistanceStatus: taRow?.status ?? null,
 		paymentPlanId: application?.paymentPlanId ?? null,

@@ -927,6 +927,7 @@ applicationsRouter.openapi(
 			body.stage,
 			body.note,
 			actorFrom(c.get("staff")!),
+			body.outcome,
 		);
 		return c.json(await serializeApplication(updated));
 	},

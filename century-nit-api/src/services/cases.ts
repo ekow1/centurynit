@@ -651,6 +651,7 @@ async function serializeApplication(row: ApplicationRow): Promise<ApiApplication
 		notes: row.notes,
 		checklist: row.checklist ?? [],
 		visaStage: row.visaStage,
+		visaOutcome: (row.visaOutcome as "approved" | "refused" | null) ?? null,
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote,
 		paymentPlanId: row.paymentPlanId,
@@ -2562,9 +2563,20 @@ export async function setApplicationVisaStage(
 	stage: ApplicationRow["visaStage"],
 	note: string | undefined,
 	actor: Actor,
+	outcome?: "approved" | "refused",
 ): Promise<ApplicationRow> {
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+
+	// The decision: a refusal is recorded at `decision` and stays there (the
+	// case is reopened for a reapplication by moving back to `pending`);
+	// reaching `complete` is an approval.
+	if (outcome === "refused" && stage !== "decision") {
+		throw new HttpError(409, "VISA_OUTCOME_STAGE", "A refusal is recorded at the decision step.");
+	}
+	// Any other move (including back to `pending`) clears a refusal — that is
+	// the reapplication.
+	const visaOutcome: string | null = outcome === "refused" ? "refused" : stage === "complete" ? "approved" : null;
 
 	// The portal must not show visa tracking until the visa invoice is paid.
 	// Only allow leaving "locked" (starting the visa process) once a paid visa
@@ -2599,6 +2611,7 @@ export async function setApplicationVisaStage(
 		.update(applications)
 		.set({
 			visaStage: stage,
+			visaOutcome,
 			visaCounselorNote: note ?? row.visaCounselorNote,
 			updatedAt: new Date(),
 		})
@@ -2608,7 +2621,7 @@ export async function setApplicationVisaStage(
 		targetType: "application",
 		targetId: id,
 		kind: "status",
-		text: `Visa stage → ${stage}`,
+		text: visaOutcome === "refused" ? "Visa refused" : visaOutcome === "approved" ? "Visa approved" : `Visa stage → ${stage}`,
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});

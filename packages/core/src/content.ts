@@ -2436,6 +2436,17 @@ export const DOCUMENT_TYPES = [
 		name: "Police clearance",
 		hint: "Where the destination requires one — issued within the last 6 months",
 	},
+	// ── Departure ─────────────────────────────────────────────────────────
+	{
+		id: "insurance",
+		name: "Health insurance certificate",
+		hint: "International student cover or the university's plan, showing the dates of cover",
+	},
+	{
+		id: "accommodation_proof",
+		name: "Accommodation confirmation",
+		hint: "The housing offer or tenancy agreement with the address and move-in date",
+	},
 ] as const;
 
 export type DocumentTypeId = (typeof DOCUMENT_TYPES)[number]["id"];
@@ -2481,6 +2492,8 @@ export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
 	visa_form: "VISA",
 	tb_test: "VISA",
 	police_clearance: "VISA",
+	insurance: "DEPARTURE",
+	accommodation_proof: "DEPARTURE",
 	visa_receipt: "OFFICIAL",
 	flight_receipt: "OFFICIAL",
 	additional: "OTHER",
@@ -2528,24 +2541,39 @@ export type AppNotification = {
 export type PreDepartureTask = {
 	id: string;
 	category: "travel" | "accommodation" | "documents" | "health" | "finance" | "orientation";
+	/** Whose item it is: the client ticks their own, the departure officer ticks Century's. */
+	owner: "client" | "century";
+	/** A document type the client uploads as proof, or nothing. */
+	evidence?: string | null;
+	/** Required items gate completion; the rest are advice. */
+	required: boolean;
+	doneBy?: string | null;
+	doneAt?: string | null;
+	waivedReason?: string | null;
 	label: string;
 	detail: string;
 	done: boolean;
 };
 
+/**
+ * The pre-departure template. Seeded onto a case when Departure opens; the
+ * per-country items are added from the destination. Century's items are the
+ * officer's to tick; the client's are theirs, with proof where it says so.
+ */
 export const PRE_DEPARTURE_TASKS: PreDepartureTask[] = [
-	{ id: "pd-flights", category: "travel", label: "Book flights", detail: "Book your flight to arrive at least 1 week before orientation.", done: false },
-	{ id: "pd-airport", category: "travel", label: "Arrange airport pickup", detail: "Check if your university offers free airport pickup for international students.", done: false },
-	{ id: "pd-accommodation", category: "accommodation", label: "Confirm accommodation", detail: "Secure on-campus housing or private rental before departure.", done: false },
-	{ id: "pd-utilities", category: "accommodation", label: "Set up utilities", detail: "If renting privately, arrange internet, electricity, and water connections.", done: false },
-	{ id: "pd-visa-copy", category: "documents", label: "Print visa & passport copies", detail: "Keep physical and digital copies of your visa, passport, and admission letter.", done: false },
-	{ id: "pd-insurance", category: "health", label: "Arrange health insurance", detail: "Purchase international student health insurance or enroll in the university plan.", done: false },
-	{ id: "pd-vaccinations", category: "health", label: "Check vaccination requirements", detail: "Review required vaccinations for your destination country.", done: false },
-	{ id: "pd-budget", category: "finance", label: "Set up banking access", detail: "Open a local bank account or arrange international card access for your destination.", done: false },
-	{ id: "pd-tuition", category: "finance", label: "Confirm tuition payment plan", detail: "Verify tuition payment deadlines and methods with your university.", done: false },
-	{ id: "pd-orientation", category: "orientation", label: "Register for orientation", detail: "Sign up for international student orientation day.", done: false },
-	{ id: "pd-sim", category: "orientation", label: "Get a local SIM card", detail: "Arrive with a plan to get a local phone number within 48 hours.", done: false },
-	{ id: "pd-packing", category: "travel", label: "Review packing checklist", detail: "Pack for the climate, bring adapters, and keep essentials in carry-on.", done: false },
+	{ id: "pd-briefing", category: "orientation", owner: "century", required: true, label: "Pre-departure briefing", detail: "Your consultant walks you through arrival, the first week and who to call.", done: false },
+	{ id: "pd-flights", category: "travel", owner: "century", required: true, label: "Flight booked", detail: "Booked by Century NIT, or confirmed if you booked it yourself.", done: false },
+	{ id: "pd-airport", category: "travel", owner: "century", required: true, label: "Airport pickup arranged", detail: "Your university's pickup, or one we arrange — you will get the details before you fly.", done: false },
+	{ id: "pd-visa-copy", category: "documents", owner: "century", required: true, label: "Visa, passport and admission copies filed", detail: "Digital copies in your vault; carry printed copies in your hand luggage.", done: false },
+	{ id: "pd-accommodation", category: "accommodation", owner: "client", evidence: "accommodation_proof", required: true, label: "Accommodation confirmed", detail: "On-campus housing or a private rental — upload the confirmation.", done: false },
+	{ id: "pd-insurance", category: "health", owner: "client", evidence: "insurance", required: true, label: "Health insurance arranged", detail: "International student cover or the university's plan — upload the certificate.", done: false },
+	{ id: "pd-tuition", category: "finance", owner: "client", required: true, label: "Tuition payment plan confirmed", detail: "Confirm deadlines and how you will pay with your university.", done: false },
+	{ id: "pd-orientation", category: "orientation", owner: "client", required: true, label: "Registered for orientation", detail: "Sign up for international student orientation.", done: false },
+	{ id: "pd-vaccinations", category: "health", owner: "client", required: false, label: "Vaccinations checked", detail: "Review what your destination requires.", done: false },
+	{ id: "pd-budget", category: "finance", owner: "client", required: false, label: "Banking access set up", detail: "A local account or an international card that works on arrival.", done: false },
+	{ id: "pd-utilities", category: "accommodation", owner: "client", required: false, label: "Utilities arranged", detail: "If renting privately: internet, electricity and water.", done: false },
+	{ id: "pd-sim", category: "orientation", owner: "client", required: false, label: "Local SIM planned", detail: "Have a plan for a local number within 48 hours.", done: false },
+	{ id: "pd-packing", category: "travel", owner: "client", required: false, label: "Packing checklist reviewed", detail: "Pack for the climate, bring adapters, keep essentials in your carry-on.", done: false },
 ];
 
 /* ========== CRM Lead Pipeline ========== */

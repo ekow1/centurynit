@@ -59,6 +59,7 @@ import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } f
 import { listSchoolsForApplication } from "./schools.js";
 import { applicationFeeLinesFor, createInvoice, type InvoiceRow } from "./invoice.js";
 import { activeFeeItem, serviceFeeSplit } from "./fees.js";
+import { seedPreDepartureTasks } from "./preDeparture.js";
 import {
 
 	syncLeadAssignment,
@@ -323,7 +324,20 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		travelInvoicePaid: row.travelInvoicePaid,
 		requestedDocuments: row.requestedDocuments ?? [],
 		documentChecklist,
-		preDepartureTasks: (row.preDepartureTasks ?? []) as ApiApplication["preDepartureTasks"],
+		// Lists seeded before owners existed default to the client's, required.
+		preDepartureTasks: ((row.preDepartureTasks ?? []) as Partial<ApiApplication["preDepartureTasks"][number]>[]).map((t) => ({
+			id: t.id ?? "",
+			category: t.category,
+			label: t.label ?? "",
+			detail: t.detail,
+			owner: t.owner ?? "client",
+			evidence: t.evidence ?? null,
+			required: t.required ?? true,
+			done: Boolean(t.done),
+			doneBy: t.doneBy ?? null,
+			doneAt: t.doneAt ?? null,
+			waivedReason: t.waivedReason ?? null,
+		})),
 		comments: comments.map(toComment),
 		pendingHandoff,
 		consultationId: row.consultationId ?? null,
@@ -1204,7 +1218,6 @@ export async function updateApplication(
 	};
 	if (input.visaCounselorNote !== undefined) set.visaCounselorNote = input.visaCounselorNote;
 	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
-	if (input.preDepartureTasks !== undefined) set.preDepartureTasks = input.preDepartureTasks;
 	if (input.notes !== undefined) set.notes = input.notes;
 	if (input.targetSchoolCount !== undefined) set.targetSchoolCount = input.targetSchoolCount;
 
@@ -1632,6 +1645,7 @@ export async function setApplicationStage(
 		.set({ stage, updatedAt: new Date() })
 		.where(eq(applications.id, id))
 		.returning();
+	if (stage === "travel_assistance") await seedPreDepartureTasks(id);
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: id,
@@ -1975,7 +1989,11 @@ export async function setApplicationVisaStage(
 		}).catch(() => {});
 	}
 
-	if (stage === "complete") markStageCompleted(id, "visa_processing", actor.opsUserId);
+	if (stage === "complete") {
+		markStageCompleted(id, "visa_processing", actor.opsUserId);
+		// Departure opens with the approval: the checklist is seeded now.
+		await seedPreDepartureTasks(id);
+	}
 
 	return updated;
 }

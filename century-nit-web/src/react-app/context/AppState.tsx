@@ -28,6 +28,7 @@ import {
 	type DocumentChecklistItem,
 	type CaseComment,
 	type FeeCatalogue,
+	preDepartureChecklistDone,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
@@ -36,8 +37,6 @@ import {
 	formatDualCurrency,
 	MESSAGES_KEY,
 	PORTAL_INTERVIEW_KEY,
-	PRE_DEPARTURE_KEY,
-	PRE_DEPARTURE_TASKS,
 	PROCESS_STAGES,
 	SCHOOL_APPS_KEY,
 	SCHOOL_DEGREE_LEVELS,
@@ -1275,20 +1274,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const [fees, setFees] = useState<(FeeSchedule & { catalogue: FeeCatalogue }) | null>(null);
 	// unreadCount is already declared above
 
-	const [preDepartureTasks, setPreDepartureTasks] = useState<PreDepartureTask[]>(() => {
-		try {
-			const raw = localStorage.getItem(PRE_DEPARTURE_KEY);
-			if (!raw) return PRE_DEPARTURE_TASKS;
-			const parsed = JSON.parse(raw) as PreDepartureTask[];
-			if (!Array.isArray(parsed) || parsed.length === 0) return PRE_DEPARTURE_TASKS;
-			return PRE_DEPARTURE_TASKS.map((t) => {
-				const existing = parsed.find((p) => p.id === t.id);
-				return existing ?? t;
-			});
-		} catch {
-			return PRE_DEPARTURE_TASKS;
-		}
-	});
+	// The pre-departure checklist lives on the case (one list the client and the
+	// departure officer both read); it arrives with the application and is
+	// empty until the visa is approved and Departure opens.
+	const [preDepartureTasks, setPreDepartureTasks] = useState<PreDepartureTask[]>([]);
 
 	useEffect(() => {
 		const t1 = window.setTimeout(() => setAutosaveLabel("Saving…"), 0);
@@ -1329,10 +1318,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		safeSetJSON(MESSAGES_KEY, messages);
 	}, [messages]);
 
-	useEffect(() => {
-		safeSetJSON(PRE_DEPARTURE_KEY, preDepartureTasks);
-	}, [preDepartureTasks]);
-
 	/** Persist portal state to server whenever key fields change (debounced). */
 	useEffect(() => {
 		if (!authUser) return;
@@ -1342,14 +1327,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		if (!hasCase) return;
 		const t = window.setTimeout(() => {
 			void meApi.updatePortalState({
-				preDepartureTasks,
 				postArrivalScheduleId: application.postArrivalSchedule,
 				enabledPostArrivalSchedules,
 				customPostArrivalSchedules,
 			}).catch(() => { /* keep local */ });
 		}, 1500);
 		return () => window.clearTimeout(t);
-	}, [authUser, preDepartureTasks, application.postArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules, application.applicationId, booking.confirmationId]);
+	}, [authUser, application.postArrivalSchedule, enabledPostArrivalSchedules, customPostArrivalSchedules, application.applicationId, booking.confirmationId]);
 
 	/** Prefill profile from consultation when eligible (no invoice yet) */
 	useEffect(() => {
@@ -2074,19 +2058,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
-	const togglePreDepartureTask = useCallback((id: string) => {
-		setPreDepartureTasks((prev) => {
-			const next = prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
-			// Mirror completion onto the application — the travel stage reads it
-			const allDone = next.every((t) => t.done);
-			setApplication((app) =>
-				allDone === Boolean(app.preDepartureCompletedAt)
-					? app
-					: { ...app, preDepartureCompletedAt: allDone ? new Date().toISOString() : null },
-			);
-			return next;
-		});
-	}, []);
+	/** Tick or untick one of the client's own items — written to the case, read back from it. */
+	const togglePreDepartureTask = useCallback(
+		(id: string) => {
+			const task = preDepartureTasks.find((t) => t.id === id);
+			if (!task) return;
+			const next = preDepartureTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+			setPreDepartureTasks(next);
+			void meApi
+				.setPreDepartureTask(id, !task.done)
+				.then((a) => setPreDepartureTasks((a.preDepartureTasks ?? []) as PreDepartureTask[]))
+				.catch(() => setPreDepartureTasks(preDepartureTasks));
+		},
+		[preDepartureTasks],
+	);
 
 	const recordTravelDecision = useCallback(async (decision: "yes" | "hold" | "no") => {
 		try {
@@ -2281,6 +2266,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 			}
 			if (res.application) {
 				const a = res.application;
+				// The pre-departure checklist is the case's — never the browser's.
+				setPreDepartureTasks((a.preDepartureTasks ?? []) as PreDepartureTask[]);
 				setApplication((prev) => ({
 					...prev,
 					applicationId: a.id || prev.applicationId,
@@ -2297,6 +2284,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					visaOutcome: a.visaOutcome ?? null,
 					visaDetails: a.visaDetails ?? {},
 					visaDocumentChecklist: a.visaDocumentChecklist ?? [],
+					// The checklist is done when every required item is ticked or waived.
+					preDepartureCompletedAt:
+						(a.preDepartureTasks ?? []).length > 0 && preDepartureChecklistDone(a.preDepartureTasks)
+							? (prev.preDepartureCompletedAt ?? a.updatedAt ?? new Date().toISOString())
+							: null,
 					comments: a.comments ?? [],
 					visaCounselorNote: a.visaCounselorNote ?? prev.visaCounselorNote,
 					visaInvoice: a.visaInvoicePaid
@@ -2352,15 +2344,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		try {
 			const ps = await meApi.portalState();
 			if (ps && typeof ps === "object") {
-				if (Array.isArray(ps.preDepartureTasks) && ps.preDepartureTasks.length > 0) {
-					setPreDepartureTasks((prev) => {
-						const serverTasks = ps.preDepartureTasks as PreDepartureTask[];
-						return prev.map((t) => {
-							const server = serverTasks.find((s) => s.id === t.id);
-							return server ?? t;
-						});
-					});
-				}
 				if (ps.postArrivalScheduleId) {
 					setApplication((prev) => ({
 						...prev,
@@ -2523,7 +2506,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	);
 
 	const preDepartureProgress = useMemo(() => {
-		const done = preDepartureTasks.filter((t) => t.done).length;
+		if (preDepartureTasks.length === 0) return 0;
+		const done = preDepartureTasks.filter((t) => t.done || Boolean(t.waivedReason)).length;
 		return Math.round((done / preDepartureTasks.length) * 100);
 	}, [preDepartureTasks]);
 

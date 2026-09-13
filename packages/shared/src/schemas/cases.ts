@@ -107,7 +107,7 @@ export function canAdvanceToStage(
 		agencySettled?: boolean;
 		depositPaid?: boolean;
 		appFeePaid?: boolean;
-		preDepartureTasks?: { done: boolean }[];
+		preDepartureTasks?: { required?: boolean; done: boolean; waivedReason?: string | null }[];
 		paymentPlanId?: string | null;
 		proceedStatus?: string;
 		/**
@@ -164,9 +164,8 @@ export function canAdvanceToStage(
 			if (feeBlock) return feeBlock;
 			const travelBlock = travelBlockReason(checks.travelAssistanceStatus, "Cannot mark complete");
 			if (travelBlock) return travelBlock;
-			if (checks.preDepartureTasks && checks.preDepartureTasks.length > 0) {
-				const allDone = checks.preDepartureTasks.every((t) => t.done);
-				if (!allDone) return "Cannot mark complete: pre-departure checklist is incomplete.";
+			if (!preDepartureChecklistDone(checks.preDepartureTasks)) {
+				return "Cannot mark complete: the pre-departure checklist still has required items open.";
 			}
 			return null;
 		}
@@ -362,13 +361,44 @@ export const checklistItemSchema = z.object({
 	checked: z.boolean(),
 });
 
+/**
+ * One pre-departure item on a case. Seeded from the template when Departure
+ * opens; the client ticks their own items in the portal, the departure
+ * officer ticks Century's in the case. An item asking for `evidence` is a
+ * document type the client uploads to their vault; the officer verifies it.
+ */
+export const preDepartureOwnerSchema = z.enum(["client", "century"]);
+export type PreDepartureOwner = z.infer<typeof preDepartureOwnerSchema>;
+export const PRE_DEPARTURE_OWNER_LABELS: Record<PreDepartureOwner, string> = { client: "You", century: "Century NIT" };
+
 export const preDepartureTaskSchema = z.object({
 	id: z.string(),
 	category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
 	label: z.string(),
 	detail: z.string().optional(),
+	owner: preDepartureOwnerSchema.default("client"),
+	/** A document type the client uploads as proof, or nothing. */
+	evidence: z.string().nullable().optional(),
+	/** Required items gate completion; the rest are advice. */
+	required: z.boolean().default(true),
 	done: z.boolean(),
+	doneBy: z.string().nullable().optional(),
+	doneAt: z.string().datetime().nullable().optional(),
+	/** Set by the officer when a required item is waived — the reason is the record. */
+	waivedReason: z.string().nullable().optional(),
 });
+export type PreDepartureTask = z.infer<typeof preDepartureTaskSchema>;
+
+export const setPreDepartureTaskSchema = z.object({
+	done: z.boolean(),
+	waivedReason: z.string().max(500).nullable().optional(),
+});
+
+/** The checklist is done when every required item is ticked or waived; an empty list has nothing to do. */
+export function preDepartureChecklistDone(tasks: readonly { required?: boolean; done: boolean; waivedReason?: string | null }[] | null | undefined): boolean {
+	if (!tasks || tasks.length === 0) return true;
+	return tasks.filter((t) => t.required !== false).every((t) => t.done || Boolean(t.waivedReason));
+}
 
 /**
  * Ops edits to an application. Payment state (`appFeePaid`, `depositPaid`,
@@ -379,7 +409,6 @@ export const preDepartureTaskSchema = z.object({
 export const patchApplicationSchema = z.object({
 	visaCounselorNote: z.string().optional(),
 	paymentPlanId: z.string().optional(),
-	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
 	notes: z.string().optional(),
 	/**
 	 * Correction of the school allowance only. The package itself
@@ -586,15 +615,7 @@ export const applicationSchema = z.object({
 	requestedDocuments: z.array(z.string()),
 	/** The standard documents for this client, collected at consultation, with their verification state. */
 	documentChecklist: z.array(documentChecklistItemSchema).default([]),
-	preDepartureTasks: z.array(
-		z.object({
-			id: z.string(),
-			category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
-			label: z.string(),
-			detail: z.string().optional(),
-			done: z.boolean(),
-		}),
-	),
+	preDepartureTasks: z.array(preDepartureTaskSchema),
 	comments: z.array(caseCommentSchema),
 	/** Open gated assignment (pending handoff) parked on this application, if any. */
 	pendingHandoff: stageHandoffPreviewSchema.nullable(),

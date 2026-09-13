@@ -1028,6 +1028,11 @@ export const meApi = {
 		return request(`${API_PREFIX}/me/identity`);
 	},
 
+	/** Tick or untick one of the client's own pre-departure items; Century's are the officer's. */
+	setPreDepartureTask(taskId: string, done: boolean): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/pre-departure/${taskId}`, { method: "POST", ...json({ done }) });
+	},
+
 	/** The fee schedule as the portal reads it — see `feesApi.schedule`. */
 	fees(): Promise<FeeSchedule & { catalogue: FeeCatalogue }> {
 		return feesApi.schedule();

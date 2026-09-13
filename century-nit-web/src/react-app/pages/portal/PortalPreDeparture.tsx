@@ -4,6 +4,7 @@ import { downloadReceipt } from "../../lib/receipt";
 import { useAppState, hasSettledPlan } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
+import { PreDepartureChecklist } from "../../components/PreDepartureChecklist";
 import { meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { ApiInvoice, TravelFlight } from "century-nit-shared";
@@ -22,7 +23,7 @@ export function PortalPreDeparture() {
  * Execution chapter, where the money is; this page ends at "booked".
  */
 function TravelAssistanceInner() {
-	const { application, schoolApplications, syncFromServer, recordTravelDecision } = useAppState();
+	const { application, schoolApplications, syncFromServer, recordTravelDecision, preDepartureTasks, togglePreDepartureTask } = useAppState();
 	const { toast } = useNotifier();
 
 	// Where the client is going: the accepted offer, else the one admission.
@@ -297,6 +298,11 @@ function TravelAssistanceInner() {
 					</div>
 				</section>
 			)}
+
+			{/* The checklist — one list with the departure officer; the client ticks theirs. */}
+			<div className="mt-5">
+				<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
+			</div>
 
 			{/* Travel is settled — the plan chapter is next */}
 			{settled && (

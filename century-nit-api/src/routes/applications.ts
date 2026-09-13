@@ -68,6 +68,7 @@ import {
 	syncApplicationProformaLines,
 } from "../services/invoice.js";
 import { markApplicationFeesNotDue } from "../services/cases.js";
+import { setPreDepartureTask } from "../services/preDeparture.js";
 
 
 
@@ -117,6 +118,7 @@ import {
 	setStageSchema,
 	setVisaStageSchema,
 	updateVisaDetailsSchema,
+	setPreDepartureTaskSchema,
 	toggleChecklistSchema,
 
 
@@ -613,6 +615,31 @@ applicationsRouter.openapi(
 			body.outcome,
 			body.details,
 		);
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── POST /applications/{id}/pre-departure/{taskId} — the officer ticks or waives ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/pre-departure/{taskId}",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams.extend({ taskId: z.string().min(1).max(64) }),
+			body: { content: { "application/json": { schema: setPreDepartureTaskSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "The application with the item updated" },
+		},
+	}),
+	async (c) => {
+		const { id, taskId } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const staff = c.get("staff")!;
+		const updated = await setPreDepartureTask(id, taskId, c.req.valid("json"), { kind: "staff", name: staff.name, opsUserId: staff.opsUserId });
 		return c.json(await serializeApplication(updated));
 	},
 );

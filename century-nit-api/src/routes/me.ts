@@ -43,6 +43,7 @@ import {
 
 } from "../services/invoice.js";
 import { serviceFeeSplit } from "../services/fees.js";
+import { setPreDepartureTask } from "../services/preDeparture.js";
 import {
 	createPaystackCheckout,
 	verifyPaystackTransaction,
@@ -95,6 +96,7 @@ import {
 	requestEmailChangeSchema,
 	confirmEmailChangeSchema,
 	portalStateSchema,
+	setPreDepartureTaskSchema,
 	updatePortalStateSchema,
 	notificationSchema,
 
@@ -639,6 +641,38 @@ meRouter.openapi(
 			applicantUserId: user.id,
 		});
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── POST /me/application/pre-departure/{taskId} — the client ticks their own items ── */
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/pre-departure/{taskId}",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: z.object({ taskId: z.string().min(1).max(64) }),
+			body: { content: { "application/json": { schema: setPreDepartureTaskSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "The application with the item updated" },
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
+		}
+		const { taskId } = c.req.valid("param");
+		const updated = await setPreDepartureTask(application.id, taskId, { done: c.req.valid("json").done }, { kind: "client", name: applicant.name ?? "Client" });
+		return c.json(await serializeApplication(updated, true));
 	},
 );
 

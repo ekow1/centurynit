@@ -5,6 +5,7 @@ import {
 	emptyJourney,
 	type DerivedJourney,
 	type JourneyStage,
+	preDepartureChecklistDone,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { applications, consultations, invoices, travelAssistanceRequests } from "../db/schema.js";
@@ -119,9 +120,7 @@ export async function journeyForApplicant(
 		agencySettled: Boolean(application?.agencySettled),
 		// The pre-departure list, not `checklist` (the consultation-era
 		// requested-documents list) — the ops serializer reads the same field.
-		preDepartureDone: Boolean(
-			(application?.preDepartureTasks?.length ?? 0) > 0 && application?.preDepartureTasks?.every((t) => t.done),
-		),
+		preDepartureDone: preDepartureChecklistDone(application?.preDepartureTasks),
 		coarseStage:
 			application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)
 				? (application.stage as JourneyStage)

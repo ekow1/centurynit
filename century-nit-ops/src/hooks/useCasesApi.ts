@@ -161,6 +161,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote ?? undefined,
 		visaDetails: row.visaDetails ?? {},
+		preDepartureTasks: row.preDepartureTasks ?? [],
 		visaDocumentChecklist: row.visaDocumentChecklist ?? [],
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
 		agencyStageIndex: row.agencyStageIndex,
@@ -497,16 +498,16 @@ export function useCasesApi() {
 			replaceApplication(res.application);
 			await refresh();
 		},
-		togglePreDepartureTask: async (appId: string, taskId: string) => {
+		/** Tick, untick or waive one pre-departure item — the officer's or, on the client's word, the client's. */
+		setPreDepartureTask: async (appId: string, taskId: string, input: { done: boolean; waivedReason?: string | null }) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
-			const tasks = app.preDepartureTasks ?? [];
-			const updated = tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t));
-			await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}`, {
-				method: "PATCH",
-				body: JSON.stringify({ preDepartureTasks: updated }),
-			});
-			await refresh();
+			replaceApplication(
+				await apiFetch<ApiApplication>(`${API_PREFIX}/applications/${app.id}/pre-departure/${taskId}`, {
+					method: "POST",
+					body: JSON.stringify(input),
+				}),
+			);
 		},
 		assignConsultation: async (id: string, to: Assignee) =>
 			replaceConsultation(await consultationsApi.assign(id, await staffIdByEmail(to.email))),

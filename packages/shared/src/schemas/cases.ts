@@ -150,6 +150,15 @@ export function canAdvanceToStage(
 		 * has not decided yet.
 		 */
 		travelAssistanceStatus?: TravelAssistanceStatus | string | null;
+		/**
+		 * The record signals the server also checks (a package chosen, schools
+		 * selected, an offer admitted). A caller that has them passes them so
+		 * the rule reads the same on a card as on the server; `undefined`
+		 * means unknown and gates nothing.
+		 */
+		hasPackage?: boolean;
+		hasSelection?: boolean;
+		hasAdmitted?: boolean;
 	},
 ): string | null {
 	const currentIdx = JOURNEY_STAGES.indexOf(current);
@@ -181,13 +190,15 @@ export function canAdvanceToStage(
 
 	switch (target) {
 		case "school_submission":
-			return (checks.agencyStageIndex ?? 0) >= 1
-				? null
-				: "Cannot advance: Agency Service Fee Deposit must be paid before school submission.";
+			if ((checks.agencyStageIndex ?? 0) < 1) return "Cannot advance: Agency Service Fee Deposit must be paid before school submission.";
+			if (checks.hasPackage === false) return "Cannot advance to School submission: no service package selected.";
+			return null;
 		case "offer_letter_review":
-			return checks.appFeePaid
-				? null
-				: "Cannot advance: application fee must be paid before reviewing offers.";
+			if (!checks.appFeePaid) return "Cannot advance: application fee must be paid before reviewing offers.";
+			if (checks.hasSelection === false) return "Cannot advance to Offer letter review: no schools selected.";
+			return null;
+		case "visa_processing":
+			return checks.hasAdmitted === false ? "Cannot advance to Visa processing: no accepted offer (admitted)." : null;
 		case "travel_assistance":
 			return checks.visaStage === "complete"
 				? null

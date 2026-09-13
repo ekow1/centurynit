@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CaseDetail } from "./case/CaseDetail";
 import { CaseScaffold } from "./case/CaseScaffold";
-import { CaseBoard } from "./case/CaseBoard";
+import { CaseBoard, BOARD_ORDERS, type BoardOrder } from "./case/CaseBoard";
 import { StatusPill, VisaStagePill } from "century-nit-core/ui";
 import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
@@ -127,6 +127,7 @@ export function EnterpriseCases() {
 	const setView = (v: View) => setParam("view", v, "list");
 
 	const [statusFilter, setStatusFilter] = useState<string>("All");
+	const [boardOrder, setBoardOrder] = useState<BoardOrder>("age");
 	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
@@ -280,24 +281,56 @@ export function EnterpriseCases() {
 
 			{view === "board" ? (
 				<>
-					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem", flexDirection: "row", alignItems: "center" }}>
-						<label className="cn-filter" style={{ flex: "0 1 16rem" }}>
-							<span className="cn-filter__label">Chapter</span>
-							<select
-								className="cn-filter__select"
-								value={chapter}
-								onChange={(e) => setChapter(e.target.value as "all" | ChapterId)}
-							>
-								{CHAPTER_FILTERS.map((c) => (
-									<option key={c.id} value={c.id}>
-										{c.label} · {chapterCounts.get(c.id) ?? 0}
-									</option>
-								))}
-							</select>
-						</label>
-						<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="cn-search" style={{ flex: 1 }} />
+					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem", border: "1px solid var(--border-light)" }}>
+						<div className="cn-scaffold__chips" role="tablist" aria-label="Chapter">
+							{CHAPTER_FILTERS.map((c) => {
+								const n = chapterCounts.get(c.id) ?? 0;
+								const on = chapter === c.id;
+								return (
+									<button
+										key={c.id}
+										type="button"
+										role="tab"
+										aria-selected={on}
+										className="ops-pill"
+										onClick={() => setChapter(c.id)}
+										style={{
+											cursor: "pointer",
+											marginLeft: 0,
+											border: "1px solid var(--border)",
+											background: on ? "var(--foreground)" : "transparent",
+											color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+										}}
+									>
+										{c.label}
+										<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+											{n}
+										</span>
+									</button>
+								);
+							})}
+						</div>
+						<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+							<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="cn-search" style={{ flex: "1 1 14rem", width: "auto" }} />
+							<label className="cn-filter">
+								<span className="cn-filter__label">Order</span>
+								<select className="cn-filter__select" value={boardOrder} onChange={(e) => setBoardOrder(e.target.value as BoardOrder)}>
+									{BOARD_ORDERS.map((o) => (
+										<option key={o.id} value={o.id}>
+											{o.label}
+										</option>
+									))}
+								</select>
+							</label>
+						</div>
 					</div>
-					<CaseBoard apps={filteredApps} onOpen={(app) => { setSelectedApp(app); setView("list"); }} />
+					<CaseBoard
+						apps={filteredApps}
+						chapter={chapter}
+						order={boardOrder}
+						onOpen={(app) => { setSelectedApp(app); setView("list"); }}
+						onAssign={canAssignWork ? (app) => setAssignFor(app) : undefined}
+					/>
 				</>
 			) : (
 				<CaseScaffold

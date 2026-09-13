@@ -7,6 +7,7 @@ import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
 import type { Flash, Fail } from "./types";
 import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
+import { RaiseInvoiceSheet } from "../RaiseInvoiceSheet";
 
 const INVOICE_TYPE_TITLES: Record<string, string> = {
 	application: "Application",
@@ -43,6 +44,7 @@ export function MoneyTab({
 	const { setApplicationStage, setPaymentPlan } = useCases();
 	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
 	const [approving, setApproving] = useState<ApiInvoice | null>(null);
+	const [raising, setRaising] = useState(false);
 	return (
 		<>
 			<div className="card">
@@ -99,6 +101,17 @@ export function MoneyTab({
 					</div>
 				)}
 			</div>
+			{canWork && (
+				<div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+					<div>
+						<p className="eyebrow" style={{ margin: 0 }}>Invoices on this case</p>
+						<p className="muted text-xs">The journey raises its own; anything else is raised here and approved before the client sees it.</p>
+					</div>
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setRaising(true)}>
+						+ Raise an invoice
+					</button>
+				</div>
+			)}
 			{caseInvoices.length === 0 ? (
 				<div className="card"><p className="muted text-sm">No invoices on this case yet.</p></div>
 			) : (
@@ -137,6 +150,15 @@ export function MoneyTab({
 				onDeclined={(voided) => {
 					onInvoicesChanged();
 					flash(`${voided.invoiceNumber} declined and voided.`);
+				}}
+			/>
+			<RaiseInvoiceSheet
+				app={app}
+				open={raising}
+				onClose={() => setRaising(false)}
+				onRaised={(raised) => {
+					onInvoicesChanged();
+					flash(canIssueInvoices ? `${raised.invoiceNumber} raised — approve it to issue.` : `${raised.invoiceNumber} raised — awaiting approval.`);
 				}}
 			/>
 		</>

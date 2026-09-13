@@ -306,12 +306,13 @@ export function getInvoice(id: string): Promise<ApiInvoice> {
 	return apiFetch<ApiInvoice>(`${API_PREFIX}/invoices/${id}`);
 }
 
+/** Raise an invoice — it is born awaiting approval; issuing is a separate step. */
 export function createInvoice(body: {
 	applicantName: string;
 	applicantEmail?: string;
 	clientUserId?: string;
+	applicationId?: string;
 	type: "application" | "visa" | "consultation" | "agency" | "travel" | "custom";
-	status?: "proforma" | "issued";
 	lines: { label: string; detail?: string; amountCents: number }[];
 	note?: string;
 	dueAt?: string;

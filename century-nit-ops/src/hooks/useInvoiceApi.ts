@@ -123,7 +123,6 @@ export function useInvoiceApi() {
 			applicantEmail?: string;
 			clientUserId?: string;
 			type: InvoiceType;
-			status?: "issued" | "proforma";
 			lines: OpsInvoiceLine[];
 			note?: string;
 			dueAt?: string;
@@ -137,7 +136,6 @@ export function useInvoiceApi() {
 				applicantEmail: input.applicantEmail,
 				clientUserId: input.clientUserId,
 				type: apiType,
-				status: input.status,
 				lines: input.lines.map((l) => ({
 					label: l.label,
 					detail: l.detail || undefined,

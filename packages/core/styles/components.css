@@ -325,3 +325,6 @@
 .cn-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: var(--text-sm); }
 .cn-facts__full { grid-column: 1 / -1; }
 .cn-stack { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* ── Study choices, in order (consultation goals) ────────────────────────── */
+.cn-choice-list { margin: 0.35rem 0 0; padding-left: 1.25rem; font-size: var(--text-sm); display: flex; flex-direction: column; gap: 0.3rem; }

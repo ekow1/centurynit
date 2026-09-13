@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { apiFetch } from "../../lib/api";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, PAYMENT_PLAN_LABELS, decisionOf, type JourneyStage } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, LookupValue, MAX_STUDY_CHOICES, PAYMENT_PLAN_LABELS, decisionOf, type JourneyStage, type StudyChoice } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
@@ -22,6 +22,8 @@ import {
 	type SchoolApplicationTrack,
 	type StageInvoice,
 	FALLBACK_FEE_SCHEDULE,
+	emptyStudyChoice,
+	flattenStudyChoices,
 } from "../../context/AppState";
 import { usdFromCents } from "century-nit-shared";
 import {
@@ -50,6 +52,7 @@ import {
 	universitiesForDestination,
 	CONSULTATION_DURATIONS,
 	getBranchName,
+	branches,
 } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage, SchoolFileKind } from "century-nit-shared";
@@ -835,6 +838,29 @@ function SlotPickerLive({
 	const requestKey = `${branchId}|${date}|${durationMinutes}`;
 	const [result, setResult] = useState<{ key: string; slots: AvailabilitySlot[] } | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	// Open-slot counts for the whole window, so a day with nothing open is
+	// greyed out before anyone clicks it and waits.
+	const daysKey = `${branchId}|${durationMinutes}`;
+	const [daysResult, setDaysResult] = useState<{ key: string; open: Record<string, number> } | null>(null);
+
+	useEffect(() => {
+		if (!branchId || dates.length === 0) return;
+		let active = true;
+		bookingsApi
+			.availabilityDays({ branchId, from: dates[0].value, days: dates.length, durationMinutes })
+			.then((res) => {
+				if (active) setDaysResult({ key: daysKey, open: Object.fromEntries(res.days.map((d) => [d.date, d.open])) });
+			})
+			.catch(() => {
+				// The per-day query still works; the calendar just isn't pre-greyed.
+				if (active) setDaysResult({ key: daysKey, open: {} });
+			});
+		return () => {
+			active = false;
+		};
+	}, [branchId, durationMinutes, dates, daysKey]);
+	// A stale result (a previous branch) reads as "not loaded", never as wrong greys.
+	const openByDate = daysResult?.key === daysKey ? daysResult.open : null;
 
 	useEffect(() => {
 		if (!branchId || !date) return;
@@ -863,21 +889,30 @@ function SlotPickerLive({
 
 			<p className="resched__label mono mt-3">Date</p>
 			<div className="resched__days">
-				{dates.map((d) => (
-					<button
-						key={d.value}
-						type="button"
-						onClick={() => {
-							onDateChange(d.value);
-							onTimeChange("");
-						}}
-						className={`resched__day${date === d.value ? " resched__day--on" : ""}`}
-					>
-						<span className="resched__day-wd">{d.weekday}</span>
-						<span className="resched__day-num">{d.dayMonth}</span>
-					</button>
-				))}
+				{dates.map((d) => {
+					const open = openByDate?.[d.value];
+					const closed = open === 0;
+					return (
+						<button
+							key={d.value}
+							type="button"
+							disabled={closed}
+							title={closed ? "No open slots" : open ? `${open} open` : undefined}
+							onClick={() => {
+								onDateChange(d.value);
+								onTimeChange("");
+							}}
+							className={`resched__day${date === d.value ? " resched__day--on" : ""}`}
+						>
+							<span className="resched__day-wd">{d.weekday}</span>
+							<span className="resched__day-num">{d.dayMonth}</span>
+						</button>
+					);
+				})}
 			</div>
+			{openByDate === null && branchId ? (
+				<p className="muted mt-1" style={{ fontSize: "0.8rem" }}>Checking which days are open…</p>
+			) : null}
 
 			<p className="resched__label mono mt-3">
 				Time{" "}
@@ -935,43 +970,196 @@ const ASSESSMENT_DOC_FIELDS: { id: string; label: string; hint: string }[] = [
 	{ id: "additional", label: "Additional documents", hint: "Any other supporting documents" },
 ];
 
+/** The reference data the assessment form's selects are built from. */
+type AssessmentCatalog = {
+	lookups: LookupValue[];
+	universities: { id: string; name: string; destinationId?: string | null }[];
+	destinations: { id: string; name: string }[];
+	programs: { id: string; name: string; universityId?: string | null; level?: string | null; field?: string | null; intake?: string[] | null }[];
+};
+
+const EMPTY_CATALOG: AssessmentCatalog = { lookups: [], universities: [], destinations: [], programs: [] };
+
+/**
+ * Fetched once by the flow, not by the form: the form used to load all four
+ * on every mount, and it mounted again on every tab switch.
+ */
+function useAssessmentCatalog(): AssessmentCatalog {
+	const [catalog, setCatalog] = useState<AssessmentCatalog>(EMPTY_CATALOG);
+	useEffect(() => {
+		let active = true;
+		void Promise.all([
+			apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`).then((r) => r?.lookups ?? []).catch(() => []),
+			apiFetch<{ universities: AssessmentCatalog["universities"] }>(`${API_PREFIX}/catalog/universities`).then((r) => r?.universities ?? []).catch(() => []),
+			apiFetch<{ destinations: AssessmentCatalog["destinations"] }>(`${API_PREFIX}/catalog/destinations`).then((r) => r?.destinations ?? []).catch(() => []),
+			apiFetch<{ programs: AssessmentCatalog["programs"] }>(`${API_PREFIX}/catalog/programs`).then((r) => r?.programs ?? []).catch(() => []),
+		]).then(([lookups, universities, destinations, programs]) => {
+			if (active) setCatalog({ lookups, universities, destinations, programs });
+		});
+		return () => { active = false; };
+	}, []);
+	return catalog;
+}
+
+/**
+ * Up to three study choices, each picked as one thing: country → school →
+ * programme (which names the field) → intake. Each select narrows the next
+ * from the catalogue; a programme's own intakes replace the generic list
+ * when the catalogue knows them.
+ */
+function StudyChoicesEditor({
+	choices,
+	catalog,
+	onChange,
+}: {
+	choices: StudyChoice[];
+	catalog: AssessmentCatalog;
+	onChange: (next: StudyChoice[]) => void;
+}) {
+	const fields = useMemo(
+		() => Array.from(new Set(catalog.programs.map((p) => p.field).filter((x): x is string => Boolean(x)))),
+		[catalog.programs],
+	);
+	const update = (i: number, patch: Partial<StudyChoice>) =>
+		onChange(choices.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+
+	return (
+		<div className="choices mt-3">
+			{choices.map((choice, i) => {
+				const destination = catalog.destinations.find((d) => d.name === choice.country);
+				const schools = destination
+					? catalog.universities.filter((u) => u.destinationId === destination.id)
+					: catalog.universities;
+				const school = catalog.universities.find((u) => u.name === choice.university);
+				const programmes = school ? catalog.programs.filter((p) => p.universityId === school.id) : [];
+				const programme = programmes.find((p) => p.name === choice.program);
+				const intakes = programme?.intake?.length ? programme.intake : GENERIC_INTAKES.map((o) => o.value);
+				return (
+					<fieldset key={i} className="choice">
+						<legend className="choice__legend">
+							Choice {i + 1}
+							{choices.length > 1 ? (
+								<button type="button" className="btn btn--ghost btn--sm" onClick={() => onChange(choices.filter((_, j) => j !== i))}>
+									Remove
+								</button>
+							) : null}
+						</legend>
+						<div className="form-grid form-grid--2">
+							<div className="field">
+								<label htmlFor={`ch-${i}-country`}>Country</label>
+								<select
+									id={`ch-${i}-country`}
+									className="select select--full-border"
+									value={choice.country}
+									onChange={(e) => update(i, { country: e.target.value, university: "", program: "", field: "", intake: "" })}
+								>
+									<option value="">Select</option>
+									{catalog.destinations.map((d) => (<option key={d.id} value={d.name}>{d.name}</option>))}
+								</select>
+							</div>
+							<div className="field">
+								<label htmlFor={`ch-${i}-school`}>School</label>
+								<select
+									id={`ch-${i}-school`}
+									className="select select--full-border"
+									value={choice.university}
+									onChange={(e) => update(i, { university: e.target.value, program: "", field: "", intake: "" })}
+								>
+									<option value="">{choice.country ? "Select" : "Choose a country first"}</option>
+									{schools.map((u) => (<option key={u.id} value={u.name}>{u.name}</option>))}
+								</select>
+							</div>
+							<div className="field">
+								<label htmlFor={`ch-${i}-programme`}>Programme</label>
+								<select
+									id={`ch-${i}-programme`}
+									className="select select--full-border"
+									value={choice.program}
+									onChange={(e) => {
+										const p = programmes.find((x) => x.name === e.target.value);
+										update(i, { program: e.target.value, field: p?.field ?? choice.field, intake: "" });
+									}}
+									disabled={!school}
+								>
+									<option value="">{school ? (programmes.length ? "Select" : "No programmes listed — pick a field") : "Choose a school first"}</option>
+									{programmes.map((p) => (<option key={p.id} value={p.name}>{p.name}{p.level ? ` · ${p.level}` : ""}</option>))}
+								</select>
+							</div>
+							<div className="field">
+								<label htmlFor={`ch-${i}-field`}>Field</label>
+								<select
+									id={`ch-${i}-field`}
+									className="select select--full-border"
+									value={choice.field}
+									onChange={(e) => update(i, { field: e.target.value })}
+								>
+									<option value="">Select</option>
+									{fields.map((f) => (<option key={f} value={f}>{f}</option>))}
+								</select>
+							</div>
+							<div className="field">
+								<label htmlFor={`ch-${i}-intake`}>Intake</label>
+								<select
+									id={`ch-${i}-intake`}
+									className="select select--full-border"
+									value={choice.intake}
+									onChange={(e) => update(i, { intake: e.target.value })}
+								>
+									<option value="">Select</option>
+									{intakes.map((v) => (<option key={v} value={v}>{GENERIC_INTAKES.find((o) => o.value === v)?.label ?? v}</option>))}
+								</select>
+							</div>
+						</div>
+					</fieldset>
+				);
+			})}
+			{choices.length < MAX_STUDY_CHOICES ? (
+				<button type="button" className="btn btn--secondary btn--sm mt-2" onClick={() => onChange([...choices, emptyStudyChoice()])}>
+					+ Add another choice
+				</button>
+			) : null}
+		</div>
+	);
+}
+
+const GENERIC_INTAKES = [
+	{ value: "spring", label: "Spring (Jan/Feb)" },
+	{ value: "fall", label: "Fall (Sep/Oct)" },
+	{ value: "summer", label: "Summer (May/Jun)" },
+	{ value: "flexible", label: "Flexible" },
+];
+
+const ASSESSMENT_SECTIONS = [
+	{ id: "personal", label: "Personal", icon: "◎" },
+	{ id: "passport", label: "Passport", icon: "≡" },
+	{ id: "education", label: "Education", icon: "◈" },
+	{ id: "employment", label: "Employment", icon: "◴" },
+	{ id: "english", label: "English", icon: "✦" },
+	{ id: "preferences", label: "Preferences", icon: "❖" },
+	{ id: "financial", label: "Financial", icon: "¤" },
+	{ id: "documents", label: "Documents", icon: "📎" },
+] as const;
+
 function AssessmentForm({
 	assessment,
 	assessmentDocs,
+	catalog,
 	onUpdate,
 	onDocUpdate,
 }: {
 	assessment: AssessmentData;
 	assessmentDocs: Record<string, AssessmentDoc>;
+	catalog: AssessmentCatalog;
 	onUpdate: (patch: Partial<AssessmentData>) => void;
 	onDocUpdate: (id: string, fileName: string | null, documentId?: string | null) => void;
 }) {
 	const { toast } = useNotifier();
-	const [section, setSection] = useState(0);
-	const [lookups, setLookups] = useState<LookupValue[]>([]);
-	const [catalogUnis, setCatalogUnis] = useState<any[]>([]);
-	const [catalogDestinations, setCatalogDestinations] = useState<any[]>([]);
-	const [catalogPrograms, setCatalogPrograms] = useState<any[]>([]);
-	
-	useEffect(() => {
-		apiFetch<{ lookups: LookupValue[] }>(`${API_PREFIX}/lookups`)
-			.then((res) => {
-				if (res && res.lookups) setLookups(res.lookups);
-			})
-			.catch(console.error);
-
-		apiFetch<{ universities: any[] }>(`${API_PREFIX}/catalog/universities`)
-			.then(res => setCatalogUnis(res.universities))
-			.catch(console.error);
-
-		apiFetch<{ destinations: any[] }>(`${API_PREFIX}/catalog/destinations`)
-			.then(res => setCatalogDestinations(res.destinations))
-			.catch(console.error);
-
-		apiFetch<{ programs: any[] }>(`${API_PREFIX}/catalog/programs`)
-			.then(res => setCatalogPrograms(res.programs))
-			.catch(console.error);
-	}, []);
+	const { lookups, programs: catalogPrograms } = catalog;
+	// Distinct fields of study, in catalogue order; a programme without one contributes nothing.
+	const programFields = useMemo(
+		() => Array.from(new Set(catalogPrograms.map((p) => p.field).filter((x): x is string => Boolean(x)))),
+		[catalogPrograms],
+	);
 
 	const getLookupOptions = (category: string) => {
 		return lookups.filter(l => l.category === category).map(l => (
@@ -980,17 +1168,6 @@ function AssessmentForm({
 	};
 	const [uploading, setUploading] = useState<Record<string, number>>({});
 	const [pickDocId, setPickDocId] = useState<string | null>(null);
-
-	const sections = [
-		{ label: "Personal", icon: "◎" },
-		{ label: "Passport", icon: "≡" },
-		{ label: "Education", icon: "◈" },
-		{ label: "Employment", icon: "◴" },
-		{ label: "English", icon: "✦" },
-		{ label: "Preferences", icon: "❖" },
-		{ label: "Financial", icon: "¤" },
-		{ label: "Documents", icon: "📎" },
-	];
 
 	function handleDocUpload(id: string) {
 		setPickDocId(id);
@@ -1043,23 +1220,21 @@ function AssessmentForm({
 				Complete all sections. Your consultant will review this before your meeting.
 			</p>
 
-			<div className="dash-tabs mt-3" role="tablist">
-				{sections.map((s, i) => (
-					<button
-						key={s.label}
-						type="button"
-						role="tab"
-						aria-selected={section === i}
-						className={`dash-tabs__btn${section === i ? " dash-tabs__btn--active" : ""}`}
-						onClick={() => setSection(i)}
-					>
-						<span>{s.icon}</span> {s.label}
-					</button>
-				))}
-			</div>
-
-			<div className="mt-4">
-				{section === 0 && (
+			{/* One page, top to bottom — the flow's tabs are the only tabs. The nav
+			    is a table of contents, not a second stepper. */}
+			<div className="assess-layout mt-3">
+				<nav className="assess-nav" aria-label="Assessment sections">
+					<ul>
+						{ASSESSMENT_SECTIONS.map((s) => (
+							<li key={s.id}>
+								<a href={`#assess-${s.id}`}><span aria-hidden>{s.icon}</span> {s.label}</a>
+							</li>
+						))}
+					</ul>
+				</nav>
+				<div className="assess-body">
+				<section id="assess-personal" className="assess-section">
+					<h3 className="assess-section__title">Personal</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fn">First name *</label>
@@ -1101,9 +1276,10 @@ function AssessmentForm({
 							<input id="a-addr" className="input input--full-border" value={assessment.address} onChange={(e) => onUpdate({ address: e.target.value })} placeholder="Street, city, country" />
 						</div>
 					</div>
-				)}
+				</section>
 
-				{section === 1 && (
+				<section id="assess-passport" className="assess-section">
+					<h3 className="assess-section__title">Passport</h3>
 					<div className="form-grid form-grid--2">
 						<div className="field">
 							<label htmlFor="a-pn">Passport number</label>
@@ -1122,9 +1298,10 @@ function AssessmentForm({
 							<input id="a-pe" type="date" className="input input--full-border" value={assessment.passportExpiry} onChange={(e) => onUpdate({ passportExpiry: e.target.value })} />
 						</div>
 					</div>
-				)}
+				</section>
 
-				{section === 2 && (
+				<section id="assess-education" className="assess-section">
+					<h3 className="assess-section__title">Education</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-edu">Highest education</label>
@@ -1134,17 +1311,14 @@ function AssessmentForm({
 	</select>
 						</div>
 						<div className="field">
-							<label htmlFor="a-inst">Institution</label>
-							<select id="a-inst" className="select select--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })}>
-		<option value="">Select</option>
-		{catalogUnis.map(u => (<option key={u.id} value={u.name}>{u.name}</option>))}
-	</select>
+							<label htmlFor="a-inst">Institution attended</label>
+							<input id="a-inst" className="input input--full-border" value={assessment.institution} onChange={(e) => onUpdate({ institution: e.target.value })} placeholder="University of Ghana" />
 						</div>
 						<div className="field">
 							<label htmlFor="a-fos">Field of study</label>
 							<select id="a-fos" className="select select--full-border" value={assessment.fieldOfStudy} onChange={(e) => onUpdate({ fieldOfStudy: e.target.value })}>
 		<option value="">Select</option>
-		{Array.from(new Set(catalogPrograms.map(p => p.field).filter(Boolean))).map(f => (<option key={f} value={f}>{f}</option>))}
+		{programFields.map((f) => (<option key={f} value={f}>{f}</option>))}
 	</select>
 						</div>
 						<div className="field">
@@ -1156,9 +1330,10 @@ function AssessmentForm({
 							<input id="a-gpa" className="input input--full-border" value={assessment.gpa} onChange={(e) => onUpdate({ gpa: e.target.value })} placeholder="3.6 / 4.0" />
 						</div>
 					</div>
-				)}
+				</section>
 
-				{section === 3 && (
+				<section id="assess-employment" className="assess-section">
+					<h3 className="assess-section__title">Employment</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-es">Employment status</label>
@@ -1180,9 +1355,10 @@ function AssessmentForm({
 							<input id="a-yexp" className="input input--full-border" value={assessment.yearsExperience} onChange={(e) => onUpdate({ yearsExperience: e.target.value })} placeholder="3" />
 						</div>
 					</div>
-				)}
+				</section>
 
-				{section === 4 && (
+				<section id="assess-english" className="assess-section">
+					<h3 className="assess-section__title">English</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-et">English test taken</label>
@@ -1200,45 +1376,31 @@ function AssessmentForm({
 							<input id="a-ed" type="date" className="input input--full-border" value={assessment.englishDate} onChange={(e) => onUpdate({ englishDate: e.target.value })} />
 						</div>
 					</div>
-				)}
+				</section>
 
-				{section === 5 && (
+				<section id="assess-preferences" className="assess-section">
+					<h3 className="assess-section__title">Preferences</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
-							<label htmlFor="a-pc2">Preferred countries</label>
-							<select id="a-pc2" className="select select--full-border" value={assessment.preferredCountries} onChange={(e) => onUpdate({ preferredCountries: e.target.value })}>
-		<option value="">Select</option>
-		{catalogDestinations.map(d => (<option key={d.id} value={d.name}>{d.name}</option>))}
-	</select>
-						</div>
-						<div className="field">
-							<label htmlFor="a-pl">Preferred level</label>
+							<label htmlFor="a-pl">Level of study</label>
 							<select id="a-pl" className="select select--full-border" value={assessment.preferredLevel} onChange={(e) => onUpdate({ preferredLevel: e.target.value })}>
-		<option value="">Select</option>
-		{getLookupOptions('preferredLevel')}
-	</select>
-						</div>
-						<div className="field">
-							<label htmlFor="a-pf">Preferred field</label>
-							<select id="a-pf" className="select select--full-border" value={assessment.preferredField} onChange={(e) => onUpdate({ preferredField: e.target.value })}>
-		<option value="">Select</option>
-		{Array.from(new Set(catalogPrograms.map(p => p.field).filter(Boolean))).map(f => (<option key={f} value={f}>{f}</option>))}
-	</select>
-						</div>
-						<div className="field">
-							<label htmlFor="a-intake">Intake preference</label>
-							<select id="a-intake" className="select select--full-border" value={assessment.intakePreference} onChange={(e) => onUpdate({ intakePreference: e.target.value })}>
 								<option value="">Select</option>
-								<option value="spring">Spring (Jan/Feb)</option>
-								<option value="fall">Fall (Sep/Oct)</option>
-								<option value="summer">Summer (May/Jun)</option>
-								<option value="flexible">Flexible</option>
+								{getLookupOptions('preferredLevel')}
 							</select>
 						</div>
 					</div>
-				)}
+					<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
+						Where would you like to study? Pick the country, school, programme and intake together — add a second and third choice if you have them.
+					</p>
+					<StudyChoicesEditor
+						choices={assessment.studyChoices}
+						catalog={catalog}
+						onChange={(studyChoices) => onUpdate({ studyChoices, ...flattenStudyChoices(studyChoices) })}
+					/>
+				</section>
 
-				{section === 6 && (
+				<section id="assess-financial" className="assess-section">
+					<h3 className="assess-section__title">Financial</h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fs">Funding source</label>
@@ -1263,9 +1425,10 @@ function AssessmentForm({
 							<input id="a-sr" className="input input--full-border" value={assessment.sponsorRelationship} onChange={(e) => onUpdate({ sponsorRelationship: e.target.value })} placeholder="Parent, Guardian, etc." />
 						</div>
 					</div>
-				)}
+				</section>
 
-			{section === 7 && (
+			<section id="assess-documents" className="assess-section">
+				<h3 className="assess-section__title">Documents</h3>
 				<div>
 					<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
 						Upload scanned copies of your documents. Accepted: PDF, JPEG, PNG, DOC, DOCX (max 15 MB each).
@@ -1317,16 +1480,8 @@ function AssessmentForm({
 						})}
 					</div>
 				</div>
-			)}
-			</div>
-
-			<div className="row mt-4" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>
-				<Button type="button" variant="ghost" disabled={section === 0} onClick={() => setSection((s) => Math.max(0, s - 1))}>
-					← Prev section
-				</Button>
-				<Button type="button" variant="secondary" disabled={section >= sections.length - 1} onClick={() => setSection((s) => Math.min(sections.length - 1, s + 1))}>
-					Next section →
-				</Button>
+			</section>
+				</div>
 			</div>
 
 			<UploadPickModal
@@ -1341,17 +1496,28 @@ function AssessmentForm({
 	);
 }
 
-const CONSULT_TABS = [
-	"Type",
-	"Location",
-	"Branch",
-	"Assessment",
-	"Schedule",
-	"Pay",
-	"Review",
-	"Outcome",
-] as const;
-
+/**
+ * The flow's steps, by id. Online consultations skip Branch and book at HQ,
+ * so the list depends on the type; Review and Outcome are the post-booking
+ * chapters and stay in the bar so the story reads in one line.
+ */
+type ConsultStepId = "type" | "branch" | "assessment" | "schedule" | "pay" | "review" | "outcome";
+const CONSULT_STEP_LABELS: Record<ConsultStepId, string> = {
+	type: "Type",
+	branch: "Branch",
+	assessment: "Assessment",
+	schedule: "Schedule",
+	pay: "Pay",
+	review: "Review",
+	outcome: "Outcome",
+};
+/** Where an online consultation is hosted — the branch whose slots and consultants it uses. */
+const ONLINE_BRANCH_ID = "accra-hq";
+function consultSteps(type: string | null | undefined): ConsultStepId[] {
+	return type === "online"
+		? ["type", "assessment", "schedule", "pay", "review", "outcome"]
+		: ["type", "branch", "assessment", "schedule", "pay", "review", "outcome"];
+}
 
 function ConsultationOutcome({
 	booking,
@@ -1779,7 +1945,9 @@ export function PortalConsultationBookingFlow() {
 		journeyPhase,
 	} = useAppState();
 	const { toast } = useNotifier();
-	const [selectedTab, setSelectedTab] = useState(0);
+	const [selectedStep, setSelectedStep] = useState<ConsultStepId>("type");
+	const steps = consultSteps(booking.consultationType);
+	const catalog = useAssessmentCatalog();
 
 	// Live consultation fee (USD) from platform_settings — what ops configured,
 	// not the hardcoded default. Falls back to FALLBACK_FEE_SCHEDULE on error.
@@ -1799,12 +1967,14 @@ export function PortalConsultationBookingFlow() {
 		})();
 		return () => { active = false; };
 	}, []);
-	const tab = useMemo(() => {
+	const step: ConsultStepId = useMemo(() => {
 		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "cancelled") {
-			return CONSULT_TABS.length - 1;
+			return "outcome";
 		}
-		return selectedTab;
-	}, [booking.consultationPhase, selectedTab]);
+		return steps.includes(selectedStep) ? selectedStep : "type";
+	}, [booking.consultationPhase, selectedStep, steps]);
+	const stepIndex = steps.indexOf(step);
+	const outcomeUnlocked = booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "outcome";
 	const [payState, setPayState] = useState<"method" | "card" | "momo" | "processing" | "success" | "paid">(
 		booking.confirmationId ? "paid" : "method",
 	);
@@ -1857,6 +2027,7 @@ export function PortalConsultationBookingFlow() {
 					degreeLevel: booking.assessment.preferredLevel,
 					intake: booking.assessment.intakePreference,
 					major: booking.assessment.preferredField,
+					studyChoices: booking.assessment.studyChoices.filter((c) => c.country || c.university || c.program || c.field),
 					referralSource: "",
 				},
 			});
@@ -1875,30 +2046,25 @@ export function PortalConsultationBookingFlow() {
 					<p className="eyebrow">Dashboard · {STAGE_SHORT[journeyPhase.stage] ?? journeyPhase.label}</p>
 					<h1 className="page-title mt-1">Consultation</h1>
 					<p className="lead mt-2">
-						All consultation steps stay <strong>inside this dashboard</strong> - not a separate app.
-						Mockup: skip freely between tabs.
+						Choose how you'd like to meet, tell us about yourself, pick a time and pay the fee — all here.
 					</p>
 				</div>
 			</header>
 
 			<div className="dash-tabs" role="tablist">
-				{CONSULT_TABS.map((label, i) => {
-					const isOutcomeTab = i === CONSULT_TABS.length - 1;
-					const outcomeUnlocked =
-						booking.consultationPhase === "assessment_complete" ||
-						booking.consultationPhase === "outcome";
-					const isLocked = isOutcomeTab && !outcomeUnlocked;
+				{steps.map((id, i) => {
+					const isLocked = id === "outcome" && !outcomeUnlocked;
 					return (
 						<button
-							key={label}
+							key={id}
 							type="button"
 							role="tab"
-							aria-selected={tab === i}
+							aria-selected={step === id}
 							aria-disabled={isLocked}
-							className={`dash-tabs__btn${tab === i ? " dash-tabs__btn--active" : ""}${isLocked ? " dash-tabs__btn--locked" : ""}`}
-							onClick={() => !isLocked && setSelectedTab(i)}
+							className={`dash-tabs__btn${step === id ? " dash-tabs__btn--active" : ""}${isLocked ? " dash-tabs__btn--locked" : ""}`}
+							onClick={() => !isLocked && setSelectedStep(id)}
 						>
-							<span className="mono">{i + 1}</span> {label}
+							<span className="mono">{i + 1}</span> {CONSULT_STEP_LABELS[id]}
 							{isLocked ? <span className="dash-tabs__lock">🔒</span> : null}
 						</button>
 					);
@@ -1906,7 +2072,7 @@ export function PortalConsultationBookingFlow() {
 			</div>
 
 			<div className="sharp-card mt-3">
-				{tab === 0 && (
+				{step === "type" && (
 					<>
 						<p className="eyebrow">Meeting type</p>
 						<div className="card-grid card-grid--2 mt-3">
@@ -1920,62 +2086,30 @@ export function PortalConsultationBookingFlow() {
 									key={id}
 									type="button"
 									className={`card card--pad card--selectable${booking.consultationType === id ? " card--selected" : ""}`}
-									onClick={() => updateBooking({ consultationType: id })}
+									onClick={() =>
+										updateBooking(
+											id === "online"
+												? { consultationType: id, branchId: ONLINE_BRANCH_ID }
+												: { consultationType: id, branchId: booking.branchId === ONLINE_BRANCH_ID ? "" : booking.branchId },
+										)
+									}
 								>
 									<span className="display" style={{ fontSize: "1.25rem" }}>
 										{name}
+									</span>
+									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
+										{id === "online" ? "Video call with a consultant — no branch visit." : "Meet your consultant at one of our branches."}
 									</span>
 								</button>
 							))}
 						</div>
 					</>
 				)}
-				{tab === 1 && (
-					<>
-						<p className="eyebrow">Your location</p>
-						<div className="form-grid form-grid--3 mt-3">
-							<div className="field">
-								<label htmlFor="c-country">Country</label>
-								<input
-									id="c-country"
-									className="input input--full-border"
-									value={booking.country}
-									onChange={(e) => updateBooking({ country: e.target.value })}
-									placeholder="Ghana"
-								/>
-							</div>
-							<div className="field">
-								<label htmlFor="c-region">Region</label>
-								<input
-									id="c-region"
-									className="input input--full-border"
-									value={booking.region}
-									onChange={(e) => updateBooking({ region: e.target.value })}
-									placeholder="Greater Accra"
-								/>
-							</div>
-							<div className="field">
-								<label htmlFor="c-city">City</label>
-								<input
-									id="c-city"
-									className="input input--full-border"
-									value={booking.city}
-									onChange={(e) => updateBooking({ city: e.target.value })}
-									placeholder="Accra"
-								/>
-							</div>
-						</div>
-					</>
-				)}
-				{tab === 2 && (
+				{step === "branch" && (
 					<>
 						<p className="eyebrow">Branch</p>
 						<div className="card-grid card-grid--2 mt-3">
-							{[
-								{ id: "accra-hq", name: "Accra Headquarters" },
-								{ id: "kumasi", name: "Kumasi Branch" },
-								{ id: "takoradi", name: "Takoradi Branch" },
-							].map((b) => (
+							{branches.map((b) => (
 								<button
 									key={b.id}
 									type="button"
@@ -1985,20 +2119,24 @@ export function PortalConsultationBookingFlow() {
 									<span className="display" style={{ fontSize: "1.2rem" }}>
 										{b.name}
 									</span>
+									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
+										{b.address}
+									</span>
 								</button>
 							))}
 						</div>
 					</>
 				)}
-				{tab === 3 && (
+				{step === "assessment" && (
 					<AssessmentForm
 						assessment={booking.assessment}
 						assessmentDocs={booking.assessmentDocs}
+						catalog={catalog}
 						onUpdate={updateAssessment}
 						onDocUpdate={updateAssessmentDoc}
 					/>
 				)}
-				{tab === 4 && (
+				{step === "schedule" && (
 					<SlotPickerLive
 						branchId={booking.branchId}
 						date={booking.date}
@@ -2008,7 +2146,8 @@ export function PortalConsultationBookingFlow() {
 						durationMinutes={45}
 					/>
 				)}
-				{tab === 5 && (					<>
+				{step === "pay" && (
+					<>
 						<p className="eyebrow">Consultation fee</p>
 						<p className="display mt-2" style={{ fontSize: "2rem" }}>
 							{formatDualCurrency(consultationFeeUsd)}
@@ -2098,14 +2237,14 @@ export function PortalConsultationBookingFlow() {
 						) : null}
 					</>
 				)}
-				{tab === 6 && (
+				{step === "review" && (
 					<ConsultationReview
 						booking={booking}
-						onProceed={() => setSelectedTab(7)}
+						onProceed={() => setSelectedStep("outcome")}
 						onRevealOutcome={revealOutcome}
 					/>
 				)}
-				{tab === 7 && (
+				{step === "outcome" && (
 					<ConsultationOutcome
 						booking={booking}
 						onMockOutcome={setEligibilityOutcome}
@@ -2118,18 +2257,18 @@ export function PortalConsultationBookingFlow() {
 					<Button
 						type="button"
 						variant="ghost"
-						disabled={tab === 0}
-						onClick={() => setSelectedTab((t) => Math.max(0, t - 1))}
+						disabled={stepIndex <= 0}
+						onClick={() => setSelectedStep(steps[Math.max(0, stepIndex - 1)])}
 					>
-						← Prev tab
+						← Back
 					</Button>
 					<Button
 						type="button"
 						variant="secondary"
-						disabled={tab >= CONSULT_TABS.length - 1 || (tab === CONSULT_TABS.length - 2 && !(booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "outcome"))}
-						onClick={() => setSelectedTab((t) => Math.min(CONSULT_TABS.length - 1, t + 1))}
+						disabled={stepIndex >= steps.length - 1 || (steps[stepIndex + 1] === "outcome" && !outcomeUnlocked)}
+						onClick={() => setSelectedStep(steps[Math.min(steps.length - 1, stepIndex + 1)])}
 					>
-						Next tab →
+						{step === "assessment" ? "Continue to schedule →" : "Next →"}
 					</Button>
 				</div>
 			</div>
@@ -2249,6 +2388,24 @@ export function PortalConsultation() {
 								<a href="#assessment-outcome" className="btn btn--primary btn--sm">
 									Review outcome →
 								</a>
+							),
+						});
+					}
+					// The assessment feeds the consultant's preparation. A booking made
+					// in a hurry can skip it, so it stays asked for until the meeting.
+					const profile = liveConsultation?.profile;
+					const assessmentGaps = profile
+						? (["nationality", "dob", "degree", "degreeLevel", "intake"] as const).filter((k) => !profile[k])
+						: [];
+					if (assessmentGaps.length > 0 && workflowStatus !== "COMPLETED" && workflowStatus !== "CLOSED") {
+						actions.push({
+							id: "assessment",
+							title: "Complete your assessment form",
+							detail: "Your consultant reads this before you meet — your background, passport, education and what you're aiming for.",
+							action: (
+								<Button to="/portal/profile" variant="primary">
+									Complete form →
+								</Button>
 							),
 						});
 					}

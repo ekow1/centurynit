@@ -15,7 +15,7 @@ import {
 	type StageInvoice,
 } from "../../context/AppState";
 import { FALLBACK_FEE_SCHEDULE } from "../../context/AppState";
-import { usdFromCents, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { usdFromCents, JOURNEY_STAGE_LABELS, titleCase, type JourneyStage } from "century-nit-shared";
 import {
 	AGENCY_STAGES,
 	AGENCY_DEPOSIT_PORTION,
@@ -45,11 +45,6 @@ import { Money, MoneyInline } from "../../components/ui/Money";
 import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { prepareDocumentForUpload } from "../../lib/upload";
-
-function toTitleCase(str: string | null | undefined): string {
-	if (!str) return "";
-	return str.toLowerCase().replace(/\b\w/g, (s) => s.toUpperCase());
-}
 
 /* ========== Profile ========== */
 
@@ -471,7 +466,7 @@ export function PortalProfile() {
 					<div className="profile-ref">
 						<p className="profile-ref__label">Target Intake</p>
 						<p className="profile-ref__value mono">
-							{toTitleCase(a.intake || ass.intakePreference) || <span className="profile-hero__empty">Not set</span>}
+							{titleCase(a.intake || ass.intakePreference) || <span className="profile-hero__empty">Not set</span>}
 						</p>
 					</div>
 				</div>
@@ -490,7 +485,7 @@ export function PortalProfile() {
 								<DossierField label="Target Destination" value={targetDestination} />
 								<DossierField label="Target Institution" value={targetInstitution} />
 								<DossierField label="Academic Programme" value={targetProgram} />
-								<DossierField label="Target Intake" value={toTitleCase(a.intake || ass.intakePreference)} />
+								<DossierField label="Target Intake" value={titleCase(a.intake || ass.intakePreference)} />
 								<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
 								<DossierField label="Payment Plan" value={planName || "Direct / Unassigned"} />
 								<DossierField label="Schools Selection" value={a.schoolSelectionDoneAt ? "Confirmed" : "In Progress"} />
@@ -614,7 +609,7 @@ export function PortalProfile() {
 															f.key,
 															(f.key === "phone"
 																? ass.phone || a.phone
-																: ass[f.key as keyof AssessmentData]) ?? "",
+																: scalar(ass, f.key)) ?? "",
 														]),
 													),
 												)
@@ -718,7 +713,7 @@ export function PortalProfile() {
 											: startEdit(
 													"preferences",
 													Object.fromEntries(
-														PREFERENCE_FIELDS.map((f) => [f.key, ass[f.key as keyof AssessmentData] ?? ""]),
+														PREFERENCE_FIELDS.map((f) => [f.key, scalar(ass, f.key) ?? ""]),
 													),
 												)
 									}
@@ -741,11 +736,25 @@ export function PortalProfile() {
 									/>
 								</div>
 							) : (
-								<div className="dossier-grid">
-									<DossierField label="Preferred Countries" value={ass.preferredCountries} />
-									<DossierField label="Target Degree Level" value={getDegreeLevelName(ass.preferredLevel)} />
-									<DossierField label="Preferred Major / Field" value={ass.preferredField} />
-								</div>
+								<>
+									<div className="dossier-grid">
+										<DossierField label="Target Degree Level" value={getDegreeLevelName(ass.preferredLevel)} />
+										<DossierField label="Preferred Countries" value={ass.preferredCountries} />
+										<DossierField label="Preferred Major / Field" value={ass.preferredField} />
+									</div>
+									{ass.studyChoices.some((c) => c.country || c.university || c.program) ? (
+										<ol className="choice-list mt-3">
+											{ass.studyChoices
+												.filter((c) => c.country || c.university || c.program)
+												.map((c, i) => (
+													<li key={i}>
+														<span className="mono">{i + 1}.</span>{" "}
+														{[c.country, c.university, c.program || c.field, c.intake && titleCase(c.intake)].filter(Boolean).join(" · ")}
+													</li>
+												))}
+										</ol>
+									) : null}
+								</>
 							)}
 						</div>
 
@@ -1000,6 +1009,12 @@ const ASSESSMENT_FIELDS: FieldDef[] = [
 	{ key: "englishScore", label: "English score", type: "text" },
 	{ key: "englishDate", label: "English test date", type: "date" },
 ];
+
+/** The generic edit form holds strings; the assessment's one list field never appears in it. */
+function scalar(ass: AssessmentData, key: string): string | undefined {
+	const v = ass[key as keyof AssessmentData];
+	return typeof v === "string" ? v : undefined;
+}
 
 const PREFERENCE_FIELDS: FieldDef[] = [
 	{ key: "preferredCountries", label: "Preferred countries", placeholder: "e.g. UK, Canada" },

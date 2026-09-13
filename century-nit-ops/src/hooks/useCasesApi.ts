@@ -93,6 +93,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 			degreeLevel: p.degreeLevel ?? "-",
 			intake: p.intake ?? "-",
 			major: p.major ?? "-",
+			choices: p.studyChoices ?? [],
 		},
 		documents: [],
 		assessmentResult: row.assessmentResult ?? undefined,

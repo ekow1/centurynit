@@ -2,6 +2,7 @@ import type {
 	DerivedJourney,
 	AssignableEmployee,
 	AvailabilityResponse,
+	AvailabilityDaysResponse,
 	ApplicantDocument,
 	Booking,
 	BookingStatus,
@@ -246,6 +247,22 @@ export const bookingsApi = {
 			...(params.employeeId ? { employeeId: params.employeeId } : {}),
 		});
 		return request(`${API_PREFIX}/bookings/availability?${query}`);
+	},
+
+	/** Open-slot counts for a run of days — lets a picker grey out days before a click. */
+	availabilityDays(params: {
+		branchId: string;
+		from: string;
+		days?: number;
+		durationMinutes?: number;
+	}): Promise<AvailabilityDaysResponse> {
+		const query = new URLSearchParams({
+			branchId: params.branchId,
+			from: params.from,
+			days: String(params.days ?? 21),
+			durationMinutes: String(params.durationMinutes ?? 45),
+		});
+		return request(`${API_PREFIX}/bookings/availability/days?${query}`);
 	},
 
 	create(input: CreateBooking): Promise<Booking> {

@@ -5,7 +5,7 @@
  * Enterprise* pages can both import them without a circular reference.
  */
 
-import type { SchoolApplication, ProceedStatus, DocumentChecklistItem, VisaDetails, DepartureDetails } from "century-nit-shared";
+import type { SchoolApplication, ProceedStatus, DocumentChecklistItem, VisaDetails, DepartureDetails, StudyChoice } from "century-nit-shared";
 import { INVOICE_STATUS_LABELS as SHARED_INVOICE_STATUS_LABELS } from "century-nit-shared";
 
 export type ConsultationStatus =
@@ -122,7 +122,7 @@ export interface MockConsultation {
 	education: { degree: string; institution: string; gpa: string; gradYear: string };
 	employment: { currentRole: string; company: string; experienceYears: string };
 	financial: { source: string; budget: string };
-	goals: { degreeLevel: string; intake: string; major: string };
+	goals: { degreeLevel: string; intake: string; major: string; choices?: StudyChoice[] };
 	documents: { name: string; status: string }[];
 	assessmentResult?: AssessmentResult;
 	/** Consultant has confirmed the assigned slot. */

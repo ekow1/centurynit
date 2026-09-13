@@ -135,6 +135,15 @@ export const availabilityQuerySchema = z.object({
 });
 export type AvailabilityQuery = z.infer<typeof availabilityQuerySchema>;
 
+/** A run of days from `from` — the picker greys out days with nothing open before anyone clicks. */
+export const availabilityDaysQuerySchema = z.object({
+	branchId: z.string().min(1),
+	from: dateStringSchema,
+	days: z.coerce.number().int().min(1).max(31).default(21),
+	durationMinutes: z.coerce.number().int().min(15).max(240).default(45),
+});
+export type AvailabilityDaysQuery = z.infer<typeof availabilityDaysQuerySchema>;
+
 /* ─── Responses ──────────────────────────────────────────────────────────── */
 
 export const availabilitySlotSchema = z.object({
@@ -157,6 +166,15 @@ export const availabilityResponseSchema = z.object({
     calendarSyncStatus: z.enum(['NOT_REQUIRED', 'PENDING', 'SYNCED', 'FAILED']).optional(),
 });
 export type AvailabilityResponse = z.infer<typeof availabilityResponseSchema>;
+
+export const availabilityDaysResponseSchema = z.object({
+	branchId: z.string(),
+	timezone: timezoneSchema,
+	durationMinutes: z.number().int(),
+	/** One entry per day, in order; `open` is the count of bookable slots. */
+	days: z.array(z.object({ date: dateStringSchema, open: z.number().int() })),
+});
+export type AvailabilityDaysResponse = z.infer<typeof availabilityDaysResponseSchema>;
 
 /** An employee offered in the manager's assign dialog. */
 export const assignableEmployeeSchema = z.object({

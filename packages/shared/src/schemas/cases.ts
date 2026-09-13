@@ -388,6 +388,22 @@ export const assessmentResultSchema = z.object({
 });
 export type AssessmentResult = z.infer<typeof assessmentResultSchema>;
 
+/**
+ * One study choice — country, school, programme, field and intake picked
+ * together. An applicant lists up to three in order of preference; the
+ * scalar `preferredCountries` / `major` / `intake` fields below are the
+ * first choice flattened, kept so older readers keep working.
+ */
+export const studyChoiceSchema = z.object({
+	country: z.string().max(80).default(""),
+	university: z.string().max(200).default(""),
+	program: z.string().max(200).default(""),
+	field: z.string().max(120).default(""),
+	intake: z.string().max(40).default(""),
+});
+export type StudyChoice = z.infer<typeof studyChoiceSchema>;
+export const MAX_STUDY_CHOICES = 3;
+
 export const applicantProfileSchema = z.object({
 	nationality: z.string().optional(),
 	residence: z.string().optional(),
@@ -417,6 +433,7 @@ export const applicantProfileSchema = z.object({
 	intake: z.string().optional(),
 	major: z.string().optional(),
 	preferredCountries: z.string().optional(),
+	studyChoices: z.array(studyChoiceSchema).max(MAX_STUDY_CHOICES).optional(),
 	sponsorName: z.string().optional(),
 	sponsorRelationship: z.string().optional(),
 	referralSource: z.string().optional(),

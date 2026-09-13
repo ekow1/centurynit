@@ -810,3 +810,38 @@ describe("booking buffer, set from the ops console", () => {
 		expect(guarded.reason).toBe("booked");
 	});
 });
+
+describe("availability by day", () => {
+	/**
+	 * The portal's date strip greys out days with nothing open before anyone
+	 * clicks. The per-day count must be exactly what the per-day query would
+	 * show as available — it is the same rule run in parallel, and this pins
+	 * that the two can't drift apart.
+	 */
+	maybe()("counts open slots per day, in order, and agrees with the per-day query", async () => {
+		const { createApp } = await import("../app.js");
+		const from = futureWeekday(28);
+		const res = await createApp().request(
+			`/api/v1/bookings/availability/days?branchId=${BRANCH}&from=${from}&days=5&durationMinutes=45`,
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { branchId: string; timezone: string; days: { date: string; open: number }[] };
+		expect(body.branchId).toBe(BRANCH);
+		expect(body.timezone).toBe(TZ);
+		expect(body.days).toHaveLength(5);
+		expect(body.days[0].date).toBe(from);
+
+		for (const day of body.days) {
+			const single = await branchAvailability({ branchId: BRANCH, date: day.date, durationMinutes: 45, timezone: TZ });
+			expect(day.open).toBe(single.slots.filter((s) => s.available).length);
+		}
+	});
+
+	maybe()("refuses a window longer than a month", async () => {
+		const { createApp } = await import("../app.js");
+		const res = await createApp().request(
+			`/api/v1/bookings/availability/days?branchId=${BRANCH}&from=${futureWeekday(28)}&days=40`,
+		);
+		expect(res.status).toBe(400);
+	});
+});

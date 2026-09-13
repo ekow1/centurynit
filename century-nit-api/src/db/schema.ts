@@ -14,7 +14,7 @@ import {
 	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { DepartureDetails, PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
+import type { ApplicantProfile, DepartureDetails, PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
 
 /**
  * The flight a ticket invoice is for, and — with a PNR — the flight that was
@@ -891,7 +891,7 @@ export const applicants = pgTable(
 		assignedOfficerId: uuid("assigned_officer_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
-		profile: jsonb("profile").$type<Record<string, string>>().notNull().default({}),
+		profile: jsonb("profile").$type<ApplicantProfile>().notNull().default({}),
 		portalState: jsonb("portal_state").$type<Record<string, unknown>>().notNull().default({}),
 		archivedAt: timestamp("archived_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

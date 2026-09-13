@@ -45,6 +45,8 @@ import {
 	assignableEmployeeSchema,
 	availabilityQuerySchema,
 	availabilityResponseSchema,
+	availabilityDaysQuerySchema,
+	availabilityDaysResponseSchema,
 	bookingListSchema,
 	bookingSchema,
 	bookingStatusSchema,
@@ -144,6 +146,52 @@ function toBookingResponse(row: BookingRow, employee?: { name: string; email: st
 		updatedAt: row.updatedAt.toISOString(),
 	};
 }
+
+/* ── GET /api/v1/bookings/availability/days ─────────────────────────────────── */
+/** A run of days with how many slots are open on each — the same rule as
+ * the per-day query, run in parallel, so the greyed-out calendar and the
+ * slot list can never disagree. DB-only, no external calendars. */
+bookingsRouter.openapi(
+  createRoute({
+    method: "get",
+    path: "/availability/days",
+    tags: ["Bookings"],
+    request: { query: availabilityDaysQuerySchema },
+    responses: {
+      200: {
+        description: "Open-slot counts per day",
+        content: { "application/json": { schema: availabilityDaysResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const query = c.req.valid("query");
+    const branch = getBranchOrThrow(query.branchId);
+    const start = new Date(`${query.from}T00:00:00Z`);
+    const dates = Array.from({ length: query.days }, (_, i) => {
+      const d = new Date(start);
+      d.setUTCDate(d.getUTCDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+    const days = await Promise.all(
+      dates.map(async (date) => {
+        const result = await branchAvailability({
+          branchId: query.branchId,
+          date,
+          durationMinutes: query.durationMinutes,
+          timezone: branch.timezone,
+        });
+        return { date, open: result.slots.filter((s) => s.available).length };
+      }),
+    );
+    return c.json({
+      branchId: branch.id,
+      timezone: branch.timezone,
+      durationMinutes: query.durationMinutes,
+      days,
+    });
+  },
+);
 
 /* ── GET /api/v1/bookings/availability ──────────────────────────────────────── */
 

@@ -4049,6 +4049,96 @@ img.profile-monogram {
 	font-size: 0.6rem;
 }
 
+/* Study choices: each one a fieldset picked as a unit, listed in order. */
+.choice {
+	border: 1px solid var(--border-light);
+	padding: 1rem 1.25rem 1.25rem;
+	margin: 0 0 1rem;
+	min-width: 0;
+}
+.choice__legend {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0 0.5rem;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--muted-foreground);
+}
+.choice-list {
+	margin: 0;
+	padding-left: 0;
+	list-style: none;
+	font-size: 0.9rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+/* Assessment form: one page top to bottom, with a table of contents beside
+   it on wide screens — not a second tab strip under the flow's own. */
+.assess-layout {
+	display: grid;
+	gap: 1.5rem;
+}
+.assess-nav ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem 0.75rem;
+}
+.assess-nav a {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--muted-foreground);
+	text-decoration: none;
+	white-space: nowrap;
+}
+.assess-nav a:hover,
+.assess-nav a:focus-visible {
+	color: var(--foreground);
+}
+.assess-body {
+	min-width: 0;
+}
+.assess-section {
+	scroll-margin-top: 1rem;
+}
+.assess-section + .assess-section {
+	margin-top: 2rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--border-light);
+}
+.assess-section__title {
+	margin: 0 0 1rem;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--muted-foreground);
+}
+@media (min-width: 900px) {
+	.assess-layout {
+		grid-template-columns: 11rem minmax(0, 1fr);
+		align-items: start;
+	}
+	.assess-nav {
+		position: sticky;
+		top: 1rem;
+	}
+	.assess-nav ul {
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+}
+
 .process-spine--compact .process-spine__item {
 	padding-bottom: 0.85rem;
 }

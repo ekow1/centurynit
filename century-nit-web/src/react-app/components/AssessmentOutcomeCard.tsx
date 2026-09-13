@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { StatusPill } from "century-nit-core/ui";
 import { meApi } from "century-nit-core/api";
-import { DECISION_LABELS, decisionOf } from "century-nit-shared";
+import { DECISION_LABELS, decisionOf, titleCase } from "century-nit-shared";
 import { Button } from "./ui/Button";
 import { useAppState } from "../context/AppState";
 
@@ -74,11 +74,6 @@ export function AssessmentOutcomeCard({
 		return pkg.charAt(0).toUpperCase() + pkg.slice(1).replace(/_/g, " ");
 	};
 
-	const toTitleCase = (str?: string | null) => {
-		if (!str) return null;
-		return str.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-	};
-
 	return (
 		<div className={`sharp-card mb-4 cn-outcome${isEligible ? " cn-outcome--eligible" : ""}`}>
 			<div className="cn-outcome__head">
@@ -103,19 +98,19 @@ export function AssessmentOutcomeCard({
 					{effectiveCountry && (
 						<div className="cn-outcome__rec">
 							<dt>Destination</dt>
-							<dd>{toTitleCase(effectiveCountry)}</dd>
+							<dd>{titleCase(effectiveCountry)}</dd>
 						</div>
 					)}
 					{effectiveUniversity && (
 						<div className="cn-outcome__rec">
 							<dt>Institution</dt>
-							<dd>{toTitleCase(effectiveUniversity)}</dd>
+							<dd>{titleCase(effectiveUniversity)}</dd>
 						</div>
 					)}
 					{effectiveProgram && (
 						<div className="cn-outcome__rec">
 							<dt>Programme</dt>
-							<dd>{toTitleCase(effectiveProgram)}</dd>
+							<dd>{titleCase(effectiveProgram)}</dd>
 						</div>
 					)}
 					{effectivePackage && (

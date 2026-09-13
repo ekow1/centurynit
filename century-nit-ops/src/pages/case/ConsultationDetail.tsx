@@ -773,6 +773,16 @@ export function ConsultationDetail({
 								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Intake</p><p>{consultation.goals.intake}</p></div>
 								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Target Country</p><p>{consultation.targetCountry}</p></div>
 							</div>
+							{consultation.goals.choices?.length ? (
+								<>
+									<p className="muted mt-3" style={{ fontSize: "var(--text-xs)" }}>Choices, in order</p>
+									<ol className="cn-choice-list">
+										{consultation.goals.choices.map((c, i) => (
+											<li key={i}>{[c.country, c.university, c.program || c.field, c.intake].filter(Boolean).join(" · ")}</li>
+										))}
+									</ol>
+								</>
+							) : null}
 						</div>
 					</div>
 				)}

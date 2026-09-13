@@ -30,6 +30,7 @@ import {
 	type CaseComment,
 	type FeeCatalogue,
 	preDepartureChecklistDone,
+	type StudyChoice,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
@@ -378,7 +379,10 @@ export type AssessmentData = {
 	englishTest: string;
 	englishScore: string;
 	englishDate: string;
-	// Study preferences
+	// Study preferences: up to three choices, each a country, school,
+	// programme, field and intake picked together. The scalars are the first
+	// choice flattened — the API and the ops console read those.
+	studyChoices: StudyChoice[];
 	preferredCountries: string;
 	preferredLevel: string;
 	preferredField: string;
@@ -595,6 +599,7 @@ const defaultAssessment: AssessmentData = {
 	englishTest: "",
 	englishScore: "",
 	englishDate: "",
+	studyChoices: [emptyStudyChoice()],
 	preferredCountries: "",
 	preferredLevel: "",
 	preferredField: "",
@@ -604,6 +609,21 @@ const defaultAssessment: AssessmentData = {
 	sponsorName: "",
 	sponsorRelationship: "",
 };
+
+export function emptyStudyChoice(): StudyChoice {
+	return { country: "", university: "", program: "", field: "", intake: "" };
+}
+
+/** The first choice, flattened onto the scalar fields older readers use. */
+export function flattenStudyChoices(choices: StudyChoice[]): Pick<AssessmentData, "preferredCountries" | "preferredField" | "intakePreference"> {
+	const filled = choices.filter((c) => c.country || c.university || c.program || c.field);
+	const first = filled[0];
+	return {
+		preferredCountries: Array.from(new Set(filled.map((c) => c.country).filter(Boolean))).join(", "),
+		preferredField: first?.field ?? "",
+		intakePreference: first?.intake ?? "",
+	};
+}
 
 const defaultAssessmentDocs: Record<string, AssessmentDoc> = {
 	passport: { fileName: null, uploadedAt: null, documentId: null },
@@ -1217,7 +1237,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 		return {
 			...defaultBooking,
 			...loaded,
-			assessment: { ...defaultAssessment, ...(loaded.assessment ?? {}) },
+			assessment: { ...defaultAssessment, ...(loaded.assessment ?? {}), studyChoices: loaded.assessment?.studyChoices?.length ? loaded.assessment.studyChoices : [emptyStudyChoice()] },
 			assessmentDocs: { ...defaultAssessmentDocs, ...(loaded.assessmentDocs ?? {}) },
 		};
 	});

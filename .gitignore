@@ -45,3 +45,6 @@ Thumbs.db
 *.original.ts
 *.diff
 scratch_*
+
+# Local PDF engine test outputs
+century-nit-api/test-*.pdf

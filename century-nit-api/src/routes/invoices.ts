@@ -63,14 +63,14 @@ invoicesRouter.openapi(
 		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
 		request: {
 			body: {
-				content: { "application/json": { schema: createInvoiceSchema } },
+				content: { "application/json": { schema: createInvoiceSchema.omit({ status: true }) } },
 				description: "Invoice to issue",
 				required: true,
 			},
 		},
 		responses: {
 			201: {
-				description: "Invoice issued",
+				description: "Invoice raised — awaiting approval",
 				content: { "application/json": { schema: invoiceSchema } },
 			},
 		},
@@ -78,7 +78,9 @@ invoicesRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		const body = c.req.valid("json");
-		const row = await createInvoice({ data: body, actor: actorFrom(staff) });
+		// Every invoice is born awaiting approval; issuing is a separate,
+		// capability-gated step so the trail always reads raised → approved.
+		const row = await createInvoice({ data: { ...body, status: "proforma" }, actor: actorFrom(staff) });
 		return c.json(await serializeInvoice(row), 201);
 	},
 );

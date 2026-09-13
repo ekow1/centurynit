@@ -374,7 +374,7 @@ applicationsRouter.openapi(
  * one, or a new one built from the selected schools. Raising it is handler
  * work; turning it into a payable invoice is a separate, finance-gated step.
  */
-async function ensureApplicationProforma(id: string): Promise<typeof schema.invoices.$inferSelect> {
+async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: string | null; name: string; email?: string | null }): Promise<typeof schema.invoices.$inferSelect> {
 	// Documents first: they were collected at consultation so applications
 	// never wait on paperwork. Nothing is invoiced while any is outstanding.
 	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
@@ -462,6 +462,7 @@ async function ensureApplicationProforma(id: string): Promise<typeof schema.invo
 					? `Application invoice for ${schools.length} university application(s).`
 					: "Application fee invoice. Per-school line items will follow as schools are added.",
 			},
+			raisedBy,
 		});
 		appInvoice = proforma;
 	} else if (appInvoice.status === "proforma") {
@@ -504,7 +505,7 @@ applicationsRouter.openapi(
 	async (c) => {
 		const { id } = c.req.valid("param");
 		await assertApplicationAccess(c, id, "raise an invoice for");
-		const appInvoice = await ensureApplicationProforma(id);
+		const appInvoice = await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
 		return c.json(await serializeInvoice(appInvoice));
 	},
 );
@@ -533,7 +534,7 @@ applicationsRouter.openapi(
 		const staff = c.get("staff")!;
 		const { id } = c.req.valid("param");
 		await assertApplicationAccess(c, id, "issue an invoice for");
-		const appInvoice = await ensureApplicationProforma(id);
+		const appInvoice = await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
 		const updated = await issueProformaByOps({
 			invoiceId: appInvoice.id,
 			actorName: staff.name ?? "Handler",

@@ -172,6 +172,10 @@ export const invoiceSchema = z.object({
 	creditedCents: z.number().int(),
 	balanceCents: z.number().int(),
 	note: z.string().nullable(),
+	/** Who raised it — the chapter owner, the client via the portal, or "System". */
+	raisedByName: z.string().nullable(),
+	raisedAt: z.string().datetime(),
+	/** Who issued (approved) it. Equals the raiser until approval. */
 	issuedByName: z.string(),
 	reviewedByName: z.string().nullable(),
 	reviewedAt: z.string().datetime().nullable(),

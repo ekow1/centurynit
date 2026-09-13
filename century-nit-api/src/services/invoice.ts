@@ -160,6 +160,8 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 		creditedCents: row.creditedCents,
 		balanceCents: balanceOf(row, paidCents),
 		note: row.note ?? null,
+		raisedByName: row.raisedByName ?? null,
+		raisedAt: row.createdAt.toISOString(),
 		issuedByName: row.issuedByName,
 		reviewedByName: row.reviewedByName ?? null,
 		reviewedAt: row.reviewedAt?.toISOString() ?? null,
@@ -355,6 +357,8 @@ export async function createInvoice(input: {
 				subtotalCents,
 				note: data.note ?? null,
 				status,
+				raisedBy: actor.opsUserId ?? null,
+				raisedByName: actor.name,
 				issuedBy: actor.opsUserId ?? null,
 				issuedByName: actor.name,
 				dueAt: data.dueAt && data.dueAt.trim() ? new Date(data.dueAt) : null,
@@ -864,8 +868,11 @@ export async function getFeeSchedule(): Promise<{
  */
 export async function createProforma(input: {
 	data: CreateInvoice;
+	/** Who raised it — a staff member, the client from the portal, or nothing for System. */
+	raisedBy?: { opsUserId?: string | null; name: string; email?: string | null } | null;
 }): Promise<InvoiceRow> {
 	const { data } = input;
+	const raiser = input.raisedBy ?? { opsUserId: null, name: "System", email: null };
 	const subtotalCents = data.lines.reduce((n, l) => n + l.amountCents, 0);
 
 	const row = await db.transaction(async (tx) => {
@@ -883,8 +890,10 @@ export async function createProforma(input: {
 				subtotalCents,
 				note: data.note ?? null,
 				status: "proforma",
-				issuedBy: null,
-				issuedByName: "System Estimate",
+				raisedBy: raiser.opsUserId ?? null,
+				raisedByName: raiser.name,
+				issuedBy: raiser.opsUserId ?? null,
+				issuedByName: raiser.name,
 			})
 			.returning();
 
@@ -899,7 +908,7 @@ export async function createProforma(input: {
 			})),
 		);
 
-		await audit(created.id, "proforma_created", null, `Estimate generated (${invoiceNumber}) — pending staff review`, txDb);
+		await audit(created.id, "proforma_created", raiser.email ?? null, `Raised (${invoiceNumber}) by ${raiser.name} — awaiting approval`, txDb);
 		return created;
 	});
 
@@ -1178,7 +1187,7 @@ export async function issueProformaByOps(input: {
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-				issuedByName: row.issuedByName ?? input.actorName,
+				issuedByName: input.actorName,
 				reviewedByName: input.actorName,
 				reviewedAt: new Date(),
 				updatedAt: new Date(),
@@ -1186,7 +1195,7 @@ export async function issueProformaByOps(input: {
 			.where(eq(invoices.id, row.id))
 			.returning();
 
-		await audit(row.id, "issued", input.actorName, "Application invoice issued by handler", txDb);
+		await audit(row.id, "issued", input.actorName, `Approved and issued by ${input.actorName}`, txDb);
 		return updated;
 	}).then(async (updated) => {
 		await notifyClientInvoice(updated, "issued");
@@ -1229,7 +1238,7 @@ export async function issueInvoiceByOps(input: {
 				invoiceNumber: officialInvoiceNumber,
 				status: "issued",
 				dueAt: row.dueAt ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-				issuedByName: row.issuedByName ?? input.actorName,
+				issuedByName: input.actorName,
 				reviewedByName: input.actorName,
 				reviewedAt: new Date(),
 				updatedAt: new Date(),

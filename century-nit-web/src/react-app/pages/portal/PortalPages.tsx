@@ -2488,6 +2488,7 @@ function ApplicationHubInner() {
 		payAgencyInstallment,
 		syncFromServer,
 		syncTick,
+		journeyPhase,
 	} = useAppState();
 	const nav = useNavigate();
 	const [depositPaying, setDepositPaying] = useState(false);
@@ -2547,7 +2548,7 @@ function ApplicationHubInner() {
 			raisedAt: serverInvoice.createdAt,
 			paidAt: isPaid ? serverInvoice.updatedAt : null,
 			description: isProforma
-				? "Proforma estimate — your consultant is reviewing and will confirm the final figures."
+				? "Your consultant is preparing your invoice."
 				: isRaised
 					? `Official invoice ${serverInvoice.invoiceNumber} issued by ${serverInvoice.issuedByName}`
 					: isPaid
@@ -2564,7 +2565,10 @@ function ApplicationHubInner() {
 		};
 	}, [serverInvoice, inv]);
 
-	const selectionDone = Boolean(application.schoolSelectionDoneAt) || Boolean(serverInvoice);
+	// A raised-but-unapproved invoice is not shown to the client (`/me/invoices`
+	// leaves it out), so "selection done, nothing to pay yet" is read from the
+	// journey stage as well as the local lock.
+	const selectionDone = Boolean(application.schoolSelectionDoneAt) || Boolean(serverInvoice) || journeyPhase.stage === "awaiting_invoice";
 	const paid = effectiveInv.status === "paid" || inv.status === "paid";
 
 	const selectedLevel = application.schoolDegreeLevel || undefined;
@@ -2618,9 +2622,7 @@ function ApplicationHubInner() {
 				return;
 			}
 			if (backend.status === "proforma") {
-				toast.error(
-					"This invoice is currently in review as a proforma estimate. Your consultant will issue the final invoice shortly.",
-				);
+				toast.error("Your consultant is still preparing this invoice. You'll be notified when it is ready to pay.");
 				return;
 			}
 			// Real Paystack hosted checkout session
@@ -2931,19 +2933,18 @@ function ApplicationHubInner() {
 			{/* 2 · Invoice only on this page — show the real invoice once issued,
 				or a simple "awaiting" card while it's still a proforma. */}
 			{selectionDone ? (
-				effectiveInv.status === "estimated" ? (
+				effectiveInv.status === "estimated" || !serverInvoice ? (
 					<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--primary, #2563eb)" }}>
 						<p className="eyebrow">Application invoice</p>
 						<h3 className="display mt-1" style={{ fontSize: "1.4rem" }}>
-							Awaiting invoice
+							Being prepared
 						</h3>
 						<p className="muted mt-2" style={{ fontSize: "0.95rem", lineHeight: 1.6 }}>
-							Your school selection has been submitted. Your consultant is reviewing the
-							list and will issue the application invoice shortly.
+							Your school list is with your consultant. They are preparing your application invoice —
+							you'll be notified the moment it is ready to pay.
 						</p>
 						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
-							You don't need to do anything right now — the payment card will appear
-							here once the invoice is issued.
+							Nothing to do right now — the payment card appears here once the invoice is issued.
 						</p>
 						<div className="row mt-4">
 							<Button to="/portal/home" variant="secondary">

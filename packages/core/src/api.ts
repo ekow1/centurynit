@@ -1055,16 +1055,6 @@ export const meApi = {
 	},
 
 	/**
-	 * Idempotently ensure the signed-in applicant's visa invoice exists: if none
-	 * has been raised yet, raises a proforma estimate (which appears in Ops for
-	 * review/issue), otherwise returns the existing invoice. Links the invoice
-	 * to the application. Never creates a duplicate.
-	 */
-	ensureVisaInvoice(): Promise<ApiInvoice> {
-		return request(`${API_PREFIX}/me/invoices/visa/ensure`, { method: "POST" });
-	},
-
-	/**
 	 * Stage consent — the applicant's explicit decision to start, hold, or opt
 	 * out of a major journey stage. Only "continue" sends the case to Ops for
 	 * handler assignment.

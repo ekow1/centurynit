@@ -236,6 +236,9 @@ describe("the applicant journey, end to end", () => {
 		expect(proforma.row.status).toBe("proforma");
 		expect(proforma.row.applicationId).toBe(appId);
 		expect(proforma.api.lines.map((l) => l.schoolApplicationId).filter(Boolean)).toHaveLength(1);
+		// The trail: raised by the client from the portal, not yet approved.
+		expect(proforma.api.raisedByName).toContain("client");
+		expect(proforma.api.reviewedByName).toBeNull();
 
 		// ── The draft follows the school list ───────────────────────────
 		const second = await addSchoolForApplicant(applicant.id, {
@@ -257,6 +260,9 @@ describe("the applicant journey, end to end", () => {
 		await issueProformaByOps({ invoiceId: proforma.row.id, actorName: "Handler" });
 		expect(await stage()).toBe("application_invoice");
 		const issued = (await invoiceOfType("application"))!;
+		// …approved by the handler; the raiser stays on record.
+		expect(issued.api.issuedByName).toBe("Handler");
+		expect(issued.api.raisedByName).toContain("client");
 		await recordPayment({ invoiceId: issued.row.id, amountCents: issued.api.balanceCents, method: "card", actor: ACTOR });
 		expect(await stage()).toBe("school_tracking");
 		const [afterAppFee] = await db.select().from(applications).where(eq(applications.id, appId));

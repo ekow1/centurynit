@@ -628,6 +628,10 @@ export const invoices = pgTable(
 
 		status: invoiceStatusEnum("status").notNull().default("issued"),
 
+		/** Who raised it (the chapter owner, the client via the portal, or System). */
+		raisedBy: uuid("raised_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		raisedByName: text("raised_by_name"),
+		/** Who issued (approved) it — the same as the raiser until approval. */
 		issuedBy: uuid("issued_by").references(() => opsUsers.id, { onDelete: "set null" }),
 		issuedByName: text("issued_by_name").notNull(),
 		/** When payment is expected — drives overdue and the aging buckets. */

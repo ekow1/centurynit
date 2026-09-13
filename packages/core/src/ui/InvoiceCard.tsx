@@ -19,6 +19,11 @@ export function InvoiceCard({
 }: {
 	invoice: Pick<ApiInvoice, "invoiceNumber" | "status" | "type" | "lines" | "subtotalCents" | "paidCents" | "balanceCents" | "dueAt" | "note"> & {
 		creditedCents?: number;
+		/** The trail — shown when present: raised by X, approved by Y. */
+		raisedByName?: string | null;
+		raisedAt?: string | null;
+		issuedByName?: string | null;
+		reviewedAt?: string | null;
 	};
 	/** Heading — "Application invoice", "Visa invoice", "Ticket invoice"… */
 	title: string;
@@ -82,6 +87,18 @@ export function InvoiceCard({
 					{due && <>Due {due.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</>}
 					{due && invoice.note && " · "}
 					{invoice.note}
+				</p>
+			)}
+			{invoice.raisedByName && (
+				<p className="cn-invoice__meta">
+					Raised by {invoice.raisedByName}
+					{invoice.raisedAt && ` · ${new Date(invoice.raisedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+					{!isProforma && invoice.status !== "void" && invoice.issuedByName && (
+						<>
+							{" · "}Approved by {invoice.issuedByName}
+							{invoice.reviewedAt && ` · ${new Date(invoice.reviewedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+						</>
+					)}
 				</p>
 			)}
 

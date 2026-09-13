@@ -230,6 +230,8 @@ export type ApiInvoice = {
 	creditedCents: number;
 	balanceCents: number;
 	note: string | null;
+	raisedByName?: string | null;
+	raisedAt?: string;
 	issuedByName: string;
 	reviewedByName?: string | null;
 	reviewedAt?: string | null;

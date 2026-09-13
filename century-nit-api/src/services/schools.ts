@@ -163,6 +163,7 @@ export async function lockSchoolsForApplicant(
 							],
 				note: `Proforma estimate for ${rows.length} university application(s). Consultant will confirm exact institutional fees.`,
 			},
+			raisedBy: { opsUserId: null, name: `${user.name ?? "Client"} (client, portal)`, email: user.email },
 		});
 		invoiceId = proforma.id;
 	}

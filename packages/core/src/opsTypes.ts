@@ -102,6 +102,8 @@ export type AssessmentResult = {
 export interface MockConsultation {
 	id: string; // The consultation ID
 	applicantId: string;
+	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	updatedAt?: string;
 	applicantUserId?: string | null;
 	ref: string;
 	bookingId: string | null;
@@ -196,6 +198,8 @@ export interface MockApplication {
 	id: string;
 	appId: string;
 	applicantId: string;
+	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	updatedAt?: string;
 	applicantName: string;
 	email: string;
 	phone: string;
@@ -283,6 +287,8 @@ export interface MockApplication {
 export interface MockApplicant {
 	id: string;
 	applicantId: string;
+	/** When the record last changed (ISO) — what the work queue dates a task by. */
+	updatedAt?: string;
 	name: string;
 	email: string;
 	phone: string;

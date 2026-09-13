@@ -149,6 +149,13 @@ async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] |
 	);
 }
 
+/**
+ * Document types staff may place on a client's record — official agency
+ * artifacts only. Everything else (passport, bank statements, health
+ * documents) must be uploaded by the client; the allowlist is the policy.
+ */
+const STAFF_ARTIFACT_TYPES = new Set(["visa_receipt", "flight_receipt"]);
+
 /** Whether this caller may act on a document owned by `ownerUserId`. */
 async function mayReachOwner(
 	ownerUserId: string,
@@ -240,10 +247,32 @@ documentsRouter.openapi(
 	}),
 	async (c) => {
 		const user = c.get("user");
+		const staff = c.get("staff") ?? null;
 		const body = c.req.valid("json");
 		const storage = await storageOrThrow();
 
-		const storageKey = buildStorageKey(user.id, body.documentType, body.fileName, user.name);
+		// Staff placing an official agency artifact on a client's record
+		// (visa receipt, flight booking). Everything else belongs to the
+		// client — the allowlist and the caller's caseload decide, not the UI.
+		const ownerUserId = body.ownerUserId ?? user.id;
+		let ownerName = user.name;
+		if (ownerUserId !== user.id) {
+			if (!STAFF_ARTIFACT_TYPES.has(body.documentType)) {
+				throw new HttpError(403, "FORBIDDEN", "Staff may only upload official agency artifacts on a client's record");
+			}
+			if (!(await mayReachOwner(ownerUserId, user, staff))) {
+				throw new HttpError(403, "FORBIDDEN", "You cannot upload documents for this applicant");
+			}
+			const [owner] = await db
+				.select({ name: users.name })
+				.from(users)
+				.where(eq(users.id, ownerUserId))
+				.limit(1);
+			if (!owner) throw new HttpError(404, "OWNER_NOT_FOUND", "Applicant account not found");
+			ownerName = owner.name;
+		}
+
+		const storageKey = buildStorageKey(ownerUserId, body.documentType, body.fileName, ownerName);
 
 		// Replacing a document of the same type: retire every live row first, or
 		// the partial unique index (`status <> 'REJECTED'`) rejects the new one.
@@ -259,7 +288,7 @@ documentsRouter.openapi(
 			})
 			.where(
 				and(
-					eq(applicantDocuments.ownerUserId, user.id),
+					eq(applicantDocuments.ownerUserId, ownerUserId),
 					eq(applicantDocuments.documentType, body.documentType),
 					ne(applicantDocuments.status, "REJECTED"),
 				),
@@ -268,7 +297,7 @@ documentsRouter.openapi(
 		const [row] = await db
 			.insert(applicantDocuments)
 			.values({
-				ownerUserId: user.id,
+				ownerUserId,
 				documentType: body.documentType,
 				fileName: body.fileName,
 				contentType: body.contentType,
@@ -316,16 +345,19 @@ documentsRouter.openapi(
 	}),
 	async (c) => {
 		const user = c.get("user");
+		const staff = c.get("staff") ?? null;
 		const { id } = c.req.valid("param");
 		const storage = await storageOrThrow();
 
 		const [row] = await db
 			.select()
 			.from(applicantDocuments)
-			.where(and(eq(applicantDocuments.id, id), eq(applicantDocuments.ownerUserId, user.id)))
+			.where(eq(applicantDocuments.id, id))
 			.limit(1);
 
-		if (!row) {
+		// The owner completes their own upload; staff may complete the
+		// artifacts they placed on a client's record. Same scope as listing.
+		if (!row || !(await mayReachOwner(row.ownerUserId, user, staff))) {
 			throw new HttpError(404, DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND, "Document not found");
 		}
 
@@ -371,17 +403,22 @@ documentsRouter.openapi(
 		}
 
 		// In-app: let the assigned consultant know a document was uploaded, or
-		// fall back to managers/coordinators when nobody is assigned yet.
+		// fall back to managers/coordinators when nobody is assigned yet. The
+		// owner decides whose upload this is — staff artifacts land on the
+		// client's record, not the uploader's.
 		(async () => {
 			try {
 				const [applicant] = await db
 					.select({ name: applicants.name, assignedOfficerId: applicants.assignedOfficerId })
 					.from(applicants)
-					.where(eq(applicants.userId, user.id))
+					.where(eq(applicants.userId, updated.ownerUserId))
 					.limit(1);
 
 				const applicantName = applicant?.name ?? "An applicant";
-				const body = `${applicantName} uploaded ${updated.documentType}`;
+				const body =
+					updated.ownerUserId === user.id
+						? `${applicantName} uploaded ${updated.documentType}`
+						: `${applicantName} received ${updated.documentType} from the agency`;
 
 				const officerId = applicant?.assignedOfficerId ?? null;
 				if (officerId) {
@@ -415,7 +452,9 @@ documentsRouter.openapi(
 			}
 		})().catch(() => {});
 
-		return c.json(toResponse(updated));
+		// Staff get the owner back so a caller can confirm the artifact landed
+		// on the client's record, not their own.
+		return c.json(toResponse(updated, staff ? {} : undefined));
 	},
 );
 

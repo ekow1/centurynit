@@ -1191,6 +1191,7 @@ export async function updateApplication(
 	if (input.paymentPlanId !== undefined) set.paymentPlanId = input.paymentPlanId;
 	if (input.preDepartureTasks !== undefined) set.preDepartureTasks = input.preDepartureTasks;
 	if (input.notes !== undefined) set.notes = input.notes;
+	if (input.targetSchoolCount !== undefined) set.targetSchoolCount = input.targetSchoolCount;
 
 	if (Object.keys(set).length <= 1) return row;
 
@@ -1781,7 +1782,12 @@ export async function setApplicationVisaStage(
 		targetType: "application",
 		targetId: id,
 		kind: "status",
-		text: visaOutcome === "refused" ? "Visa refused" : visaOutcome === "approved" ? "Visa approved" : `Visa stage → ${stage}`,
+		text:
+			visaOutcome === "refused"
+				? `Visa refused${note ? ` — ${note}` : ""}`
+				: visaOutcome === "approved"
+					? `Visa approved${note ? ` — ${note}` : ""}`
+					: `Visa stage → ${stage}`,
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});

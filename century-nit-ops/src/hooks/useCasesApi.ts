@@ -20,6 +20,7 @@ import {
 	type StudentScholarship,
 	type VisaStage,
 	type JourneyStage,
+	type PackageCode,
 	type UpdateSchoolStatus,
 	type StageHandoff,
 	type StageHandoffDecision,
@@ -41,6 +42,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 	return {
 		id: row.id,
 		applicantId: row.applicantId,
+		updatedAt: row.updatedAt,
 		applicantUserId: row.applicantUserId ?? null,
 		ref: row.reference,
 		bookingId: row.bookingId,
@@ -133,6 +135,7 @@ function toApplication(row: ApiApplication): MockApplication {
 		id: row.id,
 		appId: row.appNumber,
 		applicantId: row.applicantId,
+		updatedAt: row.updatedAt,
 		applicantName: row.applicantName,
 		email: row.email,
 		phone: row.phone ?? "",
@@ -210,6 +213,7 @@ function toApplicant(row: ApiApplicant, allApps: ApiApplication[]): MockApplican
 	return {
 		id: row.id,
 		applicantId: row.id.slice(0, 8).toUpperCase(),
+		updatedAt: row.updatedAt,
 		name: row.name,
 		email: row.email,
 		phone: row.phone ?? "",
@@ -465,6 +469,21 @@ export function useCasesApi() {
 				method: "PATCH",
 				body: JSON.stringify({ paymentPlanId: plan }),
 			});
+			await refresh();
+		},
+		/** Correct the school allowance or payment plan. Package changes go through selectPackage. */
+		updateCaseFacts: async (appId: string, input: { paymentPlanId?: string; targetSchoolCount?: number | null }) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.patch(app.id, input));
+			await refresh();
+		},
+		/** Bind the service package on the client's behalf — same server flow as the portal's, repricing included. */
+		selectPackage: async (appId: string, input: { packageCode: PackageCode; degreeLevel: string; targetSchoolCount?: number }) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			const res = await applicationsApi.choosePackage(app.id, input);
+			replaceApplication(res.application);
 			await refresh();
 		},
 		togglePreDepartureTask: async (appId: string, taskId: string) => {

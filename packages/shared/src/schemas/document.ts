@@ -41,6 +41,13 @@ export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 export const requestUploadSchema = z.object({
 	/** Which required document this satisfies, e.g. "passport". */
 	documentType: z.string().min(1).max(64),
+	/**
+	 * Staff only: upload on behalf of this applicant (official agency
+	 * artifacts — visa receipts, flight bookings). The server refuses every
+	 * other document type on another owner's record; client documents must be
+	 * uploaded by the client.
+	 */
+	ownerUserId: z.string().uuid().optional(),
 	fileName: z.string().min(1).max(255),
 	contentType: z.enum(ALLOWED_DOCUMENT_TYPES, {
 		errorMap: () => ({ message: "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX)" }),

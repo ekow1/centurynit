@@ -523,11 +523,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			<CaseTabs tabs={tabs} current={current} onChange={setTab} nowId={stageTab} />
 
 
-			{current === "overview" && <OverviewTab app={app} flash={flash} fail={fail} />}
+			{current === "overview" && <OverviewTab app={app} consultation={consultation} canWork={canWork} flash={flash} fail={fail} />}
 
 			{current === "consultation" && consultation && <ConsultationTab app={app} consultation={consultation} />}
 
-			{current === "enrolment" && <EnrolmentTab app={app} caseInvoices={caseInvoices} canIssueInvoices={canIssueInvoices} />}
+			{current === "enrolment" && <EnrolmentTab app={app} caseInvoices={caseInvoices} canIssueInvoices={canIssueInvoices} canWork={canWork} flash={flash} fail={fail} />}
 
 			{current === "application" && (
 				<ApplicationsTab

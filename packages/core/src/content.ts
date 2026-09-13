@@ -2450,6 +2450,8 @@ export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
 	sponsorship: "FINANCIAL",
 	recommendation: "ACADEMIC",
 	photo: "IDENTITY",
+	visa_receipt: "OFFICIAL",
+	flight_receipt: "OFFICIAL",
 	additional: "OTHER",
 };
 

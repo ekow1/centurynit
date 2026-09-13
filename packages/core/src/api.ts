@@ -761,13 +761,19 @@ export const documentsApi = {
 	async upload(
 		file: File,
 		documentType: string,
-		options: { signal?: AbortSignal; onProgress?: (percent: number) => void } = {},
+		options: {
+			signal?: AbortSignal;
+			onProgress?: (percent: number) => void;
+			/** Staff only: place an official artifact on this applicant's record. */
+			ownerUserId?: string;
+		} = {},
 	): Promise<ApplicantDocument> {
 		const ticket = await documentsApi.requestUpload({
 			documentType,
 			fileName: file.name,
 			contentType: file.type as RequestUpload["contentType"],
 			sizeBytes: file.size,
+			ownerUserId: options.ownerUserId,
 		});
 
 		try {
@@ -930,6 +936,30 @@ export const applicationsApi = {
 			method: "POST",
 			...json({ stage, note, outcome }),
 		});
+	},
+	/**
+	 * Staff-side package selection — binds `packageId`/`fundingTrack`, sets the
+	 * school allowance, voids prior unpaid agency proformas and raises a fresh
+	 * one. Same service as the applicant's own `/me/application/package`.
+	 */
+	choosePackage(id: string, input: ChoosePackage): Promise<{ application: ApiApplication; proformaInvoice: ApiInvoice | null }> {
+		return request(`${API_PREFIX}/applications/${id}/package`, { method: "POST", ...json(input) });
+	},
+	/**
+	 * Correct patchable case facts. The package (`fundingTrack`) is not
+	 * patchable — changing it re-prices invoices, so it goes through
+	 * `choosePackage` only.
+	 */
+	patch(
+		id: string,
+		input: {
+			paymentPlanId?: string;
+			targetSchoolCount?: number | null;
+			notes?: string;
+			visaCounselorNote?: string;
+		},
+	): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}`, { method: "PATCH", ...json(input) });
 	},
 	comment(id: string, input: AddCommentInput): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/comments`, {

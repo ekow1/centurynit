@@ -1,4 +1,5 @@
 import { useCases } from "../../../hooks/useCases";
+import { useOpsAuth } from "../../OpsAuthContext";
 
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
@@ -43,6 +44,7 @@ export function DepartureTab({
 	onInvoicesChanged: () => void;
 }) {
 	const { togglePreDepartureTask, refresh } = useCases();
+	const { hasPermission } = useOpsAuth();
 	const pdProg = preDepartureProgress(app.preDepartureTasks);
 	const pdCats = Object.keys(PRE_DEPARTURE_CATEGORIES);
 	return (
@@ -75,6 +77,8 @@ export function DepartureTab({
 						invoice={caseInvoices.find((i) => i.type === "travel") ?? null}
 						canWork={canWork}
 						canIssueInvoices={canIssueInvoices}
+						canUploadArtifacts={hasPermission("documents")}
+						ownerUserId={app.applicantUserId}
 						feeBlock={feeBlock}
 						onChanged={() => {
 							void refresh();

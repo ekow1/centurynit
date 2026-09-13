@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { z } from "zod";
 
 import { and, desc, eq, isNull, not } from "drizzle-orm";
 import { db } from "../db/index.js";
@@ -41,6 +42,7 @@ import {
 
 
 
+	setApplicationPackage,
 	setApplicationStage,
 	setApplicationVisaStage,
 
@@ -91,6 +93,7 @@ import {
 	applicationSchema,
 	assignCaseSchema,
 	CASE_ERROR_CODES,
+	choosePackageSchema,
 
 
 
@@ -281,6 +284,55 @@ applicationsRouter.openapi(
 		await assertApplicationAccess(c, id, "update");
 		const updated = await updateApplication(id, c.req.valid("json"), actorFrom(staff));
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * Staff-side package selection — the same service the applicant's
+ * `/me/application/package` uses, so eligibility, consent, invoice voiding
+ * and repricing behave identically. Never set `fundingTrack` by hand: it is
+ * one half of this transaction, not a standalone field.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/package",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: choosePackageSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							application: applicationSchema,
+							proformaInvoice: invoiceSchema.nullable(),
+						}),
+					},
+				},
+				description: "Package bound and proforma raised",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const row = await getApplication(id);
+		if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+		await assertApplicationAccess(c, id, "update");
+		const body = c.req.valid("json");
+		const { application: updated, proformaInvoice } = await setApplicationPackage({
+			id,
+			packageCode: body.packageCode,
+			degreeLevel: body.degreeLevel,
+			targetSchoolCount: body.targetSchoolCount,
+		});
+		return c.json({
+			application: await serializeApplication(updated),
+			proformaInvoice: proformaInvoice ? await serializeInvoice(proformaInvoice) : null,
+		});
 	},
 );
 

@@ -57,15 +57,18 @@ export function CaseTabs<T extends string>({
 	current,
 	onChange,
 	nowId,
+	pageLevel,
 }: {
 	tabs: CaseTab<T>[];
 	current: T;
 	onChange: (id: T) => void;
 	/** The chapter the case is in right now — gets the dot. */
 	nowId?: T | null;
+	/** Host is a full page, not a scaffold pane — no edge bleed. */
+	pageLevel?: boolean;
 }) {
 	return (
-		<div className="cn-tabs-sticky">
+		<div className={`cn-tabs-sticky${pageLevel ? " cn-tabs-sticky--page" : ""}`}>
 			<div className="cn-tabs" role="tablist">
 				{tabs.map((t) => (
 					<button

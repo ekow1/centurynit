@@ -368,13 +368,25 @@ export function ApplicationsTab({
 								const admitted = schools.filter((s) => s.outcome === "Admitted").length;
 								const pending = schools.filter((s) => s.status !== "Decision Reached").length;
 								const rejected = schools.filter((s) => s.outcome === "Application Rejected" || s.outcome === "Withdrawn").length;
+								const cap = app.targetSchoolCount ?? null;
+								const over = cap != null && cap > 0 && total > cap;
 								return (
-									<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
-										<span>{total} school{total !== 1 ? "s" : ""}</span>
-										{admitted > 0 ? <span style={{ fontWeight: 700 }}>{admitted} admitted</span> : null}
-										{pending > 0 ? <span>{pending} pending</span> : null}
-										{rejected > 0 ? <span style={{ color: "var(--danger, #b91c1c)" }}>{rejected} rejected/declined</span> : null}
-									</div>
+									<>
+										<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
+											<span>{total} school{total !== 1 ? "s" : ""}{cap ? ` of ${cap} allowed` : ""}</span>
+											{admitted > 0 ? <span style={{ fontWeight: 700 }}>{admitted} admitted</span> : null}
+											{pending > 0 ? <span>{pending} pending</span> : null}
+											{rejected > 0 ? <span style={{ color: "var(--danger, #b91c1c)" }}>{rejected} rejected/declined</span> : null}
+										</div>
+										{over && (
+											<div style={{ border: "1px solid var(--foreground)", padding: "0.6rem 0.75rem", marginBottom: "0.75rem" }}>
+												<span className="wf-badge wf-badge--warn">Over allowance</span>
+												<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>
+													{total} schools tracked against a {cap}-school package. Confirm the client has paid for the extra applications before sending them.
+												</p>
+											</div>
+										)}
+									</>
 								);
 							})()}
 							{app.schoolApplications && app.schoolApplications.length > 0 ? (

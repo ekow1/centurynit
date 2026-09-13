@@ -4,6 +4,7 @@ import { applicationsApi, ApiError } from "century-nit-core/api";
 import { InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../../lib/api";
+import { ArtifactCard } from "./ArtifactCard";
 
 /**
  * One travel request as ops works it — one path, one card:
@@ -166,6 +167,8 @@ export function TravelCard({
 	invoice,
 	canWork,
 	canIssueInvoices,
+	canUploadArtifacts = false,
+	ownerUserId = null,
 	feeBlock = null,
 	onChanged,
 }: {
@@ -175,6 +178,10 @@ export function TravelCard({
 	canWork: boolean;
 	/** Holds the invoices module — sees the Review & issue link. */
 	canIssueInvoices: boolean;
+	/** Holds the documents module — may place the flight receipt on the client's record. */
+	canUploadArtifacts?: boolean;
+	/** Portal user the flight receipt belongs to. */
+	ownerUserId?: string | null;
 	/** Why the ticket cannot be invoiced yet (the pre-departure fee milestone), or null. */
 	feeBlock?: string | null;
 	onChanged: () => void;
@@ -286,6 +293,15 @@ export function TravelCard({
 					onSubmit={({ flight, confirmationCode }) =>
 						void run(() => applicationsApi.recordTravelBooking(ta.id, { ...flight, confirmationCode }))
 					}
+				/>
+			)}
+			{(status === "ticket_paid" || status === "booked") && ownerUserId && (
+				<ArtifactCard
+					ownerUserId={ownerUserId}
+					documentType="flight_receipt"
+					title="Flight booking receipt"
+					hint="The issued ticket or booking confirmation — shared with the client via their document vault."
+					canUpload={canUploadArtifacts}
 				/>
 			)}
 			{error && <p className="cn-assign__error">{error}</p>}

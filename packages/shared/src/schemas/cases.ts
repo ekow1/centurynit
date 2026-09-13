@@ -354,6 +354,13 @@ export const patchApplicationSchema = z.object({
 	paymentPlanId: z.string().optional(),
 	preDepartureTasks: z.array(preDepartureTaskSchema).optional(),
 	notes: z.string().optional(),
+	/**
+	 * Correction of the school allowance only. The package itself
+	 * (`fundingTrack`/`packageId`) is deliberately absent — changing it
+	 * re-prices and re-links invoices, so it goes through
+	 * `POST /{id}/package`, never a bare patch.
+	 */
+	targetSchoolCount: z.number().int().min(1).max(10).nullable().optional(),
 }).partial();
 
 export const applicantSchema = z.object({

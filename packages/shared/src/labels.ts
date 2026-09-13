@@ -309,3 +309,16 @@ export const TASK_GROUP_LABELS = {
 	waiting_client: "Waiting on client",
 	waiting_finance: "Waiting on finance",
 } as const;
+
+/* ── Workspace ────────────────────────────────────────────────────────────── */
+
+/**
+ * The two views inside the Workspace — the queue waiting to be cleared versus
+ * the workload each person is carrying.
+ */
+export const WORKSPACE_TAB_LABELS = {
+	worklist: "Worklist",
+	caseload: "Caseload",
+} as const;
+
+export type WorkspaceTab = keyof typeof WORKSPACE_TAB_LABELS;

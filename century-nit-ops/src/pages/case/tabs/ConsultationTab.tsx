@@ -17,6 +17,16 @@ export function ConsultationTab({ app, consultation }: { app: MockApplication; c
 					<div><p className="muted text-xs">Status</p><p>{consultation.status}</p></div>
 					<div><p className="muted text-xs">Target country</p><p>{consultation.targetCountry || "—"}</p></div>
 					<div><p className="muted text-xs">Degree level</p><p>{consultation.goals?.degreeLevel || app.degreeLevel || "—"}</p></div>
+					{consultation.meetingLink && (
+						<div>
+							<p className="muted text-xs">Meeting link</p>
+							<p>
+								<a href={consultation.meetingLink} target="_blank" rel="noreferrer" className="link-arrow">
+									Join meeting ↗
+								</a>
+							</p>
+						</div>
+					)}
 				</div>
 				<p style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
 					<button type="button" className="link-arrow" onClick={() => navigate(`/consultations?id=${consultation.id}`)}>

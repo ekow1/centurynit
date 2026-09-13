@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth } from "../../OpsAuthContext";
 import { useCases } from "../../../hooks/useCases";
 import { InvoiceCard, StatusPill } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
-import type { ApiInvoice } from "../../../lib/api";
+import { getApplicationActivity, type ApiInvoice } from "../../../lib/api";
 import type { Flash, Fail } from "./types";
-import { VISA_STAGE_LABELS, type StageHandoff, type VisaStage } from "century-nit-shared";
+import { VISA_STAGE_LABELS, type ApplicationActivityEvent, type StageHandoff, type VisaStage } from "century-nit-shared";
+import { ArtifactCard } from "../ArtifactCard";
 
 const VISA_STEPS: { id: VisaStage; label: string }[] = [
 	{ id: "pending", label: VISA_STAGE_LABELS.pending },
@@ -33,10 +34,33 @@ export function VisaTab({
 	flash: Flash;
 	fail: Fail;
 }) {
-	const { opsRole } = useOpsAuth();
+	const { opsRole, hasPermission } = useOpsAuth();
 	const { setVisaStage, setVisaCounselorNote } = useCases();
 	const [noteDraft, setNoteDraft] = useState("");
 	const [editingNote, setEditingNote] = useState(false);
+	const [refusing, setRefusing] = useState(false);
+	const [refusalReason, setRefusalReason] = useState("");
+
+	// Visa decisions are written to the case timeline as status comments
+	// ("Visa refused" / "Visa approved"). Reading them back gives the attempts
+	// log — a reopened case keeps its earlier refusals visible.
+	const [activityFor, setActivityFor] = useState<{ id: string; events: ApplicationActivityEvent[] } | null>(null);
+	useEffect(() => {
+		let alive = true;
+		getApplicationActivity(app.id)
+			.then((res) => {
+				if (alive) setActivityFor({ id: app.id, events: res.events });
+			})
+			.catch(() => {
+				if (alive) setActivityFor({ id: app.id, events: [] });
+			});
+		return () => {
+			alive = false;
+		};
+	}, [app.id, app.visaStage, app.visaOutcome]);
+	const decisions = (activityFor?.id === app.id ? activityFor.events : [])
+		.filter((e) => typeof e.detail === "string" && /^Visa (refused|approved)/.test(e.detail))
+		.sort((a, b) => a.at.localeCompare(b.at));
 	function advanceVisa() {
 		const cur = app.visaStage ?? "locked";
 		if (cur === "awaiting_handler") return;
@@ -191,11 +215,7 @@ export function VisaTab({
 														</button>
 														<button
 															type="button"
-															onClick={() =>
-																void setVisaStage(app.appId, "decision", undefined, "refused")
-																	.then(() => flash("Visa refusal recorded."))
-																	.catch((e) => fail(e, "Could not record the decision"))
-															}
+															onClick={() => setRefusing(true)}
 															className="btn btn--ghost btn--sm"
 														>
 															Refused
@@ -218,9 +238,95 @@ export function VisaTab({
 									);
 								})}
 							</div>
+							{/* Recording a refusal asks for the reason — it lands on the
+							    timeline so the next attempt can see why the last one failed. */}
+							{refusing && app.visaStage === "decision" && (
+								<div className="mt-3" style={{ border: "1px solid var(--foreground)", padding: "0.75rem" }}>
+									<p className="muted text-xs mb-1">Refusal reason — kept on record for the next attempt</p>
+									<textarea
+										className="input"
+										rows={2}
+										maxLength={2000}
+										value={refusalReason}
+										onChange={(e) => setRefusalReason(e.target.value)}
+										placeholder="e.g. Insufficient ties to home country; missing financial evidence"
+										autoFocus
+									/>
+									<div className="cn-assign__row mt-2">
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											disabled={!refusalReason.trim()}
+											onClick={() =>
+												void setVisaStage(app.appId, "decision", refusalReason.trim(), "refused")
+													.then(() => {
+														flash("Visa refusal recorded.");
+														setRefusing(false);
+														setRefusalReason("");
+													})
+													.catch((e) => fail(e, "Could not record the decision"))
+											}
+										>
+											Record refusal
+										</button>
+										<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setRefusing(false); setRefusalReason(""); }}>
+											Cancel
+										</button>
+									</div>
+								</div>
+							)}
+							{/* Prior decisions survive a reopen — refusals stay on record. */}
+							{decisions.length > 0 && (
+								<div className="mt-3">
+									<p className="muted mb-1" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+										Visa attempts
+									</p>
+									<div className="cn-stack">
+										{[...decisions].reverse().map((e, i) => {
+											const attemptNo = decisions.length - i;
+											const refused = e.detail!.startsWith("Visa refused");
+											const reason = e.detail!.split(" — ").slice(1).join(" — ").trim();
+											return (
+												<div
+													key={e.id}
+													style={{
+														display: "flex",
+														justifyContent: "space-between",
+														alignItems: "center",
+														gap: "0.75rem",
+														padding: "0.5rem 0.75rem",
+														border: "1px solid var(--border-light)",
+													}}
+												>
+													<div>
+														<p className="text-sm--strong">Attempt {attemptNo}</p>
+														<p className="muted text-xs">
+															{new Date(e.at).toLocaleDateString(undefined, { dateStyle: "medium" })}
+															{e.actorName ? ` · ${e.actorName}` : ""}
+														</p>
+														{reason && <p className="muted text-xs">{reason}</p>}
+													</div>
+													<StatusPill tone={refused ? "blocked" : "done"} dot>
+														{refused ? "Refused" : "Approved"}
+													</StatusPill>
+												</div>
+											);
+										})}
+									</div>
+								</div>
+							)}
 							</>
 							)}
 						</div>
+
+						{/* Official artifact — uploaded on the client's behalf, lands in their vault. */}
+						<ArtifactCard
+							ownerUserId={app.applicantUserId}
+							documentType="visa_receipt"
+							title="Visa application receipt"
+							hint="The embassy or VFS submission receipt — shared with the client via their document vault."
+							canUpload={hasPermission("documents")}
+						/>
 
 						{/* Counselor Note */}
 						<div className="card">

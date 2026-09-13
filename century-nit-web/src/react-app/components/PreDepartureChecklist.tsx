@@ -109,17 +109,17 @@ export function PreDepartureChecklist({
 			<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
 				<p className="eyebrow">Pre-departure checklist</p>
 				<span className="mono muted" style={{ fontSize: "0.8rem" }}>
-					{requiredDone}/{required.length} required done
+					{requiredDone}/{required.length} from Century NIT done
 				</span>
 			</div>
 			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
-				{requiredDone === required.length ? "Everything required is done — you can complete your journey below." : "Tick yours as you go; Century NIT closes its own. Required items must be done before you complete your journey."}
+				{requiredDone === required.length ? "Everything Century NIT owes you is done — you can complete your journey below." : "Century NIT closes what it does for you; your own list is a set of reminders for the move — tick them as you go, they never hold you back."}
 			</p>
 
 			{mine.length > 0 ? (
 				<>
 					<p className="eyebrow mt-4" style={{ fontSize: "0.7rem" }}>
-						Yours
+						Your own reminders
 					</p>
 					<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 						{mine.map((t) => (
@@ -131,7 +131,7 @@ export function PreDepartureChecklist({
 			{theirs.length > 0 ? (
 				<>
 					<p className="eyebrow mt-4" style={{ fontSize: "0.7rem" }}>
-						Century NIT
+						What Century NIT does for you
 					</p>
 					<ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
 						{theirs.map((t) => (

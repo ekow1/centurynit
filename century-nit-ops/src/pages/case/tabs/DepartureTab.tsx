@@ -270,7 +270,7 @@ export function DepartureTab({
 					</div>
 					<p className="text-sm mb-3">
 						<span className="muted">Next · </span>
-						{checklistDone ? "Every required item is closed — the case can be completed from Money." : `${requiredTotal - requiredDone} required item${requiredTotal - requiredDone === 1 ? "" : "s"} open.`}
+						{checklistDone ? "Century's deliverables are all closed — the case can be completed from Money." : `${requiredTotal - requiredDone} of Century's deliverable${requiredTotal - requiredDone === 1 ? "" : "s"} still open.`}
 					</p>
 
 					{tasks.length === 0 ? (
@@ -284,7 +284,7 @@ export function DepartureTab({
 									<div key={owner} style={{ border: "1px solid var(--border-light)", padding: "0.75rem" }}>
 										<p className="text-sm--strong">{owner === "century" ? "Century's items" : "Client's items"}</p>
 										<p className="muted text-xs mb-2">
-											{owner === "century" ? "The departure officer closes these." : "The client ticks these in the portal; tick on their word, or waive with a reason."}
+											{owner === "century" ? "Century's deliverables — the only items that gate completion. Closed by the officer, or by the fact (booking, briefing, pickup)." : "The client's own arrangements with the school and for the move — reminders they tick in the portal, never a gate."}
 										</p>
 										<div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
 											{rows.map((task) => {

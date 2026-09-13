@@ -2560,18 +2560,23 @@ export type PreDepartureTask = {
 
 /**
  * The pre-departure template. Seeded onto a case when Departure opens; the
- * per-country items are added from the destination. Century's items are the
- * officer's to tick; the client's are theirs, with proof where it says so.
+ * per-country items are added from the destination. Century is the client's
+ * consultant, not their school: only Century's own deliverables are required
+ * and gate completion; the client's arrangements with the school and for the
+ * move are reminders they tick for themselves. Proof items stay possible
+ * (the template editor can ask for one) but the standard list asks for none.
  */
 export const PRE_DEPARTURE_TASKS: PreDepartureTask[] = [
+	// Century's deliverables — the only items that gate completion. The officer closes them (or the system does, from the fact).
 	{ id: "pd-briefing", category: "orientation", owner: "century", required: true, label: "Pre-departure briefing", detail: "Your consultant walks you through arrival, the first week and who to call.", done: false },
 	{ id: "pd-flights", category: "travel", owner: "century", required: true, label: "Flight booked", detail: "Booked by Century NIT, or confirmed if you booked it yourself.", done: false },
 	{ id: "pd-airport", category: "travel", owner: "century", required: true, label: "Airport pickup arranged", detail: "Your university's pickup, or one we arrange — you will get the details before you fly.", done: false },
 	{ id: "pd-visa-copy", category: "documents", owner: "century", required: true, label: "Visa, passport and admission copies filed", detail: "Digital copies in your vault; carry printed copies in your hand luggage.", done: false },
-	{ id: "pd-accommodation", category: "accommodation", owner: "client", evidence: "accommodation_proof", required: true, label: "Accommodation confirmed", detail: "On-campus housing or a private rental — upload the confirmation.", done: false },
-	{ id: "pd-insurance", category: "health", owner: "client", evidence: "insurance", required: true, label: "Health insurance arranged", detail: "International student cover or the university's plan — upload the certificate.", done: false },
-	{ id: "pd-tuition", category: "finance", owner: "client", required: true, label: "Tuition payment plan confirmed", detail: "Confirm deadlines and how you will pay with your university.", done: false },
-	{ id: "pd-orientation", category: "orientation", owner: "client", required: true, label: "Registered for orientation", detail: "Sign up for international student orientation.", done: false },
+	// The client's own arrangements with the school and for the move — reminders, never a gate.
+	{ id: "pd-accommodation", category: "accommodation", owner: "client", required: false, label: "Accommodation confirmed", detail: "On-campus housing or a private rental, arranged with your school.", done: false },
+	{ id: "pd-insurance", category: "health", owner: "client", required: false, label: "Health insurance arranged", detail: "International student cover or the university's plan.", done: false },
+	{ id: "pd-tuition", category: "finance", owner: "client", required: false, label: "Tuition payment plan confirmed", detail: "Confirm deadlines and how you will pay with your university.", done: false },
+	{ id: "pd-orientation", category: "orientation", owner: "client", required: false, label: "Registered for orientation", detail: "Sign up for international student orientation.", done: false },
 	{ id: "pd-vaccinations", category: "health", owner: "client", required: false, label: "Vaccinations checked", detail: "Review what your destination requires.", done: false },
 	{ id: "pd-budget", category: "finance", owner: "client", required: false, label: "Banking access set up", detail: "A local account or an international card that works on arrival.", done: false },
 	{ id: "pd-utilities", category: "accommodation", owner: "client", required: false, label: "Utilities arranged", detail: "If renting privately: internet, electricity and water.", done: false },

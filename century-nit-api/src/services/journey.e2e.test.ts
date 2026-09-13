@@ -312,11 +312,16 @@ describe("the applicant journey, end to end", () => {
 		expect(await seedPreDepartureTasks(appId)).toBe(true);
 		expect(await seedPreDepartureTasks(appId)).toBe(false);
 		const appRow = () => db.select().from(applications).where(eq(applications.id, appId)).then((r) => r[0]);
+		// Only Century's deliverables are required; the client's reminders never gate.
+		let resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.filter((t) => t.required).every((t) => t.owner === "century")).toBe(true);
+		// A country or the template editor can ask for proof on an item — make insurance one for this case.
+		await db.update(applications).set({ preDepartureTasks: resolved.map((t) => (t.id === "pd-insurance" ? { ...t, evidence: "insurance", required: true } : t)) }).where(eq(applications.id, appId));
 		// The client cannot close Century's items, nor a proof item by ticking.
 		await expect(setPreDepartureTask(appId, "pd-briefing", { done: true }, { kind: "client", name: "Ama" })).rejects.toMatchObject({ code: "NOT_YOUR_ITEM" });
 		await expect(setPreDepartureTask(appId, "pd-insurance", { done: true }, { kind: "client", name: "Ama" })).rejects.toMatchObject({ code: "PROOF_REQUIRED" });
 		await setPreDepartureTask(appId, "pd-orientation", { done: true }, { kind: "client", name: "Ama" });
-		let resolved = await resolvePreDepartureTasks(await appRow());
+		resolved = await resolvePreDepartureTasks(await appRow());
 		expect(resolved.find((t) => t.id === "pd-orientation")).toMatchObject({ done: true, doneBy: "client" });
 		expect(resolved.find((t) => t.id === "pd-insurance")).toMatchObject({ done: false, proofStatus: "PENDING_UPLOAD" });
 		// The upload shows as under review; verification closes the item with the verifier's name.
@@ -329,10 +334,10 @@ describe("the applicant journey, end to end", () => {
 		await db.update(applicantDocuments).set({ status: "VERIFIED", reviewedBy: staff.handler, reviewedAt: new Date() }).where(eq(applicantDocuments.id, doc.id));
 		resolved = await resolvePreDepartureTasks(await appRow());
 		expect(resolved.find((t) => t.id === "pd-insurance")).toMatchObject({ done: true, proofStatus: "VERIFIED", doneBy: "Handler" });
-		// The officer waives a required item with a reason; advice items never gate.
-		await setPreDepartureTask(appId, "pd-accommodation", { done: false, waivedReason: "Staying with family — no tenancy" }, { kind: "staff", name: "Handler", opsUserId: staff.handler });
+		// The officer waives a required item with a reason.
+		await setPreDepartureTask(appId, "pd-visa-copy", { done: false, waivedReason: "Client keeps their own copies — filed with the school" }, { kind: "staff", name: "Handler", opsUserId: staff.handler });
 		resolved = await resolvePreDepartureTasks(await appRow());
-		expect(resolved.find((t) => t.id === "pd-accommodation")?.waivedReason).toContain("family");
+		expect(resolved.find((t) => t.id === "pd-visa-copy")?.waivedReason).toContain("copies");
 		// Recording the briefing and the pickup closes those items — the fact is the tick.
 		await updateDepartureDetails(appId, { briefingAt: "2027-06-01T10:00:00.000Z", pickupBy: "University shuttle", reportBy: "2027-08-20T12:00:00.000Z" }, ACTOR);
 		resolved = await resolvePreDepartureTasks(await appRow());

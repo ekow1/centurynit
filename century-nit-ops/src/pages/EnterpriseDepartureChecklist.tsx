@@ -231,7 +231,7 @@ export function EnterpriseDepartureChecklist() {
 				<div>
 					<h2 className="section-title">Departure checklist</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						What every case is asked to do before flying, seeded when the visa is approved. Century's items are the departure officer's to close; the client's are theirs — with proof where it says so. Changes apply to cases reaching Departure from now on.
+						What happens before a client flies, seeded when the visa is approved. Century is the client's consultant, not their school: Century's own deliverables are required and gate completion; the client's arrangements with the school and for the move are reminders. Ask for proof on an item only where Century needs to see it. Changes apply to cases reaching Departure from now on.
 					</p>
 				</div>
 			</div>

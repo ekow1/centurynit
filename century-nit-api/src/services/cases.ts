@@ -313,7 +313,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		checklist: row.checklist ?? [],
 		visaStage: row.visaStage,
 		visaOutcome: (row.visaOutcome as "approved" | "refused" | null) ?? null,
-		visaInvoicePaid: row.visaInvoicePaid,
+		visaInvoicePaid: await visaCostsSettled(row),
 		visaCounselorNote: row.visaCounselorNote,
 		visaDetails: (row.visaDetails ?? {}) as ApiApplication["visaDetails"],
 		departureDetails: (row.departureDetails ?? {}) as ApiApplication["departureDetails"],
@@ -324,7 +324,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
 		depositPaid: row.depositPaid,
-		appFeePaid: row.appFeePaid,
+		appFeePaid: await applicationFeesSettled(row),
 		travelInvoicePaid: row.travelInvoicePaid,
 		requestedDocuments: row.requestedDocuments ?? [],
 		documentChecklist,
@@ -1370,21 +1370,55 @@ export async function visaCostLinesFor(app: ApplicationRow): Promise<{ label: st
 	return lines;
 }
 
-/** No application fees for the chosen schools: nothing to invoice, submissions can start. */
+/**
+ * Whether the application fees are settled — paid, or nothing due. The
+ * `app_fee_paid` column is derived by the ledger trigger from paid invoices
+ * alone, so "nothing due" (no school charges a fee, no add-on) has to be
+ * read from the catalogue every time; a flag would be undone by the next
+ * invoice change. Every gate reads this, not the column.
+ */
+export async function applicationFeesSettled(row: { id: string; appFeePaid: boolean }): Promise<boolean> {
+	if (row.appFeePaid) return true;
+	// "Nothing due" was recorded when the fees were raised and there were none —
+	// and still holds only while the chosen schools charge nothing.
+	return (await nothingDueRecorded(row.id, NOTHING_DUE_TEXT)) && (await applicationFeeLinesFor(row.id)).length === 0;
+}
+
+/** Whether the visa costs are settled — paid, or recorded as none for the destination (and still none). */
+export async function visaCostsSettled(row: ApplicationRow): Promise<boolean> {
+	if (row.visaInvoicePaid) return true;
+	return (await nothingDueRecorded(row.id, VISA_NOTHING_DUE_TEXT)) && (await visaCostLinesFor(row)).length === 0;
+}
+
+async function nothingDueRecorded(applicationId: string, text: string): Promise<boolean> {
+	const [row] = await db
+		.select({ id: caseComments.id })
+		.from(caseComments)
+		.where(and(eq(caseComments.targetId, applicationId), eq(caseComments.text, text)))
+		.limit(1);
+	return Boolean(row);
+}
+
+/** No application fees for the chosen schools: nothing to invoice, submissions can start. Recorded once, for the client. */
 export async function markApplicationFeesNotDue(applicationId: string, byName: string): Promise<void> {
-	const [row] = await db.select({ appFeePaid: applications.appFeePaid }).from(applications).where(eq(applications.id, applicationId)).limit(1);
-	if (!row || row.appFeePaid) return;
-	await db.update(applications).set({ appFeePaid: true, updatedAt: new Date() }).where(eq(applications.id, applicationId));
+	const [already] = await db
+		.select({ id: caseComments.id })
+		.from(caseComments)
+		.where(and(eq(caseComments.targetId, applicationId), eq(caseComments.text, NOTHING_DUE_TEXT)))
+		.limit(1);
+	if (already) return;
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: applicationId,
 		kind: "status",
 		visibility: "applicant",
-		text: "No university application fees are due for the chosen schools — nothing to pay before submissions start.",
+		text: NOTHING_DUE_TEXT,
 		authorName: byName,
 		authorOpsUserId: null,
 	});
 }
+const NOTHING_DUE_TEXT = "No university application fees are due for the chosen schools — nothing to pay before submissions start.";
+const VISA_NOTHING_DUE_TEXT = "No visa costs are recorded for this destination — nothing to pay before visa processing starts.";
 
 /** Auto-raise the visa costs when entering visa_processing with no visa invoice — or record that none are due. */
 async function raiseVisaInvoiceForApplication(
@@ -1395,13 +1429,12 @@ async function raiseVisaInvoiceForApplication(
 	const clientUserId = applicant.userId ?? undefined;
 	const lines = await visaCostLinesFor(app);
 	if (lines.length === 0) {
-		await db.update(applications).set({ visaInvoicePaid: true, updatedAt: new Date() }).where(eq(applications.id, app.id));
 		await db.insert(caseComments).values({
 			targetType: "application",
 			targetId: app.id,
 			kind: "status",
 			visibility: "applicant",
-			text: "No visa costs are recorded for this destination — nothing to pay before visa processing starts.",
+			text: VISA_NOTHING_DUE_TEXT,
 			authorName: actor.name,
 			authorOpsUserId: actor.opsUserId ?? null,
 		});
@@ -1582,7 +1615,7 @@ export async function setApplicationStage(
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
-		appFeePaid: row.appFeePaid,
+		appFeePaid: await applicationFeesSettled(row),
 		paymentPlanId: row.paymentPlanId,
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
@@ -1739,7 +1772,7 @@ export async function applyHandoffResolvedTransition(input: {
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
-		appFeePaid: row.appFeePaid,
+		appFeePaid: await applicationFeesSettled(row),
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: await resolvePreDepartureTasks(row),
 	});
@@ -1988,9 +2021,8 @@ export async function setApplicationVisaStage(
 	// a manual advance here is only meaningful for staff nudging progress.
 	if (stage !== "locked" && row.visaStage === "locked") {
 		const clientInvoices = row.applicantId ? await listInvoicesForApplicant(row.applicantId) : [];
-		const hasPaidVisaInvoice = clientInvoices.some(
-			(i) => i.type === "visa" && i.status === "paid",
-		);
+		const hasPaidVisaInvoice =
+			clientInvoices.some((i) => i.type === "visa" && i.status === "paid") || (await visaCostsSettled(row));
 		if (!hasPaidVisaInvoice) {
 			throw new HttpError(
 				409,
@@ -2349,7 +2381,7 @@ export async function completeFromDeparture(input: {
 		visaStage: row.visaStage,
 		agencySettled: row.agencySettled,
 		agencyStageIndex: row.agencyStageIndex,
-		appFeePaid: row.appFeePaid,
+		appFeePaid: await applicationFeesSettled(row),
 		paymentPlanId: row.paymentPlanId,
 		preDepartureTasks: await resolvePreDepartureTasks(row),
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,

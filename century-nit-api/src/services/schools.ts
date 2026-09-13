@@ -426,12 +426,13 @@ export async function updateSchoolStatus(
 		? eq(applications.id, target.applicationId)
 		: eq(applications.applicantId, target.applicantId);
 	const [parentApp] = await db
-		.select({ appFeePaid: applications.appFeePaid })
+		.select({ id: applications.id, appFeePaid: applications.appFeePaid })
 		.from(applications)
 		.where(parentCondition)
 		.orderBy(desc(applications.createdAt))
 		.limit(1);
-	if (parentApp && !parentApp.appFeePaid) {
+	const { applicationFeesSettled } = await import("./cases.js");
+	if (parentApp && !(await applicationFeesSettled(parentApp))) {
 		throw new HttpError(
 			409,
 			"APP_FEE_NOT_PAID",

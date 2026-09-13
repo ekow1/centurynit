@@ -11,6 +11,7 @@ import { db } from "../db/index.js";
 import { applications, consultations, invoices, travelAssistanceRequests } from "../db/schema.js";
 import { activeHandlerFor } from "./handoffs.js";
 import { resolvePreDepartureTasks } from "./preDeparture.js";
+import { applicationFeesSettled, visaCostsSettled } from "./cases.js";
 import { listSchoolsForApplication } from "./schools.js";
 import { getStageConsent } from "./stageConsents.js";
 
@@ -109,10 +110,10 @@ export async function journeyForApplicant(
 		// The invoice starts as a proforma when the applicant locks schools;
 		// the handler must issue it before the applicant can pay.
 		appInvoiceIssued: invoiceIs("application", "issued", "partial", "paid"),
-		appInvoicePaid: Boolean(application?.appFeePaid) || invoiceIs("application", "paid"),
+		appInvoicePaid: Boolean(application && (await applicationFeesSettled(application))) || invoiceIs("application", "paid"),
 		hasAdmitted: schoolTracks.schools.some((s) => s.outcome === "Admitted"),
 		hasVisaConsent: visaConsent?.decision === "continue",
-		visaInvoicePaid: Boolean(application?.visaInvoicePaid) || invoiceIs("visa", "paid"),
+		visaInvoicePaid: Boolean(application && (await visaCostsSettled(application))) || invoiceIs("visa", "paid"),
 		visaDone: application?.visaStage === "complete" && application?.visaOutcome === "approved",
 		visaRefused: application?.visaOutcome === "refused",
 		travelAssistanceStatus: taRow?.status ?? null,

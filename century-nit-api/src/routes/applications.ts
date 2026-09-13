@@ -46,6 +46,7 @@ import {
 	setApplicationStage,
 	setApplicationVisaStage,
 	updateVisaDetails,
+	updateDepartureDetails,
 
 	toggleApplicationChecklist,
 	updateApplication,
@@ -118,6 +119,7 @@ import {
 	setStageSchema,
 	setVisaStageSchema,
 	updateVisaDetailsSchema,
+	updateDepartureDetailsSchema,
 	setPreDepartureTaskSchema,
 	toggleChecklistSchema,
 
@@ -640,6 +642,29 @@ applicationsRouter.openapi(
 		await assertApplicationAccess(c, id);
 		const staff = c.get("staff")!;
 		const updated = await setPreDepartureTask(id, taskId, c.req.valid("json"), { kind: "staff", name: staff.name, opsUserId: staff.opsUserId });
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── PATCH /applications/{id}/departure-details — the Departure facts ────── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/departure-details",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: updateDepartureDetailsSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "Departure facts recorded" },
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const updated = await updateDepartureDetails(c.req.valid("param").id, c.req.valid("json"), actorFrom(c.get("staff")!));
 		return c.json(await serializeApplication(updated));
 	},
 );

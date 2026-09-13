@@ -20,6 +20,8 @@ import {
 	type ProceedQuotation,
 	permissionsGrant,
 	type VisaDetails,
+	type DepartureDetails,
+	type PreDepartureTask,
 	VISA_STAGE_LABELS,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
@@ -314,6 +316,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote,
 		visaDetails: (row.visaDetails ?? {}) as ApiApplication["visaDetails"],
+		departureDetails: (row.departureDetails ?? {}) as ApiApplication["departureDetails"],
 		visaDocumentChecklist,
 		paymentPlanId: row.paymentPlanId,
 		packageId: row.packageId,
@@ -1837,6 +1840,92 @@ function describeVisaDetails(patch: VisaDetails | undefined, merged: VisaDetails
 }
 
 /** Record visa facts without moving the stage — the reference, the appointment, validity. */
+/* ── Departure facts ───────────────────────────────────────────────────── */
+
+function mergeDepartureDetails(current: DepartureDetails | null | undefined, patch: DepartureDetails): DepartureDetails {
+	const next: DepartureDetails = { ...(current ?? {}) };
+	for (const [k, v] of Object.entries(patch) as [keyof DepartureDetails, DepartureDetails[keyof DepartureDetails]][]) {
+		if (v === undefined) continue;
+		if (v === null || v === "") delete next[k];
+		else next[k] = v as never;
+	}
+	return next;
+}
+
+function describeDepartureDetails(patch: DepartureDetails, merged: DepartureDetails): string[] {
+	const lines: string[] = [];
+	if (patch.reportBy !== undefined) lines.push(merged.reportBy ? `Report to the school by ${VISA_DATE(merged.reportBy)}` : "Report-by date cleared");
+	if (patch.orientationAt !== undefined) lines.push(merged.orientationAt ? `Orientation — ${VISA_DATE(merged.orientationAt)}` : "Orientation date cleared");
+	if (patch.briefingAt !== undefined) lines.push(merged.briefingAt ? `Pre-departure briefing — ${VISA_DATETIME(merged.briefingAt)}` : "Briefing date cleared");
+	if (patch.pickupBy !== undefined || patch.pickupNote !== undefined) {
+		lines.push(merged.pickupBy ? `Airport pickup — ${merged.pickupBy}${merged.pickupNote ? ` · ${merged.pickupNote}` : ""}` : "Airport pickup cleared");
+	}
+	if (patch.accommodationAddress !== undefined || patch.accommodationMoveInAt !== undefined) {
+		lines.push(
+			merged.accommodationAddress || merged.accommodationMoveInAt
+				? `Accommodation — ${merged.accommodationAddress ?? "address to follow"}${merged.accommodationMoveInAt ? ` · from ${VISA_DATE(merged.accommodationMoveInAt)}` : ""}`
+				: "Accommodation cleared",
+		);
+	}
+	if (patch.emergencyContactName !== undefined || patch.emergencyContactPhone !== undefined || patch.emergencyContactRelation !== undefined) {
+		lines.push(
+			merged.emergencyContactName
+				? `Emergency contact abroad — ${merged.emergencyContactName}${merged.emergencyContactRelation ? ` (${merged.emergencyContactRelation})` : ""}${merged.emergencyContactPhone ? ` · ${merged.emergencyContactPhone}` : ""}`
+				: "Emergency contact cleared",
+		);
+	}
+	if (patch.arrivedAt !== undefined) lines.push(merged.arrivedAt ? `Arrived — ${VISA_DATE(merged.arrivedAt)}` : "Arrival date cleared");
+	return lines;
+}
+
+/**
+ * Record Departure facts. Recording the briefing closes the briefing item
+ * and recording the pickup closes the pickup item — the fact is the tick.
+ */
+export async function updateDepartureDetails(id: string, patch: DepartureDetails, actor: Actor): Promise<ApplicationRow> {
+	const row = await getApplication(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const merged = mergeDepartureDetails(row.departureDetails, patch);
+	const now = new Date().toISOString();
+	const tasks = ((row.preDepartureTasks ?? []) as PreDepartureTask[]).map((t) => {
+		if (t.id === "pd-briefing" && patch.briefingAt !== undefined) {
+			return merged.briefingAt ? { ...t, done: true, doneBy: t.done ? t.doneBy : actor.name, doneAt: t.done ? t.doneAt : now } : { ...t, done: false, doneBy: null, doneAt: null };
+		}
+		if (t.id === "pd-airport" && patch.pickupBy !== undefined) {
+			return merged.pickupBy ? { ...t, done: true, doneBy: t.done ? t.doneBy : actor.name, doneAt: t.done ? t.doneAt : now } : { ...t, done: false, doneBy: null, doneAt: null };
+		}
+		return t;
+	});
+	const [updated] = await db
+		.update(applications)
+		.set({ departureDetails: merged, preDepartureTasks: tasks, updatedAt: new Date() })
+		.where(eq(applications.id, id))
+		.returning();
+	const lines = describeDepartureDetails(patch, merged);
+	if (lines.length > 0) {
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: id,
+			kind: "status",
+			visibility: "applicant",
+			text: lines.join("\n"),
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId,
+		});
+		const clientUserId = await applicantUserIdOfApplication(id);
+		if (clientUserId && (patch.briefingAt || patch.pickupBy || patch.reportBy)) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "stage.changed",
+				title: "Before you fly",
+				body: lines[0],
+				link: "/portal/pre-departure",
+			}).catch(() => {});
+		}
+	}
+	return updated;
+}
+
 export async function updateVisaDetails(id: string, patch: VisaDetails, actor: Actor): Promise<ApplicationRow> {
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");

@@ -14,7 +14,7 @@ import {
 	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
+import type { DepartureDetails, PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
 
 /**
  * The flight a ticket invoice is for, and — with a PNR — the flight that was
@@ -1040,6 +1040,8 @@ export const applications = pgTable(
 		visaCounselorNote: text("visa_counselor_note"),
 		/** The facts of the visa application — reference, appointment, biometrics, decision, validity. */
 		visaDetails: jsonb("visa_details").$type<VisaDetails>().notNull().default({}),
+		/** The Departure chapter's facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
+		departureDetails: jsonb("departure_details").$type<DepartureDetails>().notNull().default({}),
 		/**
 		 * How the visa decision went. `complete` means approved; a refusal
 		 * keeps the stage at `decision` and records `refused` here so the case

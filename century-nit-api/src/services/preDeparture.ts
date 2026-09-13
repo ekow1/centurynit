@@ -2,7 +2,7 @@ import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { PRE_DEPARTURE_TASKS } from "century-nit-core/content";
 import { preDepartureTemplateSchema, type PreDepartureTask, type PreDepartureTemplateItem } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applicantDocuments, applicants, applications, caseComments, destinations, opsUsers, schoolApplications } from "../db/schema.js";
+import { applicantDocuments, applicants, applications, caseComments, destinations, opsUsers, schoolApplications, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { getSetting, writeSetting } from "./settings.js";
 
@@ -82,6 +82,7 @@ const RANK: Record<string, number> = { VERIFIED: 3, UPLOADED: 2, REJECTED: 1, PE
  * still closes an item; verification is the normal way.
  */
 export async function resolvePreDepartureTasks(row: {
+	id?: string;
 	applicantId: string;
 	preDepartureTasks: unknown;
 }): Promise<PreDepartureTask[]> {
@@ -101,6 +102,20 @@ export async function resolvePreDepartureTasks(row: {
 		proofStatus: null,
 		proofDocumentId: null,
 	}));
+	// "Flight booked" is the travel request's word: booked by Century, or the
+	// client booking their own (declined) — either way the case can fly.
+	if (row.id && tasks.some((t) => t.id === "pd-flights" && !t.done)) {
+		const [ta] = await db
+			.select({ status: travelAssistanceRequests.status, updatedAt: travelAssistanceRequests.updatedAt })
+			.from(travelAssistanceRequests)
+			.where(eq(travelAssistanceRequests.applicationId, row.id))
+			.limit(1);
+		if (ta && (ta.status === "booked" || ta.status === "declined")) {
+			for (const t of tasks) {
+				if (t.id === "pd-flights") Object.assign(t, { done: true, doneBy: ta.status === "booked" ? "Century NIT" : "client", doneAt: ta.updatedAt.toISOString() });
+			}
+		}
+	}
 	const types = tasks.map((t) => t.evidence).filter((e): e is string => Boolean(e));
 	if (types.length === 0) return tasks;
 	const [applicant] = await db.select({ userId: applicants.userId }).from(applicants).where(eq(applicants.id, row.applicantId)).limit(1);

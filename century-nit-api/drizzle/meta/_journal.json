@@ -596,6 +596,13 @@
       "when": 1789600013000,
       "tag": "0086_destination_departure_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1789600014000,
+      "tag": "0087_departure_details",
+      "breakpoints": true
     }
   ]
 }

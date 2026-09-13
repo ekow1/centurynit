@@ -5,7 +5,7 @@
  * Enterprise* pages can both import them without a circular reference.
  */
 
-import type { SchoolApplication, ProceedStatus, DocumentChecklistItem, VisaDetails } from "century-nit-shared";
+import type { SchoolApplication, ProceedStatus, DocumentChecklistItem, VisaDetails, DepartureDetails } from "century-nit-shared";
 import { INVOICE_STATUS_LABELS as SHARED_INVOICE_STATUS_LABELS } from "century-nit-shared";
 
 export type ConsultationStatus =
@@ -235,6 +235,8 @@ export interface MockApplication {
 	visaCounselorNote?: string;
 	/** The visa application's facts — reference, appointment, biometrics, decision, validity. */
 	visaDetails?: VisaDetails;
+	/** The Departure chapter's facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
+	departureDetails?: DepartureDetails;
 	/** The visa-stage documents and where each upload stands. */
 	visaDocumentChecklist?: DocumentChecklistItem[];
 	/** Payment plan selection (after visa invoice paid) */

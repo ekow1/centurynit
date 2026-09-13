@@ -25,6 +25,7 @@ import {
 	setApplicationPackage,
 	setApplicationVisaStage,
 	updateVisaDetails,
+	updateDepartureDetails,
 } from "./cases.js";
 import {
 	completeConsultationAssessment,
@@ -332,6 +333,15 @@ describe("the applicant journey, end to end", () => {
 		await setPreDepartureTask(appId, "pd-accommodation", { done: false, waivedReason: "Staying with family — no tenancy" }, { kind: "staff", name: "Handler", opsUserId: staff.handler });
 		resolved = await resolvePreDepartureTasks(await appRow());
 		expect(resolved.find((t) => t.id === "pd-accommodation")?.waivedReason).toContain("family");
+		// Recording the briefing and the pickup closes those items — the fact is the tick.
+		await updateDepartureDetails(appId, { briefingAt: "2027-06-01T10:00:00.000Z", pickupBy: "University shuttle", reportBy: "2027-08-20T12:00:00.000Z" }, ACTOR);
+		resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-briefing")).toMatchObject({ done: true, doneBy: "Manager" });
+		expect(resolved.find((t) => t.id === "pd-airport")).toMatchObject({ done: true });
+		expect((await appRow()).departureDetails).toMatchObject({ pickupBy: "University shuttle" });
+		await updateDepartureDetails(appId, { pickupBy: null }, ACTOR);
+		resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-airport")?.done).toBe(false);
 		await processConsentDecision({ userId: CLIENT_ID, stage: "visa", decision: "continue" });
 		expect(await stage()).toBe("visa_invoice");
 

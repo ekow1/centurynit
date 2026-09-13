@@ -40,7 +40,7 @@ import type {
 	VisaStage,
 	SchoolApplication,
 	SchoolApplicationList,
-	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind, VisaDetails, FeeCatalogue,
+	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind, VisaDetails, DepartureDetails, FeeCatalogue,
 	UpdateSchoolStatus,
 	LockSchools,
 	InitializePayment,
@@ -941,6 +941,10 @@ export const applicationsApi = {
 	/** Record visa facts (reference, appointment, validity…) without moving the stage. */
 	setVisaDetails(id: string, details: VisaDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/visa-details`, { method: "PATCH", ...json(details) });
+	},
+	/** Record Departure facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
+	setDepartureDetails(id: string, details: DepartureDetails): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/departure-details`, { method: "PATCH", ...json(details) });
 	},
 	/**
 	 * Staff-side package selection — binds `packageId`/`fundingTrack`, sets the

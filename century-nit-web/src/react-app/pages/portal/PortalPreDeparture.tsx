@@ -31,8 +31,20 @@ function TravelAssistanceInner() {
 	const destination =
 		schoolApplications.find((s) => s.id === application.acceptedSchoolId) ?? (admitted.length === 1 ? admitted[0] : null);
 	const vd = application.visaDetails ?? {};
+	const dd = application.departureDetails ?? {};
 	const day = (iso: string | null | undefined) =>
 		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
+	const when = (iso: string | null | undefined) =>
+		iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+	const daysUntil = (iso: string | null | undefined) => {
+		if (!iso) return null;
+		const t = new Date(iso).getTime();
+		return Number.isNaN(t) ? null : Math.ceil((t - Date.now()) / 86_400_000);
+	};
+	const flightAt = application.travelAssistance?.booking?.departAt ?? application.travelAssistance?.flight?.departAt ?? null;
+	const flyDays = daysUntil(flightAt);
+	const reportDays = daysUntil(dd.reportBy);
+	const hasFacts = Boolean(dd.reportBy || dd.orientationAt || dd.briefingAt || dd.pickupBy || dd.accommodationAddress || dd.emergencyContactName);
 
 	const ta = application.travelAssistance;
 	const [busy, setBusy] = useState(false);
@@ -297,6 +309,77 @@ function TravelAssistanceInner() {
 						</div>
 					</div>
 				</section>
+			)}
+
+			{/* Before you fly — the facts the officer recorded, and the days left. */}
+			{(flyDays !== null || hasFacts) && (
+				<div className="card card--pad mt-5" style={{ border: flyDays !== null && flyDays >= 0 && flyDays <= 14 ? "2px solid var(--foreground)" : undefined }}>
+					<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+						<p className="eyebrow">Before you fly</p>
+						{flyDays !== null && (
+							<span className="mono" style={{ fontSize: "0.85rem", fontWeight: 700 }}>
+								{flyDays > 0 ? `${flyDays} day${flyDays === 1 ? "" : "s"} to go` : flyDays === 0 ? "You fly today" : "Flown"}
+							</span>
+						)}
+					</div>
+					{flightAt && (
+						<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
+							{when(flightAt)}
+						</p>
+					)}
+					<ul className="portal-snapshot mt-3">
+						{dd.reportBy && (
+							<li>
+								<span>Report to your school by</span>
+								<strong>
+									{day(dd.reportBy)}
+									{reportDays !== null && reportDays >= 0 ? ` · ${reportDays} day${reportDays === 1 ? "" : "s"}` : ""}
+								</strong>
+							</li>
+						)}
+						{dd.orientationAt && (
+							<li>
+								<span>Orientation</span>
+								<strong>{day(dd.orientationAt)}</strong>
+							</li>
+						)}
+						{dd.briefingAt && (
+							<li>
+								<span>Pre-departure briefing</span>
+								<strong>{when(dd.briefingAt)}</strong>
+							</li>
+						)}
+						{dd.pickupBy && (
+							<li>
+								<span>Airport pickup</span>
+								<strong>
+									{dd.pickupBy}
+									{dd.pickupNote ? ` · ${dd.pickupNote}` : ""}
+								</strong>
+							</li>
+						)}
+						{dd.accommodationAddress && (
+							<li>
+								<span>Accommodation</span>
+								<strong>
+									{dd.accommodationAddress}
+									{dd.accommodationMoveInAt ? ` · from ${day(dd.accommodationMoveInAt)}` : ""}
+								</strong>
+							</li>
+						)}
+						{dd.emergencyContactName && (
+							<li>
+								<span>Emergency contact abroad</span>
+								<strong>
+									{dd.emergencyContactName}
+									{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}
+									{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}
+								</strong>
+							</li>
+						)}
+					</ul>
+					{!hasFacts && <p className="muted mt-2" style={{ fontSize: "0.85rem" }}>Your consultant adds the arrival details here as they are settled.</p>}
+				</div>
 			)}
 
 			{/* The checklist — one list with the departure officer; the client ticks theirs. */}

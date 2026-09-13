@@ -25,6 +25,7 @@ import {
 	usdFromCents,
 	type TravelAssistanceRequest,
 	type VisaDetails,
+	type DepartureDetails,
 	type DocumentChecklistItem,
 	type CaseComment,
 	type FeeCatalogue,
@@ -276,6 +277,8 @@ export type ApplicationData = {
 	visaOutcome: "approved" | "refused" | null;
 	/** The visa application's facts, as the officer records them. */
 	visaDetails: VisaDetails;
+	/** The Departure chapter's facts, as the officer records them. */
+	departureDetails: DepartureDetails;
 	/** The visa-stage documents — asked once the chapter opens. */
 	visaDocumentChecklist: DocumentChecklistItem[];
 	/** Case history the consultant marked for the client — milestones, decisions, notes. */
@@ -542,6 +545,7 @@ const defaultApplication: ApplicationData = {
 	visaStatus: "locked",
 	visaOutcome: null,
 	visaDetails: {},
+	departureDetails: {},
 	visaDocumentChecklist: [],
 	comments: [],
 	visaUpdatedAt: null,
@@ -2283,6 +2287,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 					visaOutcome: a.visaOutcome ?? null,
 					visaDetails: a.visaDetails ?? {},
+					departureDetails: a.departureDetails ?? {},
 					visaDocumentChecklist: a.visaDocumentChecklist ?? [],
 					// The checklist is done when every required item is ticked or waived.
 					preDepartureCompletedAt:

@@ -276,6 +276,32 @@ export const visaDetailsSchema = z.object({
 	collectedAt: z.string().datetime().nullable().optional(),
 });
 export type VisaDetails = z.infer<typeof visaDetailsSchema>;
+
+/**
+ * The facts of the Departure chapter, recorded by the departure officer as
+ * they are settled. Every field is optional; `null` clears. The flight
+ * itself lives on the travel request.
+ */
+export const departureDetailsSchema = z.object({
+	/** The school's arrive-by / reporting date. */
+	reportBy: z.string().datetime().nullable().optional(),
+	orientationAt: z.string().datetime().nullable().optional(),
+	/** The pre-departure briefing with the consultant — recording it closes that item. */
+	briefingAt: z.string().datetime().nullable().optional(),
+	/** Airport pickup — recording who closes that item. */
+	pickupBy: z.string().max(120).nullable().optional(),
+	pickupNote: z.string().max(500).nullable().optional(),
+	accommodationAddress: z.string().max(300).nullable().optional(),
+	accommodationMoveInAt: z.string().datetime().nullable().optional(),
+	/** Someone to call in the destination country. */
+	emergencyContactName: z.string().max(120).nullable().optional(),
+	emergencyContactPhone: z.string().max(40).nullable().optional(),
+	emergencyContactRelation: z.string().max(60).nullable().optional(),
+	/** The day they landed — the Done chapter starts here. */
+	arrivedAt: z.string().datetime().nullable().optional(),
+});
+export type DepartureDetails = z.infer<typeof departureDetailsSchema>;
+export const updateDepartureDetailsSchema = departureDetailsSchema;
 /** How the visa decision went; `complete` implies approved, a refusal stays at `decision`. */
 export const visaOutcomeSchema = z.enum(["approved", "refused"]);
 export type VisaOutcome = z.infer<typeof visaOutcomeSchema>;
@@ -621,6 +647,7 @@ export const applicationSchema = z.object({
 	visaInvoicePaid: z.boolean(),
 	visaCounselorNote: z.string().nullable(),
 	visaDetails: visaDetailsSchema.default({}),
+	departureDetails: departureDetailsSchema.default({}),
 	/** The visa-stage documents and where the client's upload of each stands. */
 	visaDocumentChecklist: z.array(documentChecklistItemSchema).default([]),
 	paymentPlanId: z.string().nullable(),

@@ -9,8 +9,44 @@ import type { PreDepartureTask } from "century-nit-core/ops";
 import { DOCUMENT_TYPES } from "century-nit-core/content";
 import { PAYMENT_PLAN_LABELS, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
 import type { Flash, Fail, TabId } from "./types";
-import { StatusPill } from "century-nit-core/ui";
+import { Sheet, StatusPill } from "century-nit-core/ui";
+import type { DepartureDetails } from "century-nit-shared";
 import { TravelCard } from "../TravelCard";
+
+function fmtDate(iso: string | null | undefined): string | null {
+	if (!iso) return null;
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+function fmtDateTime(iso: string | null | undefined): string | null {
+	if (!iso) return null;
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? null : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+function dateInputValue(iso: string | null | undefined): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+function dateTimeInputValue(iso: string | null | undefined): string {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return "";
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const dateToIso = (v: string): string | null => (v ? new Date(`${v}T12:00:00Z`).toISOString() : null);
+const dateTimeToIso = (v: string): string | null => {
+	if (!v) return null;
+	const d = new Date(v);
+	return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+/** Whole days from now to `iso`, negative once passed. */
+function daysUntil(iso: string | null | undefined): number | null {
+	if (!iso) return null;
+	const t = new Date(iso).getTime();
+	return Number.isNaN(t) ? null : Math.ceil((t - Date.now()) / 86_400_000);
+}
 
 
 /** Departure — the fee milestone, the flight, the pre-departure checklist. */
@@ -40,8 +76,57 @@ export function DepartureTab({
 	flash: Flash;
 	fail: Fail;
 }) {
-	const { setPreDepartureTask, refresh } = useCases();
+	const { setPreDepartureTask, setDepartureDetails, refresh } = useCases();
 	const { hasPermission } = useOpsAuth();
+	const dd: DepartureDetails = app.departureDetails ?? {};
+	const flightAt = selectedTa?.booking?.departAt ?? selectedTa?.flight?.departAt ?? null;
+	const flyDays = daysUntil(flightAt);
+	const reportDays = daysUntil(dd.reportBy);
+
+	// ── Arrival facts sheet ─────────────────────────────────────────────
+	const [factsOpen, setFactsOpen] = useState(false);
+	const [saving, setSaving] = useState(false);
+	const [f, setF] = useState({ reportBy: "", orientationAt: "", briefingAt: "", pickupBy: "", pickupNote: "", accommodationAddress: "", accommodationMoveInAt: "", emergencyContactName: "", emergencyContactPhone: "", emergencyContactRelation: "", arrivedAt: "" });
+	function openFacts() {
+		setF({
+			reportBy: dateInputValue(dd.reportBy),
+			orientationAt: dateInputValue(dd.orientationAt),
+			briefingAt: dateTimeInputValue(dd.briefingAt),
+			pickupBy: dd.pickupBy ?? "",
+			pickupNote: dd.pickupNote ?? "",
+			accommodationAddress: dd.accommodationAddress ?? "",
+			accommodationMoveInAt: dateInputValue(dd.accommodationMoveInAt),
+			emergencyContactName: dd.emergencyContactName ?? "",
+			emergencyContactPhone: dd.emergencyContactPhone ?? "",
+			emergencyContactRelation: dd.emergencyContactRelation ?? "",
+			arrivedAt: dateInputValue(dd.arrivedAt),
+		});
+		setFactsOpen(true);
+	}
+	async function saveFacts() {
+		setSaving(true);
+		try {
+			await setDepartureDetails(app.appId, {
+				reportBy: dateToIso(f.reportBy),
+				orientationAt: dateToIso(f.orientationAt),
+				briefingAt: dateTimeToIso(f.briefingAt),
+				pickupBy: f.pickupBy.trim() || null,
+				pickupNote: f.pickupNote.trim() || null,
+				accommodationAddress: f.accommodationAddress.trim() || null,
+				accommodationMoveInAt: dateToIso(f.accommodationMoveInAt),
+				emergencyContactName: f.emergencyContactName.trim() || null,
+				emergencyContactPhone: f.emergencyContactPhone.trim() || null,
+				emergencyContactRelation: f.emergencyContactRelation.trim() || null,
+				arrivedAt: dateToIso(f.arrivedAt),
+			});
+			flash("Arrival facts recorded — the client sees them on their pre-departure page");
+			setFactsOpen(false);
+		} catch (e) {
+			fail(e, "Could not record the facts");
+		} finally {
+			setSaving(false);
+		}
+	}
 	const tasks: PreDepartureTask[] = app.preDepartureTasks ?? [];
 	const required = tasks.filter((t) => t.required !== false);
 	const requiredTotal = required.length;
@@ -129,6 +214,42 @@ export function DepartureTab({
 					</p>
 				)}
 			</div>
+
+			{/* Arrival — the facts the client flies with. Recording the briefing
+			    and the pickup closes those checklist items; the fact is the tick. */}
+			{travelOpen && (
+				<div className="card">
+					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
+						<p className="eyebrow" style={{ margin: 0 }}>
+							Arrival
+						</p>
+						<p className="text-xs" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+							{flyDays !== null && (
+								<span style={{ fontWeight: 700 }}>{flyDays > 0 ? `Flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "Flies today" : `Flew ${-flyDays} day${flyDays === -1 ? "" : "s"} ago`}</span>
+							)}
+							{reportDays !== null && (
+								<span className={reportDays < 0 && !dd.arrivedAt ? "" : "muted"} style={reportDays < 0 && !dd.arrivedAt ? { color: "var(--danger, #b91c1c)", fontWeight: 600 } : undefined}>
+									{reportDays >= 0 ? `Report by ${fmtDate(dd.reportBy)} · ${reportDays} day${reportDays === 1 ? "" : "s"}` : `Report-by date passed ${-reportDays} day${reportDays === -1 ? "" : "s"} ago`}
+								</span>
+							)}
+						</p>
+					</div>
+					<div className="cn-facts">
+						<div><p className="muted text-xs">Report to the school by</p><p className="text-sm">{fmtDate(dd.reportBy) ?? <span className="muted">—</span>}</p></div>
+						<div><p className="muted text-xs">Orientation</p><p className="text-sm">{fmtDate(dd.orientationAt) ?? <span className="muted">—</span>}</p></div>
+						<div><p className="muted text-xs">Pre-departure briefing</p><p className="text-sm">{fmtDateTime(dd.briefingAt) ?? <span className="muted">not held</span>}</p></div>
+						<div><p className="muted text-xs">Airport pickup</p><p className="text-sm">{dd.pickupBy ? `${dd.pickupBy}${dd.pickupNote ? ` · ${dd.pickupNote}` : ""}` : <span className="muted">not arranged</span>}</p></div>
+						<div><p className="muted text-xs">Accommodation</p><p className="text-sm">{dd.accommodationAddress ? `${dd.accommodationAddress}${dd.accommodationMoveInAt ? ` · from ${fmtDate(dd.accommodationMoveInAt)}` : ""}` : <span className="muted">—</span>}</p></div>
+						<div><p className="muted text-xs">Emergency contact abroad</p><p className="text-sm">{dd.emergencyContactName ? `${dd.emergencyContactName}${dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}${dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}` : <span className="muted">—</span>}</p></div>
+						{dd.arrivedAt && <div><p className="muted text-xs">Arrived</p><p className="text-sm">{fmtDate(dd.arrivedAt)}</p></div>}
+					</div>
+					{canWork && (
+						<button type="button" className="btn btn--sm btn--ghost mt-3" onClick={openFacts}>
+							{Object.keys(dd).length ? "Edit arrival facts" : "Record arrival facts"}
+						</button>
+					)}
+				</div>
+			)}
 
 			{/* Pre-departure checklist — one list, two owners. The client ticks
 			    theirs in the portal (with proof where it says so); the officer
@@ -259,6 +380,29 @@ export function DepartureTab({
 				</div>
 			)}
 
+			<Sheet open={factsOpen} onClose={() => setFactsOpen(false)} title="Arrival facts">
+				<div className="cn-stack">
+					<p className="muted text-sm">What the client flies with. Recording the briefing closes "Pre-departure briefing"; recording the pickup closes "Airport pickup arranged".</p>
+					<div className="cn-facts">
+						<label><span className="muted text-xs">Report to the school by</span><input className="input input--sm" type="date" value={f.reportBy} onChange={(e) => setF({ ...f, reportBy: e.target.value })} /></label>
+						<label><span className="muted text-xs">Orientation</span><input className="input input--sm" type="date" value={f.orientationAt} onChange={(e) => setF({ ...f, orientationAt: e.target.value })} /></label>
+						<label className="cn-facts__full"><span className="muted text-xs">Pre-departure briefing held on</span><input className="input input--sm" type="datetime-local" value={f.briefingAt} onChange={(e) => setF({ ...f, briefingAt: e.target.value })} /></label>
+						<label><span className="muted text-xs">Airport pickup by</span><input className="input input--sm" value={f.pickupBy} onChange={(e) => setF({ ...f, pickupBy: e.target.value })} placeholder="University shuttle · Century driver · family" /></label>
+						<label><span className="muted text-xs">Pickup details</span><input className="input input--sm" value={f.pickupNote} onChange={(e) => setF({ ...f, pickupNote: e.target.value })} placeholder="Meeting point, contact, time" /></label>
+						<label className="cn-facts__full"><span className="muted text-xs">Accommodation address</span><input className="input input--sm" value={f.accommodationAddress} onChange={(e) => setF({ ...f, accommodationAddress: e.target.value })} /></label>
+						<label><span className="muted text-xs">Move in from</span><input className="input input--sm" type="date" value={f.accommodationMoveInAt} onChange={(e) => setF({ ...f, accommodationMoveInAt: e.target.value })} /></label>
+						<div />
+						<label><span className="muted text-xs">Emergency contact abroad — name</span><input className="input input--sm" value={f.emergencyContactName} onChange={(e) => setF({ ...f, emergencyContactName: e.target.value })} /></label>
+						<label><span className="muted text-xs">Relation</span><input className="input input--sm" value={f.emergencyContactRelation} onChange={(e) => setF({ ...f, emergencyContactRelation: e.target.value })} placeholder="Aunt · friend · host" /></label>
+						<label><span className="muted text-xs">Phone</span><input className="input input--sm" value={f.emergencyContactPhone} onChange={(e) => setF({ ...f, emergencyContactPhone: e.target.value })} /></label>
+						<label><span className="muted text-xs">Arrived on (once they land)</span><input className="input input--sm" type="date" value={f.arrivedAt} onChange={(e) => setF({ ...f, arrivedAt: e.target.value })} /></label>
+					</div>
+					<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setFactsOpen(false)} disabled={saving}>Cancel</button>
+						<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveFacts()} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+					</div>
+				</div>
+			</Sheet>
 		</>
 	);
 }

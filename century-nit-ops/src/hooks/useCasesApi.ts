@@ -20,6 +20,7 @@ import {
 	type StudentScholarship,
 	type VisaStage,
 	type VisaDetails,
+	type DepartureDetails,
 	type JourneyStage,
 	type PackageCode,
 	type UpdateSchoolStatus,
@@ -161,7 +162,12 @@ function toApplication(row: ApiApplication): MockApplication {
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote ?? undefined,
 		visaDetails: row.visaDetails ?? {},
-		preDepartureTasks: row.preDepartureTasks ?? [],
+		departureDetails: row.departureDetails ?? {},
+		preDepartureTasks: (row.preDepartureTasks ?? []).map((t) => ({
+			...t,
+			category: t.category ?? "documents",
+			detail: t.detail ?? "",
+		})),
 		visaDocumentChecklist: row.visaDocumentChecklist ?? [],
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
 		agencyStageIndex: row.agencyStageIndex,
@@ -440,6 +446,12 @@ export function useCasesApi() {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			replaceApplication(await applicationsApi.setVisaDetails(app.id, details));
+			await refresh();
+		},
+		setDepartureDetails: async (appId: string, details: DepartureDetails) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setDepartureDetails(app.id, details));
 			await refresh();
 		},
 		updateSchoolApplication: async (

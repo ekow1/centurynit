@@ -17,26 +17,42 @@ import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError } from "../lib/api";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { AssignControl } from "century-nit-core/ui";
-import { Users, Zap, FileText, AlertTriangle, PhoneCall, DollarSign } from "lucide-react";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage, type StageHandoff } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
 	handoffOffersKeep,
 	taskActionLabel,
+	TASK_KIND_LABEL,
 	timeAgo,
 	VISA_STEP_LABELS,
 	type PendingTask,
 } from "../lib/pendingTasks";
 import { PendingTaskTable } from "./PendingTasks";
+import { CaseScaffold } from "./case/CaseScaffold";
+import { CaseTabs, useCaseTab } from "./case/CaseTabs";
+import { WorkspaceCaseload } from "./WorkspaceCaseload";
 
 /**
  * F-shaped workspace / mission control.
  *
- * The first scan is the top KPI strip; the second scan is the long, left-aligned
- * work queue presented as a table with inline assignment; the right-hand pane
- * shows context without leaving the page.
+ * The first scan is the filter chips; the second is the long, left-aligned
+ * work queue presented as a table with inline assignment. The right-hand
+ * pane only appears while an item is selected — with nothing selected the
+ * queue keeps the page width.
  */
+
+/** The two views — the queue to clear vs the workload being carried. */
+const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
+
+/** Queue filters — every entry is a real task category from buildPendingTasks. */
+const QUEUE_FILTERS: { id: string; label: string }[] = [
+	{ id: "all", label: "All" },
+	{ id: "needs_assignment", label: "Needs an owner" },
+	{ id: "needs_action", label: "Needs you" },
+	{ id: "needs_invoice", label: "Waiting on finance" },
+	{ id: "needs_followup", label: "Follow up" },
+];
 
 export function Workspace() {
 	const { opsUser, canSeeAllBranches, canAssignWork, scopeRecords } = useOpsAuth();
@@ -57,11 +73,11 @@ export function Workspace() {
 	} = useCases();
 	const { invoices, loading: invoicesLoading } = useInvoiceApi();
 
+	const [view, setView] = useCaseTab(WORKSPACE_TABS, () => "worklist", "workspace");
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [search, setSearch] = useState("");
 	const [searchParams, setSearchParams] = useSearchParams();
-	const initialFilter = searchParams.get("filter") ?? "all";
-	const [filter, setFilterState] = useState<string>(initialFilter);
+	const [filter, setFilterState] = useState<string>(searchParams.get("filter") ?? "all");
 	const setFilter = (next: string) => {
 		setFilterState(next);
 		const params = new URLSearchParams(searchParams);
@@ -155,25 +171,27 @@ export function Workspace() {
 		});
 	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs, travelRequests]);
 
+	// Only real task categories are filters — a stale ?filter= (the retired
+	// "overdue"/"outstanding" cards) must not silently empty the queue.
+	const activeFilter = QUEUE_FILTERS.some((f) => f.id === filter) ? filter : "all";
+
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
 		return items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
-			if (filter !== "all" && item.category !== filter) return false;
+			if (activeFilter !== "all" && item.category !== activeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
 			return hay.includes(q);
 		});
-	}, [items, branchFilter, filter, search]);
+	}, [items, branchFilter, activeFilter, search]);
 
 	const stats = useMemo(() => {
-		const needsAssignment = items.filter((i) => i.category === "needs_assignment").length;
-		const needsAction = items.filter((i) => i.category === "needs_action").length;
-		const needsInvoice = items.filter((i) => i.category === "needs_invoice").length;
-		const needsFollowup = items.filter((i) => i.category === "needs_followup").length;
+		const counts = new Map<string, number>([["all", items.length]]);
+		for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
 		const overdue = invoiceRows.filter((r) => r.status === "overdue").length;
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
-		return { needsAssignment, needsAction, needsInvoice, needsFollowup, overdue, totalOutstanding };
+		return { counts, overdue, totalOutstanding };
 	}, [items, invoiceRows, applicants]);
 
 	const loading = casesLoading || invoicesLoading || leadsLoading;
@@ -203,143 +221,115 @@ export function Workspace() {
 	);
 
 	return (
-		<div className="page-content fade-in" style={{ backgroundColor: "#f8fafc", minHeight: "100%" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+		<div className="page-content fade-in">
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
 				<div>
 					<h1 className="page-title">Workspace</h1>
-					<p className="lead mt-2">
-						{opsUser ? `Good day, ${opsUser.name.split(" ")[0]}.` : "Operations workspace."} Here is what needs attention.
+					<p className="lead mt-1">
+						{opsUser ? `Good day, ${opsUser.name.split(" ")[0]}.` : "Operations workspace."}{" "}
+						{view === "worklist" ? "Here is what needs attention." : "Here is what is in flight and who has it."}
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-					{canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
+					{view === "worklist" && canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
 
-			{/* KPI strip — first horizontal scan */}
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<KPICard label="Needs an owner" value={String(stats.needsAssignment)} active={filter === "needs_assignment"} onClick={() => setFilter("needs_assignment")} icon={<Users size={18} strokeWidth={1.5} />} />
-				<KPICard label="Needs you" value={String(stats.needsAction)} active={filter === "needs_action"} onClick={() => setFilter("needs_action")} icon={<Zap size={18} strokeWidth={1.5} />} />
-				<KPICard label="Waiting on finance" value={String(stats.needsInvoice)} active={filter === "needs_invoice"} onClick={() => setFilter("needs_invoice")} icon={<FileText size={18} strokeWidth={1.5} />} />
-				<KPICard label="Overdue invoices" value={String(stats.overdue)} active={filter === "overdue"} onClick={() => setFilter("overdue")} icon={<AlertTriangle size={18} strokeWidth={1.5} />} />
-				<KPICard label="Follow up" value={String(stats.needsFollowup)} active={filter === "needs_followup"} onClick={() => setFilter("needs_followup")} icon={<PhoneCall size={18} strokeWidth={1.5} />} />
-				<KPICard label="Outstanding" value={fmtGhs(stats.totalOutstanding)} sub={fmtUsd(stats.totalOutstanding)} active={filter === "outstanding"} onClick={() => setFilter("outstanding")} icon={<DollarSign size={18} strokeWidth={1.5} />} />
-			</div>
+			{casesError && view === "worklist" && <p className="ops-modal__error" role="alert">{casesError}</p>}
 
-			{/* Main Content Grid: 2 Columns */}
-			<div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1.5rem", alignItems: "start" }}>
-				
-				{/* LEFT COLUMN: Work Queue */}
-				<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-					{/* Toolbar & Search */}
-					<div className="card" style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", padding: "1rem 1.25rem" }}>
-						<h2 className="section-title" style={{ margin: 0, marginRight: "auto", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-							Work Queue
-							<span className="portal-pill" style={{ fontSize: "var(--text-sm)", fontWeight: "normal" }}>{filtered.length} items</span>
-						</h2>
-						
-						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-							{loading && <span className="muted" style={{ fontSize: "var(--text-sm)" }}>Loading…</span>}
-							{casesError && <span className="ops-modal__error">{casesError}</span>}
-							{filter !== "all" && (
-								<button className="btn btn--ghost btn--sm" onClick={() => setFilter("all")}>
-									Clear filter
-								</button>
-							)}
+			<CaseTabs
+				pageLevel
+				tabs={WORKSPACE_TABS.map((id) => ({ id, label: WORKSPACE_TAB_LABELS[id] }))}
+				current={view}
+				onChange={setView}
+			/>
+
+			{view === "caseload" && <WorkspaceCaseload />}
+
+			{view === "worklist" && <CaseScaffold
+				collapseDetail
+				onClose={() => setSelected(null)}
+				bar={
+					selected ? (
+						<Link to={selected.linkTo} className="btn btn--primary btn--sm">
+							{openLabel(selected)}
+						</Link>
+					) : null
+				}
+				list={
+					<>
+						<div className="cn-scaffold__filters cn-scaffold__filters--row">
 							<input
 								type="search"
-								placeholder="Search queue..."
+								placeholder="Search queue…"
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
-								className="input"
-								style={{ width: "240px" }}
+								className="cn-search"
+								aria-label="Search queue"
 							/>
+							<label className="cn-filter">
+								<span className="cn-filter__label">Queue</span>
+								<select
+									className="cn-filter__select"
+									value={activeFilter}
+									onChange={(e) => setFilter(e.target.value)}
+								>
+									{QUEUE_FILTERS.map((f) => (
+										<option key={f.id} value={f.id}>
+											{f.label} · {stats.counts.get(f.id) ?? 0}
+										</option>
+									))}
+								</select>
+							</label>
+							{loading && <span className="cn-filter__label">Loading…</span>}
+							{stats.overdue > 0 && (
+								<span className="cn-filter__label" style={{ marginLeft: "auto" }}>
+									{stats.overdue} overdue invoice{stats.overdue === 1 ? "" : "s"}
+									{stats.totalOutstanding > 0 ? ` · ${fmtGhs(stats.totalOutstanding)} outstanding` : ""}
+								</span>
+							)}
 						</div>
-					</div>
-
-					{/* Queue List — tabular, with inline assignment like the Dashboard */}
-					<div className="card" style={{ display: "flex", flexDirection: "column", minHeight: "50vh", maxHeight: "calc(100vh - 280px)", overflow: "hidden", padding: 0 }}>
-						<div style={{ flex: 1, overflowY: "auto" }}>
+						<div className="cn-scaffold__rows">
 							<PendingTaskTable
 								items={filtered}
 								assignees={assignees}
 								canAssignWork={canAssignWork}
 								onAssign={doAssign}
 								onAssigned={refresh}
-								onSelect={setSelected}
+								onSelect={(t) => setSelected((cur) => (cur?.id === t.id ? null : t))}
 								selectedId={selected?.id}
 								emptyLabel={loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
 							/>
 						</div>
-					</div>
-				</div>
-
-				{/* RIGHT COLUMN: Preview Pane */}
-				<div style={{ display: "flex", flexDirection: "column", gap: "1rem", position: "sticky", top: "1rem", height: "calc(100vh - 2rem)" }}>
-					{/* Preview Pane */}
-					<div className="card" style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
-						{selected ? (
-							<PreviewPane
-								item={selected}
-								assignees={assignees}
-								canAssignWork={canAssignWork}
-								onAssigned={refresh}
-								onAssignConsultation={assignConsultation}
-								onAssignApplication={assignApplication}
-								onResolveHandoff={resolveHandoff}
-								onDeferHandoff={deferHandoff}
-							/>
-						) : (
-							<div style={{ padding: "4rem 2rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }} className="muted">
-								<span style={{ fontSize: "3rem", opacity: 0.2 }}>👈</span>
-								<p style={{ margin: 0, maxWidth: "200px" }}>Select an item from the queue to see details and next steps.</p>
-							</div>
-						)}
-					</div>
-				</div>
-			</div>
+					</>
+				}
+				detail={
+					selected ? (
+						<PreviewPane
+							item={selected}
+							assignees={assignees}
+							canAssignWork={canAssignWork}
+							onAssigned={refresh}
+							onAssignConsultation={assignConsultation}
+							onAssignApplication={assignApplication}
+							onResolveHandoff={resolveHandoff}
+							onDeferHandoff={deferHandoff}
+						/>
+					) : null
+				}
+			/>}
 		</div>
 	);
 }
 
-function KPICard({
-	label,
-	value,
-	sub,
-	active,
-	onClick,
-	icon,
-}: {
-	label: string;
-	value: string;
-	sub?: string;
-	active?: boolean;
-	onClick?: () => void;
-	icon?: React.ReactNode;
-}) {
-	return (
-		<button
-			className="card"
-			onClick={onClick}
-			style={{
-				textAlign: "left",
-				width: "100%",
-				cursor: "pointer",
-				background: active ? "var(--foreground)" : "var(--card)",
-				color: active ? "var(--background)" : "var(--foreground)",
-				border: active ? `1px solid var(--foreground)` : `1px solid var(--border-light)`,
-				display: "flex",
-				flexDirection: "column",
-			}}
-		>
-			<div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.5rem" }}>
-				<p className="eyebrow" style={{ opacity: active ? 0.9 : 0.7, margin: 0, color: active ? "var(--background)" : "var(--foreground)" }}>{label}</p>
-				{icon && <span style={{ opacity: active ? 1 : 0.8, color: active ? "var(--background)" : "var(--foreground)", display: "flex", alignItems: "center" }}>{icon}</span>}
-			</div>
-			<p className="page-title" style={{ fontSize: "1.75rem", margin: "0.25rem 0", color: active ? "var(--background)" : "inherit" }}>{value}</p>
-			{sub && <p className="muted" style={{ fontSize: "var(--text-xs)", opacity: active ? 0.8 : 1, margin: 0, color: active ? "var(--background)" : "var(--muted-fg)" }}>{sub}</p>}
-		</button>
-	);
+/** The one primary action for a task — where it opens. Every case-flavoured
+ * task lands on the unified Cases queue; the label names the destination. */
+function openLabel(item: PendingTask): string {
+	if (item.kind === "booking" || item.kind === "consultation") return "Open consultation";
+	if (item.kind === "applicant") return "Open client";
+	if (item.kind === "invoice") return "Open invoice";
+	if (item.kind === "lead") return "Open leads";
+	return "Open case";
 }
 
 function PreviewPane({
@@ -411,53 +401,37 @@ function PreviewPane({
 		}
 	}
 
-	const linkLabel =
-		item.kind === "booking"
-			? "Open Consultations"
-			: item.kind === "consultation"
-				? "Open Consultations"
-				: item.kind === "application"
-					? "Open Applications"
-					: item.kind === "visa"
-						? "Open Visa Processing"
-						: item.kind === "handoff"
-							? item.record.stage === "visa_processing"
-								? "Open Visa Processing"
-								: "Open Applications"
-							: item.kind === "applicant"
-								? "Open Applicants"
-								: item.kind === "invoice"
-									? "Open Invoices"
-									: "Open Leads";
-
 	return (
-		<div style={{ padding: "1.25rem" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-				<div>
-					<span className="portal-pill" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem", display: "inline-block" }}>
-						{taskActionLabel(item)}
-					</span>
-					<h3 style={{ margin: "0.35rem 0 0", fontSize: "1.1rem" }}>{item.title}</h3>
-				</div>
-				<Link to={item.linkTo} className="btn btn--primary btn--sm">
-					{linkLabel}
-				</Link>
+		<div className="cn-detail">
+			{/* The "open" action lives in the scaffold bar beside Close, not here. */}
+			<div>
+				<span className="cn-detailhead__kicker">{TASK_KIND_LABEL[item.kind]} · {taskActionLabel(item)}</span>
+				<h3 className="cn-detailhead__title">{item.title}</h3>
+				<p className="cn-detailhead__sub">{item.subtitle}</p>
+				{/* `meta` is prose or a reference, never shouted; the mono line below is for facts. */}
+				{!item.details && item.meta && <p className="cn-detailhead__sub">{item.meta}</p>}
+				<p className="cn-detailhead__meta">
+					{item.branch ? `${item.branch} · ` : ""}Assigned: {item.owner}
+				</p>
 			</div>
 
-			<div className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "1rem" }}>
-				<p style={{ margin: "0 0 0.35rem" }}>{item.subtitle}</p>
-				<p style={{ margin: "0 0 0.35rem" }}>{item.meta}</p>
-				{item.branch && <p style={{ margin: 0 }}>Branch: {item.branch}</p>}
-				<p style={{ margin: "0.35rem 0 0" }}>Owner: {item.owner}</p>
-			</div>
+			{item.details && (
+				<ul className="cn-detail__list">
+					{item.details.map((d) => (
+						<li key={d}>{d}</li>
+					))}
+				</ul>
+			)}
 
-			{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
-			{item.kind === "application" && <ApplicationDetails a={item.record} />}
-			{item.kind === "visa" && <VisaDetails a={item.record} />}
-			{item.kind === "handoff" && <HandoffDetails h={item.record} />}
-			{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
-			{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
-			{item.kind === "lead" && <LeadDetails lead={item.record} />}
+			<div className="cn-detail__facts">
+				{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
+				{item.kind === "application" && <ApplicationDetails a={item.record} />}
+				{item.kind === "visa" && <VisaDetails a={item.record} />}
+				{item.kind === "handoff" && <HandoffDetails h={item.record} />}
+				{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
+				{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
+				{item.kind === "lead" && <LeadDetails lead={item.record} />}
+			</div>
 
 			{item.kind === "handoff" && canAssignWork && (
 				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
@@ -526,7 +500,7 @@ function ApplicationDetails({ a }: { a: MockApplication }) {
 			<p style={{ margin: 0 }}><strong>Stage:</strong> {JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}</p>
 			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
-			<p style={{ margin: 0 }}><strong>Open checklist:</strong> {open}</p>
+			<p style={{ margin: 0 }}><strong>Application tasks open:</strong> {open}</p>
 		</div>
 	);
 }

@@ -174,6 +174,25 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 
 	if (!canAssignWork) return null; // consultants do not triage
 
+	// Empty triage is a line, not a panel — the controls stay inline.
+	if (bookings && bookings.length === 0 && !showAssigned && !error && !justAssigned) {
+		return (
+			<p className="ops-panel__muted" style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+				<span>Unassigned bookings — nothing waiting.</span>
+				<button
+					type="button"
+					className="btn btn--ghost btn--sm"
+					onClick={() => setShowAssigned(true)}
+				>
+					Show assigned
+				</button>
+				<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
+					Refresh
+				</button>
+			</p>
+		);
+	}
+
 	return (
 		<section className="ops-panel" aria-labelledby="unassigned-heading">
 			<header className="ops-panel__head">

@@ -20,6 +20,7 @@ import {
 	sortTasks,
 	taskActionLabel,
 	TASK_KIND_LABEL,
+	whenLabel,
 	type PendingTask,
 } from "../lib/pendingTasks";
 
@@ -130,6 +131,7 @@ export function PendingTaskTable({
 	items: PendingTask[];
 	assignees: Assignee[];
 	canAssignWork: boolean;
+
 	onAssign: (task: PendingTask, to: Assignee, reason?: string) => Promise<unknown>;
 	onKeepHandler?: (task: PendingTask, reason?: string) => Promise<unknown>;
 	onAssigned: () => void | Promise<void>;
@@ -137,6 +139,7 @@ export function PendingTaskTable({
 	selectedId?: string | null;
 	emptyLabel?: string;
 }) {
+	const { canSeeAllBranches } = useOpsAuth();
 	const [booking, setBooking] = useState<Booking | null>(null);
 	const [task, setTask] = useState<PendingTask | null>(null);
 	const [justAssigned, setJustAssigned] = useState<string | null>(null);
@@ -162,15 +165,18 @@ export function PendingTaskTable({
 							<tr>
 								<th>Task</th>
 								<th>Type</th>
-								<th>When / Details</th>
-								<th>Branch</th>
-								<th>Owner</th>
+								<th>When</th>
+								{canSeeAllBranches && <th>Branch</th>}
+								<th>Assigned</th>
 								<th />
 							</tr>
 						</thead>
 						<tbody>
 							{items.map((t) => {
-								const canAssign = isAssignable(t);
+								// Assign shows only for unowned work — a handoff is unowned
+								// by definition (its "owner" column is the previous handler).
+								const canAssign =
+									isAssignable(t) && (t.owner === "Unassigned" || t.action === "resolve");
 								const selected = selectedId === t.id;
 								return (
 									<tr
@@ -207,8 +213,8 @@ export function PendingTaskTable({
 											<span className="ops-pill">{TASK_KIND_LABEL[t.kind]}</span>
 											<div className="ops-table__sub">{taskActionLabel(t)}</div>
 										</td>
-										<td>{t.meta}</td>
-										<td>{t.branch || "—"}</td>
+										<td className="ops-table__when" title={t.at ? new Date(t.at).toLocaleString() : undefined}>{whenLabel(t.at)}</td>
+										{canSeeAllBranches && <td>{t.branch || "—"}</td>}
 										<td>{t.owner}</td>
 										<td
 											style={{ textAlign: "right", whiteSpace: "nowrap" }}
@@ -222,11 +228,7 @@ export function PendingTaskTable({
 														t.kind === "booking" ? setBooking(t.record) : setTask(t)
 													}
 												>
-													{t.kind === "booking"
-													? "Assign employee"
-													: t.owner === "Unassigned"
-														? "Assign"
-														: "Reassign"}
+													{t.kind === "booking" ? "Assign employee" : "Assign"}
 												</button>
 											) : (
 												<Link to={t.linkTo} className="btn btn--ghost btn--sm">
@@ -427,6 +429,7 @@ export function PendingTasks({
 			kind: "booking",
 			action: "assign",
 			record: b,
+			at: b.startsAt,
 			title: b.clientName,
 			subtitle: b.serviceName,
 			meta: formatBookingWhenCompact(b),

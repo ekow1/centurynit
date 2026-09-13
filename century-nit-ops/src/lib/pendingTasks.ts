@@ -174,7 +174,14 @@ export type BookingTask = {
 	priority: number;
 };
 
-export type PendingTask = (BaseTask | BookingTask) & { isLive?: boolean };
+export type PendingTask = (BaseTask | BookingTask) & {
+	isLive?: boolean;
+	/** When the task is dated — the record's last change, or the moment it asked
+	 * for something (a reschedule, a due date). Shown in the queue's When column. */
+	at?: string;
+	/** Itemised detail for the preview pane; the table never shows it. */
+	details?: string[];
+};
 
 /** Visa sub-stage names — the one vocabulary, shared with the portal. */
 export const VISA_STEP_LABELS = VISA_STAGE_LABELS;
@@ -193,6 +200,15 @@ export function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoi
 	return invoices.find(
 		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
 	);
+}
+
+/** The queue's When column: a short absolute stamp; the year only when it isn't this one. */
+export function whenLabel(iso?: string | null): string {
+	if (!iso) return "—";
+	const d = new Date(iso);
+	if (isNaN(d.getTime())) return "—";
+	const thisYear = d.getFullYear() === new Date().getFullYear();
+	return d.toLocaleString(undefined, { day: "numeric", month: "short", ...(thisYear ? {} : { year: "numeric" }), hour: "2-digit", minute: "2-digit" });
 }
 
 export function timeAgo(iso?: string | null) {
@@ -371,6 +387,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: c.branch,
 				owner: "Unassigned",
 				linkTo: `/consultations?id=${c.id}`,
+				at: c.updatedAt,
 				priority: PRIORITY.assign_consultation,
 				isLive,
 			});
@@ -387,6 +404,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: c.branch,
 				owner: c.assignedOfficer || "—",
 				linkTo: `/consultations?id=${c.id}`,
+				at: c.updatedAt,
 				priority: PRIORITY.assess,
 				isLive,
 			});
@@ -403,6 +421,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: c.branch,
 				owner: c.assignedOfficer || "—",
 				linkTo: `/consultations?id=${c.id}`,
+				at: c.rescheduleRequestedAt ?? c.updatedAt,
 				priority: PRIORITY.reschedule,
 				isLive,
 			});
@@ -440,6 +459,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: a.branch,
 				owner: "Unassigned",
 				linkTo: `/applications?id=${a.id}`,
+				at: a.updatedAt,
 				priority: PRIORITY.assign_application,
 			});
 		} else if (a.status === "Under Review") {
@@ -455,6 +475,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: a.branch,
 				owner: a.assignedStaff,
 				linkTo: `/applications?id=${a.id}`,
+				at: a.updatedAt,
 				priority: PRIORITY.review_application,
 			});
 		} else if (a.checklist.some((i) => !i.checked)) {
@@ -471,6 +492,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: a.branch,
 				owner: a.assignedStaff,
 				linkTo: `/applications?id=${a.id}`,
+				at: a.updatedAt,
 				priority: PRIORITY.checklist,
 			});
 		}
@@ -507,6 +529,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			branch: a.branch,
 			owner: a.assignedStaff || "—",
 			linkTo: `/applications?id=${a.id}`,
+			at: a.updatedAt,
 			priority: PRIORITY.issue,
 		});
 	}
@@ -526,7 +549,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				meta: a.appId,
 				branch: a.branch,
 				owner: a.assignedStaff || "—",
-				linkTo: `/visa?id=${a.id}`,
+				linkTo: `/applications?chapter=visa&id=${a.id}`,
+				at: a.updatedAt,
 				priority: PRIORITY.review_application,
 			});
 		} else if (stage === "pending" || stage === "biometrics" || stage === "decision") {
@@ -541,7 +565,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				meta: `App ${a.appId}`,
 				branch: a.branch,
 				owner: a.assignedStaff || "—",
-				linkTo: `/visa?id=${a.id}`,
+				linkTo: `/applications?chapter=visa&id=${a.id}`,
+				at: a.updatedAt,
 				priority: PRIORITY.review_application,
 			});
 		} else if (stage === "locked" && visaInv && visaInv.status !== "void") {
@@ -558,7 +583,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					meta: visaInv.invoiceNumber,
 					branch: a.branch,
 					owner: visaInv.issuedBy || a.assignedStaff || "—",
-					linkTo: `/visa?id=${a.id}`,
+					linkTo: `/applications?chapter=visa&id=${a.id}`,
+					at: a.updatedAt,
 					priority: PRIORITY.issue,
 				});
 			} else if (balance > 0) {
@@ -573,7 +599,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					meta: `App ${a.appId}`,
 					branch: a.branch,
 					owner: visaInv.issuedBy || a.assignedStaff || "—",
-					linkTo: `/visa?id=${a.id}`,
+					linkTo: `/applications?chapter=visa&id=${a.id}`,
+					at: a.updatedAt,
 					priority: PRIORITY.chase,
 				});
 			}
@@ -601,7 +628,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
 			branch: handoffApp?.branch ?? "",
 			owner: h.fromOpsUserName ?? "No previous handler",
-			linkTo: h.stage === "visa_processing" ? `/visa?id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
+			linkTo: h.stage === "visa_processing" ? `/applications?chapter=visa&id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
+			at: h.deferredAt ?? h.createdAt,
 			priority: PRIORITY.assign_consultation,
 		});
 	}
@@ -617,7 +645,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		const app = appById.get(ta.applicationId);
 		const title = ta.applicantName ?? app?.applicantName ?? "Applicant";
 		const ref = ta.applicationReference ?? app?.appId ?? "";
-		const base = { record: ta, title, branch: app?.branch ?? "", linkTo: `/travel?id=${ta.applicationId}` } as const;
+		const base = { record: ta, title, branch: app?.branch ?? "", linkTo: `/applications?chapter=depart&id=${ta.applicationId}`, at: ta.updatedAt } as const;
 		if (ta.status === "review" && !ta.assignedOpsUserId) {
 			if (handoffAppIds.has(ta.applicationId)) continue;
 			q.push({
@@ -706,10 +734,15 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				toReview > 0
 					? `${toReview} document${toReview === 1 ? "" : "s"} to verify · ${outstanding.length} outstanding`
 					: `${outstanding.length} document${outstanding.length === 1 ? "" : "s"} not uploaded yet`,
-			meta: outstanding.map((d) => d.name).join(", "),
+			// One line for the table (clamped there); the pane gets the list.
+			meta: `${outstanding.length} outstanding: ${outstanding.map((d) => d.name).join(", ")}`,
+			details: outstanding.map((d) =>
+				d.status === "UPLOADED" ? `${d.name} — uploaded, to verify` : d.status === "REJECTED" ? `${d.name} — rejected, needs re-upload` : `${d.name} — not uploaded`,
+			),
 			branch: a.branch,
 			owner: a.assignedStaff || "—",
 			linkTo: `/applications?id=${a.id}&tab=documents`,
+			at: a.updatedAt,
 			priority: toReview > 0 ? PRIORITY.review_application : PRIORITY.chase,
 		});
 	}
@@ -729,6 +762,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: app.branch,
 				owner: app.assignedOfficer || "—",
 				linkTo: `/applicants?id=${app.id}`,
+				at: app.updatedAt,
 				priority: PRIORITY.docs,
 			});
 		}
@@ -751,6 +785,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					branch: app.branch,
 					owner: app.assignedOfficer || "—",
 					linkTo: `/invoices`,
+					at: app.updatedAt,
 					priority: PRIORITY.invoice,
 				});
 			}
@@ -771,6 +806,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: "",
 				owner: r.inv.issuedBy || "—",
 				linkTo: `/invoices`,
+				at: r.inv.issuedAt,
 				priority: PRIORITY.issue,
 			});
 		}
@@ -787,6 +823,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: "",
 				owner: r.inv.issuedBy || "—",
 				linkTo: `/invoices`,
+				at: r.inv.dueAt ?? r.inv.issuedAt,
 				priority: PRIORITY.chase,
 			});
 		}
@@ -806,6 +843,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				branch: "",
 				owner: lead.assignedTo || "Unassigned",
 				linkTo: `/leads`,
+				at: lead.lastContactAt,
 				priority: PRIORITY.followup,
 			});
 		}

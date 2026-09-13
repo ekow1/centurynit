@@ -41,7 +41,6 @@ const EnterpriseUniversities = lazyNamed(() => import("./pages/EnterpriseUnivers
 const EnterprisePrograms = lazyNamed(() => import("./pages/EnterprisePrograms"), "EnterprisePrograms");
 const EnterprisePackages = lazyNamed(() => import("./pages/EnterprisePackages"), "EnterprisePackages");
 const EnterpriseReports = lazyNamed(() => import("./pages/EnterpriseReports"), "EnterpriseReports");
-const EnterpriseTeamAssignments = lazyNamed(() => import("./pages/EnterpriseTeamAssignments"), "EnterpriseTeamAssignments");
 const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppointments"), "EnterpriseAppointments");
 const LiveMeetings = lazyNamed(() => import("./pages/LiveMeetings"), "LiveMeetings");
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
@@ -75,6 +74,19 @@ function ScrollToTop() {
 		}
 	}, [pathname]);
 	return null;
+}
+
+/** Redirects a retired route to its replacement, keeping the query string —
+ * a stale `/visa?id=…` link must still deep-link to the record. */
+function LegacyRedirect({ to }: { to: string }) {
+	const location = useLocation();
+	const [path, query = ""] = to.split("?");
+	const params = new URLSearchParams(query);
+	new URLSearchParams(location.search).forEach((value, key) => {
+		if (!params.has(key)) params.set(key, value);
+	});
+	const qs = params.toString();
+	return <Navigate to={qs ? `${path}?${qs}` : path} replace />;
 }
 
 function RouteFallback() {
@@ -139,9 +151,9 @@ export default function App() {
 									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									<Route path="marketing/sms" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									{/* The old Board, Visa and Departure queues are views inside Cases; the URLs live on as redirects. */}
-									<Route path="workflow" element={<Navigate to="/applications?view=board" replace />} />
-									<Route path="visa" element={<Navigate to="/applications?chapter=visa" replace />} />
-									<Route path="travel" element={<Navigate to="/applications?chapter=depart" replace />} />
+									<Route path="workflow" element={<LegacyRedirect to="/applications?view=board" />} />
+									<Route path="visa" element={<LegacyRedirect to="/applications?chapter=visa" />} />
+									<Route path="travel" element={<LegacyRedirect to="/applications?chapter=depart" />} />
 									<Route path="documents" element={<Ops module="documents"><EnterpriseDocuments /></Ops>} />
 									<Route path="invoices" element={<Ops module="invoices"><EnterpriseInvoices /></Ops>} />
 									<Route path="ledger" element={<Ops module="ledger"><EnterpriseLedger /></Ops>} />
@@ -155,7 +167,8 @@ export default function App() {
 									<Route path="programs" element={<Ops module="programs"><EnterprisePrograms /></Ops>} />
 									<Route path="packages" element={<Ops module="packages"><EnterprisePackages /></Ops>} />
 									<Route path="reports" element={<Ops module="reports"><EnterpriseReports /></Ops>} />
-									<Route path="team" element={<Ops module="reports"><EnterpriseTeamAssignments /></Ops>} />
+									{/* Caseload lives inside Workspace now; the URL lives on as a redirect. */}
+									<Route path="team" element={<LegacyRedirect to="/workspace?tab=caseload" />} />
 									<Route path="marketing" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
 									{/* Personal calendar connection. Gated on "dashboard" rather than
 									    "settings": consultants must reach this, admins never take bookings. */}

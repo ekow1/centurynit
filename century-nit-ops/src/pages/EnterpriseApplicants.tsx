@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { DocPreviewInline, type DocPreviewData } from "./DocPreviewInline";
@@ -16,6 +17,18 @@ export function EnterpriseApplicants() {
 	const [dossierTab, setDossierTab] = useState<"overview" | "timeline" | "documents" | "financials" | "visa" | "messages" | "audit">("overview");
 	const [previewingDoc, setPreviewingDoc] = useState<DocPreviewData | null>(null);
 	const [branchFilter, setBranchFilter] = useState("all");
+	const [searchParams] = useSearchParams();
+
+	// Deep links (/applicants?id=…, from pending tasks) open the dossier. The
+	// list loads async, so this adjusts state during render until the record
+	// has had a chance to arrive; closing the dossier stays closed.
+	const queryId = searchParams.get("id");
+	const [resolvedId, setResolvedId] = useState<string | null>(null);
+	if (queryId && queryId !== resolvedId && applicants.length > 0) {
+		setResolvedId(queryId);
+		const match = applicants.find((a) => a.id === queryId);
+		if (match) setSelectedApplicant(match);
+	}
 
 	const canSeeAll = canSeeAllBranches;
 

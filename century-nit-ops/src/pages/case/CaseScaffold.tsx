@@ -16,6 +16,7 @@ export function CaseScaffold({
 	onClose,
 	emptyHint = "Select a record from the list to review it and take action.",
 	bar,
+	collapseDetail = false,
 }: {
 	/** The list pane: filters, search and rows. */
 	list: ReactNode;
@@ -25,30 +26,43 @@ export function CaseScaffold({
 	emptyHint?: string;
 	/** Optional controls beside the close button (a link to the applicant, a queue badge). */
 	bar?: ReactNode;
+	/**
+	 * When true, the detail pane is only rendered while a record is selected —
+	 * the list keeps the full width instead of surrendering it to an empty
+	 * pane. For queues whose list is wide (a table, not row-cards).
+	 */
+	collapseDetail?: boolean;
 }) {
+	const open = detail !== null;
 	return (
-		<div className="ops-split cn-scaffold">
+		<div
+			className={`ops-split cn-scaffold${collapseDetail ? " cn-scaffold--collapse" : ""}${
+				collapseDetail && open ? " cn-scaffold--open" : ""
+			}`}
+		>
 			<div className="ops-split__list cn-scaffold__list">{list}</div>
-			<div className="ops-split__detail cn-scaffold__detail">
-				{detail === null ? (
-					<div className="cn-scaffold__empty">
-						<span className="cn-scaffold__empty-mark" aria-hidden>
-							◈
-						</span>
-						<p className="muted">{emptyHint}</p>
-					</div>
-				) : (
-					<>
-						<div className="cn-scaffold__bar">
-							<div className="cn-scaffold__bar-slot">{bar}</div>
-							<button type="button" className="btn btn--sm btn--ghost" onClick={onClose} aria-label="Close detail">
-								✕ Close
-							</button>
+			{(!collapseDetail || open) && (
+				<div className="ops-split__detail cn-scaffold__detail">
+					{!open ? (
+						<div className="cn-scaffold__empty">
+							<span className="cn-scaffold__empty-mark" aria-hidden>
+								◈
+							</span>
+							<p className="muted">{emptyHint}</p>
 						</div>
-						<div className="cn-scaffold__body">{detail}</div>
-					</>
-				)}
-			</div>
+					) : (
+						<>
+							<div className="cn-scaffold__bar">
+								<div className="cn-scaffold__bar-slot">{bar}</div>
+								<button type="button" className="btn btn--sm btn--ghost" onClick={onClose} aria-label="Close detail">
+									✕ Close
+								</button>
+							</div>
+							<div className="cn-scaffold__body">{detail}</div>
+						</>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

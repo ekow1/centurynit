@@ -90,7 +90,6 @@ const OPERATIONS_NAV: NavEntry[] = [
 		children: [
 			{ to: "/finance", module: "finance", label: "Finance reports", blurb: "Revenue & collections", icon: "finance" },
 			{ to: "/reports", module: "reports", label: "Analytics Reports", blurb: "Operations & performance", icon: "reports" },
-			{ to: "/team", module: "reports", label: "Team", blurb: "Workload & rebalancing", icon: "reports" },
 		],
 	},
 	{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },

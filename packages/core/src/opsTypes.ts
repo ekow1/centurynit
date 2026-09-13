@@ -279,6 +279,21 @@ export interface MockApplication {
 	/** Parent consultation that opened this application, if any. */
 	consultationId?: string | null;
 	consultationNumber?: string | null;
+	/** Biographical and passport data */
+	dateOfBirth?: string;
+	passportNumber?: string;
+	passportExpiry?: string;
+	nationality?: string;
+	emergencyContactName?: string;
+	emergencyContactPhone?: string;
+	emergencyContactRelation?: string;
+	/** Academic history */
+	previousEducation?: {
+		institution: string;
+		degree: string;
+		graduationYear: number;
+		gpa?: string;
+	}[];
 	/** Actual schools selected by the applicant, with their per-school statuses. */
 	schoolApplications?: SchoolApplication[];
 }

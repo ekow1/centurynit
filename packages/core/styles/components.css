@@ -188,21 +188,41 @@
 /* Collapsible variant (Workspace): with nothing selected the detail pane is
    not rendered at all and the queue keeps the page width — a six-column
    table needs the room a row-card list doesn't. */
-.cn-scaffold--collapse .cn-scaffold__list { flex: 1 1 auto; min-width: 0; }
-.cn-scaffold--collapse.cn-scaffold--open .cn-scaffold__list { flex: 0 0 58%; }
-.cn-scaffold--collapse.cn-scaffold--open .cn-scaffold__detail { flex: 1 1 auto; }
+.cn-scaffold--collapse > .cn-scaffold__list { flex: 1 1 auto; min-width: 0; }
+.cn-scaffold--collapse.cn-scaffold--open > .cn-scaffold__list { flex: 0 0 58%; }
+.cn-scaffold--collapse.cn-scaffold--open > .cn-scaffold__detail { flex: 1 1 auto; }
+/* Bare variant (Workspace): a data table needs no pane frame — the table's
+   own hairlines are the structure, and the tabs' underline is the top edge.
+   List and detail share the page surface; a single vertical rule splits them. */
+.cn-scaffold--bare { gap: 0; }
+.cn-scaffold--bare .cn-scaffold__list,
+.cn-scaffold--bare .cn-scaffold__detail { border: none; }
+.cn-scaffold--bare .cn-scaffold__detail { border-left: 1px solid var(--border-light); }
+@media (max-width: 959.98px) {
+	.cn-scaffold--bare .cn-scaffold__detail { border-left: none; border-top: 1px solid var(--border-light); }
+}
 .cn-scaffold__bar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.4rem 0.75rem 0.4rem 1.25rem; border-bottom: 1px solid var(--border-light); background: var(--muted); flex-shrink: 0; }
 .cn-scaffold__bar-slot { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; min-width: 0; }
+.cn-scaffold__bar-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+/* Expanded detail: the same pane lifted over the page. Sits under sheets
+   (z 2000) so anything opened from inside it still stacks on top. */
+.cn-scaffold__scrim { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+.cn-scaffold__detail--expanded { flex: none; width: min(96vw, 80rem); height: min(92dvh, 100%); max-height: 92dvh; border: 1px solid var(--foreground); }
+.cn-scaffold--bare .cn-scaffold__detail--expanded { border: 1px solid var(--foreground); }
+@media (max-width: 899.98px) {
+	.cn-scaffold__scrim { padding: 0; }
+	.cn-scaffold__detail--expanded { width: 100vw; height: 100dvh; max-height: 100dvh; border: none; }
+}
 .cn-scaffold__body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 1.25rem 1.25rem; }
 .cn-scaffold__empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; text-align: center; gap: 0.75rem; }
 .cn-scaffold__empty-mark { font-size: 2.5rem; opacity: 0.15; }
 .cn-scaffold__filters { padding: 0.75rem; border-bottom: 1px solid var(--border-light); background: var(--muted); flex-shrink: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 /* One-line strip: search grows, selects keep a fixed basis, stats pin right.
    Used where the filter strip sits above a full-width table. */
-.cn-scaffold__filters--row { flex-direction: row; align-items: center; flex-wrap: wrap; }
-.cn-scaffold__filters--row .cn-search { flex: 1 1 14rem; width: auto; }
-.cn-scaffold__filters--row .cn-filter { flex: 0 1 15rem; }
-.cn-scaffold__filters--row .cn-scaffold__filter-row { flex: 0 0 auto; flex-wrap: wrap; }
+.cn-scaffold__filters--row { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.cn-scaffold__filters--row .cn-search { flex: 1 1 40%; width: auto; }
+.cn-scaffold__filters--row .cn-filter { flex: 0 1 auto; }
+.cn-scaffold__filters--row .cn-scaffold__filter-row { flex: 0 0 auto; flex-wrap: nowrap; }
 /* ── Queue filters (list pane) ──────────────────────────────────────────── */
 /* A detail's content column; its first child's margin supplies the top space.
    It must live *inside* the detail root — the root is the sticky tab bar's
@@ -220,8 +240,15 @@
 .cn-detailhead__kicker { display: inline-block; margin-bottom: 0.35rem; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); }
 /* Itemised detail (outstanding documents, checklist rows): one per line. */
 .cn-detail__list { margin: 0; padding: 0 0 0 1.1rem; font-size: var(--text-sm); display: flex; flex-direction: column; gap: 0.3rem; }
-/* The record's facts box. Distinct from .cn-facts (the case tabs' 2-col grid). */
-.cn-detail__facts { border: 1px solid var(--border-light); padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: var(--text-sm); }
+/* Eyebrow above a detail section ("Needs action", "Record"). */
+.cn-detail__eyebrow { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); }
+/* Status rows inside the detail pane — label left, note right, hairlines. */
+.cn-detail__rows { display: flex; flex-direction: column; border-top: 1px solid var(--border-light); }
+.cn-detail__row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0; border-bottom: 1px solid var(--border-light); font-size: var(--text-sm); }
+.cn-detail__row-note { font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); white-space: nowrap; }
+/* The record's facts, hairline-separated — not a box. Distinct from
+   .cn-facts (the case tabs' 2-col grid). */
+.cn-detail__facts { border-top: 1px solid var(--border-light); padding: 0.6rem 0 0; display: flex; flex-direction: column; gap: 0.35rem; font-size: var(--text-sm); }
 .cn-detail__facts p { margin: 0; }
 
 .cn-filter { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; }

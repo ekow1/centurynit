@@ -67,7 +67,8 @@ function getStageProgress(type: "case" | "consultation", stageOrStatus: string):
 	if (type === "case") {
 		const idx = (JOURNEY_STAGES as readonly string[]).indexOf(stageOrStatus);
 		const step = idx >= 0 ? idx + 1 : 1;
-		const label = JOURNEY_STAGE_LABELS[stageOrStatus as JourneyStage] ?? stageOrStatus;
+		const rawLabel = JOURNEY_STAGE_LABELS[stageOrStatus as JourneyStage] ?? stageOrStatus;
+		const label = rawLabel === "Complete" ? "Completed" : rawLabel;
 		return { step, total: JOURNEY_STAGES.length, label };
 	}
 	const map: Record<string, { step: number; label: string }> = {
@@ -200,9 +201,9 @@ export function WorkspaceCaseload() {
 
 			{/* Summary first — a manager reads who is carrying what before the rows. */}
 			{staffList.length > 0 && (
-				<section className="ops-panel" style={{ marginBottom: "1.25rem" }}>
-					<header className="ops-panel__head">
-						<h2 className="section-title">Workload distribution</h2>
+				<section style={{ marginBottom: "1.25rem" }}>
+					<header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+						<h2 className="eyebrow" style={{ margin: 0 }}>Workload distribution</h2>
 						<button type="button" className="btn btn--ghost btn--sm" onClick={() => void refreshCases()} disabled={loading}>
 							{loading ? "Refreshing…" : "Refresh"}
 						</button>
@@ -373,10 +374,10 @@ export function WorkspaceCaseload() {
 										<div className="ops-table__sub" style={{ fontFamily: "var(--font-mono, monospace)" }}>
 											{r.reference}
 										</div>
-										{r.clientEmail && <div className="ops-table__sub">{r.clientEmail}</div>}
+										{r.clientEmail && <div className="ops-table__sub" style={{ color: "var(--muted-foreground)", fontFamily: "var(--font-mono, monospace)" }}>{r.clientEmail}</div>}
 									</td>
 									<td>
-										<span className="ops-pill">{r.type === "case" ? "Case" : "Consultation"}</span>
+										<span className="ops-badge">{r.type === "case" ? "Case" : "Consultation"}</span>
 									</td>
 									<td>
 										{r.assignedStaffName ?? "Unassigned"}
@@ -389,9 +390,10 @@ export function WorkspaceCaseload() {
 														background: "none",
 														border: "none",
 														padding: 0,
+														marginTop: "0.25rem",
 														cursor: "pointer",
 														fontSize: "inherit",
-														color: "inherit",
+														color: "var(--muted-foreground)",
 														textDecoration: "underline",
 													}}
 												>
@@ -410,7 +412,7 @@ export function WorkspaceCaseload() {
 													key={i}
 													style={{
 														flex: 1,
-														height: "2px",
+														height: "1px",
 														background: i < progress.step ? "var(--muted-foreground)" : "var(--border-light)",
 													}}
 												/>

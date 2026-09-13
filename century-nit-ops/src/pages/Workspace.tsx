@@ -3,7 +3,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { BranchScopeFilter } from "./BranchScopeFilter";
+import { OPS_BRANCHES } from "century-nit-core/ops";
+
 import { fmtGhs, fmtUsd, money } from "./currency";
 import type {
 	MockConsultation,
@@ -48,10 +49,25 @@ const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
 /** Queue filters — every entry is a real task category from buildPendingTasks. */
 const QUEUE_FILTERS: { id: string; label: string }[] = [
 	{ id: "all", label: "All" },
-	{ id: "needs_assignment", label: "Needs an owner" },
-	{ id: "needs_action", label: "Needs you" },
-	{ id: "needs_invoice", label: "Waiting on finance" },
-	{ id: "needs_followup", label: "Follow up" },
+	{ id: "needs_assignment", label: "Unassigned" },
+	{ id: "needs_action", label: "My Tasks" },
+	{ id: "needs_invoice", label: "Invoicing" },
+	{ id: "needs_followup", label: "Follow-up" },
+];
+
+const TYPE_FILTERS: { id: string; label: string }[] = [
+	{ id: "all", label: "All Types" },
+	{ id: "consultation", label: "Consultation" },
+	{ id: "application", label: "Application" },
+	{ id: "travel", label: "Travel" },
+	{ id: "invoice", label: "Invoice" },
+	{ id: "lead", label: "Lead" },
+];
+
+const DATE_SORTS = [
+	{ id: "default", label: "Priority" },
+	{ id: "desc", label: "Newest first" },
+	{ id: "asc", label: "Oldest first" },
 ];
 
 export function Workspace() {
@@ -78,6 +94,8 @@ export function Workspace() {
 	const [search, setSearch] = useState("");
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [filter, setFilterState] = useState<string>(searchParams.get("filter") ?? "all");
+	const [typeFilter, setTypeFilter] = useState("all");
+	const [dateSort, setDateSort] = useState("default");
 	const setFilter = (next: string) => {
 		setFilterState(next);
 		const params = new URLSearchParams(searchParams);
@@ -177,14 +195,21 @@ export function Workspace() {
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
-		return items.filter((item) => {
+		let result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
 			if (activeFilter !== "all" && item.category !== activeFilter) return false;
+			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
 			return hay.includes(q);
 		});
-	}, [items, branchFilter, activeFilter, search]);
+		if (dateSort === "desc") {
+			result.sort((a, b) => (new Date(b.at || 0).getTime()) - (new Date(a.at || 0).getTime()));
+		} else if (dateSort === "asc") {
+			result.sort((a, b) => (new Date(a.at || 0).getTime()) - (new Date(b.at || 0).getTime()));
+		}
+		return result;
+	}, [items, branchFilter, activeFilter, typeFilter, dateSort, search]);
 
 	const stats = useMemo(() => {
 		const counts = new Map<string, number>([["all", items.length]]);
@@ -231,7 +256,7 @@ export function Workspace() {
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-					{view === "worklist" && canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
+					{/* Filters moved to the inline table row */}
 				</div>
 			</div>
 
@@ -247,15 +272,10 @@ export function Workspace() {
 			{view === "caseload" && <WorkspaceCaseload />}
 
 			{view === "worklist" && <CaseScaffold
+				bare
 				collapseDetail
 				onClose={() => setSelected(null)}
-				bar={
-					selected ? (
-						<Link to={selected.linkTo} className="btn btn--primary btn--sm">
-							{openLabel(selected)}
-						</Link>
-					) : null
-				}
+				bar={null}
 				list={
 					<>
 						<div className="cn-scaffold__filters cn-scaffold__filters--row">
@@ -281,6 +301,49 @@ export function Workspace() {
 									))}
 								</select>
 							</label>
+							<label className="cn-filter">
+								<span className="cn-filter__label">Type</span>
+								<select
+									className="cn-filter__select"
+									value={typeFilter}
+									onChange={(e) => setTypeFilter(e.target.value)}
+								>
+									{TYPE_FILTERS.map((f) => (
+										<option key={f.id} value={f.id}>
+											{f.label}
+										</option>
+									))}
+								</select>
+							</label>
+							<label className="cn-filter">
+								<span className="cn-filter__label">Date/Time</span>
+								<select
+									className="cn-filter__select"
+									value={dateSort}
+									onChange={(e) => setDateSort(e.target.value)}
+								>
+									{DATE_SORTS.map((f) => (
+										<option key={f.id} value={f.id}>
+											{f.label}
+										</option>
+									))}
+								</select>
+							</label>
+							{view === "worklist" && canSeeAllBranches && (
+								<label className="cn-filter">
+									<span className="cn-filter__label">Branch</span>
+									<select
+										className="cn-filter__select"
+										value={branchFilter}
+										onChange={(e) => setBranchFilter(e.target.value)}
+									>
+										<option value="all">All Branches</option>
+										{OPS_BRANCHES.map(b => (
+											<option key={b.id} value={b.id}>{b.name}</option>
+										))}
+									</select>
+								</label>
+							)}
 							{loading && <span className="cn-filter__label">Loading…</span>}
 							{stats.overdue > 0 && (
 								<span className="cn-filter__label" style={{ marginLeft: "auto" }}>
@@ -404,26 +467,34 @@ function PreviewPane({
 	return (
 		<div className="cn-detail">
 			{/* The "open" action lives in the scaffold bar beside Close, not here. */}
-			<div>
+			<div className="card" style={{ padding: "1.25rem", borderBottom: "none" }}>
 				<span className="cn-detailhead__kicker">{TASK_KIND_LABEL[item.kind]} · {taskActionLabel(item)}</span>
-				<h3 className="cn-detailhead__title">{item.title}</h3>
+				<h3 className="cn-detailhead__title" style={{ fontSize: "1.25rem", margin: "0.25rem 0" }}>{item.title}</h3>
 				<p className="cn-detailhead__sub">{item.subtitle}</p>
 				{/* `meta` is prose or a reference, never shouted; the mono line below is for facts. */}
 				{!item.details && item.meta && <p className="cn-detailhead__sub">{item.meta}</p>}
 				<p className="cn-detailhead__meta">
-					{item.branch ? `${item.branch} · ` : ""}Assigned: {item.owner}
+					{item.branch ? `${OPS_BRANCHES.find(b => b.id === item.branch)?.name || item.branch} · ` : ""}Assigned: {item.owner}
 				</p>
 			</div>
 
 			{item.details && (
-				<ul className="cn-detail__list">
-					{item.details.map((d) => (
-						<li key={d}>{d}</li>
-					))}
-				</ul>
+				<div className="card" style={{ padding: "1.25rem" }}>
+					<p className="cn-detail__eyebrow" style={{ marginBottom: "0.75rem" }}>Needs action</p>
+					<ul style={{ listStyleType: "disc", paddingLeft: "1.25rem", margin: "0" }}>
+						{item.details.map((d) => (
+							<li key={d.label} style={{ marginBottom: "0.5rem" }}>
+								<span className="ops-panel__muted">{d.label}</span>
+								{d.note && <span className="cn-detail__row-note" style={{ marginLeft: "0.75rem", background: "var(--muted)", padding: "0.15rem 0.45rem", color: "var(--foreground)" }}>{d.note}</span>}
+							</li>
+						))}
+					</ul>
+				</div>
 			)}
 
-			<div className="cn-detail__facts">
+			<div className="card" style={{ padding: "1.25rem" }}>
+				<p className="cn-detail__eyebrow" style={{ marginBottom: "0.75rem" }}>Record Details</p>
+				<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
 				{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
 				{item.kind === "application" && <ApplicationDetails a={item.record} />}
 				{item.kind === "visa" && <VisaDetails a={item.record} />}
@@ -431,6 +502,7 @@ function PreviewPane({
 				{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
 				{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
 				{item.kind === "lead" && <LeadDetails lead={item.record} />}
+				</div>
 			</div>
 
 			{item.kind === "handoff" && canAssignWork && (
@@ -467,6 +539,13 @@ function PreviewPane({
 					/>
 				</div>
 			)}
+
+			{/* Bottom actions */}
+			<div style={{ marginTop: "2rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "flex-end" }}>
+				<Link to={item.linkTo} className="btn btn--primary btn--sm">
+					{openLabel(item)}
+				</Link>
+			</div>
 		</div>
 	);
 }

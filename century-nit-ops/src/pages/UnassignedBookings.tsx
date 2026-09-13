@@ -175,21 +175,22 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 	if (!canAssignWork) return null; // consultants do not triage
 
 	// Empty triage is a line, not a panel — the controls stay inline.
-	if (bookings && bookings.length === 0 && !showAssigned && !error && !justAssigned) {
+	// Empty triage is a line, not a panel — the controls stay inline.
+	if (bookings && bookings.length === 0 && !error && !justAssigned) {
 		return (
-			<p className="ops-panel__muted" style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-				<span>Unassigned bookings — nothing waiting.</span>
-				<button
-					type="button"
-					className="btn btn--ghost btn--sm"
-					onClick={() => setShowAssigned(true)}
-				>
-					Show assigned
-				</button>
-				<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
-					Refresh
-				</button>
-			</p>
+			<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--muted)", padding: "0.5rem 1rem", marginBottom: "1.25rem" }}>
+				<span className="ops-panel__muted" style={{ margin: 0 }}>
+					{showAssigned ? "No assigned bookings." : "Unassigned bookings — nothing waiting."}
+				</span>
+				<div style={{ display: "flex", gap: "0.5rem" }}>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowAssigned(!showAssigned)}>
+						{showAssigned ? "Show unassigned" : "Show assigned"}
+					</button>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
+						Refresh
+					</button>
+				</div>
+			</div>
 		);
 	}
 
@@ -228,12 +229,6 @@ export function UnassignedQueue({ title = "Unassigned bookings" }: { title?: str
 			)}
 
 			{!bookings && <p className="ops-panel__muted">Loading…</p>}
-
-			{bookings && bookings.length === 0 && !error && (
-				<p className="ops-panel__muted">
-					{showAssigned ? "No assigned bookings to reassign." : "Nothing waiting to be assigned."}
-				</p>
-			)}
 
 			{bookings && bookings.length > 0 && (
 				<table className="ops-table">

@@ -13,7 +13,7 @@ import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, NextActionBand, StatusPill, type NextAction } from "century-nit-core/ui";
-import { PORTAL_STAGE_ORDER } from "century-nit-shared";
+
 
 function isKnown(v: string | undefined | null): v is string {
 	const s = (v ?? "").trim();
@@ -180,29 +180,7 @@ export function ConsultationDetail({
 	// Where this applicant is on the ladder: the spawned application's derived
 	// journey when there is one, else the two consultation steps.
 	const spawned = consultation.applicationId ? applications.find((a) => a.id === consultation.applicationId) ?? null : null;
-	const journey: { portalStage: string; nextUnlock: string | null; stageStatuses: Record<string, "done" | "current" | "locked" | "skipped"> } =
-		spawned?.journey ?? {
-			portalStage: consultation.status === "Completed" ? "eligibility" : "consultation",
-			nextUnlock: consultation.status === "Completed" ? "The applicant chooses whether to proceed" : null,
-			stageStatuses: Object.fromEntries(
-				PORTAL_STAGE_ORDER.map((id) => [
-					id,
-					id === "new"
-						? "done"
-						: id === "consultation"
-							? consultation.status === "Completed"
-								? "done"
-								: consultation.status === "Cancelled"
-									? "skipped"
-									: "current"
-							: id === "eligibility"
-								? consultation.status === "Completed"
-									? "current"
-									: "locked"
-								: "locked",
-				]),
-			),
-		};
+
 
 	// What this consultation is waiting on from us.
 	const canActOnReschedule =
@@ -308,7 +286,7 @@ export function ConsultationDetail({
 					name={consultation.applicantName}
 					reference={consultation.ref}
 					branch={consultation.branch}
-					portalStage={journey?.portalStage ?? (consultation.status === "Completed" ? "eligibility" : "consultation")}
+					portalStage={consultation.status === "Completed" ? "eligibility" : "consultation"}
 					handlerName={consultation.assignedOfficer || null}
 					handlerAction={
 						canAssignWork && consultation.status !== "Completed" && consultation.status !== "In Assessment" && consultation.status !== "Cancelled" ? (
@@ -819,7 +797,36 @@ export function ConsultationDetail({
 				</div>
 			)}
 
-				{detailTab === "assessment" && !canAssess && (
+				{detailTab === "assessment" && consultation.status === "Completed" && (
+					<div className="card" style={{ marginTop: "1rem" }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+							<h3 className="section-title" style={{ margin: 0 }}>Consultation Assessment</h3>
+							<span className="ops-badge" style={{ background: "var(--foreground)", color: "var(--background)" }}>🔒 Locked</span>
+						</div>
+						
+						<dl className="cn-facts" style={{ marginTop: "1rem" }}>
+							<dt>Outcome</dt>
+							<dd><strong>{consultation.assessmentResult?.outcome ?? "—"}</strong></dd>
+
+							<dt>Recommendation Notes</dt>
+							<dd style={{ whiteSpace: "pre-wrap" }}>{consultation.assessmentResult?.notes ?? "—"}</dd>
+
+							<dt>Recommended Country</dt>
+							<dd>{consultation.assessmentResult?.recCountry ?? "—"}</dd>
+
+							<dt>Recommended University</dt>
+							<dd>{consultation.assessmentResult?.recUniversity ?? "—"}</dd>
+
+							<dt>Recommended Program</dt>
+							<dd>{consultation.assessmentResult?.recProgram ?? "—"}</dd>
+
+							<dt>Recommended Package</dt>
+							<dd>{consultation.assessmentResult?.recPackage ?? "—"}</dd>
+						</dl>
+					</div>
+				)}
+
+				{detailTab === "assessment" && consultation.status !== "Completed" && !canAssess && (
 					<div className="card" style={{ marginTop: "1rem" }}>
 						<h3 className="section-title mb-3">Consultation Assessment Form</h3>
 						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
@@ -828,7 +835,7 @@ export function ConsultationDetail({
 					</div>
 				)}
 
-			{detailTab === "assessment" && canAssess && (
+			{detailTab === "assessment" && consultation.status !== "Completed" && canAssess && (
 			<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>
 				<h3 className="section-title mb-3">Consultation Assessment Form</h3>
 				{isSubmitted && (
@@ -848,7 +855,7 @@ export function ConsultationDetail({
 						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
 							Assessment Outcome
 						</label>
-						<select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="input" style={{ width: "100%" }}>
+						<select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="input" style={{ width: "100%", padding: "0.6rem" }}>
 							<option value="Eligible">Eligible - Approve for School Selection</option>
 							<option value="Conditionally Eligible">Conditionally Eligible - Pending Docs</option>
 							<option value="Need More Information">Need More Information</option>
@@ -859,24 +866,54 @@ export function ConsultationDetail({
 						<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
 							Consultant Recommendation Notes
 						</label>
-						<textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Detailed notes regarding eligibility, academic background, visa probability..." className="input" style={{ width: "100%" }} />
+						<textarea rows={6} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Detailed notes regarding eligibility, academic background, visa probability..." className="input" style={{ width: "100%", padding: "0.75rem", fontFamily: "inherit" }} />
 					</div>
-					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.25rem" }}>
+					<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
 						<div>
 							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Country</label>
-							<input type="text" value={recCountry} onChange={(e) => setRecCountry(e.target.value)} className="input" style={{ width: "100%" }} />
+							<select value={recCountry} onChange={(e) => setRecCountry(e.target.value)} className="input" style={{ width: "100%", padding: "0.6rem" }}>
+								<option value="">-- Select Country --</option>
+								<option value="United States">United States</option>
+								<option value="Canada">Canada</option>
+								<option value="United Kingdom">United Kingdom</option>
+								<option value="Australia">Australia</option>
+								<option value="Germany">Germany</option>
+								<option value="France">France</option>
+								<option value="China">China</option>
+								<option value="Other">Other</option>
+							</select>
 						</div>
 						<div>
 							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended University</label>
-							<input type="text" value={recUniversity} onChange={(e) => setRecUniversity(e.target.value)} className="input" style={{ width: "100%" }} />
+							<input list="universities" type="text" value={recUniversity} onChange={(e) => setRecUniversity(e.target.value)} placeholder="Select or type..." className="input" style={{ width: "100%", padding: "0.6rem" }} />
+							<datalist id="universities">
+								<option value="Harvard University" />
+								<option value="Stanford University" />
+								<option value="Massachusetts Institute of Technology (MIT)" />
+								<option value="University of Oxford" />
+								<option value="University of Cambridge" />
+								<option value="University of Toronto" />
+								<option value="University of British Columbia" />
+								<option value="McGill University" />
+							</datalist>
 						</div>
 						<div>
 							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Program</label>
-							<input type="text" value={recProgram} onChange={(e) => setRecProgram(e.target.value)} className="input" style={{ width: "100%" }} />
+							<input list="programs" type="text" value={recProgram} onChange={(e) => setRecProgram(e.target.value)} placeholder="Select or type..." className="input" style={{ width: "100%", padding: "0.6rem" }} />
+							<datalist id="programs">
+								<option value="Foundation in Computer Science" />
+								<option value="BSc Computer Science" />
+								<option value="BSc Business Administration" />
+								<option value="BSc Nursing" />
+								<option value="BSc Public Health" />
+								<option value="MSc Data Science" />
+								<option value="Master of Business Administration (MBA)" />
+								<option value="MSc Artificial Intelligence" />
+							</datalist>
 						</div>
 						<div>
 							<label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", marginBottom: "0.35rem" }}>Recommended Package</label>
-							<select value={recPackage} onChange={(e) => setRecPackage(e.target.value)} className="input" style={{ width: "100%" }}>
+							<select value={recPackage} onChange={(e) => setRecPackage(e.target.value)} className="input" style={{ width: "100%", padding: "0.6rem" }}>
 								<option value="undecided">Undecided</option>
 								<option value="non_scholarship">Non-Scholarship</option>
 								<option value="scholarship">Scholarship</option>
@@ -884,7 +921,7 @@ export function ConsultationDetail({
 							</select>
 						</div>
 					</div>
-					<button type="submit" className="btn btn--primary" style={{ width: "100%", padding: "0.85rem" }}>
+					<button type="submit" className="btn btn--primary" style={{ width: "100%", padding: "1rem", fontSize: "1rem", textTransform: "uppercase", letterSpacing: "1px" }}>
 						Complete Consultation & Lock Assessment
 					</button>
 			</form>

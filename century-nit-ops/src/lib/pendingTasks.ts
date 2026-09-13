@@ -179,8 +179,9 @@ export type PendingTask = (BaseTask | BookingTask) & {
 	/** When the task is dated — the record's last change, or the moment it asked
 	 * for something (a reschedule, a due date). Shown in the queue's When column. */
 	at?: string;
-	/** Itemised detail for the preview pane; the table never shows it. */
-	details?: string[];
+	/** Itemised detail for the preview pane — label left, status note right;
+	 * the table never shows it. */
+	details?: { label: string; note?: string }[];
 };
 
 /** Visa sub-stage names — the one vocabulary, shared with the portal. */
@@ -736,9 +737,15 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					: `${outstanding.length} document${outstanding.length === 1 ? "" : "s"} not uploaded yet`,
 			// One line for the table (clamped there); the pane gets the list.
 			meta: `${outstanding.length} outstanding: ${outstanding.map((d) => d.name).join(", ")}`,
-			details: outstanding.map((d) =>
-				d.status === "UPLOADED" ? `${d.name} — uploaded, to verify` : d.status === "REJECTED" ? `${d.name} — rejected, needs re-upload` : `${d.name} — not uploaded`,
-			),
+			details: outstanding.map((d) => ({
+				label: d.name,
+				note:
+					d.status === "UPLOADED"
+						? "To verify"
+						: d.status === "REJECTED"
+							? "Re-upload needed"
+							: "Not uploaded",
+			})),
 			branch: a.branch,
 			owner: a.assignedStaff || "—",
 			linkTo: `/applications?id=${a.id}&tab=documents`,

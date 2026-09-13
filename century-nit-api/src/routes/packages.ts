@@ -74,6 +74,51 @@ packagesRouter.openapi(
 	},
 );
 
+/* ── GET /api/v1/packages/all (staff) ─────────────────────────────────────── */
+
+packagesRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/all",
+		tags: ["Packages"],
+		summary: "List every service package, including deactivated ones",
+		middleware: [requireAuth, requireModule("packages")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": { schema: packageListResponseSchema },
+				},
+				description: "All packages, sorted by sort order",
+			},
+		},
+	}),
+	async (c) => {
+		const rows = await db
+			.select()
+			.from(servicePackages)
+			.orderBy(servicePackages.sortOrder, desc(servicePackages.createdAt));
+		return c.json({
+			packages: rows.map((r) => ({
+				id: r.id,
+				code: r.code,
+				name: r.name,
+				tagline: r.tagline,
+				priceCents: r.priceCents,
+				currency: r.currency,
+				features: r.features,
+				exclusions: r.exclusions,
+				includedFeeKeys: r.includedFeeKeys,
+				requiredDocuments: r.requiredDocuments ?? [],
+				maxSchools: r.maxSchools,
+				sortOrder: r.sortOrder,
+				active: r.active,
+				createdAt: r.createdAt.toISOString(),
+				updatedAt: r.updatedAt.toISOString(),
+			})),
+		});
+	},
+);
+
 /* ── GET /api/v1/packages/:code ───────────────────────────────────────────── */
 
 packagesRouter.openapi(

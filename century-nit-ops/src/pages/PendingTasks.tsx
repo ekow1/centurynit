@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiError, applicationsApi, bookingsApi } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
 import type { Booking } from "century-nit-shared";
+import { OPS_BRANCHES } from "century-nit-core/ops";
 import type { Lead } from "century-nit-core";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
@@ -165,7 +166,7 @@ export function PendingTaskTable({
 							<tr>
 								<th>Task</th>
 								<th>Type</th>
-								<th>When</th>
+								<th>When / Details</th>
 								{canSeeAllBranches && <th>Branch</th>}
 								<th>Assigned</th>
 								<th />
@@ -191,7 +192,7 @@ export function PendingTaskTable({
 									>
 										<td>
 											<strong>{t.title}</strong>
-											<div className="ops-table__sub">{t.subtitle}</div>
+											<div className="ops-table__sub" title={t.subtitle} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "22rem" }}>{t.subtitle}</div>
 											{t.kind === "booking" && (
 												<div className="ops-table__sub">{t.record.clientEmail}</div>
 											)}
@@ -210,11 +211,11 @@ export function PendingTaskTable({
 											)}
 										</td>
 										<td>
-											<span className="ops-pill">{TASK_KIND_LABEL[t.kind]}</span>
+											<span className="ops-badge">{TASK_KIND_LABEL[t.kind]}</span>
 											<div className="ops-table__sub">{taskActionLabel(t)}</div>
 										</td>
 										<td className="ops-table__when" title={t.at ? new Date(t.at).toLocaleString() : undefined}>{whenLabel(t.at)}</td>
-										{canSeeAllBranches && <td>{t.branch || "—"}</td>}
+										{canSeeAllBranches && <td>{OPS_BRANCHES.find(b => b.id === t.branch)?.name || t.branch || "—"}</td>}
 										<td>{t.owner}</td>
 										<td
 											style={{ textAlign: "right", whiteSpace: "nowrap" }}

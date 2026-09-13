@@ -10,15 +10,18 @@ import { schoolsApi } from "century-nit-core/api";
 import {
 	ALLOWED_DOCUMENT_TYPES,
 	MAX_DOCUMENT_BYTES,
+	SCHOOL_FILE_LABELS,
 	SCHOOL_OUTCOME_LABELS,
 	SCHOOL_TRACK_STAGES,
 	SCHOOL_TRACK_STATUS_LABELS,
 	schoolDecisionNote,
 	type SchoolApplication,
+	type SchoolFileKind,
 	type SchoolOutcome,
 	type SchoolTrackStatus,
 } from "century-nit-shared";
 import { issueApplicationInvoice, raiseApplicationInvoice } from "../../../lib/api";
+import { AddSchoolApplicationModal } from "../../AddSchoolApplicationModal";
 
 /**
  * Applications — the schools, the application fee, submissions and offers.
@@ -67,6 +70,9 @@ function SchoolRow({
 	school,
 	feePaid,
 	canWork,
+	accepted,
+	otherAccepted,
+	offerAcceptedAt,
 	flash,
 	fail,
 }: {
@@ -74,12 +80,18 @@ function SchoolRow({
 	school: SchoolApplication;
 	feePaid: boolean;
 	canWork: boolean;
+	/** This is the offer the client is going with. */
+	accepted: boolean;
+	/** Another school's offer was accepted — accepting this one replaces it. */
+	otherAccepted: boolean;
+	offerAcceptedAt?: string | null;
 	flash: Flash;
 	fail: Fail;
 }) {
 	const { updateSchoolApplication, refresh } = useCases();
 	const decided = school.status === "Decision Reached";
 	const admitted = decided && school.outcome === "Admitted";
+	const preparing = school.status === "Preparing Application";
 
 	const [editing, setEditing] = useState(false);
 	const [status, setStatus] = useState<SchoolTrackStatus>(school.status);
@@ -94,12 +106,16 @@ function SchoolRow({
 	const [depositDue, setDepositDue] = useState(dateInputValue(school.offerDepositDueAt));
 	const [depositPaid, setDepositPaid] = useState(dateInputValue(school.offerDepositPaidAt));
 
+	const [reference, setReference] = useState(school.institutionReference ?? "");
+
 	const [saving, setSaving] = useState(false);
-	const [uploading, setUploading] = useState(false);
+	const [uploading, setUploading] = useState<SchoolFileKind | null>(null);
 	const [uploadPct, setUploadPct] = useState(0);
 	const [showTimeline, setShowTimeline] = useState(false);
+	const [busy, setBusy] = useState(false);
 
 	const hasLetter = Boolean(school.offerLetterStorageKey || school.offerLetterUrl);
+	const hasProof = Boolean(school.submissionProofUrl);
 	const currentIdx = SCHOOL_TRACK_STAGES.indexOf(school.status);
 	const nextIdx = SCHOOL_TRACK_STAGES.indexOf(status);
 	const movingBack = nextIdx < currentIdx;
@@ -133,6 +149,7 @@ function SchoolRow({
 				outcome: willDecide ? outcome : null,
 				sendUpdateEmail: willDecide && sendUpdateEmail,
 				handlerNote: note.trim() || null,
+				institutionReference: reference.trim() || null,
 				...(movingBack ? { note: reason.trim() } : {}),
 				...(willAdmit
 					? {
@@ -158,10 +175,11 @@ function SchoolRow({
 		}
 	}
 
-	async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+	async function upload(kind: SchoolFileKind, e: React.ChangeEvent<HTMLInputElement>) {
 		const file = e.target.files?.[0];
 		e.target.value = "";
 		if (!file) return;
+		const label = SCHOOL_FILE_LABELS[kind].toLowerCase();
 		if (!ALLOWED_DOCUMENT_TYPES.includes(file.type as (typeof ALLOWED_DOCUMENT_TYPES)[number])) {
 			fail(new Error("Upload a PDF, image (JPEG, PNG) or Word document."), "Unsupported file");
 			return;
@@ -170,39 +188,94 @@ function SchoolRow({
 			fail(new Error("That file is larger than 15 MB."), "File too large");
 			return;
 		}
-		setUploading(true);
+		setUploading(kind);
 		setUploadPct(0);
 		try {
-			await schoolsApi.uploadAdmissionLetter(school.id, file, (p) => setUploadPct(p));
+			await schoolsApi.uploadFile(school.id, kind, file, (p) => setUploadPct(p));
 			await refresh();
-			flash("Offer letter filed in the client's vault");
+			flash(`${SCHOOL_FILE_LABELS[kind]} filed in the client's vault`);
 		} catch (err) {
-			fail(err, "Could not upload the offer letter");
+			fail(err, `Could not upload the ${label}`);
 		} finally {
-			setUploading(false);
+			setUploading(null);
 		}
 	}
 
-	async function removeLetter() {
-		setUploading(true);
+	async function removeFile(kind: SchoolFileKind) {
+		setUploading(kind);
 		try {
-			await schoolsApi.removeAdmissionLetter(school.id);
+			await schoolsApi.removeFile(school.id, kind);
 			await refresh();
-			flash("Offer letter removed");
+			flash(`${SCHOOL_FILE_LABELS[kind]} removed`);
 		} catch (err) {
-			fail(err, "Could not remove the offer letter");
+			fail(err, `Could not remove the ${SCHOOL_FILE_LABELS[kind].toLowerCase()}`);
 		} finally {
-			setUploading(false);
+			setUploading(null);
 		}
 	}
 
-	async function viewLetter() {
+	async function viewFile(kind: SchoolFileKind) {
 		try {
-			const { url } = await schoolsApi.admissionLetterDownloadUrl(school.id);
+			const { url } = await schoolsApi.fileDownloadUrl(school.id, kind);
 			window.open(url, "_blank", "noopener");
 		} catch (err) {
-			fail(err, "Could not open the offer letter");
+			fail(err, `Could not open the ${SCHOOL_FILE_LABELS[kind].toLowerCase()}`);
 		}
+	}
+
+	async function accept() {
+		if (otherAccepted && !window.confirm(`Switch the accepted offer to ${school.universityName ?? "this school"}?`)) return;
+		setBusy(true);
+		try {
+			await schoolsApi.acceptOffer(school.id);
+			await refresh();
+			flash(`${school.universityName ?? "School"} — offer accepted. Visa can open.`);
+		} catch (err) {
+			fail(err, "Could not accept the offer");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function remove() {
+		if (!window.confirm(`Remove ${school.universityName ?? "this school"} from the application? The draft invoice line goes with it.`)) return;
+		setBusy(true);
+		try {
+			await schoolsApi.removeByStaff(school.id);
+			await refresh();
+			flash(`${school.universityName ?? "School"} removed`);
+		} catch (err) {
+			fail(err, "Could not remove the school");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	/** One file slot: the input, progress, the on-file mark and remove. A plain
+	 * render helper, not a component — a component defined inside the row
+	 * would remount (and lose its input) on every keystroke. */
+	function fileSlot(kind: SchoolFileKind, present: boolean, hint: string) {
+		const isUploading = uploading === kind;
+		return (
+			<div style={{ marginTop: "0.6rem" }}>
+				<p className="muted" style={{ marginBottom: "0.15rem" }}>
+					{SCHOOL_FILE_LABELS[kind]} (PDF / image / Word) — {hint}
+				</p>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<input type="file" accept={ALLOWED_DOCUMENT_TYPES.join(",")} onChange={(e) => upload(kind, e)} disabled={uploading !== null} className="text-xs" />
+					{isUploading ? (
+						<span className="muted">Uploading… {uploadPct}%</span>
+					) : present ? (
+						<>
+							<span style={{ fontWeight: 600 }}>✓ On file</span>
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => removeFile(kind)} disabled={uploading !== null}>
+								Remove
+							</button>
+						</>
+					) : null}
+				</div>
+			</div>
+		);
 	}
 
 	const events = [...(school.events ?? [])].sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -210,8 +283,8 @@ function SchoolRow({
 	return (
 		<div
 			style={{
-				border: admitted ? "2px solid var(--foreground)" : "1px solid var(--border-light)",
-				background: admitted ? "var(--muted)" : "transparent",
+				border: accepted || admitted ? "2px solid var(--foreground)" : "1px solid var(--border-light)",
+				background: accepted ? "var(--muted)" : "transparent",
 			}}
 		>
 			{/* Summary — the record */}
@@ -221,13 +294,24 @@ function SchoolRow({
 						<p style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
 							{school.universityName || school.universityId}
 							<SchoolStatePill status={school.status} outcome={school.outcome} />
+							{accepted && (
+								<span className="text-xs" style={{ fontWeight: 700 }}>
+									★ Accepted{offerAcceptedAt ? ` ${fmtDate(offerAcceptedAt)}` : ""}
+								</span>
+							)}
 						</p>
 						<p className="muted text-xs">
 							{school.programName || school.programId} · {school.countryName || school.destinationId} · {school.intake}
+							{school.institutionReference && <> · Ref {school.institutionReference}</>}
 						</p>
 					</div>
 					{canWork && !editing && (
 						<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+							{admitted && !accepted && (
+								<button type="button" className="btn btn--sm btn--primary" onClick={accept} disabled={busy}>
+									{otherAccepted ? "Switch to this offer" : "Accept this offer"}
+								</button>
+							)}
 							<button
 								type="button"
 								className="btn btn--sm btn--ghost"
@@ -237,6 +321,11 @@ function SchoolRow({
 							>
 								{decided ? "Edit" : "Update"}
 							</button>
+							{preparing && (
+								<button type="button" className="btn btn--sm btn--ghost" onClick={remove} disabled={busy} title="Only a school still being prepared can be removed">
+									Remove
+								</button>
+							)}
 						</div>
 					)}
 				</div>
@@ -246,6 +335,7 @@ function SchoolRow({
 						addedAt && `Added ${addedAt}`,
 						submittedAt && `Submitted ${submittedAt}`,
 						decidedAt && `Decided ${decidedAt}`,
+						hasProof && "Submission ✓",
 						hasLetter && "Letter ✓",
 					]
 						.filter(Boolean)
@@ -279,8 +369,13 @@ function SchoolRow({
 				)}
 
 				<div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+					{hasProof && (
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => viewFile("submission-proof")}>
+							View submission
+						</button>
+					)}
 					{hasLetter && (
-						<button type="button" className="btn btn--sm btn--ghost" onClick={viewLetter}>
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => viewFile("offer-letter")}>
 							View letter
 						</button>
 					)}
@@ -343,6 +438,14 @@ function SchoolRow({
 						{movingBack && <span className="muted">← moving back</span>}
 					</div>
 
+					<label>
+						<span className="muted">School's application reference (their number for this application)</span>
+						<input className="input input--sm" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UCAS 1234567890 / OX-2026-44871" />
+					</label>
+
+					{status !== "Preparing Application" &&
+						fileSlot("submission-proof", hasProof, "the confirmation page or receipt showing we submitted")}
+
 					{movingBack && (
 						<div>
 							<p className="muted" style={{ marginBottom: "0.15rem" }}>
@@ -385,24 +488,7 @@ function SchoolRow({
 								</label>
 							</div>
 
-							<div style={{ marginTop: "0.6rem" }}>
-								<p className="muted" style={{ marginBottom: "0.15rem" }}>
-									Offer letter (PDF / image / Word) — filed in the client's vault and attached to the email
-								</p>
-								<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-									<input type="file" accept={ALLOWED_DOCUMENT_TYPES.join(",")} onChange={upload} disabled={uploading} className="text-xs" />
-									{uploading ? (
-										<span className="muted">Uploading… {uploadPct}%</span>
-									) : hasLetter ? (
-										<>
-											<span style={{ fontWeight: 600 }}>✓ Letter on file</span>
-											<button type="button" className="btn btn--ghost btn--sm" onClick={removeLetter}>
-												Remove
-											</button>
-										</>
-									) : null}
-								</div>
-							</div>
+							{fileSlot("offer-letter", hasLetter, "filed in the client's vault and attached to the email")}
 						</div>
 					)}
 
@@ -471,6 +557,8 @@ export function ApplicationsTab({
 	fail: Fail;
 }) {
 	const [issuing, setIssuing] = useState(false);
+	const [adding, setAdding] = useState(false);
+	const { addApplication, refresh } = useCases();
 
 	const schools = app.schoolApplications ?? [];
 	const total = schools.length;
@@ -483,6 +571,7 @@ export function ApplicationsTab({
 	const unsuccessful = decidedRows.filter((s) => s.outcome === "Application Rejected" || s.outcome === "Withdrawn").length;
 	const over = cap != null && cap > 0 && total > cap;
 	const feePaid = Boolean(app.appFeePaid);
+	const acceptedSchool = app.acceptedSchoolId ? schools.find((s) => s.id === app.acceptedSchoolId) ?? null : null;
 
 	const invoicePaid = appInvoice?.status === "paid";
 	const isProforma = appInvoice?.status === "proforma";
@@ -491,11 +580,12 @@ export function ApplicationsTab({
 
 	// The one sentence that says what moves this chapter.
 	const next = (() => {
-		if (total === 0) return "No schools yet — the client chooses them in the portal.";
+		if (acceptedSchool) return `Client accepted ${acceptedSchool.universityName ?? "an offer"} — Visa can open.`;
+		if (total === 0) return "No schools yet — add them here or the client picks them in the portal.";
 		if (!feePaid) return "Application fee not paid — submissions start once it is paid.";
 		if (preparing > 0) return `${preparing} to submit.`;
 		if (awaiting > 0) return `Waiting on ${awaiting} decision${awaiting === 1 ? "" : "s"}.`;
-		if (admitted > 0) return `All decisions in — ${admitted} admitted. Next: the client accepts an offer, then Visa.`;
+		if (admitted > 0) return `All decisions in — ${admitted} admitted. Next: the client accepts an offer (here or in the portal), then Visa.`;
 		if (waitlisted > 0) return "All decisions in — waitlisted only. Chase the school or add another.";
 		return "All decisions in — no admission. Add another school or close the case.";
 	})();
@@ -581,8 +671,13 @@ export function ApplicationsTab({
 			{/* Schools */}
 			<div className="card">
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
-					<p className="eyebrow" style={{ margin: 0 }}>
+					<p className="eyebrow" style={{ margin: 0, display: "flex", alignItems: "center", gap: "0.75rem" }}>
 						Schools
+						{canWork && (
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAdding(true)}>
+								+ Add school
+							</button>
+						)}
 					</p>
 					<p className="text-xs" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
 						<span>
@@ -612,13 +707,36 @@ export function ApplicationsTab({
 				{total > 0 ? (
 					<div className="cn-stack">
 						{schools.map((s) => (
-							<SchoolRow key={s.id} appId={app.appId} school={s} feePaid={feePaid} canWork={canWork} flash={flash} fail={fail} />
+							<SchoolRow
+								key={s.id}
+								appId={app.appId}
+								school={s}
+								feePaid={feePaid}
+								canWork={canWork}
+								accepted={app.acceptedSchoolId === s.id}
+								otherAccepted={Boolean(app.acceptedSchoolId) && app.acceptedSchoolId !== s.id}
+								offerAcceptedAt={app.offerAcceptedAt}
+								flash={flash}
+								fail={fail}
+							/>
 						))}
 					</div>
 				) : (
 					<p className="muted text-sm">No schools chosen yet.</p>
 				)}
 			</div>
+
+			{adding && (
+				<AddSchoolApplicationModal
+					forApplicant={{ id: app.applicantId, name: app.applicantName }}
+					onClose={() => setAdding(false)}
+					onAdd={async (applicantId, destinationId, universityId, programId, intake) => {
+						await addApplication(applicantId, { destinationId, universityId, programId, intake });
+						await refresh();
+						flash("School added — the draft invoice has a line for it.");
+					}}
+				/>
+			)}
 		</>
 	);
 }

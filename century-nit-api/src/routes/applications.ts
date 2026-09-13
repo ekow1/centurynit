@@ -60,14 +60,14 @@ import {
 
 
 import {
-
-
-
-	serializeInvoice,
-
-	issueProformaByOps,
+	APPLICATION_FEE_PLACEHOLDER_LABEL,
 	createProforma,
 	getFeeSchedule,
+	getInvoice,
+	issueProformaByOps,
+	schoolFeeLine,
+	serializeInvoice,
+	syncApplicationProformaLines,
 } from "../services/invoice.js";
 
 
@@ -444,11 +444,7 @@ async function ensureApplicationProforma(id: string): Promise<typeof schema.invo
 			.from(schema.schoolApplications)
 			.where(eq(schema.schoolApplications.applicationId, app.id));
 		const fees = await getFeeSchedule();
-		const schoolLines = schools.map((s) => ({
-			label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
-			detail: `Direct institutional submission & processing (${s.intake})`,
-			amountCents: fees.appPerSchoolCents,
-		}));
+		const schoolLines = schools.map((s) => schoolFeeLine(s, fees.appPerSchoolCents));
 		const proforma = await createProforma({
 			data: {
 				applicantName: applicant?.name ?? "Applicant",
@@ -459,13 +455,18 @@ async function ensureApplicationProforma(id: string): Promise<typeof schema.invo
 				status: "proforma",
 				lines: schoolLines.length > 0
 					? schoolLines
-					: [{ label: "University Application Fee", detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
+					: [{ label: APPLICATION_FEE_PLACEHOLDER_LABEL, detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
 				note: schools.length > 0
 					? `Application invoice for ${schools.length} university application(s).`
 					: "Application fee invoice. Per-school line items will follow as schools are added.",
 			},
 		});
 		appInvoice = proforma;
+	} else if (appInvoice.status === "proforma") {
+		// Still a draft: its lines follow the school list before it goes out.
+		if (await syncApplicationProformaLines(app.id)) {
+			appInvoice = (await getInvoice(appInvoice.id)) ?? appInvoice;
+		}
 	}
 
 	// Backfill applicationId if missing.

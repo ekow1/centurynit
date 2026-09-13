@@ -205,6 +205,10 @@ export type SchoolApplicationTrack = {
 	offerDepositDueAt: string | null;
 	offerDepositPaidAt: string | null;
 	offerLetterStorageKey?: string | null;
+	/** The school's own application number, when the consultant has recorded it. */
+	institutionReference?: string | null;
+	/** Set once the consultant filed proof that the application went in. */
+	submissionProofUrl?: string | null;
 };
 
 export type ApplicationData = {
@@ -247,6 +251,9 @@ export type ApplicationData = {
 	schoolFundingTrack: SchoolFundingTrack | "";
 	schoolDegreeLevel: SchoolDegreeLevel | "";
 	targetSchoolCount?: number;
+	/** The admitted school the client is going with. */
+	acceptedSchoolId?: string | null;
+	offerAcceptedAt?: string | null;
 	packageChosenAt: string | null;
 	packageSelectedAt: string | null;
 	/** Installment vs full - after admitted, before visa/travel */
@@ -2227,6 +2234,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					schoolFundingTrack: (a.fundingTrack as SchoolFundingTrack) || prev.schoolFundingTrack,
 					schoolDegreeLevel: (a.degreeLevel as SchoolDegreeLevel) || prev.schoolDegreeLevel,
 					targetSchoolCount: a.targetSchoolCount ?? prev.targetSchoolCount,
+					acceptedSchoolId: a.acceptedSchoolId ?? null,
+					offerAcceptedAt: a.offerAcceptedAt ?? null,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 					visaOutcome: a.visaOutcome ?? null,
 					visaCounselorNote: a.visaCounselorNote ?? prev.visaCounselorNote,

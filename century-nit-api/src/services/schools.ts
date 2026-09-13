@@ -4,6 +4,7 @@ import type {
 	AddSchoolApplication,
 	SchoolApplication,
 	SchoolApplicationList,
+	SchoolFileKind,
 	UpdateSchoolStatus,
 	AssignScholarship,
 	StudentScholarship,
@@ -15,7 +16,7 @@ import { db } from "../db/index.js";
 import {
 	applicants,
 	applications,
-	invoiceLines,
+	caseComments,
 	invoices,
 	schoolApplications,
 	schoolTrackEvents,
@@ -25,7 +26,7 @@ import {
 	catalogPrograms,
 	destinations,
 } from "../db/schema.js";
-import { createProforma, getFeeSchedule } from "./invoice.js";
+import { createProforma, getFeeSchedule, schoolFeeLine, syncApplicationProformaLines } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
@@ -134,49 +135,13 @@ export async function lockSchoolsForApplicant(
 				.set({ applicationId: app.id, updatedAt: new Date() })
 				.where(eq(invoices.id, activeInvoice.id));
 		}
-		// If it is still a proforma, update lines to reflect current selected schools count & direct university fees
+		// Still a draft: its lines follow the school list.
 		if (activeInvoice.status === "proforma") {
-			const subtotalCents = rows.length * fees.appPerSchoolCents;
-			const schoolLines = rows.map((r, idx) => ({
-				invoiceId: activeInvoice.id,
-				position: idx,
-				label: `${r.universityName || "University"} - ${r.programName || "Programme"} Application Fee`,
-				detail: `Direct institutional submission & processing (${r.intake})`,
-				amountCents: fees.appPerSchoolCents,
-			}));
-
-			await db.transaction(async (tx) => {
-				await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, activeInvoice.id));
-				await tx.insert(invoiceLines).values(
-					schoolLines.length > 0
-						? schoolLines
-						: [
-								{
-									invoiceId: activeInvoice.id,
-									position: 0,
-									label: "University Application Fee",
-									detail: "Per-institution submission fee",
-									amountCents: fees.appPerSchoolCents,
-								},
-							],
-				);
-				await tx
-					.update(invoices)
-					.set({
-						subtotalCents,
-						note: `Proforma estimate for ${rows.length} university application(s). Consultant will confirm exact institutional fees.`,
-						updatedAt: new Date(),
-					})
-					.where(eq(invoices.id, activeInvoice.id));
-			});
+			await syncApplicationProformaLines(app.id);
 		}
 	} else {
 		// Create a new PROFORMA estimate — consultant reviews & issues exact university fees
-		const schoolLines = rows.map((r) => ({
-			label: `${r.universityName || "University"} - ${r.programName || "Programme"} Application Fee`,
-			detail: `Direct institutional submission & processing (${r.intake})`,
-			amountCents: fees.appPerSchoolCents,
-		}));
+		const schoolLines = rows.map((r) => schoolFeeLine(r, fees.appPerSchoolCents));
 
 		const proforma = await createProforma({
 			data: {
@@ -268,6 +233,8 @@ export async function serializeSchool(
 		offerDepositPaidAt: row.offerDepositPaidAt?.toISOString() ?? null,
 		offerLetterStorageKey: row.offerLetterUrl ?? null,
 		offerLetterUrl: row.offerLetterUrl ?? null,
+		institutionReference: row.institutionReference ?? null,
+		submissionProofUrl: row.submissionProofUrl ?? null,
 	};
 }
 
@@ -352,6 +319,7 @@ export async function addSchoolForApplicant(
 		note: "School selection added to profile",
 	});
 
+	await syncApplicationProformaLines(app.id);
 	return serializeSchool(created);
 }
 
@@ -364,20 +332,80 @@ export async function removeSchoolForApplicant(
 		.from(schoolApplications)
 		.where(and(eq(schoolApplications.id, schoolId), eq(schoolApplications.applicantId, applicantId)))
 		.limit(1);
-
 	if (!target) {
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
+	await removeSchoolRow(target);
+}
 
+/** Staff remove — same rule as the client's: only a school still being prepared. */
+export async function removeSchoolByStaff(schoolId: string): Promise<void> {
+	const [target] = await db.select().from(schoolApplications).where(eq(schoolApplications.id, schoolId)).limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+	await removeSchoolRow(target);
+}
+
+async function removeSchoolRow(target: typeof schoolApplications.$inferSelect): Promise<void> {
 	if (target.status !== "Preparing Application") {
 		throw new HttpError(
 			400,
 			"CANNOT_DELETE_ACTIVE_APPLICATION",
-			"Only preparing school applications can be removed",
+			"Only a school still being prepared can be removed — this one has been submitted.",
 		);
 	}
+	// The draft's line goes first — once the row is gone the FK nulls the
+	// reference and the line could no longer be told apart from a manual one.
+	await syncApplicationProformaLines(target.applicationId, { removing: target.id });
+	await db.delete(schoolApplications).where(eq(schoolApplications.id, target.id));
+}
 
-	await db.delete(schoolApplications).where(eq(schoolApplications.id, schoolId));
+/* ── Accepting an offer ────────────────────────────────────────────────── */
+
+/**
+ * The client (or the consultant on their word) picks the admitted school
+ * they are going with. Visa, deposit and departure hang off this one row.
+ * Choosing again replaces the earlier choice — the case has one accepted
+ * offer at a time.
+ */
+export async function acceptOffer(
+	schoolId: string,
+	actor: { name: string; opsUserId?: string | null; applicantId?: string | null },
+): Promise<SchoolApplication> {
+	const [target] = await db.select().from(schoolApplications).where(eq(schoolApplications.id, schoolId)).limit(1);
+	if (!target) {
+		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
+	}
+	if (actor.applicantId && target.applicantId !== actor.applicantId) {
+		throw new HttpError(403, "FORBIDDEN", "That school application is not yours");
+	}
+	if (target.status !== "Decision Reached" || target.outcome !== "Admitted") {
+		throw new HttpError(409, "NOT_ADMITTED", "Only an admitted school can be accepted.");
+	}
+	const [app] = await db.select().from(applications).where(eq(applications.id, target.applicationId)).limit(1);
+	if (!app) {
+		throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	}
+	if (app.acceptedSchoolId === target.id) return serializeSchool(target);
+
+	const now = new Date();
+	await db
+		.update(applications)
+		.set({ acceptedSchoolId: target.id, offerAcceptedAt: now, updatedAt: now })
+		.where(eq(applications.id, app.id));
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: app.id,
+		kind: "status",
+		visibility: "applicant",
+		text: `Offer accepted: ${target.universityName ?? "the school"} — ${target.programName ?? "programme"} (${target.intake}).${
+			actor.opsUserId ? ` Recorded by ${actor.name}.` : ""
+		}`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId ?? null,
+	});
+	return serializeSchool(target);
 }
 
 export async function updateSchoolStatus(
@@ -460,6 +488,8 @@ export async function updateSchoolStatus(
 						: null
 					: target.offerDepositPaidAt,
 			offerLetterUrl: nextOfferLetterUrl,
+			institutionReference:
+				input.institutionReference !== undefined ? input.institutionReference?.trim() || null : target.institutionReference,
 			updatedAt: new Date(),
 		})
 		.where(eq(schoolApplications.id, schoolId))
@@ -608,21 +638,26 @@ export async function removeScholarshipForApplicant(applicantId: string, scholar
 		);
 }
 
-/* ── Admission letters (offer letters) ────────────────────────────────────── */
+/* ── Files on a school row: the offer letter, the submission proof ────────── */
 
 /**
- * Admission / offer letters live in the same private document vault as applicant
- * uploads, under a sub-directory keyed by the applicant's name so a reviewer
- * browsing the bucket sees a sensible layout. The applicant's *original* filename
- * is never used as the path — it is attacker-controlled — only as a stored label.
+ * Both live in the same private document vault as applicant uploads, under a
+ * sub-directory keyed by the applicant's name so a reviewer browsing the
+ * bucket sees a sensible layout. The *original* filename is never used as
+ * the path — it is attacker-controlled — only as a stored label.
  *
- * Structure: `admission-letters/{nameSlug}/{nameSlug}-admission-letter-{suffix}.{ext}`
+ * Structure: `{folder}/{nameSlug}/{nameSlug}-{kind}-{suffix}.{ext}`
  */
-function buildAdmissionLetterKey(applicantName: string | null, fileName: string): string {
+const SCHOOL_FILES: Record<SchoolFileKind, { column: "offerLetterUrl" | "submissionProofUrl"; folder: string; label: string }> = {
+	"offer-letter": { column: "offerLetterUrl", folder: "admission-letters", label: "admission letter" },
+	"submission-proof": { column: "submissionProofUrl", folder: "submission-proofs", label: "submission confirmation" },
+};
+
+function buildSchoolFileKey(kind: SchoolFileKind, applicantName: string | null, fileName: string): string {
 	const extension = (fileName.match(/\.([A-Za-z0-9]{1,8})$/)?.[1] ?? "pdf").toLowerCase();
 	const nameSlug = sanitizeApplicantSlug(applicantName ?? "applicant");
 	const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
-	return `admission-letters/${nameSlug}/${nameSlug}-admission-letter-${suffix}.${extension}`;
+	return `${SCHOOL_FILES[kind].folder}/${nameSlug}/${nameSlug}-${kind}-${suffix}.${extension}`;
 }
 
 function sanitizeApplicantSlug(input: string): string {
@@ -649,8 +684,9 @@ async function applicantNameFor(schoolRow: { applicantId: string }): Promise<str
 	return appRow?.name ?? null;
 }
 
-export async function createAdmissionLetterUpload(
+export async function createSchoolFileUpload(
 	schoolId: string,
+	kind: SchoolFileKind,
 	input: { fileName: string; contentType: string },
 ): Promise<{ uploadUrl: string; storageKey: string; expiresAt: string; headers?: Record<string, string> }> {
 	const [target] = await db
@@ -672,7 +708,7 @@ export async function createAdmissionLetterUpload(
 	}
 
 	const applicantName = await applicantNameFor(target);
-	const storageKey = buildAdmissionLetterKey(applicantName, input.fileName);
+	const storageKey = buildSchoolFileKey(kind, applicantName, input.fileName);
 
 	const ticket = await storage.createUploadUrl({
 		key: storageKey,
@@ -687,10 +723,12 @@ export async function createAdmissionLetterUpload(
 	};
 }
 
-export async function completeAdmissionLetterUpload(
+export async function completeSchoolFileUpload(
 	schoolId: string,
+	kind: SchoolFileKind,
 	storageKey: string,
 ): Promise<SchoolApplication> {
+	const { column } = SCHOOL_FILES[kind];
 	const [target] = await db
 		.select()
 		.from(schoolApplications)
@@ -716,23 +754,25 @@ export async function completeAdmissionLetterUpload(
 		throw new HttpError(409, "UPLOAD_NOT_COMPLETED", "The file has not finished uploading");
 	}
 
-	// Remove any previous letter object so the vault folder has only the latest.
-	if (target.offerLetterUrl && target.offerLetterUrl !== storageKey && !/^https?:\/\//i.test(target.offerLetterUrl)) {
-		await storage.remove(target.offerLetterUrl).catch(() => {
+	// Remove any previous object so the vault folder has only the latest.
+	const previous = target[column];
+	if (previous && previous !== storageKey && !/^https?:\/\//i.test(previous)) {
+		await storage.remove(previous).catch(() => {
 			/* orphaned object; not worth failing the replacement */
 		});
 	}
 
 	const [updated] = await db
 		.update(schoolApplications)
-		.set({ offerLetterUrl: storageKey, updatedAt: new Date() })
+		.set({ [column]: storageKey, updatedAt: new Date() })
 		.where(eq(schoolApplications.id, schoolId))
 		.returning();
 
 	return serializeSchool(updated);
 }
 
-export async function removeAdmissionLetter(schoolId: string): Promise<SchoolApplication> {
+export async function removeSchoolFile(schoolId: string, kind: SchoolFileKind): Promise<SchoolApplication> {
+	const { column } = SCHOOL_FILES[kind];
 	const [target] = await db
 		.select()
 		.from(schoolApplications)
@@ -742,11 +782,12 @@ export async function removeAdmissionLetter(schoolId: string): Promise<SchoolApp
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
 
-	if (target.offerLetterUrl && !/^https?:\/\//i.test(target.offerLetterUrl)) {
+	const current = target[column];
+	if (current && !/^https?:\/\//i.test(current)) {
 		try {
 			const storage = await getDocumentStorage();
 			if (storage.enabled) {
-				await storage.remove(target.offerLetterUrl);
+				await storage.remove(current);
 			}
 		} catch {
 			/* storage not configured or object already gone — clear the row regardless */
@@ -755,16 +796,18 @@ export async function removeAdmissionLetter(schoolId: string): Promise<SchoolApp
 
 	const [updated] = await db
 		.update(schoolApplications)
-		.set({ offerLetterUrl: null, updatedAt: new Date() })
+		.set({ [column]: null, updatedAt: new Date() })
 		.where(eq(schoolApplications.id, schoolId))
 		.returning();
 
 	return serializeSchool(updated);
 }
 
-export async function getAdmissionLetterDownloadUrl(
+export async function getSchoolFileDownloadUrl(
 	schoolId: string,
+	kind: SchoolFileKind,
 ): Promise<{ url: string; expiresAt: string }> {
+	const { column, label } = SCHOOL_FILES[kind];
 	const [target] = await db
 		.select()
 		.from(schoolApplications)
@@ -773,12 +816,13 @@ export async function getAdmissionLetterDownloadUrl(
 	if (!target) {
 		throw new HttpError(404, "SCHOOL_NOT_FOUND", "School application not found");
 	}
-	if (!target.offerLetterUrl) {
-		throw new HttpError(404, "DOCUMENT_NOT_FOUND", "No admission letter has been uploaded");
+	const key = target[column];
+	if (!key) {
+		throw new HttpError(404, "DOCUMENT_NOT_FOUND", `No ${label} has been uploaded`);
 	}
 
-	if (/^https?:\/\//i.test(target.offerLetterUrl)) {
-		return { url: target.offerLetterUrl, expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
+	if (/^https?:\/\//i.test(key)) {
+		return { url: key, expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString() };
 	}
 
 	const storage = await getDocumentStorage();
@@ -790,6 +834,6 @@ export async function getAdmissionLetterDownloadUrl(
 		);
 	}
 
-	const ticket = await storage.createDownloadUrl({ key: target.offerLetterUrl });
+	const ticket = await storage.createDownloadUrl({ key });
 	return { url: ticket.url, expiresAt: ticket.expiresAt.toISOString() };
 }

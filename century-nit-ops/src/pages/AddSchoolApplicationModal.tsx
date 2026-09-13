@@ -6,12 +6,15 @@ import { useCases } from "../hooks/useCases";
 export function AddSchoolApplicationModal({
 	onClose,
 	onAdd,
+	forApplicant,
 }: {
 	onClose: () => void;
 	onAdd: (applicantId: string, destId: string, uniId: string, progId: string, intake: string) => Promise<void>;
+	/** Opened from a case: the client is known, so the picker is hidden. */
+	forApplicant?: { id: string; name: string };
 }) {
 	const { applicants } = useCases();
-	const [applicantId, setApplicantId] = useState("");
+	const [applicantId, setApplicantId] = useState(forApplicant?.id ?? "");
 	
 	const [destinations, setDestinations] = useState<CatalogDestination[]>([]);
 	const [destinationId, setDestinationId] = useState("");
@@ -98,26 +101,28 @@ export function AddSchoolApplicationModal({
 				border: "1px solid var(--border)"
 			}}>
 				<h3 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-lg)", marginBottom: "1rem" }}>
-					Add School Application
+					{forApplicant ? `Add a school for ${forApplicant.name}` : "Add School Application"}
 				</h3>
 				{error && <p className="ops-modal__error" style={{ marginBottom: "1rem" }}>{error}</p>}
 				
 				<form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-					<label>
-						<span className="eyebrow" style={{ display: "block", marginBottom: "0.25rem" }}>Select Applicant</span>
-						<select
-							className="input input--sm"
-							style={{ width: "100%" }}
-							value={applicantId}
-							onChange={(e) => setApplicantId(e.target.value)}
-							required
-						>
-							<option value="">-- Choose Applicant --</option>
-							{applicants.map(app => (
-								<option key={app.id} value={app.id}>{app.name} ({app.applicantId})</option>
-							))}
-						</select>
-					</label>
+					{!forApplicant && (
+						<label>
+							<span className="eyebrow" style={{ display: "block", marginBottom: "0.25rem" }}>Select Applicant</span>
+							<select
+								className="input input--sm"
+								style={{ width: "100%" }}
+								value={applicantId}
+								onChange={(e) => setApplicantId(e.target.value)}
+								required
+							>
+								<option value="">-- Choose Applicant --</option>
+								{applicants.map(app => (
+									<option key={app.id} value={app.id}>{app.name} ({app.applicantId})</option>
+								))}
+							</select>
+						</label>
+					)}
 
 					<label>
 						<span className="eyebrow" style={{ display: "block", marginBottom: "0.25rem" }}>Target Country</span>

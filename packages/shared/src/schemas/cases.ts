@@ -535,6 +535,9 @@ export const applicationSchema = z.object({
 	declinedReason: z.string().nullable(),
 	fundingTrack: z.string().nullable(),
 	targetSchoolCount: z.number().int().nullable().optional(),
+	/** The admitted school the client accepted — visa, deposit and departure hang off it. */
+	acceptedSchoolId: z.string().uuid().nullable().optional(),
+	offerAcceptedAt: z.string().datetime().nullable().optional(),
 	notes: z.string().nullable(),
 	checklist: z.array(checklistItemSchema),
 	visaStage: visaStageSchema,

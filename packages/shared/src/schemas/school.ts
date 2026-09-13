@@ -118,8 +118,20 @@ export const schoolApplicationSchema = z.object({
 	offerDepositPaidAt: z.string().datetime().nullable().optional(),
 	offerLetterStorageKey: z.string().nullable().optional(),
 	offerLetterUrl: z.string().nullable().optional(),
+	/** The school's own application number / portal reference. */
+	institutionReference: z.string().nullable().optional(),
+	/** Vault key of the submission confirmation, when one was filed. */
+	submissionProofUrl: z.string().nullable().optional(),
 });
 export type SchoolApplication = z.infer<typeof schoolApplicationSchema>;
+
+/** Which file on a school row an upload/download route is about. */
+export const schoolFileKindSchema = z.enum(["offer-letter", "submission-proof"]);
+export type SchoolFileKind = z.infer<typeof schoolFileKindSchema>;
+export const SCHOOL_FILE_LABELS: Record<SchoolFileKind, string> = {
+	"offer-letter": "Offer letter",
+	"submission-proof": "Submission confirmation",
+};
 
 export const schoolApplicationListSchema = z.object({
 	schools: z.array(schoolApplicationSchema),
@@ -144,6 +156,7 @@ export const updateSchoolStatusSchema = z.object({
 	offerLetterUrl: z.string().nullable().optional(),
 	sendUpdateEmail: z.boolean().optional(),
 	consultantNote: z.string().max(2000).nullable().optional(),
+	institutionReference: z.string().max(120).nullable().optional(),
 });
 export type UpdateSchoolStatus = z.infer<typeof updateSchoolStatusSchema>;
 

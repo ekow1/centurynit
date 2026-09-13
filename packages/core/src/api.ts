@@ -40,7 +40,7 @@ import type {
 	VisaStage,
 	SchoolApplication,
 	SchoolApplicationList,
-	AddSchoolApplication, OpsAddSchoolApplication,
+	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind,
 	UpdateSchoolStatus,
 	LockSchools,
 	InitializePayment,
@@ -1489,6 +1489,21 @@ export const schoolsApi = {
 		return request(`${API_PREFIX}/me/schools/lock`, { method: "POST", ...json(input) });
 	},
 
+	/** Staff: remove a school still being prepared. */
+	removeByStaff(id: string): Promise<void> {
+		return request(`${API_PREFIX}/schools/${id}`, { method: "DELETE" });
+	},
+
+	/** Staff: record that the client is going with this admitted school. */
+	acceptOffer(id: string): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/accept`, { method: "POST" });
+	},
+
+	/** Applicant: accept this admitted school's offer. */
+	meAcceptOffer(id: string): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/me/schools/${id}/accept`, { method: "POST" });
+	},
+
 	/** Staff: update an application track status, handler note, or timeline event. */
 	updateStatus(id: string, input: UpdateSchoolStatus): Promise<SchoolApplication> {
 		return request(`${API_PREFIX}/schools/${id}/status`, { method: "PATCH", ...json(input) });
@@ -1536,17 +1551,40 @@ export const schoolsApi = {
 		return request(`${API_PREFIX}/me/schools/${id}/admission-letter/download`);
 	},
 
-	/**
-	 * Staff: the whole admission-letter upload, as one call — ticket, PUT
-	 * straight to storage with progress, then complete. `onProgress` receives
-	 * 0–100 as bytes go up. Returns the updated school application.
-	 */
-	async uploadAdmissionLetter(
+	/* ── Files on a school row, by kind: the offer letter or the submission proof ── */
+
+	requestFileUpload(
 		id: string,
+		kind: SchoolFileKind,
+		input: { fileName: string; contentType: string },
+	): Promise<{ uploadUrl: string; storageKey: string; expiresAt: string; headers?: Record<string, string> }> {
+		return request(`${API_PREFIX}/schools/${id}/${SCHOOL_FILE_PATH[kind]}/upload-url`, { method: "POST", ...json(input) });
+	},
+	completeFileUpload(id: string, kind: SchoolFileKind, storageKey: string): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/${SCHOOL_FILE_PATH[kind]}/complete`, { method: "POST", ...json({ storageKey }) });
+	},
+	removeFile(id: string, kind: SchoolFileKind): Promise<SchoolApplication> {
+		return request(`${API_PREFIX}/schools/${id}/${SCHOOL_FILE_PATH[kind]}`, { method: "DELETE" });
+	},
+	fileDownloadUrl(id: string, kind: SchoolFileKind): Promise<{ url: string; expiresAt: string }> {
+		return request(`${API_PREFIX}/schools/${id}/${SCHOOL_FILE_PATH[kind]}/download`);
+	},
+	meFileDownloadUrl(id: string, kind: SchoolFileKind): Promise<{ url: string; expiresAt: string }> {
+		return request(`${API_PREFIX}/me/schools/${id}/${SCHOOL_FILE_PATH[kind]}/download`);
+	},
+
+	/**
+	 * Staff: the whole upload of one file on a school row, as one call —
+	 * ticket, PUT straight to storage with progress, then complete.
+	 * `onProgress` receives 0–100 as bytes go up. Returns the updated row.
+	 */
+	async uploadFile(
+		id: string,
+		kind: SchoolFileKind,
 		file: File,
 		onProgress?: (percent: number) => void,
 	): Promise<SchoolApplication> {
-		const ticket = await schoolsApi.requestAdmissionLetterUpload(id, {
+		const ticket = await schoolsApi.requestFileUpload(id, kind, {
 			fileName: file.name,
 			contentType: file.type as RequestUpload["contentType"],
 		});
@@ -1569,8 +1607,19 @@ export const schoolsApi = {
 			throw err;
 		}
 
-		return schoolsApi.completeAdmissionLetterUpload(id, ticket.storageKey);
+		return schoolsApi.completeFileUpload(id, kind, ticket.storageKey);
 	},
+
+	/** Staff: the offer letter upload — `uploadFile` for the "offer-letter" kind. */
+	uploadAdmissionLetter(id: string, file: File, onProgress?: (percent: number) => void): Promise<SchoolApplication> {
+		return schoolsApi.uploadFile(id, "offer-letter", file, onProgress);
+	},
+};
+
+/** URL segment per file kind — the offer letter keeps its historical path. */
+const SCHOOL_FILE_PATH: Record<SchoolFileKind, string> = {
+	"offer-letter": "admission-letter",
+	"submission-proof": "submission-proof",
 };
 
 /* ── CRM Leads ─────────────────────────────────────────────────────────── */

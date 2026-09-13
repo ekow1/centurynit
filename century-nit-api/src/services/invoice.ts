@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type {
 	ApiInvoice,
 	CreateInvoice,
@@ -15,6 +15,7 @@ import {
 	applications,
 	applicants,
 	caseComments,
+	schoolApplications,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
@@ -152,6 +153,7 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 			label: l.label,
 			detail: l.detail ?? null,
 			amountCents: l.amountCents,
+			schoolApplicationId: l.schoolApplicationId ?? null,
 		})),
 		subtotalCents: row.subtotalCents,
 		paidCents,
@@ -366,6 +368,7 @@ export async function createInvoice(input: {
 				label: l.label,
 				detail: l.detail ?? null,
 				amountCents: l.amountCents,
+				schoolApplicationId: l.schoolApplicationId ?? null,
 			})),
 		);
 
@@ -892,6 +895,7 @@ export async function createProforma(input: {
 				label: l.label,
 				detail: l.detail ?? null,
 				amountCents: l.amountCents,
+				schoolApplicationId: l.schoolApplicationId ?? null,
 			})),
 		);
 
@@ -902,6 +906,92 @@ export async function createProforma(input: {
 	return row;
 }
 
+/* ── Application invoice lines follow the school list ───────────────────── */
+
+export const APPLICATION_FEE_PLACEHOLDER_LABEL = "University Application Fee";
+
+type SchoolLineSource = { id: string; universityName: string | null; programName: string | null; intake: string };
+
+export function schoolFeeLine(s: SchoolLineSource, amountCents: number) {
+	return {
+		label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
+		detail: `Direct institutional submission & processing (${s.intake})`,
+		amountCents,
+		schoolApplicationId: s.id,
+	};
+}
+
+/**
+ * While the application invoice is still a draft, its school lines follow
+ * the school list: a school added gets a line, a school removed loses its
+ * line. Lines finance typed by hand (no school id) are left alone. Once
+ * issued the invoice is a record and is never touched here.
+ *
+ * Returns true when anything changed.
+ */
+export async function syncApplicationProformaLines(
+	applicationId: string,
+	opts: { /** A school about to be deleted — its line goes now, before the FK nulls the reference. */ removing?: string } = {},
+): Promise<boolean> {
+	const [inv] = await db
+		.select()
+		.from(invoices)
+		.where(and(eq(invoices.applicationId, applicationId), eq(invoices.type, "application"), eq(invoices.status, "proforma")))
+		.orderBy(desc(invoices.createdAt))
+		.limit(1);
+	if (!inv) return false;
+
+	const schools = await db
+		.select()
+		.from(schoolApplications)
+		.where(eq(schoolApplications.applicationId, applicationId))
+		.orderBy(asc(schoolApplications.createdAt));
+	const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)).orderBy(asc(invoiceLines.position));
+
+	const schoolIds = new Set(schools.filter((s) => s.id !== opts.removing).map((s) => s.id));
+	const billed = new Set(lines.map((l) => l.schoolApplicationId).filter((id): id is string => Boolean(id)));
+	const stale = lines.filter((l) => l.schoolApplicationId && !schoolIds.has(l.schoolApplicationId));
+	const missing = schools.filter((s) => schoolIds.has(s.id) && !billed.has(s.id));
+	// The placeholder only stands in while there are no schools.
+	const placeholder = schoolIds.size > 0 ? lines.filter((l) => !l.schoolApplicationId && l.label === APPLICATION_FEE_PLACEHOLDER_LABEL) : [];
+	const dropIds = new Set([...stale, ...placeholder].map((l) => l.id));
+	const kept = lines.filter((l) => !dropIds.has(l.id));
+	const needPlaceholder = schoolIds.size === 0 && kept.length === 0;
+	if (dropIds.size === 0 && missing.length === 0 && !needPlaceholder) return false;
+
+	const fees = await getFeeSchedule();
+	const added = needPlaceholder
+		? [{ label: APPLICATION_FEE_PLACEHOLDER_LABEL, detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents, schoolApplicationId: null as string | null }]
+		: missing.map((s) => schoolFeeLine(s, fees.appPerSchoolCents));
+
+	await db.transaction(async (tx) => {
+		if (dropIds.size > 0) await tx.delete(invoiceLines).where(inArray(invoiceLines.id, [...dropIds]));
+		for (const [i, l] of kept.entries()) {
+			if (l.position !== i) await tx.update(invoiceLines).set({ position: i }).where(eq(invoiceLines.id, l.id));
+		}
+		if (added.length > 0) {
+			await tx.insert(invoiceLines).values(added.map((l, i) => ({ invoiceId: inv.id, position: kept.length + i, ...l })));
+		}
+		const subtotalCents = kept.reduce((n, l) => n + l.amountCents, 0) + added.reduce((n, l) => n + l.amountCents, 0);
+		await tx
+			.update(invoices)
+			.set({
+				subtotalCents,
+				note: schoolIds.size > 0 ? `Application invoice for ${schoolIds.size} university application(s).` : inv.note,
+				updatedAt: new Date(),
+			})
+			.where(eq(invoices.id, inv.id));
+		await audit(
+			inv.id,
+			"lines_synced",
+			null,
+			`Draft lines follow the school list: ${added.length} added, ${dropIds.size} removed (${schoolIds.size} school(s))`,
+			tx as unknown as typeof db,
+		);
+	});
+	return true;
+}
+
 /**
  * Staff action: review a proforma and issue it as a real, payable invoice.
  *
@@ -910,7 +1000,7 @@ export async function createProforma(input: {
  */
 export async function issueProforma(input: {
 	invoiceId: string;
-	lines: { label: string; detail?: string; amountCents: number }[];
+	lines: { label: string; detail?: string; amountCents: number; schoolApplicationId?: string | null }[];
 	note?: string;
 	dueAt?: string | null;
 	actor: Actor;
@@ -938,7 +1028,11 @@ export async function issueProforma(input: {
 			throw new HttpError(400, "VALIDATION_ERROR", "Invoice total must be greater than zero");
 		}
 
-		// Replace estimate lines with the reviewed/adjusted lines
+		// Replace estimate lines with the reviewed/adjusted lines. A reviewed
+		// line that kept its label keeps its school, so the invoice still
+		// knows which school each line bills after finance edits amounts.
+		const previous = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, row.id));
+		const schoolByLabel = new Map(previous.filter((l) => l.schoolApplicationId).map((l) => [l.label, l.schoolApplicationId!]));
 		await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, row.id));
 		await tx.insert(invoiceLines).values(
 			input.lines.map((l, position) => ({
@@ -947,6 +1041,7 @@ export async function issueProforma(input: {
 				label: l.label,
 				detail: l.detail ?? null,
 				amountCents: l.amountCents,
+				schoolApplicationId: l.schoolApplicationId ?? schoolByLabel.get(l.label) ?? null,
 			})),
 		);
 

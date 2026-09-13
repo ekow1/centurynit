@@ -175,6 +175,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		travelConsent: row.travelConsent ?? null,
 		travelAssistanceStatus: row.travelAssistanceStatus ?? null,
 		targetSchoolCount: row.targetSchoolCount ?? null,
+		acceptedSchoolId: row.acceptedSchoolId ?? null,
+		offerAcceptedAt: row.offerAcceptedAt ?? null,
 		consultationId: row.consultationId ?? null,
 		consultationNumber: row.consultationNumber ?? null,
 		schoolApplications: row.schoolApplications ?? [],

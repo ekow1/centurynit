@@ -554,6 +554,13 @@
       "when": 1789600007000,
       "tag": "0080_role_capabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1789600008000,
+      "tag": "0081_applications_chapter",
+      "breakpoints": true
     }
   ]
 }

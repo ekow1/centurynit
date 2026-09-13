@@ -245,6 +245,9 @@ export interface MockApplication {
 	proceedStatus?: ProceedStatus;
 	/** Number of target schools requested in service package */
 	targetSchoolCount?: number | null;
+	/** The admitted school the client accepted — visa, deposit and departure hang off it. */
+	acceptedSchoolId?: string | null;
+	offerAcceptedAt?: string | null;
 	/** The applicant's login id — documents and chat are keyed on it. */
 	applicantUserId?: string | null;
 	/** Whole-case owner (applications.assignedStaffId). */
@@ -349,6 +352,8 @@ export type OpsInvoiceLine = {
 	label: string;
 	detail: string;
 	amount: number;
+	/** The school this line bills, on application invoices — kept through a review. */
+	schoolApplicationId?: string | null;
 };
 
 export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Travel" | "Custom";

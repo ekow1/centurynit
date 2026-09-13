@@ -31,7 +31,7 @@ import { releaseOfficerCases } from "./caseOwnership.js";
 import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js";
 import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
-import { addSchoolForApplicant, lockSchoolsForApplicant, updateSchoolStatus } from "./schools.js";
+import { acceptOffer, addSchoolForApplicant, lockSchoolsForApplicant, removeSchoolByStaff, updateSchoolStatus } from "./schools.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -233,6 +233,23 @@ describe("the applicant journey, end to end", () => {
 		const proforma = (await invoiceOfType("application"))!;
 		expect(proforma.row.status).toBe("proforma");
 		expect(proforma.row.applicationId).toBe(appId);
+		expect(proforma.api.lines.map((l) => l.schoolApplicationId).filter(Boolean)).toHaveLength(1);
+
+		// ── The draft follows the school list ───────────────────────────
+		const second = await addSchoolForApplicant(applicant.id, {
+			destinationId: "e2e-ca",
+			universityId: "e2e-uni",
+			programId: "e2e-prog",
+			intake: "Jan 2028",
+		});
+		const grown = (await invoiceOfType("application"))!;
+		expect(grown.api.lines).toHaveLength(2);
+		expect(grown.api.lines.some((l) => l.schoolApplicationId === second.id)).toBe(true);
+		expect(grown.row.subtotalCents).toBe(proforma.row.subtotalCents * 2);
+		await removeSchoolByStaff(second.id);
+		const shrunk = (await invoiceOfType("application"))!;
+		expect(shrunk.api.lines).toHaveLength(1);
+		expect(shrunk.row.subtotalCents).toBe(proforma.row.subtotalCents);
 
 		// ── Handler issues, applicant pays ───────────────────────────────
 		await issueProformaByOps({ invoiceId: proforma.row.id, actorName: "Handler" });
@@ -245,8 +262,20 @@ describe("the applicant journey, end to end", () => {
 
 		// ── Admission → visa consent ─────────────────────────────────────
 		const [school] = (await db.execute<{ id: string }>(sql`SELECT id FROM school_applications WHERE application_id = ${appId}`)).rows;
+		// Submitted schools cannot be removed; the client accepts the admitted one.
+		await updateSchoolStatus(school.id, { status: "Submitted", institutionReference: "UNI-2027-001" }, "Handler");
+		await expect(removeSchoolByStaff(school.id)).rejects.toMatchObject({ code: "CANNOT_DELETE_ACTIVE_APPLICATION" });
+		await expect(acceptOffer(school.id, { name: "Handler", opsUserId: staff.handler })).rejects.toMatchObject({ code: "NOT_ADMITTED" });
 		await updateSchoolStatus(school.id, { status: "Decision Reached", outcome: "Admitted" }, "Handler");
 		expect(await stage()).toBe("school_tracking");
+		const acceptedRow = await acceptOffer(school.id, { name: "Ama Mensah", applicantId: applicant.id });
+		expect(acceptedRow.institutionReference).toBe("UNI-2027-001");
+		const [afterAccept] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(afterAccept.acceptedSchoolId).toBe(school.id);
+		expect(afterAccept.offerAcceptedAt).not.toBeNull();
+		// Once issued, the invoice is a record: a later school change leaves it alone.
+		const issuedLater = (await invoiceOfType("application"))!;
+		expect(issuedLater.api.lines).toHaveLength(1);
 		await processConsentDecision({ userId: CLIENT_ID, stage: "visa", decision: "continue" });
 		expect(await stage()).toBe("visa_invoice");
 

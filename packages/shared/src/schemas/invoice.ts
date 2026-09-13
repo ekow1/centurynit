@@ -33,6 +33,8 @@ export const invoiceLineInputSchema = z.object({
 	label: z.string().min(1).max(200),
 	detail: z.string().max(500).optional(),
 	amountCents: z.number().int().min(0).max(100_000_000),
+	/** The school this line bills, on application invoices. */
+	schoolApplicationId: z.string().uuid().nullable().optional(),
 });
 
 /** Accepts ISO datetime (2026-09-15T00:00:00Z), date-only (2026-09-15), or empty/null. */
@@ -134,6 +136,7 @@ export const invoiceLineSchema = z.object({
 	label: z.string(),
 	detail: z.string().nullable(),
 	amountCents: z.number().int(),
+	schoolApplicationId: z.string().uuid().nullable().optional(),
 });
 
 export const invoicePaymentSchema = z.object({

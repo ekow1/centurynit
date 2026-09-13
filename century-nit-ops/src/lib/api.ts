@@ -224,7 +224,7 @@ export type ApiInvoice = {
 	applicantEmail: string | null;
 	clientUserId: string | null;
 	applicationId: string | null;
-	lines: { id: string; label: string; detail: string | null; amountCents: number }[];
+	lines: { id: string; label: string; detail: string | null; amountCents: number; schoolApplicationId?: string | null }[];
 	subtotalCents: number;
 	paidCents: number;
 	creditedCents: number;
@@ -323,7 +323,7 @@ export function createInvoice(body: {
 export function issueInvoice(
 	id: string,
 	body: {
-		lines: { label: string; detail?: string; amountCents: number }[];
+		lines: { label: string; detail?: string; amountCents: number; schoolApplicationId?: string | null }[];
 		note?: string;
 		dueAt?: string;
 	},

@@ -5,9 +5,13 @@ import {
 	studentScholarshipSchema,
 	addSchoolApplicationSchema,
 	lockSchoolsSchema,
+	opsAddSchoolApplicationSchema,
 	schoolApplicationListSchema,
 	schoolApplicationSchema,
+	schoolFileKindSchema,
+	SCHOOL_FILE_LABELS,
 	updateSchoolStatusSchema,
+	type SchoolFileKind,
 } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES } from "century-nit-shared";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
@@ -22,10 +26,12 @@ import {
 	assignScholarshipForApplicant,
 	removeScholarshipForApplicant,
 	listScholarshipsForApplicant,
-	createAdmissionLetterUpload,
-	completeAdmissionLetterUpload,
-	removeAdmissionLetter,
-	getAdmissionLetterDownloadUrl,
+	acceptOffer,
+	createSchoolFileUpload,
+	completeSchoolFileUpload,
+	removeSchoolByStaff,
+	removeSchoolFile,
+	getSchoolFileDownloadUrl,
 } from "../services/schools.js";
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -117,6 +123,34 @@ meSchoolsRouter.openapi(
 	},
 );
 
+/* ── POST /api/v1/me/schools/{id}/accept (Applicant) ────────────────────────── */
+
+meSchoolsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/accept",
+		tags: ["Schools"],
+		middleware: [requireAuth] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: schoolApplicationSchema } },
+				description: "The offer the client is going with",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user")!;
+		const { id } = c.req.valid("param");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, "APPLICANT_NOT_FOUND", "No applicant record found for this user");
+		}
+		const updated = await acceptOffer(id, { name: user.name ?? applicant.name ?? "Client", applicantId: applicant.id });
+		return c.json(updated);
+	},
+);
+
 /* ── POST /api/v1/me/schools/lock ───────────────────────────────────────────── */
 
 meSchoolsRouter.openapi(
@@ -145,6 +179,78 @@ meSchoolsRouter.openapi(
 		}
 		const result = await lockSchoolsForApplicant(applicant.id, user);
 		return c.json(result);
+	},
+);
+
+/* ── POST /api/v1/schools (Ops) — the consultant adds a school for the client ── */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			body: {
+				content: { "application/json": { schema: opsAddSchoolApplicationSchema } },
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: { "application/json": { schema: schoolApplicationSchema } },
+				description: "School added to the client's application",
+			},
+		},
+	}),
+	async (c) => {
+		const { applicantId, ...input } = c.req.valid("json");
+		const created = await addSchoolForApplicant(applicantId, input);
+		return c.json(created, 201);
+	},
+);
+
+/* ── DELETE /api/v1/schools/{id} (Ops) — only while still being prepared ───── */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{id}",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			204: { description: "School removed" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await removeSchoolByStaff(id);
+		return c.body(null, 204);
+	},
+);
+
+/* ── POST /api/v1/schools/{id}/accept (Ops) — on the client's word ─────────── */
+
+opsSchoolsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/accept",
+		tags: ["Schools"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: schoolApplicationSchema } },
+				description: "The offer the client is going with",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const updated = await acceptOffer(id, { name: staff.name, opsUserId: staff.opsUserId });
+		return c.json(updated);
 	},
 );
 
@@ -311,144 +417,154 @@ const admissionDownloadTicketSchema = z.object({
 	expiresAt: z.string().datetime(),
 });
 
-/* ── POST /api/v1/schools/:id/admission-letter/upload-url (Ops) ──────────── */
-opsSchoolsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/admission-letter/upload-url",
-		tags: ["Schools"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: admissionLetterUploadBody } },
-				required: true,
-			},
-		},
-		responses: {
-			201: {
-				content: { "application/json": { schema: admissionUploadTicketSchema } },
-				description: "Signed upload URL for the admission letter",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const ticket = await createAdmissionLetterUpload(id, body);
-		return c.json(ticket, 201);
-	},
-);
+/* ── Files on a school row — the offer letter and the submission proof ────────
+ *
+ * The same four staff routes and one applicant download, registered once per
+ * kind: `/{id}/admission-letter/…` (the offer letter, path kept for existing
+ * clients) and `/{id}/submission-proof/…`.
+ */
 
-/* ── POST /api/v1/schools/:id/admission-letter/complete (Ops) ───────────── */
-opsSchoolsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/admission-letter/complete",
-		tags: ["Schools"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			body: {
-				content: { "application/json": { schema: admissionLetterCompleteBody } },
-				required: true,
-			},
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: schoolApplicationSchema } },
-				description: "School application with the admission letter attached",
-			},
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const body = c.req.valid("json");
-		const updated = await completeAdmissionLetterUpload(id, body.storageKey);
-		return c.json(updated);
-	},
-);
+const SCHOOL_FILE_PATHS: Record<SchoolFileKind, string> = {
+	"offer-letter": "admission-letter",
+	"submission-proof": "submission-proof",
+};
 
-/* ── DELETE /api/v1/schools/:id/admission-letter (Ops) ───────────────────── */
-opsSchoolsRouter.openapi(
-	createRoute({
-		method: "delete",
-		path: "/{id}/admission-letter",
-		tags: ["Schools"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: schoolApplicationSchema } },
-				description: "Admission letter removed",
+for (const kind of schoolFileKindSchema.options) {
+	const seg = SCHOOL_FILE_PATHS[kind];
+	const label = SCHOOL_FILE_LABELS[kind].toLowerCase();
+	opsSchoolsRouter.openapi(
+		createRoute({
+			method: "post",
+			path: `/{id}/${seg}/upload-url`,
+			tags: ["Schools"],
+			middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+			request: {
+				params: idParams,
+				body: {
+					content: { "application/json": { schema: admissionLetterUploadBody } },
+					required: true,
+				},
 			},
+			responses: {
+				201: {
+					content: { "application/json": { schema: admissionUploadTicketSchema } },
+					description: `Signed upload URL for the ${label}`,
+				},
+			},
+		}),
+		async (c) => {
+			const { id } = c.req.valid("param");
+			const body = c.req.valid("json");
+			const ticket = await createSchoolFileUpload(id, kind, body);
+			return c.json(ticket, 201);
 		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const updated = await removeAdmissionLetter(id);
-		return c.json(updated);
-	},
-);
+	);
 
-/* ── GET /api/v1/schools/:id/admission-letter/download (Ops) ─────────────── */
-opsSchoolsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/admission-letter/download",
-		tags: ["Schools"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: {
-			params: idParams,
-			query: z.object({ inline: z.string().optional() }),
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: admissionDownloadTicketSchema } },
-				description: "Signed download URL for the admission letter",
+	opsSchoolsRouter.openapi(
+		createRoute({
+			method: "post",
+			path: `/{id}/${seg}/complete`,
+			tags: ["Schools"],
+			middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+			request: {
+				params: idParams,
+				body: {
+					content: { "application/json": { schema: admissionLetterCompleteBody } },
+					required: true,
+				},
 			},
+			responses: {
+				200: {
+					content: { "application/json": { schema: schoolApplicationSchema } },
+					description: `School application with the ${label} attached`,
+				},
+			},
+		}),
+		async (c) => {
+			const { id } = c.req.valid("param");
+			const body = c.req.valid("json");
+			const updated = await completeSchoolFileUpload(id, kind, body.storageKey);
+			return c.json(updated);
 		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const ticket = await getAdmissionLetterDownloadUrl(id);
-		return c.json(ticket);
-	},
-);
+	);
 
-/* ── GET /api/v1/me/schools/:id/admission-letter/download (Applicant) ───── */
-meSchoolsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/{id}/admission-letter/download",
-		tags: ["Schools"],
-		middleware: [requireAuth] as const,
-		request: {
-			params: idParams,
-			query: z.object({ inline: z.string().optional() }),
-		},
-		responses: {
-			200: {
-				content: { "application/json": { schema: admissionDownloadTicketSchema } },
-				description: "Signed download URL for the admission letter",
+	opsSchoolsRouter.openapi(
+		createRoute({
+			method: "delete",
+			path: `/{id}/${seg}`,
+			tags: ["Schools"],
+			middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+			request: { params: idParams },
+			responses: {
+				200: {
+					content: { "application/json": { schema: schoolApplicationSchema } },
+					description: `${SCHOOL_FILE_LABELS[kind]} removed`,
+				},
 			},
+		}),
+		async (c) => {
+			const { id } = c.req.valid("param");
+			const updated = await removeSchoolFile(id, kind);
+			return c.json(updated);
 		},
-	}),
-	async (c) => {
-		const user = c.get("user")!;
-		const { id } = c.req.valid("param");
-		const applicant = await getApplicantByUserId(user.id);
-		if (!applicant) {
-			throw new HttpError(404, "APPLICANT_NOT_FOUND", "No applicant record found for this user");
-		}
-		// Verify the school application belongs to this applicant before handing
-		// out a signed URL — the storage key alone is not authorisation.
-		const { listSchoolsForApplicant } = await import("../services/schools.js");
-		const list = await listSchoolsForApplicant(applicant.id);
-		if (!list.schools.some((s) => s.id === id)) {
-			throw new HttpError(403, "FORBIDDEN", "That school application is not yours");
-		}
-		const ticket = await getAdmissionLetterDownloadUrl(id);
-		return c.json(ticket);
-	},
-);
+	);
+
+	opsSchoolsRouter.openapi(
+		createRoute({
+			method: "get",
+			path: `/{id}/${seg}/download`,
+			tags: ["Schools"],
+			middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+			request: {
+				params: idParams,
+				query: z.object({ inline: z.string().optional() }),
+			},
+			responses: {
+				200: {
+					content: { "application/json": { schema: admissionDownloadTicketSchema } },
+					description: `Signed download URL for the ${label}`,
+				},
+			},
+		}),
+		async (c) => {
+			const { id } = c.req.valid("param");
+			const ticket = await getSchoolFileDownloadUrl(id, kind);
+			return c.json(ticket);
+		},
+	);
+
+	meSchoolsRouter.openapi(
+		createRoute({
+			method: "get",
+			path: `/{id}/${seg}/download`,
+			tags: ["Schools"],
+			middleware: [requireAuth] as const,
+			request: {
+				params: idParams,
+				query: z.object({ inline: z.string().optional() }),
+			},
+			responses: {
+				200: {
+					content: { "application/json": { schema: admissionDownloadTicketSchema } },
+					description: `Signed download URL for the ${label}`,
+				},
+			},
+		}),
+		async (c) => {
+			const user = c.get("user")!;
+			const { id } = c.req.valid("param");
+			const applicant = await getApplicantByUserId(user.id);
+			if (!applicant) {
+				throw new HttpError(404, "APPLICANT_NOT_FOUND", "No applicant record found for this user");
+			}
+			// Verify the school application belongs to this applicant before handing
+			// out a signed URL — the storage key alone is not authorisation.
+			const list = await listSchoolsForApplicant(applicant.id);
+			if (!list.schools.some((s) => s.id === id)) {
+				throw new HttpError(403, "FORBIDDEN", "That school application is not yours");
+			}
+			const ticket = await getSchoolFileDownloadUrl(id, kind);
+			return c.json(ticket);
+		},
+	);
+}

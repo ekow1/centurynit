@@ -117,8 +117,10 @@ export async function journeyForApplicant(
 		paymentPlanId: application?.paymentPlanId ?? null,
 		agencyStageIndex: application?.agencyStageIndex ?? 0,
 		agencySettled: Boolean(application?.agencySettled),
+		// The pre-departure list, not `checklist` (the consultation-era
+		// requested-documents list) — the ops serializer reads the same field.
 		preDepartureDone: Boolean(
-			(application?.checklist?.length ?? 0) > 0 && application?.checklist?.every((item) => item.checked),
+			(application?.preDepartureTasks?.length ?? 0) > 0 && application?.preDepartureTasks?.every((t) => t.done),
 		),
 		coarseStage:
 			application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)

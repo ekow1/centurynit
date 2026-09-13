@@ -1,4 +1,5 @@
 import {
+	type AnyPgColumn,
 	pgTable,
 	text,
 	timestamp,
@@ -665,9 +666,12 @@ export const invoiceLines = pgTable(
 		label: text("label").notNull(),
 		detail: text("detail"),
 		amountCents: integer("amount_cents").notNull(),
+		/** The school this line bills, so a draft application invoice can follow the school list. */
+		schoolApplicationId: uuid("school_application_id").references((): AnyPgColumn => schoolApplications.id, { onDelete: "set null" }),
 	},
 	(t) => ({
 		byInvoice: index("invoice_lines_invoice_idx").on(t.invoiceId, t.position),
+		bySchool: index("invoice_lines_school_idx").on(t.schoolApplicationId),
 	}),
 );
 
@@ -1041,6 +1045,9 @@ export const applications = pgTable(
 		/** True once the applicant has paid the 10% deposit (first agency milestone). */
 		depositPaid: boolean("deposit_paid").notNull().default(false),
 		appFeePaid: boolean("app_fee_paid").notNull().default(false),
+		/** The admitted school the client is going with — visa, deposit and departure hang off it. */
+		acceptedSchoolId: uuid("accepted_school_id").references((): AnyPgColumn => schoolApplications.id, { onDelete: "set null" }),
+		offerAcceptedAt: timestamp("offer_accepted_at", { withTimezone: true }),
 		travelInvoicePaid: boolean("travel_invoice_paid").notNull().default(false),
 		requestedDocuments: jsonb("requested_documents").$type<string[]>().notNull().default([]),
 		preDepartureTasks: jsonb("pre_departure_tasks")
@@ -1195,6 +1202,10 @@ export const schoolApplications = pgTable(
 		offerDepositDueAt: timestamp("offer_deposit_due_at", { withTimezone: true }),
 		offerDepositPaidAt: timestamp("offer_deposit_paid_at", { withTimezone: true }),
 		offerLetterUrl: text("offer_letter_url"),
+		/** The school's own application number / portal reference — quoted when chasing. */
+		institutionReference: text("institution_reference"),
+		/** Proof we submitted (confirmation page, receipt) — a vault key like the offer letter. */
+		submissionProofUrl: text("submission_proof_url"),
 		intake: varchar("intake", { length: 64 }).notNull(),
 		status: schoolTrackStatusEnum("status").notNull().default("Preparing Application"),
 		outcome: schoolOutcomeEnum("outcome"),

@@ -52,7 +52,7 @@ import {
 	getBranchName,
 } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError } from "century-nit-core/api";
-import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage } from "century-nit-shared";
+import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage, SchoolFileKind } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { UploadPickModal } from "../../components/portal/UploadPickModal";
@@ -3066,6 +3066,8 @@ function TrackingPageInner() {
 				offerDepositDueAt: s.offerDepositDueAt ?? null,
 				offerDepositPaidAt: s.offerDepositPaidAt ?? null,
 				offerLetterStorageKey: s.offerLetterStorageKey ?? null,
+				institutionReference: s.institutionReference ?? null,
+				submissionProofUrl: s.submissionProofUrl ?? null,
 			}));
 				setSchoolApplications(mapped);
 			} catch {
@@ -3160,7 +3162,18 @@ function TrackingPageInner() {
 				</div>
 				<ul className="school-track-list school-track-list--grid" style={{ gap: "1.5rem" }}>
 					{schoolApplications.map((s) => (
-						<SchoolTrackCard key={s.id} row={s} canRemove={false} onRemove={() => undefined} />
+						<SchoolTrackCard
+							key={s.id}
+							row={s}
+							canRemove={false}
+							onRemove={() => undefined}
+							accepted={application.acceptedSchoolId === s.id}
+							anotherAccepted={Boolean(application.acceptedSchoolId) && application.acceptedSchoolId !== s.id}
+							onAccept={async () => {
+								await schoolsApi.meAcceptOffer(s.id);
+								await syncFromServer();
+							}}
+						/>
 					))}
 				</ul>
 			</div>
@@ -3312,6 +3325,32 @@ function decisionUpdateCopy(row: SchoolApplicationTrack, uniName: string, progra
 	);
 }
 
+/** A signed, short-lived link to one file on a school row, opened in a new tab. */
+function SchoolFileLink({ schoolId, kind, label }: { schoolId: string; kind: SchoolFileKind; label: string }) {
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const open = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			const ticket = await schoolsApi.meFileDownloadUrl(schoolId, kind);
+			window.open(ticket.url, "_blank", "noopener");
+		} catch {
+			setError("Could not open the file. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+	return (
+		<>
+			<button type="button" className="btn btn--secondary btn--sm" onClick={open} disabled={busy}>
+				{busy ? "Opening…" : label}
+			</button>
+			{error ? <span className="muted" style={{ marginLeft: "0.5rem" }}>{error}</span> : null}
+		</>
+	);
+}
+
 function AdmissionLetterViewer({ schoolId, universityName }: { schoolId: string; universityName: string }) {
 	const [open, setOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
@@ -3419,15 +3458,39 @@ function SchoolTrackCard({
 	row,
 	canRemove,
 	onRemove,
+	accepted = false,
+	anotherAccepted = false,
+	onAccept,
 }: {
 	row: SchoolApplicationTrack;
 	canRemove: boolean;
 	onRemove: () => void;
+	/** This is the offer the client is going with. */
+	accepted?: boolean;
+	/** A different offer is already accepted — accepting this one replaces it. */
+	anotherAccepted?: boolean;
+	/** Present once decisions are in and the client may choose. */
+	onAccept?: () => Promise<void>;
 }) {
 	const dest = getDestination(row.destinationId);
 	const uni = getUniversity(row.universityId);
 	const program = getProgram(row.programId);
 	const curIdx = Math.max(0, TRACK_PIPELINE.indexOf(row.status));
+	const [accepting, setAccepting] = useState(false);
+	const [acceptError, setAcceptError] = useState<string | null>(null);
+	const accept = async () => {
+		if (!onAccept) return;
+		if (anotherAccepted && !window.confirm(`Switch your accepted offer to ${uni?.name ?? row.universityName ?? "this school"}?`)) return;
+		setAccepting(true);
+		setAcceptError(null);
+		try {
+			await onAccept();
+		} catch (err) {
+			setAcceptError(err instanceof ApiError ? err.message : "Could not record your choice. Please try again.");
+		} finally {
+			setAccepting(false);
+		}
+	};
 
 	return (
 		<li
@@ -3445,9 +3508,14 @@ function SchoolTrackCard({
 						<p className="muted" style={{ fontSize: "0.9rem" }}>
 							{program?.name} · {row.intake}
 						</p>
+						{row.institutionReference ? (
+							<p className="mono muted mt-1" style={{ fontSize: "0.75rem" }}>
+								Application ref · {row.institutionReference}
+							</p>
+						) : null}
 					</div>
 					<span className={`track-status-pill track-status-pill--${trackSlug(row.status)}${row.outcome === "Admitted" ? " track-status-pill--admitted" : ""}`}>
-						{trackLabel(row)}
+						{accepted ? "★ Your choice" : trackLabel(row)}
 					</span>
 				</div>
 
@@ -3536,6 +3604,34 @@ function SchoolTrackCard({
 									The official admission letter and documents will appear here once your consultant
 									uploads them.
 								</p>
+							) : null}
+							{row.submissionProofUrl ? (
+								<p className="mt-2" style={{ fontSize: "0.8rem" }}>
+									<SchoolFileLink schoolId={row.id} kind="submission-proof" label="View submission confirmation" />
+								</p>
+							) : null}
+							{row.outcome === "Admitted" && onAccept ? (
+								<div className="mt-3">
+									{accepted ? (
+										<p style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+											★ You accepted this offer. Your consultant will take it from here.
+										</p>
+									) : (
+										<>
+											<button type="button" className="btn btn--primary btn--sm" onClick={accept} disabled={accepting}>
+												{accepting ? "Saving…" : anotherAccepted ? "Switch to this offer" : "Accept this offer"}
+											</button>
+											<p className="muted mt-1" style={{ fontSize: "0.75rem" }}>
+												Tell us which school you are going with — visa and travel are arranged for that one.
+											</p>
+										</>
+									)}
+									{acceptError ? (
+										<p className="mt-1" style={{ fontSize: "0.8rem", color: "var(--danger, #b91c1c)" }}>
+											{acceptError}
+										</p>
+									) : null}
+								</div>
 							) : null}
 							{row.updatedAt ? (
 								<p className="mono muted mt-2" style={{ fontSize: "0.7rem" }}>
@@ -3777,13 +3873,13 @@ function VisaHubInner() {
 					</div>
 				) : (
 					<div className="card card--pad">
-						<p className="eyebrow">Accepted / offer</p>
+						<p className="eyebrow">Your offers</p>
 						<ul className="portal-snapshot mt-2">
 							{accepted.map((s) => (
 								<li key={s.id}>
 									<span>{getUniversity(s.universityId)?.name}</span>
 									<strong>
-										{getProgram(s.programId)?.name} · {trackLabel(s)}
+										{getProgram(s.programId)?.name} · {application.acceptedSchoolId === s.id ? "★ Your choice" : trackLabel(s)}
 									</strong>
 								</li>
 							))}

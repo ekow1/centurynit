@@ -296,6 +296,8 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		declinedReason: row.declinedReason,
 		fundingTrack: row.fundingTrack,
 		targetSchoolCount: row.targetSchoolCount ?? null,
+		acceptedSchoolId: row.acceptedSchoolId ?? null,
+		offerAcceptedAt: row.offerAcceptedAt?.toISOString() ?? null,
 		notes: row.notes,
 		checklist: row.checklist ?? [],
 		visaStage: row.visaStage,

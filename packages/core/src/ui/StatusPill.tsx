@@ -1,4 +1,12 @@
-import { INVOICE_STATUS_LABELS, TRAVEL_STATUS_LABELS, VISA_STAGE_LABELS } from "century-nit-shared";
+import {
+	INVOICE_STATUS_LABELS,
+	SCHOOL_OUTCOME_LABELS,
+	SCHOOL_TRACK_STATUS_LABELS,
+	TRAVEL_STATUS_LABELS,
+	VISA_STAGE_LABELS,
+	type SchoolOutcome,
+	type SchoolTrackStatus,
+} from "century-nit-shared";
 
 /**
  * The five things a status can mean. Every pill in either app is one of
@@ -48,6 +56,26 @@ export function travelTone(status: string): Tone {
 	}
 }
 
+/**
+ * A school application's state in one word: the outcome once decided,
+ * otherwise where it is in the track.
+ */
+export function schoolTone(status: string, outcome?: string | null): Tone {
+	if (status === "Decision Reached") {
+		switch (outcome) {
+			case "Admitted": return "done";
+			case "Waitlisted": return "waiting";
+			case "Application Rejected": case "Withdrawn": return "void";
+			default: return "neutral";
+		}
+	}
+	return status === "Submitted" ? "current" : "neutral";
+}
+export function schoolStateLabel(status: string, outcome?: string | null): string {
+	if (status === "Decision Reached" && outcome) return SCHOOL_OUTCOME_LABELS[outcome as SchoolOutcome] ?? outcome;
+	return SCHOOL_TRACK_STATUS_LABELS[status as SchoolTrackStatus] ?? status;
+}
+
 /** Convenience pills that pair the shared label with its tone. */
 export function InvoiceStatusPill({ status }: { status: string }) {
 	return <StatusPill tone={invoiceTone(status)}>{INVOICE_STATUS_LABELS[status] ?? status}</StatusPill>;
@@ -57,4 +85,7 @@ export function VisaStagePill({ stage }: { stage: string }) {
 }
 export function TravelStatusPill({ status }: { status: string }) {
 	return <StatusPill tone={travelTone(status)}>{TRAVEL_STATUS_LABELS[status] ?? status}</StatusPill>;
+}
+export function SchoolStatePill({ status, outcome }: { status: string; outcome?: string | null }) {
+	return <StatusPill tone={schoolTone(status, outcome)}>{schoolStateLabel(status, outcome)}</StatusPill>;
 }

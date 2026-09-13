@@ -535,12 +535,15 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					appInvoice={appInvoice}
 					appInvoiceLoading={appInvoiceLoading}
 					canIssueInvoices={canIssueInvoices}
+					canWork={canWork}
 					outstandingDocs={outstandingDocs}
 					setTab={setTab}
 					onInvoiceChanged={(updated) => {
 						setAppInvoice(updated);
 						setInvoiceRefresh((n) => n + 1);
 					}}
+					flash={flash}
+					fail={fail}
 				/>
 			)}
 

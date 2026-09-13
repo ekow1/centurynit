@@ -29,6 +29,7 @@ import { createProforma, getFeeSchedule } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
+import { formatUsd } from "./receiptEmail.js";
 import { getDocumentStorage } from "./storage/index.js";
 import { activeHandlerFor } from "./handoffs.js";
 
@@ -512,9 +513,15 @@ export async function updateSchoolStatus(
 					universityName: target.universityName || "University",
 					programName: target.programName || "Programme",
 					outcome: input.outcome,
-					tuitionFormatted: null,
-					depositFormatted: null,
-					depositDeadlineFormatted: null,
+					// Offer terms come from the row just saved, so the email says
+					// what the portal shows.
+					tuitionFormatted:
+						updated.offerTuitionLabel?.trim() ||
+						(updated.offerTuitionUsd != null ? formatUsd(updated.offerTuitionUsd) : null),
+					depositFormatted: updated.offerDepositUsd != null ? formatUsd(updated.offerDepositUsd) : null,
+					depositDeadlineFormatted: updated.offerDepositDueAt
+						? updated.offerDepositDueAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+						: null,
 					consultantNote: providedNote || fallbackNote,
 					portalUrl: frontendUrl,
 					hasAttachment: Boolean(attachmentUrl),

@@ -279,6 +279,8 @@ export type ApplicationData = {
 	visaDetails: VisaDetails;
 	/** The visa-stage documents — asked once the chapter opens. */
 	visaDocumentChecklist: DocumentChecklistItem[];
+	/** Case history the consultant marked for the client — milestones, decisions, notes. */
+	comments: CaseComment[];
 	visaUpdatedAt: string | null;
 	/** Set to true once the Travel invoice (flights/ticketing) is fully paid */
 	travelInvoicePaid: boolean;
@@ -503,7 +505,7 @@ const defaultApplication: ApplicationData = {
 		status: "none",
 		raisedAt: null,
 		paidAt: null,
-		description: "Stage II - school selection & admission tracking",
+		description: "Application fee - school submissions & admission tracking",
 		estimatedAmount: usdFromCents(FALLBACK_FEE_SCHEDULE.appBaseCents),
 		estimateLines: [],
 		actualAmount: null,
@@ -516,7 +518,7 @@ const defaultApplication: ApplicationData = {
 		status: "none",
 		raisedAt: null,
 		paidAt: null,
-		description: "Stage III - visa processing & travel prep",
+		description: "Visa fee - visa processing",
 		estimatedAmount: VISA_STAGE_FEE,
 		estimateLines: [],
 		actualAmount: null,
@@ -542,6 +544,7 @@ const defaultApplication: ApplicationData = {
 	visaOutcome: null,
 	visaDetails: {},
 	visaDocumentChecklist: [],
+	comments: [],
 	visaUpdatedAt: null,
 	travelInvoicePaid: false,
 	completedAt: null,
@@ -787,7 +790,10 @@ export type PendingAction = {
 		| "schools"
 		| "appointment"
 		| "payment_execution"
-		| "travel";
+		| "travel"
+		| "accept_offer"
+		| "visa_documents"
+		| "visa_appointment";
 	/** Short imperative name - the button label the applicant sees. */
 	label: string;
 	/** The one-line "what is being asked" title. */
@@ -811,6 +817,7 @@ export function getPendingAction(
 	app: ApplicationData,
 	booking: BookingData,
 	stage: ProcessStageId,
+	schools: SchoolApplicationTrack[] = [],
 ): PendingAction | null {
 	const selectionConfirmed = Boolean(app.schoolSelectionDoneAt);
 	const eligible = isConsultationEligible(booking);
@@ -875,7 +882,7 @@ export function getPendingAction(
 			label: "Pay now",
 			title: "Pay your application invoice",
 			detail:
-				"Settle your Stage II invoice so Century NIT can start tracking your applications.",
+				"Settle the application fee so Century NIT can submit and track your applications.",
 			to: "/portal/financial",
 		};
 	}
@@ -893,16 +900,56 @@ export function getPendingAction(
 		};
 	}
 
+	// Several offers, none chosen — the visa and departure are for one school.
+	const admitted = schools.filter((s) => s.outcome === "Admitted");
+	if (admitted.length > 1 && !app.acceptedSchoolId) {
+		return {
+			kind: "accept_offer",
+			label: "Choose school",
+			title: "Accept the offer you are going with",
+			detail: `You hold ${admitted.length} admission offers. Accept one so your visa and departure are prepared for that school.`,
+			to: "/portal/tracking",
+		};
+	}
+
 	// Unpaid visa invoice - admission is in, visa is blocked until this settles.
 	if (app.visaInvoice.status === "raised" && !isVisaInvoicePaid(app)) {
 		return {
 			kind: "visa_invoice",
 			label: "Pay now",
-			title: "Pay your visa invoice",
+			title: "Pay your visa fee",
 			detail:
-				"You have an admission. Settle your Stage III invoice so visa processing can begin.",
+				"You have an admission. Settle the visa fee so visa processing can begin.",
 			to: "/portal/financial",
 		};
+	}
+
+	// Visa case open: the appointment is the one date not to miss; the
+	// documents the officer builds the application from come before it.
+	const visaOpen = app.visaStatus === "pending" || app.visaStatus === "biometrics";
+	if (visaOpen) {
+		const vd = app.visaDetails ?? {};
+		const appointment = vd.appointmentAt && !vd.biometricsAt && new Date(vd.appointmentAt).getTime() > Date.now() - 6 * 3_600_000 ? vd.appointmentAt : null;
+		if (appointment) {
+			const when = new Date(appointment).toLocaleString(undefined, { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+			return {
+				kind: "visa_appointment",
+				label: "See details",
+				title: `Visa appointment · ${when}`,
+				detail: `${vd.appointmentCentre ? `${vd.appointmentCentre}. ` : ""}Bring your passport, the confirmation and every document in your visa list.`,
+				to: "/portal/visa/tracking",
+			};
+		}
+		const missing = app.visaDocumentChecklist.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
+		if (missing.length > 0) {
+			return {
+				kind: "visa_documents",
+				label: "Upload",
+				title: `Upload your visa documents · ${missing.length} outstanding`,
+				detail: `${missing.slice(0, 3).map((d) => d.name).join(", ")}${missing.length > 3 ? "…" : ""} — your officer needs these to lodge the application.`,
+				to: "/portal/documents",
+			};
+		}
 	}
 
 	// Server-backed appointment awaiting the applicant's confirmation.
@@ -2250,6 +2297,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					visaOutcome: a.visaOutcome ?? null,
 					visaDetails: a.visaDetails ?? {},
 					visaDocumentChecklist: a.visaDocumentChecklist ?? [],
+					comments: a.comments ?? [],
 					visaCounselorNote: a.visaCounselorNote ?? prev.visaCounselorNote,
 					visaInvoice: a.visaInvoicePaid
 						? {
@@ -2505,8 +2553,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	const stageStatuses = useMemo(() => (serverJourney ? journey.stageStatuses : null), [serverJourney, journey]);
 
 	const pendingAction = useMemo(
-		() => getPendingAction(application, booking, processStage),
-		[application, booking, processStage],
+		() => getPendingAction(application, booking, processStage, schoolApplications),
+		[application, booking, processStage, schoolApplications],
 	);
 
 	const value = useMemo(

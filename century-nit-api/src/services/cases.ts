@@ -1411,13 +1411,8 @@ async function raiseVisaInvoiceForApplication(
 			applicationId: app.id,
 			type: "visa",
 			status: "proforma",
-			lines: [
-				{
-					label: "Visa processing fee",
-					amountCents: fees.visaBaseCents,
-				},
-			],
-			note: `Auto-raised when stage advanced to visa_processing (application ${app.appNumber}).`,
+			lines,
+			note: "Visa costs paid on your behalf, at cost.",
 		},
 		actor,
 	});
@@ -1943,17 +1938,30 @@ export async function setApplicationVisaStage(
 		targetType: "application",
 		targetId: id,
 		kind: "status",
+		// The milestone — and a decision's reason — is the client's to read;
+		// the reason for a plain move (a step back, a reopen) is staff-only.
+		visibility: "applicant",
 		text: [
 			visaOutcome === "refused"
 				? `Visa refused${note ? ` — ${note}` : ""}`
 				: visaOutcome === "approved"
 					? `Visa approved${note ? ` — ${note}` : ""}`
-					: `Visa stage → ${VISA_STAGE_LABELS[stage] ?? stage}${note ? ` — ${note}` : ""}`,
+					: `Visa stage → ${VISA_STAGE_LABELS[stage] ?? stage}`,
 			...factLines,
 		].join("\n"),
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+	if (!visaOutcome && note) {
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: id,
+			kind: "status",
+			text: `Visa stage → ${VISA_STAGE_LABELS[stage] ?? stage} — ${note}`,
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId,
+		});
+	}
 
 	// In-app: keep the client informed of visa processing progress.
 	const clientUserId = await applicantUserIdOfApplication(id);

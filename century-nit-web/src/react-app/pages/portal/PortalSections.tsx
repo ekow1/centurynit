@@ -43,6 +43,13 @@ import { ChangePasswordModal, ChangeEmailModal } from "../../components/portal/S
 import type { ApplicantDocument, ApiInvoice } from "century-nit-shared";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
+import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
+import { prepareDocumentForUpload } from "../../lib/upload";
+
+function toTitleCase(str: string | null | undefined): string {
+	if (!str) return "";
+	return str.toLowerCase().replace(/\b\w/g, (s) => s.toUpperCase());
+}
 
 /* ========== Profile ========== */
 
@@ -160,9 +167,6 @@ export function PortalProfile() {
 	}, []);
 
 	const [editing, setEditing] = useState<null | "account" | "assessment" | "preferences">(null);
-	const [dossierTab, setDossierTab] = useState<
-		"overview" | "assessment" | "preferences" | "consultation" | "security"
-	>("overview");
 	const [draft, setDraft] = useState<Record<string, string>>({});
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [saving, setSaving] = useState<null | "account" | "assessment" | "preferences">(null);
@@ -356,14 +360,6 @@ export function PortalProfile() {
 		? PAYMENT_PLANS.find((p) => p.id === a.paymentPlanId)?.name ?? a.paymentPlanId
 		: null;
 
-	const DOSSIER_TABS = [
-		{ key: "overview", label: "Overview" },
-		{ key: "assessment", label: "Assessment & Background" },
-		{ key: "preferences", label: "Study Preferences" },
-		{ key: "consultation", label: "Consultation & Target" },
-		{ key: "security", label: "Security & Credentials" },
-	] as const;
-
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
@@ -380,14 +376,17 @@ export function PortalProfile() {
 			<section className="profile-hero-card mt-4">
 				<div className="profile-hero">
 					<div className="profile-hero__main">
-						<div className="profile-avatar">
+						<div className="profile-avatar" style={{ position: "relative" }}>
 							<Avatar name={fullName} image={authUser?.image} className="profile-monogram" />
 							<button
 								type="button"
-								className="profile-avatar__edit"
+								className="profile-avatar__overlay-btn"
 								onClick={() => setAvatarOpen(true)}
+								title="Change photo"
 							>
-								{authUser?.image ? "Change photo" : "Add photo"}
+								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+									<path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+								</svg>
 							</button>
 						</div>
 						<div>
@@ -409,7 +408,7 @@ export function PortalProfile() {
 					<div className="profile-hero__side">
 						<button
 							type="button"
-							className="profile-edit-btn"
+							className="btn btn--primary"
 							onClick={() =>
 								editing === "account"
 									? setEditing(null)
@@ -472,42 +471,26 @@ export function PortalProfile() {
 					<div className="profile-ref">
 						<p className="profile-ref__label">Target Intake</p>
 						<p className="profile-ref__value mono">
-							{a.intake || ass.intakePreference || <span className="profile-hero__empty">Not set</span>}
+							{toTitleCase(a.intake || ass.intakePreference) || <span className="profile-hero__empty">Not set</span>}
 						</p>
 					</div>
 				</div>
 			</section>
 
-			{/* Dossier Tabs */}
-			<nav className="dossier-tabs" aria-label="Applicant Dossier Navigation">
-				{DOSSIER_TABS.map((t) => (
-					<button
-						key={t.key}
-						type="button"
-						className={`dossier-tab-btn ${dossierTab === t.key ? "dossier-tab-btn--active" : ""}`}
-						onClick={() => setDossierTab(t.key)}
-					>
-						{t.label}
-					</button>
-				))}
-			</nav>
-
 			{/* Dossier Panels */}
-			<div className="dossier-panel">
-				{dossierTab === "overview" && (
-					<>
+			<div className="dossier-panel" style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "2rem" }}>
 						<div className="dossier-card">
 							<div className="dossier-card__head">
 								<h2 className="dossier-card__title">Academic Path &amp; Target Application</h2>
 								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-									STATUS: {(a.journeyStage || a.pipelineStatus || "ACTIVE").replace(/_/g, " ").toUpperCase()}
+									STATUS: {uploadedDocs < totalDocs ? "IN PROGRESS" : "APPLICATION SUBMITTED"}
 								</span>
 							</div>
 							<div className="dossier-grid">
 								<DossierField label="Target Destination" value={targetDestination} />
 								<DossierField label="Target Institution" value={targetInstitution} />
 								<DossierField label="Academic Programme" value={targetProgram} />
-								<DossierField label="Target Intake" value={a.intake || ass.intakePreference} />
+								<DossierField label="Target Intake" value={toTitleCase(a.intake || ass.intakePreference)} />
 								<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
 								<DossierField label="Payment Plan" value={planName || "Direct / Unassigned"} />
 								<DossierField label="Schools Selection" value={a.schoolSelectionDoneAt ? "Confirmed" : "In Progress"} />
@@ -582,20 +565,39 @@ export function PortalProfile() {
 													View
 												</button>
 											) : (
-												<Link to="/portal/documents" className="profile-doc__action">
+												<label className="profile-doc__action" style={{ cursor: "pointer", display: "inline-block" }}>
 													Upload
-												</Link>
+													<input
+														type="file"
+														hidden
+														accept={ALLOWED_DOCUMENT_TYPES.join(",")}
+														onChange={async (e) => {
+															const file = e.target.files?.[0];
+															if (!file) return;
+															if (file.size > MAX_DOCUMENT_BYTES) {
+																toast.error(`${file.name} is larger than 15 MB.`);
+																return;
+															}
+															try {
+																toast.info(`Uploading ${file.name}...`);
+																const ready = await prepareDocumentForUpload(file, () => {});
+																const saved = await documentsApi.upload(ready, r.id, { onProgress: () => {} });
+																setLiveDocs(prev => new Map(prev ?? []).set(saved.documentType, saved));
+																toast.success(`${file.name} uploaded successfully.`);
+															} catch(err) {
+																toast.error("Could not upload. Please try again.");
+															}
+															e.target.value = "";
+														}}
+													/>
+												</label>
 											)}
 										</li>
 									);
 								})}
 							</ul>
 						</div>
-					</>
-				)}
 
-				{dossierTab === "assessment" && (
-					<>
 						<div className="dossier-card">
 							<div className="dossier-card__head">
 								<h2 className="dossier-card__title">Personal &amp; Contact Background</h2>
@@ -703,11 +705,7 @@ export function PortalProfile() {
 								</div>
 							</>
 						)}
-					</>
-				)}
 
-				{dossierTab === "preferences" && (
-					<>
 						<div className="dossier-card">
 							<div className="dossier-card__head">
 								<h2 className="dossier-card__title">Study Aspirations &amp; Goals</h2>
@@ -765,11 +763,7 @@ export function PortalProfile() {
 								</div>
 							</div>
 						)}
-					</>
-				)}
 
-				{dossierTab === "consultation" && (
-					<>
 						<div className="dossier-card">
 							<div className="dossier-card__head">
 								<h2 className="dossier-card__title">Consultation Session</h2>
@@ -828,11 +822,7 @@ export function PortalProfile() {
 								<DossierField label="Application Status" value={(a.journeyStage || a.pipelineStatus || "IN PROGRESS").replace(/_/g, " ").toUpperCase()} />
 							</div>
 						</div>
-					</>
-				)}
 
-				{dossierTab === "security" && (
-					<>
 						<div className="dossier-card">
 							<div className="dossier-card__head">
 								<h2 className="dossier-card__title">Sign-in Identity &amp; Provider</h2>
@@ -949,8 +939,6 @@ export function PortalProfile() {
 								</div>
 							</div>
 						</div>
-					</>
-				)}
 			</div>
 
 			<AvatarCropModal

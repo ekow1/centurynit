@@ -22,8 +22,16 @@ export function PortalPreDeparture() {
  * Execution chapter, where the money is; this page ends at "booked".
  */
 function TravelAssistanceInner() {
-	const { application, syncFromServer, recordTravelDecision } = useAppState();
+	const { application, schoolApplications, syncFromServer, recordTravelDecision } = useAppState();
 	const { toast } = useNotifier();
+
+	// Where the client is going: the accepted offer, else the one admission.
+	const admitted = schoolApplications.filter((s) => s.outcome === "Admitted");
+	const destination =
+		schoolApplications.find((s) => s.id === application.acceptedSchoolId) ?? (admitted.length === 1 ? admitted[0] : null);
+	const vd = application.visaDetails ?? {};
+	const day = (iso: string | null | undefined) =>
+		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : null;
 
 	const ta = application.travelAssistance;
 	const [busy, setBusy] = useState(false);
@@ -136,7 +144,16 @@ function TravelAssistanceInner() {
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">Travel assistance</p>
-					<h1 className="page-title mt-1">Flight booking</h1>
+					<h1 className="page-title mt-1">
+						{destination ? `Departure · ${destination.universityName ?? "your school"}` : "Flight booking"}
+					</h1>
+					{destination && (
+						<p className="mono muted mt-1" style={{ fontSize: "0.8rem" }}>
+							{[destination.programName, destination.intake, vd.validFrom || vd.validTo ? `Visa valid ${day(vd.validFrom) ?? "…"} → ${day(vd.validTo) ?? "…"}` : null]
+								.filter(Boolean)
+								.join(" · ")}
+						</p>
+					)}
 					<p className="lead mt-2">
 						Your visa is sorted. Tell us how you'd like to handle your flight and we'll take it from
 						there. The flight booking service is already part of your package — the only invoice on

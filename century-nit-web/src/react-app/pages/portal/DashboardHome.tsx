@@ -57,9 +57,9 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	awaiting_handler: { title: "Consultant being assigned", desc: "Your deposit has been received. Your consultant is being assigned." },
 	school_select: { title: "Select schools & programmes", desc: "Choose where to apply, then pay the application invoice." },
 	awaiting_invoice: { title: "Awaiting application invoice", desc: "Your consultant is reviewing your school selection and will issue the application invoice shortly." },
-	application_invoice: { title: "Pay the application invoice", desc: "Settle the Stage II invoice so tracking can begin." },
+	application_invoice: { title: "Pay the application invoice", desc: "Settle the application fee so submissions and tracking can begin." },
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
-	visa_invoice: { title: "Pay the visa invoice", desc: "On admission, settle the Stage III invoice to start visa." },
+	visa_invoice: { title: "Pay the visa fee", desc: "On admission, settle the visa fee to open your visa case." },
 	visa: { title: "Visa tracking", desc: "Your consultant processes your visa after you settle the invoice." },
 	payment_execution: { title: "Pre-departure fee milestone", desc: "Due once your visa is approved — your ticket is issued after it." },
 	travel_assistance: { title: "Departure", desc: "Choose how to book your flight, pay the ticket, and work through the pre-departure checklist." },
@@ -97,7 +97,7 @@ export function DashboardHome() {
 	// consultation ref exists once the consultation is booked+paid,
 	// application ID exists once the application invoice is paid.
 	const consultationRef = booking.confirmationId;
-	const applicationId = application.applicationId;
+	const applicationId = application.appNumber;
 	const appInvoice = application.applicationInvoice;
 	const visaInvoice = application.visaInvoice;
 

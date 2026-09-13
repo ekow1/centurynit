@@ -20,7 +20,7 @@
 }
 
 .appt-muted {
-	color: var(--text-muted, #666);
+	color: var(--text-secondary, #4b5563);
 	font-size: var(--text-sm, 0.875rem);
 	margin: 0.5rem 0;
 }
@@ -90,6 +90,7 @@
 	padding: 1.25rem;
 	margin-bottom: 1.25rem;
 	background: var(--background);
+	max-width: 800px;
 }
 
 .appt-card--over {
@@ -111,7 +112,7 @@
 
 .appt-card__when {
 	margin: 0.2rem 0 0;
-	color: var(--text-muted, #666);
+	color: var(--text-secondary, #4b5563);
 	font-size: var(--text-sm, 0.875rem);
 }
 

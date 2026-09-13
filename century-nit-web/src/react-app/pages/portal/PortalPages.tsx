@@ -60,8 +60,10 @@ import { prepareDocumentForUpload } from "../../lib/upload";
 
 
 
+import { STAGE_SHORT } from "../../data/stageLabels";
 import { ChapterGate } from "./PortalLayout";
 import { ConsultationAppointmentCard } from "./ConsultationAppointmentCard";
+import { ConsultantUpdates, isVisaUpdate } from "./ConsultantUpdates";
 
 /* ========== Journey ========== */
 
@@ -106,7 +108,7 @@ export function PortalAwaitingHandler() {
 					<p className="eyebrow">Dashboard · Application</p>
 					<h1 className="page-title mt-1">Handler Assigned</h1>
 				</header>
-				<div className="card card--pad">
+				<div className="sharp-card">
 					<p className="display" style={{ fontSize: "1.2rem" }}>
 						Your consultant has been assigned
 					</p>
@@ -132,7 +134,7 @@ export function PortalAwaitingHandler() {
 				<p className="eyebrow">Dashboard · Application</p>
 				<h1 className="page-title mt-1">Your consultant is being assigned</h1>
 			</header>
-			<div className="card card--pad">
+			<div className="sharp-card">
 				<p className="display" style={{ fontSize: "1.2rem" }}>
 					Your 10% deposit has been received
 				</p>
@@ -223,7 +225,7 @@ export function PortalAwaitingInvoice() {
 				<p className="eyebrow">Dashboard · Application</p>
 				<h1 className="page-title mt-1">Awaiting application invoice</h1>
 			</header>
-			<div className="card card--pad">
+			<div className="sharp-card">
 				<p className="display" style={{ fontSize: "1.2rem" }}>
 					Your school selection has been submitted
 				</p>
@@ -486,7 +488,7 @@ function SchoolPackageInner() {
 			</ol>
 
 			<section className="mt-4">
-				<div className="card card--pad">
+				<div className="sharp-card">
 					<p className="eyebrow">1 · Confirm your enrolment</p>
 					<div className="mt-2">
 						<EnrolmentDecision />
@@ -617,7 +619,7 @@ function SchoolPackageInner() {
 			</section>
 
 			{funding && level ? (
-				<div className="card card--pad mb-5 package-compose">
+				<div className="sharp-card mb-5 package-compose">
 					<div>
 						<p className="eyebrow">Your composed package</p>
 						<p className="display mt-2" style={{ fontSize: "1.5rem" }}>
@@ -674,7 +676,7 @@ function SchoolPackageInner() {
 						</li>
 					</ul>
 
-					<div className="card card--pad mt-4" style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+					<div className="sharp-card mt-4" style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
 						<p className="eyebrow" style={{ color: "var(--success, #10b981)" }}>All-Inclusive Consultancy Scope</p>
 						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
 							The following are 100% covered by Century NIT — never charged as hidden desk fees:
@@ -694,7 +696,7 @@ function SchoolPackageInner() {
 					</div>
 
 					{selectedPkg?.exclusions && selectedPkg.exclusions.length > 0 && (
-						<div className="card card--pad mt-3" style={{ background: "rgba(239, 68, 68, 0.04)", border: "1px solid rgba(239, 68, 68, 0.15)" }}>
+						<div className="sharp-card mt-3" style={{ background: "rgba(239, 68, 68, 0.04)", border: "1px solid rgba(239, 68, 68, 0.15)" }}>
 							<p className="eyebrow" style={{ color: "var(--danger, #ef4444)" }}>Package Exclusions</p>
 							<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
 								{selectedPkg.exclusions.map((excl, idx) => (
@@ -712,7 +714,7 @@ function SchoolPackageInner() {
 
 			{/* 3 · Payment plan — chosen here, so the money is agreed before any work starts */}
 			<section className="mt-4">
-				<div className="card card--pad">
+				<div className="sharp-card">
 					<p className="eyebrow">3 · Payment plan</p>
 					<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
 						The deposit (10%) is due now either way. The rest of your service fee follows your plan.
@@ -1273,7 +1275,7 @@ function AssessmentForm({
 							const pct = uploading[doc.id];
 							const isUploading = pct !== undefined;
 							return (
-								<div key={doc.id} className="card card--pad">
+								<div key={doc.id} className="sharp-card">
 									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
 										<div>
 											<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>{doc.label}</p>
@@ -1382,7 +1384,7 @@ function ConsultationOutcome({
 		return (
 			<>
 				<p className="eyebrow">Outcome</p>
-				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
 					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
 					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
 						Your consultant has finished reviewing your file. Your eligibility outcome is ready to view.
@@ -1404,7 +1406,7 @@ function ConsultationOutcome({
 		return (
 			<>
 				<p className="eyebrow">Outcome</p>
-				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
 					<p className="display" style={{ fontSize: "1.3rem" }}>Consultation cancelled</p>
 					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
 						Your consultation has been cancelled. If you'd like to continue, you can book a new appointment from the Appointments tab.
@@ -1437,7 +1439,7 @@ function ConsultationOutcome({
 		return (
 			<>
 				<p className="eyebrow">Outcome</p>
-				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
+				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
 					<div style={{ marginBottom: "1.5rem" }}>
 						<span
 							style={{
@@ -1630,7 +1632,7 @@ function ConsultationReview({
 
 			{/* Assessment complete - prominent call to action */}
 			{phase === "assessment_complete" ? (
-				<div className="card card--pad mt-3" style={{ textAlign: "center", padding: "2rem 1.5rem", border: "2px solid var(--foreground)" }}>
+				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "2rem 1.5rem", border: "2px solid var(--foreground)" }}>
 					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
 					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
 						Your consultant has finished reviewing your file. Your eligibility outcome is ready.
@@ -1737,7 +1739,7 @@ function ConsultationReview({
 					</Button>
 				</div>
 			) : phase === "cancelled" ? (
-				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>
+				<div className="sharp-card mt-4" style={{ textAlign: "center" }}>
 					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
 						Booking ref: {booking.confirmationId}
 					</p>
@@ -1751,7 +1753,7 @@ function ConsultationReview({
 					</div>
 				</div>
 			) : phase !== "assessment_complete" ? (
-				<div className="card card--pad mt-4" style={{ textAlign: "center" }}>
+				<div className="sharp-card mt-4" style={{ textAlign: "center" }}>
 					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
 						Booking ref: {booking.confirmationId}
 					</p>
@@ -1773,7 +1775,7 @@ export function PortalConsultationBookingFlow() {
 
 		setEligibilityOutcome,
 		revealOutcome,
-
+		journeyPhase,
 	} = useAppState();
 	const { toast } = useNotifier();
 	const [selectedTab, setSelectedTab] = useState(0);
@@ -1869,7 +1871,7 @@ export function PortalConsultationBookingFlow() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · Stage I</p>
+					<p className="eyebrow">Dashboard · {STAGE_SHORT[journeyPhase.stage] ?? journeyPhase.label}</p>
 					<h1 className="page-title mt-1">Consultation</h1>
 					<p className="lead mt-2">
 						All consultation steps stay <strong>inside this dashboard</strong> - not a separate app.
@@ -1902,7 +1904,7 @@ export function PortalConsultationBookingFlow() {
 				})}
 			</div>
 
-			<div className="card card--pad mt-3">
+			<div className="sharp-card mt-3">
 				{tab === 0 && (
 					<>
 						<p className="eyebrow">Meeting type</p>
@@ -2013,7 +2015,7 @@ export function PortalConsultationBookingFlow() {
 						<p className="muted mt-1">Confirm your booking details below. Payment will be collected at the branch.</p>
 
 						{payState === "paid" && booking.confirmationId ? (
-							<div className="card card--pad mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
+							<div className="sharp-card mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
 								<p className="eyebrow">Booking confirmed</p>
 								<p className="mono mt-2">Ref: {booking.confirmationId}</p>
 								<p className="mt-2" style={{ opacity: 0.85 }}>
@@ -2023,7 +2025,7 @@ export function PortalConsultationBookingFlow() {
 						) : null}
 
 						{payState === "method" ? (
-							<div className="card card--pad mt-3" style={{ border: "1px solid var(--border-light)" }}>
+							<div className="sharp-card mt-3" style={{ border: "1px solid var(--border-light)" }}>
 								<p className="eyebrow mb-2">Booking summary</p>
 								<div style={{ display: "grid", gap: "0.5rem", fontSize: "var(--text-sm)" }}>
 									<div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -2056,7 +2058,7 @@ export function PortalConsultationBookingFlow() {
 						) : null}
 
 						{payState === "processing" ? (
-							<div className="card card--pad mt-3" style={{ textAlign: "center", border: "1px solid var(--border-light)" }}>
+							<div className="sharp-card mt-3" style={{ textAlign: "center", border: "1px solid var(--border-light)" }}>
 								<p className="eyebrow">Creating your booking…</p>
 								<p className="mono mt-2" style={{ fontSize: "0.85rem" }}>
 									Submitting to server
@@ -2083,7 +2085,7 @@ export function PortalConsultationBookingFlow() {
 						) : null}
 
 						{payState === "success" ? (
-							<div className="card card--pad mt-3" style={{ textAlign: "center", background: "var(--foreground)", color: "var(--accent-foreground)" }}>
+							<div className="sharp-card mt-3" style={{ textAlign: "center", background: "var(--foreground)", color: "var(--accent-foreground)" }}>
 								<p className="eyebrow">Booking confirmed</p>
 								<p className="display mt-2" style={{ fontSize: "1.35rem" }}>
 									✓ {formatDualCurrency(consultationFeeUsd)} consultation booked
@@ -2181,7 +2183,7 @@ export function PortalConsultation() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · Stage I</p>
+					<p className="eyebrow">Dashboard · {STAGE_SHORT[journeyPhase.stage] ?? journeyPhase.label}</p>
 					<h1 className="page-title mt-1">Consultation &amp; Assessment</h1>
 					<p className="lead mt-2">
 						{hasActiveCase
@@ -2192,7 +2194,7 @@ export function PortalConsultation() {
 			</header>
 
 			{loading ? (
-				<div className="card card--pad text-center py-5">
+				<div className="sharp-card text-center py-5">
 					<p className="muted">Loading consultation case details…</p>
 				</div>
 			) : !hasActiveCase ? (
@@ -2303,14 +2305,14 @@ export function PortalConsultation() {
 						<div className="portal-case">
 							<div className="portal-case__main">
 								{stageStatuses && (
-									<div className="card card--pad">
+									<div className="sharp-card">
 										<p className="eyebrow mb-2">Your journey</p>
 										<JourneyStepper stageStatuses={stageStatuses} nextUnlock={journeyPhase.nextUnlock} />
 									</div>
 								)}
 
 								{activeOutcome ? (
-									<div id="assessment-outcome">
+									<div id="assessment-outcome" className="mt-5">
 										<AssessmentOutcomeCard
 											outcome={activeOutcome}
 											notes={activeNotes}
@@ -2326,7 +2328,7 @@ export function PortalConsultation() {
 									</div>
 								) : (
 									workflowStatus !== "CLOSED" && (
-										<div className="card card--pad">
+										<div className="sharp-card mt-5">
 											<p className="eyebrow mb-2">Assessment</p>
 											<p className="muted">
 												{activeOfficer
@@ -2337,8 +2339,56 @@ export function PortalConsultation() {
 									)
 								)}
 
+								<div className="sharp-card mt-5">
+									<div className="cn-case__top mb-4">
+										<span className="cn-case__ref" style={{ fontWeight: 600 }}>{activeRef}</span>
+										<StatusPill tone={statusTone} dot>
+											{statusLabel}
+										</StatusPill>
+									</div>
+									<dl className="portal-case__facts dossier-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "1.5rem 1rem" }}>
+										<div className="dossier-field">
+											<dt className="dossier-field__label">Format & Branch</dt>
+											<dd className="dossier-field__value">
+												{(liveConsultation?.type === "in_person" ? "In person" : "Online")} · {getBranchName(liveConsultation?.branch ?? booking.branchId)}
+											</dd>
+										</div>
+										<div className="dossier-field">
+											<dt className="dossier-field__label">Date & Time</dt>
+											<dd className="dossier-field__value">{when}</dd>
+										</div>
+										<div className="dossier-field">
+											<dt className="dossier-field__label">Consultant</dt>
+											<dd className="dossier-field__value">
+												{activeOfficer ? (
+													<span className="portal-case__person" style={{ display: "inline-block" }}>
+														<span>
+															{activeOfficer}
+															{liveConsultation?.assignedOfficerEmail && (
+																<>
+																	<br />
+																	<a href={`mailto:${liveConsultation.assignedOfficerEmail}`} className="muted">
+																		{liveConsultation.assignedOfficerEmail}
+																	</a>
+																</>
+															)}
+														</span>
+													</span>
+												) : (
+													<span className="muted">Being assigned at your branch</span>
+												)}
+											</dd>
+										</div>
+									</dl>
+									{liveConsultation?.meetingUrl && workflowStatus !== "CLOSED" && (
+										<a href={liveConsultation.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-4">
+											Join video meeting →
+										</a>
+									)}
+								</div>
+
 								{liveConsultation?.comments && liveConsultation.comments.length > 0 && (
-									<div className="card card--pad">
+									<div className="sharp-card mt-5">
 										<p className="eyebrow mb-2">Messages from your consultant</p>
 										<ol className="cn-timeline">
 											{[...liveConsultation.comments].reverse().map((cm) => (
@@ -2358,86 +2408,44 @@ export function PortalConsultation() {
 							</div>
 
 							<aside className="portal-case__side">
-								<NextActionBand
-									items={actions}
-									waitingOn={journeyPhase.nextUnlock}
-									title="Your next steps"
-									emptyTitle="Nothing needed from you right now"
-								/>
+								<div className="sharp-card">
+									<NextActionBand
+										items={actions}
+										waitingOn={journeyPhase.nextUnlock}
+										title="Your next steps"
+										emptyTitle="Nothing needed from you right now"
+									/>
 
-								{checklist.length > 0 && (
-									<div className="card card--pad">
-										<div className="cn-case__top">
-											<p className="eyebrow" style={{ margin: 0 }}>Your documents</p>
-											<StatusPill tone={verifiedDocs.length === checklist.length ? "done" : toVerify.length > 0 ? "current" : "waiting"} dot>
-												{verifiedDocs.length}/{checklist.length} verified
-											</StatusPill>
-										</div>
-										<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
-											We collect these now so your applications never wait on paperwork.
-										</p>
-										<ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0", display: "grid", gap: "0.4rem" }}>
-											{checklist.map((d) => (
-												<li key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", fontSize: "0.9rem" }}>
-													<span title={d.hint}>{d.name}</span>
-													<StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "current" : d.status === "REJECTED" ? "blocked" : "neutral"}>
-														{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "Being checked" : d.status === "REJECTED" ? "Needs re-upload" : "To upload"}
-													</StatusPill>
-												</li>
-											))}
-										</ul>
-										{toUpload.length > 0 && (
-											<div className="row mt-3">
-												<Button to="/portal/documents" variant="secondary">
-													Upload in the vault →
-												</Button>
+									{checklist.length > 0 && (
+										<>
+											<div className="sharp-card-divider" />
+											<div className="cn-case__top">
+												<p className="eyebrow" style={{ margin: 0 }}>Your documents</p>
+												<StatusPill tone={verifiedDocs.length === checklist.length ? "done" : toVerify.length > 0 ? "current" : "waiting"} dot>
+													{verifiedDocs.length}/{checklist.length} verified
+												</StatusPill>
 											</div>
-										)}
-									</div>
-								)}
-
-								<div className="card card--pad">
-									<div className="cn-case__top">
-										<span className="cn-case__ref">{activeRef}</span>
-										<StatusPill tone={statusTone} dot>
-											{statusLabel}
-										</StatusPill>
-									</div>
-									<dl className="portal-case__facts">
-										<dt>Session</dt>
-										<dd>{liveConsultation?.type === "in_person" ? "In person" : "Online"}</dd>
-										<dt>When</dt>
-										<dd>{when}</dd>
-										<dt>Branch</dt>
-										<dd>{getBranchName(liveConsultation?.branch ?? booking.branchId)}</dd>
-										<dt>Consultant</dt>
-										<dd>
-											{activeOfficer ? (
-												<span className="portal-case__person">
-													<span className="portal-case__avatar" aria-hidden>
-														{activeOfficer.slice(0, 1)}
-													</span>
-													<span>
-														{activeOfficer}
-														{liveConsultation?.assignedOfficerEmail && (
-															<>
-																<br />
-																<a href={`mailto:${liveConsultation.assignedOfficerEmail}`} className="muted">
-																	{liveConsultation.assignedOfficerEmail}
-																</a>
-															</>
-														)}
-													</span>
-												</span>
-											) : (
-												<span className="muted">Being assigned at your branch</span>
+											<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
+												We collect these now so your applications never wait on paperwork.
+											</p>
+											<ul style={{ listStyle: "none", padding: 0, margin: "1.25rem 0 0", display: "grid", gap: "0.75rem" }}>
+												{checklist.map((d) => (
+													<li key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", fontSize: "0.9rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-light)" }}>
+														<span title={d.hint} style={{ fontWeight: 500 }}>{d.name}</span>
+														<StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "current" : d.status === "REJECTED" ? "blocked" : "neutral"}>
+															{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "Being checked" : d.status === "REJECTED" ? "Needs re-upload" : "To upload"}
+														</StatusPill>
+													</li>
+												))}
+											</ul>
+											{toUpload.length > 0 && (
+												<div className="row mt-4">
+													<Button to="/portal/documents" variant="secondary">
+														Upload in the vault →
+													</Button>
+												</div>
 											)}
-										</dd>
-									</dl>
-									{liveConsultation?.meetingUrl && workflowStatus !== "CLOSED" && (
-										<a href={liveConsultation.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-3">
-											Join video meeting →
-										</a>
+										</>
 									)}
 								</div>
 							</aside>
@@ -2492,6 +2500,9 @@ function ApplicationHubInner() {
 	const nav = useNavigate();
 	const [depositPaying, setDepositPaying] = useState(false);
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
+	// Schools added after the first invoice went out are billed on a
+	// supplementary one — every application invoice past the first.
+	const [extraInvoices, setExtraInvoices] = useState<ApiInvoice[]>([]);
 	const [destId, setDestId] = useState("");
 	const [uniId, setUniId] = useState("");
 	const [progId, setProgId] = useState("");
@@ -2510,8 +2521,9 @@ function ApplicationHubInner() {
 			.invoices({ type: "application" })
 			.then((res) => {
 				if (cancelled) return;
-				const found = res.invoices.find((i) => i.status !== "void");
-				if (found) setServerInvoice(found);
+				const live = res.invoices.filter((i) => i.status !== "void").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+				if (live[0]) setServerInvoice(live[0]);
+				setExtraInvoices(live.slice(1));
 			})
 			.catch(() => {});
 		return () => {
@@ -2611,16 +2623,19 @@ function ApplicationHubInner() {
 	}
 
 	async function payInvoice() {
+		const { invoices } = await meApi.invoices().catch(() => ({ invoices: [] as ApiInvoice[] }));
+		const backend = invoices.find((i) => i.type === "application" && i.balanceCents > 0);
+		if (!backend) {
+			toast.error("Your application invoice has not been issued on the server yet. Ask your consultant to raise it.");
+			return;
+		}
+		await payOne(backend);
+	}
+
+	/** Paystack hosted checkout for one issued invoice. */
+	async function payOne(backend: ApiInvoice) {
 		setPayPhase("loading");
 		try {
-			const { invoices } = await meApi.invoices();
-			const backend = invoices.find((i) => i.type === "application" && i.balanceCents > 0);
-			if (!backend) {
-				toast.error(
-					"Your application invoice has not been issued on the server yet. Ask your consultant to raise it.",
-				);
-				return;
-			}
 			if (backend.status === "proforma") {
 				toast.error("Your consultant is still preparing this invoice. You'll be notified when it is ready to pay.");
 				return;
@@ -2711,7 +2726,7 @@ function ApplicationHubInner() {
 			</header>
 
 			{application.proceedStatus === "declined" ? (
-				<section className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--warning, #f59e0b)" }}>
+				<section className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--warning, #f59e0b)" }}>
 					<p className="eyebrow">Application Paused</p>
 					<h2 className="page-title mt-1" style={{ fontSize: "1.45rem" }}>
 						You paused your application
@@ -2742,7 +2757,7 @@ function ApplicationHubInner() {
 				<section className="mb-5">
 					<p className="eyebrow mb-2">Select schools & programmes</p>
 					{!hasPkg ? (
-						<div className="card card--pad mb-4">
+						<div className="sharp-card mb-4">
 							<p className="eyebrow">Academic Package Required</p>
 							<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Please Select Your School Package First</h3>
 							<p className="muted mt-2" style={{ maxWidth: "42rem" }}>
@@ -2755,7 +2770,7 @@ function ApplicationHubInner() {
 							</div>
 						</div>
 					) : !depositPaid ? (
-						<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--accent, #3b82f6)" }}>
+						<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--accent, #3b82f6)" }}>
 							<p className="eyebrow" style={{ color: "var(--accent, #3b82f6)" }}>10% Commitment Deposit Required</p>
 							<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Activate Your File to Unlock School Selection</h3>
 							<p className="muted mt-2" style={{ maxWidth: "44rem", lineHeight: 1.6 }}>
@@ -2934,7 +2949,7 @@ function ApplicationHubInner() {
 				or a simple "awaiting" card while it's still a proforma. */}
 			{selectionDone ? (
 				effectiveInv.status === "estimated" || !serverInvoice ? (
-					<div className="card card--pad mb-4" style={{ borderLeft: "4px solid var(--primary, #2563eb)" }}>
+					<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--primary, #2563eb)" }}>
 						<p className="eyebrow">Application invoice</p>
 						<h3 className="display mt-1" style={{ fontSize: "1.4rem" }}>
 							Being prepared
@@ -2953,7 +2968,7 @@ function ApplicationHubInner() {
 						</div>
 					</div>
 				) : serverInvoice ? (
-					<section className="card card--pad mb-4">
+					<section className="sharp-card mb-4">
 						<InvoiceCard
 							title="Application invoice"
 							invoice={serverInvoice}
@@ -2979,6 +2994,26 @@ function ApplicationHubInner() {
 								<strong>Each university's own application fee — paid on your behalf, at cost</strong>
 							</li>
 						</ul>
+						{extraInvoices.map((x) => (
+							<div key={x.id} className="mt-4">
+								<InvoiceCard
+									compact
+									title="Additional schools"
+									invoice={x}
+									actions={
+										x.status === "paid" ? (
+											<Button variant="secondary" onClick={() => downloadReceipt(x, "Application invoice")}>
+												Download receipt
+											</Button>
+										) : x.status !== "proforma" && x.balanceCents > 0 ? (
+											<Button onClick={() => void payOne(x)} arrow>
+												Pay {formatMoney(x.balanceCents, "ghs")}
+											</Button>
+										) : null
+									}
+								/>
+							</div>
+						))}
 					</section>
 				) : null
 			) : (
@@ -2988,7 +3023,7 @@ function ApplicationHubInner() {
 
 			{/* After pay: Next → Tracking page (not embedded here) */}
 			{paid ? (
-				<div className="card card--pad next-action">
+				<div className="sharp-card next-action">
 					<p className="eyebrow">Payment complete</p>
 					<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
 						Tracking is unlocked in the sidebar
@@ -3110,7 +3145,7 @@ function TrackingPageInner() {
 			</header>
 
 			{application.pendingHandoff && (
-				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
+				<div className="sharp-card mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
 					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.4rem" }}>
 						We're assigning your{" "}
@@ -3144,7 +3179,7 @@ function TrackingPageInner() {
 				</div>
 			</div>
 
-			<div className="card card--pad mt-5" style={{ background: "var(--foreground)", color: "var(--background)" }}>
+			<div className="sharp-card mt-5" style={{ background: "var(--foreground)", color: "var(--background)" }}>
 				<div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
 					<span style={{ fontSize: "1.5rem" }}>✓</span>
 					<div>
@@ -3179,9 +3214,24 @@ function TrackingPageInner() {
 				</ul>
 			</div>
 
+			{/* Several offers and no choice yet: the visa and departure are for one school. */}
+			{acceptedCount > 1 && !application.acceptedSchoolId && (
+				<div className="sharp-card mt-6" style={{ border: "2px solid var(--foreground)" }}>
+					<p className="eyebrow">Choose your school</p>
+					<p className="display mt-1" style={{ fontSize: "1.2rem" }}>
+						You hold {acceptedCount} offers — which one are you going with?
+					</p>
+					<p className="muted mt-2">
+						Use “Accept this offer” on the school above. Your visa application and departure are prepared for that school.
+					</p>
+				</div>
+			)}
+
+			<ConsultantUpdates comments={application.comments} filter={(c) => !isVisaUpdate(c)} className="mt-6" />
+
 			{acceptedCount > 0 ? (
 				application.visaConsent?.decision === "continue" ? (
-					<div className="card card--pad mt-6 next-action" style={{ border: "2px solid var(--foreground)" }}>
+					<div className="sharp-card mt-6 next-action" style={{ border: "2px solid var(--foreground)" }}>
 						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
 							<div>
 								<p className="eyebrow">Admitted · {acceptedCount} school(s)</p>
@@ -3217,7 +3267,7 @@ function TrackingPageInner() {
 					</div>
 				)
 			) : (
-				<div className="card card--pad mt-6">
+				<div className="sharp-card mt-6">
 					<p className="eyebrow">In progress</p>
 					<p className="muted mt-2">
 						First school reaches <strong>Decision Reached</strong> to unlock the visa stage. This is
@@ -3580,7 +3630,7 @@ function SchoolTrackCard({
 
 				{/* Latest update — congrats / decision copy, admission letter, docs */}
 				<div
-					className="card card--pad"
+					className="sharp-card"
 					style={{
 						marginTop: "1.25rem",
 						background: "var(--background)",
@@ -3687,6 +3737,8 @@ function VisaHubInner() {
 	const [payPhase, setPayPhase] = useState<"idle" | "loading">("idle");
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
 	const hasAdmit = hasAcceptedOffer(schoolApplications);
+	// The school the visa is for: the accepted offer, else the sole admission.
+	const chosen = schoolApplications.find((s) => s.id === application.acceptedSchoolId) ?? (accepted.length === 1 ? accepted[0] : null);
 	const { toast } = useNotifier();
 
 	const [serverInv, setServerInv] = useState<ApiInvoice | null>(null);
@@ -3859,7 +3911,7 @@ function VisaHubInner() {
 
 			<div className="portal-grid portal-grid--2 portal-grid--align-start mb-2">
 				{!hasAdmit ? (
-					<div className="card card--pad">
+					<div className="sharp-card">
 						<p className="display" style={{ fontSize: "1.25rem" }}>
 							No admission yet
 						</p>
@@ -3873,24 +3925,44 @@ function VisaHubInner() {
 							</Button>
 						</div>
 					</div>
+				) : chosen ? (
+					// The visa is for one school — the accepted offer heads the chapter.
+					<div className="sharp-card">
+						<p className="eyebrow">Visa for</p>
+						<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
+							{chosen.universityName ?? getUniversity(chosen.universityId)?.name}
+						</p>
+						<p className="muted mt-1">
+							{[chosen.programName ?? getProgram(chosen.programId)?.name, chosen.intake].filter(Boolean).join(" · ")}
+						</p>
+						{accepted.length > 1 && (
+							<p className="muted mt-2" style={{ fontSize: "0.8rem" }}>
+								{accepted.length - 1} other offer{accepted.length > 2 ? "s" : ""} on file — change your choice on Tracking.
+							</p>
+						)}
+					</div>
 				) : (
-					<div className="card card--pad">
+					<div className="sharp-card">
 						<p className="eyebrow">Your offers</p>
 						<ul className="portal-snapshot mt-2">
 							{accepted.map((s) => (
 								<li key={s.id}>
 									<span>{getUniversity(s.universityId)?.name}</span>
-									<strong>
-										{getProgram(s.programId)?.name} · {application.acceptedSchoolId === s.id ? "★ Your choice" : trackLabel(s)}
-									</strong>
+									<strong>{getProgram(s.programId)?.name} · {trackLabel(s)}</strong>
 								</li>
 							))}
 						</ul>
+						{accepted.length > 1 && (
+							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
+								You hold {accepted.length} offers. Accept the one you are going with on{" "}
+								<Link to="/portal/tracking">Tracking</Link> — your visa is prepared for that school.
+							</p>
+						)}
 					</div>
 				)}
 
 				{isAwaitingSpecialist ? (
-					<div className="card card--pad">
+					<div className="sharp-card">
 						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
 							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
 								Awaiting Visa Specialist
@@ -3914,7 +3986,7 @@ function VisaHubInner() {
 						</div>
 					</div>
 				) : isPendingInvoice ? (
-					<div className="card card--pad">
+					<div className="sharp-card">
 						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
 							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
 								Invoice in Review
@@ -3940,7 +4012,7 @@ function VisaHubInner() {
 						</div>
 					</div>
 				) : (hasIssuedInvoice || paid) && serverInv ? (
-					<section className="card card--pad mb-4">
+					<section className="sharp-card mb-4">
 						<InvoiceCard
 							title="Visa invoice"
 							invoice={serverInv}
@@ -4061,7 +4133,7 @@ function VisaTrackingInner() {
 					<p className="eyebrow">Dashboard · Visa</p>
 					<h1 className="page-title mt-1">Visa tracking</h1>
 				</header>
-				<div className="card card--pad">
+				<div className="sharp-card">
 					<p className="display" style={{ fontSize: "1.2rem" }}>
 						Visa tracking is not open yet
 					</p>
@@ -4103,8 +4175,10 @@ function VisaTrackingInner() {
 					</p>
 				)}
 			</div>
-			{application.visaCounselorNote && (
-				<div className="card card--pad mb-4">
+			{/* The refusal reason and any note for the client arrive as history
+			    lines; the legacy counselor note shows only when there are none. */}
+			{application.visaCounselorNote && !application.comments.some(isVisaUpdate) && (
+				<div className="sharp-card mb-4">
 					<p className="eyebrow">Message from your consultant</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
 						{application.visaCounselorNote}
@@ -4112,7 +4186,7 @@ function VisaTrackingInner() {
 				</div>
 			)}
 			{appointmentSoon && (
-				<div className="card card--pad mb-4" style={{ border: "2px solid var(--foreground)" }}>
+				<div className="sharp-card mb-4" style={{ border: "2px solid var(--foreground)" }}>
 					<p className="eyebrow">Your visa appointment</p>
 					<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
 						{when(vd.appointmentAt)}
@@ -4124,7 +4198,7 @@ function VisaTrackingInner() {
 				</div>
 			)}
 			{assigningHandler && (
-				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
+				<div className="sharp-card mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
 					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.5rem" }}>
 						Your payment is confirmed. Centurion is matching your case to a consultant — you'll get a
@@ -4151,8 +4225,9 @@ function VisaTrackingInner() {
 					);
 				})}
 			</ol>
+			<ConsultantUpdates comments={application.comments} filter={isVisaUpdate} title="Your visa case, as recorded" className="mt-4" />
 			{application.visaDocumentChecklist.length > 0 && (
-				<div className="card card--pad mt-4">
+				<div className="sharp-card mt-4">
 					<div className="between">
 						<p className="eyebrow">Your visa documents</p>
 						<span className="mono muted" style={{ fontSize: "0.75rem" }}>
@@ -4176,7 +4251,7 @@ function VisaTrackingInner() {
 					</div>
 				</div>
 			)}
-			<div className="card card--pad mt-5 next-action">
+			<div className="sharp-card mt-5 next-action">
 				<p className="eyebrow">Continue</p>
 				{application.visaStatus === "complete" ? (
 					<div className="row mt-3">
@@ -4218,6 +4293,7 @@ function CompleteInner() {
 			application.visaStatus === "complete" &&
 			application.travelInvoicePaid);
 	const accepted = schoolApplications.filter((s) => s.outcome === "Admitted");
+	const chosen = schoolApplications.find((s) => s.id === application.acceptedSchoolId) ?? (accepted.length === 1 ? accepted[0] : null);
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
 
@@ -4262,7 +4338,7 @@ function CompleteInner() {
 					✓
 				</div>
 			</header>
-			<div className="card card--pad mb-4">
+			<div className="sharp-card mb-4">
 				<ul className="status-list">
 					<li>Stage I · Consultation {booking.confirmationId}</li>
 					<li>
@@ -4277,9 +4353,26 @@ function CompleteInner() {
 					<li>Service fee settled</li>
 				</ul>
 			</div>
-			{accepted.length ? (
-				<div className="card card--pad">
-					<p className="eyebrow">Accepted</p>
+			{chosen ? (
+				<div className="sharp-card">
+					<p className="eyebrow">Your school</p>
+					<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+						{chosen.universityName ?? getUniversity(chosen.universityId)?.name} · {chosen.programName ?? getProgram(chosen.programId)?.name}
+					</p>
+					<p className="muted mt-1">
+						{[chosen.intake, application.offerAcceptedAt ? `offer accepted ${new Date(application.offerAcceptedAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : null]
+							.filter(Boolean)
+							.join(" · ")}
+					</p>
+					{accepted.length > 1 && (
+						<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+							Also admitted: {accepted.filter((s) => s.id !== chosen.id).map((s) => s.universityName ?? getUniversity(s.universityId)?.name).join(", ")}
+						</p>
+					)}
+				</div>
+			) : accepted.length ? (
+				<div className="sharp-card">
+					<p className="eyebrow">Admitted</p>
 					{accepted.map((s) => (
 						<p key={s.id} className="display mt-2" style={{ fontSize: "1.25rem" }}>
 							{getUniversity(s.universityId)?.name} · {getProgram(s.programId)?.name}
@@ -4431,7 +4524,7 @@ export function PortalPayCallback() {
 	if (failed) {
 		return (
 			<div className="portal-page">
-				<div className="card card--pad">
+				<div className="sharp-card">
 					<p className="eyebrow">Payment confirmation</p>
 					<h1 className="page-title mt-1">Could not confirm the payment</h1>
 					<p className="muted mt-2">

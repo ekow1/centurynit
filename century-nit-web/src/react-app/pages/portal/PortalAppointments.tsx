@@ -264,8 +264,14 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const { confirm, toast } = useNotifier();
-	const copy = STATUS_COPY[booking.status] ?? { label: booking.status, note: "" };
-	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED";
+	
+	// Override 'COMPLETED' if the appointment hasn't happened yet
+	const isFutureCompleted = booking.status === "COMPLETED" && new Date(booking.startsAt).getTime() > Date.now();
+	const displayStatus = isFutureCompleted ? "CONFIRMED" : booking.status;
+	const copy = STATUS_COPY[displayStatus] ?? { label: displayStatus, note: "" };
+	
+	// If it's a future completed booking, it's not actually 'over'
+	const isOver = (displayStatus === "CANCELLED" || displayStatus === "COMPLETED") && !isFutureCompleted;
 
 	async function cancel() {
 		const ok = await confirm({
@@ -296,7 +302,7 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 					<h3 className="appt-card__title">{booking.serviceName}</h3>
 					<p className="appt-card__when">{formatWhen(booking)}</p>
 				</div>
-				<span className={`appt-status appt-status--${booking.status.toLowerCase()}`}>
+				<span className={`appt-status appt-status--${displayStatus.toLowerCase()}`}>
 					{copy.label}
 				</span>
 			</header>
@@ -374,6 +380,7 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 export function PortalAppointments() {
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [filter, setFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled">("All");
 
 	const load = useCallback(() => {
 		bookingsApi
@@ -396,43 +403,60 @@ export function PortalAppointments() {
 
 	useEffect(load, [load]);
 
-	const upcoming = (bookings ?? []).filter(
-		(b) => b.status !== "CANCELLED" && b.status !== "COMPLETED",
-	);
-	const past = (bookings ?? []).filter(
-		(b) => b.status === "CANCELLED" || b.status === "COMPLETED",
-	);
+	const filteredBookings = useMemo(() => {
+		if (!bookings) return [];
+		return bookings.filter((b) => {
+			const isPast = b.status === "COMPLETED" && new Date(b.startsAt).getTime() <= Date.now();
+			const isCancelled = b.status === "CANCELLED";
+			const isUpcoming = !isCancelled && !isPast;
+			
+			if (filter === "All") return true;
+			if (filter === "Upcoming") return isUpcoming;
+			if (filter === "Past") return isPast;
+			if (filter === "Cancelled") return isCancelled;
+			return true;
+		});
+	}, [bookings, filter]);
 
 	return (
 		<div className="appt-page">
-			<header className="appt-page__head">
-				<h1 className="page-title">Appointments</h1>
-				<p className="lead mt-1" style={{ fontSize: "var(--text-sm)" }}>
-					View and manage your consultation appointments. To book a new appointment, go to{" "}
-					<a href="/portal/consultation" style={{ textDecoration: "underline", textUnderlineOffset: "3px" }}>Consultation & Assessment</a>.
-				</p>
+			<header className="appt-page__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+				<div>
+					<p className="lead mt-1" style={{ fontSize: "var(--text-sm)", margin: 0 }}>
+						View and manage your consultation appointments.
+					</p>
+				</div>
+				<a href="/portal/consultation" className="btn btn--primary">
+					+ Book New Appointment
+				</a>
 			</header>
 
 			{error && <p className="appt-error">{error}</p>}
 
 			{!bookings && !error && <p className="appt-muted">Loading…</p>}
 
-			{bookings && upcoming.length === 0 && (
-				<p className="appt-muted">You have no upcoming appointments.</p>
+			{bookings && bookings.length > 0 && (
+				<nav className="dossier-tabs" style={{ marginBottom: "1.5rem" }} aria-label="Appointment Filters">
+					{(["All", "Upcoming", "Past", "Cancelled"] as const).map((t) => (
+						<button
+							key={t}
+							type="button"
+							className={`dossier-tab-btn ${filter === t ? "dossier-tab-btn--active" : ""}`}
+							onClick={() => setFilter(t)}
+						>
+							{t}
+						</button>
+					))}
+				</nav>
 			)}
 
-			{upcoming.map((b) => (
+			{bookings && filteredBookings.length === 0 && (
+				<p className="appt-muted">No appointments found for this filter.</p>
+			)}
+
+			{filteredBookings.map((b) => (
 				<BookingCard key={b.id} booking={b} onChanged={load} />
 			))}
-
-			{past.length > 0 && (
-				<section className="appt-section">
-					<h2 className="section-title">Past and cancelled</h2>
-					{past.map((b) => (
-						<BookingCard key={b.id} booking={b} onChanged={load} />
-					))}
-				</section>
-			)}
 		</div>
 	);
 }

@@ -74,8 +74,13 @@ export function AssessmentOutcomeCard({
 		return pkg.charAt(0).toUpperCase() + pkg.slice(1).replace(/_/g, " ");
 	};
 
+	const toTitleCase = (str?: string | null) => {
+		if (!str) return null;
+		return str.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+	};
+
 	return (
-		<div className={`card card--pad mb-4 cn-outcome${isEligible ? " cn-outcome--eligible" : ""}`}>
+		<div className={`sharp-card mb-4 cn-outcome${isEligible ? " cn-outcome--eligible" : ""}`}>
 			<div className="cn-outcome__head">
 				<div>
 					<span className="eyebrow">Official assessment result</span>
@@ -98,19 +103,19 @@ export function AssessmentOutcomeCard({
 					{effectiveCountry && (
 						<div className="cn-outcome__rec">
 							<dt>Destination</dt>
-							<dd>{effectiveCountry}</dd>
+							<dd>{toTitleCase(effectiveCountry)}</dd>
 						</div>
 					)}
 					{effectiveUniversity && (
 						<div className="cn-outcome__rec">
 							<dt>Institution</dt>
-							<dd>{effectiveUniversity}</dd>
+							<dd>{toTitleCase(effectiveUniversity)}</dd>
 						</div>
 					)}
 					{effectiveProgram && (
 						<div className="cn-outcome__rec">
 							<dt>Programme</dt>
-							<dd>{effectiveProgram}</dd>
+							<dd>{toTitleCase(effectiveProgram)}</dd>
 						</div>
 					)}
 					{effectivePackage && (

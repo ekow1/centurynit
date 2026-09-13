@@ -453,7 +453,7 @@ export function PortalProfile() {
 					<div className="profile-ref">
 						<p className="profile-ref__label">Application ID</p>
 						<p className="profile-ref__value mono">
-							{a.applicationId ?? <span className="profile-hero__empty">Not issued yet</span>}
+							{a.appNumber ?? <span className="profile-hero__empty">Not issued yet</span>}
 						</p>
 					</div>
 					<div className="profile-ref">

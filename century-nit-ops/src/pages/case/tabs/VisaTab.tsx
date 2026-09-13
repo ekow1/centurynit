@@ -265,7 +265,7 @@ export function VisaTab({
 			<div className="card">
 				{visaApiInvoice ? (
 					<InvoiceCard
-						title="Visa fee"
+						title="Visa costs — paid on the client's behalf"
 						invoice={visaApiInvoice}
 						compact={visaApiInvoice.status === "paid"}
 						hint={visaApiInvoice.status === "proforma" ? "Awaiting approval — the client cannot see or pay it until it is issued." : undefined}
@@ -285,11 +285,11 @@ export function VisaTab({
 					/>
 				) : (
 					<>
-						<p className="eyebrow mb-1">Visa fee</p>
+						<p className="eyebrow mb-1">Visa costs</p>
 						<p className="muted text-sm">
 							{app.visaInvoicePaid
-								? "Recorded as paid — no invoice is linked to this case."
-								: "Raised automatically when the client confirms the visa chapter and an officer is assigned."}
+								? "Nothing due — no visa costs are recorded for this destination, or they were settled before invoicing moved here."
+								: "The destination's visa and biometrics fees, at cost — raised automatically when the client confirms the chapter and an officer is assigned."}
 						</p>
 					</>
 				)}

@@ -22,6 +22,7 @@ import {
 } from "century-nit-shared";
 import { raiseApplicationInvoice } from "../../../lib/api";
 import { AddSchoolApplicationModal } from "../../AddSchoolApplicationModal";
+import { useFeeCatalogue } from "../../../hooks/useFeeCatalogue";
 import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
 
 /**
@@ -561,6 +562,7 @@ export function ApplicationsTab({
 	const [adding, setAdding] = useState(false);
 	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	const { addApplication, refresh } = useCases();
+	const { catalogue } = useFeeCatalogue();
 
 	const schools = app.schoolApplications ?? [];
 	const total = schools.length;
@@ -597,9 +599,14 @@ export function ApplicationsTab({
 	function handleInvoice() {
 		setIssuing(true);
 		raiseApplicationInvoice(app.id)
-			.then((updated) => {
-				onInvoiceChanged(updated);
-				flash(canIssueInvoices ? `${updated.invoiceNumber} raised — approve it to issue.` : `${updated.invoiceNumber} raised — awaiting approval.`);
+			.then(({ invoice, nothingDue }) => {
+				if (nothingDue || !invoice) {
+					flash("No university application fees are due for these schools — submissions can start.");
+					void refresh();
+					return;
+				}
+				onInvoiceChanged(invoice);
+				flash(canIssueInvoices ? `${invoice.invoiceNumber} raised — approve it to issue.` : `${invoice.invoiceNumber} raised — awaiting approval.`);
 			})
 			.catch((e) => fail(e, "Could not raise the invoice"))
 			.finally(() => setIssuing(false));
@@ -613,7 +620,7 @@ export function ApplicationsTab({
 					<p className="muted text-sm">Loading invoice…</p>
 				) : appInvoice ? (
 					<InvoiceCard
-						title="Application fee"
+						title="University application fees — paid on the client's behalf"
 						invoice={appInvoice}
 						compact={invoicePaid}
 						hint={
@@ -643,15 +650,18 @@ export function ApplicationsTab({
 					/>
 				) : feePaid ? (
 					<>
-						<p className="eyebrow mb-1">Application fee</p>
-						<p className="text-sm--strong">Paid — recorded on the case</p>
-						<p className="muted text-xs">No invoice is linked to this case; the fee was settled before invoicing moved here.</p>
+						<p className="eyebrow mb-1">University application fees</p>
+						<p className="text-sm--strong">Nothing due — submissions are open</p>
+						<p className="muted text-xs">Either the chosen schools charge no application fee, or the fees were settled before invoicing moved here.</p>
 					</>
 				) : (
 					<>
-						<p className="eyebrow mb-1">Application fee</p>
+						<p className="eyebrow mb-1">University application fees</p>
 						<p className="text-sm--strong">No invoice yet — {total === 0 ? "no schools chosen" : `${total} school${total === 1 ? "" : "s"} chosen`}</p>
-						<p className="muted text-xs">One line per school. Raise it once the standard documents are verified; the client pays, then submissions start.</p>
+						<p className="muted text-xs">
+							Each school's own application fee, paid on the client's behalf at cost{catalogue?.items.some((i) => i.key === "extra_school" && i.active && i.amountCents > 0) ? ", plus the extra-school add-on beyond the package" : ""}.
+							Raise it once the standard documents are verified; the client pays, then submissions start.
+						</p>
 						{canWork && (
 							<div className="mt-3" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
 								<button

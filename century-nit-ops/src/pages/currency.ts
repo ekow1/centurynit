@@ -1,13 +1,18 @@
+import { getGhsPerUsd } from "century-nit-core/ui";
+
 /**
  * Dual-currency helpers - everything is stored canonically in USD and rendered
  * as both Ghanaian cedi (GHS) and its USD equivalent.
  *
- * The bank/interbank rate moves constantly; bump GHS_PER_USD when it drifts.
+ * The rate is the fee schedule's (GET /api/v1/fees), set on the shared money
+ * module when the console loads — the same rate the client is charged at.
  */
-export const GHS_PER_USD = 15;
+export function ghsPerUsd(): number {
+	return getGhsPerUsd();
+}
 
 export function toGhs(usd: number): number {
-	return Math.round(usd * GHS_PER_USD);
+	return Math.round(usd * getGhsPerUsd());
 }
 
 export function fmtUsd(usd: number): string {
@@ -40,7 +45,7 @@ export function money(s: string): number {
 
 	// A GHS-only figure is converted back to the canonical USD
 	const ghs = str.match(/(?:GH₵|GHS|₵)\s*([\d,]+(?:\.\d+)?)/i);
-	if (ghs) return toNumber(ghs[1]) / GHS_PER_USD;
+	if (ghs) return toNumber(ghs[1]) / getGhsPerUsd();
 
 	// Bare number - take the first run of digits, not all of them
 	const bare = str.match(/[\d,]+(?:\.\d+)?/);

@@ -26,7 +26,7 @@ import {
 	catalogPrograms,
 	destinations,
 } from "../db/schema.js";
-import { createProforma, getFeeSchedule, schoolFeeLine, syncApplicationProformaLines } from "./invoice.js";
+import { applicationFeeLinesFor, createProforma, syncApplicationProformaLines } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
@@ -93,9 +93,6 @@ export async function lockSchoolsForApplicant(
 		}
 	}
 
-	// Read configurable fees from platform_settings
-	const fees = await getFeeSchedule();
-
 	// Find applicant details
 	const [applicantRow] = await db
 		.select()
@@ -124,7 +121,7 @@ export async function lockSchoolsForApplicant(
 	const activeInvoice =
 		existingInvoices.find((i) => i.applicationId === app.id) ??
 		existingInvoices.find((i) => i.status !== "paid");
-	let invoiceId: string;
+	let invoiceId: string | null = null;
 
 	if (activeInvoice) {
 		invoiceId = activeInvoice.id;
@@ -140,32 +137,29 @@ export async function lockSchoolsForApplicant(
 			await syncApplicationProformaLines(app.id);
 		}
 	} else {
-		// Create a new PROFORMA estimate — consultant reviews & issues exact university fees
-		const schoolLines = rows.map((r) => schoolFeeLine(r, fees.appPerSchoolCents));
-
-		const proforma = await createProforma({
-			data: {
-				applicantName: applicantRow?.name ?? user.name ?? "Applicant",
-				applicantEmail: applicantRow?.email ?? user.email,
-				clientUserId: user.id,
-				applicationId: app.id,
-				type: "application",
-				status: "proforma",
-				lines:
-					schoolLines.length > 0
-						? schoolLines
-						: [
-								{
-									label: "University Application Fee",
-									detail: "Per-institution submission fee",
-									amountCents: fees.appPerSchoolCents,
-								},
-							],
-				note: `Proforma estimate for ${rows.length} university application(s). Consultant will confirm exact institutional fees.`,
-			},
-			raisedBy: { opsUserId: null, name: `${user.name ?? "Client"} (client, portal)`, email: user.email },
-		});
-		invoiceId = proforma.id;
+		// A draft priced from the catalogue: each school's own fee, paid on the
+		// client's behalf, plus the extra-school add-on beyond the package.
+		// Nothing due means no invoice — the case records it instead.
+		const lines = await applicationFeeLinesFor(app.id);
+		if (lines.length === 0) {
+			const { markApplicationFeesNotDue } = await import("./cases.js");
+			await markApplicationFeesNotDue(app.id, `${user.name ?? "Client"} (client, portal)`);
+		} else {
+			const proforma = await createProforma({
+				data: {
+					applicantName: applicantRow?.name ?? user.name ?? "Applicant",
+					applicantEmail: applicantRow?.email ?? user.email,
+					clientUserId: user.id,
+					applicationId: app.id,
+					type: "application",
+					status: "proforma",
+					lines,
+					note: `University application fees for ${new Set(lines.map((l) => l.schoolApplicationId)).size} school(s), paid on your behalf.`,
+				},
+				raisedBy: { opsUserId: null, name: `${user.name ?? "Client"} (client, portal)`, email: user.email },
+			});
+			invoiceId = proforma.id;
+		}
 	}
 
 	// Entering school_submission is gated on the 10% deposit elsewhere

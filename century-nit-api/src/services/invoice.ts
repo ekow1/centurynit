@@ -5,7 +5,6 @@ import type {
 	InvoiceStatus,
 	InvoiceStoredStatus,
 } from "century-nit-shared";
-import { DEFAULT_FEE_CENTS } from "century-nit-shared";
 import { db } from "../db/index.js";
 import {
 	invoiceEvents,
@@ -15,12 +14,15 @@ import {
 	applications,
 	applicants,
 	caseComments,
+	catalogPrograms,
+	catalogUniversities,
 	schoolApplications,
+	servicePackages,
 	travelAssistanceRequests,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
-import { getSetting } from "./settings.js";
+import { activeFeeItem } from "./fees.js";
 import { formatGhs, formatUsd } from "./receiptEmail.js";
 import { invoiceRaisedForClient } from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
@@ -830,31 +832,68 @@ export async function creditInvoice(input: {
 /* ── Fee Schedule ────────────────────────────────────────────────────────── */
 
 /** Read configurable fee amounts from platform_settings, with hardcoded defaults. */
-export async function getFeeSchedule(): Promise<{
-	appBaseCents: number;
-	appPerSchoolCents: number;
-	appDocVerifyCents: number;
-	appMatchReviewCents: number;
-	visaBaseCents: number;
-	visaBiometricsCents: number;
-	visaTranslationCents: number;
-	consultationCents: number;
-}> {
-	const parse = async (key: Parameters<typeof getSetting>[0], fallback: number) => {
-		const v = await getSetting(key);
-		const n = v ? Number.parseInt(v, 10) : NaN;
-		return Number.isFinite(n) && n >= 0 ? n : fallback;
-	};
-	return {
-		appBaseCents: await parse("APP_BASE_FEE_CENTS", DEFAULT_FEE_CENTS.appBase),
-		appPerSchoolCents: await parse("APP_PER_SCHOOL_FEE_CENTS", DEFAULT_FEE_CENTS.appPerSchool),
-		appDocVerifyCents: await parse("APP_DOC_VERIFY_FEE_CENTS", DEFAULT_FEE_CENTS.appDocVerify),
-		appMatchReviewCents: await parse("APP_MATCH_REVIEW_FEE_CENTS", DEFAULT_FEE_CENTS.appMatchReview),
-		visaBaseCents: await parse("VISA_BASE_FEE_CENTS", DEFAULT_FEE_CENTS.visaBase),
-		visaBiometricsCents: await parse("VISA_BIOMETRICS_FEE_CENTS", DEFAULT_FEE_CENTS.visaBiometrics),
-		visaTranslationCents: await parse("VISA_TRANSLATION_FEE_CENTS", DEFAULT_FEE_CENTS.visaTranslation),
-		consultationCents: await parse("CONSULTATION_FEE_CENTS", DEFAULT_FEE_CENTS.consultation),
-	};
+/* ── What an application's schools cost ─────────────────────────────────── */
+
+export type ApplicationFeeLine = { label: string; detail: string; amountCents: number; schoolApplicationId: string };
+
+/**
+ * The application invoice is money paid on the client's behalf: each
+ * university's own application fee (the programme's override, else the
+ * university's), at cost. Century's only charge here is the extra-school
+ * add-on, one per school beyond the package's allowance. Schools are
+ * counted in the order they were added, so the add-on lands on the ones
+ * chosen last.
+ */
+export async function applicationFeeLinesFor(applicationId: string): Promise<ApplicationFeeLine[]> {
+	const [app] = await db
+		.select({ targetSchoolCount: applications.targetSchoolCount, packageId: applications.packageId })
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.limit(1);
+	if (!app) return [];
+	const [pkg] = app.packageId
+		? await db.select({ maxSchools: servicePackages.maxSchools }).from(servicePackages).where(eq(servicePackages.id, app.packageId)).limit(1)
+		: [];
+	// No allowance recorded means no add-ons — the package, not the code, decides what is extra.
+	const allowance = app.targetSchoolCount ?? (pkg?.maxSchools && pkg.maxSchools > 0 ? pkg.maxSchools : Number.POSITIVE_INFINITY);
+
+	const rows = await db
+		.select({
+			id: schoolApplications.id,
+			universityName: schoolApplications.universityName,
+			programName: schoolApplications.programName,
+			universityFee: catalogUniversities.applicationFeeCents,
+			programFee: catalogPrograms.applicationFeeCents,
+		})
+		.from(schoolApplications)
+		.leftJoin(catalogUniversities, eq(catalogUniversities.id, schoolApplications.universityId))
+		.leftJoin(catalogPrograms, eq(catalogPrograms.id, schoolApplications.programId))
+		.where(eq(schoolApplications.applicationId, applicationId))
+		.orderBy(asc(schoolApplications.createdAt));
+
+	const extra = await activeFeeItem("extra_school");
+	const lines: ApplicationFeeLine[] = [];
+	rows.forEach((s, i) => {
+		const uni = s.universityName || "University";
+		const fee = s.programFee ?? s.universityFee ?? 0;
+		if (fee > 0) {
+			lines.push({
+				label: `${uni} — application fee`,
+				detail: `${s.programName || "Programme"} · paid on your behalf, at cost`,
+				amountCents: fee,
+				schoolApplicationId: s.id,
+			});
+		}
+		if (i >= allowance && extra && extra.amountCents > 0) {
+			lines.push({
+				label: extra.clientLabel,
+				detail: `${uni} — school ${i + 1}, beyond the package's ${allowance}`,
+				amountCents: extra.amountCents,
+				schoolApplicationId: s.id,
+			});
+		}
+	});
+	return lines;
 }
 
 /* ── Proforma (estimate, not payable) ────────────────────────────────────── */
@@ -917,30 +956,20 @@ export async function createProforma(input: {
 
 /* ── Application invoice lines follow the school list ───────────────────── */
 
-export const APPLICATION_FEE_PLACEHOLDER_LABEL = "University Application Fee";
-
-type SchoolLineSource = { id: string; universityName: string | null; programName: string | null; intake: string };
-
-export function schoolFeeLine(s: SchoolLineSource, amountCents: number) {
-	return {
-		label: `${s.universityName || "University"} - ${s.programName || "Programme"} Application Fee`,
-		detail: `Direct institutional submission & processing (${s.intake})`,
-		amountCents,
-		schoolApplicationId: s.id,
-	};
-}
-
 /**
  * While the application invoice is still a draft, its school lines follow
- * the school list: a school added gets a line, a school removed loses its
- * line. Lines finance typed by hand (no school id) are left alone. Once
- * issued the invoice is a record and is never touched here.
+ * the school list and the catalogue: the school-tagged lines are rebuilt
+ * from `applicationFeeLinesFor` on every change, so a school added gets its
+ * fee, a school removed loses it, and a tariff edited re-prices. Lines
+ * finance typed by hand (no school id) are left alone. A draft left with
+ * nothing on it is voided — there is nothing to approve. Once issued the
+ * invoice is a record and is never touched here.
  *
  * Returns true when anything changed.
  */
 export async function syncApplicationProformaLines(
 	applicationId: string,
-	opts: { /** A school about to be deleted — its line goes now, before the FK nulls the reference. */ removing?: string } = {},
+	opts: { /** A school about to be deleted — its lines go now, before the FK nulls the reference. */ removing?: string } = {},
 ): Promise<boolean> {
 	const [inv] = await db
 		.select()
@@ -950,53 +979,37 @@ export async function syncApplicationProformaLines(
 		.limit(1);
 	if (!inv) return false;
 
-	const schools = await db
-		.select()
-		.from(schoolApplications)
-		.where(eq(schoolApplications.applicationId, applicationId))
-		.orderBy(asc(schoolApplications.createdAt));
-	const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)).orderBy(asc(invoiceLines.position));
+	const current = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)).orderBy(asc(invoiceLines.position));
+	const manual = current.filter((l) => !l.schoolApplicationId);
+	const tagged = current.filter((l) => l.schoolApplicationId);
+	const wanted = (await applicationFeeLinesFor(applicationId)).filter((l) => l.schoolApplicationId !== opts.removing);
 
-	const schoolIds = new Set(schools.filter((s) => s.id !== opts.removing).map((s) => s.id));
-	const billed = new Set(lines.map((l) => l.schoolApplicationId).filter((id): id is string => Boolean(id)));
-	const stale = lines.filter((l) => l.schoolApplicationId && !schoolIds.has(l.schoolApplicationId));
-	const missing = schools.filter((s) => schoolIds.has(s.id) && !billed.has(s.id));
-	// The placeholder only stands in while there are no schools.
-	const placeholder = schoolIds.size > 0 ? lines.filter((l) => !l.schoolApplicationId && l.label === APPLICATION_FEE_PLACEHOLDER_LABEL) : [];
-	const dropIds = new Set([...stale, ...placeholder].map((l) => l.id));
-	const kept = lines.filter((l) => !dropIds.has(l.id));
-	const needPlaceholder = schoolIds.size === 0 && kept.length === 0;
-	if (dropIds.size === 0 && missing.length === 0 && !needPlaceholder) return false;
+	const same =
+		tagged.length === wanted.length &&
+		tagged.every((l, i) => l.schoolApplicationId === wanted[i].schoolApplicationId && l.amountCents === wanted[i].amountCents && l.label === wanted[i].label);
+	if (same) return false;
 
-	const fees = await getFeeSchedule();
-	const added = needPlaceholder
-		? [{ label: APPLICATION_FEE_PLACEHOLDER_LABEL, detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents, schoolApplicationId: null as string | null }]
-		: missing.map((s) => schoolFeeLine(s, fees.appPerSchoolCents));
+	if (manual.length === 0 && wanted.length === 0) {
+		await db.update(invoices).set({ status: "void", voidedAt: new Date(), voidReason: "Nothing due — no application fees for the chosen schools", updatedAt: new Date() }).where(eq(invoices.id, inv.id));
+		await audit(inv.id, "voided", null, "Draft voided: nothing due for the chosen schools");
+		return true;
+	}
 
 	await db.transaction(async (tx) => {
-		if (dropIds.size > 0) await tx.delete(invoiceLines).where(inArray(invoiceLines.id, [...dropIds]));
-		for (const [i, l] of kept.entries()) {
+		if (tagged.length > 0) await tx.delete(invoiceLines).where(inArray(invoiceLines.id, tagged.map((l) => l.id)));
+		for (const [i, l] of manual.entries()) {
 			if (l.position !== i) await tx.update(invoiceLines).set({ position: i }).where(eq(invoiceLines.id, l.id));
 		}
-		if (added.length > 0) {
-			await tx.insert(invoiceLines).values(added.map((l, i) => ({ invoiceId: inv.id, position: kept.length + i, ...l })));
+		if (wanted.length > 0) {
+			await tx.insert(invoiceLines).values(wanted.map((l, i) => ({ invoiceId: inv.id, position: manual.length + i, ...l })));
 		}
-		const subtotalCents = kept.reduce((n, l) => n + l.amountCents, 0) + added.reduce((n, l) => n + l.amountCents, 0);
+		const subtotalCents = manual.reduce((n, l) => n + l.amountCents, 0) + wanted.reduce((n, l) => n + l.amountCents, 0);
+		const schools = new Set(wanted.map((l) => l.schoolApplicationId)).size;
 		await tx
 			.update(invoices)
-			.set({
-				subtotalCents,
-				note: schoolIds.size > 0 ? `Application invoice for ${schoolIds.size} university application(s).` : inv.note,
-				updatedAt: new Date(),
-			})
+			.set({ subtotalCents, note: schools > 0 ? `University application fees for ${schools} school(s), paid on your behalf.` : inv.note, updatedAt: new Date() })
 			.where(eq(invoices.id, inv.id));
-		await audit(
-			inv.id,
-			"lines_synced",
-			null,
-			`Draft lines follow the school list: ${added.length} added, ${dropIds.size} removed (${schoolIds.size} school(s))`,
-			tx as unknown as typeof db,
-		);
+		await audit(inv.id, "lines_synced", null, `Draft re-priced from the school list and the catalogue: ${wanted.length} line(s) for ${schools} school(s)`, tx as unknown as typeof db);
 	});
 	return true;
 }

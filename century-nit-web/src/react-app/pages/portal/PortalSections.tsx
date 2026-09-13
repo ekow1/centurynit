@@ -34,7 +34,7 @@ import {
 	REQUIRED_DOCUMENTS,
 	getBranchName,
 } from "century-nit-core";
-import { documentsApi, meApi, ApiError } from "century-nit-core/api";
+import { documentsApi, meApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ChapterGate } from "./PortalLayout";
 import { Avatar } from "../../components/ui/Avatar";
@@ -1508,8 +1508,9 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 
 	// Fees the applicant will owe but that have not been raised yet — without
 	// these the top band reads GH₵0 / GH₵0 for most of the journey
-	const appNotRaised = a.applicationInvoice.status === "none" ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appBaseCents) : 0;
-	const visaNotRaised = a.visaInvoice.status === "none" ? usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents) : 0;
+	// Application fees are the universities' own and unknown until raised; visa costs are the destination's from the catalogue.
+	const appNotRaised = 0;
+	const visaNotRaised = a.visaInvoice.status === "none" ? usdFromCents(visaCostsCentsFor(fees?.catalogue, a.destinationId)) : 0;
 	const notYetRaised = (consultationPaid ? 0 : usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents)) + appNotRaised + visaNotRaised;
 
 	// Every recorded payment across all invoices, newest first — shown as the

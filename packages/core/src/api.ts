@@ -40,7 +40,7 @@ import type {
 	VisaStage,
 	SchoolApplication,
 	SchoolApplicationList,
-	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind, VisaDetails,
+	AddSchoolApplication, OpsAddSchoolApplication, SchoolFileKind, VisaDetails, FeeCatalogue,
 	UpdateSchoolStatus,
 	LockSchools,
 	InitializePayment,
@@ -66,6 +66,7 @@ import type {
 	TravelAssistanceInvoiceInput,
 } from "century-nit-shared";
 import { API_PREFIX, type FeeSchedule } from "century-nit-shared";
+import { setGhsPerUsd } from "./ui/Money.js";
 
 
 
@@ -1027,8 +1028,9 @@ export const meApi = {
 		return request(`${API_PREFIX}/me/identity`);
 	},
 
-	fees(): Promise<FeeSchedule> {
-		return request(`${API_PREFIX}/fees`);
+	/** The fee schedule as the portal reads it — see `feesApi.schedule`. */
+	fees(): Promise<FeeSchedule & { catalogue: FeeCatalogue }> {
+		return feesApi.schedule();
 	},
 
 	application(): Promise<{
@@ -1439,20 +1441,41 @@ export const invoicesApi = {
 /* ── Fee Schedule ────────────────────────────────────────────────────────── */
 
 export const feesApi = {
-	/** Live fee schedule (USD cents) from platform_settings. */
-	schedule(): Promise<{
-		appBaseCents: number;
-		appPerSchoolCents: number;
-		appDocVerifyCents: number;
-		appMatchReviewCents: number;
-		visaBaseCents: number;
-		visaBiometricsCents: number;
-		visaTranslationCents: number;
-		consultationCents: number;
-	}> {
-		return request(`${API_PREFIX}/fees`);
+	/** The live fee catalogue — items, destination tariffs, the exchange rate, the service-fee split. */
+	async catalogue(): Promise<FeeCatalogue> {
+		const cat = await request<FeeCatalogue>(`${API_PREFIX}/fees`);
+		setGhsPerUsd(cat.exchangeRate);
+		return cat;
+	},
+	/**
+	 * The catalogue in the shape the portal grew up with. Century's only
+	 * per-case fees are the consultation and the extra-school add-on; the
+	 * other keys are zero because those charges are no longer Century's —
+	 * a university's application fee and a destination's visa costs come
+	 * from `catalogue` and are only known once a school or a country is.
+	 */
+	async schedule(): Promise<FeeSchedule & { catalogue: FeeCatalogue }> {
+		const catalogue = await feesApi.catalogue();
+		const item = (key: string) => catalogue.items.find((i) => i.key === key && i.active)?.amountCents ?? 0;
+		return {
+			consultationCents: item("consultation"),
+			appBaseCents: 0,
+			appPerSchoolCents: 0,
+			appDocVerifyCents: 0,
+			appMatchReviewCents: 0,
+			visaBaseCents: 0,
+			visaBiometricsCents: 0,
+			visaTranslationCents: item("translation"),
+			catalogue,
+		};
 	},
 };
+
+/** A destination's visa costs from the catalogue, in cents — 0 until the country is known or priced. */
+export function visaCostsCentsFor(catalogue: FeeCatalogue | null | undefined, destinationId: string | null | undefined): number {
+	const d = catalogue?.destinations.find((x) => x.id === destinationId);
+	return d ? d.visaFeeCents + d.biometricsFeeCents : 0;
+}
 
 
 /* ── Schools & Applications ──────────────────────────────────────────────── */

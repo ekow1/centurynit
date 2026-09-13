@@ -184,8 +184,8 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
 
 /** What each invoice is for — the title on its card. */
 export const INVOICE_TYPE_LABELS: Record<string, string> = {
-	application: "Application fee",
-	visa: "Visa fee",
+	application: "University application fees",
+	visa: "Visa costs",
 	agency: "Service fee",
 	travel: "Ticket",
 	consultation: "Consultation fee",
@@ -193,10 +193,11 @@ export const INVOICE_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * Invoice types whose money is not the agency's: collected and passed on
- * (the airline fare on a ticket invoice). Reports keep them out of revenue.
+ * Invoice types whose money is not the agency's: collected and passed on —
+ * the universities' application fees, the destination's visa costs, the
+ * airline fare. Reports keep them out of revenue.
  */
-export const PASS_THROUGH_INVOICE_TYPES: readonly string[] = ["travel"];
+export const PASS_THROUGH_INVOICE_TYPES: readonly string[] = ["application", "visa", "travel"];
 export const isPassThroughInvoice = (type: string): boolean => PASS_THROUGH_INVOICE_TYPES.includes(type);
 
 export const INVOICE_PROFORMA_HINT = "Being prepared — you'll be able to pay it here once it's issued.";

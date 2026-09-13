@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { BranchScopeFilter } from "./BranchScopeFilter";
-import { fmtGhs, fmtUsd, GHS_PER_USD } from "./currency";
+import { fmtGhs, fmtUsd, ghsPerUsd } from "./currency";
 import { methodGateway } from "century-nit-core/ops";
 import { fetchPaystackLiveTransactions, reconcilePaystackTransaction } from "../lib/api";
 
@@ -154,9 +154,9 @@ export function EnterprisePaymentsLog() {
 			seenRefs.add(ref);
 
 			const ghsAmount = (p.amount || 0) / 100;
-			const usdAmount = ghsAmount / GHS_PER_USD;
+			const usdAmount = ghsAmount / ghsPerUsd();
 			const feeGhs = (p.fees || 0) / 100;
-			const feeUsd = feeGhs / GHS_PER_USD;
+			const feeUsd = feeGhs / ghsPerUsd();
 			const netUsd = usdAmount - feeUsd;
 
 			let channel: EnrichedTransaction["channel"] = "card_visa";
@@ -434,7 +434,7 @@ export function EnterprisePaymentsLog() {
 			`"${tx.applicantBranch || ""}"`,
 			`"${tx.channelLabel}"`,
 			tx.grossAmount.toFixed(2),
-			(tx.grossAmount * GHS_PER_USD).toFixed(2),
+			(tx.grossAmount * ghsPerUsd()).toFixed(2),
 			tx.fee.toFixed(2),
 			tx.netAmount.toFixed(2),
 			tx.status.toUpperCase(),
@@ -1304,7 +1304,7 @@ function ManualPaymentModal({
 						/>
 						{parseFloat(amountStr) > 0 && (
 							<p style={{ fontSize: "10px", color: "#71717a", marginTop: "4px", fontFamily: "monospace" }}>
-								≈ {fmtGhs(parseFloat(amountStr))} at rate GH₵ {GHS_PER_USD} / $1
+								≈ {fmtGhs(parseFloat(amountStr))} at rate GH₵ {ghsPerUsd()} / $1
 							</p>
 						)}
 					</div>

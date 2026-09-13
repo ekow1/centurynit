@@ -337,16 +337,13 @@ export function issueInvoice(
 	});
 }
 
-/** Ops: raise the application invoice as a proforma (handler step; no invoices module needed). */
-export function raiseApplicationInvoice(applicationId: string): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/raise-application-invoice`, {
-		method: "POST",
-	});
-}
-
-/** Ops: issue the application invoice so the applicant can pay (needs the invoices module). */
-export function issueApplicationInvoice(applicationId: string): Promise<ApiInvoice> {
-	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/issue-application-invoice`, {
+/**
+ * Ops: raise the application invoice — the universities' own fees, paid on
+ * the client's behalf, plus any extra-school add-on. `nothingDue` when no
+ * school charges anything: the case records it and submissions can start.
+ */
+export function raiseApplicationInvoice(applicationId: string): Promise<{ invoice: ApiInvoice | null; nothingDue: boolean }> {
+	return apiFetch<{ invoice: ApiInvoice | null; nothingDue: boolean }>(`${API_PREFIX}/applications/${applicationId}/raise-application-invoice`, {
 		method: "POST",
 	});
 }

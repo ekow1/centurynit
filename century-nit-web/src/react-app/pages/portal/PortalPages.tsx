@@ -51,7 +51,7 @@ import {
 	CONSULTATION_DURATIONS,
 	getBranchName,
 } from "century-nit-core";
-import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError } from "century-nit-core/api";
+import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import type { ApiInvoice, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage, SchoolFileKind } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { useNotifier } from "../../components/notifier/Notifier";
@@ -2484,7 +2484,6 @@ function ApplicationHubInner() {
 		removeSchoolApplication,
 		lockSchoolSelection,
 		booking,
-		fees,
 		payAgencyInstallment,
 		syncFromServer,
 		syncTick,
@@ -2590,8 +2589,9 @@ function ApplicationHubInner() {
 		: packagePrograms;
 	const program = getProgram(progId);
 	const intakes = program?.intake ?? ["September 2026", "January 2027"];
-	const previewAmount =
-		Math.max(0, schoolApplications.length) * usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents);
+	// The universities' own fees are only known once the invoice is raised; the
+	// preview is what the ledger says, never a guess.
+	const previewAmount = 0;
 
 	// If the applicant already locked their school selection (or has a server
 	// invoice), they are past the package/deposit gate — show the invoice
@@ -2975,8 +2975,8 @@ function ApplicationHubInner() {
 								<strong>{schoolApplications.length}</strong>
 							</li>
 							<li>
-								<span>University filing fee</span>
-								<strong>{formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents))} / school</strong>
+								<span>What this covers</span>
+								<strong>Each university's own application fee — paid on your behalf, at cost</strong>
 							</li>
 						</ul>
 					</section>
@@ -3760,14 +3760,15 @@ function VisaHubInner() {
 				...inv,
 				id: null,
 				status: "estimated" as const,
-				amount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
-				actualAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
-				estimatedAmount: usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents),
+				// The destination's visa and biometrics fees from the catalogue, paid on your behalf at cost.
+				amount: usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId)),
+				actualAmount: usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId)),
+				estimatedAmount: usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId)),
 				estimateLines: [],
 				actualLines: [],
-				description: "Visa processing fee (estimate) · awaiting ops confirmation",
+				description: "Visa costs — paid on your behalf, at cost · being prepared",
 			};
-	const amount = cardInvoice.amount || usdFromCents((fees || FALLBACK_FEE_SCHEDULE).visaBaseCents);
+	const amount = cardInvoice.amount || usdFromCents(visaCostsCentsFor(fees?.catalogue, application.destinationId));
 
 	async function pay() {
 		setPayPhase("loading");

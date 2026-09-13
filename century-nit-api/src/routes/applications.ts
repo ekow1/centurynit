@@ -61,15 +61,13 @@ import {
 
 
 import {
-	APPLICATION_FEE_PLACEHOLDER_LABEL,
+	applicationFeeLinesFor,
 	createProforma,
-	getFeeSchedule,
 	getInvoice,
-	issueProformaByOps,
-	schoolFeeLine,
 	serializeInvoice,
 	syncApplicationProformaLines,
 } from "../services/invoice.js";
+import { markApplicationFeesNotDue } from "../services/cases.js";
 
 
 
@@ -164,7 +162,6 @@ import {
 	requireModule,
 
 	type AuthVariables,
-	requireCapability,
 } from "../middleware/auth.js";
 
 
@@ -374,7 +371,7 @@ applicationsRouter.openapi(
  * one, or a new one built from the selected schools. Raising it is handler
  * work; turning it into a payable invoice is a separate, finance-gated step.
  */
-async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: string | null; name: string; email?: string | null }): Promise<typeof schema.invoices.$inferSelect> {
+async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: string | null; name: string; email?: string | null }): Promise<typeof schema.invoices.$inferSelect | null> {
 	// Documents first: they were collected at consultation so applications
 	// never wait on paperwork. Nothing is invoiced while any is outstanding.
 	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
@@ -441,13 +438,16 @@ async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: str
 	// when no schools are selected yet, so the handler can always bill the
 	// applicant and get processing unblocked.
 	if (!appInvoice) {
-		const schools = await db
-			.select()
-			.from(schema.schoolApplications)
-			.where(eq(schema.schoolApplications.applicationId, app.id));
-		const fees = await getFeeSchedule();
-		const schoolLines = schools.map((s) => schoolFeeLine(s, fees.appPerSchoolCents));
-		const proforma = await createProforma({
+		// Money paid on the client's behalf: each school's own fee from the
+		// catalogue, plus the extra-school add-on beyond the package. Nothing
+		// due means no invoice — the case records it and submissions can start.
+		const lines = await applicationFeeLinesFor(app.id);
+		if (lines.length === 0) {
+			await markApplicationFeesNotDue(app.id, raisedBy.name);
+			return null;
+		}
+		const schools = new Set(lines.map((l) => l.schoolApplicationId)).size;
+		appInvoice = await createProforma({
 			data: {
 				applicantName: applicant?.name ?? "Applicant",
 				applicantEmail: applicant?.email ?? undefined,
@@ -455,20 +455,20 @@ async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: str
 				applicationId: app.id,
 				type: "application",
 				status: "proforma",
-				lines: schoolLines.length > 0
-					? schoolLines
-					: [{ label: APPLICATION_FEE_PLACEHOLDER_LABEL, detail: "Per-institution submission fee", amountCents: fees.appPerSchoolCents }],
-				note: schools.length > 0
-					? `Application invoice for ${schools.length} university application(s).`
-					: "Application fee invoice. Per-school line items will follow as schools are added.",
+				lines,
+				note: `University application fees for ${schools} school(s), paid on your behalf.`,
 			},
 			raisedBy,
 		});
-		appInvoice = proforma;
 	} else if (appInvoice.status === "proforma") {
 		// Still a draft: its lines follow the school list before it goes out.
 		if (await syncApplicationProformaLines(app.id)) {
-			appInvoice = (await getInvoice(appInvoice.id)) ?? appInvoice;
+			const fresh = await getInvoice(appInvoice.id);
+			if (!fresh || fresh.status === "void") {
+				await markApplicationFeesNotDue(app.id, raisedBy.name);
+				return null;
+			}
+			appInvoice = fresh;
 		}
 	}
 
@@ -497,8 +497,8 @@ applicationsRouter.openapi(
 		request: { params: idParams },
 		responses: {
 			200: {
-				content: { "application/json": { schema: invoiceSchema } },
-				description: "The application invoice (proforma, or already issued)",
+				content: { "application/json": { schema: z.object({ invoice: invoiceSchema.nullable(), nothingDue: z.boolean() }) } },
+				description: "The application invoice (draft, or already issued) — or nothing due, in which case submissions can start",
 			},
 		},
 	}),
@@ -506,42 +506,10 @@ applicationsRouter.openapi(
 		const { id } = c.req.valid("param");
 		await assertApplicationAccess(c, id, "raise an invoice for");
 		const appInvoice = await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
-		return c.json(await serializeInvoice(appInvoice));
+		return c.json({ invoice: appInvoice ? await serializeInvoice(appInvoice) : null, nothingDue: !appInvoice });
 	},
 );
 
-/**
- * Finance action: issue the application invoice, turning the proforma into a
- * payable invoice. Raises it first if nobody has. The applicant cannot pay
- * until this has happened. Gated on the invoices module, not the applications
- * module — a consultant who can work the case must not be able to bill it.
- */
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/issue-application-invoice",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("issue_invoices")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: invoiceSchema } },
-				description: "The issued application invoice",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff")!;
-		const { id } = c.req.valid("param");
-		await assertApplicationAccess(c, id, "issue an invoice for");
-		const appInvoice = await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
-		const updated = await issueProformaByOps({
-			invoiceId: appInvoice.id,
-			actorName: staff.name ?? "Handler",
-		});
-		return c.json(await serializeInvoice(updated));
-	},
-);
 
 applicationsRouter.openapi(
 	createRoute({

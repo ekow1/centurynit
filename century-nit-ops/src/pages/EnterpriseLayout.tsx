@@ -13,6 +13,7 @@ import { ICONS } from "./opsIcons";
 import { OpsNotificationBell } from "./OpsNotificationBell";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
 import { publicSiteUrl } from "../lib/publicSite";
+import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
 
 type NavItem = { to: string; module: OpsModule; label: string; blurb: string; icon: string };
 type NavGroup = { group: string; icon: string; blurb: string; children: NavItem[] };
@@ -208,6 +209,8 @@ function MainNavGroup({
 
 export function EnterpriseLayout() {
 	const { opsUser, opsRole, opsSignOut, hasPermission } = useOpsAuth();
+	// Loads the fee catalogue once, which also sets the rate every GHS figure renders at.
+	useFeeCatalogue();
 	const isDev = import.meta.env.DEV;
 	const { openCommandPalette, resetOpsState } = useOpsState();
 	const location = useLocation();

@@ -34,6 +34,7 @@ import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js
 import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
 import { acceptOffer, addSchoolForApplicant, lockSchoolsForApplicant, removeSchoolByStaff, updateSchoolStatus } from "./schools.js";
+import { activeFeeItem } from "./fees.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -110,11 +111,14 @@ async function seed() {
 		.insert(servicePackages)
 		.values({ code: "non_scholarship", name: "Non-Scholarship Track", priceCents: 200_000, maxSchools: 3 })
 		.onConflictDoNothing();
-	await db.insert(destinations).values({ id: "e2e-ca", name: "Canada", region: "North America" }).onConflictDoNothing();
+	// Third-party tariffs on the catalogue: what the client pays through Century, at cost.
+	await db.insert(destinations).values({ id: "e2e-ca", name: "Canada", region: "North America", visaFeeCents: 15_000, biometricsFeeCents: 8_500 }).onConflictDoNothing();
+	await db.update(destinations).set({ visaFeeCents: 15_000, biometricsFeeCents: 8_500 }).where(eq(destinations.id, "e2e-ca"));
 	await db
 		.insert(catalogUniversities)
-		.values({ id: "e2e-uni", name: "E2E University", destinationId: "e2e-ca" })
+		.values({ id: "e2e-uni", name: "E2E University", destinationId: "e2e-ca", applicationFeeCents: 12_000 })
 		.onConflictDoNothing();
+	await db.update(catalogUniversities).set({ applicationFeeCents: 12_000 }).where(eq(catalogUniversities.id, "e2e-uni"));
 	await db
 		.insert(catalogPrograms)
 		.values({ id: "e2e-prog", name: "MSc Testing", universityId: "e2e-uni", tuitionUsd: 20_000 })
@@ -235,7 +239,10 @@ describe("the applicant journey, end to end", () => {
 		const proforma = (await invoiceOfType("application"))!;
 		expect(proforma.row.status).toBe("proforma");
 		expect(proforma.row.applicationId).toBe(appId);
+		// One line per school: the university's own fee, at cost — no Century charge inside the allowance.
 		expect(proforma.api.lines.map((l) => l.schoolApplicationId).filter(Boolean)).toHaveLength(1);
+		expect(proforma.row.subtotalCents).toBe(12_000);
+		expect(proforma.api.lines[0].label).toContain("application fee");
 		// The trail: raised by the client from the portal, not yet approved.
 		expect(proforma.api.raisedByName).toContain("client");
 		expect(proforma.api.reviewedByName).toBeNull();
@@ -250,11 +257,23 @@ describe("the applicant journey, end to end", () => {
 		const grown = (await invoiceOfType("application"))!;
 		expect(grown.api.lines).toHaveLength(2);
 		expect(grown.api.lines.some((l) => l.schoolApplicationId === second.id)).toBe(true);
-		expect(grown.row.subtotalCents).toBe(proforma.row.subtotalCents * 2);
+		expect(grown.row.subtotalCents).toBe(24_000);
 		await removeSchoolByStaff(second.id);
 		const shrunk = (await invoiceOfType("application"))!;
 		expect(shrunk.api.lines).toHaveLength(1);
-		expect(shrunk.row.subtotalCents).toBe(proforma.row.subtotalCents);
+		expect(shrunk.row.subtotalCents).toBe(12_000);
+		// Beyond the package's allowance (3), Century's extra-school add-on lands on the school added last.
+		const extra = (await activeFeeItem("extra_school"))!;
+		const added: string[] = [];
+		for (const intake of ["May 2028", "Sept 2028", "Jan 2029"]) {
+			added.push((await addSchoolForApplicant(applicant.id, { destinationId: "e2e-ca", universityId: "e2e-uni", programId: "e2e-prog", intake })).id);
+		}
+		const over = (await invoiceOfType("application"))!;
+		expect(over.api.lines.filter((l) => l.label === extra.clientLabel)).toHaveLength(1);
+		expect(over.api.lines.find((l) => l.label === extra.clientLabel)?.schoolApplicationId).toBe(added[2]);
+		expect(over.row.subtotalCents).toBe(4 * 12_000 + extra.amountCents);
+		for (const id of added) await removeSchoolByStaff(id);
+		expect((await invoiceOfType("application"))!.row.subtotalCents).toBe(12_000);
 
 		// ── Handler issues, applicant pays ───────────────────────────────
 		await issueProformaByOps({ invoiceId: proforma.row.id, actorName: "Handler" });
@@ -346,6 +365,11 @@ describe("the applicant journey, end to end", () => {
 		);
 		expect(pendingVisa).toBeTruthy();
 		await resolveStageHandoff({ handoffId: pendingVisa!.id, decision: "assign", opsUserId: staff.visa, actor: ACTOR });
+		// Assigning the officer raises the visa draft: the destination's tariffs, at cost — nothing of Century's in it.
+		const visaDraft = (await invoiceOfType("visa"))!;
+		expect(visaDraft.row.status).toBe("proforma");
+		expect(visaDraft.api.lines.map((l) => l.amountCents).sort()).toEqual([15_000, 8_500].sort());
+		expect(visaDraft.row.subtotalCents).toBe(23_500);
 
 		// Read and write agree: the specialist can open the case, and it is in
 		// their list, without being the whole-case owner.

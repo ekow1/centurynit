@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sheet } from "century-nit-core/ui";
 import { INVOICE_TYPE_LABELS } from "century-nit-shared";
 import { issueInvoice, voidInvoice, type ApiInvoice } from "../../lib/api";
+import { optionalItemsFor, useFeeCatalogue } from "../../hooks/useFeeCatalogue";
 
 /**
  * Approval happens in the case, on the invoice card: the reviewer sees the
@@ -47,6 +48,8 @@ export function ApproveInvoiceSheet({
 	const [error, setError] = useState<string | null>(null);
 	const [declining, setDeclining] = useState(false);
 	const [reason, setReason] = useState("");
+	const { catalogue } = useFeeCatalogue();
+	const optional = invoice ? optionalItemsFor(catalogue, invoice.type) : [];
 
 	useEffect(() => {
 		if (!invoice) return;
@@ -121,7 +124,7 @@ export function ApproveInvoiceSheet({
 								</button>
 							</div>
 						))}
-						<div>
+						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
 							<button
 								type="button"
 								className="btn btn--ghost btn--sm"
@@ -129,6 +132,26 @@ export function ApproveInvoiceSheet({
 							>
 								+ Add line
 							</button>
+							{optional.length > 0 && (
+								<select
+									className="input input--sm"
+									style={{ width: "auto" }}
+									value=""
+									onChange={(e) => {
+										const item = optional.find((i) => i.key === e.target.value);
+										if (!item) return;
+										setLines([...lines, { key: `fee-${item.key}-${Date.now()}`, label: item.clientLabel, detail: item.description ?? "", amount: (item.amountCents / 100).toFixed(2), schoolApplicationId: null }]);
+									}}
+									aria-label="Add a catalogue item"
+								>
+									<option value="">+ From the fee schedule…</option>
+									{optional.map((i) => (
+										<option key={i.key} value={i.key}>
+											{i.name} · ${(i.amountCents / 100).toFixed(2)}
+										</option>
+									))}
+								</select>
+							)}
 						</div>
 					</div>
 

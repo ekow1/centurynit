@@ -42,6 +42,7 @@ import {
 
 
 } from "../services/invoice.js";
+import { serviceFeeSplit } from "../services/fees.js";
 import {
 	createPaystackCheckout,
 	verifyPaystackTransaction,
@@ -942,7 +943,8 @@ meRouter.openapi(
 		if (row.status === "paid" || serialized.balanceCents <= 0) {
 			throw new HttpError(409, "INVOICE_PAID", "Invoice already paid.");
 		}
-		const depositCents = Math.round(serialized.subtotalCents * 0.1);
+		const { depositPercent } = await serviceFeeSplit();
+		const depositCents = Math.round((serialized.subtotalCents * depositPercent) / 100);
 		const hasPaidDeposit = serialized.paidCents >= depositCents;
 		const amountCents = !hasPaidDeposit
 			? Math.min(depositCents - serialized.paidCents, serialized.balanceCents)

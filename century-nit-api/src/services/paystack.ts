@@ -1,5 +1,6 @@
 import { HttpError } from "../middleware/error.js";
 import { getSetting } from "./settings.js";
+import { exchangeRate } from "./fees.js";
 
 const PAYSTACK_API = "https://api.paystack.co";
 
@@ -73,7 +74,7 @@ export async function createPaystackCheckout(input: {
 			body.message?.toLowerCase().includes("usd") ||
 			!response.ok
 		) {
-			const GHS_USD_RATE = 15.0;
+			const GHS_USD_RATE = await exchangeRate();
 			// Paystack GHS minimum transaction amount is 100 pesewas (GH₵ 1.00)
 			const amountInPesewas = Math.max(100, Math.round((input.amountCents / 100) * GHS_USD_RATE * 100));
 			const retryRes = await fetch(`${PAYSTACK_API}/transaction/initialize`, {

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Sheet } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import { createInvoice, type ApiInvoice } from "../../lib/api";
+import { FEE_KIND_LABELS } from "century-nit-shared";
+import { useFeeCatalogue } from "../../hooks/useFeeCatalogue";
 
 /**
  * Anything the journey does not raise on its own — a courier fee, a
@@ -29,6 +31,9 @@ export function RaiseInvoiceSheet({
 	onRaised: (raised: ApiInvoice) => void;
 }) {
 	const [lines, setLines] = useState<Line[]>([{ key: "l1", label: "", detail: "", amount: "" }]);
+	const { catalogue } = useFeeCatalogue();
+	// Anything in the schedule can be raised here; the consultation is booked, not raised.
+	const fromCatalogue = (catalogue?.items ?? []).filter((i) => i.active && i.key !== "consultation");
 	const [note, setNote] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -77,10 +82,32 @@ export function RaiseInvoiceSheet({
 							</button>
 						</div>
 					))}
-					<div>
+					<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
 						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setLines([...lines, { key: `l${Date.now()}`, label: "", detail: "", amount: "" }])}>
 							+ Add line
 						</button>
+						{fromCatalogue.length > 0 && (
+							<select
+								className="input input--sm"
+								style={{ width: "auto" }}
+								value=""
+								onChange={(e) => {
+									const item = fromCatalogue.find((i) => i.key === e.target.value);
+									if (!item) return;
+									const blank = lines.length === 1 && !lines[0].label && !lines[0].amount;
+									const next = { key: `fee-${item.key}-${Date.now()}`, label: item.clientLabel, detail: item.description ?? "", amount: (item.amountCents / 100).toFixed(2) };
+									setLines(blank ? [next] : [...lines, next]);
+								}}
+								aria-label="Add a catalogue item"
+							>
+								<option value="">+ From the fee schedule…</option>
+								{fromCatalogue.map((i) => (
+									<option key={i.key} value={i.key}>
+										{FEE_KIND_LABELS[i.kind]} · {i.name} · ${(i.amountCents / 100).toFixed(2)}
+									</option>
+								))}
+							</select>
+						)}
 					</div>
 				</div>
 				<label>

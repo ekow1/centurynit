@@ -26,6 +26,8 @@ import {
 	type TravelAssistanceRequest,
 	type VisaDetails,
 	type DocumentChecklistItem,
+	type CaseComment,
+	type FeeCatalogue,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
@@ -1081,7 +1083,7 @@ type AppStateContextValue = {
 	preDepartureTasks: PreDepartureTask[];
 	togglePreDepartureTask: (id: string) => void;
 	preDepartureProgress: number;
-	fees: FeeSchedule | null;
+	fees: (FeeSchedule & { catalogue: FeeCatalogue }) | null;
 	/** Travel assistance (direct-invoice flow) */
 	recordTravelDecision: (decision: "yes" | "hold" | "no") => Promise<void>;
 };
@@ -1223,7 +1225,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 	 * prepends new notifications in real time.
 	 */
 	const [notifications, setNotifications] = useState<AppNotification[]>([]);
-	const [fees, setFees] = useState<FeeSchedule | null>(null);
+	const [fees, setFees] = useState<(FeeSchedule & { catalogue: FeeCatalogue }) | null>(null);
 	// unreadCount is already declared above
 
 	const [preDepartureTasks, setPreDepartureTasks] = useState<PreDepartureTask[]>(() => {

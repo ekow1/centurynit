@@ -7,7 +7,14 @@
  * invoice. The rate here is a display approximation; the API converts at
  * the live rate when it takes a payment.
  */
-export const GHS_PER_USD = 15;
+let ghsPerUsd = 15;
+/** The rate every GHS figure renders at — set from the fee catalogue when an app loads. */
+export function setGhsPerUsd(rate: number): void {
+	if (Number.isFinite(rate) && rate > 0) ghsPerUsd = rate;
+}
+export function getGhsPerUsd(): number {
+	return ghsPerUsd;
+}
 
 export type MoneyDisplay = "ghs" | "usd" | "both";
 
@@ -17,7 +24,7 @@ export function formatUsd(cents: number): string {
 }
 
 export function formatGhs(cents: number): string {
-	return `GH₵ ${Math.round((cents / 100) * GHS_PER_USD).toLocaleString("en-US")}`;
+	return `GH₵ ${Math.round((cents / 100) * ghsPerUsd).toLocaleString("en-US")}`;
 }
 
 export function formatMoney(cents: number, display: MoneyDisplay = "both"): string {

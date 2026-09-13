@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, ne, not, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, isNull, ne, not, or, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	type AddComment,
@@ -43,6 +43,7 @@ import {
 	invoiceLines,
 	notifications,
 	opsUsers,
+	destinations,
 	schoolApplications,
 	servicePackages,
 	stageAssignments,
@@ -56,7 +57,8 @@ import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
 import { listSchoolsForApplication } from "./schools.js";
-import { createInvoice, getFeeSchedule, type InvoiceRow } from "./invoice.js";
+import { applicationFeeLinesFor, createInvoice, type InvoiceRow } from "./invoice.js";
+import { activeFeeItem, serviceFeeSplit } from "./fees.js";
 import {
 
 	syncLeadAssignment,
@@ -482,17 +484,21 @@ export async function quotationForApplication(applicationId: string): Promise<Pr
 		.from(schoolApplications)
 		.where(and(eq(schoolApplications.applicationId, applicationId), eq(schoolApplications.status, "Preparing Application")));
 
-	const fees = await getFeeSchedule();
+	// The same sources the invoices are raised from: the package's price,
+	// each school's own fee, the destination's visa costs.
 	const schoolCount = draftRows.length;
-	const appSubtotalCents =
-		fees.appBaseCents + schoolCount * fees.appPerSchoolCents + fees.appDocVerifyCents;
-	const agencyFeeCents = Math.round(serviceFeeFor((app.fundingTrack ?? "") as SchoolFundingTrack | "") * 100);
-	const visaFeeCents = fees.visaBaseCents;
+	const appLines = await applicationFeeLinesFor(applicationId);
+	const appSubtotalCents = appLines.reduce((n, l) => n + l.amountCents, 0);
+	const [pkg] = app.packageId ? await db.select({ priceCents: servicePackages.priceCents }).from(servicePackages).where(eq(servicePackages.id, app.packageId)).limit(1) : [];
+	const agencyFeeCents =
+		pkg && pkg.priceCents > 0 ? pkg.priceCents : Math.round(serviceFeeFor((app.fundingTrack ?? "") as SchoolFundingTrack | "") * 100);
+	const visaFeeCents = (await visaCostLinesFor(app)).reduce((n, l) => n + l.amountCents, 0);
+	const extra = await activeFeeItem("extra_school");
 
 	return {
 		schoolCount,
-		appBaseCents: fees.appBaseCents,
-		perSchoolCents: fees.appPerSchoolCents,
+		appBaseCents: 0,
+		perSchoolCents: extra?.amountCents ?? 0,
 		appSubtotalCents,
 		agencyFeeCents,
 		visaFeeCents,
@@ -1329,14 +1335,74 @@ async function listInvoicesForApplicant(applicantId: string) {
 		.where(eq(invoices.clientUserId, applicant.userId));
 }
 
-/** Auto-raise a visa invoice when entering visa_processing with no visa invoice. */
+/**
+ * The visa invoice is money paid on the client's behalf: the destination's
+ * visa fee and its biometrics fee, at cost. The destination is the accepted
+ * school's country; before an offer is accepted, the country on the case.
+ */
+export async function visaCostLinesFor(app: ApplicationRow): Promise<{ label: string; detail: string; amountCents: number }[]> {
+	let dest: { id: string; name: string; visaFeeCents: number; biometricsFeeCents: number } | undefined;
+	if (app.acceptedSchoolId) {
+		const [row] = await db
+			.select({ id: destinations.id, name: destinations.name, visaFeeCents: destinations.visaFeeCents, biometricsFeeCents: destinations.biometricsFeeCents })
+			.from(schoolApplications)
+			.innerJoin(destinations, eq(destinations.id, schoolApplications.destinationId))
+			.where(eq(schoolApplications.id, app.acceptedSchoolId))
+			.limit(1);
+		dest = row;
+	}
+	if (!dest && app.country) {
+		const [row] = await db
+			.select({ id: destinations.id, name: destinations.name, visaFeeCents: destinations.visaFeeCents, biometricsFeeCents: destinations.biometricsFeeCents })
+			.from(destinations)
+			.where(or(ilike(destinations.name, app.country), eq(destinations.id, app.country.toLowerCase())))
+			.limit(1);
+		dest = row;
+	}
+	if (!dest) return [];
+	const lines: { label: string; detail: string; amountCents: number }[] = [];
+	if (dest.visaFeeCents > 0) lines.push({ label: `${dest.name} visa fee`, detail: "Paid to the embassy on your behalf, at cost", amountCents: dest.visaFeeCents });
+	if (dest.biometricsFeeCents > 0) lines.push({ label: `${dest.name} biometrics fee`, detail: "Paid to the visa centre on your behalf, at cost", amountCents: dest.biometricsFeeCents });
+	return lines;
+}
+
+/** No application fees for the chosen schools: nothing to invoice, submissions can start. */
+export async function markApplicationFeesNotDue(applicationId: string, byName: string): Promise<void> {
+	const [row] = await db.select({ appFeePaid: applications.appFeePaid }).from(applications).where(eq(applications.id, applicationId)).limit(1);
+	if (!row || row.appFeePaid) return;
+	await db.update(applications).set({ appFeePaid: true, updatedAt: new Date() }).where(eq(applications.id, applicationId));
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: applicationId,
+		kind: "status",
+		visibility: "applicant",
+		text: "No university application fees are due for the chosen schools — nothing to pay before submissions start.",
+		authorName: byName,
+		authorOpsUserId: null,
+	});
+}
+
+/** Auto-raise the visa costs when entering visa_processing with no visa invoice — or record that none are due. */
 async function raiseVisaInvoiceForApplication(
 	app: ApplicationRow,
 	applicant: ApplicantRow,
 	actor: { opsUserId?: string | null; name: string; email: string },
 ): Promise<void> {
 	const clientUserId = applicant.userId ?? undefined;
-	const fees = await getFeeSchedule();
+	const lines = await visaCostLinesFor(app);
+	if (lines.length === 0) {
+		await db.update(applications).set({ visaInvoicePaid: true, updatedAt: new Date() }).where(eq(applications.id, app.id));
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: app.id,
+			kind: "status",
+			visibility: "applicant",
+			text: "No visa costs are recorded for this destination — nothing to pay before visa processing starts.",
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId ?? null,
+		});
+		return;
+	}
 	await createInvoice({
 		data: {
 			applicantName: applicant.name,
@@ -2053,13 +2119,15 @@ export async function setApplicationPackage(input: {
 		const price = (pkg.priceCents && pkg.priceCents > 0)
 			? pkg.priceCents
 			: Math.round(serviceFeeForPackage(input.degreeLevel, input.packageCode, targetSchools));
+		const split = await serviceFeeSplit();
+		const portions = [split.depositPercent / 100, split.preDeparturePercent / 100, split.postArrivalPercent / 100];
 		const milestoneLines = AGENCY_STAGES.map((stage, i) => ({
 			position: i,
 			label: stage.label,
 			detail: stage.detail,
 			amountCents: i === AGENCY_STAGES.length - 1
-				? price - AGENCY_STAGES.slice(0, -1).reduce((n, s) => n + Math.round(price * s.portion), 0)
-				: Math.round(price * stage.portion),
+				? price - portions.slice(0, -1).reduce((n, portion) => n + Math.round(price * portion), 0)
+				: Math.round(price * portions[i]),
 		})).filter((l) => l.amountCents > 0);
 
 		const subtotalCents = milestoneLines.reduce((n, l) => n + l.amountCents, 0);

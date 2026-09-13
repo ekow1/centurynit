@@ -37,7 +37,8 @@ import {
 	ensureCaseForBooking,
 	syncConsultationAssignment,
 } from "../services/consultations.js";
-import { createConsultationInvoice, getFeeSchedule } from "../services/invoice.js";
+import { createConsultationInvoice } from "../services/invoice.js";
+import { activeFeeItem } from "../services/fees.js";
 import { postPaymentSettlement } from "../services/paymentSettlement.js";
 import {
 	assignBookingSchema,
@@ -216,11 +217,11 @@ bookingsRouter.openapi(
 		// falling back to the shared default when unset. Previously hardcoded at
 		// 7500 cents ($75), so Paystack always charged GHS 1,125 regardless of
 		// what ops configured.
-		const fees = await getFeeSchedule();
+		const consultation = await activeFeeItem("consultation");
 
 		const checkout = await createPaystackCheckout({
 			email: user.email,
-			amountCents: fees.consultationCents,
+			amountCents: consultation?.amountCents ?? 0,
 			callbackUrl: `${origin}/portal/pay?paystack=1&booking=consultation`,
 			customMetadata: { bookingPayload: body },
 		});
@@ -454,14 +455,14 @@ bookingsRouter.openapi(
 					branchId: booking.branchId,
 					type: booking.type,
 				});
-				const fees = await getFeeSchedule();
+				const consultation = await activeFeeItem("consultation");
 				await createConsultationInvoice({
 					clientUserId: user.id,
 					applicantName: user.name ?? user.email,
 					applicantEmail: user.email,
 					bookingId: booking.id,
 					reference: booking.reference,
-					amountCents: fees.consultationCents,
+					amountCents: consultation?.amountCents ?? 0,
 					issuedBy: "System",
 				});
 			} catch {

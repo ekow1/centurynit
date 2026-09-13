@@ -74,9 +74,9 @@ const OPERATIONS_NAV: NavEntry[] = [
 		],
 	},
 	{
-		group: "Money",
+		group: "Billing",
 		icon: "finance",
-		blurb: "Invoices, payments & pricing",
+		blurb: "Invoices, client accounts & fees",
 		children: [
 			{ to: "/invoices", module: "invoices", label: "Invoices", blurb: "Raise, chase & settle", icon: "finance" },
 			{ to: "/ledger", module: "ledger", label: "Client ledger", blurb: "Per-client journal & instalments", icon: "finance" },

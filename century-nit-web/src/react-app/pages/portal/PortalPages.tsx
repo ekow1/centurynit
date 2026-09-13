@@ -708,6 +708,7 @@ function SchoolPackageInner() {
 
 					<p className="pkg-cost__excl mt-3">
 						Institutional university application fees and tuition are <strong>not</strong> agency fees. Application fees are billed per school selected, and tuition is paid directly to whichever university issues your offer.
+						The service fee is settled in milestones: the deposit now, the pre-departure milestone once your visa is approved, the rest after you arrive. <strong>Your admission letter and visa documents are released, and your ticket is issued, after the pre-departure milestone.</strong>
 					</p>
 				</section>
 			) : null}
@@ -3416,8 +3417,9 @@ function AdmissionLetterViewer({ schoolId, universityName }: { schoolId: string;
 		try {
 			const ticket = await schoolsApi.meAdmissionLetterDownloadUrl(schoolId);
 			setUrl(ticket.url);
-		} catch {
-			setError("Could not load the admission letter. Please try again.");
+		} catch (err) {
+			// Held until the pre-departure fee milestone — the API says so; show it as it is.
+			setError(err instanceof ApiError && err.code === "RELEASE_HELD" ? `🔒 ${err.message}` : "Could not load the admission letter. Please try again.");
 		} finally {
 			setBusy(false);
 		}

@@ -35,7 +35,7 @@ export function ArtifactCard({
 }: {
 	/** Portal user the artifact belongs to; null until the applicant has an account. */
 	ownerUserId: string | null | undefined;
-	documentType: "visa_receipt" | "flight_receipt";
+	documentType: "visa_receipt" | "visa_grant" | "flight_receipt";
 	title: string;
 	hint?: string;
 	/** Holds the documents module — the same gate the server applies. */

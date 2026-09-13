@@ -38,6 +38,7 @@ import { journeyForApplicant } from "./journey.js";
 import { acceptOffer, addSchoolForApplicant, lockSchoolsForApplicant, removeSchoolByStaff, updateSchoolStatus } from "./schools.js";
 import { activeFeeItem } from "./fees.js";
 import { resolvePreDepartureTasks, seedPreDepartureTasks, setPreDepartureTask } from "./preDeparture.js";
+import { assertOfferLetterReleased, assertReleasedForOwner, setReleaseOverride } from "./release.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -347,6 +348,19 @@ describe("the applicant journey, end to end", () => {
 		await updateDepartureDetails(appId, { pickupBy: null }, ACTOR);
 		resolved = await resolvePreDepartureTasks(await appRow());
 		expect(resolved.find((t) => t.id === "pd-airport")?.done).toBe(false);
+
+		// ── The release hold: the letter and the visa documents wait on the milestone ──
+		// No plan settled yet: the client's downloads are refused, staff's never are.
+		await expect(assertOfferLetterReleased(school.id)).rejects.toMatchObject({ status: 402, code: "RELEASE_HELD" });
+		await expect(assertReleasedForOwner(CLIENT_ID, "visa_grant")).rejects.toMatchObject({ code: "RELEASE_HELD" });
+		await expect(assertReleasedForOwner(CLIENT_ID, "insurance")).resolves.toBeUndefined();
+		// A manager releases early with a reason — recorded on the case — and can take it back.
+		await expect(setReleaseOverride(appId, {}, ACTOR)).rejects.toMatchObject({ code: "REASON_REQUIRED" });
+		await setReleaseOverride(appId, { reason: "Bank transfer received, finance to record on Monday" }, ACTOR);
+		await expect(assertOfferLetterReleased(school.id)).resolves.toBeUndefined();
+		expect((await appRow()).departureDetails).toMatchObject({ releaseOverrideBy: "Manager" });
+		await setReleaseOverride(appId, { revoke: true }, ACTOR);
+		await expect(assertOfferLetterReleased(school.id)).rejects.toMatchObject({ code: "RELEASE_HELD" });
 		await processConsentDecision({ userId: CLIENT_ID, stage: "visa", decision: "continue" });
 		expect(await stage()).toBe("visa_invoice");
 

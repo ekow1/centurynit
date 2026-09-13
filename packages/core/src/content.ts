@@ -2436,6 +2436,12 @@ export const DOCUMENT_TYPES = [
 		name: "Police clearance",
 		hint: "Where the destination requires one — issued within the last 6 months",
 	},
+	// ── Official — placed by Century as the client's agent ───────────────
+	{
+		id: "visa_grant",
+		name: "Visa grant / e-visa",
+		hint: "The grant notice or e-visa PDF from the authority, filed by your consultant",
+	},
 	// ── Departure ─────────────────────────────────────────────────────────
 	{
 		id: "insurance",
@@ -2495,6 +2501,7 @@ export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
 	insurance: "DEPARTURE",
 	accommodation_proof: "DEPARTURE",
 	visa_receipt: "OFFICIAL",
+	visa_grant: "OFFICIAL",
 	flight_receipt: "OFFICIAL",
 	additional: "OTHER",
 };

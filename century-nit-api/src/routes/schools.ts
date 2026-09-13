@@ -17,6 +17,7 @@ import { ALLOWED_DOCUMENT_TYPES } from "century-nit-shared";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { getApplicantByUserId } from "../services/cases.js";
+import { assertOfferLetterReleased } from "../services/release.js";
 import {
 	addSchoolForApplicant,
 	listSchoolsForApplicant,
@@ -563,6 +564,8 @@ for (const kind of schoolFileKindSchema.options) {
 			if (!list.schools.some((s) => s.id === id)) {
 				throw new HttpError(403, "FORBIDDEN", "That school application is not yours");
 			}
+			// The offer letter is held until the pre-departure fee milestone.
+			if (kind === "offer-letter") await assertOfferLetterReleased(id);
 			const ticket = await getSchoolFileDownloadUrl(id, kind);
 			return c.json(ticket);
 		},

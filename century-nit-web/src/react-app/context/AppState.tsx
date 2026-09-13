@@ -783,6 +783,17 @@ export function hasSettledPlan(app: ApplicationData) {
 	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyStageIndex >= 2;
 }
 
+/** The admission letter and visa documents open once the milestone is paid — or a manager released them early. */
+export function documentsReleasedFor(app: ApplicationData): boolean {
+	return hasSettledPlan(app) || Boolean(app.departureDetails?.releaseOverrideAt);
+}
+export function documentHoldReasonFor(app: ApplicationData): string {
+	if (!hasPaymentPlan(app)) return "Your admission letter and visa documents are released, and your ticket is issued, once your pre-departure fee milestone is paid — choose a plan and settle it.";
+	return app.paymentPlanId === "installment"
+		? "Your admission letter and visa documents are released, and your ticket is issued, once the pre-departure instalment of your service fee is paid."
+		: "Your admission letter and visa documents are released, and your ticket is issued, once your service fee balance is paid.";
+}
+
 export type PendingAction = {
 	kind:
 		| "consent"
@@ -1007,7 +1018,7 @@ export function getPendingAction(
 			detail: !hasPlan
 				? "Choose your payment plan — pay the full agency service fee, or settle it in installments — to complete your journey."
 				: planDue
-					? "Your plan is confirmed. Settle your service fee (in full or the first installment) to complete your journey."
+					? "Your plan is confirmed. Settle the pre-departure milestone — your admission letter and visa documents are released, and your ticket is issued, after it."
 					: travelLeft
 						? "Your plan is settled. Finish your pre-departure checklist and travel clearance, then complete your journey."
 						: ready

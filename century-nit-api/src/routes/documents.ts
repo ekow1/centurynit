@@ -24,6 +24,7 @@ import {
 	users,
 } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { assertReleasedForOwner } from "../services/release.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -154,7 +155,7 @@ async function reachableOwnerIds(staff: StaffContext | null): Promise<string[] |
  * artifacts only. Everything else (passport, bank statements, health
  * documents) must be uploaded by the client; the allowlist is the policy.
  */
-const STAFF_ARTIFACT_TYPES = new Set(["visa_receipt", "flight_receipt"]);
+const STAFF_ARTIFACT_TYPES = new Set(["visa_receipt", "visa_grant", "flight_receipt"]);
 
 /** Whether this caller may act on a document owned by `ownerUserId`. */
 async function mayReachOwner(
@@ -656,6 +657,11 @@ documentsRouter.openapi(
 				DOCUMENT_ERROR_CODES.UPLOAD_NOT_COMPLETED,
 				"That upload never completed",
 			);
+		}
+		// The client's own download of a held document waits on the fee
+		// milestone; staff, and the client's own uploads, never do.
+		if (!staff && row.ownerUserId === user.id) {
+			await assertReleasedForOwner(user.id, row.documentType);
 		}
 
 		/*

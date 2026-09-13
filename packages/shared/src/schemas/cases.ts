@@ -78,6 +78,39 @@ export function feeMilestoneBlockReason(
 		: `${prefix}: the service fee balance is not paid.`;
 }
 
+/**
+ * What the agency holds until the pre-departure fee milestone: the admission
+ * letter and the visa documents it received as the client's agent. The
+ * ticket is not held — it is simply not bought before the milestone. A
+ * manager may release early with a reason (a transfer finance has not
+ * recorded yet); the reason is the record.
+ */
+export const RELEASE_GATED_DOCUMENT_TYPES: readonly string[] = ["visa_receipt", "visa_grant"];
+
+export function documentsReleased(checks: {
+	paymentPlanId?: string | null;
+	agencyStageIndex?: number;
+	agencySettled?: boolean;
+	departureDetails?: { releaseOverrideAt?: string | null } | null;
+}): boolean {
+	if (checks.departureDetails?.releaseOverrideAt) return true;
+	return preDepartureFeePaid(checks);
+}
+
+/** Why the documents are still held, or null once released. */
+export function documentReleaseHoldReason(checks: {
+	paymentPlanId?: string | null;
+	agencyStageIndex?: number;
+	agencySettled?: boolean;
+	departureDetails?: { releaseOverrideAt?: string | null } | null;
+}): string | null {
+	if (documentsReleased(checks)) return null;
+	if (!checks.paymentPlanId) return "Released once the pre-departure fee milestone is paid — choose a payment plan and settle it.";
+	return checks.paymentPlanId === "installment"
+		? "Released once the pre-departure instalment of the service fee is paid."
+		: "Released once the service fee balance is paid.";
+}
+
 /** Travel is settled when the flight is booked, or the applicant is handling it, or has paused it. */
 export function isTravelResolved(status: string | null | undefined): boolean {
 	return status === "booked" || status === "declined" || status === "on_hold";
@@ -299,8 +332,17 @@ export const departureDetailsSchema = z.object({
 	emergencyContactRelation: z.string().max(60).nullable().optional(),
 	/** The day they landed — the Done chapter starts here. */
 	arrivedAt: z.string().datetime().nullable().optional(),
+	/** A manager released the held documents ahead of the milestone — when, who, and why. */
+	releaseOverrideAt: z.string().datetime().nullable().optional(),
+	releaseOverrideBy: z.string().max(120).nullable().optional(),
+	releaseOverrideReason: z.string().max(500).nullable().optional(),
 });
 export type DepartureDetails = z.infer<typeof departureDetailsSchema>;
+export const releaseOverrideSchema = z.object({
+	reason: z.string().min(3).max(500).optional(),
+	/** Take the early release back. */
+	revoke: z.boolean().optional(),
+});
 export const updateDepartureDetailsSchema = departureDetailsSchema;
 /** How the visa decision went; `complete` implies approved, a refusal stays at `decision`. */
 export const visaOutcomeSchema = z.enum(["approved", "refused"]);

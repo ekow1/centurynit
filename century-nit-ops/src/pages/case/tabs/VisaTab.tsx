@@ -498,7 +498,14 @@ export function VisaTab({
 				ownerUserId={app.applicantUserId}
 				documentType="visa_receipt"
 				title="Visa application receipt"
-				hint="The embassy or VFS submission receipt — shared with the client via their document vault."
+				hint="The embassy or VFS submission receipt. In the client's vault; downloadable by them once the pre-departure fee milestone is paid."
+				canUpload={hasPermission("documents")}
+			/>
+			<ArtifactCard
+				ownerUserId={app.applicantUserId}
+				documentType="visa_grant"
+				title="Visa grant / e-visa"
+				hint="The grant notice or e-visa PDF from the authority. Held in the client's vault until the pre-departure fee milestone — the offer letter too."
 				canUpload={hasPermission("documents")}
 			/>
 

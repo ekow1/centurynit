@@ -5,6 +5,10 @@ import { useAppState, hasSettledPlan } from "../../context/AppState";
 import { Button } from "../../components/ui/Button";
 import { ChapterGate } from "./PortalLayout";
 import { PreDepartureChecklist } from "../../components/PreDepartureChecklist";
+import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
+import { documentsReleasedFor, documentHoldReasonFor } from "../../context/AppState";
+import { documentsApi } from "century-nit-core/api";
+import type { ApplicantDocument } from "century-nit-shared";
 import { meApi, ApiError } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { ApiInvoice, TravelFlight } from "century-nit-shared";
@@ -41,6 +45,20 @@ function TravelAssistanceInner() {
 		const t = new Date(iso).getTime();
 		return Number.isNaN(t) ? null : Math.ceil((t - Date.now()) / 86_400_000);
 	};
+	// The documents Century holds for the client — shown here because this is where the milestone is paid.
+	const [officialDocs, setOfficialDocs] = useState<ApplicantDocument[]>([]);
+	useEffect(() => {
+		let alive = true;
+		documentsApi
+			.list()
+			.then((res) => {
+				if (alive) setOfficialDocs(res.documents);
+			})
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+	}, [application.agencyStageIndex, application.agencySettledAt, application.departureDetails?.releaseOverrideAt]);
 	const flightAt = application.travelAssistance?.booking?.departAt ?? application.travelAssistance?.flight?.departAt ?? null;
 	const flyDays = daysUntil(flightAt);
 	const reportDays = daysUntil(dd.reportBy);
@@ -310,6 +328,13 @@ function TravelAssistanceInner() {
 					</div>
 				</section>
 			)}
+
+			{/* What the milestone releases — the letter and the visa documents, filed and waiting. */}
+			<OfficialDocuments
+				rows={officialRows({ schools: schoolApplications, docs: officialDocs })}
+				released={documentsReleasedFor(application)}
+				holdReason={documentHoldReasonFor(application)}
+			/>
 
 			{/* Before you fly — the facts the officer recorded, and the days left. */}
 			{(flyDays !== null || hasFacts) && (

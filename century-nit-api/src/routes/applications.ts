@@ -70,6 +70,7 @@ import {
 } from "../services/invoice.js";
 import { markApplicationFeesNotDue } from "../services/cases.js";
 import { setPreDepartureTask } from "../services/preDeparture.js";
+import { setReleaseOverride } from "../services/release.js";
 
 
 
@@ -120,6 +121,7 @@ import {
 	setVisaStageSchema,
 	updateVisaDetailsSchema,
 	updateDepartureDetailsSchema,
+	releaseOverrideSchema,
 	setPreDepartureTaskSchema,
 	toggleChecklistSchema,
 
@@ -164,6 +166,7 @@ import {
 	requireAuth,
 	requireMfa,
 	requireModule,
+	requireCapability,
 
 	type AuthVariables,
 } from "../middleware/auth.js";
@@ -642,6 +645,29 @@ applicationsRouter.openapi(
 		await assertApplicationAccess(c, id);
 		const staff = c.get("staff")!;
 		const updated = await setPreDepartureTask(id, taskId, c.req.valid("json"), { kind: "staff", name: staff.name, opsUserId: staff.opsUserId });
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── POST /applications/{id}/release-override — release held documents early ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/release-override",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("issue_invoices")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: releaseOverrideSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "Documents released early (or the release withdrawn), with the reason on the case" },
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const updated = await setReleaseOverride(c.req.valid("param").id, c.req.valid("json"), actorFrom(c.get("staff")!));
 		return c.json(await serializeApplication(updated));
 	},
 );

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { JOURNEY_STAGES, feeMilestoneBlockReason, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGES, documentsReleased, feeMilestoneBlockReason, type JourneyStage } from "century-nit-shared";
 import type {
 	TravelAssistanceBookingInput,
 	TravelAssistanceDecisionInput,
@@ -513,11 +513,13 @@ export async function raiseTicketInvoice(input: {
 	// visa is granted, the flight is not yet bought — this is where the
 	// agency's leverage is, so the ticket waits on it.
 	const [feeApp] = await db
-		.select({ paymentPlanId: applications.paymentPlanId, agencyStageIndex: applications.agencyStageIndex, agencySettled: applications.agencySettled })
+		.select({ paymentPlanId: applications.paymentPlanId, agencyStageIndex: applications.agencyStageIndex, agencySettled: applications.agencySettled, departureDetails: applications.departureDetails })
 		.from(applications)
 		.where(eq(applications.id, existing.applicationId))
 		.limit(1);
-	const feeBlock = feeMilestoneBlockReason(feeApp ?? {}, "The ticket cannot be invoiced yet");
+	// A manager's early release (a transfer not yet recorded) lets the ticket follow too.
+	const released = documentsReleased({ ...(feeApp ?? {}), departureDetails: (feeApp?.departureDetails ?? null) as { releaseOverrideAt?: string | null } | null });
+	const feeBlock = released ? null : feeMilestoneBlockReason(feeApp ?? {}, "The ticket cannot be invoiced yet");
 	if (feeBlock) {
 		throw new HttpError(409, TRAVEL_ERROR_CODES.FEE_MILESTONE_DUE, feeBlock);
 	}

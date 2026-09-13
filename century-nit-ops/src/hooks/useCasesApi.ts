@@ -448,6 +448,12 @@ export function useCasesApi() {
 			replaceApplication(await applicationsApi.setVisaDetails(app.id, details));
 			await refresh();
 		},
+		setReleaseOverride: async (appId: string, input: { reason?: string; revoke?: boolean }) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setReleaseOverride(app.id, input));
+			await refresh();
+		},
 		setDepartureDetails: async (appId: string, details: DepartureDetails) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;

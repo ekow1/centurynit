@@ -1548,7 +1548,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "Your visa is approved. This milestone is due before your ticket is issued — the balance on a full plan, the pre-departure instalment otherwise. Any post-arrival remainder follows on your schedule."
+							? "Your visa is approved. This milestone is due before your ticket is issued — the balance on a full plan, the pre-departure instalment otherwise. Your admission letter and visa documents are released, and your ticket is issued, after it. Any post-arrival remainder follows on your schedule."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>

@@ -7,7 +7,7 @@ import type { ApiInvoice } from "../../../lib/api";
 import { useState } from "react";
 import type { PreDepartureTask } from "century-nit-core/ops";
 import { DOCUMENT_TYPES } from "century-nit-core/content";
-import { PAYMENT_PLAN_LABELS, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
+import { PAYMENT_PLAN_LABELS, documentsReleased, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
 import type { Flash, Fail, TabId } from "./types";
 import { Sheet, StatusPill } from "century-nit-core/ui";
 import type { DepartureDetails } from "century-nit-shared";
@@ -76,9 +76,25 @@ export function DepartureTab({
 	flash: Flash;
 	fail: Fail;
 }) {
-	const { setPreDepartureTask, setDepartureDetails, refresh } = useCases();
+	const { setPreDepartureTask, setDepartureDetails, setReleaseOverride, refresh } = useCases();
 	const { hasPermission } = useOpsAuth();
 	const dd: DepartureDetails = app.departureDetails ?? {};
+	const released = documentsReleased({ paymentPlanId: app.paymentPlanId, agencyStageIndex: app.agencyStageIndex, agencySettled: app.agencySettled, departureDetails: dd });
+	const [releasing, setReleasing] = useState(false);
+	const [releaseReason, setReleaseReason] = useState("");
+	async function release() {
+		setBusy("release");
+		try {
+			await setReleaseOverride(app.appId, dd.releaseOverrideAt ? { revoke: true } : { reason: releaseReason.trim() });
+			flash(dd.releaseOverrideAt ? "Early release withdrawn — documents held again" : "Documents released — the client can download them now");
+			setReleasing(false);
+			setReleaseReason("");
+		} catch (e) {
+			fail(e, "Could not change the release");
+		} finally {
+			setBusy(null);
+		}
+	}
 	const flightAt = selectedTa?.booking?.departAt ?? selectedTa?.flight?.departAt ?? null;
 	const flyDays = daysUntil(flightAt);
 	const reportDays = daysUntil(dd.reportBy);
@@ -179,6 +195,48 @@ export function DepartureTab({
 					Plan: {PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "not chosen"} · {app.agencyStageIndex ?? 0} milestone{(app.agencyStageIndex ?? 0) === 1 ? "" : "s"} paid
 					{app.agencySettled ? " · settled" : ""}
 				</p>
+				{/* What the milestone holds: the letter and the visa documents in the
+				    client's vault. A manager can release early with a reason. */}
+				<div className="mt-3" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "0.6rem" }}>
+					<p className="text-sm">
+						<span className="muted">Admission letter & visa documents · </span>
+						{released ? (
+							dd.releaseOverrideAt ? (
+								<>
+									released early by {dd.releaseOverrideBy ?? "a manager"}
+									{dd.releaseOverrideAt ? ` on ${fmtDate(dd.releaseOverrideAt)}` : ""} — {dd.releaseOverrideReason}
+								</>
+							) : (
+								"released — the milestone is paid"
+							)
+						) : (
+							"held in the client's vault until the milestone is paid"
+						)}
+					</p>
+					{canIssueInvoices && !releasing && (
+						<button type="button" className="btn btn--sm btn--ghost mt-2" onClick={() => setReleasing(true)}>
+							{dd.releaseOverrideAt ? "Withdraw early release…" : !released ? "Release early…" : null}
+						</button>
+					)}
+					{releasing && (
+						<div className="mt-2" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+							{!dd.releaseOverrideAt && (
+								<input className="input input--sm" style={{ flex: "1 1 18rem" }} value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} placeholder="Why — e.g. bank transfer received, finance records it Monday" autoFocus />
+							)}
+							<button
+								type="button"
+								className="btn btn--sm btn--primary"
+								disabled={busy === "release" || (!dd.releaseOverrideAt && !releaseReason.trim())}
+								onClick={() => void release()}
+							>
+								{busy === "release" ? "Saving…" : dd.releaseOverrideAt ? "Withdraw" : "Release now"}
+							</button>
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReleasing(false); setReleaseReason(""); }}>
+								Cancel
+							</button>
+						</div>
+					)}
+				</div>
 			</div>
 
 			{/* Flight — status, the flight, the one next action. Departure is

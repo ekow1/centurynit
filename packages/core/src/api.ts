@@ -942,6 +942,10 @@ export const applicationsApi = {
 	setVisaDetails(id: string, details: VisaDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/visa-details`, { method: "PATCH", ...json(details) });
 	},
+	/** Release the held admission letter and visa documents ahead of the fee milestone (or withdraw that). */
+	setReleaseOverride(id: string, input: { reason?: string; revoke?: boolean }): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/release-override`, { method: "POST", ...json(input) });
+	},
 	/** Record Departure facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
 	setDepartureDetails(id: string, details: DepartureDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/departure-details`, { method: "PATCH", ...json(details) });

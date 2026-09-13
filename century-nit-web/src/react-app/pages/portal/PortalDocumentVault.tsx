@@ -8,6 +8,8 @@ import { Button } from "../../components/ui/Button";
 import { IconDoc } from "../../components/ui/Icons";
 import { UploadProgressModal, type UploadStage } from "../../components/portal/UploadProgressModal";
 import { prepareDocumentForUpload } from "../../lib/upload";
+import { useAppState, documentsReleasedFor, documentHoldReasonFor } from "../../context/AppState";
+import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
 
 /**
  * The applicant's document vault — fully server-backed.
@@ -60,6 +62,8 @@ type VaultRow = {
 };
 
 export function PortalDocumentVault() {
+	const { application, schoolApplications } = useAppState();
+	const [allDocs, setAllDocs] = useState<ApplicantDocument[]>([]);
 	const { toast } = useNotifier();
 	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -99,6 +103,7 @@ export function PortalDocumentVault() {
 			const list = [...base, ...visa.filter((d) => !seen.has(d.id)), ...departure.filter((d) => !seen.has(d.id) && !visa.some((v) => v.id === d.id))];
 			if (list.length > 0) setRequired(list.map((d) => ({ id: d.id, name: d.name, hint: d.hint })));
 			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
+			setAllDocs(res.documents);
 		} catch (err) {
 			// Signed-out is no longer reachable here (RequireAuth gates the
 			// portal), so a failure is operational — surface a retry.
@@ -383,6 +388,12 @@ export function PortalDocumentVault() {
 					<p className="muted">{error}</p>
 				</div>
 			) : null}
+
+			<OfficialDocuments
+				rows={officialRows({ schools: schoolApplications, docs: allDocs })}
+				released={documentsReleasedFor(application)}
+				holdReason={documentHoldReasonFor(application)}
+			/>
 
 			<section className="mt-4">
 				<div className="vault-list">

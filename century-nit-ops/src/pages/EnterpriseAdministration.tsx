@@ -1675,6 +1675,11 @@ function UsersAndRoles() {
 								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setCreatingRole(false)}>
 									Cancel
 								</button>
+								{newRoleDraft.permissions.length > 0 && !newRoleDraft.permissions.some((p) => (CAPABILITIES as readonly { id: string }[]).some((c) => c.id === p)) && (
+									<p className="muted text-xs" style={{ marginRight: "auto" }}>
+										This role can see pages but can't act on anything yet — add capabilities after creating it, or it stays read-only.
+									</p>
+								)}
 								<button type="submit" className="btn btn--primary" disabled={!newRoleDraft.name.trim() || !newRoleDraft.id.trim()}>
 									Create Role
 								</button>

@@ -1,6 +1,7 @@
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { opsRoles, opsUsers, settingsAudit } from "../db/schema.js";
+import { publishToUser } from "../worker/pubsub.js";
 import {
 	SYSTEM_ROLES,
 	ROLE_RANKS,
@@ -55,10 +56,33 @@ const ROLE_LABELS: Record<SystemRole, { name: string; description: string }> = {
 	},
 };
 
+/**
+ * Permissions changed: every open console refreshes its map at once, so a
+ * control never shows for a right that was just taken away (or hides one
+ * just granted). Fire-and-forget over each staff user's SSE channel.
+ */
+function broadcastRolesChanged(roleId: string): void {
+	(async () => {
+		try {
+			const rows = await db
+				.select({ userId: opsUsers.userId })
+				.from(opsUsers)
+				.where(eq(opsUsers.active, true));
+			for (const r of rows) {
+				if (r.userId) publishToUser(r.userId, { type: "roles.changed", roleId, at: new Date().toISOString() });
+			}
+		} catch {
+			// best-effort; the console also refreshes on focus and on an interval
+		}
+	})();
+}
+
 let cachedPermissions = new Map<string, string[]>();
 let cachedRanks = new Map<string, number>();
 let permissionsCacheLoadedAt = 0;
-const CACHE_TTL_MS = 30_000;
+// One indexed select on a tiny table: a short TTL keeps every process in
+// step with the editor without the broadcast having to reach it.
+const CACHE_TTL_MS = 10_000;
 
 /**
  * Ensures every built-in system role exists. Runs once at startup.
@@ -255,6 +279,7 @@ export async function createRole(input: {
 
 	rememberRole(created);
 	await auditRole(input.actor, created.id, null, created.permissions ?? []);
+	broadcastRolesChanged(created.id);
 
 	return {
 		id: created.id,
@@ -308,6 +333,7 @@ export async function updateRole(
 	if (input.permissions !== undefined) {
 		await auditRole(input.actor, id, existing.permissions ?? [], updated.permissions ?? []);
 	}
+	broadcastRolesChanged(id);
 
 	return {
 		id: updated.id,
@@ -347,4 +373,5 @@ export async function deleteRole(id: string, actor: RoleActor): Promise<void> {
 	await db.delete(opsRoles).where(eq(opsRoles.id, id));
 	cachedPermissions.delete(id);
 	await auditRole(actor, id, existing.permissions ?? [], null);
+	broadcastRolesChanged(id);
 }

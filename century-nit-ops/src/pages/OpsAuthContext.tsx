@@ -22,6 +22,7 @@ import {
 	getMfaEnrollment,
 	type SessionResponse,
 } from "../lib/api";
+import { useOpsSSE } from "../hooks/useChatStream";
 
 /* ─── Role Definitions ─── */
 
@@ -203,6 +204,31 @@ function staffToOpsUser(s: NonNullable<SessionResponse["staff"]>): OpsUser {
 		branch: s.branch ?? "",
 		avatar: s.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase(),
 	};
+}
+
+/**
+ * Keeps the permission map honest while a session is open: a push when a
+ * role is edited anywhere, a refresh when the window regains focus (a
+ * laptop woken from sleep), and a slow interval as the safety net. Mounted
+ * only while signed in, so the event stream is never opened on the login
+ * page.
+ */
+function PermissionsSync({ refresh }: { refresh: () => Promise<void> }) {
+	useOpsSSE((event) => {
+		if (event.type === "roles.changed") void refresh();
+	});
+	useEffect(() => {
+		const onVisible = () => {
+			if (document.visibilityState === "visible") void refresh();
+		};
+		document.addEventListener("visibilitychange", onVisible);
+		const timer = window.setInterval(() => void refresh(), 5 * 60_000);
+		return () => {
+			document.removeEventListener("visibilitychange", onVisible);
+			window.clearInterval(timer);
+		};
+	}, [refresh]);
+	return null;
 }
 
 export function OpsAuthProvider({ children }: { children: ReactNode }) {
@@ -397,6 +423,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				refreshPermissions,
 			}}
 		>
+			{opsUser && <PermissionsSync refresh={refreshPermissions} />}
 			{children}
 		</OpsAuthContext.Provider>
 	);

@@ -2551,7 +2551,7 @@ export type PreDepartureTask = {
 	doneAt?: string | null;
 	waivedReason?: string | null;
 	label: string;
-	detail: string;
+	detail?: string;
 	done: boolean;
 };
 

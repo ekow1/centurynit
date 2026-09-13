@@ -483,7 +483,7 @@ const AGENCY_MILESTONES = [
 	{ label: "Clearance", portion: "100%" },
 ];
 
-const PD_CATEGORIES: Record<PreDepartureTask["category"], { icon: string; label: string }> = {
+const PD_CATEGORIES: Record<NonNullable<PreDepartureTask["category"]>, { icon: string; label: string }> = {
 	travel: { icon: "\u2708", label: "Travel" },
 	accommodation: { icon: "\u2302", label: "Accommodation" },
 	documents: { icon: "\u2702", label: "Documents" },
@@ -641,7 +641,7 @@ function VisaTravelTab({ applicant }: { applicant: MockApplicant }) {
 					<p className="eyebrow mb-3">Pre-Departure Checklist</p>
 					<div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
 						{applicant.preDepartureTasks.map((task) => {
-							const cat = PD_CATEGORIES[task.category];
+							const cat = PD_CATEGORIES[task.category ?? "documents"];
 							return (
 								<div
 									key={task.id}

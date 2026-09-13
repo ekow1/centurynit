@@ -7229,3 +7229,142 @@ img.profile-monogram {
 .vdocs__st--fix {
 	text-decoration: underline;
 }
+
+/* ========== Complete — the closed file ========== */
+
+.jclosed {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	padding: 2.5rem clamp(1.25rem, 3vw, 2rem);
+	position: relative;
+}
+
+.jclosed .eyebrow {
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.jclosed__seal {
+	position: absolute;
+	top: 2rem;
+	right: 2rem;
+	width: 3.6rem;
+	height: 3.6rem;
+	border: 1.5px solid var(--accent-foreground);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 1.1rem;
+	font-weight: 700;
+}
+
+.jclosed__title {
+	font-size: clamp(1.8rem, 4vw, 2.4rem);
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	margin: 0.4rem 0 0.3rem;
+}
+
+.jclosed__lead {
+	color: rgba(255, 255, 255, 0.75);
+	font-size: var(--text-sm);
+	max-width: 36rem;
+}
+
+.jclosed__meta {
+	display: flex;
+	gap: 2.5rem;
+	flex-wrap: wrap;
+	margin-top: 1.8rem;
+	padding-top: 1.2rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.jclosed__k {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: rgba(255, 255, 255, 0.55);
+}
+
+.jclosed__v {
+	font-size: 1rem;
+	font-weight: 700;
+	margin-top: 0.2rem;
+}
+
+/* the journey recap — six sealed rows */
+.recap {
+	border: 1px solid var(--border-light);
+	background: var(--background);
+}
+
+.recap__row {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.85rem 1.1rem;
+	border-bottom: 1px solid var(--border-light);
+}
+
+.recap__row:last-child {
+	border-bottom: none;
+}
+
+.recap__seal {
+	width: 2rem;
+	height: 2rem;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+
+.recap__name {
+	font-weight: 600;
+	font-size: 0.9rem;
+	min-width: 9rem;
+}
+
+.recap__fact {
+	flex: 1;
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+}
+
+.recap__when {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+/* inline text-link button inside kv values (receipt downloads) */
+.jlink {
+	background: none;
+	border: none;
+	padding: 0;
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
+	color: inherit;
+}
+
+@media (max-width: 720px) {
+	.jclosed__seal {
+		position: static;
+		margin-top: 1rem;
+	}
+	.recap__name {
+		min-width: 0;
+	}
+	.recap__row {
+		flex-wrap: wrap;
+	}
+}

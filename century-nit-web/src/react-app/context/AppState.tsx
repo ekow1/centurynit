@@ -942,7 +942,7 @@ export function getPendingAction(
 			label: "Choose school",
 			title: "Accept the offer you are going with",
 			detail: `You hold ${admitted.length} admission offers. Accept one so your visa and departure are prepared for that school.`,
-			to: "/portal/tracking",
+			to: "/portal/application",
 		};
 	}
 

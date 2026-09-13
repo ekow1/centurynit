@@ -21,7 +21,7 @@ const STAGE_CTA: Partial<Record<ProcessStageId, { to: string; label: string }>> 
 	school_select: { to: "/portal/application", label: "Select schools" },
 	awaiting_invoice: { to: "/portal/application", label: "Awaiting invoice" },
 	application_invoice: { to: "/portal/application", label: "Pay invoice" },
-	school_tracking: { to: "/portal/tracking", label: "View applications" },
+	school_tracking: { to: "/portal/application", label: "View applications" },
 	visa_invoice: { to: "/portal/visa", label: "Pay visa invoice" },
 	visa: { to: "/portal/visa/tracking", label: "View visa" },
 	payment_execution: { to: "/portal/payment-execution", label: "Pay fee milestone" },

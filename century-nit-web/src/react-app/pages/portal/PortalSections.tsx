@@ -1167,7 +1167,7 @@ export function PortalJourney() {
 			case "enrol":
 				return current === "awaiting_handler" ? "/portal/awaiting-handler" : "/portal/package";
 			case "apply":
-				return chapterUnlocks.tracking ? "/portal/tracking" : "/portal/application";
+				return "/portal/application";
 			case "visa":
 				return "/portal/visa";
 			case "depart":

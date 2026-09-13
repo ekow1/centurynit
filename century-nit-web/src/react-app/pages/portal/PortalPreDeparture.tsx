@@ -10,6 +10,7 @@ import { documentsReleasedFor, documentHoldReasonFor } from "../../context/AppSt
 import { documentsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { meApi, ApiError } from "century-nit-core/api";
+import { PAYMENT_PLANS } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import type { ApiInvoice, TravelFlight } from "century-nit-shared";
 
@@ -170,13 +171,28 @@ function TravelAssistanceInner() {
 		? "Your request has been sent to our travel team. A travel officer will be assigned and will prepare your ticket invoice."
 		: `${ta.assignedOpsUserName ? `${ta.assignedOpsUserName} is` : "Your travel officer is"} finding your flight and preparing the ticket invoice. You'll be able to pay it here once it's ready.`;
 
+	// The band — the one thing this chapter needs right now.
+	const band = canComplete
+		? { title: "Everything is settled — close your file", detail: "Fee milestone paid, travel settled, checklist done. Completing hands you to post-arrival support.", cta: <Button variant="inverted" onClick={() => void handleComplete()} arrow>Complete my journey →</Button> }
+		: !feePaid
+			? { title: "Settle the fee milestone to release your documents", detail: "Your admission letter and visa documents release on payment — your ticket is issued after it.", cta: <Button to="/portal/payment-execution" variant="inverted" arrow>Pay the milestone →</Button> }
+			: status === "decision_pending" || status === "on_hold" || status === "declined"
+				? { title: "Tell us how you'd like to fly", detail: "One decision — the flight booking service is part of your package; the only invoice here is the ticket itself.", cta: null }
+				: showWaiting
+					? { title: "Your travel officer is finding your flight", detail: waitingLine, cta: null }
+					: tripDue
+						? { title: `Pay the ticket invoice — ${formatMoney(trip?.balanceCents ?? 0, "ghs")} due`, detail: "The airline ticket, at cost. Your officer books once it's paid.", cta: <Button variant="inverted" onClick={() => void payTicketing()} arrow>Pay now →</Button> }
+						: showBooked
+							? { title: "Flight booked — finish the checklist below", detail: ta?.booking?.confirmationCode ? `Keep ${ta.booking.confirmationCode} for check-in.` : "Keep the confirmation code for check-in.", cta: null }
+							: { title: "Departure in motion", detail: "Your officer updates this page as each piece settles.", cta: null };
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Travel assistance</p>
+					<p className="eyebrow">Chapter V · Departure</p>
 					<h1 className="page-title mt-1">
-						{destination ? `Departure · ${destination.universityName ?? "your school"}` : "Flight booking"}
+						Departure{destination ? ` · ${destination.universityName ?? "your school"}` : ""}
 					</h1>
 					{destination && (
 						<p className="mono muted mt-1" style={{ fontSize: "0.8rem" }}>
@@ -185,279 +201,307 @@ function TravelAssistanceInner() {
 								.join(" · ")}
 						</p>
 					)}
-					<p className="lead mt-2">
-						Your visa is sorted. Tell us how you'd like to handle your flight and we'll take it from
-						there. The flight booking service is already part of your package — the only invoice on
-						this page is for the airline ticket itself.
-					</p>
 				</div>
+				{ta?.assignedOpsUserName ? (
+					<p className="mono muted" style={{ fontSize: "0.7rem" }}>TRAVEL OFFICER · {ta.assignedOpsUserName.toUpperCase()}</p>
+				) : null}
 			</header>
 
-			{/* The one decision for this stage. Choosing "yes" is the applicant's
-				consent to travel assistance and what puts the case in front of the
-				travel team. */}
-			{!feePaid && (
-				<section className="mt-4">
-					<div className="card card--pad" style={{ borderColor: "var(--accent, #3b82f6)" }}>
-						<p className="eyebrow">Before your ticket</p>
-						<p className="mt-2" style={{ fontSize: "0.95rem" }}>
-							{application.paymentPlanId
-								? "Your pre-departure service fee milestone is due now that your visa is approved. Your ticket is issued once it's paid — you can still tell us how you'd like to book below."
-								: "Choose your payment plan and settle the pre-departure milestone; your ticket is issued once it's paid."}
-						</p>
-						<div className="row mt-3">
-							<Button to="/portal/payment-execution" variant="primary" arrow>
-								{application.paymentPlanId ? "Pay the fee milestone" : "Choose plan & pay"}
-							</Button>
-						</div>
-					</div>
-				</section>
-			)}
-
-			{showDecision && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Your decision</p>
-						<h2 className="mt-1" style={{ fontSize: "1.35rem" }}>How would you like to book your flight?</h2>
-						<div className="portal-grid portal-grid--3 mt-4">
-							<DecisionCard
-								title="Book with us"
-								description="We find the flight, you pay the ticket invoice here, and we book it for you."
-								icon="✈"
-								onClick={() => void handleDecision("yes")}
-								disabled={busy}
-								highlighted={ta?.decision === "yes"}
-							/>
-							<DecisionCard
-								title="Not now"
-								description="Put travel assistance on hold. Nothing is raised and nobody is assigned until you come back."
-								icon="⏸"
-								onClick={() => void handleDecision("hold")}
-								disabled={busy}
-								highlighted={ta?.decision === "hold"}
-							/>
-							<DecisionCard
-								title="I'll book myself"
-								description="Arrange your own flight. Your journey moves straight on to your payment plan."
-								icon="✕"
-								onClick={() => void handleDecision("no")}
-								disabled={busy}
-								highlighted={ta?.decision === "no"}
-							/>
-						</div>
-						{status === "on_hold" && (
-							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-								You're on hold. Pick an option above when you're ready.
-							</p>
-						)}
-						{status === "declined" && (
-							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-								You're booking your own flight. Choose "Book with us" if you'd like our help after all.
-							</p>
-						)}
-					</div>
-				</section>
-			)}
-
-			{/* Waiting on the travel team — one card, one line */}
-			{showWaiting && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">{ta?.assignedOpsUserId ? "Your travel officer is on it" : "Request received"}</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>{waitingLine}</p>
-					</div>
-				</section>
-			)}
-
-			{/* Ticket invoice — the same card as every other invoice */}
-			{showInvoice && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						{ta?.flight && !showBooked && (
-							<div className="mb-3">
-								<p className="eyebrow">Your flight</p>
-								<FlightRows flight={ta.flight} />
-							</div>
-						)}
-						{trip ? (
-							<InvoiceCard
-								title="Ticket invoice"
-								invoice={trip}
-								actions={
-									trip.status === "paid" ? (
-										<Button variant="secondary" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
-											Download receipt
-										</Button>
-									) : tripDue ? (
-										<Button variant="primary" onClick={() => void payTicketing()} arrow>
-											Pay {formatMoney(trip.balanceCents, "ghs")}
-										</Button>
-									) : null
-								}
-								hint={
-									trip.status === "paid"
-										? showBooked
-											? "Paid."
-											: "Paid — your travel officer is booking the flight and will post the confirmation here."
-										: trip.status === "proforma"
-											? "Your ticket invoice is being issued. You'll be able to pay it here shortly."
-											: undefined
-								}
-							/>
-						) : (
-							<>
-								<p className="eyebrow">Ticket invoice</p>
-								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Being prepared by your travel officer.</p>
-							</>
-						)}
-					</div>
-				</section>
-			)}
-
-			{/* Booked — the flight as booked, with its PNR */}
-			{showBooked && ta?.booking && (
-				<section className="mt-4">
-					<div className="card card--pad">
-						<p className="eyebrow">Flight booked 🛫</p>
-						<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>
-							Your flight is booked. Keep the confirmation code for check-in.
-						</p>
-						<div className="mt-3">
-							<FlightRows flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
-						</div>
-					</div>
-				</section>
-			)}
-
-			{/* What the milestone releases — the letter and the visa documents, filed and waiting. */}
-			<OfficialDocuments
-				rows={officialRows({ schools: schoolApplications, docs: officialDocs })}
-				released={documentsReleasedFor(application)}
-				holdReason={documentHoldReasonFor(application)}
-			/>
-
-			{/* Before you fly — the facts the officer recorded, and the days left. */}
-			{(flyDays !== null || hasFacts) && (
-				<div className="card card--pad mt-5" style={{ border: flyDays !== null && flyDays >= 0 && flyDays <= 14 ? "2px solid var(--foreground)" : undefined }}>
-					<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
-						<p className="eyebrow">Before you fly</p>
-						{flyDays !== null && (
-							<span className="mono" style={{ fontSize: "0.85rem", fontWeight: 700 }}>
-								{flyDays > 0 ? `${flyDays} day${flyDays === 1 ? "" : "s"} to go` : flyDays === 0 ? "You fly today" : "Flown"}
-							</span>
-						)}
-					</div>
-					{flightAt && (
-						<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
-							{when(flightAt)}
-						</p>
-					)}
-					<ul className="portal-snapshot mt-3">
-						{dd.reportBy && (
-							<li>
-								<span>Report to your school by</span>
-								<strong>
-									{day(dd.reportBy)}
-									{reportDays !== null && reportDays >= 0 ? ` · ${reportDays} day${reportDays === 1 ? "" : "s"}` : ""}
-								</strong>
-							</li>
-						)}
-						{dd.orientationAt && (
-							<li>
-								<span>Orientation</span>
-								<strong>{day(dd.orientationAt)}</strong>
-							</li>
-						)}
-						{dd.briefingAt && (
-							<li>
-								<span>Pre-departure briefing</span>
-								<strong>{when(dd.briefingAt)}</strong>
-							</li>
-						)}
-						{dd.pickupBy && (
-							<li>
-								<span>Airport pickup</span>
-								<strong>
-									{dd.pickupBy}
-									{dd.pickupNote ? ` · ${dd.pickupNote}` : ""}
-								</strong>
-							</li>
-						)}
-						{dd.accommodationAddress && (
-							<li>
-								<span>Accommodation</span>
-								<strong>
-									{dd.accommodationAddress}
-									{dd.accommodationMoveInAt ? ` · from ${day(dd.accommodationMoveInAt)}` : ""}
-								</strong>
-							</li>
-						)}
-						{dd.emergencyContactName && (
-							<li>
-								<span>Emergency contact abroad</span>
-								<strong>
-									{dd.emergencyContactName}
-									{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}
-									{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}
-								</strong>
-							</li>
-						)}
-					</ul>
-					{!hasFacts && <p className="muted mt-2" style={{ fontSize: "0.85rem" }}>Your consultant adds the arrival details here as they are settled.</p>}
+			{/* You are here */}
+			<div className="journey-now mt-4">
+				<div>
+					<p className="eyebrow">Chapter V · Departure — you are here</p>
+					<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>{band.title}</p>
+					<p className="journey-now__detail">{band.detail}</p>
 				</div>
-			)}
-
-			{/* The checklist — one list with the departure officer; the client ticks theirs. */}
-			<div className="mt-5">
-				<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
+				{band.cta}
 			</div>
 
-			{/* Travel is settled — the plan chapter is next */}
-			{settled && (
-				<div className="card card--pad mt-5 next-action">
-					<p className="eyebrow">Next step</p>
-					<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
-						{canComplete
-							? "Everything is settled 🛫"
-							: showBooked
-								? "You're set to fly 🛫"
-								: status === "declined"
-									? "Travel arranged independently"
-									: "Travel on hold"}
-					</p>
-					<p className="muted mt-1">
-						{canComplete
-							? "Your fee milestone is paid, your travel is settled and your checklist is done. Complete your journey and we'll hand over to post-arrival support."
-							: !feePaid
-								? "Settle your pre-departure fee milestone to finish."
-								: !checklistDone
-									? "Work through your pre-departure checklist to finish."
-									: "Travel assistance is paused. You can resume it above whenever you're ready."}
-					</p>
-					<div className="row mt-3">
-						{canComplete ? (
-							<Button className="btn btn--primary" onClick={() => void handleComplete()}>
-								Complete my journey →
-							</Button>
-						) : !feePaid ? (
-							<Button to="/portal/payment-execution" variant="primary" arrow>
-								Pay the fee milestone
-							</Button>
+			<div className="psplit mt-6">
+				<div>
+					{/* 1 · the decision */}
+					<section className="mb-5">
+						<div className="psec">
+							<span className={`psec__no${!showDecision ? " psec__no--done" : ""}`}>{showDecision ? "1" : "✓"}</span>
+							<span className="psec__title">How you're flying</span>
+							<span className="psec__hint">
+								{status === "decision_pending" ? "your call" : status === "on_hold" ? "on hold" : status === "declined" ? "own booking" : "decided"}
+							</span>
+						</div>
+						{showDecision ? (
+							<>
+								<div className="portal-grid portal-grid--3">
+									<button type="button" className={`pick${ta?.decision === "yes" ? " pick--on" : ""}`} onClick={() => void handleDecision("yes")} disabled={busy}>
+										<span style={{ fontWeight: 700, fontSize: "0.92rem" }}>Book with us</span>
+										<span className="muted" style={{ display: "block", fontSize: "0.78rem", marginTop: "0.4rem", lineHeight: 1.5 }}>We find the flight, you pay the ticket invoice here, and we book it for you.</span>
+									</button>
+									<button type="button" className={`pick${ta?.decision === "hold" ? " pick--on" : ""}`} onClick={() => void handleDecision("hold")} disabled={busy}>
+										<span style={{ fontWeight: 700, fontSize: "0.92rem" }}>Not now</span>
+										<span className="muted" style={{ display: "block", fontSize: "0.78rem", marginTop: "0.4rem", lineHeight: 1.5 }}>Put travel assistance on hold. Nothing is raised and nobody is assigned until you come back.</span>
+									</button>
+									<button type="button" className={`pick${ta?.decision === "no" ? " pick--on" : ""}`} onClick={() => void handleDecision("no")} disabled={busy}>
+										<span style={{ fontWeight: 700, fontSize: "0.92rem" }}>I'll book myself</span>
+										<span className="muted" style={{ display: "block", fontSize: "0.78rem", marginTop: "0.4rem", lineHeight: 1.5 }}>Arrange your own flight. Your journey moves straight on.</span>
+									</button>
+								</div>
+								{status === "on_hold" && (
+									<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>You're on hold. Pick an option above when you're ready.</p>
+								)}
+								{status === "declined" && (
+									<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>You're booking your own flight. Choose "Book with us" if you'd like our help after all.</p>
+								)}
+							</>
 						) : (
-							<Button to="/portal/journey" variant="ghost">
-								See your journey
-							</Button>
+							<p className="mono muted" style={{ fontSize: "0.8rem" }}>
+								Booked with Century NIT — your travel officer is on the file.
+							</p>
 						)}
+					</section>
+
+					{/* 2 · the flight — waiting, invoice, or booked */}
+					<section className="mb-5">
+						<div className="psec">
+							<span className={`psec__no${showBooked ? " psec__no--done" : ""}`}>{showBooked ? "✓" : "2"}</span>
+							<span className="psec__title">Your flight</span>
+							<span className="psec__hint">
+								{showBooked ? "booked" : trip?.status === "paid" ? "ticket paid · booking" : tripDue ? "invoice due" : showWaiting ? "with your officer" : "not started"}
+							</span>
+						</div>
+						{showWaiting && (
+							<div className="sharp-card" style={{ borderLeft: "4px solid var(--foreground)" }}>
+								<p className="eyebrow">{ta?.assignedOpsUserId ? "Your travel officer is on it" : "Request received"}</p>
+								<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>{waitingLine}</p>
+							</div>
+						)}
+						{showInvoice && (
+							<div className="sharp-card">
+								{ta?.flight && !showBooked && (
+									<div className="mb-3">
+										<FlightRows flight={ta.flight} />
+									</div>
+								)}
+								{trip ? (
+									<InvoiceCard
+										title="Ticket invoice"
+										invoice={trip}
+										actions={
+											trip.status === "paid" ? (
+												<Button variant="secondary" onClick={() => downloadReceipt(trip, "Ticket invoice")}>
+													Download receipt
+												</Button>
+											) : tripDue ? (
+												<Button variant="primary" onClick={() => void payTicketing()} arrow>
+													Pay {formatMoney(trip.balanceCents, "ghs")}
+												</Button>
+											) : null
+										}
+										hint={
+											trip.status === "paid"
+												? showBooked
+													? "Paid."
+													: "Paid — your travel officer is booking the flight and will post the confirmation here."
+												: trip.status === "proforma"
+													? "Your ticket invoice is being issued. You'll be able to pay it here shortly."
+													: undefined
+										}
+									/>
+								) : (
+									<>
+										<p className="eyebrow">Ticket invoice</p>
+										<p className="muted mt-2" style={{ fontSize: "0.9rem" }}>Being prepared by your travel officer.</p>
+									</>
+								)}
+							</div>
+						)}
+						{showBooked && ta?.booking && (
+							<div className="sharp-card" style={{ border: "1.5px solid var(--border)", boxShadow: "inset 4px 0 0 var(--foreground)" }}>
+								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+									<p className="eyebrow">Booked · confirmed</p>
+									<span className="portal-pill portal-pill--solid">Ticketed</span>
+								</div>
+								<div className="mt-3">
+									<FlightRows flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
+								</div>
+								<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>Keep the confirmation code for check-in.</p>
+							</div>
+						)}
+						{!showWaiting && !showInvoice && !showBooked && (
+							<p className="mono muted" style={{ fontSize: "0.8rem" }}>Choose how you'd like to fly above — this section fills in from there.</p>
+						)}
+					</section>
+
+					{/* 3 · the milestone — the release */}
+					<section className="mb-5">
+						<div className="psec">
+							<span className={`psec__no${feePaid ? " psec__no--done" : ""}`}>{feePaid ? "✓" : "3"}</span>
+							<span className="psec__title">Fee milestone</span>
+							<span className="psec__hint">{feePaid ? "settled" : "due · the last Century NIT invoice"}</span>
+						</div>
+						{feePaid ? (
+							<div className="sharp-card">
+								<p className="mono muted" style={{ fontSize: "0.8rem" }}>
+									SERVICE FEE SETTLED{application.agencySettledAt ? ` · ${day(application.agencySettledAt)}` : ""} — DOCUMENTS RELEASED TO YOUR VAULT
+								</p>
+							</div>
+						) : (
+							<div className="sharp-card" style={{ border: "1.5px solid var(--border)", boxShadow: "inset 4px 0 0 var(--foreground)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+								<div>
+									<p style={{ fontWeight: 700 }}>Pre-departure milestone — releases your admission letter &amp; visa documents</p>
+									<p className="mono muted" style={{ fontSize: "0.68rem", marginTop: "0.3rem" }}>
+										{application.paymentPlanId ? "SERVICE FEE · AGREED AT PACKAGE SELECTION" : "CHOOSE YOUR PAYMENT PLAN FIRST"}
+									</p>
+								</div>
+								<Button to="/portal/payment-execution" variant="primary" arrow>
+									{application.paymentPlanId ? "Pay the fee milestone" : "Choose plan & pay"}
+								</Button>
+							</div>
+						)}
+					</section>
+
+					{/* 4 · documents the milestone releases */}
+					<section className="mb-5">
+						<div className="psec">
+							<span className="psec__no">4</span>
+							<span className="psec__title">Your documents</span>
+							<span className="psec__hint">filed by Century NIT</span>
+						</div>
+						<OfficialDocuments
+							rows={officialRows({ schools: schoolApplications, docs: officialDocs })}
+							released={documentsReleasedFor(application)}
+							holdReason={documentHoldReasonFor(application)}
+						/>
+					</section>
+
+					{/* 5 · the shared checklist */}
+					<section className="mb-5">
+						<div className="psec">
+							<span className={`psec__no${checklistDone ? " psec__no--done" : ""}`}>{checklistDone ? "✓" : "5"}</span>
+							<span className="psec__title">Before you fly</span>
+							<span className="psec__hint">yours + your officer's</span>
+						</div>
+						<PreDepartureChecklist tasks={preDepartureTasks} onToggle={togglePreDepartureTask} locked={Boolean(application.completedAt)} />
+					</section>
+
+					{/* 6 · on arrival — the facts the officer recorded */}
+					{(flyDays !== null || hasFacts) && (
+						<section className="mb-5">
+							<div className="psec">
+								<span className="psec__no">6</span>
+								<span className="psec__title">On arrival</span>
+								<span className="psec__hint">recorded by your officer</span>
+							</div>
+							<div className="sharp-card">
+								{flightAt && (
+									<p className="display" style={{ fontSize: "1.15rem", marginBottom: "0.6rem" }}>
+										{when(flightAt)}
+									</p>
+								)}
+								{dd.reportBy && (
+									<div className="pkv"><span className="pkv__k">Report to your school by</span><span className="pkv__v">{day(dd.reportBy)}{reportDays !== null && reportDays >= 0 ? ` · ${reportDays} day${reportDays === 1 ? "" : "s"}` : ""}</span></div>
+								)}
+								{dd.orientationAt && (
+									<div className="pkv"><span className="pkv__k">Orientation</span><span className="pkv__v">{day(dd.orientationAt)}</span></div>
+								)}
+								{dd.briefingAt && (
+									<div className="pkv"><span className="pkv__k">Pre-departure briefing</span><span className="pkv__v">{when(dd.briefingAt)}</span></div>
+								)}
+								{dd.pickupBy && (
+									<div className="pkv"><span className="pkv__k">Airport pickup</span><span className="pkv__v">{dd.pickupBy}{dd.pickupNote ? ` · ${dd.pickupNote}` : ""}</span></div>
+								)}
+								{dd.accommodationAddress && (
+									<div className="pkv"><span className="pkv__k">Accommodation</span><span className="pkv__v">{dd.accommodationAddress}{dd.accommodationMoveInAt ? ` · from ${day(dd.accommodationMoveInAt)}` : ""}</span></div>
+								)}
+								{dd.emergencyContactName && (
+									<div className="pkv"><span className="pkv__k">Emergency contact</span><span className="pkv__v">{dd.emergencyContactName}{dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}{dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}</span></div>
+								)}
+								{!hasFacts && <p className="muted" style={{ fontSize: "0.85rem" }}>Your consultant adds the arrival details here as they are settled.</p>}
+							</div>
+						</section>
+					)}
+
+					{/* travel is settled — close the file */}
+					{settled && !canComplete && (
+						<div className="sharp-card next-action">
+							<p className="eyebrow">Next step</p>
+							<p className="display mt-2" style={{ fontSize: "1.25rem" }}>
+								{showBooked ? "You're set to fly" : status === "declined" ? "Travel arranged independently" : "Travel on hold"}
+							</p>
+							<p className="muted mt-1">
+								{!feePaid
+									? "Settle your pre-departure fee milestone to finish."
+									: !checklistDone
+										? "Work through your pre-departure checklist to finish."
+										: "Travel assistance is paused. You can resume it above whenever you're ready."}
+							</p>
+							<div className="row mt-3">
+								{!feePaid ? (
+									<Button to="/portal/payment-execution" variant="primary" arrow>
+										Pay the fee milestone
+									</Button>
+								) : (
+									<Button to="/portal/journey" variant="ghost">
+										See your journey
+									</Button>
+								)}
+							</div>
+						</div>
+					)}
+				</div>
+
+				{/* the rail — countdown, money, officer, what happens after */}
+				<div className="prail">
+					{flyDays !== null && (
+						<div className="sharp-card sharp-card--key">
+							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Countdown</p>
+							<p style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "0.3rem" }}>
+								{flyDays > 0 ? `${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "Today" : "Flown"}
+							</p>
+							<p className="mono" style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", marginTop: "0.15rem" }}>
+								{flightAt ? `TO ${when(flightAt)?.toUpperCase() ?? ""}` : ""}
+							</p>
+						</div>
+					)}
+
+					<div className="sharp-card">
+						<p className="eyebrow">Money this chapter</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv">
+								<span className="pkv__k">Ticket</span>
+								<span className="pkv__v">{trip ? `${formatMoney(trip.subtotalCents, "ghs")} · ${trip.status === "paid" ? "paid" : trip.status}` : "not raised"}</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Fee milestone</span>
+								<span className="pkv__v">{feePaid ? "settled" : "due"}</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Plan</span>
+								<span className="pkv__v">{application.paymentPlanId ? PAYMENT_PLANS.find((p) => p.id === application.paymentPlanId)?.name ?? application.paymentPlanId : "not chosen"}</span>
+							</div>
+						</div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">Your travel officer</p>
+						{ta?.assignedOpsUserName ? (
+							<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{ta.assignedOpsUserName}</p>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+								Assigned when you choose "Book with us" — usually same day.
+							</p>
+						)}
+						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
+							Message through the chat widget, bottom right.
+						</p>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">After landing</p>
+						<p className="muted" style={{ fontSize: "var(--text-sm)", lineHeight: 1.6, marginTop: "0.5rem" }}>
+							Post-arrival support continues — check in when you land, enrolment week, and any issues in
+							your first month. Completing this chapter closes your file.
+						</p>
 					</div>
 				</div>
-			)}
-
-			<div className="card card--pad mt-5">
-				<p className="eyebrow">Need help?</p>
-				<p className="muted mt-2">
-					Message your consultant through the chat widget at the bottom right of the portal if you
-					have questions about your flight or invoice.
-				</p>
 			</div>
 		</div>
 	);
@@ -488,48 +532,6 @@ function FlightRows({ flight, confirmationCode }: { flight: TravelFlight; confir
 				</p>
 			)}
 		</div>
-	);
-}
-
-function DecisionCard({
-	title,
-	description,
-	icon,
-	onClick,
-	disabled,
-	highlighted,
-}: {
-	title: string;
-	description: string;
-	icon: string;
-	onClick: () => void;
-	disabled?: boolean;
-	highlighted?: boolean;
-}) {
-	return (
-		<button
-			type="button"
-			onClick={onClick}
-			disabled={disabled}
-			style={{
-				textAlign: "left",
-				cursor: disabled ? "wait" : "pointer",
-				padding: "1.25rem",
-				borderRadius: "8px",
-				border: highlighted ? "2px solid var(--foreground)" : "1px solid var(--border)",
-				background: highlighted ? "var(--accent-light, transparent)" : "transparent",
-				display: "flex",
-				flexDirection: "column",
-				gap: "0.5rem",
-				fontFamily: "inherit",
-			}}
-		>
-			<span style={{ fontSize: "1.5rem" }}>{icon}</span>
-			<span style={{ fontWeight: 600, fontSize: "0.95rem" }}>{title}</span>
-			<span className="muted" style={{ fontSize: "0.82rem" }}>
-				{description}
-			</span>
-		</button>
 	);
 }
 

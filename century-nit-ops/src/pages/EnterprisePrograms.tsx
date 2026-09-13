@@ -307,6 +307,19 @@ export function EnterprisePrograms() {
 									<input className="input" type="text" value={editingProg.tuition || ""} onChange={(e) => setEditingProg({ ...editingProg, tuition: e.target.value })} />
 								</label>
 							</div>
+							<label className="field">
+								<span className="field-label">Application fee override (USD) — leave blank to charge the university's fee</span>
+								<input
+									className="input"
+									inputMode="decimal"
+									value={editingProg.applicationFeeCents != null ? String(editingProg.applicationFeeCents / 100) : ""}
+									onChange={(e) => {
+										const raw = e.target.value.trim();
+										const n = Number(raw.replace(/[^0-9.]/g, ""));
+										setEditingProg({ ...editingProg, applicationFeeCents: raw === "" ? null : Number.isFinite(n) ? Math.round(n * 100) : null });
+									}}
+								/>
+							</label>
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
 								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingProg(null)} disabled={saving}>Cancel</button>
 								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>

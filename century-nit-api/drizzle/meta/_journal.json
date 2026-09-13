@@ -575,6 +575,13 @@
       "when": 1789600010000,
       "tag": "0083_invoice_raised_by",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1789600011000,
+      "tag": "0084_fee_catalogue",
+      "breakpoints": true
     }
   ]
 }

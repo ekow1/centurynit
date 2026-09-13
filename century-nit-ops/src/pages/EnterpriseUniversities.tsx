@@ -210,12 +210,13 @@ export function EnterpriseUniversities() {
 											<th style={{ padding: "1rem" }}>City</th>
 											<th style={{ padding: "1rem" }}>Type</th>
 											<th style={{ padding: "1rem" }}>Acceptance</th>
+											<th style={{ padding: "1rem" }} title="The university's own fee — paid on the client's behalf, at cost">Application fee</th>
 											{canEditUniversities && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
 										</tr>
 									</thead>
 									<tbody>
 										{filteredUnis.length === 0 ? (
-											<tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center" }} className="muted">No universities found.</td></tr>
+											<tr><td colSpan={7} style={{ padding: "2rem", textAlign: "center" }} className="muted">No universities found.</td></tr>
 										) : filteredUnis.map((uni) => (
 											<tr key={uni.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
 												<td style={{ padding: "1rem" }}>
@@ -226,6 +227,9 @@ export function EnterpriseUniversities() {
 												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.city}</td>
 												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.type}</td>
 												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{uni.acceptance}</td>
+												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
+													{uni.applicationFeeCents ? `$${(uni.applicationFeeCents / 100).toLocaleString("en-US")}` : <span className="muted">not set</span>}
+												</td>
 												{canEditUniversities && (
 													<td style={{ padding: "1rem", textAlign: "right" }}>
 														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingUni(uni)}>Edit</button>
@@ -325,6 +329,19 @@ export function EnterpriseUniversities() {
 									<input className="input" type="text" value={editingUni.ranking || ""} onChange={(e) => setEditingUni({ ...editingUni, ranking: e.target.value })} />
 								</label>
 							</div>
+							<label className="field">
+								<span className="field-label">Application fee (USD) — the university's own fee, paid on the client's behalf at cost</span>
+								<input
+									className="input"
+									inputMode="decimal"
+									value={editingUni.applicationFeeCents != null ? String(editingUni.applicationFeeCents / 100) : ""}
+									onChange={(e) => {
+										const n = Number(e.target.value.replace(/[^0-9.]/g, ""));
+										setEditingUni({ ...editingUni, applicationFeeCents: e.target.value.trim() === "" ? 0 : Number.isFinite(n) ? Math.round(n * 100) : 0 });
+									}}
+									placeholder="0 when the university charges nothing"
+								/>
+							</label>
 							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
 								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingUni(null)} disabled={saving}>Cancel</button>
 								<button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>

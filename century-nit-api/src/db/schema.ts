@@ -2076,6 +2076,9 @@ export const destinations = pgTable("destinations", {
 	id: text("id").primaryKey(), // e.g. "ca", "uk"
 	name: text("name").notNull(),
 	region: text("region").notNull(),
+	/** The embassy's visa fee and the visa centre's biometrics fee — paid on the client's behalf, at cost. */
+	visaFeeCents: integer("visa_fee_cents").notNull().default(0),
+	biometricsFeeCents: integer("biometrics_fee_cents").notNull().default(0),
 	tagline: text("tagline"),
 	description: text("description"),
 	highlights: jsonb("highlights").$type<string[]>(), // Array of strings
@@ -2092,6 +2095,8 @@ export const catalogUniversities = pgTable("catalog_universities", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),
 	destinationId: text("destination_id").references(() => destinations.id),
+	/** The university's own application fee — paid on the client's behalf, at cost. */
+	applicationFeeCents: integer("application_fee_cents").notNull().default(0),
 	city: text("city"),
 	ranking: text("ranking"),
 	type: text("type"),
@@ -2108,6 +2113,8 @@ export const catalogPrograms = pgTable("catalog_programs", {
 	id: text("id").primaryKey(),
 	name: text("name").notNull(),
 	universityId: text("university_id").references(() => catalogUniversities.id),
+	/** Overrides the university's application fee for this programme; null means "as the university". */
+	applicationFeeCents: integer("application_fee_cents"),
 	level: text("level"), // Undergraduate, Postgraduate, etc.
 	field: text("field"), // STEM, Arts, etc.
 	duration: text("duration"),
@@ -2221,3 +2228,28 @@ export const caseAssignments = pgTable(
 			.where(sql`status = 'active'`),
 	}),
 );
+
+/* ── Fee items ──────────────────────────────────────────────────────────── */
+
+export const feeKindEnum = pgEnum("fee_kind", ["century", "pass_through"]);
+
+/**
+ * Century's own fees beyond the package (the consultation, add-ons) and the
+ * optional at-cost items recovered on the client's behalf. Tariffs that
+ * belong to a country or a school live on those catalogue rows instead.
+ */
+export const feeItems = pgTable("fee_items", {
+	key: text("key").primaryKey(),
+	kind: feeKindEnum("kind").notNull(),
+	chapter: text("chapter").notNull(),
+	name: text("name").notNull(),
+	clientLabel: text("client_label").notNull(),
+	description: text("description"),
+	amountCents: integer("amount_cents").notNull().default(0),
+	/** Offered as a tick-box when raising or approving, rather than added on its own. */
+	optional: boolean("optional").notNull().default(false),
+	active: boolean("active").notNull().default(true),
+	sortOrder: integer("sort_order").notNull().default(0),
+	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

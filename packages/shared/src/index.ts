@@ -19,5 +19,6 @@ export * from "./schemas/portal.js";
 export * from "./scheduling.js";
 
 export * from "./schemas/catalog.js";
+export * from "./schemas/fees.js";
 export * from "./journey.js";
 export * from "./labels.js";

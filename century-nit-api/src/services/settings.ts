@@ -65,6 +65,8 @@ export type SettingKey =
 	| "HOUSING_ASSISTANCE_FEE_CENTS"
 	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS"
 	| "PLATFORM_EXCHANGE_RATE"
+	| "SERVICE_FEE_DEPOSIT_PERCENT"
+	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
 	| string;
 
 
@@ -229,10 +231,22 @@ export const SETTING_DEFS: Record<
 			"Server-side Paystack key used to open and verify applicant invoice checkouts. Starts with sk_live_ or sk_test_.",
 	},
 	PLATFORM_EXCHANGE_RATE: {
-		label: "GHS → USD Exchange Rate",
-		group: "Payments",
+		label: "Exchange rate (GHS per USD)",
+		group: "Fee Schedule",
 		secret: false,
-		description: "Rate used to convert GHS gateway amounts to USD for receipts. Default: 15.0.",
+		description: "The rate the client is charged at and receipts convert at. Default: 15.0.",
+	},
+	SERVICE_FEE_DEPOSIT_PERCENT: {
+		label: "Service fee · deposit %",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Share of the service fee due as the deposit. Default: 10.",
+	},
+	SERVICE_FEE_PRE_DEPARTURE_PERCENT: {
+		label: "Service fee · pre-departure %",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Share of the service fee due after the visa, before travel. The rest is due after arrival. Default: 50.",
 	},
 	STRIPE_SECRET_KEY: {
 		label: "Stripe Secret Key",

@@ -261,6 +261,7 @@ app.route(`${API_PREFIX}/fees`, feesRouter);
 	{ name: "Schools", description: "School-application management and scholarships." },
 	{ name: "Payments", description: "Paystack checkout initiation, verification and webhooks." },
 	{ name: "Roles", description: "Staff role definitions and permissions." },
+	{ name: "Fees", description: "The fee catalogue — Century's items, the destinations' visa tariffs, the exchange rate and the service-fee split." },
 	{ name: "CRM Leads", description: "Lead capture, events and pipeline management." },
 	{
 		name: "Client Directory & Access Control",

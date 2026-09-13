@@ -4,6 +4,9 @@ export const CatalogDestinationSchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	region: z.string(),
+	/** The embassy's visa fee and the visa centre's biometrics fee — paid on the client's behalf, at cost. */
+	visaFeeCents: z.number().int().min(0).optional(),
+	biometricsFeeCents: z.number().int().min(0).optional(),
 	tagline: z.string().nullable().optional(),
 	description: z.string().nullable().optional(),
 	highlights: z.array(z.string()).nullable().optional(),
@@ -25,6 +28,8 @@ export const CatalogUniversitySchema = z.object({
 	id: z.string(),
 	name: z.string(),
 	destinationId: z.string().nullable().optional(),
+	/** The university's own application fee — paid on the client's behalf, at cost. */
+	applicationFeeCents: z.number().int().min(0).optional(),
 	city: z.string().nullable().optional(),
 	ranking: z.string().nullable().optional(),
 	type: z.string().nullable().optional(),
@@ -51,6 +56,8 @@ export const CatalogProgramSchema = z.object({
 	duration: z.string().nullable().optional(),
 	tuition: z.string().nullable().optional(),
 	tuitionUsd: z.number().nullable().optional(),
+	/** Overrides the university's application fee for this programme; null means "as the university". */
+	applicationFeeCents: z.number().int().min(0).nullable().optional(),
 	intake: z.array(z.string()).nullable().optional(),
 	applicationDeadline: z.string().nullable().optional(),
 	description: z.string().nullable().optional(),

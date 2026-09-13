@@ -3,7 +3,6 @@ import { Suspense, lazy, useEffect, type ComponentType } from "react";
 import { OpsAuthProvider, useOpsAuth, ROLE_HOME } from "./pages/OpsAuthContext";
 import { OpsRequireAuth, OpsRequireModule } from "./pages/OpsRequireAuth";
 import { OpsStateProvider } from "./pages/OpsStateContext";
-import { FeeSettingsProvider } from "./hooks/FeeSettingsContext";
 
 /**
  * Operations Center — a standalone app deployed as its own Cloudflare
@@ -103,7 +102,6 @@ export default function App() {
 		<BrowserRouter>
 			<OpsAuthProvider>
 				<OpsStateProvider>
-					<FeeSettingsProvider>
 					<ScrollToTop />
 					<a href="#main-content" className="skip-link">
 						Skip to content
@@ -194,7 +192,6 @@ export default function App() {
 							</Routes>
 						</Suspense>
 					</main>
-					</FeeSettingsProvider>
 				</OpsStateProvider>
 			</OpsAuthProvider>
 		</BrowserRouter>

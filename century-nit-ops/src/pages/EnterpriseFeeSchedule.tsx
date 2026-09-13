@@ -1,656 +1,362 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_PREFIX } from "century-nit-shared";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+	API_PREFIX,
+	FEE_KIND_LABELS,
+	type DestinationTariff,
+	type FeeCatalogue,
+	type FeeItem,
+	type UpdateFeeItem,
+} from "century-nit-shared";
+import { Sheet, StatusPill } from "century-nit-core/ui";
 import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { Toast } from "./OpsDialogs";
-import { GHS_PER_USD } from "./currency";
-import { useFeeSettings, type InvoiceMode } from "../hooks/FeeSettingsContext";
 
-interface SettingView {
-	key: string;
-	label: string;
-	group: string;
-	secret: boolean;
-	description: string;
-	valueMasked: string | null;
-	source: "database" | "env" | "unset";
-	updatedAt: string | null;
-}
+/**
+ * The fee schedule — what finance owns, and only that.
+ *
+ * Century's fee is the package's service fee (edited under Packages) plus
+ * the items here: the consultation and a short list of add-ons. Everything
+ * else the client pays through Century is a third-party cost recovered at
+ * cost: a university's application fee (on the university), a country's
+ * visa and biometrics fees (below), and the optional at-cost items. The
+ * exchange rate and the milestone split close the page — every surface
+ * prices from this same payload (`GET /api/v1/fees`).
+ */
 
-export interface FeeItem {
-	key: string;
-	title: string;
-	category: string;
-	description: string;
-	defaultCents: number;
-	billingStage: string;
-	badge: string;
-}
+const CHAPTER_LABELS: Record<string, string> = { consult: "Consultation", apply: "Applications", visa: "Visa", depart: "Departure" };
 
-export const FEE_DEFINITIONS: FeeItem[] = [
-	{
-		key: "CONSULTATION_FEE_CENTS",
-		title: "Initial Advisory Consultation",
-		category: "Consultations",
-		description: "Standard 45-minute comprehensive university and visa pathway evaluation session.",
-		defaultCents: 7,
-		billingStage: "Upon Booking / Pre-session",
-		badge: "Advisory",
-	},
-	{
-		key: "APP_BASE_FEE_CENTS",
-		title: "University Application Base Fee",
-		category: "Admissions & Processing",
-		description: "Initial application setup, credential review, and admissions portal filing.",
-		defaultCents: 7,
-		billingStage: "Upon Application Initiation",
-		badge: "Admissions",
-	},
-	{
-		key: "APP_PER_SCHOOL_FEE_CENTS",
-		title: "Additional University Submission",
-		category: "Admissions & Processing",
-		description: "Supplementary fee per each additional university beyond the first institution.",
-		defaultCents: 7,
-		billingStage: "Per Additional Institution",
-		badge: "Per-School",
-	},
-	{
-		key: "APP_DOC_VERIFY_FEE_CENTS",
-		title: "Official Document Verification & Notarization",
-		category: "Admissions & Processing",
-		description: "Transcript notarization, WES/credential evaluation assistance, and apostille verification.",
-		defaultCents: 7,
-		billingStage: "Pre-submission Review",
-		badge: "Verification",
-	},
-	{
-		key: "APP_MATCH_REVIEW_FEE_CENTS",
-		title: "Program Matching & Eligibility Audit",
-		category: "Admissions & Processing",
-		description: "Deep academic transcript evaluation and tailored scholarship match analysis.",
-		defaultCents: 7,
-		billingStage: "Advisory Stage",
-		badge: "Matching",
-	},
-	{
-		key: "VISA_BASE_FEE_CENTS",
-		title: "Visa Filing & Documentation Guidance",
-		category: "Visa & Immigration",
-		description: "Embassy filing package preparation, CAS review, financial statement verification, and interview prep.",
-		defaultCents: 7,
-		billingStage: "Upon Unconditional Offer / CAS",
-		badge: "Immigration",
-	},
-	{
-		key: "VISA_BIOMETRICS_FEE_CENTS",
-		title: "Embassy Biometrics & Appointment Coordination",
-		category: "Visa & Immigration",
-		description: "VFS / TLScontact appointment booking, priority courier handling, and document scanning assistance.",
-		defaultCents: 7,
-		billingStage: "Post-Submission Stage",
-		badge: "Biometrics",
-	},
-	{
-		key: "VISA_TRANSLATION_FEE_CENTS",
-		title: "Certified Document Translation",
-		category: "Visa & Immigration",
-		description: "Certified legal and academic document translation per certified page.",
-		defaultCents: 7,
-		billingStage: "As Requested",
-		badge: "Translation",
-	},
-	{
-		key: "TRAVEL_COORDINATION_FEE_CENTS",
-		title: "Traveling & Flight Booking Assistance",
-		category: "Travel & Relocation",
-		description: "Flight itinerary coordination, student discount fares, and baggage allowance assistance.",
-		defaultCents: 7,
-		billingStage: "Post-Visa Approval",
-		badge: "Travel",
-	},
-	{
-		key: "HOUSING_ASSISTANCE_FEE_CENTS",
-		title: "Student Housing & Accommodation Guidance",
-		category: "Travel & Relocation",
-		description: "University dorm reservation support, student apartment search, and lease review.",
-		defaultCents: 7,
-		billingStage: "Pre-Departure Stage",
-		badge: "Housing",
-	},
-	{
-		key: "PRE_DEPARTURE_BRIEFING_FEE_CENTS",
-		title: "Pre-Departure & Airport Arrival Support",
-		category: "Travel & Relocation",
-		description: "Cultural & academic orientation, transit guidance, and airport arrival assistance.",
-		defaultCents: 7,
-		billingStage: "Pre-Departure Stage",
-		badge: "Relocation",
-	},
-];
-
-function centsToDollars(cents: number | string | null): string {
-	if (cents === null || cents === undefined || cents === "") return "0.00";
-	const val = typeof cents === "number" ? cents : Number.parseInt(cents, 10);
-	if (Number.isNaN(val)) return "0.00";
-	return (val / 100).toFixed(2);
-}
-
-function dollarsToCents(dollars: string): number {
-	const float = Number.parseFloat(dollars);
-	if (Number.isNaN(float)) return 0;
-	return Math.round(float * 100);
-}
-
-const feeHeader = {
-	padding: "0.6rem 0",
-	textAlign: "left" as const,
-	fontSize: "0.65rem",
-	textTransform: "uppercase" as const,
-	letterSpacing: "0.06em",
-	fontWeight: 600,
-	color: "#6b6b6b",
-};
-
-const feeCell = {
-	padding: "0.85rem 0.5rem 0.85rem 0",
+const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+const toCents = (dollars: string): number => {
+	const n = Number(dollars.replace(/[^0-9.]/g, ""));
+	return Number.isFinite(n) ? Math.round(n * 100) : 0;
 };
 
 export function EnterpriseFeeSchedule() {
-	const { opsRole } = useOpsAuth();
-	const [settings, setSettings] = useState<SettingView[]>([]);
+	const { hasCapability } = useOpsAuth();
+	const canEdit = hasCapability("manage_settings");
+	const [cat, setCat] = useState<FeeCatalogue | null>(null);
+	const [items, setItems] = useState<FeeItem[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [modalError, setModalError] = useState<string | null>(null);
-	const [editingFee, setEditingFee] = useState<FeeItem | null>(null);
-	const [editAmountDollars, setEditAmountDollars] = useState<string>("");
-	const [editMode, setEditMode] = useState<InvoiceMode>("issued");
-	const [saving, setSaving] = useState(false);
-	const [selectedCategory, setSelectedCategory] = useState<string>("all");
-	const { refresh: refreshGlobalSettings, feeModes, customFees } = useFeeSettings();
-
-	const [addingFee, setAddingFee] = useState(false);
-	const [newFee, setNewFee] = useState({
-		title: "",
-		category: "Admissions & Processing",
-		amountDollars: "1.00",
-		mode: "proforma" as InvoiceMode
-	});
-
-	// Toast
 	const [toast, setToast] = useState<{ type: "error" | "success" | "info"; message: string } | null>(null);
+	const say = (type: "error" | "success" | "info", message: string) => setToast({ type, message });
 
-	function showToast(type: "error" | "success" | "info", message: string) {
-		setToast({ type, message });
-	}
-
-	const isSuperAdmin = opsRole === "super_admin";
-
-	const loadSettings = useCallback(async () => {
+	const load = useCallback(async () => {
 		setLoading(true);
-		setModalError(null);
 		try {
-			const res = await apiFetch<{ settings: SettingView[] }>(`${API_PREFIX}/settings?include_hidden=true`);
-			setSettings(res.settings);
+			const [catalogue, all] = await Promise.all([apiFetch<FeeCatalogue>(`${API_PREFIX}/fees`), apiFetch<{ items: FeeItem[] }>(`${API_PREFIX}/fees/items`)]);
+			setCat(catalogue);
+			setItems(all.items);
 		} catch (err) {
-			showToast("error", err instanceof ApiError ? err.message : "Failed to load fee configuration");
+			say("error", err instanceof ApiError ? err.message : "Could not load the fee schedule");
 		} finally {
 			setLoading(false);
 		}
 	}, []);
-
 	useEffect(() => {
-		void loadSettings();
-	}, [loadSettings]);
+		void load();
+	}, [load]);
 
-	function getFeeValue(key: string, defaultCents: number): number {
-		const found = settings.find((s) => s.key === key);
-		if (found && found.valueMasked) {
-			const parsed = Number.parseInt(found.valueMasked, 10);
-			if (!Number.isNaN(parsed)) return parsed;
-		}
-		return defaultCents;
+	// ── item editor ─────────────────────────────────────────────────────
+	const [editing, setEditing] = useState<FeeItem | null>(null);
+	const [draft, setDraft] = useState<{ name: string; clientLabel: string; description: string; amount: string; optional: boolean; active: boolean }>({
+		name: "",
+		clientLabel: "",
+		description: "",
+		amount: "",
+		optional: false,
+		active: true,
+	});
+	const [saving, setSaving] = useState(false);
+	const [sheetError, setSheetError] = useState<string | null>(null);
+	function openItem(item: FeeItem) {
+		setDraft({ name: item.name, clientLabel: item.clientLabel, description: item.description ?? "", amount: (item.amountCents / 100).toFixed(2), optional: item.optional, active: item.active });
+		setSheetError(null);
+		setEditing(item);
 	}
-
-	function handleOpenEdit(item: FeeItem) {
-		const currentCents = getFeeValue(item.key, item.defaultCents);
-		setEditingFee(item);
-		setEditAmountDollars(centsToDollars(currentCents));
-		setEditMode(feeModes[item.key] || "issued");
-		setModalError(null);
-	}
-
-	async function handleSaveFee(e: React.FormEvent) {
-		e.preventDefault();
-		if (!editingFee) return;
-
-		const nextCents = dollarsToCents(editAmountDollars);
-		if (nextCents < 0) {
-			setModalError("Fee amount must be greater than or equal to zero.");
-			return;
-		}
-
+	async function saveItem() {
+		if (!editing) return;
 		setSaving(true);
-		setModalError(null);
-
+		setSheetError(null);
 		try {
-			// 1. Save fee amount
-			if (editingFee.key.startsWith("CUSTOM_FEE_")) {
-				const nextCustomFees = customFees.map(f =>
-					f.key === editingFee.key ? { ...f, defaultCents: nextCents } : f
-				);
-				await apiFetch(
-					`${API_PREFIX}/settings`,
-					{ method: "PUT", body: JSON.stringify({ key: "CUSTOM_FEE_ITEMS", value: JSON.stringify(nextCustomFees) }) },
-				);
-			} else {
-				await apiFetch(
-					`${API_PREFIX}/settings`,
-					{ method: "PUT", body: JSON.stringify({ key: editingFee.key, value: String(nextCents) }) },
-				);
-			}
-
-			// 2. Save updated per-fee mode
-			const nextModes = { ...feeModes, [editingFee.key]: editMode };
-			await apiFetch(
-				`${API_PREFIX}/settings`,
-				{ method: "PUT", body: JSON.stringify({ key: "FEE_ISSUANCE_MODES", value: JSON.stringify(nextModes) }) },
-			);
-
-			const usdAmount = Number.parseFloat(editAmountDollars) || 0;
-			const ghsAmount = Math.round(usdAmount * GHS_PER_USD).toLocaleString();
-			const modeLabel = editMode === "proforma" ? "Estimate" : "Actual";
-			showToast("success", `"${editingFee.title}" updated — GH₵ ${ghsAmount} ($${editAmountDollars} USD), ${modeLabel}.`);
-			setEditingFee(null);
-			await loadSettings();
-			void refreshGlobalSettings();
-		} catch (err) {
-			setModalError(err instanceof ApiError ? err.message : "Failed to update fee schedule");
-		} finally {
-			setSaving(false);
-		}
-	}
-
-	async function handleAddFee(e: React.FormEvent) {
-		e.preventDefault();
-		const nextCents = dollarsToCents(newFee.amountDollars);
-		if (nextCents < 0 || !newFee.title) {
-			setModalError("Invalid fee details.");
-			return;
-		}
-
-		setSaving(true);
-		setModalError(null);
-
-		try {
-			const feeKey = `CUSTOM_FEE_${Date.now()}`;
-			const feeItem: FeeItem = {
-				key: feeKey,
-				title: newFee.title,
-				category: newFee.category,
-				description: "Custom dynamically added fee.",
-				defaultCents: nextCents,
-				billingStage: "As Requested",
-				badge: "Custom",
+			const patch: UpdateFeeItem = {
+				name: draft.name.trim(),
+				clientLabel: draft.clientLabel.trim(),
+				description: draft.description.trim() || null,
+				amountCents: toCents(draft.amount),
+				optional: draft.optional,
+				active: draft.active,
 			};
-
-			const nextCustomFees = [...customFees, feeItem];
-			await apiFetch(
-				`${API_PREFIX}/settings`,
-				{ method: "PUT", body: JSON.stringify({ key: "CUSTOM_FEE_ITEMS", value: JSON.stringify(nextCustomFees) }) },
-			);
-
-			const nextModes = { ...feeModes, [feeKey]: newFee.mode };
-			await apiFetch(
-				`${API_PREFIX}/settings`,
-				{ method: "PUT", body: JSON.stringify({ key: "FEE_ISSUANCE_MODES", value: JSON.stringify(nextModes) }) },
-			);
-
-			showToast("success", `Added custom fee "${newFee.title}".`);
-			setAddingFee(false);
-			setNewFee({ title: "", category: "Admissions & Processing", amountDollars: "1.00", mode: "proforma" });
-			await loadSettings();
-			void refreshGlobalSettings();
+			await apiFetch(`${API_PREFIX}/fees/items/${editing.key}`, { method: "PUT", body: JSON.stringify(patch) });
+			say("success", `${patch.name} saved.`);
+			setEditing(null);
+			await load();
 		} catch (err) {
-			setModalError(err instanceof ApiError ? err.message : "Failed to add custom fee");
+			setSheetError(err instanceof ApiError ? err.message : "Could not save the item");
 		} finally {
 			setSaving(false);
 		}
 	}
 
-	const categories = [
-		"all",
-		"Consultations",
-		"Admissions & Processing",
-		"Visa & Immigration",
-		"Relocation & Travel",
-		"Supplementary Services",
-	];
+	// ── destination tariffs (inline) ────────────────────────────────────
+	const [tariffDraft, setTariffDraft] = useState<Record<string, { visa: string; biometrics: string }>>({});
+	const tariffValue = (d: DestinationTariff) => tariffDraft[d.id] ?? { visa: (d.visaFeeCents / 100).toFixed(2), biometrics: (d.biometricsFeeCents / 100).toFixed(2) };
+	async function saveTariff(d: DestinationTariff) {
+		const v = tariffValue(d);
+		try {
+			await apiFetch(`${API_PREFIX}/fees/destinations/${d.id}`, {
+				method: "PUT",
+				body: JSON.stringify({ visaFeeCents: toCents(v.visa), biometricsFeeCents: toCents(v.biometrics) }),
+			});
+			say("success", `${d.name} saved.`);
+			setTariffDraft((prev) => {
+				const next = { ...prev };
+				delete next[d.id];
+				return next;
+			});
+			await load();
+		} catch (err) {
+			say("error", err instanceof ApiError ? err.message : `Could not save ${d.name}`);
+		}
+	}
 
-	const allFees = useMemo(() => [...FEE_DEFINITIONS, ...customFees], [customFees]);
+	// ── exchange rate + split (settings) ────────────────────────────────
+	const [rate, setRate] = useState<string>("");
+	const [deposit, setDeposit] = useState<string>("");
+	const [preDeparture, setPreDeparture] = useState<string>("");
+	useEffect(() => {
+		if (!cat) return;
+		setRate(String(cat.exchangeRate));
+		setDeposit(String(cat.serviceFeeSplit.depositPercent));
+		setPreDeparture(String(cat.serviceFeeSplit.preDeparturePercent));
+	}, [cat]);
+	async function putSetting(key: string, value: string) {
+		await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key, value }) });
+	}
+	async function saveMoneyRules() {
+		const r = Number(rate);
+		const d = Number.parseInt(deposit, 10);
+		const p = Number.parseInt(preDeparture, 10);
+		if (!Number.isFinite(r) || r <= 0) return say("error", "The exchange rate must be a positive number.");
+		if (!Number.isInteger(d) || !Number.isInteger(p) || d < 1 || p < 1 || d + p >= 100) return say("error", "Deposit and pre-departure must be whole percentages that leave something for after arrival.");
+		try {
+			await putSetting("PLATFORM_EXCHANGE_RATE", String(r));
+			await putSetting("SERVICE_FEE_DEPOSIT_PERCENT", String(d));
+			await putSetting("SERVICE_FEE_PRE_DEPARTURE_PERCENT", String(p));
+			say("success", "Money rules saved — new invoices price from them.");
+			await load();
+		} catch (err) {
+			say("error", err instanceof ApiError ? err.message : "Could not save");
+		}
+	}
 
-	const filteredFees = allFees.filter(
-		(f) => selectedCategory === "all" || f.category === selectedCategory,
-	);
+	const century = items.filter((i) => i.kind === "century");
+	const passThrough = items.filter((i) => i.kind === "pass_through");
+	const post = cat ? cat.serviceFeeSplit.postArrivalPercent : 100 - (Number.parseInt(deposit, 10) || 0) - (Number.parseInt(preDeparture, 10) || 0);
 
-	return (
-		<div className="admin-page">
-			{/* Header */}
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
-				<div>
-					<h2 className="section-title">Official Fee Schedule</h2>
-					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Master service pricing, application fees, visa filing rates, and milestone billing rates.
-					</p>
-				</div>
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-					<span
-						className="portal-pill"
-						style={{
-							fontFamily: "var(--font-mono)",
-							fontSize: "0.7rem",
-							background: "var(--foreground)",
-							color: "var(--background)",
-						}}
-					>
-						USD ($) MASTER BASE
-					</span>
-					{isSuperAdmin && (
-						<button type="button" className="btn btn--primary btn--sm" onClick={() => setAddingFee(true)}>
-							+ Add Custom Fee
-						</button>
-					)}
-				</div>
-			</div>
-
-			{/* Category Filter Tabs */}
-			<div style={{ display: "flex", gap: "1rem", borderBottom: "1px solid #000", marginBottom: "1.5rem" }}>
-				{categories.map((c) => (
-					<button
-						key={c}
-						type="button"
-						onClick={() => setSelectedCategory(c)}
-						style={{
-							border: "none",
-							borderBottom: selectedCategory === c ? "2px solid #000" : "2px solid transparent",
-							background: "transparent",
-							fontSize: "0.75rem",
-							textTransform: "uppercase",
-							letterSpacing: "0.05em",
-							padding: "0.5rem 0.25rem",
-							cursor: "pointer",
-							color: "#000",
-						}}
-					>
-						{c === "all" ? `All Fee Schedules (${allFees.length})` : c}
-					</button>
-				))}
-			</div>
-
-			{/* Fee Schedule Cards Grid */}
-			{loading ? (
-				<p style={{ color: "#6b6b6b" }}>Loading official fee schedules…</p>
-			) : filteredFees.length === 0 ? (
-				<p style={{ color: "#6b6b6b" }}>No fee schedules found for "{selectedCategory}".</p>
-			) : (
-				<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", marginBottom: "2rem" }}>
+	function ItemTable({ rows, empty }: { rows: FeeItem[]; empty: string }) {
+		if (rows.length === 0) return <p className="muted text-sm">{empty}</p>;
+		return (
+			<div style={{ overflowX: "auto" }}>
+				<table className="admin-table" style={{ width: "100%" }}>
 					<thead>
-						<tr style={{ borderBottom: "1px solid #000" }}>
-							<th style={feeHeader}>Service</th>
-							<th style={feeHeader}>Stage</th>
-							<th style={{ ...feeHeader, textAlign: "right" }}>GHS (₵)</th>
-							<th style={{ ...feeHeader, textAlign: "right" }}>USD Equivalent</th>
-							<th style={feeHeader}>Mode</th>
-							<th style={feeHeader} />
+						<tr>
+							<th>Item</th>
+							<th>Client reads</th>
+							<th>Chapter</th>
+							<th>When</th>
+							<th style={{ textAlign: "right" }}>Amount</th>
+							<th />
 						</tr>
 					</thead>
 					<tbody>
-						{filteredFees.map((fee) => {
-							const cents = getFeeValue(fee.key, fee.defaultCents);
-							const ghs = centsToDollars(cents);
-							const usd = (Number.parseFloat(ghs) / 15.5).toFixed(2);
-
-							return (
-								<tr key={fee.key} style={{ borderBottom: "1px solid #e5e5e5" }}>
-									<td style={feeCell}>
-										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-											<span
-												style={{
-													border: "1px solid #000",
-													padding: "0.15rem 0.4rem",
-													fontSize: "0.65rem",
-													textTransform: "uppercase",
-													letterSpacing: "0.04em",
-												}}
-											>
-												{fee.badge}
-											</span>
-											<div>
-												<p style={{ fontWeight: 600, margin: 0 }}>{fee.title}</p>
-												<p style={{ color: "#6b6b6b", fontSize: "0.75rem", margin: "0.15rem 0 0" }}>{fee.description}</p>
-											</div>
-										</div>
-									</td>
-									<td style={{ ...feeCell, color: "#6b6b6b", fontSize: "0.75rem" }}>{fee.billingStage}</td>
-									<td style={{ ...feeCell, textAlign: "right", fontWeight: 600 }}>GH₵ {ghs}</td>
-									<td style={{ ...feeCell, textAlign: "right", color: "#6b6b6b" }}>≈ ${usd} USD</td>
-									<td style={feeCell}>
-										<span
-											style={{
-												border: `1px solid ${(feeModes[fee.key] || "issued") === "proforma" ? "var(--primary, #0066cc)" : "#000"}`,
-												color: (feeModes[fee.key] || "issued") === "proforma" ? "var(--primary, #0066cc)" : "#000",
-												padding: "0.15rem 0.4rem",
-												fontSize: "0.65rem",
-												textTransform: "uppercase",
-												letterSpacing: "0.04em",
-											}}
-										>
-											{(feeModes[fee.key] || "issued") === "proforma" ? "◯ Estimate" : "◉ Actual"}
-										</span>
-									</td>
-									<td style={feeCell}>
-										{isSuperAdmin && (
-											<button
-												type="button"
-												onClick={() => handleOpenEdit(fee)}
-												style={{
-													border: "1px solid #000",
-													borderRadius: 0,
-													background: "transparent",
-													fontSize: "0.7rem",
-													textTransform: "uppercase",
-													padding: "0.35rem 0.6rem",
-													cursor: "pointer",
-												}}
-											>
-												Edit
-											</button>
-										)}
-									</td>
-								</tr>
-							);
-						})}
+						{rows.map((i) => (
+							<tr key={i.key} style={{ opacity: i.active ? 1 : 0.55 }}>
+								<td>
+									<p className="text-sm--strong">{i.name}</p>
+									{i.description && <p className="muted text-xs">{i.description}</p>}
+								</td>
+								<td className="text-sm">{i.clientLabel}</td>
+								<td className="text-sm">{CHAPTER_LABELS[i.chapter] ?? i.chapter}</td>
+								<td>
+									<StatusPill tone={!i.active ? "void" : i.optional ? "waiting" : "current"}>{!i.active ? "Off" : i.optional ? "When ticked" : "Automatic"}</StatusPill>
+								</td>
+								<td className="mono" style={{ textAlign: "right" }}>
+									{usd(i.amountCents)}
+								</td>
+								<td style={{ textAlign: "right" }}>
+									{canEdit && (
+										<button type="button" className="btn btn--sm btn--ghost" onClick={() => openItem(i)}>
+											Edit
+										</button>
+									)}
+								</td>
+							</tr>
+						))}
 					</tbody>
 				</table>
-			)}
+			</div>
+		);
+	}
 
-		{/* Add Custom Fee Modal */}
-			{addingFee && (
-				<div className="ops-modal-backdrop" onClick={() => setAddingFee(false)} role="dialog" aria-modal="true">
-					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "30rem" }}>
-						<header className="ops-modal__head">
-							<div>
-								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Fee Schedule Configuration</p>
-								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Add Custom Fee</h2>
-								<p className="ops-modal__sub">Create a new fee item to apply to invoices.</p>
+	return (
+		<div className="admin-page">
+			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+				<div>
+					<h2 className="section-title">Fee schedule</h2>
+					<p className="muted" style={{ marginTop: "0.25rem" }}>
+						Century's fee is the package's service fee plus the items below. Everything else is paid on the client's behalf, at cost.
+						Prices are in USD; the client is charged in GHS at the rate at the bottom.
+					</p>
+				</div>
+			</div>
+
+			{loading && !cat ? (
+				<div className="route-loading" role="status" aria-live="polite">
+					<span className="route-loading__spinner" aria-hidden="true" />
+				</div>
+			) : (
+				<div className="cn-stack" style={{ gap: "1.25rem" }}>
+					<section className="card">
+						<div className="between mb-2" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.75rem" }}>
+							<p className="eyebrow" style={{ margin: 0 }}>
+								{FEE_KIND_LABELS.century}
+							</p>
+							<Link to="/packages" className="btn btn--sm btn--ghost">
+								Service fee by package →
+							</Link>
+						</div>
+						<p className="muted text-xs mb-3">The service fee covers every chapter's work. These are the only fees Century charges on top of it.</p>
+						<ItemTable rows={century} empty="No items." />
+					</section>
+
+					<section className="card">
+						<p className="eyebrow mb-2">{FEE_KIND_LABELS.pass_through} · optional items</p>
+						<p className="muted text-xs mb-3">Third-party costs recovered at cost, offered as tick-boxes when an invoice is raised or approved. University application fees are set on each university; visa costs by country are below.</p>
+						<ItemTable rows={passThrough} empty="No items." />
+					</section>
+
+					<section className="card">
+						<p className="eyebrow mb-2">{FEE_KIND_LABELS.pass_through} · visa costs by country</p>
+						<p className="muted text-xs mb-3">The embassy's visa fee and the visa centre's biometrics fee, in USD. The visa invoice takes the accepted school's country.</p>
+						{cat && cat.destinations.length > 0 ? (
+							<div style={{ overflowX: "auto" }}>
+								<table className="admin-table" style={{ width: "100%" }}>
+									<thead>
+										<tr>
+											<th>Country</th>
+											<th style={{ width: "10rem" }}>Visa fee</th>
+											<th style={{ width: "10rem" }}>Biometrics</th>
+											<th />
+										</tr>
+									</thead>
+									<tbody>
+										{cat.destinations.map((d) => {
+											const v = tariffValue(d);
+											const dirty = Boolean(tariffDraft[d.id]);
+											return (
+												<tr key={d.id}>
+													<td className="text-sm--strong">{d.name}</td>
+													<td>
+														<input className="input input--sm" inputMode="decimal" value={v.visa} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, visa: e.target.value } })} />
+													</td>
+													<td>
+														<input className="input input--sm" inputMode="decimal" value={v.biometrics} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, biometrics: e.target.value } })} />
+													</td>
+													<td style={{ textAlign: "right" }}>
+														{canEdit && dirty && (
+															<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveTariff(d)}>
+																Save
+															</button>
+														)}
+													</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
 							</div>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setAddingFee(false)}>
-								✕ Close
-							</button>
-						</header>
+						) : (
+							<p className="muted text-sm">No destinations in the catalogue yet.</p>
+						)}
+					</section>
 
-						<form onSubmit={handleAddFee} className="invite-form" style={{ marginTop: "1rem" }}>
-							<div className="field">
-								<label htmlFor="new-fee-title">Fee Title</label>
-								<input
-									id="new-fee-title"
-									type="text"
-									className="input input--full-border"
-									value={newFee.title}
-									onChange={(e) => setNewFee({ ...newFee, title: e.target.value })}
-									required
-									autoFocus
-								/>
-							</div>
-
-							<div className="field">
-								<label htmlFor="new-fee-category">Category</label>
-								<select
-									id="new-fee-category"
-									className="input input--full-border"
-									value={newFee.category}
-									onChange={(e) => setNewFee({ ...newFee, category: e.target.value })}
-									required
-								>
-									{categories.filter(c => c !== "all").map(c => (
-										<option key={c} value={c}>{c}</option>
-									))}
-								</select>
-							</div>
-
-							<div className="field">
-								<label htmlFor="new-fee-amount">Official Rate (USD $)</label>
-								<input
-									id="new-fee-amount"
-									type="number"
-									step="0.01"
-									min="0"
-									className="input input--full-border mono"
-									style={{ fontSize: "1.1rem", fontWeight: 700 }}
-									value={newFee.amountDollars}
-									onChange={(e) => setNewFee({ ...newFee, amountDollars: e.target.value })}
-									required
-								/>
-							</div>
-
-							<div className="field">
-								<label>Issuance Mode</label>
-								<div style={{ display: "flex", gap: "0.5rem" }}>
-									<button
-										type="button"
-										onClick={() => setNewFee({ ...newFee, mode: "issued" })}
-										className={`btn btn--sm ${newFee.mode === "issued" ? "btn--primary" : "btn--ghost"}`}
-									>
-										◉ Actual Invoice
-									</button>
-									<button
-										type="button"
-										onClick={() => setNewFee({ ...newFee, mode: "proforma" })}
-										className={`btn btn--sm ${newFee.mode === "proforma" ? "btn--primary" : "btn--ghost"}`}
-									>
-										◯ Estimated Quote
-									</button>
-								</div>
-							</div>
-
-							{modalError && (
-								<p className="ops-modal__error" role="alert">{modalError}</p>
-							)}
-
-							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
-								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setAddingFee(false)} disabled={saving}>
-									Cancel
+					<section className="card">
+						<p className="eyebrow mb-2">Money rules</p>
+						<div className="cn-facts">
+							<label>
+								<span className="muted text-xs">Exchange rate — GHS per USD (the client is charged at this)</span>
+								<input className="input input--sm" inputMode="decimal" value={rate} disabled={!canEdit} onChange={(e) => setRate(e.target.value)} />
+							</label>
+							<div />
+							<label>
+								<span className="muted text-xs">Service fee · deposit %</span>
+								<input className="input input--sm" inputMode="numeric" value={deposit} disabled={!canEdit} onChange={(e) => setDeposit(e.target.value)} />
+							</label>
+							<label>
+								<span className="muted text-xs">Service fee · pre-departure % (after the visa, before travel)</span>
+								<input className="input input--sm" inputMode="numeric" value={preDeparture} disabled={!canEdit} onChange={(e) => setPreDeparture(e.target.value)} />
+							</label>
+						</div>
+						<p className="muted text-xs mt-2">
+							Post-arrival: {Number.isFinite(post) ? post : "—"} %. Changes apply to invoices raised from now on; drafts and issued invoices keep their figures.
+						</p>
+						{canEdit && (
+							<div className="mt-3">
+								<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveMoneyRules()}>
+									Save money rules
 								</button>
-								<button type="submit" className="btn btn--primary" disabled={saving}>
-									{saving ? "Saving…" : "Add Fee"}
-								</button>
 							</div>
-						</form>
-					</div>
+						)}
+					</section>
 				</div>
 			)}
 
-		{/* Edit Fee Modal */}
-			{editingFee && (
-				<div className="ops-modal-backdrop" onClick={() => setEditingFee(null)} role="dialog" aria-modal="true">
-					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "30rem" }}>
-						<header className="ops-modal__head">
-							<div>
-								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Fee Schedule Configuration</p>
-								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Edit Fee</h2>
-								<p className="ops-modal__sub">{editingFee.title}</p>
-							</div>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingFee(null)}>
-								✕ Close
+			<Sheet open={Boolean(editing)} onClose={() => setEditing(null)} title={editing ? `Edit · ${editing.name}` : "Edit"}>
+				{editing && (
+					<div className="cn-stack">
+						<p className="muted text-sm">
+							{FEE_KIND_LABELS[editing.kind]} · {CHAPTER_LABELS[editing.chapter] ?? editing.chapter} · key <code>{editing.key}</code>
+						</p>
+						<label>
+							<span className="muted text-xs">Name (ops)</span>
+							<input className="input input--sm" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+						</label>
+						<label>
+							<span className="muted text-xs">What the client reads on the invoice</span>
+							<input className="input input--sm" value={draft.clientLabel} onChange={(e) => setDraft({ ...draft, clientLabel: e.target.value })} />
+						</label>
+						<label>
+							<span className="muted text-xs">Description (ops)</span>
+							<input className="input input--sm" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+						</label>
+						<label>
+							<span className="muted text-xs">Amount (USD)</span>
+							<input className="input input--sm" inputMode="decimal" value={draft.amount} onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+						</label>
+						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+							<input type="checkbox" checked={draft.optional} onChange={(e) => setDraft({ ...draft, optional: e.target.checked })} />
+							<span className="text-sm">Offered as a tick-box when raising or approving (otherwise added automatically)</span>
+						</label>
+						<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+							<input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
+							<span className="text-sm">Active</span>
+						</label>
+						<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditing(null)} disabled={saving}>
+								Cancel
 							</button>
-						</header>
-
-						<form onSubmit={handleSaveFee} className="invite-form" style={{ marginTop: "1rem" }}>
-							<div className="field">
-								<label htmlFor="fee-amount">Official Rate (USD $)</label>
-								<input
-									id="fee-amount"
-									type="number"
-									step="0.01"
-									min="0"
-									className="input input--full-border mono"
-									style={{ fontSize: "1.1rem", fontWeight: 700 }}
-									value={editAmountDollars}
-									onChange={(e) => setEditAmountDollars(e.target.value)}
-									required
-									autoFocus
-								/>
-								<p className="field__hint">Stored in database as {dollarsToCents(editAmountDollars)} cents.</p>
-							</div>
-
-							<div className="field">
-								<label>Issuance Mode</label>
-								<div style={{ display: "flex", gap: "0.5rem" }}>
-									<button
-										type="button"
-										onClick={() => setEditMode("issued")}
-										className={`btn btn--sm ${editMode === "issued" ? "btn--primary" : "btn--ghost"}`}
-									>
-										◉ Actual Invoice
-									</button>
-									<button
-										type="button"
-										onClick={() => setEditMode("proforma")}
-										className={`btn btn--sm ${editMode === "proforma" ? "btn--primary" : "btn--ghost"}`}
-									>
-										◯ Estimated Quote
-									</button>
-								</div>
-								<p className="field__hint">
-									{editMode === "proforma"
-										? "Advisory quote — applicant sees an estimate, not a binding invoice."
-										: "Binding invoice — appears in receivables, triggers payment tracking."}
-								</p>
-							</div>
-
-							{modalError && (
-								<p className="ops-modal__error" role="alert">{modalError}</p>
-							)}
-
-							<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
-								<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingFee(null)} disabled={saving}>
-									Cancel
-								</button>
-								<button type="submit" className="btn btn--primary" disabled={saving}>
-									{saving ? "Saving…" : "Save Fee"}
-								</button>
-							</div>
-						</form>
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveItem()} disabled={saving || !draft.name.trim() || !draft.clientLabel.trim()}>
+								{saving ? "Saving…" : "Save"}
+							</button>
+						</div>
+						{sheetError && <p className="cn-assign__error">{sheetError}</p>}
 					</div>
-				</div>
-			)}
+				)}
+			</Sheet>
 
-			{toast && (
-				<Toast
-					type={toast.type}
-					message={toast.message}
-					onDone={() => setToast(null)}
-				/>
-			)}
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

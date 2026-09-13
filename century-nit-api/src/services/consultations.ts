@@ -586,6 +586,7 @@ export async function assignConsultation(input: {
 				.limit(1)
 				.then((r) => r[0]);
 			const email = mail.consultationAssigned({
+				entityId: updated.id,
 				reference: updated.reference,
 				clientName: applicant?.name ?? "Client",
 				clientEmail: applicant?.email ?? "",
@@ -798,6 +799,7 @@ export async function completeConsultationAssessment(input: {
 	try {
 		await queueEmails([
 			mail.assessmentCompleteForClient({
+				entityId: updated.id,
 				reference: updated.reference,
 				clientName: applicant.name ?? "Client",
 				clientEmail: applicant.email ?? "",

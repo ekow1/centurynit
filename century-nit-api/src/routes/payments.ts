@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { z } from "zod";
 import {
 	initializePaymentResponseSchema,
@@ -10,7 +10,7 @@ import { env } from "../env.js";
 import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { db } from "../db/index.js";
-import { paymentTransactions, bookings as bookingsTable, users } from "../db/schema.js";
+import { paymentTransactions, bookings as bookingsTable, users, invoices } from "../db/schema.js";
 import {
 	initializePayment,
 	processPaystackWebhook,
@@ -25,6 +25,7 @@ import {
 import { resolveServiceName } from "../services/availability.js";
 import { zonedTimeToUtc } from "../lib/time.js";
 import { sendPaymentReceiptEmail } from "../services/receiptEmail.js";
+import { postPaymentSettlement, settleInvoicePayment } from "../services/paymentSettlement.js";
 
 const verifyParams = z.object({ reference: z.string().min(1) });
 const verifyQuery = z.object({ gateway: z.enum(["paystack", "stripe"]).default("paystack") });
@@ -246,6 +247,21 @@ paymentsRouter.openapi(
 
 			if (existingBooking) {
 				bookingId = existingBooking.id;
+				// The consultation invoice was raised with the booking — find it
+				// the same way createConsultationInvoice does (type + booking
+				// reference in the note) so the payment can be settled and the
+				// receipt queued. Previously this branch recorded nothing.
+				const [invoice] = await db
+					.select({ id: invoices.id })
+					.from(invoices)
+					.where(
+						and(
+							eq(invoices.type, "consultation"),
+							ilike(invoices.note, `%${existingBooking.reference}%`),
+						),
+					)
+					.limit(1);
+				invoiceId = invoice?.id ?? null;
 				await notifyBookingCreated(existingBooking);
 			} else {
 				const serviceName = resolveServiceName(bookingPayload.serviceId);
@@ -290,22 +306,41 @@ paymentsRouter.openapi(
 				}
 			}
 
-			// If we have an invoice (newly created or pre-existing), make sure the
-			// payment_transactions row exists.
+			// Settle the payment against the invoice. An unpaid invoice (the
+			// webhook was missed entirely — the reason reconcile exists) is
+			// settled properly; an already-paid one only backfills the gateway
+			// transaction and the receipt. Both are idempotent: the txn upserts
+			// on `reference` and the receipt job is keyed receipt:{reference},
+			// so re-running after a successful webhook can't double-send.
 			if (invoiceId) {
-				await db
-					.insert(paymentTransactions)
-					.values({
-						invoiceId,
-						clientUserId: userRow.id,
-						reference,
-						gateway: "paystack",
+				const [invoice] = await db
+					.select()
+					.from(invoices)
+					.where(eq(invoices.id, invoiceId))
+					.limit(1);
+				if (invoice && invoice.status === "paid") {
+					await postPaymentSettlement({
+						invoice,
+						payment: {
+							amountCents: txn.amountCents,
+							method: "Card Payment",
+							gateway: "paystack",
+							reference,
+							currency: txn.currency,
+						},
+						actor: { name: "Reconciliation", email: "payments@centurynit.com" },
+					});
+				} else if (invoice) {
+					await settleInvoicePayment({
+						invoiceId: invoice.id,
 						amountCents: txn.amountCents,
+						method: "Card Payment",
+						gateway: "paystack",
+						reference,
 						currency: txn.currency,
-						status: "success",
-						paidAt: new Date(),
-					})
-					.onConflictDoNothing({ target: paymentTransactions.reference });
+						actor: { name: "Reconciliation", email: "payments@centurynit.com" },
+					});
+				}
 			}
 
 			return c.json({

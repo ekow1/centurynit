@@ -1,6 +1,8 @@
 import { env } from "../env.js";
 import { getSetting } from "../services/settings.js";
 import { HttpError } from "../middleware/error.js";
+import { db } from "../db/index.js";
+import { notificationLog } from "../db/schema.js";
 
 /**
  * Email delivery via Resend.
@@ -11,18 +13,81 @@ import { HttpError } from "../middleware/error.js";
  * changed from the UI takes effect without a restart.
  */
 
+export type EmailLogMeta = {
+	/** Human-readable template name for the audit log (e.g. "Booking created"). */
+	template?: string;
+	/** Business reference (booking ref, invoice number) for cross-linking. */
+	reference?: string;
+	/** The queue's idempotency key — retries upsert the same audit row. */
+	idempotencyKey?: string;
+	/** Which attempt this send was — from the BullMQ job when queued. */
+	attempts?: number;
+};
+
+/**
+ * Record the outcome of a send in `notification_log` — one row per logical
+ * email. With an idempotency key the row is upserted, so a retry that fails
+ * then succeeds ends as a single "sent · attempts 2" entry, not two rows.
+ * Without a key (OTP codes, test mail) every send is its own row.
+ */
+async function logDelivery(e: {
+	to: string;
+	subject: string;
+	status: "sent" | "failed";
+	errorMessage?: string;
+} & EmailLogMeta): Promise<void> {
+	try {
+		const values = {
+			recipient: e.to,
+			subject: e.subject,
+			template: e.template ?? null,
+			status: e.status,
+			reference: e.reference ?? null,
+			idempotencyKey: e.idempotencyKey ?? null,
+			errorMessage: e.errorMessage ?? null,
+			attempts: e.attempts ?? 1,
+			sentAt: new Date(),
+		};
+		if (e.idempotencyKey) {
+			await db
+				.insert(notificationLog)
+				.values(values)
+				.onConflictDoUpdate({
+					target: notificationLog.idempotencyKey,
+					set: {
+						status: values.status,
+						errorMessage: values.errorMessage,
+						attempts: values.attempts,
+						sentAt: values.sentAt,
+						template: values.template,
+						reference: values.reference,
+						recipient: values.recipient,
+						subject: values.subject,
+					},
+				});
+		} else {
+			await db.insert(notificationLog).values(values);
+		}
+	} catch {
+		/* the audit log must never break a send or a retry */
+	}
+}
+
 export async function sendEmail({
 	to,
 	subject,
 	html,
 	text,
 	attachments,
+	log,
 }: {
 	to: string;
 	subject: string;
 	html?: string;
 	text?: string;
 	attachments?: Array<{ filename: string; content?: Buffer | string; path?: string }>;
+	/** Audit metadata — every send lands in notification_log, queued or not. */
+	log?: EmailLogMeta;
 }) {
 	const apiKey = await getSetting("RESEND_API_KEY");
 	const from = (await getSetting("RESEND_FROM")) ?? env.RESEND_FROM;
@@ -36,6 +101,7 @@ export async function sendEmail({
 			return { id: `console-${Date.now()}` };
 		}
 		console.warn("[email] RESEND_API_KEY is not configured.", { to, subject });
+		await logDelivery({ to, subject, status: "failed", errorMessage: "RESEND_API_KEY is not configured", ...log });
 		throw new HttpError(
 			400,
 			"EMAIL_NOT_CONFIGURED",
@@ -56,6 +122,7 @@ export async function sendEmail({
 
 	if (res.error) {
 		console.error(`[email] Resend delivery error to ${to} (from ${from}):`, res.error);
+		await logDelivery({ to, subject, status: "failed", errorMessage: res.error.message, ...log });
 		throw new HttpError(
 			400,
 			"EMAIL_DELIVERY_FAILED",
@@ -63,7 +130,7 @@ export async function sendEmail({
 		);
 	}
 
+	await logDelivery({ to, subject, status: "sent", ...log });
 	console.log(`[email] Successfully sent to ${to} (id: ${res.data?.id})`);
 	return res.data;
 }
-

@@ -28,7 +28,7 @@ import {
 } from "../db/schema.js";
 import { applicationFeeLinesFor, createProforma, syncApplicationProformaLines } from "./invoice.js";
 import { HttpError } from "../middleware/error.js";
-import { sendEmail } from "../lib/resend.js";
+import { queueEmail } from "../worker/queues.js";
 import { renderSchoolOfferEmail } from "../lib/email-templates.js";
 import { formatUsd } from "./receiptEmail.js";
 import { getDocumentStorage } from "./storage/index.js";
@@ -508,7 +508,7 @@ export async function updateSchoolStatus(
 				.limit(1);
 			if (appRow?.email) {
 				const frontendUrl = process.env.APP_URL || "https://centurynit.com";
-				
+
 				let subject = `Application Update: ${target.universityName || "University"}`;
 				if (input.outcome === "Admitted") {
 					subject = `🎉 Admission Offer: ${target.universityName || "University"} has accepted your application!`;
@@ -516,23 +516,18 @@ export async function updateSchoolStatus(
 					subject = `Application Update: Decision from ${target.universityName || "University"}`;
 				}
 
+				// A storage key goes to the worker, which mints a fresh download URL
+				// at send time — a presigned URL resolved here would expire before a
+				// retry. A full URL is passed straight through.
 				const storedLetter = nextOfferLetterUrl;
-				let attachmentUrl: string | null = null;
-				if (storedLetter) {
-					if (/^https?:\/\//i.test(storedLetter)) {
-						attachmentUrl = storedLetter;
-					} else {
-						try {
-							const storage = await getDocumentStorage();
-							if (storage.enabled) {
-								const ticket = await storage.createDownloadUrl({ key: storedLetter });
-								attachmentUrl = ticket.url;
-							}
-						} catch {
-							/* storage not configured — email still sends without the attachment */
-						}
-					}
-				}
+				const attachments = storedLetter
+					? [
+							{
+								filename: `Document_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
+								...(/^https?:\/\//i.test(storedLetter) ? { path: storedLetter } : { key: storedLetter }),
+							},
+						]
+					: undefined;
 
 				const emailContent = renderSchoolOfferEmail({
 					clientName: appRow.name || "Applicant",
@@ -550,24 +545,20 @@ export async function updateSchoolStatus(
 						: null,
 					consultantNote: providedNote || fallbackNote,
 					portalUrl: frontendUrl,
-					hasAttachment: Boolean(attachmentUrl),
+					hasAttachment: Boolean(storedLetter),
 				});
 
-				await sendEmail({
+				// Queued — retries on its own and lands in the delivery log. Keyed on
+				// this save's timestamp so every distinct update sends once.
+				await queueEmail({
 					to: appRow.email,
 					subject,
 					html: emailContent.html,
 					text: emailContent.text,
-					...(attachmentUrl
-						? {
-								attachments: [
-									{
-										filename: `Document_${(target.universityName || "University").replace(/\s+/g, "_")}.pdf`,
-										path: attachmentUrl,
-									},
-								],
-							}
-						: {}),
+					attachments,
+					idempotencyKey: `school:outcome:${schoolId}:${input.outcome ?? input.status}:${updated.updatedAt.toISOString()}`,
+					template: "School update",
+					reference: target.universityName ?? undefined,
 				});
 			}
 		} catch (err) {

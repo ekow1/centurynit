@@ -404,6 +404,7 @@ export async function createInvoice(input: {
 				: null;
 			await queueEmails([
 				invoiceRaisedForClient({
+					entityId: row.id,
 					clientName,
 					clientEmail: row.applicantEmail,
 					invoiceNumber: row.invoiceNumber,

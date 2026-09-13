@@ -991,6 +991,7 @@ export async function assignApplication(input: {
 		try {
 			await queueEmails([
 				mail.caseAssigned({
+					entityId: updated.id,
 					reference: updated.appNumber,
 					clientName: applicant.name ?? "Client",
 					clientEmail: applicant.email ?? "",
@@ -1006,6 +1007,7 @@ export async function assignApplication(input: {
 		try {
 			await queueEmails([
 				mail.consultantAssignedForClient({
+					entityId: updated.id,
 					clientName: applicant.name ?? "Applicant",
 					clientEmail: applicant.email ?? "",
 					consultantName: employee.name,
@@ -1699,6 +1701,7 @@ export async function setApplicationStage(
 		try {
 			await queueEmails([
 				mail.stageAdvancedForClient({
+					entityId: row.id,
 					clientName: applicant.name ?? "Client",
 					clientEmail: applicant.email,
 					stageLabel,

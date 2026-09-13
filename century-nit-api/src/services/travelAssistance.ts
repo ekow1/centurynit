@@ -433,6 +433,7 @@ export async function assignHandler(input: {
 		if (handler.email) {
 			await queueEmails([
 				mail.travelHandlerAssigned({
+					entityId: updated.id,
 					reference,
 					clientName: applicant?.name ?? "Client",
 					clientEmail: applicant?.email ?? "",
@@ -445,6 +446,7 @@ export async function assignHandler(input: {
 		if (applicant?.email) {
 			await queueEmails([
 				mail.travelHandlerAssignedForClient({
+					entityId: updated.id,
 					clientName: applicant.name,
 					clientEmail: applicant.email,
 					handlerName: handler.name,

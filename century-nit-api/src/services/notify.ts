@@ -244,7 +244,7 @@ export async function getStaffUserId(
 	const [row] = await db
 		.select({ userId: opsUsers.userId })
 		.from(opsUsers)
-		.where(eq(opsUsers.id, opsUserId))
+		.where(and(eq(opsUsers.id, opsUserId), eq(opsUsers.active, true)))
 		.limit(1);
 	return row?.userId ?? null;
 }

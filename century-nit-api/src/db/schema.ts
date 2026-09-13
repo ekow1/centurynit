@@ -1881,11 +1881,15 @@ export const notificationLog = pgTable(
 		/** Idempotency key from the queue — prevents duplicate log rows for the same email. */
 		idempotencyKey: varchar("idempotency_key", { length: 300 }),
 		errorMessage: text("error_message"),
+		/** How many send attempts the row reflects — a retry updates the row, not adds one. */
+		attempts: integer("attempts").notNull().default(1),
 		sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
 		bySentAt: index("notification_log_sent_at_idx").on(t.sentAt),
 		byStatus: index("notification_log_status_idx").on(t.status),
+		/** One row per logical email — a retry upserts rather than adding a second entry. */
+		byIdempotencyKey: uniqueIndex("notification_log_idempotency_key_idx").on(t.idempotencyKey),
 	}),
 );
 

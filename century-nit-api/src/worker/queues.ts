@@ -46,32 +46,41 @@ function isDuplicateJobId(err: unknown): boolean {
 
 /**
  * Enqueue an email job. A duplicate job id is a no-op when the original is
- * still waiting, delayed, active, or completed. If that job already failed,
- * it is removed and a new attempt is queued — otherwise a one-shot claim that
- * threw after commit can silence consultation mail forever.
+ * still waiting, delayed, active, or completed (§14 — never send twice). If
+ * that job already failed, it is removed and a new attempt is queued —
+ * otherwise a one-shot claim that threw after commit silences mail forever.
+ *
+ * BullMQ never throws on a duplicate jobId: queue.add() silently returns the
+ * existing job. The state must be checked first or a retained job suppresses
+ * the send with no error, no retry, and no log row.
  */
 async function addEmailJob(message: QueuedEmail, extra?: Pick<JobsOptions, "delay">): Promise<void> {
 	if (!message.to) return;
 	const jobId = toJobId(message.idempotencyKey);
 	const opts: JobsOptions = { ...RETRY, jobId, ...extra };
-	try {
-		await emailQueue.add("send", message, opts);
-		return;
-	} catch (err) {
-		if (!isDuplicateJobId(err)) throw err;
-	}
+
 	const existing = await emailQueue.getJob(jobId);
-	if (!existing) return;
-	const state = await existing.getState();
-	if (state !== "failed") return;
-	try {
-		await existing.remove();
-	} catch {
-		return;
+	if (existing) {
+		const state = await existing.getState();
+		if (state === "failed") {
+			try {
+				await existing.remove();
+			} catch {
+				return; // couldn't clear it — the next trigger retries
+			}
+		} else if (state !== "unknown") {
+			// waiting, delayed, active, prioritized, waiting-children,
+			// completed — the original send stands.
+			return;
+		}
+		// "unknown" — the job vanished between getJob and getState (auto-trim,
+		// cancelled reminder). The id is free; fall through and add.
 	}
 	try {
 		await emailQueue.add("send", message, opts);
 	} catch (err) {
+		// A racing producer may have landed the same key between the check and
+		// this add — either way the send is covered.
 		if (!isDuplicateJobId(err)) throw err;
 	}
 }
@@ -221,9 +230,15 @@ export type PushJob = {
  * same logical notification collapses onto the existing job instead of
  * lighting up every browser a second time.
  */
-export async function queuePush(job: PushJob): Promise<void> {
-	const id = `push:${job.notification.id}:${job.userId}`;
-	await pushQueue.add("send", job, { ...RETRY, jobId: toJobId(id) });
+/**
+ * Web Push is not built yet — the `push_subscriptions` table exists in the
+ * schema's history but has no model, no subscribe endpoint, and no worker.
+ * Enqueueing here just filled Redis with jobs nothing consumed, so this is a
+ * retained no-op (same as `queueCalendar`): the `notify()` call site stays
+ * ready for when the channel is implemented.
+ */
+export async function queuePush(_job: PushJob): Promise<void> {
+	return;
 }
 
 /* ── Campaign ────────────────────────────────────────────────────────────── */

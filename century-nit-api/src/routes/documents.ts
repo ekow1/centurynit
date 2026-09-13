@@ -774,6 +774,7 @@ documentsRouter.openapi(
 							status,
 							reviewNote: body.note ?? null,
 							portalUrl: env.FRONTEND_URL,
+							documentId: updated.id,
 						})
 					: undefined,
 			}).catch(() => {});

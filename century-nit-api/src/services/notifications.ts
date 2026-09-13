@@ -21,6 +21,12 @@ import {
  */
 
 export type BookingNotificationContext = {
+	/**
+	 * Booking row id — keys every idempotencyKey. References recycle when
+	 * rows are deleted and the sequence restarts (CNS-2026-0001 twice); the
+	 * UUID never does, so a ghost job can't suppress a new booking's emails.
+	 */
+	id: string;
 	reference: string;
 	serviceName: string;
 	startsAt: Date;
@@ -50,6 +56,12 @@ export type QueuedEmail = {
 	template?: string;
 	/** Business reference (booking ref, consultation ref) for the notification log. */
 	reference?: string;
+	/**
+	 * Attachments for the worker. `path` is sent as-is; `key` is a document-
+	 * storage object key the worker resolves to a fresh download URL at send
+	 * time. `content` is a Base64-encoded string representing a file buffer.
+	 */
+	attachments?: Array<{ filename: string; path?: string; key?: string; content?: string }>;
 };
 
 function formatEmail(title: string, lines: string[], meetingUrl?: string | null, reference?: string): { html: string; text: string } {
@@ -77,7 +89,7 @@ export function bookingCreatedForClient(ctx: BookingNotificationContext): Queued
 		subject: `Booking received · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:created:client:${ctx.reference}`,
+		idempotencyKey: `notify:created:client:${ctx.id}`,
 		template: "Booking received",
 		reference: ctx.reference,
 	};
@@ -102,7 +114,7 @@ export function bookingCreatedForManagers(
 		subject: `Unassigned booking · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:created:manager:${ctx.reference}:${managerEmail}`,
+		idempotencyKey: `notify:created:manager:${ctx.id}:${managerEmail}`,
 		template: "New booking awaiting assignment",
 		reference: ctx.reference,
 	};
@@ -125,7 +137,7 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 		subject: `Appointment confirmed · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:assigned:client:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
+		idempotencyKey: `notify:assigned:client:${ctx.id}:${ctx.employeeEmail ?? ""}`,
 		template: "Appointment confirmed",
 		reference: ctx.reference,
 	};
@@ -149,7 +161,7 @@ export function bookingMeetingUrlSetForClient(ctx: BookingNotificationContext): 
 		subject: `Meeting link ready · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:meeting_url:${ctx.reference}:${Date.now()}`,
+		idempotencyKey: `notify:meeting_url:${ctx.id}:${Date.now()}`,
 		template: "Meeting link ready",
 		reference: ctx.reference,
 	};
@@ -175,7 +187,7 @@ export function bookingSlotConfirmedForClient(ctx: BookingNotificationContext): 
 		subject: `Consultation slot confirmed · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:confirmed:client:${ctx.reference}`,
+		idempotencyKey: `notify:confirmed:client:${ctx.id}`,
 		template: "Consultation slot confirmed",
 		reference: ctx.reference,
 	};
@@ -197,7 +209,7 @@ export function bookingAssignedForEmployee(ctx: BookingNotificationContext): Que
 		subject: `New consultation assigned · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:assigned:employee:${ctx.reference}:${ctx.employeeEmail ?? ""}`,
+		idempotencyKey: `notify:assigned:employee:${ctx.id}:${ctx.employeeEmail ?? ""}`,
 		template: "Consultation assigned",
 		reference: ctx.reference,
 	};
@@ -205,6 +217,8 @@ export function bookingAssignedForEmployee(ctx: BookingNotificationContext): Que
 
 /** Consultation assigned without a booking (no scheduled time yet). */
 export function consultationAssigned(ctx: {
+	/** Consultation row id — keys the dedup; references recycle. */
+	entityId?: string;
 	reference: string;
 	clientName: string;
 	clientEmail: string;
@@ -224,7 +238,7 @@ export function consultationAssigned(ctx: {
 		subject: `New consultation assigned · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:consultation:assigned:${ctx.reference}:${ctx.employeeEmail}`,
+		idempotencyKey: `notify:consultation:assigned:${ctx.entityId ?? ctx.reference}:${ctx.employeeEmail}`,
 		template: "Consultation assigned",
 		reference: ctx.reference,
 	};
@@ -253,7 +267,7 @@ export function bookingRescheduled(
 		html,
 		text,
 		// Keyed on the new time, so each distinct reschedule notifies once.
-		idempotencyKey: `notify:rescheduled:${recipient}:${ctx.reference}:${ctx.startsAt.toISOString()}`,
+		idempotencyKey: `notify:rescheduled:${recipient}:${ctx.id}:${ctx.startsAt.toISOString()}`,
 		template: "Appointment rescheduled",
 		reference: ctx.reference,
 	};
@@ -279,7 +293,7 @@ export function bookingCancelled(
 		subject: `Appointment cancelled · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:cancelled:${recipient}:${ctx.reference}`,
+		idempotencyKey: `notify:cancelled:${recipient}:${ctx.id}`,
 		template: "Appointment cancelled",
 		reference: ctx.reference,
 	};
@@ -305,13 +319,15 @@ export function bookingReminder(
 		subject: `Reminder · ${ctx.serviceName} tomorrow`,
 		html,
 		text,
-		idempotencyKey: `notify:reminder:${recipient}:${ctx.reference}`,
+		idempotencyKey: `notify:reminder:${recipient}:${ctx.id}`,
 		template: "Appointment reminder",
 		reference: ctx.reference,
 	};
 }
 
 export function assessmentCompleteForClient(ctx: {
+	/** Consultation row id — keys the dedup; references recycle. */
+	entityId?: string;
 	reference: string;
 	clientName: string;
 	clientEmail: string;
@@ -329,13 +345,15 @@ export function assessmentCompleteForClient(ctx: {
 		subject: `Assessment Complete · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:assessment_complete:${ctx.reference}`,
+		idempotencyKey: `notify:assessment_complete:${ctx.entityId ?? ctx.reference}`,
 	};
 }
 
 /** Application/case assigned to a staff member. */
 /** Travel handler assigned — sent to the handler (ops staff). */
 export function travelHandlerAssigned(ctx: {
+	/** Travel request row id — keys the dedup; references recycle. */
+	entityId?: string;
 	reference: string;
 	clientName: string;
 	clientEmail: string;
@@ -355,7 +373,7 @@ export function travelHandlerAssigned(ctx: {
 		subject: `Travel assistance assigned · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:travel:assigned:handler:${ctx.reference}:${ctx.handlerEmail}`,
+		idempotencyKey: `notify:travel:assigned:handler:${ctx.entityId ?? ctx.reference}:${ctx.handlerEmail}`,
 		template: "Travel assistance assigned",
 		reference: ctx.reference,
 	};
@@ -363,6 +381,8 @@ export function travelHandlerAssigned(ctx: {
 
 /** Travel handler assigned — sent to the applicant (client). */
 export function travelHandlerAssignedForClient(ctx: {
+	/** Travel request row id — keys the dedup; references recycle. */
+	entityId?: string;
 	clientName: string;
 	clientEmail: string;
 	handlerName: string;
@@ -383,13 +403,15 @@ export function travelHandlerAssignedForClient(ctx: {
 		subject: `Your travel handler · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:travel:assigned:client:${ctx.clientEmail}:${ctx.reference}`,
+		idempotencyKey: `notify:travel:assigned:client:${ctx.clientEmail}:${ctx.entityId ?? ctx.reference}`,
 		template: "Travel handler assigned",
 		reference: ctx.reference,
 	};
 }
 
 export function caseAssigned(ctx: {
+	/** Application row id — keys the dedup; app numbers recycle. */
+	entityId?: string;
 	reference: string;
 	clientName: string;
 	clientEmail: string;
@@ -409,7 +431,7 @@ export function caseAssigned(ctx: {
 		subject: `New case assigned · ${ctx.reference}`,
 		html,
 		text,
-		idempotencyKey: `notify:case:assigned:${ctx.reference}:${ctx.employeeEmail}`,
+		idempotencyKey: `notify:case:assigned:${ctx.entityId ?? ctx.reference}:${ctx.employeeEmail}`,
 		template: "Case assigned",
 		reference: ctx.reference,
 	};
@@ -457,6 +479,8 @@ export function welcomeEmail(ctx: {
 }
 
 export function consultantAssignedForClient(ctx: {
+	/** Application row id — keys the dedup; app numbers recycle. */
+	entityId?: string;
 	clientName: string;
 	clientEmail: string;
 	consultantName: string;
@@ -478,13 +502,16 @@ export function consultantAssignedForClient(ctx: {
 			: "Your Century NIT consultant",
 		html,
 		text,
-		idempotencyKey: `consultant:client:${ctx.clientEmail}:${ctx.appNumber ?? ctx.consultantName}`,
+		// Keyed on the consultant too — a reassignment must reach the client.
+		idempotencyKey: `consultant:client:${ctx.clientEmail}:${ctx.entityId ?? ctx.appNumber ?? "case"}:${ctx.consultantEmail ?? ctx.consultantName}`,
 		template: "Consultant assigned",
 		reference: ctx.appNumber ?? undefined,
 	};
 }
 
 export function invoiceRaisedForClient(ctx: {
+	/** Invoice row id — keys the dedup; invoice numbers recycle. */
+	entityId?: string;
 	clientName: string;
 	clientEmail: string;
 	invoiceNumber: string;
@@ -508,7 +535,7 @@ export function invoiceRaisedForClient(ctx: {
 		subject: `Invoice ready · ${ctx.invoiceNumber}`,
 		html,
 		text,
-		idempotencyKey: `invoice:raised:${ctx.invoiceNumber}:${ctx.clientEmail}`,
+		idempotencyKey: `invoice:raised:${ctx.entityId ?? ctx.invoiceNumber}:${ctx.clientEmail}`,
 		template: "Invoice raised",
 		reference: ctx.invoiceNumber,
 	};
@@ -521,6 +548,8 @@ export function documentReviewedForClient(ctx: {
 	status: "approved" | "rejected";
 	reviewNote?: string | null;
 	portalUrl: string;
+	/** The document row's id — keys the dedup so a re-upload's next review still sends. */
+	documentId?: string;
 }): QueuedEmail {
 	const { html, text } = renderDocumentReviewedEmail({
 		clientName: ctx.clientName,
@@ -534,13 +563,17 @@ export function documentReviewedForClient(ctx: {
 		subject: `Document ${ctx.status === "approved" ? "approved" : "rejected"} · ${ctx.documentType}`,
 		html,
 		text,
-		idempotencyKey: `document:reviewed:${ctx.clientEmail}:${ctx.documentType}:${ctx.status}`,
+		// Keyed on the document row, not just the type — a re-uploaded passport's
+		// second rejection is a different event the client must still hear about.
+		idempotencyKey: `document:reviewed:${ctx.documentId ?? ctx.clientEmail}:${ctx.documentType}:${ctx.status}`,
 		template: "Document reviewed",
 	};
 }
 
 /** Application advanced to the next journey stage — sent to the client. */
 export function stageAdvancedForClient(ctx: {
+	/** Application row id — keys the dedup; app numbers recycle. */
+	entityId?: string;
 	clientName: string;
 	clientEmail: string;
 	stageLabel: string;
@@ -558,7 +591,7 @@ export function stageAdvancedForClient(ctx: {
 		subject: `Case Update · ${ctx.appNumber} → ${ctx.stageLabel}`,
 		html,
 		text,
-		idempotencyKey: `notify:stage_advanced:${ctx.appNumber}:${ctx.stageLabel}`,
+		idempotencyKey: `notify:stage_advanced:${ctx.entityId ?? ctx.appNumber}:${ctx.stageLabel}`,
 		template: "Stage advanced",
 		reference: ctx.appNumber,
 	};

@@ -1,8 +1,7 @@
 import { Worker } from "bullmq";
 import { sendEmail } from "../lib/resend.js";
 import { connection } from "./queues.js";
-import { db } from "../db/index.js";
-import { notificationLog } from "../db/schema.js";
+import { notify, getManagerAndCoordinatorUserIds } from "../services/notify.js";
 
 /**
  * Email worker.
@@ -19,53 +18,57 @@ import { notificationLog } from "../db/schema.js";
  * configured on the producer side. Swallowing an error here would silently drop
  * the notification instead.
  *
- * After each send attempt (success or failure) a row is written to
- * `notification_log` so the ops console can show a real delivery history.
+ * The audit row is written inside `sendEmail` — upserted on the job's
+ * idempotency key, so retries update one row rather than adding entries, and
+ * direct (unqueued) sends are logged the same way.
  */
 export const emailWorker = new Worker<{
 	to: string;
 	subject: string;
 	html?: string;
 	text?: string;
+	/** Admission letters and the like — `key` is resolved to a fresh download URL at send time. `content` is a base64 string. */
+	attachments?: Array<{ filename: string; path?: string; key?: string; content?: string }>;
 	idempotencyKey?: string;
 	template?: string;
 	reference?: string;
 }>(
 	"email",
 	async (job) => {
-		const { to, subject, html, text, idempotencyKey, template, reference } = job.data;
+		const { to, subject, html, text, attachments, idempotencyKey, template, reference } = job.data;
 		console.log(`[email] -> ${to} — ${subject}`);
-		try {
-			await sendEmail({ to, subject, html, text });
-			await db
-				.insert(notificationLog)
-				.values({
-					recipient: to,
-					subject,
-					template: template ?? null,
-					status: "sent",
-					reference: reference ?? null,
-					idempotencyKey: idempotencyKey ?? null,
-				})
-				.catch(() => {});
-			return { ok: true };
-		} catch (err) {
-			const message = err instanceof Error ? err.message : String(err);
-			console.error(`[email] failed to send to ${to}:`, message);
-			await db
-				.insert(notificationLog)
-				.values({
-					recipient: to,
-					subject,
-					template: template ?? null,
-					status: "failed",
-					reference: reference ?? null,
-					idempotencyKey: idempotencyKey ?? null,
-					errorMessage: message,
-				})
-				.catch(() => {});
-			throw err;
-		}
+
+		// Storage keys are resolved at send time — a presigned URL baked into the
+		// job would have expired by the time a retry runs.
+		const resolved = attachments
+			? await Promise.all(
+					attachments.map(async (a) => {
+						if (a.content) {
+							return { filename: a.filename, content: Buffer.from(a.content, "base64") };
+						}
+						if (!a.key) return { filename: a.filename, path: a.path };
+						try {
+							const { getDocumentStorage } = await import("../services/storage/index.js");
+							const storage = await getDocumentStorage();
+							if (!storage.enabled) return { filename: a.filename, path: a.path };
+							const ticket = await storage.createDownloadUrl({ key: a.key });
+							return { filename: a.filename, path: ticket.url };
+						} catch {
+							return { filename: a.filename, path: a.path };
+						}
+					}),
+				)
+			: undefined;
+
+		await sendEmail({
+			to,
+			subject,
+			html,
+			text,
+			attachments: resolved,
+			log: { template, reference, idempotencyKey, attempts: job.attemptsMade + 1 },
+		});
+		return { ok: true };
 	},
 	{ connection, concurrency: 5 },
 );
@@ -75,4 +78,28 @@ emailWorker.on("failed", (job, err) => {
 		`[email] job ${job?.id} failed (attempt ${job?.attemptsMade ?? 0}):`,
 		err.message,
 	);
+	// The final attempt has failed — the email is permanently undelivered.
+	// Flag it to the people who triage the queue so it is re-sent or the
+	// client is contacted by hand, instead of vanishing into the failed set.
+	if (job && job.attemptsMade === (job.opts.attempts ?? 0)) {
+		void getManagerAndCoordinatorUserIds()
+			.then((recipients) =>
+				Promise.all(
+					recipients.map(({ userId }) =>
+						notify({
+							eventId: `email:dead:${job.id}`,
+							recipientUserId: userId,
+							type: "email.failed",
+							title: "Email delivery failed permanently",
+							body: `"${job.data.subject}" to ${job.data.to} — ${job.attemptsMade} attempts, last error: ${err.message}`,
+							link: "/notifications",
+							priority: "high",
+							entityType: "notification",
+							entityId: String(job.id),
+						}),
+					),
+				),
+			)
+			.catch((e) => console.error("[email] dead-letter alert failed:", e));
+	}
 });

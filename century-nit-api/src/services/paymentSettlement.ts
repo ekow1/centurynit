@@ -2,8 +2,10 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { invoicePayments, invoiceLines, paymentTransactions, applicants } from "../db/schema.js";
 import { getSetting } from "./settings.js";
-import { sendPaymentReceiptEmail } from "./receiptEmail.js";
+import { receiptEmailMessage } from "./receiptEmail.js";
+import { queueEmail } from "../worker/queues.js";
 import { getInvoice, recordPayment } from "./invoice.js";
+import { generateInvoicePdf, generateReceiptPdf } from "./pdfEngine.js";
 import { HttpError } from "../middleware/error.js";
 import type { InvoiceRow } from "./invoice.js";
 
@@ -110,23 +112,62 @@ async function sendReceipt(input: {
 				}))
 			: undefined;
 
-	// Don't swallow the error — let it propagate so the caller (and the API
-	// route) can tell the user the receipt was NOT delivered instead of
-	// reporting a false success.
-	await sendPaymentReceiptEmail({
+	const baseData = {
+		clientName: invoice.applicantName || "Valued Client",
+		clientEmail: invoice.applicantEmail,
+		clientPhone: applicant?.phone ?? null,
+		invoiceNumber: invoice.invoiceNumber,
+		receiptNumber: `REC-${payment.reference ?? Date.now()}`,
+		paymentDate: new Date().toLocaleDateString("en-US"),
+		issueDate: invoice.createdAt.toLocaleDateString("en-US"),
+		dueAt: invoice.dueAt ? invoice.dueAt.toLocaleDateString("en-US") : new Date().toLocaleDateString("en-US"),
+		paymentChannel: payment.method,
+		reference: payment.reference ?? "",
+		totalGhs: amountGhs,
+		totalUsd: amountUsd,
+		lineItems: lineItems ?? [{ label: `Settlement for Invoice ${invoice.invoiceNumber}`, amountGhs, amountUsd }],
+	};
+
+	let invoicePdfBase64: string | undefined;
+	let receiptPdfBase64: string | undefined;
+
+	try {
+		const invoicePdfBuffer = await generateInvoicePdf(baseData);
+		invoicePdfBase64 = invoicePdfBuffer.toString("base64");
+
+		const receiptPdfBuffer = await generateReceiptPdf(baseData);
+		receiptPdfBase64 = receiptPdfBuffer.toString("base64");
+	} catch (err) {
+		console.error("[paymentSettlement] Failed to generate PDFs:", err);
+	}
+
+	const message = receiptEmailMessage({
 		recipientEmail: invoice.applicantEmail,
 		recipientName: invoice.applicantName || "Valued Client",
 		recipientPhone: applicant?.phone ?? null,
-		receiptNumber: `REC-${payment.reference ?? Date.now()}`,
+		receiptNumber: baseData.receiptNumber,
 		invoiceNumber: invoice.invoiceNumber,
 		amountGhs,
 		amountUsd,
-		paymentDate: new Date().toLocaleDateString("en-US"),
+		paymentDate: baseData.paymentDate,
 		paymentChannel: payment.method,
-		reference: payment.reference ?? "",
+		reference: baseData.reference,
 		description: `Settlement for Invoice ${invoice.invoiceNumber}`,
 		lineItems,
 	});
+
+	if (invoicePdfBase64 && receiptPdfBase64) {
+		message.attachments = [
+			{ filename: `Invoice_${invoice.invoiceNumber}.pdf`, content: invoicePdfBase64 },
+			{ filename: `Receipt_${baseData.receiptNumber}.pdf`, content: receiptPdfBase64 },
+		];
+	}
+
+	// Queued rather than sent inline — the receipt retries on its own schedule
+	// and lands in notification_log, so a Resend outage can no longer lose the
+	// client's proof of payment. Still inside postPaymentSettlement's catch:
+	// a Redis failure must not break the settlement either.
+	await queueEmail(message);
 }
 
 export async function postPaymentSettlement(input: {

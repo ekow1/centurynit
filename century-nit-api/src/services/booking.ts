@@ -131,6 +131,7 @@ export async function notificationContext(
     }
   }
   return {
+    id: booking.id,
     reference: booking.reference,
     serviceName: booking.serviceName,
     startsAt: booking.startsAt,
@@ -775,8 +776,8 @@ export async function rescheduleBooking(input: {
 	const ctx = { ...(await notificationContext(updated, employee)), reason: input.reason ?? null };
 
 	// The old reminder points at a time that no longer exists.
-	await cancelQueued(`notify:reminder:client:${booking.reference}`);
-	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+	await cancelQueued(`notify:reminder:client:${booking.id}`);
+	await cancelQueued(`notify:reminder:employee:${booking.id}`);
 
 	await queueEmails([
 		mail.bookingRescheduled(ctx, "client"),
@@ -955,8 +956,8 @@ export async function decideRescheduleBooking(
 		const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
 		const ctx = { ...(await notificationContext(updated, employee)), reason: "Your reschedule request was approved." };
 
-		await cancelQueued(`notify:reminder:client:${booking.reference}`);
-		await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+		await cancelQueued(`notify:reminder:client:${booking.id}`);
+		await cancelQueued(`notify:reminder:employee:${booking.id}`);
 
 		await queueEmails([
 			mail.bookingRescheduled(ctx, "client"),
@@ -1112,8 +1113,8 @@ export async function cancelBooking(input: {
 		}
 	}
 
-	await cancelQueued(`notify:reminder:client:${booking.reference}`);
-	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+	await cancelQueued(`notify:reminder:client:${booking.id}`);
+	await cancelQueued(`notify:reminder:employee:${booking.id}`);
 
 	const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
 	const ctx = { ...(await notificationContext(updated, employee)), reason: input.reason ?? null };
@@ -1196,8 +1197,8 @@ export async function completeBooking(input: {
 		endReason: "completed",
 	});
 
-	await cancelQueued(`notify:reminder:client:${booking.reference}`);
-	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+	await cancelQueued(`notify:reminder:client:${booking.id}`);
+	await cancelQueued(`notify:reminder:employee:${booking.id}`);
 	return updated;
 }
 
@@ -1229,8 +1230,8 @@ export async function markNoShow(input: {
 		.returning();
 
 	await audit(booking.id, "no_show", input.actor.email);
-	await cancelQueued(`notify:reminder:client:${booking.reference}`);
-	await cancelQueued(`notify:reminder:employee:${booking.reference}`);
+	await cancelQueued(`notify:reminder:client:${booking.id}`);
+	await cancelQueued(`notify:reminder:employee:${booking.id}`);
 	return updated;
 }
 

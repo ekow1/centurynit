@@ -603,6 +603,13 @@
       "when": 1789600014000,
       "tag": "0087_departure_details",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1789600015000,
+      "tag": "0088_notification_log_dedup",
+      "breakpoints": true
     }
   ]
 }

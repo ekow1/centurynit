@@ -1,4 +1,5 @@
 import { sendEmail } from "../lib/resend.js";
+import type { QueuedEmail } from "./notifications.js";
 
 export interface ReceiptLineItem {
 	label: string;
@@ -37,37 +38,28 @@ export function generateReceiptHtml(data: ReceiptEmailData): string {
 	const usdStr = data.amountUsd != null ? formatUsd(data.amountUsd) : "";
 	const desc = data.description || `Settlement for Invoice ${data.invoiceNumber}`;
 
-	// Build the line-items body from real invoice lines when available, so the
-	// receipt shows what was actually paid for (visa fee, travel ticket, etc.)
-	// instead of a hardcoded "Consultation, processing & admission fees" row.
 	const lineItemsHtml =
 		data.lineItems && data.lineItems.length > 0
 			? data.lineItems
 					.map(
 						(item) => `
-						<tr style="border-bottom: 1px solid #e4e4e7;">
-							<td style="padding: 14px 8px; vertical-align: top;">
-								<strong style="color: #18181b;">${item.label}</strong>
-								${item.detail ? `<div style="font-size: 11px; color: #71717a; margin-top: 2px;">${item.detail}</div>` : ""}
+						<tr>
+							<td style="padding: 8px 0 16px 0; vertical-align: top;">
+								<strong style="color: #1d1d1f; font-size: 14px; display: block; font-weight: 600;">${item.label}</strong>
+								${item.detail ? `<span style="font-size: 13px; color: #687385; display: block; margin-top: 4px;">${item.detail}</span>` : ""}
 							</td>
-							<td style="padding: 14px 8px; text-align: right; font-family: monospace; vertical-align: top;">
-								GHS / USD
-							</td>
-							<td style="padding: 14px 8px; text-align: right; font-weight: 700; font-family: monospace; vertical-align: top; color: #18181b;">
+							<td style="padding: 8px 0 16px 0; text-align: right; color: #1d1d1f; font-size: 14px; vertical-align: top; font-weight: 500;">
 								${formatGhs(item.amountGhs)}
 							</td>
 						</tr>`,
 					)
 					.join("")
 			: `
-					<tr style="border-bottom: 1px solid #e4e4e7;">
-						<td style="padding: 14px 8px; vertical-align: top;">
-							<strong style="color: #18181b;">${desc}</strong>
+					<tr>
+						<td style="padding: 8px 0 16px 0; vertical-align: top;">
+							<strong style="color: #1d1d1f; font-size: 14px; display: block; font-weight: 600;">${desc}</strong>
 						</td>
-						<td style="padding: 14px 8px; text-align: right; font-family: monospace; vertical-align: top;">
-							GHS / USD
-						</td>
-						<td style="padding: 14px 8px; text-align: right; font-weight: 700; font-family: monospace; vertical-align: top; color: #18181b;">
+						<td style="padding: 8px 0 16px 0; text-align: right; color: #1d1d1f; font-size: 14px; vertical-align: top; font-weight: 500;">
 							${ghsStr}
 						</td>
 					</tr>`;
@@ -77,133 +69,103 @@ export function generateReceiptHtml(data: ReceiptEmailData): string {
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Official Payment Receipt - Century NIT Consult</title>
+	<title>Receipt from Century NIT Consult</title>
 </head>
-<body style="margin: 0; padding: 24px; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b;">
-	<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #ffffff; border: 1px solid #e4e4e7; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-		<!-- Header -->
+<body style="margin: 0; padding: 0; background-color: #f6f9fc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+	<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f6f9fc; padding: 40px 20px;">
 		<tr>
-			<td style="padding: 28px 32px; border-bottom: 2px solid #18181b; background-color: #ffffff;">
-				<table width="100%" border="0" cellpadding="0" cellspacing="0">
+			<td>
+				<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; margin: 0 auto;">
+					<!-- Header / Logo -->
 					<tr>
-						<td style="vertical-align: top;">
-							<h1 style="margin: 0; font-size: 20px; font-weight: 900; letter-spacing: 0.05em; text-transform: uppercase; color: #18181b;">
-								CENTURY NIT CONSULT
-							</h1>
-							<p style="margin: 4px 0 0 0; font-size: 12px; color: #52525b;">
-								Travel, Visa & University Admissions Consulting
-							</p>
-							<p style="margin: 4px 0 0 0; font-size: 11px; color: #71717a; font-family: monospace;">
-								Accra Branch · info@century-nit.com · +233 (0) 30 200 0000
-							</p>
-						</td>
-						<td style="vertical-align: top; text-align: right;">
-							<div style="display: inline-block; font-size: 11px; font-weight: 800; border: 2px solid #18181b; padding: 4px 8px; text-transform: uppercase; letter-spacing: 0.05em;">
-								PAYMENT RECEIPT
-							</div>
-							<p style="margin: 6px 0 0 0; font-size: 11px; font-family: monospace; color: #71717a;">
-								${data.receiptNumber}
-							</p>
+						<td align="center" style="padding-bottom: 24px;">
+							<h2 style="margin: 0; color: #1d1d1f; font-size: 16px; font-weight: 700; letter-spacing: 0.5px;">CENTURY NIT CONSULT</h2>
 						</td>
 					</tr>
-				</table>
-			</td>
-		</tr>
-
-		<!-- Meta Section -->
-		<tr>
-			<td style="padding: 24px 32px 16px 32px;">
-				<table width="100%" border="0" cellpadding="0" cellspacing="0">
+					
+					<!-- Card 1: Summary -->
 					<tr>
-						<td style="width: 50%; vertical-align: top;">
-							<p style="margin: 0; font-size: 10px; color: #71717a; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">
-								Received From:
-							</p>
-							<p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 800; text-transform: uppercase; color: #18181b;">
-								${data.recipientName}
-							</p>
-							<p style="margin: 2px 0 0 0; font-size: 12px; color: #52525b;">
-								${data.recipientEmail}
-							</p>
-							${data.recipientPhone ? `<p style="margin: 2px 0 0 0; font-size: 12px; color: #52525b;">${data.recipientPhone}</p>` : ""}
-						</td>
-						<td style="width: 50%; vertical-align: top; text-align: right;">
-							<p style="margin: 0; font-size: 10px; color: #71717a; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">
-								Payment Details:
-							</p>
-							<p style="margin: 4px 0 0 0; font-size: 12px; color: #18181b;">
-								Date: <strong>${data.paymentDate}</strong>
-							</p>
-							<p style="margin: 2px 0 0 0; font-size: 12px; color: #18181b;">
-								Invoice: <strong>${data.invoiceNumber}</strong>
-							</p>
-							<p style="margin: 2px 0 0 0; font-size: 12px; color: #18181b;">
-								Channel: <strong>${data.paymentChannel}</strong>
-							</p>
-							<p style="margin: 2px 0 0 0; font-size: 10px; font-family: monospace; color: #71717a;">
-								Ref: ${data.reference}
-							</p>
+						<td style="padding-bottom: 16px;">
+							<table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);">
+								<tr>
+									<td style="padding: 32px 40px;">
+										<p style="margin: 0; color: #687385; font-size: 14px; font-weight: 500;">Receipt from Century NIT Consult</p>
+										<h1 style="margin: 12px 0; color: #1d1d1f; font-size: 36px; font-weight: 700; letter-spacing: -0.5px;">${ghsStr}</h1>
+										<p style="margin: 0; color: #687385; font-size: 14px;">Paid ${data.paymentDate}</p>
+										
+										<div style="margin: 24px 0; border-top: 1px solid #e6ebf1;"></div>
+										
+										<table width="100%" border="0" cellpadding="0" cellspacing="0">
+											<tr>
+												<td style="padding: 6px 0; color: #687385; font-size: 14px; width: 40%;">Receipt number</td>
+												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.receiptNumber}</td>
+											</tr>
+											<tr>
+												<td style="padding: 6px 0; color: #687385; font-size: 14px;">Invoice number</td>
+												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.invoiceNumber}</td>
+											</tr>
+											<tr>
+												<td style="padding: 6px 0; color: #687385; font-size: 14px;">Payment method</td>
+												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.paymentChannel}</td>
+											</tr>
+										</table>
+									</td>
+								</tr>
+							</table>
 						</td>
 					</tr>
-				</table>
-			</td>
-		</tr>
-
-		<!-- Table -->
-		<tr>
-			<td style="padding: 16px 32px 24px 32px;">
-				<table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
-					<thead>
-						<tr style="background-color: #f4f4f5; border-top: 1px solid #18181b; border-bottom: 1px solid #18181b;">
-							<th style="padding: 10px 8px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">Description</th>
-							<th style="padding: 10px 8px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">Currency</th>
-							<th style="padding: 10px 8px; text-align: right; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;">Amount Paid</th>
-						</tr>
-					</thead>
-					<tbody>
-						${lineItemsHtml}
-					</tbody>
-					<tfoot>
-						<tr>
-							<td colspan="2" style="padding: 14px 8px 4px 8px; text-align: right; font-weight: 800; text-transform: uppercase; font-size: 12px; color: #18181b;">
-								Total Amount Received:
-							</td>
-							<td style="padding: 14px 8px 4px 8px; text-align: right; font-weight: 900; font-size: 16px; font-family: monospace; border-bottom: 2px solid #18181b; color: #18181b;">
-								${ghsStr}
-							</td>
-						</tr>
-						<tr>
-							<td colspan="2" style="padding: 4px 8px 12px 8px; text-align: right; font-size: 11px; color: #71717a;">
-								USD Equivalent:
-							</td>
-							<td style="padding: 4px 8px 12px 8px; text-align: right; font-size: 11px; font-family: monospace; color: #71717a;">
-								${usdStr}
-							</td>
-						</tr>
-					</tfoot>
-				</table>
-			</td>
-		</tr>
-
-		<!-- Official Stamp & Verification Footer -->
-		<tr>
-			<td style="padding: 20px 32px 28px 32px; border-top: 1px solid #e4e4e7; background-color: #fafafa;">
-				<table width="100%" border="0" cellpadding="0" cellspacing="0">
+					
+					<!-- Card 2: Details -->
 					<tr>
-						<td style="vertical-align: middle; font-size: 11px; color: #71717a; line-height: 1.5;">
-							<p style="margin: 0; font-weight: 600; color: #52525b;">Century NIT Consult Official Electronic Receipt</p>
-							<p style="margin: 2px 0 0 0;">Verified and settled via Paystack Gateway Rails.</p>
-							<p style="margin: 2px 0 0 0;">For questions, email <strong>info@century-nit.com</strong> or call <strong>+233 30 200 0000</strong>.</p>
+						<td>
+							<table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);">
+								<tr>
+									<td style="padding: 32px 40px;">
+										<h3 style="margin: 0 0 24px 0; color: #1d1d1f; font-size: 16px; font-weight: 600;">Receipt ${data.receiptNumber}</h3>
+										
+										<table width="100%" border="0" cellpadding="0" cellspacing="0">
+											${lineItemsHtml}
+											
+											<tr>
+												<td colspan="2" style="padding: 16px 0; border-top: 1px solid #e6ebf1; border-bottom: 1px solid #e6ebf1;">
+													<table width="100%" border="0" cellpadding="0" cellspacing="0">
+														<tr>
+															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600;">Total</td>
+															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600; text-align: right;">${ghsStr}</td>
+														</tr>
+														<tr>
+															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600;">Amount paid</td>
+															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600; text-align: right;">${ghsStr}</td>
+														</tr>
+													</table>
+												</td>
+											</tr>
+											
+											${usdStr ? `
+											<tr>
+												<td colspan="2" style="padding: 16px 0 0 0;">
+													<table width="100%" border="0" cellpadding="0" cellspacing="0">
+														<tr>
+															<td style="padding: 4px 0; color: #687385; font-size: 13px;">USD Equivalent</td>
+															<td style="padding: 4px 0; color: #687385; font-size: 13px; text-align: right; font-weight: 500;">${usdStr}</td>
+														</tr>
+													</table>
+												</td>
+											</tr>
+											` : ""}
+										</table>
+									</td>
+								</tr>
+							</table>
 						</td>
-						<td style="vertical-align: middle; text-align: right;">
-							<div style="display: inline-block; border: 2px solid #18181b; padding: 6px 14px; text-align: center; background-color: #ffffff;">
-								<span style="font-size: 10px; font-weight: 900; letter-spacing: 0.05em; color: #18181b; text-transform: uppercase; display: block;">
-									PAID &amp; CONFIRMED
-								</span>
-								<div style="font-size: 9px; color: #52525b; font-family: monospace; margin-top: 2px;">
-									${data.paymentDate}
-								</div>
-							</div>
+					</tr>
+					
+					<!-- Footer -->
+					<tr>
+						<td align="center" style="padding: 32px 0 16px 0;">
+							<p style="margin: 0; color: #687385; font-size: 13px;">
+								Questions? Contact us at <a href="mailto:info@century-nit.com" style="color: #635bff; text-decoration: none; font-weight: 500;">info@century-nit.com</a>.
+							</p>
 						</td>
 					</tr>
 				</table>
@@ -214,9 +176,13 @@ export function generateReceiptHtml(data: ReceiptEmailData): string {
 </html>`;
 }
 
-export async function sendPaymentReceiptEmail(data: ReceiptEmailData): Promise<void> {
-	if (!data.recipientEmail) return;
-
+/**
+ * The receipt as a queueable message — the settlement path enqueues it so a
+ * Resend outage retries instead of losing the client's proof of payment, and
+ * the delivery lands in notification_log. Keyed on the payment reference so
+ * a manual resend updates the same audit row.
+ */
+export function receiptEmailMessage(data: ReceiptEmailData): QueuedEmail {
 	const html = generateReceiptHtml(data);
 	const text = `CENTURY NIT CONSULT - PAYMENT RECEIPT\n` +
 		`Receipt: ${data.receiptNumber}\n` +
@@ -228,12 +194,32 @@ export async function sendPaymentReceiptEmail(data: ReceiptEmailData): Promise<v
 		`Ref: ${data.reference}\n\n` +
 		`Thank you for choosing Century NIT Consult.`;
 
+	return {
+		to: data.recipientEmail,
+		subject: `Official Payment Receipt: ${data.invoiceNumber} (Century NIT Consult)`,
+		html,
+		text,
+		idempotencyKey: `receipt:${data.reference || data.receiptNumber}`,
+		template: "Payment receipt",
+		reference: data.invoiceNumber,
+	};
+}
+
+/**
+ * Manual resend (ops "Send receipt") — sent inline so the route can report a
+ * delivery failure, and logged to notification_log by sendEmail itself.
+ */
+export async function sendPaymentReceiptEmail(data: ReceiptEmailData): Promise<void> {
+	if (!data.recipientEmail) return;
+
+	const message = receiptEmailMessage(data);
 	try {
 		await sendEmail({
-			to: data.recipientEmail,
-			subject: `Official Payment Receipt: ${data.invoiceNumber} (Century NIT Consult)`,
-			html,
-			text,
+			to: message.to,
+			subject: message.subject,
+			html: message.html,
+			text: message.text,
+			log: { template: message.template, reference: message.reference, idempotencyKey: message.idempotencyKey },
 		});
 		console.log(`[receipt] Sent official branded receipt to ${data.recipientEmail} for invoice ${data.invoiceNumber}`);
 	} catch (err) {

@@ -15,6 +15,7 @@ const notificationLogItemSchema = z.object({
 	status: z.string(),
 	reference: z.string().nullable(),
 	errorMessage: z.string().nullable(),
+	attempts: z.number(),
 	sentAt: z.string().datetime(),
 });
 
@@ -80,6 +81,7 @@ notificationsRouter.openapi(
 				status: r.status,
 				reference: r.reference,
 				errorMessage: r.errorMessage,
+				attempts: r.attempts,
 				sentAt: r.sentAt.toISOString(),
 			})),
 			total: totalRow?.total ?? 0,

@@ -19,7 +19,7 @@ import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { AssignControl } from "century-nit-core/ui";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
@@ -32,7 +32,8 @@ import {
 	VISA_STEP_LABELS,
 	type PendingTask,
 } from "../lib/pendingTasks";
-import { PendingTaskTable } from "./PendingTasks";
+import { PendingTaskCards } from "./PendingTasks";
+import { NowPane } from "./NowPane";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseTabs, useCaseTab } from "./case/CaseTabs";
 import { WorkspaceCaseload } from "./WorkspaceCaseload";
@@ -121,7 +122,8 @@ export function Workspace() {
 	const [selected, setSelected] = useState<PendingTask | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
-	const [liveBookingIds, setLiveBookingIds] = useState<Set<string>>(new Set());
+	const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
+	const liveBookingIds = useMemo(() => new Set(liveBookings.map((b) => b.id)), [liveBookings]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -153,7 +155,7 @@ export function Workspace() {
 		const fetchLive = async () => {
 			try {
 				const res = await bookingsApi.liveMeetings();
-				if (!cancelled) setLiveBookingIds(new Set(res.bookings.map((b) => b.id)));
+				if (!cancelled) setLiveBookings(res.bookings);
 			} catch { /* ignore */ }
 		};
 		void fetchLive();
@@ -210,7 +212,7 @@ export function Workspace() {
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
-		let result = items.filter((item) => {
+		const result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
 			if (!passesQueueFilter(item, activeFilter)) return false;
 			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
@@ -222,18 +224,6 @@ export function Workspace() {
 			result.sort((a, b) => (new Date(b.at || 0).getTime()) - (new Date(a.at || 0).getTime()));
 		} else if (dateSort === "asc") {
 			result.sort((a, b) => (new Date(a.at || 0).getTime()) - (new Date(b.at || 0).getTime()));
-		} else if (activeFilter === "today") {
-			// The morning read as people: each client once, their things together,
-			// the earliest deadline first.
-			const firstDue = new Map<string, number>();
-			for (const t of result) {
-				const d = t.due ? new Date(t.due).getTime() : Number.MAX_SAFE_INTEGER;
-				firstDue.set(t.title, Math.min(firstDue.get(t.title) ?? Number.MAX_SAFE_INTEGER, d));
-			}
-			result = [...result].sort((a, b) => {
-				const byPerson = (firstDue.get(a.title) ?? 0) - (firstDue.get(b.title) ?? 0) || a.title.localeCompare(b.title);
-				return byPerson || a.priority - b.priority;
-			});
 		}
 		return result;
 	}, [items, branchFilter, activeFilter, typeFilter, dateSort, search]);
@@ -305,17 +295,10 @@ export function Workspace() {
 				collapseDetail
 				onClose={() => setSelected(null)}
 				bar={null}
+				rail={<NowPane items={items} liveBookings={liveBookings} onSelect={setSelected} />}
 				list={
 					<>
-						<div className="cn-scaffold__filters cn-scaffold__filters--row">
-							<input
-								type="search"
-								placeholder="Search queue…"
-								value={search}
-								onChange={(e) => setSearch(e.target.value)}
-								className="cn-search"
-								aria-label="Search queue"
-							/>
+						<div className="cn-scaffold__filters">
 							<div className="cn-scaffold__chips" role="tablist" aria-label="Queue" style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
 								{QUEUE_FILTERS.map((f) => {
 									const n = stats.counts.get(f.id) ?? 0;
@@ -344,6 +327,16 @@ export function Workspace() {
 									);
 								})}
 							</div>
+							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+							<input
+								type="search"
+								placeholder="Search queue…"
+								value={search}
+								onChange={(e) => setSearch(e.target.value)}
+								className="cn-search"
+								aria-label="Search queue"
+								style={{ flex: "1 1 14rem", width: "auto" }}
+							/>
 							<label className="cn-filter">
 								<span className="cn-filter__label">Type</span>
 								<select
@@ -394,9 +387,10 @@ export function Workspace() {
 									{stats.totalOutstanding > 0 ? ` · ${fmtGhs(stats.totalOutstanding)} outstanding` : ""}
 								</span>
 							)}
+							</div>
 						</div>
 						<div className="cn-scaffold__rows">
-							<PendingTaskTable
+							<PendingTaskCards
 								items={filtered}
 								assignees={assignees}
 								canAssignWork={canAssignWork}
@@ -404,7 +398,7 @@ export function Workspace() {
 								onAssigned={refresh}
 								onSelect={(t) => setSelected((cur) => (cur?.id === t.id ? null : t))}
 								selectedId={selected?.id}
-								groupByPerson={activeFilter === "today" && dateSort === "default"}
+								bands={activeFilter === "all" && dateSort === "default"}
 								emptyLabel={
 									loading
 										? "Loading your queue…"

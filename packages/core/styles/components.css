@@ -191,6 +191,27 @@
 .cn-scaffold--collapse > .cn-scaffold__list { flex: 1 1 auto; min-width: 0; }
 .cn-scaffold--collapse.cn-scaffold--open > .cn-scaffold__list { flex: 0 0 58%; }
 .cn-scaffold--collapse.cn-scaffold--open > .cn-scaffold__detail { flex: 1 1 auto; }
+/* Rail variant (Workspace): the detail pane is always on, at a fixed width —
+   the "now" surface with nothing selected, the record's preview otherwise.
+   The queue keeps the rest. */
+.cn-scaffold--rail > .cn-scaffold__list,
+.cn-scaffold--rail.cn-scaffold--open > .cn-scaffold__list { flex: 1 1 auto; min-width: 0; }
+.cn-scaffold--rail > .cn-scaffold__detail,
+.cn-scaffold--rail.cn-scaffold--open > .cn-scaffold__detail { flex: 0 0 min(23rem, 38%); }
+@media (max-width: 959.98px) {
+	/* Stacked on a phone: the now surface leads; a selected record sits under the thing that was tapped. */
+	.cn-scaffold--rail:not(.cn-scaffold--open) > .cn-scaffold__detail { order: -1; min-height: 0 !important; }
+}
+/* The now surface's pieces (Workspace rail). */
+.cn-now { padding: 1.25rem; }
+.cn-now--live { border-color: var(--foreground); }
+.cn-now__dot { display: inline-block; width: 0.6em; height: 0.6em; background: var(--foreground); }
+.cn-now__dot--hollow { background: transparent; border: 1px solid var(--foreground); }
+.cn-now__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
+.cn-now__actions + .cn-detailhead__meta { margin-top: 0.5rem; }
+.cn-now__row { appearance: none; background: none; border: 0; border-bottom: 1px solid var(--border-light); width: 100%; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.cn-now__row:hover { background: var(--muted); }
+.cn-now__time { font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: 0.04em; margin-right: 0.6rem; }
 /* Bare variant (Workspace): a data table needs no pane frame — the table's
    own hairlines are the structure, and the tabs' underline is the top edge.
    List and detail share the page surface; a single vertical rule splits them. */

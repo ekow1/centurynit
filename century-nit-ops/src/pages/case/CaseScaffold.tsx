@@ -23,6 +23,7 @@ export function CaseScaffold({
 	bar,
 	collapseDetail = false,
 	bare = false,
+	rail = null,
 }: {
 	/** The list pane: filters, search and rows. */
 	list: ReactNode;
@@ -40,6 +41,12 @@ export function CaseScaffold({
 	collapseDetail?: boolean;
 	/** Drop the pane frames — for queues whose list is a bordered data table. */
 	bare?: boolean;
+	/**
+	 * What the detail pane shows while nothing is selected — the pane stays
+	 * open at a fixed rail width instead of collapsing or showing the empty
+	 * hint. The rail brings its own bar. Selecting a record replaces it.
+	 */
+	rail?: ReactNode;
 }) {
 	const open = detail !== null;
 	const [expanded, setExpanded] = useState(false);
@@ -100,12 +107,14 @@ export function CaseScaffold({
 		<div
 			className={`ops-split cn-scaffold${collapseDetail ? " cn-scaffold--collapse" : ""}${
 				collapseDetail && open ? " cn-scaffold--open" : ""
-			}${bare ? " cn-scaffold--bare" : ""}`}
+			}${bare ? " cn-scaffold--bare" : ""}${rail ? " cn-scaffold--rail" : ""}`}
 		>
 			<div className="ops-split__list cn-scaffold__list">{list}</div>
-			{(!collapseDetail || open) && (
+			{(!collapseDetail || open || rail) && (
 				<div className="ops-split__detail cn-scaffold__detail">
-					{!open ? (
+					{!open && rail ? (
+						rail
+					) : !open ? (
 						<div className="cn-scaffold__empty">
 							<span className="cn-scaffold__empty-mark" aria-hidden>
 								◈

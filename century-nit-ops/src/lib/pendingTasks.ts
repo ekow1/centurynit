@@ -248,6 +248,23 @@ export function priorityNotches(priority: number): 1 | 2 | 3 {
 	return 1;
 }
 
+/**
+ * The queue read as a day: what is due today, what has slipped, and the
+ * rest. Overdue wins over today — a slot missed this morning is a miss,
+ * not an item on the day's list.
+ */
+export type QueueBand = "today" | "overdue" | "rest";
+export const QUEUE_BAND_LABEL: Record<QueueBand, string> = {
+	today: "Today",
+	overdue: "Overdue",
+	rest: "Everything else",
+};
+export function queueBand(task: PendingTask, now = new Date()): QueueBand {
+	if (isOverdue(task, now)) return "overdue";
+	if (isDueToday(task, now)) return "today";
+	return "rest";
+}
+
 /** The queue's When column: a short absolute stamp; the year only when it isn't this one. */
 export function whenLabel(iso?: string | null): string {
 	if (!iso) return "—";

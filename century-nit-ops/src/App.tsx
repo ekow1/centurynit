@@ -44,6 +44,7 @@ const EnterpriseAppointments = lazyNamed(() => import("./pages/EnterpriseAppoint
 const LiveMeetings = lazyNamed(() => import("./pages/LiveMeetings"), "LiveMeetings");
 const EnterpriseInbox = lazyNamed(() => import("./pages/EnterpriseInbox"), "EnterpriseInbox");
 const EnterpriseFeeSchedule = lazyNamed(() => import("./pages/EnterpriseFeeSchedule"), "EnterpriseFeeSchedule");
+const EnterpriseDepartureChecklist = lazyNamed(() => import("./pages/EnterpriseDepartureChecklist"), "EnterpriseDepartureChecklist");
 const EnterpriseAuditLogs = lazyNamed(() => import("./pages/EnterpriseAuditLogs"), "EnterpriseAuditLogs");
 const SchedulingConfig = lazyNamed(() => import("./pages/SchedulingConfig"), "SchedulingConfig");
 const ClientDirectory = lazyNamed(() => import("./pages/ClientDirectory"), "ClientDirectory");
@@ -157,6 +158,7 @@ export default function App() {
 									<Route path="ledger" element={<Ops module="ledger"><EnterpriseLedger /></Ops>} />
 									<Route path="payments" element={<Ops module="payments"><EnterprisePaymentsLog /></Ops>} />
 									<Route path="fee-schedule" element={<Ops module="finance"><EnterpriseFeeSchedule /></Ops>} />
+									<Route path="departure-checklist" element={<Ops module="applications"><EnterpriseDepartureChecklist /></Ops>} />
 									<Route path="payment-config" element={<Ops module="payment-config"><EnterprisePaymentConfig /></Ops>} />
 									<Route path="finance" element={<Ops module="finance"><EnterpriseFinance /></Ops>} />
 									<Route path="appointments" element={<Ops module="appointments"><EnterpriseAppointments /></Ops>} />

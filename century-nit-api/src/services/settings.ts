@@ -55,6 +55,7 @@ export type SettingKey =
 	| "STRIPE_SECRET_KEY"
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
+	| "PRE_DEPARTURE_TEMPLATE"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
 	| string;
 
@@ -224,6 +225,13 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "The rate the client is charged at and receipts convert at. Default: 15.0.",
+	},
+	PRE_DEPARTURE_TEMPLATE: {
+		label: "Pre-departure checklist template",
+		group: "Departure",
+		secret: false,
+		hidden: true,
+		description: "JSON list of the items every case is seeded with when Departure opens. Managed from the Departure checklist page.",
 	},
 	SERVICE_FEE_DEPOSIT_PERCENT: {
 		label: "Service fee · deposit %",

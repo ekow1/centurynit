@@ -41,6 +41,7 @@ import { eventsRouter } from "./routes/events.js";
 import { teamRouter } from "./routes/team.js";
 import { packagesRouter } from "./routes/packages.js";
 import { feesRouter } from "./routes/fees.js";
+import { departureRouter } from "./routes/departure.js";
 
 
 /**
@@ -164,6 +165,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/team`, teamRouter);
 app.route(`${API_PREFIX}/packages`, packagesRouter);
 app.route(`${API_PREFIX}/fees`, feesRouter);
+app.route(`${API_PREFIX}/departure`, departureRouter);
 
 
 	const openApiInfo = {
@@ -261,6 +263,7 @@ app.route(`${API_PREFIX}/fees`, feesRouter);
 	{ name: "Schools", description: "School-application management and scholarships." },
 	{ name: "Payments", description: "Paystack checkout initiation, verification and webhooks." },
 	{ name: "Roles", description: "Staff role definitions and permissions." },
+	{ name: "Departure", description: "The pre-departure checklist template — the global list and each destination's own items." },
 	{ name: "Fees", description: "The fee catalogue — Century's items, the destinations' visa tariffs, the exchange rate and the service-fee split." },
 	{ name: "CRM Leads", description: "Lead capture, events and pipeline management." },
 	{

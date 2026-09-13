@@ -70,6 +70,7 @@ const OPERATIONS_NAV: NavEntry[] = [
 			{ to: "/universities", module: "universities", label: "Universities", blurb: "Schools & countries", icon: "universities" },
 			{ to: "/programs", module: "programs", label: "Programmes", blurb: "Study programmes", icon: "programs" },
 			{ to: "/packages", module: "packages", label: "Packages", blurb: "Service packages & fees", icon: "packages" },
+			{ to: "/departure-checklist", module: "applications", label: "Departure checklist", blurb: "What every case does before flying", icon: "packages" },
 		],
 	},
 	{

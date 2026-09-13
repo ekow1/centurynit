@@ -14,7 +14,7 @@ import {
 	check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { VisaDetails } from "century-nit-shared";
+import type { PreDepartureTemplateItem, VisaDetails } from "century-nit-shared";
 
 /**
  * The flight a ticket invoice is for, and — with a PNR — the flight that was
@@ -2079,6 +2079,8 @@ export const destinations = pgTable("destinations", {
 	/** The embassy's visa fee and the visa centre's biometrics fee — paid on the client's behalf, at cost. */
 	visaFeeCents: integer("visa_fee_cents").notNull().default(0),
 	biometricsFeeCents: integer("biometrics_fee_cents").notNull().default(0),
+	/** This country's own pre-departure items, added to the global template when a case is seeded. */
+	departureTasks: jsonb("departure_tasks").$type<PreDepartureTemplateItem[]>().notNull().default([]),
 	tagline: text("tagline"),
 	description: text("description"),
 	highlights: jsonb("highlights").$type<string[]>(), // Array of strings

@@ -589,6 +589,13 @@
       "when": 1789600012000,
       "tag": "0085_drop_fee_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1789600013000,
+      "tag": "0086_destination_departure_tasks",
+      "breakpoints": true
     }
   ]
 }

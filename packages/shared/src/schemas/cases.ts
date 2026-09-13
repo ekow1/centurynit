@@ -396,6 +396,19 @@ export const preDepartureTaskSchema = z.object({
 });
 export type PreDepartureTask = z.infer<typeof preDepartureTaskSchema>;
 
+/** One template item — what a case is seeded with. `id` is stable across cases (e.g. "pd-briefing", "uk-brp"). */
+export const preDepartureTemplateItemSchema = z.object({
+	id: z.string().min(1).max(64).regex(/^[a-z0-9][a-z0-9-]*$/, "lower-case letters, digits and dashes"),
+	category: z.enum(["travel", "accommodation", "documents", "health", "finance", "orientation"]).optional(),
+	label: z.string().min(1).max(160),
+	detail: z.string().max(500).optional(),
+	owner: preDepartureOwnerSchema.default("client"),
+	evidence: z.string().max(64).nullable().optional(),
+	required: z.boolean().default(true),
+});
+export type PreDepartureTemplateItem = z.infer<typeof preDepartureTemplateItemSchema>;
+export const preDepartureTemplateSchema = z.object({ items: z.array(preDepartureTemplateItemSchema).max(60) });
+
 export const setPreDepartureTaskSchema = z.object({
 	done: z.boolean(),
 	waivedReason: z.string().max(500).nullable().optional(),

@@ -1,9 +1,77 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { PRE_DEPARTURE_TASKS } from "century-nit-core/content";
-import type { PreDepartureTask } from "century-nit-shared";
+import { preDepartureTemplateSchema, type PreDepartureTask, type PreDepartureTemplateItem } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applicantDocuments, applicants, applications, caseComments, opsUsers } from "../db/schema.js";
+import { applicantDocuments, applicants, applications, caseComments, destinations, opsUsers, schoolApplications } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+import { getSetting, writeSetting } from "./settings.js";
+
+/* ── The template ────────────────────────────────────────────────────────── */
+
+/** The code template, in the shape the editor and the seed use. */
+export function defaultPreDepartureTemplate(): PreDepartureTemplateItem[] {
+	return PRE_DEPARTURE_TASKS.map((t) => ({
+		id: t.id,
+		category: t.category,
+		label: t.label,
+		detail: t.detail,
+		owner: t.owner,
+		evidence: t.evidence ?? null,
+		required: t.required,
+	}));
+}
+
+/** The global template: what ops saved, else the code default. */
+export async function preDepartureTemplate(): Promise<PreDepartureTemplateItem[]> {
+	const raw = await getSetting("PRE_DEPARTURE_TEMPLATE");
+	if (!raw) return defaultPreDepartureTemplate();
+	try {
+		const parsed = preDepartureTemplateSchema.safeParse(JSON.parse(raw));
+		return parsed.success ? parsed.data.items : defaultPreDepartureTemplate();
+	} catch {
+		return defaultPreDepartureTemplate();
+	}
+}
+
+export async function savePreDepartureTemplate(items: PreDepartureTemplateItem[], actor: { opsUserId: string; email: string }): Promise<PreDepartureTemplateItem[]> {
+	const ids = new Set<string>();
+	for (const i of items) {
+		if (ids.has(i.id)) throw new HttpError(400, "DUPLICATE_ITEM", `Two items share the id "${i.id}"`);
+		ids.add(i.id);
+	}
+	await writeSetting("PRE_DEPARTURE_TEMPLATE", JSON.stringify({ items }), actor);
+	return items;
+}
+
+/** A country's own items, added to the template when a case bound for it is seeded. */
+export async function destinationDepartureTasks(destinationId: string): Promise<PreDepartureTemplateItem[]> {
+	const [row] = await db.select({ tasks: destinations.departureTasks }).from(destinations).where(eq(destinations.id, destinationId)).limit(1);
+	return (row?.tasks ?? []) as PreDepartureTemplateItem[];
+}
+
+export async function saveDestinationDepartureTasks(destinationId: string, items: PreDepartureTemplateItem[]): Promise<PreDepartureTemplateItem[]> {
+	const [row] = await db.select({ id: destinations.id }).from(destinations).where(eq(destinations.id, destinationId)).limit(1);
+	if (!row) throw new HttpError(404, "DESTINATION_NOT_FOUND", "No such destination");
+	await db.update(destinations).set({ departureTasks: items, updatedAt: new Date() }).where(eq(destinations.id, destinationId));
+	return items;
+}
+
+/** The destination a case is bound for: the accepted school's, else the country on the case. */
+async function destinationIdFor(row: { acceptedSchoolId: string | null; country: string | null }): Promise<string | null> {
+	if (row.acceptedSchoolId) {
+		const [s] = await db.select({ destinationId: schoolApplications.destinationId }).from(schoolApplications).where(eq(schoolApplications.id, row.acceptedSchoolId)).limit(1);
+		if (s?.destinationId) return s.destinationId;
+	}
+	if (row.country) {
+		const [d] = await db
+			.select({ id: destinations.id })
+			.from(destinations)
+			.where(or(ilike(destinations.name, row.country), eq(destinations.id, row.country.toLowerCase())))
+			.limit(1);
+		if (d) return d.id;
+	}
+	return null;
+}
 
 const RANK: Record<string, number> = { VERIFIED: 3, UPLOADED: 2, REJECTED: 1, PENDING_UPLOAD: 0 };
 
@@ -77,21 +145,30 @@ export async function resolvePreDepartureTasks(row: {
  */
 
 export async function seedPreDepartureTasks(applicationId: string): Promise<boolean> {
-	const [row] = await db.select({ tasks: applications.preDepartureTasks }).from(applications).where(eq(applications.id, applicationId)).limit(1);
+	const [row] = await db
+		.select({ tasks: applications.preDepartureTasks, acceptedSchoolId: applications.acceptedSchoolId, country: applications.country })
+		.from(applications)
+		.where(eq(applications.id, applicationId))
+		.limit(1);
 	if (!row || (Array.isArray(row.tasks) && row.tasks.length > 0)) return false;
-	const seeded: PreDepartureTask[] = PRE_DEPARTURE_TASKS.map((t) => ({
-		id: t.id,
-		category: t.category,
-		label: t.label,
-		detail: t.detail,
-		owner: t.owner,
-		evidence: t.evidence ?? null,
-		required: t.required,
-		done: false,
-		doneBy: null,
-		doneAt: null,
-		waivedReason: null,
-	}));
+	const destinationId = await destinationIdFor(row);
+	const template = [...(await preDepartureTemplate()), ...(destinationId ? await destinationDepartureTasks(destinationId) : [])];
+	const seen = new Set<string>();
+	const seeded: PreDepartureTask[] = template
+		.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)))
+		.map((t) => ({
+			id: t.id,
+			category: t.category,
+			label: t.label,
+			detail: t.detail,
+			owner: t.owner ?? "client",
+			evidence: t.evidence ?? null,
+			required: t.required ?? true,
+			done: false,
+			doneBy: null,
+			doneAt: null,
+			waivedReason: null,
+		}));
 	await db.update(applications).set({ preDepartureTasks: seeded, updatedAt: new Date() }).where(eq(applications.id, applicationId));
 	return true;
 }

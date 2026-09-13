@@ -2,26 +2,56 @@ import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
+import { useWorkQueue } from "../hooks/useWorkQueue";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
-import { API_PREFIX } from "century-nit-shared";
-import { fmtBoth, fmtFin, fmtGhs, fmtUsd, money } from "./currency";
-import { PendingTasks } from "./PendingTasks";
-import { LiveMeetings } from "./LiveMeetings";
-import { StaffChatBadge } from "./StaffChatBadge";
+import type { MockApplicant, MockApplication, MockConsultation } from "century-nit-core/ops";
+import { API_PREFIX, JOURNEY_STAGES, type Booking, type JourneyStage } from "century-nit-shared";
+import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { apiFetch } from "../lib/api";
+import { isDueToday, isOverdue, taskActionLabel, TASK_KIND_LABEL, priorityNotches, whenLabel, type PendingTask } from "../lib/pendingTasks";
+import { StageStrip } from "./WorkspaceCaseload";
 
 /**
- * Every figure on this page is derived from the API, so drilling into a
- * module always matches the number that sent you there. Manager and finance
- * see every branch (optionally filtered); coordinator and consultant are
- * auto-scoped to their branch / assignments - no filter shown.
+ * The Dashboard is the numbers; the work is in the Workspace. Every figure
+ * is derived from the API, so drilling into a module always matches the
+ * number that sent you there. Manager and finance see every branch
+ * (optionally filtered); coordinator and consultant are auto-scoped to
+ * their branch / assignments — no filter shown.
+ *
+ * Shared by every role: the day line (due today · overdue · unassigned ·
+ * live) pointing at the Worklist, and "the queue today" — the top of the
+ * same queue, five rows, never the whole table again.
  */
+
+const STALLED_AFTER_DAYS = 7;
+const STAGE_SHORT: Record<JourneyStage, string> = {
+	document_verification: "Docs",
+	school_submission: "School",
+	offer_letter_review: "Offer",
+	visa_processing: "Visa",
+	travel_assistance: "Travel",
+	payment_execution: "Payment",
+	completed: "Done",
+};
+const FLIGHT_STAGES = JOURNEY_STAGES.filter((s) => s !== "completed");
+
+const hm = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+/** Monday 00:00 of the current week, as a Date and as YYYY-MM-DD. */
+function weekStart(now = new Date()) {
+	const d = new Date(now);
+	d.setHours(0, 0, 0, 0);
+	d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+	return { date: d, iso: d.toISOString().slice(0, 10) };
+}
+
 export function EnterpriseDashboard() {
-	const { opsRole, opsUser, hasPermission, canSeeAllBranches, scopeRecords } = useOpsAuth();
-	const { consultations, applications, applicants, assignees } = useCases();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords } = useOpsAuth();
+	const { consultations, applications, applicants } = useCases();
 	const [branchFilter, setBranchFilter] = useState("all");
 	const [leads, setLeads] = useState<{ id: string; stage: string }[] | null>(null);
+	const queue = useWorkQueue(branchFilter);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -30,30 +60,22 @@ export function EnterpriseDashboard() {
 				const res = await apiFetch<{ leads: { id: string; stage: string }[] }>(`${API_PREFIX}/leads`);
 				if (!cancelled) setLeads(res.leads);
 			} catch {
-				/* non-fatal — funnel just shows 0 */
+				/* non-fatal — the pipeline just shows 0 */
 				if (!cancelled) setLeads([]);
 			}
 		})();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	const roleName = opsRole ? ROLE_LABELS[opsRole] : "Staff";
 
 	const scoped = useMemo(() => {
-		const scopedConsultations = scopeRecords(
-			consultations,
-			(c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
-		);
-		const scopedApplications = scopeRecords(
-			applications,
-			(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
-		);
-		const scopedApplicants = scopeRecords(
-			applicants,
-			(a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name,
-		);
-		const inBranch = <T extends { branch: string }>(list: T[]) =>
-			branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter);
+		const scopedConsultations = scopeRecords(consultations, (c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name);
+		const scopedApplications = scopeRecords(applications, (a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name);
+		const scopedApplicants = scopeRecords(applicants, (a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name);
+		const inBranch = <T extends { branch: string }>(list: T[]) => (branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter));
 		return {
 			consultations: inBranch(scopedConsultations),
 			applications: inBranch(scopedApplications),
@@ -61,30 +83,34 @@ export function EnterpriseDashboard() {
 		};
 	}, [scopeRecords, consultations, applications, applicants, opsUser, branchFilter]);
 
-	const stats = useMemo(() => {
-		const pendingDocs = scoped.applicants.reduce(
-			(n, a) => n + a.documents.filter((d) => d.status === "Pending Review").length,
-			0,
-		);
-		const openChecklistItems = scoped.applications.reduce(
-			(n, a) => n + a.checklist.filter((c) => !c.checked).length,
-			0,
-		);
+	const stats = useMemo<Stats>(() => {
+		const now = new Date();
+		const week = weekStart(now);
+		const pendingDocs = scoped.applicants.reduce((n, a) => n + a.documents.filter((d) => d.status === "Pending Review").length, 0);
+		const openChecklistItems = scoped.applications.reduce((n, a) => n + a.checklist.filter((c) => !c.checked).length, 0);
 		const outstanding = scoped.applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
 		const collected = scoped.applicants.reduce((n, a) => n + money(a.financials.paidAmount), 0);
-
+		const inFlight = scoped.applications.filter((a) => a.stage !== "completed");
+		const stalledCases = inFlight.filter((a) => {
+			const at = new Date(a.updatedAt ?? a.submittedDate).getTime();
+			return !Number.isNaN(at) && now.getTime() - at >= STALLED_AFTER_DAYS * 86_400_000;
+		}).length;
+		const stageCounts = FLIGHT_STAGES.map((s) => inFlight.filter((a) => a.stage === s).length);
 		return {
 			consultations: scoped.consultations.length,
+			consultationsThisWeek: scoped.consultations.filter((c) => c.slotDate && c.slotDate >= week.iso).length,
 			underReview: scoped.consultations.filter((c) => c.status === "Under Review").length,
 			inAssessment: scoped.consultations.filter((c) => c.status === "In Assessment").length,
-			completedConsults: scoped.consultations.filter((c) => c.status === "Completed").length,
 			applications: scoped.applications.length,
+			inFlight: inFlight.length,
+			casesThisWeek: scoped.applications.filter((a) => a.submittedDate >= week.iso).length,
+			stalledCases,
+			stageCounts,
 			appsUnderReview: scoped.applications.filter((a) => a.status === "Under Review").length,
 			accepted: scoped.applications.filter((a) => a.status === "Accepted").length,
 			applicants: scoped.applicants.length,
 			activeApplicants: scoped.applicants.filter((a) => a.status === "Active").length,
 			leads: leads ? leads.length : 0,
-			convertedLeads: leads ? leads.filter((l) => l.stage === "converted").length : 0,
 			newLeads: leads ? leads.filter((l) => l.stage === "new").length : 0,
 			contactedLeads: leads ? leads.filter((l) => l.stage === "contacted").length : 0,
 			assessmentCompleteLeads: leads ? leads.filter((l) => l.stage === "assessment_complete").length : 0,
@@ -94,30 +120,42 @@ export function EnterpriseDashboard() {
 			openChecklistItems,
 			outstanding,
 			collected,
+			overdueInvoices: queue.invoiceRows.filter((r) => r.status === "overdue").length,
+			invoicesToApprove: queue.items.filter((t) => t.action === "issue").length,
 		};
-	}, [scoped, leads]);
+	}, [scoped, leads, queue.invoiceRows, queue.items]);
 
-	const funnel = useMemo(() => {
-		return [
+	const day = useMemo(() => {
+		const now = new Date();
+		return {
+			dueToday: queue.items.filter((t) => isDueToday(t, now) && !isOverdue(t, now)).length,
+			overdue: queue.items.filter((t) => isOverdue(t, now)).length,
+			unassigned: queue.items.filter((t) => t.category === "needs_assignment").length,
+			live: queue.items.filter((t) => t.isLive).length,
+		};
+	}, [queue.items]);
+
+	const pipeline = useMemo(
+		() => [
 			{ label: LEAD_STAGE_LABELS.new, value: stats.newLeads, to: "/crm" },
 			{ label: LEAD_STAGE_LABELS.contacted, value: stats.contactedLeads, to: "/crm" },
-			{ label: LEAD_STAGE_LABELS.assessment_complete, value: stats.assessmentCompleteLeads, to: "/crm" },
+			{ label: "Assessed", value: stats.assessmentCompleteLeads, to: "/crm" },
 			{ label: "Consultations", value: stats.consultations, to: "/consultations" },
 			{ label: "Applications", value: stats.applications, to: "/applications" },
 			{ label: "Applicants", value: stats.applicants, to: "/applicants" },
-		];
-	}, [stats]);
+		],
+		[stats],
+	);
 
-	const funnelMax = Math.max(1, ...funnel.map((f) => f.value));
+	const view = { stats, pipeline, queue: queue.items, liveBookings: queue.liveBookings, scoped, branch: branchFilter };
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap" }}>
 				<div>
 					<h1 className="page-title">Dashboard</h1>
 					<p className="lead mt-2">
-						{opsUser ? `Welcome back, ${opsUser.name.split(" ")[0]}.` : "Operations overview."} Here is
-						what needs your attention.
+						{opsUser ? `Welcome back, ${opsUser.name.split(" ")[0]}.` : "Operations overview."} The numbers — the work is in the Workspace.
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -126,35 +164,17 @@ export function EnterpriseDashboard() {
 				</div>
 			</div>
 
-			{/* Quick Actions - filtered by permission */}
-			<div style={{ display: "flex", gap: "1rem", marginBottom: "2.5rem", flexWrap: "wrap" }}>
-				{hasPermission("consultations") && (
-					<Link to="/consultations" className="btn btn--primary btn--sm">Review Consultations</Link>
-				)}
-				{hasPermission("crm") && (
-					<Link to="/crm" className="btn btn--ghost btn--sm">Lead Pipeline</Link>
-				)}
-				{hasPermission("workflow") && (
-					<Link to="/applications?view=board" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
-				)}
-				{hasPermission("invoices") && (
-					<Link to="/workspace?filter=needs_invoice" className="btn btn--ghost btn--sm">Invoices to approve</Link>
-				)}
-				{hasPermission("packages") && (
-					<Link to="/packages" className="btn btn--ghost btn--sm">Service Packages</Link>
-				)}
-			</div>
+			<DayLine day={day} />
 
-			{/* Role-specific dashboard view */}
 			{opsRole === "coordinator" ? (
-				<CoordinatorView stats={stats} funnel={funnel} funnelMax={funnelMax} branch={branchFilter} />
+				<CoordinatorView {...view} />
 			) : opsRole === "consultant" ? (
-				<ConsultantView stats={stats} consultations={scoped.consultations} applications={scoped.applications} assignees={assignees} />
+				<ConsultantView {...view} />
 			) : opsRole === "finance" ? (
-				<FinanceView stats={stats} applicants={scoped.applicants} />
+				<FinanceView {...view} />
 			) : (
-				/* super_admin, admin, manager, or unassigned staff default to full operational executive overview */
-				<ManagerView stats={stats} funnel={funnel} funnelMax={funnelMax} applicants={scoped.applicants} branch={branchFilter} />
+				/* super_admin, admin, manager, or unassigned staff default to the full overview */
+				<ManagerView {...view} />
 			)}
 		</div>
 	);
@@ -162,16 +182,19 @@ export function EnterpriseDashboard() {
 
 type Stats = {
 	consultations: number;
+	consultationsThisWeek: number;
 	underReview: number;
 	inAssessment: number;
-	completedConsults: number;
 	applications: number;
+	inFlight: number;
+	casesThisWeek: number;
+	stalledCases: number;
+	stageCounts: number[];
 	appsUnderReview: number;
 	accepted: number;
 	applicants: number;
 	activeApplicants: number;
 	leads: number;
-	convertedLeads: number;
 	newLeads: number;
 	contactedLeads: number;
 	assessmentCompleteLeads: number;
@@ -181,269 +204,199 @@ type Stats = {
 	openChecklistItems: number;
 	outstanding: number;
 	collected: number;
+	overdueInvoices: number;
+	invoicesToApprove: number;
 };
 
-/* ─── Manager - full operational oversight ─── */
-
-function ManagerView({
-	stats,
-	funnel,
-	funnelMax,
-	applicants,
-	branch,
-}: {
+type ViewProps = {
 	stats: Stats;
-	funnel: { label: string; value: number; to?: string }[];
-	funnelMax: number;
-	applicants: {
-		id: string;
-		applicantId: string;
-		name: string;
-		financials: { outstanding: string; plan: string };
-	}[];
+	pipeline: { label: string; value: number; to?: string }[];
+	queue: PendingTask[];
+	liveBookings: Booking[];
+	scoped: { consultations: MockConsultation[]; applications: MockApplication[]; applicants: MockApplicant[] };
 	branch: string;
-}) {
+};
+
+/* ─── The day line: the Worklist's bands, in one line ─── */
+
+function DayLine({ day }: { day: { dueToday: number; overdue: number; unassigned: number; live: number } }) {
+	const today = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+	const cut = (n: number, label: string, filter: string) => (
+		<Link to={`/workspace${filter ? `?filter=${filter}` : ""}`} className={`dash-day__cut${n > 0 ? "" : " dash-day__cut--zero"}`}>
+			<strong>{n}</strong> {label}
+		</Link>
+	);
 	return (
-		<>
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2.5rem" }}>
-				<KPICard
-					label="Awaiting Assignment"
-					value={String(stats.unassignedConsultations + stats.unassignedApplications)}
-					note={`${stats.unassignedConsultations} consultations · ${stats.unassignedApplications} cases`}
-					inverted
-					to="/consultations"
-				/>
-				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
-				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
-				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/applicants" />
-				<KPICard label="Collected Revenue" value={fmtBoth(stats.collected)} note={`Outstanding: ${fmtBoth(stats.outstanding)}`} to="/finance" />
-			</div>
-
-			<div style={{ marginBottom: "2rem" }}>
-				<PendingTasks branchFilter={branch} />
-			</div>
-
-			<div style={{ marginBottom: "2rem" }}>
-				<LiveMeetings compact />
-			</div>
-
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Conversion Funnel</h2>
-					<p className="muted mb-2" style={{ fontSize: "var(--text-xs)" }}>Click a stage to drill into the module.</p>
-					<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-						{funnel.map((f) => (
-							<FunnelBar key={f.label} label={f.label} value={f.value} max={funnelMax} to={f.to} />
-						))}
-					</div>
-				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">Needs Attention</h2>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/workspace?filter=needs_action" />
-						<ActivityItem title="Consultations to assess" time={`${stats.inAssessment} in assessment`} to="/consultations" />
-						<ActivityItem
-							title="Lead → applicant rate"
-							time={stats.leads ? `${Math.round((stats.applicants / stats.leads) * 100)}%` : "-"}
-							to="/crm"
-						/>
-					</ul>
-				</div>
-			</div>
-
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Balances</h2>
-					{applicants.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
-					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-							{applicants.slice(0, 6).map((a) => (
-								<ActivityItem
-									key={a.id}
-									title={`${a.name} - ${fmtFin(a.financials.outstanding)} outstanding`}
-									time={`${a.applicantId} · ${a.financials.plan}`}
-									to="/applicants"
-								/>
-							))}
-						</ul>
-					)}
-				</div>
-			</div>
-		</>
+		<div className="dash-day">
+			<span className="dash-day__date">{today}</span>
+			<span className="dash-day__sep" aria-hidden>
+				|
+			</span>
+			{cut(day.dueToday, "due today", "today")}
+			{cut(day.overdue, "overdue", "overdue")}
+			{cut(day.unassigned, "unassigned", "needs_assignment")}
+			{cut(day.live, "live now", "today")}
+			<span className="dash-day__sep" aria-hidden>
+				|
+			</span>
+			<Link to="/workspace" className="dash-link">
+				Open the Worklist →
+			</Link>
+		</div>
 	);
 }
 
-/* ─── Coordinator - CRM leads, assignments, workflow tracking ─── */
+/* ─── Manager — the full overview ─── */
 
-function CoordinatorView({
-	stats,
-	funnel,
-	funnelMax,
-	branch,
-}: {
-	stats: Stats;
-	funnel: { label: string; value: number; to?: string }[];
-	funnelMax: number;
-	branch: string;
-}) {
+function ManagerView({ stats, pipeline, queue, liveBookings, scoped }: ViewProps) {
 	return (
 		<>
-			<PendingTasks branchFilter={branch} />
-
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard
-					label="Pending Tasks"
-					value={String(
-						stats.unassignedConsultations + stats.unassignedApplications + stats.pendingDocs + stats.openChecklistItems,
-					)}
-					note="Across consultations, cases & documents"
+			<div className="dash-kpis">
+				<Kpi
+					label="Awaiting assignment"
+					value={String(stats.unassignedConsultations + stats.unassignedApplications)}
+					note={`${stats.unassignedConsultations} consultation${stats.unassignedConsultations === 1 ? "" : "s"} · ${stats.unassignedApplications} case${stats.unassignedApplications === 1 ? "" : "s"}`}
 					inverted
 					to="/workspace?filter=needs_assignment"
 				/>
-				<KPICard label="Consultations" value={String(stats.consultations)} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
-				<KPICard label="Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review · ${stats.accepted} accepted`} to="/applications" />
-				<KPICard label="Pending Docs" value={String(stats.pendingDocs)} note="Awaiting verification" to="/documents" />
+				<Kpi
+					label="Consultations"
+					value={String(stats.consultations)}
+					delta={`${stats.consultationsThisWeek} this week`}
+					note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`}
+					to="/consultations"
+				/>
+				<CasesKpi stats={stats} />
+				<Kpi
+					label="Collected"
+					value={fmtGhs(stats.collected)}
+					delta={fmtUsd(stats.collected)}
+					note={`${fmtGhs(stats.outstanding)} outstanding${stats.overdueInvoices > 0 ? ` · ${stats.overdueInvoices} invoice${stats.overdueInvoices === 1 ? "" : "s"} overdue` : ""}`}
+					to="/finance"
+				/>
 			</div>
 
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Conversion Funnel</h2>
-					<p className="muted mb-2" style={{ fontSize: "var(--text-xs)" }}>Click a stage to drill into the module.</p>
-					<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-						{funnel.map((f) => (
-							<FunnelBar key={f.label} label={f.label} value={f.value} max={funnelMax} to={f.to} />
-						))}
-					</div>
+			<div className="dash-grid">
+				<div className="dash-col">
+					<QueuePanel items={queue} />
+					<Pipeline steps={pipeline} leads={stats.leads} applicants={stats.applicants} />
+					<Balances applicants={scoped.applicants} />
 				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">Workflow Status</h2>
-					<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<ActivityItem title="Consultations to assign" time={`${stats.unassignedConsultations} awaiting a consultant`} to="/workspace?filter=needs_assignment" />
-						<ActivityItem title="Cases to assign" time={`${stats.unassignedApplications} awaiting staff`} to="/workspace?filter=needs_assignment" />
-						<ActivityItem title="Documents pending review" time={`${stats.pendingDocs} awaiting a decision`} to="/documents" />
-						<ActivityItem title="Open checklist items" time={`${stats.openChecklistItems} unticked across cases`} to="/workspace?filter=needs_action" />
-					</div>
-				</div>
-			</div>
-		</>
-	);
-}
-
-/* ─── Consultant - their own caseload ─── */
-
-function ConsultantView({
-	stats,
-	consultations,
-	applications,
-	assignees,
-}: {
-	stats: Stats;
-	consultations: { id: string; applicantName: string; dateTime: string; targetCountry: string; status: string; assignedOfficer?: string; assignedOfficerEmail?: string }[];
-	applications: { id: string; appId: string; applicantName: string; stage: string; university: string; assignedStaff?: string; assignedStaffEmail?: string }[];
-	assignees: { name: string; email: string; opsUserId?: string }[];
-}) {
-	const toAssess = consultations.filter((c) => c.status !== "Completed");
-	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
-
-	return (
-		<>
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard label="My Consultations" value={String(stats.consultations)} note={`${toAssess.length} awaiting assessment`} inverted to="/consultations" />
-				<KPICard label="My Applications" value={String(stats.applications)} note={`${stats.appsUnderReview} under review`} to="/applications" />
-				<KPICard label="My Applicants" value={String(stats.activeApplicants)} note="Active across all stages" to="/applicants" />
-			</div>
-
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Awaiting My Assessment</h2>
-					{toAssess.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>Nothing waiting on you.</p>
-					) : (
-						<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-							{toAssess.slice(0, 6).map((c) => (
-								<ActivityItem
-									key={c.id}
-									title={`${c.applicantName} - ${c.dateTime}`}
-									time={`${c.targetCountry} · ${c.status}`}
-									to="/consultations"
-									chat={
-										c.assignedOfficer ? (
-											<StaffChatBadge
-												opsUserId={opsUserIdByEmail(c.assignedOfficerEmail ?? "")}
-												name={c.assignedOfficer}
-												email={c.assignedOfficerEmail}
-											/>
-										) : null
-									}
-								/>
-							))}
-						</div>
-					)}
-				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">My Cases</h2>
-					{applications.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No cases assigned to you.</p>
-					) : (
-						<div className="ops-activity-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-							{applications.slice(0, 6).map((a) => (
-								<ActivityItem
-									key={a.id}
-									title={`${a.appId} - ${a.applicantName}`}
-									time={`${a.stage} · ${a.university}`}
-									to="/applications"
-									chat={
-										a.assignedStaff ? (
-											<StaffChatBadge
-												opsUserId={opsUserIdByEmail(a.assignedStaffEmail ?? "")}
-												name={a.assignedStaff}
-												email={a.assignedStaffEmail}
-											/>
-										) : null
-									}
-								/>
-							))}
-						</div>
-					)}
+				<div className="dash-col">
+					<NowPanel liveBookings={liveBookings} items={queue} />
+					<Panel title="Needs attention">
+						<ARow label="Invoices to approve" n={stats.invoicesToApprove} to="/workspace?filter=needs_invoice" />
+						<ARow label="Documents pending review" n={stats.pendingDocs} to="/documents" />
+						<ARow label="Consultations to assess" n={stats.inAssessment} to="/consultations" />
+						<ARow label="Open checklist items" n={stats.openChecklistItems} to="/workspace?filter=needs_action" />
+						<ARow label={`Cases stalled ${STALLED_AFTER_DAYS}+ days`} n={stats.stalledCases} to="/workspace?tab=caseload" />
+					</Panel>
+					<TeamLoad applications={scoped.applications} consultations={scoped.consultations} />
 				</div>
 			</div>
 		</>
 	);
 }
 
-/* ─── Finance - money and the package catalogue ─── */
+/* ─── Coordinator — assignments and workflow ─── */
 
-function FinanceView({
-	stats,
-	applicants,
-}: {
-	stats: Stats;
-	applicants: {
-		id: string;
-		applicantId: string;
-		name: string;
-		financials: { totalAmount: string; paidAmount: string; outstanding: string; plan: string };
-	}[];
-}) {
-	const settled = applicants.filter(
-		(a) => money(a.financials.outstanding) === 0,
-	).length;
-
+function CoordinatorView({ stats, pipeline, queue, liveBookings }: ViewProps) {
 	return (
 		<>
-			<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "3rem" }}>
-				<KPICard label="Total Outstanding" value={fmtGhs(stats.outstanding)} note={`${stats.applicants} accounts · ${fmtUsd(stats.outstanding)}`} inverted to="/finance" />
-				<KPICard label="Collected" value={fmtGhs(stats.collected)} note={`Across all applicants · ${fmtUsd(stats.collected)}`} to="/finance" />
-				<KPICard label="Settled Accounts" value={String(settled)} note={`${stats.applicants - settled} with a balance`} to="/finance" />
-				<KPICard label="Active Applicants" value={String(stats.activeApplicants)} note="Currently billable" to="/applicants" />
+			<div className="dash-kpis">
+				<Kpi label="In the queue" value={String(queue.length)} note={`${stats.unassignedConsultations + stats.unassignedApplications} to assign · ${stats.pendingDocs} documents`} inverted to="/workspace" />
+				<Kpi label="Consultations" value={String(stats.consultations)} delta={`${stats.consultationsThisWeek} this week`} note={`${stats.underReview} under review · ${stats.inAssessment} in assessment`} to="/consultations" />
+				<CasesKpi stats={stats} />
+				<Kpi label="Pending documents" value={String(stats.pendingDocs)} note="Awaiting verification" to="/documents" />
 			</div>
+			<div className="dash-grid">
+				<div className="dash-col">
+					<QueuePanel items={queue} />
+					<Pipeline steps={pipeline} leads={stats.leads} applicants={stats.applicants} />
+				</div>
+				<div className="dash-col">
+					<NowPanel liveBookings={liveBookings} items={queue} />
+					<Panel title="Workflow">
+						<ARow label="Consultations to assign" n={stats.unassignedConsultations} to="/workspace?filter=needs_assignment" />
+						<ARow label="Cases to assign" n={stats.unassignedApplications} to="/workspace?filter=needs_assignment" />
+						<ARow label="Documents pending review" n={stats.pendingDocs} to="/documents" />
+						<ARow label="Open checklist items" n={stats.openChecklistItems} to="/workspace?filter=needs_action" />
+						<ARow label={`Cases stalled ${STALLED_AFTER_DAYS}+ days`} n={stats.stalledCases} to="/workspace?tab=caseload" />
+					</Panel>
+				</div>
+			</div>
+		</>
+	);
+}
 
-			<div className="card">
-				<h2 className="section-title mb-3">Applicant Balances</h2>
+/* ─── Consultant — their own load ─── */
+
+function ConsultantView({ stats, queue, liveBookings, scoped }: ViewProps) {
+	const toAssess = scoped.consultations.filter((c) => c.status !== "Completed" && c.status !== "Cancelled");
+	return (
+		<>
+			<div className="dash-kpis dash-kpis--three">
+				<Kpi label="My consultations" value={String(stats.consultations)} delta={`${stats.consultationsThisWeek} this week`} note={`${toAssess.length} awaiting assessment`} inverted to="/consultations" />
+				<CasesKpi stats={stats} label="My cases" />
+				<Kpi label="My applicants" value={String(stats.activeApplicants)} note={`${stats.applicants} in directory`} to="/applicants" />
+			</div>
+			<div className="dash-grid">
+				<div className="dash-col">
+					<QueuePanel items={queue} />
+					<Panel title="Awaiting my assessment" link={{ to: "/consultations", label: "Consultations →" }}>
+						{toAssess.length === 0 ? (
+							<p className="dash-empty">Nothing waiting on you.</p>
+						) : (
+							toAssess.slice(0, 6).map((c) => (
+								<Link key={c.id} to={`/consultations?id=${c.id}`} className="dash-row">
+									<span className="dash-row__who">{c.applicantName}</span>
+									<span className="dash-row__what">
+										{c.status}
+										{c.targetCountry ? ` · ${c.targetCountry}` : ""}
+									</span>
+									<span className="dash-row__when">{c.dateTime}</span>
+								</Link>
+							))
+						)}
+					</Panel>
+				</div>
+				<div className="dash-col">
+					<NowPanel liveBookings={liveBookings} items={queue} />
+					<Panel title="My cases" link={{ to: "/workspace?tab=caseload", label: "Caseload →" }}>
+						{scoped.applications.length === 0 ? (
+							<p className="dash-empty">No cases assigned to you.</p>
+						) : (
+							scoped.applications.slice(0, 6).map((a) => (
+								<Link key={a.id} to={`/applications?id=${a.id}`} className="dash-row">
+									<span className="dash-row__who">{a.applicantName}</span>
+									<span className="dash-row__what">{STAGE_SHORT[a.stage as JourneyStage] ?? a.stage}</span>
+									<span className="dash-row__when">{a.university || "—"}</span>
+								</Link>
+							))
+						)}
+					</Panel>
+				</div>
+			</div>
+		</>
+	);
+}
+
+/* ─── Finance — the money ─── */
+
+function FinanceView({ stats, scoped }: ViewProps) {
+	const applicants = scoped.applicants;
+	const settled = applicants.filter((a) => money(a.financials.outstanding) === 0).length;
+	return (
+		<>
+			<div className="dash-kpis">
+				<Kpi label="Total outstanding" value={fmtGhs(stats.outstanding)} delta={fmtUsd(stats.outstanding)} note={`${stats.applicants - settled} account${stats.applicants - settled === 1 ? "" : "s"} with a balance${stats.overdueInvoices > 0 ? ` · ${stats.overdueInvoices} invoice${stats.overdueInvoices === 1 ? "" : "s"} overdue` : ""}`} inverted to="/finance" />
+				<Kpi label="Collected" value={fmtGhs(stats.collected)} delta={fmtUsd(stats.collected)} note="Across all applicants" to="/finance" />
+				<Kpi label="Settled accounts" value={String(settled)} note={`of ${stats.applicants}`} to="/finance" />
+				<Kpi label="Invoices to approve" value={String(stats.invoicesToApprove)} note="Proformas raised by consultants" to="/workspace?filter=needs_invoice" />
+			</div>
+			<Panel title="Applicant balances" link={{ to: "/ledger", label: "Client ledger →" }}>
 				{applicants.length === 0 ? (
-					<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applicant accounts yet.</p>
+					<p className="dash-empty">No applicant accounts yet.</p>
 				) : (
 					<div className="ops-table-wrap">
 						<table className="ops-table">
@@ -462,11 +415,15 @@ function FinanceView({
 									<tr key={a.id}>
 										<td className="mono">{a.applicantId}</td>
 										<td>
-											<Link to="/applicants" style={{ textDecoration: "underline" }}>{a.name}</Link>
+											<Link to="/applicants" style={{ textDecoration: "underline" }}>
+												{a.name}
+											</Link>
 										</td>
 										<td>{fmtFin(a.financials.totalAmount)}</td>
 										<td>{fmtFin(a.financials.paidAmount)}</td>
-										<td><strong>{fmtFin(a.financials.outstanding)}</strong></td>
+										<td>
+											<strong>{fmtFin(a.financials.outstanding)}</strong>
+										</td>
 										<td className="muted">{a.financials.plan}</td>
 									</tr>
 								))}
@@ -474,81 +431,252 @@ function FinanceView({
 						</table>
 					</div>
 				)}
-			</div>
+			</Panel>
 		</>
 	);
 }
 
-/* ─── Shared Components ─── */
+/* ─── Pieces ─── */
 
-function KPICard({ label, value, note, inverted, to }: { label: string; value: string; note: string; inverted?: boolean; to?: string }) {
-	const card = (
-		<div
-			className="card"
-			style={{
-				...(inverted ? { background: "var(--foreground)", color: "var(--background)" } : undefined),
-				height: "100%",
-				display: "flex",
-				flexDirection: "column",
-			}}
-		>
-			<p className="eyebrow" style={inverted ? { color: "rgba(255,255,255,0.85)" } : undefined}>{label}</p>
-			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
-			<p className="muted mt-2" style={{ ...(inverted ? { color: "rgba(255,255,255,0.85)" } : undefined), marginTop: "auto" }}>{note}</p>
-		</div>
+function Kpi({
+	label,
+	value,
+	delta,
+	note,
+	inverted,
+	to,
+	children,
+}: {
+	label: string;
+	value: string;
+	delta?: string;
+	note: string;
+	inverted?: boolean;
+	to?: string;
+	children?: ReactNode;
+}) {
+	const body = (
+		<>
+			<span className="dash-kpi__label">{label}</span>
+			<span className="dash-kpi__value">{value}</span>
+			{delta && <span className="dash-kpi__delta">{delta}</span>}
+			{children}
+			<span className="dash-kpi__note">{note}</span>
+		</>
 	);
-	if (!to) return card;
+	const cls = `dash-kpi${inverted ? " dash-kpi--on" : ""}`;
+	return to ? (
+		<Link to={to} className={cls} aria-label={`Open ${label}`}>
+			{body}
+		</Link>
+	) : (
+		<div className={cls}>{body}</div>
+	);
+}
+
+/** Cases in flight, with the stage strip and its legend. */
+function CasesKpi({ stats, label = "Cases in flight" }: { stats: Stats; label?: string }) {
+	const legend = FLIGHT_STAGES.map((s, i) => (stats.stageCounts[i] > 0 ? `${STAGE_SHORT[s]} ${stats.stageCounts[i]}` : null)).filter(Boolean);
 	return (
-		<Link
-			to={to}
-			className="card-link"
-			style={{ display: "block", height: "100%" }}
-			aria-label={`Open ${label}`}
+		<Kpi
+			label={label}
+			value={String(stats.inFlight)}
+			delta={`${stats.casesThisWeek} this week${stats.stalledCases > 0 ? ` · ${stats.stalledCases} stalled` : ""}`}
+			note={legend.length > 0 ? legend.join(" · ") : `${stats.applications - stats.inFlight} completed`}
+			to="/applications?view=board"
 		>
-			{card}
+			<StageStrip counts={stats.stageCounts} />
+		</Kpi>
+	);
+}
+
+function Panel({ title, link, live, children }: { title: ReactNode; link?: { to: string; label: string }; live?: boolean; children: ReactNode }) {
+	return (
+		<section className={`dash-panel${live ? " dash-panel--live" : ""}`}>
+			<header className="dash-panel__head">
+				<h2 className="dash-panel__title">{title}</h2>
+				{link && (
+					<Link to={link.to} className="dash-link">
+						{link.label}
+					</Link>
+				)}
+			</header>
+			{children}
+		</section>
+	);
+}
+
+/** The top of the queue: what is due or late first, then the rest by priority. */
+function QueuePanel({ items }: { items: PendingTask[] }) {
+	const now = new Date();
+	const urgent = items.filter((t) => isDueToday(t, now) || isOverdue(t, now));
+	const rest = items.filter((t) => !urgent.includes(t));
+	const top = [...urgent, ...rest].slice(0, 5);
+	return (
+		<Panel title="The queue today" link={{ to: "/workspace", label: `All ${items.length} →` }}>
+			{top.length === 0 ? (
+				<p className="dash-empty">Nothing on the desk. All caught up.</p>
+			) : (
+				top.map((t) => {
+					const late = isOverdue(t, now);
+					const n = priorityNotches(t.priority);
+					const when = t.due && isDueToday(t, now) ? hm(t.due) : t.due ? whenLabel(t.due).split(",")[0] : whenLabel(t.at).split(",")[0];
+					return (
+						<Link key={t.id} to="/workspace" className="dash-row">
+							<span className="ops-meter" aria-hidden>
+								<span>{"●".repeat(n)}</span>
+								<span className="ops-meter__off">{"●".repeat(3 - n)}</span>
+							</span>
+							<span className="dash-row__who">{t.title}</span>
+							<span className="dash-row__what">
+								{taskActionLabel(t)} · {TASK_KIND_LABEL[t.kind]}
+								{t.isLive ? " · live" : late ? " · overdue" : ""}
+							</span>
+							<span className="dash-row__when">{when}</span>
+						</Link>
+					);
+				})
+			)}
+		</Panel>
+	);
+}
+
+/** What is happening now: live meetings, else the next slot today. */
+function NowPanel({ liveBookings, items }: { liveBookings: Booking[]; items: PendingTask[] }) {
+	const now = new Date();
+	const next = items
+		.filter((t) => t.kind === "consultation" && t.due && !t.isLive && isDueToday(t, now) && new Date(t.due).getTime() >= now.getTime() - 15 * 60_000)
+		.sort((a, b) => new Date(a.due!).getTime() - new Date(b.due!).getTime())
+		.slice(0, liveBookings.length > 0 ? 2 : 3);
+	const live = liveBookings.length > 0;
+	return (
+		<Panel
+			title={
+				<>
+					<span className={`cn-now__dot${live ? "" : " cn-now__dot--hollow"}`} aria-hidden style={{ marginRight: "0.45em" }} />
+					Now
+				</>
+			}
+			link={{ to: "/live-meetings", label: "Live meetings →" }}
+			live={live}
+		>
+			{liveBookings.map((b) => {
+				const mins = Math.max(0, Math.round((now.getTime() - new Date(b.startsAt).getTime()) / 60_000));
+				return (
+					<Link key={b.id} to="/live-meetings" className="dash-row">
+						<span className="dash-row__who">{b.clientName}</span>
+						<span className="dash-row__what">
+							{b.employeeName ?? "unassigned"} · {mins} min in{b.meetingParticipants > 0 ? ` · ${b.meetingParticipants} in the room` : ""}
+						</span>
+					</Link>
+				);
+			})}
+			{next.map((t) => (
+				<Link key={t.id} to={t.linkTo} className="dash-row">
+					<span className="dash-row__who">{t.title}</span>
+					<span className="dash-row__what">next · {t.owner}</span>
+					<span className="dash-row__when">{hm(t.due!)}</span>
+				</Link>
+			))}
+			{!live && next.length === 0 && <p className="dash-empty">Nothing live, and no consultations left today.</p>}
+		</Panel>
+	);
+}
+
+function Pipeline({ steps, leads, applicants }: { steps: { label: string; value: number; to?: string }[]; leads: number; applicants: number }) {
+	const max = Math.max(1, ...steps.map((s) => s.value));
+	const rate = leads > 0 ? Math.round((applicants / leads) * 100) : null;
+	return (
+		<Panel title="Pipeline" link={{ to: "/crm", label: rate === null ? "Leads →" : `${leads} leads → ${applicants} applicants · ${rate}% converted` }}>
+			<div className="dash-pipe">
+				{steps.map((s) => (
+					<Link key={s.label} to={s.to ?? "/crm"} className="dash-pipe__step" aria-label={`Open ${s.label}`}>
+						<span className="dash-pipe__n">{s.value}</span>
+						<span className="dash-pipe__l">{s.label}</span>
+						<span className="dash-pipe__bar">
+							<span style={{ width: `${Math.round((s.value / max) * 100)}%` }} />
+						</span>
+					</Link>
+				))}
+			</div>
+		</Panel>
+	);
+}
+
+function ARow({ label, n, to, note }: { label: string; n: number; to: string; note?: string }) {
+	return (
+		<Link to={to} className="dash-arow">
+			<span>
+				{label}
+				{note && <span className="cn-detail__row-note"> {note}</span>}
+			</span>
+			<span className={`dash-arow__n${n === 0 ? " dash-arow__n--zero" : ""}`}>{n}</span>
 		</Link>
 	);
 }
 
-function ActivityItem({ title, time, to, chat }: { title: string; time: string; to?: string; chat?: ReactNode }) {
-	// Render as a div (not <li>) so it can safely wrap in a <Link> without
-	// producing invalid <a><li> nesting. Callers render these inside a <ul>.
-	const item = (
-		<div className="ops-activity-item" style={{ padding: "0.75rem 0", borderBottom: "1px solid var(--border-light)" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-				<div style={{ minWidth: 0 }}>
-					<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{title}</p>
-					<p className="muted mt-1" style={{ fontSize: "var(--text-xs)" }}>{time}</p>
-				</div>
-				{chat}
-			</div>
-		</div>
-	);
-	if (!to) return item;
+function Balances({ applicants }: { applicants: ViewProps["scoped"]["applicants"] }) {
+	const owing = applicants
+		.map((a) => ({ a, due: money(a.financials.outstanding) }))
+		.filter((x) => x.due > 0)
+		.sort((x, y) => y.due - x.due)
+		.slice(0, 5);
 	return (
-		<Link to={to} className="card-link" style={{ display: "block" }}>
-			{item}
+		<Panel title="Balances" link={{ to: "/ledger", label: "Client ledger →" }}>
+			{owing.length === 0 ? (
+				<p className="dash-empty">No outstanding balances.</p>
+			) : (
+				owing.map(({ a, due }) => <ARowMoney key={a.id} label={a.name} amount={fmtGhs(due)} note={`${a.applicantId} · ${a.financials.plan}`} to="/applicants" />)
+			)}
+		</Panel>
+	);
+}
+
+function ARowMoney({ label, amount, note, to }: { label: string; amount: string; note: string; to: string }) {
+	return (
+		<Link to={to} className="dash-arow">
+			<span>
+				{label}
+				<span className="cn-detail__row-note"> {note}</span>
+			</span>
+			<span className="dash-arow__n">{amount}</span>
 		</Link>
 	);
 }
 
-function FunnelBar({ label, value, max, to }: { label: string; value: number; max: number; to?: string }) {
-	const pct = Math.round((value / max) * 100);
-	const bar = (
-		<div>
-			<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-				<span style={{ fontSize: "var(--text-sm)" }}>{label}</span>
-				<span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)" }}>{value}</span>
-			</div>
-			<div style={{ width: "100%", height: "8px", background: "var(--muted)", border: "1px solid var(--border-light)" }}>
-				<div style={{ width: `${pct}%`, height: "100%", background: "var(--foreground)", transition: "width 0.6s ease" }} />
-			</div>
-		</div>
-	);
-	if (!to) return bar;
+/** Open load per officer, with what has stalled — the Caseload in four lines. */
+function TeamLoad({ applications, consultations }: { applications: ViewProps["scoped"]["applications"]; consultations: ViewProps["scoped"]["consultations"] }) {
+	const now = new Date().getTime();
+	const map = new Map<string, { open: number; stalled: number }>();
+	const bump = (name: string | undefined, updatedAt: string | undefined, done: boolean) => {
+		if (!name || done) return;
+		const o = map.get(name) ?? { open: 0, stalled: 0 };
+		o.open++;
+		const at = updatedAt ? new Date(updatedAt).getTime() : NaN;
+		if (!Number.isNaN(at) && now - at >= STALLED_AFTER_DAYS * 86_400_000) o.stalled++;
+		map.set(name, o);
+	};
+	for (const a of applications) bump(a.assignedStaff || undefined, a.updatedAt ?? a.submittedDate, a.stage === "completed");
+	for (const c of consultations) bump(c.assignedOfficer || undefined, c.updatedAt, c.status === "Completed" || c.status === "Cancelled");
+	const rows = [...map.entries()].sort((x, y) => y[1].open - x[1].open).slice(0, 6);
+	const max = Math.max(1, ...rows.map(([, r]) => r.open));
 	return (
-		<Link to={to} className="card-link" aria-label={`Open ${label}`}>
-			{bar}
-		</Link>
+		<Panel title="Team load" link={{ to: "/workspace?tab=caseload", label: "Caseload →" }}>
+			{rows.length === 0 ? (
+				<p className="dash-empty">No one is carrying anything yet.</p>
+			) : (
+				rows.map(([name, r]) => (
+					<div key={name} className="dash-trow">
+						<span>{name}</span>
+						<span className="dash-trow__n">
+							{r.open} open{r.stalled > 0 ? ` · ${r.stalled} stalled` : ""}
+						</span>
+						<span className="dash-trow__bar" aria-hidden>
+							<span style={{ width: `${Math.round((r.open / max) * 100)}%` }} />
+						</span>
+					</div>
+				))
+			)}
+		</Panel>
 	);
 }

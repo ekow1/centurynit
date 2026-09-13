@@ -1,29 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiError, applicationsApi, bookingsApi } from "century-nit-core/api";
+import { applicationsApi } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
 import type { Booking } from "century-nit-shared";
 import { OPS_BRANCHES } from "century-nit-core/ops";
-import type { Lead } from "century-nit-core";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
-import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { apiFetch } from "../lib/api";
-import { API_PREFIX } from "century-nit-shared";
+import { useWorkQueue } from "../hooks/useWorkQueue";
 import { AssignControl } from "century-nit-core/ui";
 import { AssignDialog } from "./UnassignedBookings";
 import {
-	buildInvoiceRows,
-	buildPendingTasks,
-	formatBookingWhenCompact,
 	isOverdue,
 	priorityNotches,
 	queueBand,
 	QUEUE_BAND_LABEL,
 	type QueueBand,
 	handoffOffersKeep,
-	PRIORITY,
-	sortTasks,
 	taskActionLabel,
 	TASK_KIND_LABEL,
 	whenLabel,
@@ -577,167 +569,9 @@ export function PendingTasks({
 	title?: string;
 	branchFilter?: string;
 }) {
-	const { opsUser, canAssignWork, scopeRecords } = useOpsAuth();
-	const {
-		consultations,
-		applications,
-		applicants,
-		assignees,
-		handoffs,
-		travelRequests,
-		loading: casesLoading,
-		error: casesError,
-		refresh,
-		assignConsultation,
-		assignApplication,
-		resolveHandoff,
-	} = useCases();
-	const { invoices, loading: invoicesLoading } = useInvoiceApi();
-
-	const [bookings, setBookings] = useState<Booking[] | null>(null);
-	const [bookingsError, setBookingsError] = useState<string | null>(null);
-	const [leads, setLeads] = useState<Lead[]>([]);
-	const [liveIds, setLiveIds] = useState<Set<string>>(new Set());
-
-	const loadBookings = useCallback(() => {
-		bookingsApi
-			.list({ status: "UNASSIGNED" })
-			.then((res) => {
-				setBookings(res.bookings);
-				setBookingsError(null);
-			})
-			.catch((err: unknown) => {
-				setBookings([]);
-				setBookingsError(
-					err instanceof ApiError && err.isUnauthenticated
-						? "Sign in to view bookings."
-						: err instanceof Error
-							? err.message
-							: "Could not load bookings.",
-				);
-			});
-	}, []);
-
-	useEffect(loadBookings, [loadBookings]);
-
-	useEffect(() => {
-		let cancelled = false;
-		void (async () => {
-			try {
-				const res = await apiFetch<{ leads: (Lead & { targetCountry?: string; assignedStaffName?: string; updatedAt?: string; createdAt?: string })[] }>(`${API_PREFIX}/leads`);
-				if (cancelled) return;
-				const mapped = (res.leads || []).map((l) => ({
-					...l,
-					country: l.country || l.targetCountry || "Ghana",
-					assignedTo: l.assignedTo || l.assignedStaffName || "Unassigned",
-					lastContactAt: l.lastContactAt || l.updatedAt || l.createdAt || new Date().toISOString(),
-					phone: l.phone || "—",
-				}));
-				setLeads(mapped);
-			} catch {
-				if (!cancelled) setLeads([]);
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	useEffect(() => {
-		let cancelled = false;
-		const fetchLive = async () => {
-			try {
-				const res = await bookingsApi.liveMeetings();
-				if (!cancelled) setLiveIds(new Set(res.bookings.map((b) => b.id)));
-			} catch {
-				/* ignore */
-			}
-		};
-		void fetchLive();
-		const id = setInterval(fetchLive, 60_000);
-		return () => {
-			cancelled = true;
-			clearInterval(id);
-		};
-	}, []);
-
-	const scopedConsultations = useMemo(
-		() =>
-			scopeRecords(
-				consultations,
-				(c) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
-			),
-		[scopeRecords, consultations, opsUser],
-	);
-	const scopedApplications = useMemo(
-		() =>
-			scopeRecords(
-				applications,
-				(a) => a.assignedStaffEmail === opsUser?.email || a.assignedStaff === opsUser?.name,
-			),
-		[scopeRecords, applications, opsUser],
-	);
-	const scopedApplicants = useMemo(
-		() =>
-			scopeRecords(
-				applicants,
-				(a) => a.assignedOfficerEmail === opsUser?.email || a.assignedOfficer === opsUser?.name,
-			),
-		[scopeRecords, applicants, opsUser],
-	);
-
-	const inBranch = useCallback(
-		<T extends { branch: string }>(list: T[]) =>
-			branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter),
-		[branchFilter],
-	);
-
-	const invoiceRows = useMemo(() => buildInvoiceRows(invoices), [invoices]);
-
-	const items = useMemo<PendingTask[]>(() => {
-		const built = buildPendingTasks({
-			consultations: inBranch(scopedConsultations),
-			applications: inBranch(scopedApplications),
-			applicants: inBranch(scopedApplicants),
-			handoffs,
-			travelRequests,
-			invoiceRows,
-			invoices,
-			leads,
-			liveBookingIds: liveIds,
-			excludeBookingIds: new Set((bookings ?? []).map((b) => b.id)),
-		});
-		const bookingTasks: PendingTask[] = (bookings ?? []).map((b) => ({
-			id: `booking-${b.id}`,
-			category: "needs_assignment",
-			kind: "booking",
-			action: "assign",
-			record: b,
-			at: b.startsAt,
-			due: b.startsAt,
-			title: b.clientName,
-			subtitle: b.serviceName,
-			meta: formatBookingWhenCompact(b),
-			branch: "",
-			owner: "Unassigned",
-			linkTo: "/consultations",
-			priority: PRIORITY.assign_consultation,
-			isLive: liveIds.has(b.id),
-		}));
-		return sortTasks([...built, ...bookingTasks]);
-	}, [
-		scopedConsultations,
-		scopedApplications,
-		scopedApplicants,
-		handoffs,
-		travelRequests,
-		invoiceRows,
-		invoices,
-		leads,
-		liveIds,
-		bookings,
-		inBranch,
-	]);
+	const { canAssignWork } = useOpsAuth();
+	const { assignees, assignConsultation, assignApplication, resolveHandoff } = useCases();
+	const { items, loading, error, refresh } = useWorkQueue(branchFilter);
 
 	const doAssign = useCallback(
 		async (task: PendingTask, to: Assignee, reason?: string) => {
@@ -773,8 +607,6 @@ export function PendingTasks({
 
 	if (!canAssignWork) return null;
 
-	const loading = (casesLoading || invoicesLoading) && items.length === 0;
-
 	return (
 		<section className="ops-panel" aria-labelledby="pending-heading">
 			<header className="ops-panel__head">
@@ -782,21 +614,12 @@ export function PendingTasks({
 					{title}
 					{items.length > 0 && <span className="ops-pill">{items.length}</span>}
 				</h2>
-				<button
-					type="button"
-					className="btn btn--ghost btn--sm"
-					onClick={() => {
-						loadBookings();
-						void refresh();
-					}}
-				>
+				<button type="button" className="btn btn--ghost btn--sm" onClick={refresh}>
 					Refresh
 				</button>
 			</header>
 
-			{(bookingsError || casesError) && (
-				<p className="ops-modal__error">{bookingsError ?? casesError}</p>
-			)}
+			{error && <p className="ops-modal__error">{error}</p>}
 
 			{loading ? (
 				<p className="ops-panel__muted">Loading…</p>
@@ -807,10 +630,7 @@ export function PendingTasks({
 					canAssignWork={canAssignWork}
 					onAssign={doAssign}
 					onKeepHandler={doKeepHandler}
-					onAssigned={() => {
-						loadBookings();
-						void refresh();
-					}}
+					onAssigned={refresh}
 					emptyLabel="Nothing waiting to be assigned. All caught up."
 				/>
 			)}

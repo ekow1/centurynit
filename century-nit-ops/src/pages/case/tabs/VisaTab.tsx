@@ -8,6 +8,7 @@ import { getApplicationActivity, type ApiInvoice } from "../../../lib/api";
 import type { Flash, Fail, TabId } from "./types";
 import { VISA_STAGE_LABELS, type ApplicationActivityEvent, type StageHandoff, type VisaDetails, type VisaStage } from "century-nit-shared";
 import { ArtifactCard } from "../ArtifactCard";
+import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
 
 /**
  * Visa — the fee, the officer, then the application as a set of milestones
@@ -122,6 +123,7 @@ export function VisaTab({
 	canWork,
 	setTab,
 	onAssign,
+	onInvoicesChanged,
 	flash,
 	fail,
 }: {
@@ -133,9 +135,12 @@ export function VisaTab({
 	setTab: (t: TabId) => void;
 	/** Opens the case's assignment sheet — for the awaiting-officer state. */
 	onAssign: () => void;
+	/** An invoice was issued or voided here; the parent reloads the case's invoices. */
+	onInvoicesChanged: () => void;
 	flash: Flash;
 	fail: Fail;
 }) {
+	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	const { hasPermission } = useOpsAuth();
 	const { setVisaStage, setVisaDetails, setVisaCounselorNote } = useCases();
 	const d: VisaDetails = app.visaDetails ?? {};
@@ -263,12 +268,18 @@ export function VisaTab({
 						title="Visa fee"
 						invoice={visaApiInvoice}
 						compact={visaApiInvoice.status === "paid"}
-						hint={visaApiInvoice.status === "proforma" ? "The client cannot pay until this is reviewed and issued." : undefined}
+						hint={visaApiInvoice.status === "proforma" ? "Awaiting approval — the client cannot see or pay it until it is issued." : undefined}
 						actions={
 							canIssueInvoices ? (
-								<Link to={`/invoices?open=${visaApiInvoice.id}`} className={`btn btn--sm ${visaApiInvoice.status === "proforma" ? "btn--primary" : "btn--ghost"}`}>
-									{visaApiInvoice.status === "proforma" ? "Review & issue" : "Open in Money →"}
-								</Link>
+								visaApiInvoice.status === "proforma" ? (
+									<button type="button" className="btn btn--sm btn--primary" onClick={() => setApproving(visaApiInvoice)}>
+										Approve & issue
+									</button>
+								) : (
+									<Link to={`/invoices?open=${visaApiInvoice.id}`} className="btn btn--sm btn--ghost">
+										Open in Money →
+									</Link>
+								)
 							) : undefined
 						}
 					/>
@@ -544,6 +555,19 @@ export function VisaTab({
 			</div>
 
 			{/* ── Sheets ──────────────────────────────────────────────────────── */}
+
+			<ApproveInvoiceSheet
+				invoice={approving}
+				onClose={() => setApproving(null)}
+				onIssued={(updated) => {
+					onInvoicesChanged();
+					flash(`${updated.invoiceNumber} issued — the client can now pay.`);
+				}}
+				onDeclined={(voided) => {
+					onInvoicesChanged();
+					flash(`${voided.invoiceNumber} declined and voided.`);
+				}}
+			/>
 
 			<Sheet open={sheet === "lodged"} onClose={() => setSheet(null)} title="Visa application">
 				<div className="cn-stack">

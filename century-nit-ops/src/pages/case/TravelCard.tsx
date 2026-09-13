@@ -5,6 +5,7 @@ import { InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../../lib/api";
 import { ArtifactCard } from "./ArtifactCard";
+import { ApproveInvoiceSheet } from "./ApproveInvoiceSheet";
 
 /**
  * One travel request as ops works it — one path, one card:
@@ -189,6 +190,7 @@ export function TravelCard({
 	const [busy, setBusy] = useState(false);
 	const [form, setForm] = useState<"none" | "raise" | "book">("none");
 	const [error, setError] = useState<string | null>(null);
+	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 
 	async function run(fn: () => Promise<unknown>) {
 		setBusy(true);
@@ -237,23 +239,25 @@ export function TravelCard({
 				<FlightSummary flight={ta.flight} />
 			) : null}
 
+			<ApproveInvoiceSheet invoice={approving} onClose={() => setApproving(null)} onIssued={onChanged} onDeclined={onChanged} />
+
 			{invoice && (
 				<InvoiceCard
 					compact
 					title="Ticket invoice"
 					invoice={invoice}
-					hint={
-						invoice.status === "proforma"
-							? canIssueInvoices
-								? "The applicant cannot pay until you review and issue this invoice."
-								: "Raised — the applicant cannot pay until finance issues it."
-							: undefined
-					}
+					hint={invoice.status === "proforma" ? "Awaiting approval — the client cannot see or pay it until it is issued." : undefined}
 					actions={
 						canIssueInvoices ? (
-							<Link to={`/invoices?open=${invoice.id}`} className="btn btn--sm btn--ghost">
-								{invoice.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
-							</Link>
+							invoice.status === "proforma" ? (
+								<button type="button" className="btn btn--sm btn--primary" onClick={() => setApproving(invoice)}>
+									Approve & issue
+								</button>
+							) : (
+								<Link to={`/invoices?open=${invoice.id}`} className="btn btn--sm btn--ghost">
+									Open in Money →
+								</Link>
+							)
 						) : undefined
 					}
 				/>

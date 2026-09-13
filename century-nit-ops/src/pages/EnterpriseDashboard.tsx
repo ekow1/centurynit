@@ -137,8 +137,8 @@ export function EnterpriseDashboard() {
 				{hasPermission("workflow") && (
 					<Link to="/applications?view=board" className="btn btn--ghost btn--sm">Open Pipeline Board</Link>
 				)}
-				{hasPermission("finance") && (
-					<Link to="/finance" className="btn btn--ghost btn--sm">Issue Invoice</Link>
+				{hasPermission("invoices") && (
+					<Link to="/workspace?filter=needs_invoice" className="btn btn--ghost btn--sm">Invoices to approve</Link>
 				)}
 				{hasPermission("packages") && (
 					<Link to="/packages" className="btn btn--ghost btn--sm">Service Packages</Link>

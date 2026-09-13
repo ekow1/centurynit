@@ -20,8 +20,9 @@ import {
 	type SchoolOutcome,
 	type SchoolTrackStatus,
 } from "century-nit-shared";
-import { issueApplicationInvoice, raiseApplicationInvoice } from "../../../lib/api";
+import { raiseApplicationInvoice } from "../../../lib/api";
 import { AddSchoolApplicationModal } from "../../AddSchoolApplicationModal";
+import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
 
 /**
  * Applications — the schools, the application fee, submissions and offers.
@@ -558,6 +559,7 @@ export function ApplicationsTab({
 }) {
 	const [issuing, setIssuing] = useState(false);
 	const [adding, setAdding] = useState(false);
+	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	const { addApplication, refresh } = useCases();
 
 	const schools = app.schoolApplications ?? [];
@@ -590,16 +592,14 @@ export function ApplicationsTab({
 		return "All decisions in — no admission. Add another school or close the case.";
 	})();
 
+	// Raising and approving are two steps for everyone — a manager does both,
+	// as two clicks and two history lines.
 	function handleInvoice() {
 		setIssuing(true);
-		(canIssueInvoices ? issueApplicationInvoice(app.id) : raiseApplicationInvoice(app.id))
+		raiseApplicationInvoice(app.id)
 			.then((updated) => {
 				onInvoiceChanged(updated);
-				flash(
-					updated.status === "proforma"
-						? `Draft ${updated.invoiceNumber} raised — finance will review and issue it.`
-						: `Invoice ${updated.invoiceNumber} issued — the client can now pay.`,
-				);
+				flash(canIssueInvoices ? `${updated.invoiceNumber} raised — approve it to issue.` : `${updated.invoiceNumber} raised — awaiting approval.`);
 			})
 			.catch((e) => fail(e, "Could not raise the invoice"))
 			.finally(() => setIssuing(false));
@@ -619,8 +619,8 @@ export function ApplicationsTab({
 						hint={
 							isProforma
 								? canIssueInvoices
-									? "The client cannot pay until you review and issue this invoice."
-									: "Raised — the client cannot pay until finance reviews and issues it."
+									? "Awaiting approval — the client cannot see or pay it until you issue it."
+									: "Awaiting approval — the client cannot see or pay it until it is issued."
 								: uncoveredSchools > 0
 									? `${uncoveredSchools} school${uncoveredSchools === 1 ? " was" : "s were"} added after this invoice was raised — its lines do not cover ${uncoveredSchools === 1 ? "it" : "them"} yet.`
 									: paidOn
@@ -629,9 +629,15 @@ export function ApplicationsTab({
 						}
 						actions={
 							canIssueInvoices ? (
-								<Link to={`/invoices?open=${appInvoice.id}`} className={`btn btn--sm ${isProforma ? "btn--primary" : "btn--ghost"}`}>
-									{isProforma ? "Review & issue" : "Open in Money →"}
-								</Link>
+								isProforma ? (
+									<button type="button" className="btn btn--sm btn--primary" onClick={() => setApproving(appInvoice)}>
+										Approve & issue
+									</button>
+								) : (
+									<Link to={`/invoices?open=${appInvoice.id}`} className="btn btn--sm btn--ghost">
+										Open in Money →
+									</Link>
+								)
 							) : undefined
 						}
 					/>
@@ -655,7 +661,7 @@ export function ApplicationsTab({
 									disabled={issuing || outstandingDocs.length > 0}
 									title={outstandingDocs.length > 0 ? `Verify first: ${outstandingDocs.join(", ")}` : undefined}
 								>
-									{issuing ? (canIssueInvoices ? "Issuing…" : "Raising…") : canIssueInvoices ? "Issue application invoice" : "Raise application invoice"}
+									{issuing ? "Raising…" : "Raise application invoice"}
 								</button>
 								{outstandingDocs.length > 0 && (
 									<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>
@@ -725,6 +731,19 @@ export function ApplicationsTab({
 					<p className="muted text-sm">No schools chosen yet.</p>
 				)}
 			</div>
+
+			<ApproveInvoiceSheet
+				invoice={approving}
+				onClose={() => setApproving(null)}
+				onIssued={(updated) => {
+					onInvoiceChanged(updated);
+					flash(`${updated.invoiceNumber} issued — the client can now pay.`);
+				}}
+				onDeclined={(voided) => {
+					onInvoiceChanged(voided);
+					flash(`${voided.invoiceNumber} declined and voided.`);
+				}}
+			/>
 
 			{adding && (
 				<AddSchoolApplicationModal

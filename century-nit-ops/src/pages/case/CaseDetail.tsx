@@ -556,6 +556,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					canWork={canWork}
 					setTab={setTab}
 					onAssign={() => setAssignOpen(true)}
+					onInvoicesChanged={() => setInvoiceRefresh((n) => n + 1)}
 					flash={flash}
 					fail={fail}
 				/>
@@ -575,7 +576,16 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			)}
 
 			{current === "payments" && (
-				<MoneyTab app={app} caseInvoices={caseInvoices} canWork={canWork} canIssueInvoices={canIssueInvoices} completeBlock={completeBlock} flash={flash} fail={fail} />
+				<MoneyTab
+					app={app}
+					caseInvoices={caseInvoices}
+					canWork={canWork}
+					canIssueInvoices={canIssueInvoices}
+					completeBlock={completeBlock}
+					onInvoicesChanged={() => setInvoiceRefresh((n) => n + 1)}
+					flash={flash}
+					fail={fail}
+				/>
 			)}
 
 			{current === "documents" && (

@@ -6,6 +6,7 @@ import { InvoiceCard } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import type { ApiInvoice } from "../../../lib/api";
 import type { Flash, Fail } from "./types";
+import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
 
 const INVOICE_TYPE_TITLES: Record<string, string> = {
 	application: "Application",
@@ -24,6 +25,7 @@ export function MoneyTab({
 	canWork,
 	canIssueInvoices,
 	completeBlock,
+	onInvoicesChanged,
 	flash,
 	fail,
 }: {
@@ -33,11 +35,14 @@ export function MoneyTab({
 	canIssueInvoices: boolean;
 	/** Why the case cannot be marked complete yet, or null. */
 	completeBlock: string | null;
+	/** An invoice was issued or voided here; the parent reloads the case's invoices. */
+	onInvoicesChanged: () => void;
 	flash: Flash;
 	fail: Fail;
 }) {
 	const { setApplicationStage, setPaymentPlan } = useCases();
 	const [planDraft, setPlanDraft] = useState<"" | "full" | "installment">("");
+	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	return (
 		<>
 			<div className="card">
@@ -103,17 +108,37 @@ export function MoneyTab({
 							compact
 							title={`${INVOICE_TYPE_TITLES[inv.type] ?? inv.type} invoice`}
 							invoice={inv}
+							hint={inv.status === "proforma" ? "Awaiting approval — the client cannot see or pay it until it is issued." : undefined}
 							actions={
 								canIssueInvoices ? (
-									<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
-										{inv.status === "proforma" ? "Review & issue" : "Open in Invoices →"}
-									</Link>
+									inv.status === "proforma" ? (
+										<button type="button" className="btn btn--sm btn--primary" onClick={() => setApproving(inv)}>
+											Approve & issue
+										</button>
+									) : (
+										<Link to={`/invoices?open=${inv.id}`} className="btn btn--sm btn--ghost">
+											Open in Money →
+										</Link>
+									)
 								) : undefined
 							}
 						/>
 					</div>
 				))
 			)}
+
+			<ApproveInvoiceSheet
+				invoice={approving}
+				onClose={() => setApproving(null)}
+				onIssued={(updated) => {
+					onInvoicesChanged();
+					flash(`${updated.invoiceNumber} issued — the client can now pay.`);
+				}}
+				onDeclined={(voided) => {
+					onInvoicesChanged();
+					flash(`${voided.invoiceNumber} declined and voided.`);
+				}}
+			/>
 		</>
 	);
 }

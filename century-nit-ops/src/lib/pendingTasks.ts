@@ -693,10 +693,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					category: "needs_invoice",
 					kind: "travel",
 					action: "issue",
-					subtitle: `Ticket invoice to issue · ${ref}`,
-					meta: "Client cannot pay until finance issues it",
+					subtitle: `Ticket invoice awaiting approval · ${ref}`,
+					meta: "Approve on the case — the client cannot see it until it is issued",
 					owner: "Finance",
-					linkTo: `/invoices?open=${ta.invoiceId}`,
+					linkTo: `/applications?id=${ta.applicationId}&tab=travel`,
 					priority: PRIORITY.issue,
 				});
 			}
@@ -801,11 +801,12 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "issue",
 				record: r.inv,
 				title: r.inv.applicantName,
-				subtitle: `Proforma invoice · ${fmtGhs(r.inv.subtotal)}`,
-				meta: r.inv.invoiceNumber,
+				subtitle: `Awaiting approval · ${fmtGhs(r.inv.subtotal)}`,
+				meta: `${r.inv.invoiceNumber} · raised by ${r.inv.issuedBy || "—"}`,
 				branch: "",
-				owner: r.inv.issuedBy || "—",
-				linkTo: `/invoices`,
+				owner: "Finance",
+				// Approval happens on the case; only an invoice with no case is approved from the ledger.
+				linkTo: r.inv.applicationId ? `/applications?id=${r.inv.applicationId}&tab=payments` : `/invoices?open=${r.inv.id}`,
 				at: r.inv.issuedAt,
 				priority: PRIORITY.issue,
 			});

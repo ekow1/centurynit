@@ -179,6 +179,12 @@ export type PendingTask = (BaseTask | BookingTask) & {
 	/** When the task is dated — the record's last change, or the moment it asked
 	 * for something (a reschedule, a due date). Shown in the queue's When column. */
 	at?: string;
+	/**
+	 * A real deadline, where the work has one: the consultation slot, the
+	 * invoice due date. Most tasks have none — they are due when they land.
+	 * "Today" and "Overdue" read this, never `at`.
+	 */
+	due?: string | null;
 	/** Itemised detail for the preview pane — label left, status note right;
 	 * the table never shows it. */
 	details?: { label: string; note?: string }[];
@@ -201,6 +207,45 @@ export function visaInvoiceFor(invoices: Invoice[], app: MockApplication): Invoi
 	return invoices.find(
 		(i) => i.type === "Visa" && i.applicationId != null && i.applicationId === app.id,
 	);
+}
+
+/** The consultation's slot as an instant, when the record carries one. */
+function slotIso(c: { slotDate?: string; slotTime?: string }): string | null {
+	if (!c.slotDate) return null;
+	const d = new Date(`${c.slotDate}T${c.slotTime || "09:00"}:00`);
+	return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/* ── The day's cuts ──────────────────────────────────────────────────────── */
+
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** Due today: a deadline that falls today, or a meeting live right now. */
+export function isDueToday(task: PendingTask, now = new Date()): boolean {
+	if (task.isLive) return true;
+	if (!task.due) return false;
+	const d = new Date(task.due);
+	return !Number.isNaN(d.getTime()) && sameDay(d, now);
+}
+
+/** Overdue: a deadline that has passed and the work is still open. */
+export function isOverdue(task: PendingTask, now = new Date()): boolean {
+	if (!task.due || task.isLive) return false;
+	const d = new Date(task.due);
+	if (Number.isNaN(d.getTime())) return false;
+	// A slot earlier today is missed, not merely "today".
+	return d.getTime() < now.getTime() && !(sameDay(d, now) && d.getTime() > now.getTime() - 60 * 60_000);
+}
+
+/**
+ * The queue's ordering made legible: three notches from the task's priority
+ * rank (1 = assign a consultation … 11 = follow up a lead). Ink density,
+ * not colour — ●●● urgent, ●●○ soon, ●○○ routine.
+ */
+export function priorityNotches(priority: number): 1 | 2 | 3 {
+	if (priority <= 3) return 3;
+	if (priority <= 7) return 2;
+	return 1;
 }
 
 /** The queue's When column: a short absolute stamp; the year only when it isn't this one. */
@@ -389,6 +434,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: "Unassigned",
 				linkTo: `/consultations?id=${c.id}`,
 				at: c.updatedAt,
+				due: slotIso(c),
 				priority: PRIORITY.assign_consultation,
 				isLive,
 			});
@@ -406,6 +452,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: c.assignedOfficer || "—",
 				linkTo: `/consultations?id=${c.id}`,
 				at: c.updatedAt,
+				due: slotIso(c),
 				priority: PRIORITY.assess,
 				isLive,
 			});
@@ -423,6 +470,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: c.assignedOfficer || "—",
 				linkTo: `/consultations?id=${c.id}`,
 				at: c.rescheduleRequestedAt ?? c.updatedAt,
+				due: slotIso(c),
 				priority: PRIORITY.reschedule,
 				isLive,
 			});
@@ -832,6 +880,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: r.inv.issuedBy || "—",
 				linkTo: `/invoices`,
 				at: r.inv.dueAt ?? r.inv.issuedAt,
+				due: r.inv.dueAt ?? null,
 				priority: PRIORITY.chase,
 			});
 		}

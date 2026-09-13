@@ -16,6 +16,8 @@ import {
 	buildInvoiceRows,
 	buildPendingTasks,
 	formatBookingWhenCompact,
+	isOverdue,
+	priorityNotches,
 	handoffOffersKeep,
 	PRIORITY,
 	sortTasks,
@@ -128,6 +130,7 @@ export function PendingTaskTable({
 	onSelect,
 	selectedId,
 	emptyLabel,
+	groupByPerson = false,
 }: {
 	items: PendingTask[];
 	assignees: Assignee[];
@@ -139,8 +142,19 @@ export function PendingTaskTable({
 	onSelect?: (task: PendingTask) => void;
 	selectedId?: string | null;
 	emptyLabel?: string;
+	/** Group rows under the person they belong to — the morning read as people, not tickets. */
+	groupByPerson?: boolean;
 }) {
 	const { canSeeAllBranches } = useOpsAuth();
+	// Group headers: one per distinct name, in queue order.
+	const groups = groupByPerson
+		? items.reduce<{ name: string; rows: PendingTask[] }[]>((acc, t) => {
+				const last = acc[acc.length - 1];
+				if (last && last.name === t.title) last.rows.push(t);
+				else acc.push({ name: t.title, rows: [t] });
+				return acc;
+			}, [])
+		: null;
 	const [booking, setBooking] = useState<Booking | null>(null);
 	const [task, setTask] = useState<PendingTask | null>(null);
 	const [justAssigned, setJustAssigned] = useState<string | null>(null);
@@ -164,6 +178,7 @@ export function PendingTaskTable({
 					<table className="ops-table">
 						<thead>
 							<tr>
+								<th style={{ width: "2.5rem" }} title="Priority — ink density, top of the queue first" />
 								<th>Task</th>
 								<th>Type</th>
 								<th>When / Details</th>
@@ -173,12 +188,25 @@ export function PendingTaskTable({
 							</tr>
 						</thead>
 						<tbody>
-							{items.map((t) => {
+							{(groups ?? [{ name: "", rows: items }]).flatMap((g) => {
+								const header =
+									groups && g.rows.length > 0 ? (
+										<tr key={`group-${g.name}`} className="ops-table__group">
+											<td colSpan={canSeeAllBranches ? 7 : 6} style={{ paddingTop: "0.9rem", paddingBottom: "0.2rem", borderBottom: "none" }}>
+												<span className="eyebrow" style={{ margin: 0 }}>
+													{g.name} · {g.rows.length} thing{g.rows.length === 1 ? "" : "s"}
+												</span>
+											</td>
+										</tr>
+									) : null;
+								const rows = g.rows.map((t) => {
 								// Assign shows only for unowned work — a handoff is unowned
 								// by definition (its "owner" column is the previous handler).
 								const canAssign =
 									isAssignable(t) && (t.owner === "Unassigned" || t.action === "resolve");
 								const selected = selectedId === t.id;
+								const overdue = isOverdue(t);
+								const notches = priorityNotches(t.priority);
 								return (
 									<tr
 										key={t.id}
@@ -188,10 +216,16 @@ export function PendingTaskTable({
 												? { background: "var(--foreground)", color: "var(--background)" }
 												: {}),
 											...(onSelect ? { cursor: "pointer" } : {}),
+											...(overdue && !selected ? { boxShadow: "inset 4px 0 0 var(--foreground)" } : {}),
 										}}
 									>
+										<td className="mono" title={notches === 3 ? "Urgent — top of the queue" : notches === 2 ? "Soon" : "Routine"} style={{ letterSpacing: "0.05em", whiteSpace: "nowrap", opacity: selected ? 1 : undefined }}>
+											<span>{"●".repeat(notches)}</span>
+											<span style={{ opacity: 0.3 }}>{"●".repeat(3 - notches)}</span>
+										</td>
 										<td>
-											<strong>{t.title}</strong>
+											<strong>{groups ? taskActionLabel(t) : t.title}</strong>
+											{overdue && <span className="ops-pill" style={{ marginLeft: "0.4rem", fontWeight: 700 }}>Overdue</span>}
 											<div className="ops-table__sub" title={t.subtitle} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "22rem" }}>{t.subtitle}</div>
 											{t.kind === "booking" && (
 												<div className="ops-table__sub">{t.record.clientEmail}</div>
@@ -239,6 +273,8 @@ export function PendingTaskTable({
 										</td>
 									</tr>
 								);
+								});
+								return header ? [header, ...rows] : rows;
 							})}
 						</tbody>
 					</table>
@@ -431,6 +467,7 @@ export function PendingTasks({
 			action: "assign",
 			record: b,
 			at: b.startsAt,
+			due: b.startsAt,
 			title: b.clientName,
 			subtitle: b.serviceName,
 			meta: formatBookingWhenCompact(b),

@@ -15,13 +15,16 @@ import type {
 } from "century-nit-core/ops";
 import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
-import { apiFetch, ApiError } from "../lib/api";
+import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
+import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { AssignControl } from "century-nit-core/ui";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
+	isDueToday,
+	isOverdue,
 	handoffOffersKeep,
 	taskActionLabel,
 	TASK_KIND_LABEL,
@@ -46,14 +49,26 @@ import { WorkspaceCaseload } from "./WorkspaceCaseload";
 /** The two views — the queue to clear vs the workload being carried. */
 const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
 
-/** Queue filters — every entry is a real task category from buildPendingTasks. */
-const QUEUE_FILTERS: { id: string; label: string }[] = [
+/**
+ * Queue filters — the two time cuts first (what the day is), then the
+ * backlog categories from buildPendingTasks. Each chip carries its live
+ * count, so the shape of the day reads before anything is clicked.
+ */
+const QUEUE_FILTERS: { id: string; label: string; time?: boolean }[] = [
 	{ id: "all", label: "All" },
+	{ id: "today", label: "Today", time: true },
+	{ id: "overdue", label: "Overdue", time: true },
 	{ id: "needs_assignment", label: "Unassigned" },
 	{ id: "needs_action", label: "My Tasks" },
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
 ];
+const passesQueueFilter = (item: PendingTask, filter: string): boolean => {
+	if (filter === "all") return true;
+	if (filter === "today") return isDueToday(item);
+	if (filter === "overdue") return isOverdue(item);
+	return item.category === filter;
+};
 
 const TYPE_FILTERS: { id: string; label: string }[] = [
 	{ id: "all", label: "All Types" },
@@ -197,7 +212,7 @@ export function Workspace() {
 		const q = search.toLowerCase().trim();
 		let result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
-			if (activeFilter !== "all" && item.category !== activeFilter) return false;
+			if (!passesQueueFilter(item, activeFilter)) return false;
 			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
@@ -207,6 +222,18 @@ export function Workspace() {
 			result.sort((a, b) => (new Date(b.at || 0).getTime()) - (new Date(a.at || 0).getTime()));
 		} else if (dateSort === "asc") {
 			result.sort((a, b) => (new Date(a.at || 0).getTime()) - (new Date(b.at || 0).getTime()));
+		} else if (activeFilter === "today") {
+			// The morning read as people: each client once, their things together,
+			// the earliest deadline first.
+			const firstDue = new Map<string, number>();
+			for (const t of result) {
+				const d = t.due ? new Date(t.due).getTime() : Number.MAX_SAFE_INTEGER;
+				firstDue.set(t.title, Math.min(firstDue.get(t.title) ?? Number.MAX_SAFE_INTEGER, d));
+			}
+			result = [...result].sort((a, b) => {
+				const byPerson = (firstDue.get(a.title) ?? 0) - (firstDue.get(b.title) ?? 0) || a.title.localeCompare(b.title);
+				return byPerson || a.priority - b.priority;
+			});
 		}
 		return result;
 	}, [items, branchFilter, activeFilter, typeFilter, dateSort, search]);
@@ -214,6 +241,8 @@ export function Workspace() {
 	const stats = useMemo(() => {
 		const counts = new Map<string, number>([["all", items.length]]);
 		for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
+		counts.set("today", items.filter((i) => isDueToday(i)).length);
+		counts.set("overdue", items.filter((i) => isOverdue(i)).length);
 		const overdue = invoiceRows.filter((r) => r.status === "overdue").length;
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
 		return { counts, overdue, totalOutstanding };
@@ -287,20 +316,34 @@ export function Workspace() {
 								className="cn-search"
 								aria-label="Search queue"
 							/>
-							<label className="cn-filter">
-								<span className="cn-filter__label">Queue</span>
-								<select
-									className="cn-filter__select"
-									value={activeFilter}
-									onChange={(e) => setFilter(e.target.value)}
-								>
-									{QUEUE_FILTERS.map((f) => (
-										<option key={f.id} value={f.id}>
-											{f.label} · {stats.counts.get(f.id) ?? 0}
-										</option>
-									))}
-								</select>
-							</label>
+							<div className="cn-scaffold__chips" role="tablist" aria-label="Queue" style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+								{QUEUE_FILTERS.map((f) => {
+									const n = stats.counts.get(f.id) ?? 0;
+									const on = activeFilter === f.id;
+									return (
+										<button
+											key={f.id}
+											type="button"
+											role="tab"
+											aria-selected={on}
+											className="ops-pill"
+											onClick={() => setFilter(f.id)}
+											style={{
+												cursor: "pointer",
+												border: "1px solid var(--border)",
+												background: on ? "var(--foreground)" : "transparent",
+												color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+												fontWeight: f.time && n > 0 && !on ? 700 : 500,
+											}}
+										>
+											{f.label}
+											<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+												{n}
+											</span>
+										</button>
+									);
+								})}
+							</div>
 							<label className="cn-filter">
 								<span className="cn-filter__label">Type</span>
 								<select
@@ -361,7 +404,16 @@ export function Workspace() {
 								onAssigned={refresh}
 								onSelect={(t) => setSelected((cur) => (cur?.id === t.id ? null : t))}
 								selectedId={selected?.id}
-								emptyLabel={loading ? "Loading your queue…" : "You're all caught up! Nothing on your desk right now."}
+								groupByPerson={activeFilter === "today" && dateSort === "default"}
+								emptyLabel={
+									loading
+										? "Loading your queue…"
+										: activeFilter === "today"
+											? "Nothing is due today — the Overdue and Unassigned cuts are where the rest is."
+											: activeFilter === "overdue"
+												? "Nothing overdue. Good."
+												: "You're all caught up! Nothing on your desk right now."
+								}
 							/>
 						</div>
 					</>
@@ -416,6 +468,20 @@ function PreviewPane({
 }) {
 	const [deferring, setDeferring] = useState(false);
 	const [deferError, setDeferError] = useState<string | null>(null);
+	// An invoice awaiting approval is approved here, with the sheet the case tabs use.
+	const { canIssueInvoices } = useOpsAuth();
+	const approvable =
+		canIssueInvoices && item.action === "issue"
+			? item.kind === "invoice"
+				? item.record.id
+				: item.kind === "travel"
+					? (item.record.invoiceId ?? null)
+					: null
+			: null;
+	const [approving, setApproving] = useState<ApiInvoice | null>(null);
+	const [loadingInvoice, setLoadingInvoice] = useState(false);
+	const [actionError, setActionError] = useState<string | null>(null);
+	const [actionOk, setActionOk] = useState<string | null>(null);
 
 	// Which stage the picker is staffing — decides which roles are offered.
 	const stageForRoles =
@@ -540,12 +606,42 @@ function PreviewPane({
 				</div>
 			)}
 
-			{/* Bottom actions */}
-			<div style={{ marginTop: "2rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "flex-end" }}>
-				<Link to={item.linkTo} className="btn btn--primary btn--sm">
+			{/* Bottom actions — the thing the task exists for, then the door to the record. */}
+			<div style={{ marginTop: "2rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
+				{approvable && (
+					<button
+						type="button"
+						className="btn btn--primary btn--sm"
+						disabled={loadingInvoice}
+						onClick={() => {
+							setLoadingInvoice(true);
+							getInvoice(approvable)
+								.then(setApproving)
+								.catch((e) => setActionError(e instanceof Error ? e.message : "Could not load the invoice"))
+								.finally(() => setLoadingInvoice(false));
+						}}
+					>
+						{loadingInvoice ? "Loading…" : "Approve & issue"}
+					</button>
+				)}
+				<Link to={item.linkTo} className={`btn btn--sm ${approvable ? "btn--ghost" : "btn--primary"}`}>
 					{openLabel(item)}
 				</Link>
 			</div>
+			{actionError && <p className="cn-assign__error">{actionError}</p>}
+			<ApproveInvoiceSheet
+				invoice={approving}
+				onClose={() => setApproving(null)}
+				onIssued={(updated) => {
+					setActionOk(`${updated.invoiceNumber} issued — the client can now pay.`);
+					void onAssigned();
+				}}
+				onDeclined={(voided) => {
+					setActionOk(`${voided.invoiceNumber} declined and voided.`);
+					void onAssigned();
+				}}
+			/>
+			{actionOk && <p className="ops-panel__ok mt-2">{actionOk}</p>}
 		</div>
 	);
 }

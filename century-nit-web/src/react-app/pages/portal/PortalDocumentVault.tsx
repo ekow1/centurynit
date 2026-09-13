@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
-import { REQUIRED_DOCUMENTS } from "century-nit-core";
+import { DOCUMENT_TYPES, REQUIRED_DOCUMENTS } from "century-nit-core";
 import { ApiError, documentsApi, meApi } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
@@ -86,10 +86,17 @@ export function PortalDocumentVault() {
 		try {
 			const [res, me] = await Promise.all([documentsApi.list(), meApi.application().catch(() => null)]);
 			const base = me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [];
-			// The visa set joins the list once the visa chapter has opened.
+			// The visa set joins the list once the visa chapter has opened; the
+			// departure proofs (insurance, accommodation) once Departure has.
 			const visa = me?.application?.visaDocumentChecklist ?? [];
+			const departure = (me?.application?.preDepartureTasks ?? [])
+				.filter((t) => t.evidence)
+				.map((t) => {
+					const meta = DOCUMENT_TYPES.find((d) => d.id === t.evidence);
+					return { id: t.evidence as string, name: meta?.name ?? t.label, hint: meta?.hint ?? t.detail ?? "" };
+				});
 			const seen = new Set(base.map((d) => d.id));
-			const list = [...base, ...visa.filter((d) => !seen.has(d.id))];
+			const list = [...base, ...visa.filter((d) => !seen.has(d.id)), ...departure.filter((d) => !seen.has(d.id) && !visa.some((v) => v.id === d.id))];
 			if (list.length > 0) setRequired(list.map((d) => ({ id: d.id, name: d.name, hint: d.hint })));
 			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
 		} catch (err) {

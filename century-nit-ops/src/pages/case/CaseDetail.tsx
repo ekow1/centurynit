@@ -572,6 +572,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					feeBlock={feeBlock}
 					travelOpen={travelOpen}
 					onInvoicesChanged={() => setInvoiceRefresh((n) => n + 1)}
+					setTab={setTab}
 					flash={flash}
 					fail={fail}
 				/>

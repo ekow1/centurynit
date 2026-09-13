@@ -8,7 +8,8 @@ import { useState } from "react";
 import type { PreDepartureTask } from "century-nit-core/ops";
 import { DOCUMENT_TYPES } from "century-nit-core/content";
 import { PAYMENT_PLAN_LABELS, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
-import type { Flash, Fail } from "./types";
+import type { Flash, Fail, TabId } from "./types";
+import { StatusPill } from "century-nit-core/ui";
 import { TravelCard } from "../TravelCard";
 
 
@@ -22,6 +23,9 @@ export function DepartureTab({
 	feeBlock,
 	travelOpen,
 	onInvoicesChanged,
+	setTab,
+	flash,
+	fail,
 }: {
 	app: MockApplication;
 	selectedTa: TravelAssistanceRequest | null;
@@ -32,6 +36,7 @@ export function DepartureTab({
 	feeBlock: string | null;
 	travelOpen: boolean;
 	onInvoicesChanged: () => void;
+	setTab: (t: TabId) => void;
 	flash: Flash;
 	fail: Fail;
 }) {
@@ -168,9 +173,9 @@ export function DepartureTab({
 													<div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", padding: "0.4rem", border: "1px solid var(--border-light)", opacity: task.required === false && !closed ? 0.75 : 1 }}>
 														<button
 															type="button"
-															onClick={() => canTick && void toggle(task)}
-															disabled={!canTick || busy === task.id}
-															title={canTick ? (task.done ? "Untick" : "Tick as done") : undefined}
+															onClick={() => canTick && !task.evidence && void toggle(task)}
+															disabled={!canTick || Boolean(task.evidence) || busy === task.id}
+															title={task.evidence ? "Closes when the proof is verified on the Documents tab" : canTick ? (task.done ? "Untick" : "Tick as done") : undefined}
 															style={{
 																width: "18px",
 																height: "18px",
@@ -197,10 +202,19 @@ export function DepartureTab({
 															</p>
 															{task.detail && <p className="muted" style={{ fontSize: "0.68rem" }}>{task.detail}</p>}
 															{task.evidence && (
-																<p className="muted" style={{ fontSize: "0.68rem" }}>
-																	Proof: {DOCUMENT_TYPES.find((d) => d.id === task.evidence)?.name ?? task.evidence}
-																	{task.done ? "" : " — verify in Documents once uploaded"}
-																</p>
+																<div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.2rem" }}>
+																	<span className="muted" style={{ fontSize: "0.68rem" }}>
+																		Proof: {DOCUMENT_TYPES.find((d) => d.id === task.evidence)?.name ?? task.evidence}
+																	</span>
+																	<StatusPill tone={task.proofStatus === "VERIFIED" ? "done" : task.proofStatus === "UPLOADED" ? "waiting" : task.proofStatus === "REJECTED" ? "blocked" : "neutral"}>
+																		{task.proofStatus === "VERIFIED" ? "Verified" : task.proofStatus === "UPLOADED" ? "To review" : task.proofStatus === "REJECTED" ? "Rejected" : "Not uploaded"}
+																	</StatusPill>
+																	{task.proofStatus === "UPLOADED" && (
+																		<button type="button" className="btn btn--ghost btn--sm" style={{ padding: "0 0.3rem", fontSize: "0.68rem" }} onClick={() => setTab("documents")}>
+																			Verify in Documents →
+																		</button>
+																	)}
+																</div>
 															)}
 															{task.done && task.doneBy && (
 																<p className="muted" style={{ fontSize: "0.68rem" }}>

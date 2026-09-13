@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import {
+	applicantDocuments,
 	applicants,
 	applications,
 	catalogPrograms,
@@ -35,6 +36,7 @@ import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } fro
 import { journeyForApplicant } from "./journey.js";
 import { acceptOffer, addSchoolForApplicant, lockSchoolsForApplicant, removeSchoolByStaff, updateSchoolStatus } from "./schools.js";
 import { activeFeeItem } from "./fees.js";
+import { resolvePreDepartureTasks, seedPreDepartureTasks, setPreDepartureTask } from "./preDeparture.js";
 import { processConsentDecision } from "../routes/me.js";
 
 /**
@@ -72,6 +74,7 @@ const maybe = () => (dbAvailable ? it : it.skip);
 
 async function wipe() {
 	await db.execute(sql`DELETE FROM invoices WHERE client_user_id = ${CLIENT_ID} OR applicant_email = ${"client" + SUFFIX}`);
+	await db.execute(sql`DELETE FROM applicant_documents WHERE owner_user_id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM applicants WHERE user_id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM users WHERE id = ${CLIENT_ID}`);
 	await db.execute(sql`DELETE FROM ops_users WHERE email LIKE ${"%" + SUFFIX}`);
@@ -303,6 +306,32 @@ describe("the applicant journey, end to end", () => {
 		// Once issued, the invoice is a record: a later school change leaves it alone.
 		const issuedLater = (await invoiceOfType("application"))!;
 		expect(issuedLater.api.lines).toHaveLength(1);
+
+		// ── Pre-departure: one list, two owners, proof verified on the Documents tab ──
+		expect(await seedPreDepartureTasks(appId)).toBe(true);
+		expect(await seedPreDepartureTasks(appId)).toBe(false);
+		const appRow = () => db.select().from(applications).where(eq(applications.id, appId)).then((r) => r[0]);
+		// The client cannot close Century's items, nor a proof item by ticking.
+		await expect(setPreDepartureTask(appId, "pd-briefing", { done: true }, { kind: "client", name: "Ama" })).rejects.toMatchObject({ code: "NOT_YOUR_ITEM" });
+		await expect(setPreDepartureTask(appId, "pd-insurance", { done: true }, { kind: "client", name: "Ama" })).rejects.toMatchObject({ code: "PROOF_REQUIRED" });
+		await setPreDepartureTask(appId, "pd-orientation", { done: true }, { kind: "client", name: "Ama" });
+		let resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-orientation")).toMatchObject({ done: true, doneBy: "client" });
+		expect(resolved.find((t) => t.id === "pd-insurance")).toMatchObject({ done: false, proofStatus: "PENDING_UPLOAD" });
+		// The upload shows as under review; verification closes the item with the verifier's name.
+		const [doc] = await db
+			.insert(applicantDocuments)
+			.values({ ownerUserId: CLIENT_ID, documentType: "insurance", fileName: "cover.pdf", contentType: "application/pdf", sizeBytes: 100, storageKey: `${CLIENT_ID}/insurance/cover.pdf`, status: "UPLOADED", uploadedAt: new Date() })
+			.returning();
+		resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-insurance")).toMatchObject({ done: false, proofStatus: "UPLOADED", proofDocumentId: doc.id });
+		await db.update(applicantDocuments).set({ status: "VERIFIED", reviewedBy: staff.handler, reviewedAt: new Date() }).where(eq(applicantDocuments.id, doc.id));
+		resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-insurance")).toMatchObject({ done: true, proofStatus: "VERIFIED", doneBy: "Handler" });
+		// The officer waives a required item with a reason; advice items never gate.
+		await setPreDepartureTask(appId, "pd-accommodation", { done: false, waivedReason: "Staying with family — no tenancy" }, { kind: "staff", name: "Handler", opsUserId: staff.handler });
+		resolved = await resolvePreDepartureTasks(await appRow());
+		expect(resolved.find((t) => t.id === "pd-accommodation")?.waivedReason).toContain("family");
 		await processConsentDecision({ userId: CLIENT_ID, stage: "visa", decision: "continue" });
 		expect(await stage()).toBe("visa_invoice");
 

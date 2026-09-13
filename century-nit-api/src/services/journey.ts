@@ -10,6 +10,7 @@ import {
 import { db } from "../db/index.js";
 import { applications, consultations, invoices, travelAssistanceRequests } from "../db/schema.js";
 import { activeHandlerFor } from "./handoffs.js";
+import { resolvePreDepartureTasks } from "./preDeparture.js";
 import { listSchoolsForApplication } from "./schools.js";
 import { getStageConsent } from "./stageConsents.js";
 
@@ -120,7 +121,7 @@ export async function journeyForApplicant(
 		agencySettled: Boolean(application?.agencySettled),
 		// The pre-departure list, not `checklist` (the consultation-era
 		// requested-documents list) — the ops serializer reads the same field.
-		preDepartureDone: preDepartureChecklistDone(application?.preDepartureTasks),
+		preDepartureDone: preDepartureChecklistDone(application ? await resolvePreDepartureTasks(application) : []),
 		coarseStage:
 			application?.stage && (JOURNEY_STAGES as string[]).includes(application.stage)
 				? (application.stage as JourneyStage)

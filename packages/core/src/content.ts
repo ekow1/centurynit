@@ -2550,6 +2550,9 @@ export type PreDepartureTask = {
 	doneBy?: string | null;
 	doneAt?: string | null;
 	waivedReason?: string | null;
+	/** For proof items: where the client's upload stands — done when verified. */
+	proofStatus?: "PENDING_UPLOAD" | "UPLOADED" | "VERIFIED" | "REJECTED" | null;
+	proofDocumentId?: string | null;
 	label: string;
 	detail?: string;
 	done: boolean;

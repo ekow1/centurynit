@@ -1,9 +1,73 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { PRE_DEPARTURE_TASKS } from "century-nit-core/content";
 import type { PreDepartureTask } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { applications, caseComments } from "../db/schema.js";
+import { applicantDocuments, applicants, applications, caseComments, opsUsers } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
+
+const RANK: Record<string, number> = { VERIFIED: 3, UPLOADED: 2, REJECTED: 1, PENDING_UPLOAD: 0 };
+
+/**
+ * The list as it should be read: items asking for proof take their state
+ * from the client's vault — uploaded, verified, rejected — and are done
+ * when the officer has verified the document. A manual tick or a waiver
+ * still closes an item; verification is the normal way.
+ */
+export async function resolvePreDepartureTasks(row: {
+	applicantId: string;
+	preDepartureTasks: unknown;
+}): Promise<PreDepartureTask[]> {
+	const raw = (Array.isArray(row.preDepartureTasks) ? row.preDepartureTasks : []) as Partial<PreDepartureTask>[];
+	const tasks: PreDepartureTask[] = raw.map((t) => ({
+		id: t.id ?? "",
+		category: t.category,
+		label: t.label ?? "",
+		detail: t.detail,
+		owner: t.owner ?? "client",
+		evidence: t.evidence ?? null,
+		required: t.required ?? true,
+		done: Boolean(t.done),
+		doneBy: t.doneBy ?? null,
+		doneAt: t.doneAt ?? null,
+		waivedReason: t.waivedReason ?? null,
+		proofStatus: null,
+		proofDocumentId: null,
+	}));
+	const types = tasks.map((t) => t.evidence).filter((e): e is string => Boolean(e));
+	if (types.length === 0) return tasks;
+	const [applicant] = await db.select({ userId: applicants.userId }).from(applicants).where(eq(applicants.id, row.applicantId)).limit(1);
+	if (!applicant?.userId) return tasks.map((t) => (t.evidence ? { ...t, proofStatus: "PENDING_UPLOAD" as const } : t));
+	const docs = await db
+		.select({
+			id: applicantDocuments.id,
+			documentType: applicantDocuments.documentType,
+			status: applicantDocuments.status,
+			reviewedAt: applicantDocuments.reviewedAt,
+			reviewerName: opsUsers.name,
+		})
+		.from(applicantDocuments)
+		.leftJoin(opsUsers, eq(opsUsers.id, applicantDocuments.reviewedBy))
+		.where(and(eq(applicantDocuments.ownerUserId, applicant.userId), inArray(applicantDocuments.documentType, types)));
+	const best = new Map<string, (typeof docs)[number]>();
+	for (const d of docs) {
+		const cur = best.get(d.documentType);
+		if (!cur || (RANK[d.status] ?? 0) > (RANK[cur.status] ?? 0)) best.set(d.documentType, d);
+	}
+	return tasks.map((t) => {
+		if (!t.evidence) return t;
+		const doc = best.get(t.evidence);
+		const status = (doc?.status ?? "PENDING_UPLOAD") as NonNullable<PreDepartureTask["proofStatus"]>;
+		const verified = status === "VERIFIED";
+		return {
+			...t,
+			proofStatus: status,
+			proofDocumentId: doc?.id ?? null,
+			done: t.done || verified,
+			doneBy: t.done ? t.doneBy : verified ? (doc?.reviewerName ?? "verified") : null,
+			doneAt: t.done ? t.doneAt : verified ? (doc?.reviewedAt?.toISOString() ?? null) : null,
+		};
+	});
+}
 
 /**
  * The pre-departure checklist lives on the case — one list the client and
@@ -51,6 +115,9 @@ export async function setPreDepartureTask(
 	if (!task) throw new HttpError(404, "TASK_NOT_FOUND", "No such pre-departure item");
 	if (actor.kind === "client" && task.owner === "century") {
 		throw new HttpError(403, "NOT_YOUR_ITEM", "Century NIT closes this item — your consultant will tick it when it is done.");
+	}
+	if (actor.kind === "client" && task.evidence) {
+		throw new HttpError(403, "PROOF_REQUIRED", "This item closes when your consultant verifies your upload — add the document to your vault.");
 	}
 	if (actor.kind === "client" && input.waivedReason) {
 		throw new HttpError(403, "CANNOT_WAIVE", "Only your consultant can waive an item.");

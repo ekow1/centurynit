@@ -386,6 +386,13 @@ export const preDepartureTaskSchema = z.object({
 	doneAt: z.string().datetime().nullable().optional(),
 	/** Set by the officer when a required item is waived — the reason is the record. */
 	waivedReason: z.string().nullable().optional(),
+	/**
+	 * For items asking for proof: where the client's upload of that document
+	 * stands. The item is done when it is verified — the officer's decision,
+	 * made on the Documents tab, not a tick.
+	 */
+	proofStatus: z.enum(["PENDING_UPLOAD", "UPLOADED", "VERIFIED", "REJECTED"]).nullable().optional(),
+	proofDocumentId: z.string().uuid().nullable().optional(),
 });
 export type PreDepartureTask = z.infer<typeof preDepartureTaskSchema>;
 

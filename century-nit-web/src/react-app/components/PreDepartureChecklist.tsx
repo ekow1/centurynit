@@ -39,8 +39,8 @@ export function PreDepartureChecklist({
 			<li style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
 				<button
 					type="button"
-					onClick={() => editable && onToggle(t.id)}
-					disabled={!editable}
+					onClick={() => editable && !t.evidence && onToggle(t.id)}
+					disabled={!editable || Boolean(t.evidence)}
 					aria-label={t.done ? `Untick ${t.label}` : `Tick ${t.label}`}
 					style={{
 						width: "22px",
@@ -71,10 +71,21 @@ export function PreDepartureChecklist({
 					) : null}
 					{t.evidence && !t.done ? (
 						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
-							Proof needed: {docName(t.evidence)} —{" "}
-							<Button to="/portal/documents" variant="ghost" className="btn--sm">
-								upload to your vault
-							</Button>
+							{t.proofStatus === "UPLOADED"
+								? `${docName(t.evidence)} uploaded — your consultant is checking it; this closes once it is verified.`
+								: t.proofStatus === "REJECTED"
+									? `${docName(t.evidence)} was not accepted — please upload it again.`
+									: `Proof needed: ${docName(t.evidence)}.`}{" "}
+							{t.proofStatus !== "UPLOADED" ? (
+								<Button to="/portal/documents" variant="ghost" className="btn--sm">
+									{t.proofStatus === "REJECTED" ? "Re-upload in your vault" : "Upload to your vault"}
+								</Button>
+							) : null}
+						</p>
+					) : null}
+					{t.evidence && t.done ? (
+						<p className="muted" style={{ fontSize: "0.8rem" }}>
+							{docName(t.evidence)} verified{t.doneBy && t.doneBy !== "client" ? ` by ${t.doneBy}` : ""}
 						</p>
 					) : null}
 					{t.waivedReason ? (
@@ -82,7 +93,7 @@ export function PreDepartureChecklist({
 							Waived by your consultant — {t.waivedReason}
 						</p>
 					) : null}
-					{t.done && t.doneBy && t.doneBy !== "client" ? (
+					{t.done && !t.evidence && t.doneBy && t.doneBy !== "client" ? (
 						<p className="muted" style={{ fontSize: "0.8rem" }}>
 							Done by {t.doneBy}
 							{t.doneAt ? ` · ${new Date(t.doneAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : ""}

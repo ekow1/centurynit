@@ -59,7 +59,7 @@ import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } f
 import { listSchoolsForApplication } from "./schools.js";
 import { applicationFeeLinesFor, createInvoice, type InvoiceRow } from "./invoice.js";
 import { activeFeeItem, serviceFeeSplit } from "./fees.js";
-import { seedPreDepartureTasks } from "./preDeparture.js";
+import { resolvePreDepartureTasks, seedPreDepartureTasks } from "./preDeparture.js";
 import {
 
 	syncLeadAssignment,
@@ -235,11 +235,12 @@ function accessibleApplicationsFilter(staff: StaffContext) {
 
 
 async function serializeApplication(row: ApplicationRow, forApplicant = false): Promise<ApiApplication> {
-	const [applicant, staff, comments, documentChecklist] = await Promise.all([
+	const [applicant, staff, comments, documentChecklist, preDepartureTasks] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
 		loadStaff(row.assignedStaffId),
 		commentsFor("application", row.id, forApplicant),
 		documentChecklistForApplication(row.id),
+		resolvePreDepartureTasks(row),
 	]);
 
 	// Scoped to this application, not the applicant — an earlier application's
@@ -324,20 +325,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		travelInvoicePaid: row.travelInvoicePaid,
 		requestedDocuments: row.requestedDocuments ?? [],
 		documentChecklist,
-		// Lists seeded before owners existed default to the client's, required.
-		preDepartureTasks: ((row.preDepartureTasks ?? []) as Partial<ApiApplication["preDepartureTasks"][number]>[]).map((t) => ({
-			id: t.id ?? "",
-			category: t.category,
-			label: t.label ?? "",
-			detail: t.detail,
-			owner: t.owner ?? "client",
-			evidence: t.evidence ?? null,
-			required: t.required ?? true,
-			done: Boolean(t.done),
-			doneBy: t.doneBy ?? null,
-			doneAt: t.doneAt ?? null,
-			waivedReason: t.waivedReason ?? null,
-		})),
+		preDepartureTasks,
 		comments: comments.map(toComment),
 		pendingHandoff,
 		consultationId: row.consultationId ?? null,
@@ -1750,7 +1738,7 @@ export async function applyHandoffResolvedTransition(input: {
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
 		paymentPlanId: row.paymentPlanId,
-		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+		preDepartureTasks: await resolvePreDepartureTasks(row),
 	});
 	if (stillGated) return row;
 
@@ -2274,7 +2262,7 @@ export async function completeFromDeparture(input: {
 		agencyStageIndex: row.agencyStageIndex,
 		appFeePaid: row.appFeePaid,
 		paymentPlanId: row.paymentPlanId,
-		preDepartureTasks: (row.preDepartureTasks ?? []) as { done: boolean }[],
+		preDepartureTasks: await resolvePreDepartureTasks(row),
 		travelAssistanceStatus: travelAssistanceStatus ?? undefined,
 	});
 	if (gateReason) {

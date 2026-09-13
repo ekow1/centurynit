@@ -15,6 +15,8 @@ export function assignmentNeeded(
 	app: MockApplication,
 	handoffs: StageHandoff[],
 ): { kind: "handoff"; handoff: StageHandoff } | { kind: "owner" } | null {
+	// A closed case needs nobody — even a stale pending handoff is ignored.
+	if (app.stage === "completed" || app.status === "Rejected") return null;
 	const handoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending");
 	if (handoff) return { kind: "handoff", handoff };
 	if (!app.assignedStaff) return { kind: "owner" };

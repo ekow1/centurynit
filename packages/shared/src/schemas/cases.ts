@@ -45,22 +45,6 @@ export const JOURNEY_STAGES: JourneyStage[] = [
 export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = STAGE_LABELS as Record<JourneyStage, string>;
 
 /**
- * Mapping from the coarse `JourneyStage` (stored in the DB) to the portal's
- * fine-grained `ProcessStageId` (derived for UI display). The portal uses this
- * to decide which chapter to show, but the *authoritative* value is the
- * `JourneyStage` on the application row.
- */
-export const JOURNEY_STAGE_TO_PORTAL: Record<JourneyStage, string> = {
-	document_verification: "school_package",
-	school_submission: "school_tracking",
-	offer_letter_review: "school_tracking",
-	visa_processing: "visa",
-	payment_execution: "payment_execution",
-	travel_assistance: "travel_assistance",
-	completed: "completed",
-};
-
-/**
  * Guard a stage transition. Adjacency is enforced — a case can only move
  * forward one column at a time. A few later stages require sub-step
  * completion, matching the current ops UI buttons, so the server and the

@@ -175,7 +175,10 @@ export const opsRoles = pgTable("ops_roles", {
 	name: varchar("name", { length: 128 }).notNull(),
 	description: text("description"),
 	isSystem: boolean("is_system").notNull().default(false),
+	/** Modules (what the role sees) and capabilities (what it may do), together. */
 	permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+	/** Orders roles for who may invite or change whom: strictly higher rank only. */
+	rank: integer("rank").notNull().default(30),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -157,9 +157,9 @@ import {
 	requireAuth,
 	requireMfa,
 	requireModule,
-	requireRole,
-	type AuthVariables,
 
+	type AuthVariables,
+	requireCapability,
 } from "../middleware/auth.js";
 
 
@@ -240,7 +240,7 @@ export function registerTravelRoutes(router: OpenAPIHono<{ Variables: AuthVariab
 			method: "post",
 			path: "/travel-assistance/{id}/assign",
 			tags: ["Applications"],
-			middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+			middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 			request: {
 				params: idParams,
 				body: {

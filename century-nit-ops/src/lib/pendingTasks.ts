@@ -824,6 +824,9 @@ export function tasksForApplication(
 	app: MockApplication,
 	inputs: Pick<PendingTaskInputs, "handoffs" | "travelRequests" | "invoices">,
 ): PendingTask[] {
+	// A completed or rejected case is closed — no task may be raised on it,
+	// including a stale pending handoff.
+	if (app.stage === "completed" || app.status === "Rejected") return [];
 	const all = buildPendingTasks({
 		consultations: [],
 		applications: [app],

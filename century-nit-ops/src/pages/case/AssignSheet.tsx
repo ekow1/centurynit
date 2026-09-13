@@ -1,4 +1,5 @@
 import { AssignControl, Sheet, type AssignableStaff } from "century-nit-core/ui";
+import { useOpsAuth } from "../OpsAuthContext";
 
 /**
  * The one place ops assigns a handler: the shared AssignControl in a sheet.
@@ -39,6 +40,10 @@ export function AssignSheet({
 	onAssign: (opsUserId: string, reason?: string) => Promise<unknown>;
 	onKeep?: (reason?: string) => Promise<unknown>;
 }) {
+	// Who may own the stage comes from the live roles, so a custom role
+	// given "own visa work" shows up in the visa picker.
+	const { roleCatalog } = useOpsAuth();
+	const permissions = Object.fromEntries(roleCatalog.map((r) => [r.id, r.permissions]));
 	return (
 		<Sheet open={open} onClose={onClose} title={title}>
 			{why && (
@@ -53,6 +58,7 @@ export function AssignSheet({
 				currentName={currentName}
 				keepName={keepName}
 				withReason={withReason}
+				permissions={permissions}
 				onAssign={async (opsUserId, reason) => {
 					await onAssign(opsUserId, reason);
 					onClose();

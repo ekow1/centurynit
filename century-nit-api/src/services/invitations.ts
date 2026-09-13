@@ -1,6 +1,6 @@
 import { and, desc, eq, lt } from "drizzle-orm";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { AUTH_ERROR_CODES, SYSTEM_ROLES, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
+import { AUTH_ERROR_CODES, ROLE_RANKS, roleHasCapability, roleSchema, type OpsRole, type UpdateStaff } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, staffInvitations, users } from "../db/schema.js";
 import { env } from "../env.js";
@@ -10,7 +10,7 @@ import { getAuthInstance } from "../routes/auth.js";
 import { ensureDefaultWorkingHours } from "./availability.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderInvitationEmail } from "../lib/email-templates.js";
-import { roleExists } from "./roles.js";
+import { checkRoleCapability, rankOfRole, roleExists } from "./roles.js";
 
 /**
  * Staff invitations.
@@ -35,32 +35,29 @@ const INVITE_TTL_DAYS = 7;
  * every applicant's file, which is exactly the separation the permission matrix
  * exists to maintain.
  */
-const CAN_INVITE: Record<string, OpsRole[]> = {
-	super_admin: ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance"],
-	admin: ["manager", "coordinator", "customer_service", "consultant", "finance"],
-	manager: ["coordinator", "customer_service", "consultant", "finance"],
-	coordinator: ["customer_service"],
-	consultant: [],
-	finance: [],
-};
-
+/**
+ * The rule, from the built-in defaults only (pure, for the ladder tests):
+ * the actor must hold `invite_staff`, and the target must rank strictly
+ * below them — except the root role, which may hand out anything.
+ */
 export function canInviteRole(inviterRole: string, target: OpsRole): boolean {
-	return (CAN_INVITE[inviterRole] ?? []).includes(target);
+	if (inviterRole === "super_admin") return true;
+	if (!roleHasCapability(inviterRole, "invite_staff")) return false;
+	const mine = (ROLE_RANKS as Record<string, number | undefined>)[inviterRole] ?? 0;
+	const theirs = (ROLE_RANKS as Record<string, number | undefined>)[target] ?? 0;
+	return mine > theirs;
 }
 
-const isSystemRole = (role: string): boolean => (SYSTEM_ROLES as readonly string[]).includes(role);
-
 /**
- * `canInviteRole`, extended to custom roles. A system role follows the
- * ladder above. A custom role has no rung, so until roles carry a rank the
- * rule is: it must exist, and only the two administrator roles may hand it
- * out. A role id that names nothing is refused outright — a typo used to
- * create a staff member whom every permission check silently denied.
+ * The same rule against the live roles table, custom roles included. A
+ * role id that names nothing is refused outright — a typo used to create
+ * a staff member whom every permission check silently denied.
  */
 export async function canAssignRole(actorRole: string, target: string): Promise<boolean> {
-	if (isSystemRole(target)) return canInviteRole(actorRole, target);
 	if (!(await roleExists(target))) return false;
-	return actorRole === "super_admin" || actorRole === "admin";
+	if (actorRole === "super_admin") return true;
+	if (!(await checkRoleCapability(actorRole, "invite_staff"))) return false;
+	return (await rankOfRole(actorRole)) > (await rankOfRole(target));
 }
 
 

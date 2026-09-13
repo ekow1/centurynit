@@ -2,11 +2,10 @@ import { createContext, useContext, useState, useCallback, useEffect, type React
 import {
 	ROLE_LABELS as SHARED_ROLE_LABELS,
 	ROLE_PERMISSIONS,
-	ASSIGN_WORK_ROLES,
-	EDIT_PACKAGES_ROLES,
-	EDIT_UNIVERSITIES_ROLES,
 	roleCanAccess,
+	roleHasCapability,
 	opsModuleSchema,
+	type Capability,
 	API_PREFIX,
 	type OpsModule,
 	type OpsRole,
@@ -43,9 +42,6 @@ import {
 export type { OpsRole, OpsModule };
 export { ROLE_PERMISSIONS };
 
-const EDIT_PACKAGES: readonly OpsRole[] = EDIT_PACKAGES_ROLES;
-const EDIT_UNIVERSITIES: readonly OpsRole[] = EDIT_UNIVERSITIES_ROLES;
-const ASSIGN_WORK: readonly OpsRole[] = ASSIGN_WORK_ROLES;
 
 /** Where each role lands when they open the console. */
 export const ROLE_HOME: Record<OpsRole, string> = {
@@ -170,6 +166,10 @@ interface OpsAuthContextValue {
 	) => T[];
 	/** Only the manager assigns and reassigns cases. */
 	canAssignWork: boolean;
+	/** Whether the signed-in role holds a capability — the same list the server checks. */
+	hasCapability: (capability: Capability) => boolean;
+	/** May turn a proforma into a payable invoice, void or credit one. */
+	canIssueInvoices: boolean;
 	/** Only the manager can edit the package catalogue. */
 	canEditPackages: boolean;
 	/** Only the manager can add or edit universities and programs. */
@@ -185,7 +185,9 @@ export type RoleSummary = {
 	name: string;
 	description: string | null;
 	isSystem: boolean;
-	permissions: OpsModule[];
+	/** Modules and capabilities, together. */
+	permissions: string[];
+	rank: number;
 	createdAt: string;
 	updatedAt: string;
 };
@@ -206,7 +208,7 @@ function staffToOpsUser(s: NonNullable<SessionResponse["staff"]>): OpsUser {
 export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const [opsUser, setOpsUser] = useState<OpsUser | null>(loadSession);
 	const [authInitializing, setAuthInitializing] = useState(true);
-	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, OpsModule[]>>({});
+	const [dynamicPermissions, setDynamicPermissions] = useState<Record<string, string[]>>({});
 	const [roleCatalog, setRoleCatalog] = useState<RoleSummary[]>([]);
 
 	const opsRole = opsUser?.role ?? null;
@@ -214,7 +216,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const refreshPermissions = useCallback(async () => {
 		try {
 			const res = await apiFetch<{ roles: RoleSummary[] }>(`${API_PREFIX}/roles`);
-			const map: Record<string, OpsModule[]> = {};
+			const map: Record<string, string[]> = {};
 			for (const r of res.roles) {
 				map[r.id] = r.permissions;
 				// The label maps are static for the built-in roles; custom roles
@@ -339,20 +341,22 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const getAllowedModules = useCallback(() => {
 		if (!opsRole) return [];
 		if (opsRole === "super_admin") return opsModuleSchema.options as unknown as OpsModule[];
-		if (dynamicPermissions[opsRole]) return dynamicPermissions[opsRole];
+		if (dynamicPermissions[opsRole]) {
+			return dynamicPermissions[opsRole].filter((p) => (opsModuleSchema.options as string[]).includes(p)) as OpsModule[];
+		}
 		return (ROLE_PERMISSIONS as Record<string, OpsModule[]>)[opsRole] ?? [];
 	}, [opsRole, dynamicPermissions]);
 
-
-	const canSeeAllBranches =
-		opsRole === "super_admin" ||
-		opsRole === "admin" ||
-		opsRole === "manager" ||
-		opsRole === "coordinator" ||
-		opsRole === "customer_service" ||
-		opsRole === "finance";
+	// Capabilities — what the role may do — from the same fetched list the
+	// server enforces, with the built-in defaults until it arrives.
+	const hasCapability = useCallback(
+		(capability: Capability) => (opsRole ? roleHasCapability(opsRole, capability, dynamicPermissions) : false),
+		[opsRole, dynamicPermissions],
+	);
+	const canSeeAllBranches = hasCapability("see_all_branches");
 	const branchScopeId = opsUser?.branch ?? null;
-	const requiresAssignmentScope = opsRole === "consultant";
+	// Neither every branch nor every case: only what is assigned to them.
+	const requiresAssignmentScope = Boolean(opsRole) && !canSeeAllBranches && !hasCapability("see_all_cases");
 	const inBranchScope = useCallback(
 		(branch: string) => canSeeAllBranches || branch === branchScopeId || branch.startsWith(`${branchScopeId}-`),
 		[canSeeAllBranches, branchScopeId],
@@ -384,9 +388,11 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 				inBranchScope,
 				requiresAssignmentScope,
 				scopeRecords,
-				canAssignWork: opsRole !== null && ASSIGN_WORK.includes(opsRole),
-				canEditPackages: opsRole !== null && EDIT_PACKAGES.includes(opsRole),
-				canEditUniversities: opsRole !== null && EDIT_UNIVERSITIES.includes(opsRole),
+				canAssignWork: hasCapability("assign_work"),
+				hasCapability,
+				canIssueInvoices: hasCapability("issue_invoices"),
+				canEditPackages: hasCapability("edit_packages"),
+				canEditUniversities: hasCapability("edit_universities"),
 				roleCatalog,
 				refreshPermissions,
 			}}

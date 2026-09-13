@@ -154,7 +154,7 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 			</div>
 
 			{showDecisionFields && (
-				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", borderRadius: "var(--radius-md)", marginTop: "0.5rem" }}>
+				<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", padding: "0.75rem", background: "var(--background)", border: "1px solid var(--border-light)", marginTop: "0.5rem" }}>
 					<p className="eyebrow" style={{ gridColumn: "1 / -1", margin: 0 }}>
 						{showOfferFields ? "Offer details" : "Decision update"}
 					</p>
@@ -184,7 +184,7 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 										Uploading… {uploadPct}%
 									</span>
 								) : hasLetter ? (
-									<span style={{ color: "var(--success, #15803d)", fontSize: "var(--text-xs)" }}>
+									<span style={{ fontSize: "var(--text-xs)", fontWeight: 600 }}>
 										✓ Letter uploaded
 									</span>
 								) : null}
@@ -218,7 +218,6 @@ function InlineSchoolTracker({ appId, school }: { appId: string; school: SchoolA
 							style={{
 								background: "var(--background)",
 								border: "1px solid var(--border-light)",
-								borderRadius: "var(--radius-md)",
 								padding: "0.5rem 0.6rem",
 								fontSize: "var(--text-xs)",
 								color: "var(--text)",
@@ -372,9 +371,9 @@ export function ApplicationsTab({
 								return (
 									<div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
 										<span>{total} school{total !== 1 ? "s" : ""}</span>
-										{admitted > 0 ? <span style={{ color: "#16a34a", fontWeight: 600 }}>{admitted} admitted</span> : null}
+										{admitted > 0 ? <span style={{ fontWeight: 700 }}>{admitted} admitted</span> : null}
 										{pending > 0 ? <span>{pending} pending</span> : null}
-										{rejected > 0 ? <span style={{ color: "#dc2626" }}>{rejected} rejected/declined</span> : null}
+										{rejected > 0 ? <span style={{ color: "var(--danger, #b91c1c)" }}>{rejected} rejected/declined</span> : null}
 									</div>
 								);
 							})()}
@@ -390,9 +389,8 @@ export function ApplicationsTab({
 												key={s.id}
 												style={{
 													padding: "0.6rem 0.75rem",
-													border: admitted ? "2px solid #16a34a" : "1px solid var(--border-light)",
-													background: admitted ? "#f0fdf4" : "transparent",
-													borderRadius: "var(--radius-md)",
+													border: admitted ? "2px solid var(--foreground)" : "1px solid var(--border-light)",
+													background: admitted ? "var(--muted)" : "transparent",
 												}}
 											>
 												<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>

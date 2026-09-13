@@ -4,12 +4,13 @@ import {
 	AUTH_ERROR_CODES,
 	mfaRequiredForRole,
 	type OpsModule,
+	type Capability,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { opsUsers, users } from "../db/schema.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
-import { checkRolePermission } from "../services/roles.js";
+import { checkRoleCapability, checkRolePermission, permissionsOfRole } from "../services/roles.js";
 
 /**
  * Authentication and authorisation for the scheduling API.
@@ -33,6 +34,8 @@ export type SessionUser = {
 export type StaffContext = {
 	opsUserId: string;
 	role: string;
+	/** The role's permission list — modules and capabilities — as of this request. */
+	permissions: readonly string[];
 	branch: string | null;
 	name: string;
 	email: string;
@@ -107,6 +110,7 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 			? {
 					opsUserId: staff.id,
 					role: staff.role,
+					permissions: await permissionsOfRole(staff.role),
 					branch: staff.branch,
 					name: staff.name,
 					email: staff.email,
@@ -207,6 +211,39 @@ export function requireRole(
  *
  *   app.use("/api/v1/invoices/*", requireAuth, requireModule("invoices"));
  */
+/**
+ * Route guard for what a role may *do* — the counterpart of `requireModule`
+ * (what it may see). Reads the roles table, so the role editor's changes
+ * take effect; the root role passes every check.
+ */
+export function requireCapability(
+	capability: Capability,
+): MiddlewareHandler<{ Variables: AuthVariables }> {
+	return async (c, next) => {
+		const staff = c.get("staff");
+		if (!staff) {
+			throw new HttpError(403, "FORBIDDEN", "Staff access required");
+		}
+		if (!(await checkRoleCapability(staff.role, capability))) {
+			throw new HttpError(403, "FORBIDDEN", `Your role cannot ${CAPABILITY_VERBS[capability] ?? capability}`);
+		}
+		await next();
+	};
+}
+
+const CAPABILITY_VERBS: Partial<Record<Capability, string>> = {
+	assign_work: "assign work",
+	see_all_cases: "see every case",
+	see_all_branches: "see every branch",
+	invite_staff: "invite or change staff",
+	manage_roles: "manage roles",
+	manage_settings: "change platform settings",
+	manage_clients: "manage client accounts",
+	edit_packages: "edit packages",
+	edit_universities: "edit universities",
+	issue_invoices: "issue invoices",
+};
+
 export function requireModule(
 	module: OpsModule,
 ): MiddlewareHandler<{ Variables: AuthVariables }> {

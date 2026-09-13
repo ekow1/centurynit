@@ -302,7 +302,7 @@ export function ConsultationDetail({
 					: null;
 
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+		<div className="cn-detail">
 			<div className="card" style={{ padding: "0.75rem 1rem" }}>
 				<CaseHeader
 					name={consultation.applicantName}
@@ -450,7 +450,7 @@ export function ConsultationDetail({
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
 						<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
 						{consultation.meetingLink && (
-							<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem" }}>
 								{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : "Video Link"}
 							</span>
 						)}

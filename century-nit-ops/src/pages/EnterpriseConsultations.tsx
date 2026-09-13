@@ -53,18 +53,26 @@ export function EnterpriseConsultations() {
 		[scopeRecords, consultations, opsUser],
 	);
 
-	const filteredConsultations = roleScopedConsultations.filter((c) => {
+	const STATUS_TABS = canAssignWork
+		? ["All", "Under Review", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
+		: ["All", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"];
+
+	const matchesStatus = (c: (typeof roleScopedConsultations)[number], s: string) =>
+		s === "All" ? true : s === "Unassigned" ? !c.assignedOfficer : c.status === s;
+
+	// Search and branch apply before the status facet so each option's count
+	// says how much choosing it would show.
+	const searchedConsultations = roleScopedConsultations.filter((c) => {
 		if (branchFilter !== "all" && c.branch !== branchFilter) return false;
-		const matchesSearch =
+		return (
 			c.applicantName.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			c.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			c.targetCountry.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			c.assignedOfficer.toLowerCase().includes(searchQuery.toLowerCase());
-		if (!matchesSearch) return false;
-		if (statusFilter === "All") return true;
-		if (statusFilter === "Unassigned") return !c.assignedOfficer;
-		return c.status === statusFilter;
+			c.assignedOfficer.toLowerCase().includes(searchQuery.toLowerCase())
+		);
 	});
+	const statusCounts = new Map(STATUS_TABS.map((s) => [s, searchedConsultations.filter((c) => matchesStatus(c, s)).length]));
+	const filteredConsultations = searchedConsultations.filter((c) => matchesStatus(c, statusFilter));
 
 	const liveSelected = selectedConsultation
 		? consultations.find((c) => c.id === selectedConsultation.id) ?? selectedConsultation
@@ -84,7 +92,7 @@ export function EnterpriseConsultations() {
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
 					{reviewCount > 0 && canAssignWork && (
-						<span className="portal-pill" style={{ background: "#fef3c7", color: "#92400e", whiteSpace: "nowrap" }}>
+						<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)", whiteSpace: "nowrap" }}>
 							{reviewCount} awaiting assignment
 						</span>
 					)}
@@ -127,28 +135,28 @@ export function EnterpriseConsultations() {
 				list={
 					<>
 						<div className="cn-scaffold__filters">
-							<div className="cn-scaffold__chips">
-								{(canAssignWork
-									? ["All", "Under Review", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
-									: ["All", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
-								).map((tab) => (
-									<button
-										key={tab}
-										type="button"
-										onClick={() => setStatusFilter(tab)}
-										className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}
-									>
-										{tab}
-									</button>
-								))}
-							</div>
 							<input
 								type="search"
 								placeholder="Search applicant, ref, country..."
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
-								className="input input--sm"
+								className="cn-search"
+								aria-label="Search consultations"
 							/>
+							<label className="cn-filter">
+								<span className="cn-filter__label">Status</span>
+								<select
+									className="cn-filter__select"
+									value={statusFilter}
+									onChange={(e) => setStatusFilter(e.target.value)}
+								>
+									{STATUS_TABS.map((s) => (
+										<option key={s} value={s}>
+											{s} · {statusCounts.get(s) ?? 0}
+										</option>
+									))}
+								</select>
+							</label>
 						</div>
 						<div className="cn-scaffold__rows">
 							{filteredConsultations.length === 0 ? (

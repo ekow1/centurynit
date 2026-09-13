@@ -3,7 +3,11 @@ import { db } from "../db/index.js";
 import { opsRoles, opsUsers, settingsAudit } from "../db/schema.js";
 import {
 	SYSTEM_ROLES,
-	ROLE_PERMISSIONS,
+	ROLE_RANKS,
+	DEFAULT_CUSTOM_ROLE_RANK,
+	defaultPermissionsOf,
+	permissionsGrant,
+	type Capability,
 	type OpsModule,
 	type SystemRole,
 } from "century-nit-shared";
@@ -13,7 +17,9 @@ export interface RoleRecord {
 	name: string;
 	description: string | null;
 	isSystem: boolean;
-	permissions: OpsModule[];
+	/** Modules and capabilities, together. */
+	permissions: string[];
+	rank: number;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -49,7 +55,8 @@ const ROLE_LABELS: Record<SystemRole, { name: string; description: string }> = {
 	},
 };
 
-let cachedPermissions = new Map<string, OpsModule[]>();
+let cachedPermissions = new Map<string, string[]>();
+let cachedRanks = new Map<string, number>();
 let permissionsCacheLoadedAt = 0;
 const CACHE_TTL_MS = 30_000;
 
@@ -78,15 +85,16 @@ export async function seedSystemRoles(): Promise<void> {
 				name: meta.name,
 				description: meta.description,
 				isSystem: true,
-				permissions: ROLE_PERMISSIONS[roleKey],
+				permissions: defaultPermissionsOf(roleKey),
+				rank: ROLE_RANKS[roleKey],
 			})
 			.onConflictDoNothing();
 	}
 }
 
 /** The built-in default for a system role — what "reset to defaults" restores. */
-export function defaultPermissionsFor(roleId: string): OpsModule[] | null {
-	return (ROLE_PERMISSIONS as Record<string, OpsModule[] | undefined>)[roleId] ?? null;
+export function defaultPermissionsFor(roleId: string): string[] | null {
+	return (SYSTEM_ROLES as readonly string[]).includes(roleId) ? defaultPermissionsOf(roleId as SystemRole) : null;
 }
 
 /** Whether a role id names a role that exists (system or custom). */
@@ -95,31 +103,36 @@ export async function roleExists(id: string): Promise<boolean> {
 	return Boolean(row);
 }
 
-function rememberRole(row: { id: string; permissions: string[] | null }): void {
-	cachedPermissions.set(row.id, (row.permissions ?? []) as OpsModule[]);
+function rememberRole(row: { id: string; permissions: string[] | null; rank?: number }): void {
+	cachedPermissions.set(row.id, row.permissions ?? []);
+	if (row.rank !== undefined) cachedRanks.set(row.id, row.rank);
 }
 
 /**
  * In-memory cached permissions map for high-throughput route checks.
  */
-export async function getRolePermissionsMap(force = false): Promise<Map<string, OpsModule[]>> {
+export async function getRolePermissionsMap(force = false): Promise<Map<string, string[]>> {
 	if (!force && Date.now() - permissionsCacheLoadedAt < CACHE_TTL_MS && cachedPermissions.size > 0) {
 		return cachedPermissions;
 	}
 
 	try {
 		const rows = await db.select().from(opsRoles);
-		const next = new Map<string, OpsModule[]>();
+		const next = new Map<string, string[]>();
+		const ranks = new Map<string, number>();
 		for (const row of rows) {
-			next.set(row.id, (row.permissions ?? []) as OpsModule[]);
+			next.set(row.id, row.permissions ?? []);
+			ranks.set(row.id, row.rank);
 		}
 		cachedPermissions = next;
+		cachedRanks = ranks;
 		permissionsCacheLoadedAt = Date.now();
 	} catch (err) {
 		console.error("[Roles] Failed to load roles from DB, using fallback:", err);
-		// Fallback to built-in permissions
-		for (const [k, v] of Object.entries(ROLE_PERMISSIONS)) {
-			cachedPermissions.set(k, v);
+		// Fallback to the built-in defaults
+		for (const k of SYSTEM_ROLES) {
+			cachedPermissions.set(k, defaultPermissionsOf(k));
+			cachedRanks.set(k, ROLE_RANKS[k]);
 		}
 	}
 
@@ -130,14 +143,45 @@ export async function getRolePermissionsMap(force = false): Promise<Map<string, 
  * Check if a role has access to a specific module.
  */
 export async function checkRolePermission(role: string, module: OpsModule): Promise<boolean> {
+	return checkRoleGrant(role, module);
+}
+
+/** Whether a role has a capability — the same lookup, the same list. */
+export async function checkRoleCapability(role: string, capability: Capability): Promise<boolean> {
+	return checkRoleGrant(role, capability);
+}
+
+async function checkRoleGrant(role: string, wanted: string): Promise<boolean> {
 	if (role === "super_admin") return true;
 	const map = await getRolePermissionsMap();
 	const perms = map.get(role);
 	if (!perms) {
-		const fallback = ROLE_PERMISSIONS[role as SystemRole];
-		return fallback ? fallback.includes(module) : false;
+		return (SYSTEM_ROLES as readonly string[]).includes(role)
+			? permissionsGrant(role, defaultPermissionsOf(role as SystemRole), wanted)
+			: false;
 	}
-	return perms.includes(module);
+	return perms.includes(wanted);
+}
+
+/** The permission list of a role, for a request's staff context. */
+export async function permissionsOfRole(role: string): Promise<string[]> {
+	const map = await getRolePermissionsMap();
+	const perms = map.get(role);
+	if (perms) return perms;
+	return (SYSTEM_ROLES as readonly string[]).includes(role) ? defaultPermissionsOf(role as SystemRole) : [];
+}
+
+/** A role's rank; unknown roles rank lowest. */
+export async function rankOfRole(role: string): Promise<number> {
+	await getRolePermissionsMap();
+	const r = cachedRanks.get(role);
+	if (r !== undefined) return r;
+	return (ROLE_RANKS as Record<string, number | undefined>)[role] ?? 0;
+}
+
+/** The live permission map as a plain object, for the shared helpers. */
+export async function livePermissions(): Promise<Record<string, string[]>> {
+	return Object.fromEntries(await getRolePermissionsMap());
 }
 
 /**
@@ -150,7 +194,8 @@ export async function listRoles(): Promise<RoleRecord[]> {
 		name: r.name,
 		description: r.description,
 		isSystem: r.isSystem,
-		permissions: (r.permissions ?? []) as OpsModule[],
+		permissions: r.permissions ?? [],
+		rank: r.rank,
 		createdAt: r.createdAt.toISOString(),
 		updatedAt: r.updatedAt.toISOString(),
 	}));
@@ -179,7 +224,8 @@ export async function createRole(input: {
 	id: string;
 	name: string;
 	description?: string;
-	permissions: OpsModule[];
+	permissions: string[];
+	rank?: number;
 	actor: RoleActor;
 }): Promise<RoleRecord> {
 	const slug = input.id.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
@@ -203,6 +249,7 @@ export async function createRole(input: {
 			description: input.description?.trim() ?? null,
 			isSystem: false,
 			permissions: input.permissions,
+			rank: input.rank ?? DEFAULT_CUSTOM_ROLE_RANK,
 		})
 		.returning();
 
@@ -214,7 +261,8 @@ export async function createRole(input: {
 		name: created.name,
 		description: created.description,
 		isSystem: created.isSystem,
-		permissions: (created.permissions ?? []) as OpsModule[],
+		permissions: created.permissions ?? [],
+		rank: created.rank,
 		createdAt: created.createdAt.toISOString(),
 		updatedAt: created.updatedAt.toISOString(),
 	};
@@ -228,7 +276,8 @@ export async function updateRole(
 	input: {
 		name?: string;
 		description?: string;
-		permissions?: OpsModule[];
+		permissions?: string[];
+		rank?: number;
 		actor: RoleActor;
 	},
 ): Promise<RoleRecord> {
@@ -248,6 +297,7 @@ export async function updateRole(
 			name: input.name !== undefined ? input.name.trim() : existing.name,
 			description: input.description !== undefined ? input.description.trim() : existing.description,
 			permissions: input.permissions !== undefined ? input.permissions : existing.permissions,
+			rank: input.rank !== undefined ? input.rank : existing.rank,
 			updatedAt: new Date(),
 		})
 		.where(eq(opsRoles.id, id))
@@ -264,7 +314,8 @@ export async function updateRole(
 		name: updated.name,
 		description: updated.description,
 		isSystem: updated.isSystem,
-		permissions: (updated.permissions ?? []) as OpsModule[],
+		permissions: updated.permissions ?? [],
+		rank: updated.rank,
 		createdAt: updated.createdAt.toISOString(),
 		updatedAt: updated.updatedAt.toISOString(),
 	};

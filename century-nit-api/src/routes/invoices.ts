@@ -17,6 +17,7 @@ import {
 	requireModule,
 	type AuthVariables,
 	type StaffContext,
+	requireCapability,
 } from "../middleware/auth.js";
 import {
 	createInvoice,
@@ -232,7 +233,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/void",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices"), requireCapability("issue_invoices")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -264,7 +265,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/credit",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices"), requireCapability("issue_invoices")] as const,
 		request: {
 			params: idParams,
 			body: {
@@ -301,7 +302,7 @@ invoicesRouter.openapi(
 		method: "post",
 		path: "/{id}/issue",
 		tags: ["Invoices"],
-		middleware: [requireAuth, requireMfa, requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("invoices"), requireCapability("issue_invoices")] as const,
 		request: {
 			params: idParams,
 			body: {

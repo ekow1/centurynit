@@ -3,8 +3,9 @@ import { z } from "zod";
 import { createHmac } from "node:crypto";
 import {
 	requireAuth,
-	requireRole,
+
 	type AuthVariables,
+	requireCapability,
 } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import { env } from "../env.js";
@@ -229,7 +230,7 @@ const consentRoute = createRoute({
 	path: "/company/consent",
 	tags: ["Company Google Meet"],
 	summary: "Start the company Google account OAuth flow",
-	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
+	middleware: [requireAuth, requireCapability("manage_settings")] as const,
 	responses: {
 		302: { description: "Redirect to Google consent screen" },
 		400: { description: "Google Meet is not configured" },
@@ -508,7 +509,7 @@ const statusRoute = createRoute({
 	path: "/company/status",
 	tags: ["Company Google Meet"],
 	summary: "Whether the company Google account is connected",
-	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
+	middleware: [requireAuth, requireCapability("manage_settings")] as const,
 	responses: {
 		200: {
 			description: "Connection status",
@@ -547,7 +548,7 @@ const disconnectRoute = createRoute({
 	path: "/company/disconnect",
 	tags: ["Company Google Meet"],
 	summary: "Disconnect the company Google account",
-	middleware: [requireAuth, requireRole("super_admin", "admin")] as const,
+	middleware: [requireAuth, requireCapability("manage_settings")] as const,
 	responses: {
 		200: { description: "Disconnected" },
 	},

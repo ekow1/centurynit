@@ -12,7 +12,7 @@ import {
 	updatePresenceSchema,
 	sendContextMessageSchema,
 } from "century-nit-shared";
-import { requireAuth, requireMfa, requireModule, requireRole, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireMfa, requireModule, type AuthVariables, requireCapability } from "../middleware/auth.js";
 import {
 	getCommunicationContext,
 	listCustomerConversations,
@@ -270,7 +270,7 @@ communicationRouter.openapi(
 		method: "post",
 		path: "/stage-assignments",
 		tags: ["Communication"],
-		middleware: [requireAuth, requireMfa, requireModule("chat"), requireRole("manager", "coordinator", "customer_service", "super_admin")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("chat"), requireCapability("assign_work")] as const,
 		request: { body: { content: { "application/json": { schema: createStageAssignmentSchema } }, required: true } },
 		responses: {
 			201: {

@@ -1216,10 +1216,9 @@ export const meApi = {
 	/** Current journey stage and chapter unlocks derived server-side.
 	 *
 	 * `currentStage` is the coarse `JourneyStage` enum value stored on
-	 * `applications.stage` (e.g. "visa_processing"). The portal maps it to a
-	 * fine-grained `ProcessStageId` via `JOURNEY_STAGE_TO_PORTAL`. The server
-	 * may also send `portalStage` — an already-mapped `ProcessStageId` that
-	 * overrides the local mapping when present. */
+	 * `applications.stage` (e.g. "visa_processing"). `portalStage` is the
+	 * fine-grained `ProcessStageId` `deriveJourney` produced from it plus the
+	 * invoice/school signals — the display position the UI should use. */
 	journey(): Promise<DerivedJourney> {
 		return request(`${API_PREFIX}/me/journey`);
 	},

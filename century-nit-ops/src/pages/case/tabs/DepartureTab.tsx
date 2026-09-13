@@ -104,12 +104,12 @@ export function DepartureTab({
 									<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>
 										{app.preDepartureTasks?.filter((t) => t.done).length ?? 0}/{app.preDepartureTasks?.length ?? 0} tasks
 									</span>
-									<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", fontWeight: 600, color: pdProg === 100 ? "#22c55e" : "var(--muted-foreground)" }}>
+									<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", fontWeight: 600, color: pdProg === 100 ? "var(--foreground)" : "var(--muted-foreground)" }}>
 										{pdProg}%
 									</span>
 								</div>
-								<div style={{ height: "6px", background: "var(--muted)", borderRadius: "999px", overflow: "hidden", marginBottom: "1rem" }}>
-									<div style={{ width: `${pdProg}%`, height: "100%", background: pdProg === 100 ? "#22c55e" : "#f97316", transition: "width 0.4s ease" }} />
+								<div style={{ height: "6px", background: "var(--muted)", overflow: "hidden", marginBottom: "1rem" }}>
+									<div style={{ width: `${pdProg}%`, height: "100%", background: "var(--foreground)", transition: "width 0.4s ease" }} />
 								</div>
 
 								{app.preDepartureTasks && app.preDepartureTasks.length > 0 ? (
@@ -119,7 +119,7 @@ export function DepartureTab({
 											if (tasks.length === 0) return null;
 											const catDone = tasks.filter((t) => t.done).length;
 											return (
-												<div key={cat} style={{ border: "1px solid var(--border-light)", padding: "0.75rem", borderRadius: "4px" }}>
+												<div key={cat} style={{ border: "1px solid var(--border-light)", padding: "0.75rem" }}>
 													<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
 														<span style={{ fontSize: "0.9rem" }}>{PRE_DEPARTURE_CATEGORIES[cat].icon}</span>
 														<div>
@@ -151,10 +151,9 @@ export function DepartureTab({
 																	fontSize: "0.65rem",
 																	fontWeight: 700,
 																	border: "2px solid",
-																	borderColor: task.done ? "#22c55e" : "var(--border)",
-																	borderRadius: "3px",
-																	color: task.done ? "#fff" : "transparent",
-																	background: task.done ? "#22c55e" : "transparent",
+																	borderColor: task.done ? "var(--foreground)" : "var(--border)",
+																	color: task.done ? "var(--background)" : "transparent",
+																	background: task.done ? "var(--foreground)" : "transparent",
 																}}>
 																	{task.done ? "\u2713" : ""}
 																</span>

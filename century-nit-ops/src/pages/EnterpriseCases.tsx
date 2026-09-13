@@ -154,30 +154,41 @@ export function EnterpriseCases() {
 
 	const roleScopedApps = scopeRecords(applications, isMine);
 
-	const filteredApps = roleScopedApps.filter((a) => {
+	// A chapter view shows the cases in it and the ones past it that still
+	// have that chapter's work open (a visa case in Departure). Closed cases
+	// live under Complete only.
+	const CHAPTER_ORDER = CHAPTERS.map((x) => x.id);
+	const matchesChapter = (a: MockApplication, ch: "all" | ChapterId): boolean => {
+		if (ch === "all") return true;
+		const c = chapterOf(a);
+		if (c === "done") return ch === "done";
+		const inOrPast = CHAPTER_ORDER.indexOf(c) >= CHAPTER_ORDER.indexOf(ch);
+		if (ch === "visa") {
+			return inOrPast || Boolean(a.visaStage && a.visaStage !== "locked") || Boolean(visaInvoiceFor(allInvoices, a));
+		}
+		return inOrPast;
+	};
+
+	const STATUS_FILTERS = ["All", "Under Review", "Accepted", "Action Required", "Rejected"] as const;
+
+	// Search and scope apply before the chapter/status facets, so the select
+	// counts always say how much a choice would show.
+	const facetApps = roleScopedApps.filter((a) => {
 		if (branchFilter !== "all" && a.branch !== branchFilter) return false;
 		if (ownerFilter === "mine" && !isMine(a)) return false;
-		if (chapter !== "all") {
-			// A chapter view shows the cases in it and the ones past it that
-			// still have that chapter's work open (a visa case in Departure).
-			const c = chapterOf(a);
-			const order = CHAPTERS.map((x) => x.id);
-			const inOrPast = order.indexOf(c) >= order.indexOf(chapter);
-			if (chapter === "visa") {
-				if (!(inOrPast || (a.visaStage && a.visaStage !== "locked") || Boolean(visaInvoiceFor(allInvoices, a)))) return false;
-			} else if (!inOrPast) return false;
-			if (chapter !== "done" && c === "done" && chapter !== "depart") return false;
-		}
 		const q = searchQuery.toLowerCase();
-		const matchesSearch =
+		return (
 			a.applicantName.toLowerCase().includes(q) ||
 			a.appId.toLowerCase().includes(q) ||
 			a.university.toLowerCase().includes(q) ||
-			a.assignedStaff.toLowerCase().includes(q);
-		if (!matchesSearch) return false;
-		if (statusFilter === "All") return true;
-		return a.status === statusFilter;
+			a.assignedStaff.toLowerCase().includes(q)
+		);
 	});
+	const chapterCounts = new Map(CHAPTER_FILTERS.map((f) => [f.id, facetApps.filter((a) => matchesChapter(a, f.id)).length]));
+	const statusApps = facetApps.filter((a) => matchesChapter(a, chapter));
+	const statusCounts = new Map(STATUS_FILTERS.map((s) => [s, s === "All" ? statusApps.length : statusApps.filter((a) => a.status === s).length]));
+
+	const filteredApps = statusApps.filter((a) => statusFilter === "All" || a.status === statusFilter);
 
 	const unassignedCases = roleScopedApps.filter((a) => assignmentNeeded(a, handoffs)).length;
 	const initialTab = chapter === "visa" ? "visa" : chapter === "depart" ? "travel" : chapter === "done" ? "payments" : undefined;
@@ -269,15 +280,22 @@ export function EnterpriseCases() {
 
 			{view === "board" ? (
 				<>
-					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem" }}>
-						<div className="cn-scaffold__chips">
-							{CHAPTER_FILTERS.map((c) => (
-								<button key={c.id} type="button" onClick={() => setChapter(c.id)} className={`btn btn--sm ${chapter === c.id ? "btn--primary" : "btn--ghost"}`}>
-									{c.label}
-								</button>
-							))}
-						</div>
-						<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input input--sm" />
+					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem", flexDirection: "row", alignItems: "center" }}>
+						<label className="cn-filter" style={{ flex: "0 1 16rem" }}>
+							<span className="cn-filter__label">Chapter</span>
+							<select
+								className="cn-filter__select"
+								value={chapter}
+								onChange={(e) => setChapter(e.target.value as "all" | ChapterId)}
+							>
+								{CHAPTER_FILTERS.map((c) => (
+									<option key={c.id} value={c.id}>
+										{c.label} · {chapterCounts.get(c.id) ?? 0}
+									</option>
+								))}
+							</select>
+						</label>
+						<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="cn-search" style={{ flex: 1 }} />
 					</div>
 					<CaseBoard apps={filteredApps} onOpen={(app) => { setSelectedApp(app); setView("list"); }} />
 				</>
@@ -288,21 +306,44 @@ export function EnterpriseCases() {
 					list={
 						<>
 							<div className="cn-scaffold__filters">
-								<div className="cn-scaffold__chips">
-									{CHAPTER_FILTERS.map((c) => (
-										<button key={c.id} type="button" onClick={() => setChapter(c.id)} className={`btn btn--sm ${chapter === c.id ? "btn--primary" : "btn--ghost"}`}>
-											{c.label}
-										</button>
-									))}
+								<input
+									type="search"
+									placeholder="Search case ID, client, university…"
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									className="cn-search"
+									aria-label="Search cases"
+								/>
+								<div className="cn-scaffold__filter-row">
+									<label className="cn-filter">
+										<span className="cn-filter__label">Chapter</span>
+										<select
+											className="cn-filter__select"
+											value={chapter}
+											onChange={(e) => setChapter(e.target.value as "all" | ChapterId)}
+										>
+											{CHAPTER_FILTERS.map((c) => (
+												<option key={c.id} value={c.id}>
+													{c.label} · {chapterCounts.get(c.id) ?? 0}
+												</option>
+											))}
+										</select>
+									</label>
+									<label className="cn-filter">
+										<span className="cn-filter__label">Status</span>
+										<select
+											className="cn-filter__select"
+											value={statusFilter}
+											onChange={(e) => setStatusFilter(e.target.value)}
+										>
+											{STATUS_FILTERS.map((s) => (
+												<option key={s} value={s}>
+													{s === "All" ? "Any" : (CASE_STATUS_LABELS[s] ?? s)} · {statusCounts.get(s) ?? 0}
+												</option>
+											))}
+										</select>
+									</label>
 								</div>
-								<div className="cn-scaffold__chips">
-									{["All", "Under Review", "Accepted", "Action Required", "Rejected"].map((tab) => (
-										<button key={tab} type="button" onClick={() => setStatusFilter(tab)} className={`btn btn--sm ${statusFilter === tab ? "btn--primary" : "btn--ghost"}`}>
-											{tab === "All" ? "Any status" : (CASE_STATUS_LABELS[tab] ?? tab)}
-										</button>
-									))}
-								</div>
-								<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input input--sm" />
 							</div>
 							<div className="cn-scaffold__rows">
 								{filteredApps.length === 0 ? (

@@ -3310,7 +3310,6 @@
 	display: inline-block;
 	width: 8px;
 	height: 8px;
-	border-radius: 50%;
 	flex-shrink: 0;
 }
 
@@ -3321,7 +3320,7 @@
 	font-family: var(--font-mono);
 	font-weight: 600;
 	padding: 0.15rem 0.45rem;
-	border-radius: 3px;
+	border: 1px solid var(--border);
 	background: var(--muted);
 	color: var(--muted-foreground);
 	text-transform: uppercase;
@@ -3329,13 +3328,15 @@
 }
 
 .wf-badge--ok {
-	background: #166534;
-	color: #fff;
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--background);
 }
 
 .wf-badge--warn {
-	background: #b45309;
-	color: #fff;
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--background);
 }
 
 /* ── Workflow: detail drawer ── */

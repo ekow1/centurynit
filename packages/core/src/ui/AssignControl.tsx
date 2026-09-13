@@ -30,6 +30,7 @@ export function AssignControl({
 	withReason = false,
 	busy = false,
 	label,
+	permissions,
 }: {
 	/** The stage being staffed — decides which roles are offered. */
 	stage: string;
@@ -46,6 +47,8 @@ export function AssignControl({
 	busy?: boolean;
 	/** Button copy; defaults to Assign / Reassign. */
 	label?: string;
+	/** The live role → permissions map; without it the built-in defaults decide who may own the stage. */
+	permissions?: Record<string, readonly string[]>;
 }) {
 	const [choice, setChoice] = useState("");
 	const [reason, setReason] = useState("");
@@ -53,11 +56,11 @@ export function AssignControl({
 	const [error, setError] = useState<string | null>(null);
 
 	const eligible = useMemo(() => {
-		const allowed = staff.filter((s) => s.opsUserId && canOwnStage(s.role, stage));
+		const allowed = staff.filter((s) => s.opsUserId && canOwnStage(s.role, stage, permissions));
 		const same = branch ? allowed.filter((s) => s.branch === branch) : [];
 		const rest = allowed.filter((s) => !same.includes(s));
 		return { same, rest };
-	}, [staff, stage, branch]);
+	}, [staff, stage, branch, permissions]);
 
 	async function run(fn: () => Promise<unknown> | unknown) {
 		setPending(true);

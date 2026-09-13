@@ -5,20 +5,12 @@ import { useOpsAuth, ROLE_LABELS, type OpsRole } from "./OpsAuthContext";
 import { useOpsState } from "./OpsStateContext";
 import { OPS_BRANCHES, staffBranchName } from "century-nit-core/ops";
 import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "century-nit-core/api";
-import { MODULE_GROUPS, API_PREFIX, ROLE_PERMISSIONS, type OpsModule } from "century-nit-shared";
+import { MODULE_GROUPS, API_PREFIX, CAPABILITIES, defaultPermissionsOf, type Capability, type OpsModule, type SystemRole } from "century-nit-shared";
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
 import { ClientDirectory } from "./ClientDirectory";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
-// Mirrors the server's CAN_INVITE ladder (services/invitations.ts) — the
-// server is the authority; this only decides what the picker offers.
-const INVITEABLE: Record<string, OpsRole[]> = {
-	super_admin: ["super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance"],
-	admin: ["manager", "coordinator", "customer_service", "consultant", "finance"],
-	manager: ["coordinator", "customer_service", "consultant", "finance"],
-	coordinator: ["customer_service"],
-};
 
 /**
  * The platform console. Every screen here is about running the software -
@@ -327,13 +319,15 @@ interface DynamicRole {
 	name: string;
 	description: string | null;
 	isSystem: boolean;
-	permissions: OpsModule[];
+	/** Modules and capabilities, together. */
+	permissions: string[];
+	rank: number;
 	createdAt: string;
 	updatedAt: string;
 }
 
 function UsersAndRoles() {
-	const { opsUser, opsRole, roleCatalog, refreshPermissions } = useOpsAuth();
+	const { opsUser, opsRole, roleCatalog, refreshPermissions, hasCapability } = useOpsAuth();
 	const [activeSubTab, setActiveSubTab] = useState<"staff" | "clients" | "matrix">("staff");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
@@ -373,7 +367,7 @@ function UsersAndRoles() {
 		id: string;
 		name: string;
 		description: string;
-		permissions: OpsModule[];
+		permissions: string[];
 	}>({
 		id: "",
 		name: "",
@@ -381,14 +375,15 @@ function UsersAndRoles() {
 		permissions: ["dashboard"],
 	});
 
+	// The server's rule: hold "invite staff", hand out only lower ranks (the
+	// root role hands out anything). Read from the same roles the editor shows.
 	const inviteable = useMemo(() => {
-		const base = INVITEABLE[opsRole ?? ""] ?? [];
-		if (opsRole === "super_admin" || opsRole === "admin") {
-			const customIds = roles.filter((r) => !r.isSystem).map((r) => r.id);
-			return [...new Set([...base, ...customIds])];
-		}
-		return base;
-	}, [opsRole, roles]);
+		if (!opsRole) return [] as OpsRole[];
+		if (opsRole === "super_admin") return roles.map((r) => r.id as OpsRole);
+		if (!hasCapability("invite_staff")) return [] as OpsRole[];
+		const mine = roles.find((r) => r.id === opsRole)?.rank ?? 0;
+		return roles.filter((r) => r.rank < mine).map((r) => r.id as OpsRole);
+	}, [opsRole, roles, hasCapability]);
 
 	const roleLabelMap = useMemo(() => {
 		const map: Record<string, string> = { ...ROLE_LABELS };
@@ -566,7 +561,7 @@ function UsersAndRoles() {
 		}
 	}
 
-	async function togglePermission(roleId: string, module: OpsModule, enabled: boolean) {
+	async function togglePermission(roleId: string, module: OpsModule | Capability, enabled: boolean) {
 		const target = roles.find((r) => r.id === roleId);
 		if (!target || target.id === "super_admin") return;
 
@@ -594,7 +589,7 @@ function UsersAndRoles() {
 		}
 	}
 
-	async function bulkSetRolePermissions(roleId: string, moduleIds: OpsModule[], grant: boolean) {
+	async function bulkSetRolePermissions(roleId: string, moduleIds: string[], grant: boolean) {
 		const target = roles.find((r) => r.id === roleId);
 		if (!target || target.id === "super_admin") return;
 
@@ -623,9 +618,20 @@ function UsersAndRoles() {
 		}
 	}
 
+	async function saveRank(roleId: string, rank: number) {
+		try {
+			const saved = await apiFetch<DynamicRole>(`${API_PREFIX}/roles/${roleId}`, { method: "PUT", body: JSON.stringify({ rank }) });
+			setRoles((prev) => prev.map((r) => (r.id === roleId ? saved : r)));
+			void refreshPermissions();
+			say("Rank saved.");
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to save the rank");
+		}
+	}
+
 	// One write, one audit entry: the built-in list replaces whatever is there.
 	async function handleResetRoleDefaults(roleId: string) {
-		const def = ROLE_PERMISSIONS[roleId as keyof typeof ROLE_PERMISSIONS];
+		const def = roles.find((r) => r.id === roleId)?.isSystem ? defaultPermissionsOf(roleId as SystemRole) : null;
 		const target = roles.find((r) => r.id === roleId);
 		if (!def || !target) return;
 		setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, permissions: def } : r)));
@@ -1334,6 +1340,64 @@ function UsersAndRoles() {
 									onChange={(e) => setModuleSearch(e.target.value)}
 								/>
 							</div>
+						</div>
+
+						{/* Capabilities — what the role may do; modules below say what it sees */}
+						<div className="card" style={{ marginBottom: "1rem" }}>
+							<div className="cn-docs__head">
+								<p className="eyebrow">Capabilities</p>
+								<span className="mono muted text-xs">
+									{selectedRole.id === "super_admin" ? "all" : `${CAPABILITIES.filter((c) => (selectedRole.permissions ?? []).includes(c.id)).length} / ${CAPABILITIES.length}`}
+								</span>
+							</div>
+							<p className="muted text-xs" style={{ marginBottom: "0.75rem" }}>
+								A module lets a role see a page; a capability lets it act. The server checks both from this list.
+							</p>
+							{Array.from(new Set(CAPABILITIES.map((c) => c.group))).map((group) => (
+								<div key={group} style={{ marginBottom: "0.75rem" }}>
+									<p className="text-xs mono muted" style={{ textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.35rem" }}>{group}</p>
+									<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))", gap: "0.35rem 1rem" }}>
+										{CAPABILITIES.filter((c) => c.group === group).map((cap) => {
+											const isSuper = selectedRole.id === "super_admin";
+											const on = isSuper || (selectedRole.permissions ?? []).includes(cap.id);
+											return (
+												<label key={cap.id} className="text-sm" style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }} title={cap.hint}>
+													<input
+														type="checkbox"
+														checked={on}
+														disabled={isSuper}
+														onChange={(e) => togglePermission(selectedRole.id, cap.id, e.target.checked)}
+													/>
+													<span>
+														{cap.label}
+														{cap.hint && <span className="muted text-xs" style={{ display: "block" }}>{cap.hint}</span>}
+													</span>
+												</label>
+											);
+										})}
+									</div>
+								</div>
+							))}
+							{!selectedRole.isSystem && (
+								<div className="mt-3" style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+									<label className="text-sm" htmlFor="role-rank">Rank</label>
+									<input
+										id="role-rank"
+										type="number"
+										min={1}
+										max={99}
+										className="input input--sm"
+										style={{ width: "6rem" }}
+										defaultValue={selectedRole.rank}
+										key={`${selectedRole.id}-${selectedRole.rank}`}
+										onBlur={(e) => {
+											const next = Number(e.target.value);
+											if (Number.isFinite(next) && next !== selectedRole.rank) void saveRank(selectedRole.id, next);
+										}}
+									/>
+									<span className="muted text-xs">Who may invite or change this role: anyone holding "invite staff" with a higher rank. Manager is 70, coordinator 50, consultant 30.</span>
+								</div>
+							)}
 						</div>
 
 						{/* Categorized Permissions Cards */}

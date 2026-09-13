@@ -149,10 +149,9 @@ export function VisaTab({
 												fontWeight: 700,
 												fontFamily: "var(--font-mono)",
 												border: "2px solid",
-												borderColor: done ? "#22c55e" : current ? "#06b6d4" : "var(--border)",
-												borderRadius: "50%",
-												color: done ? "#fff" : current ? "#06b6d4" : "var(--muted-foreground)",
-												background: done ? "#22c55e" : "transparent",
+												borderColor: done || current ? "var(--foreground)" : "var(--border)",
+												color: done ? "var(--background)" : current ? "var(--foreground)" : "var(--muted-foreground)",
+												background: done ? "var(--foreground)" : "transparent",
 											}}>
 												{done ? "\u2713" : i + 1}
 											</span>

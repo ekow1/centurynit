@@ -24,6 +24,8 @@ import {
 	requireRole,
 	requireModule,
 	type AuthVariables,
+	requireCapability,
+	requireStaff,
 } from "../middleware/auth.js";
 import { getAuthInstance } from "./auth.js";
 import {
@@ -74,7 +76,7 @@ staffRouter.openapi(
 		description:
 			"Sends an invitation email. The invitee sets their own password; nobody else ever knows it. " +
 			"You cannot invite a role above your own — only a super_admin may invite an admin or another super_admin.",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
 		request: {
 			body: {
 				content: { "application/json": { schema: createInvitationSchema } },
@@ -111,7 +113,7 @@ staffRouter.openapi(
 		path: "/invitations",
 		tags: ["Staff"],
 		summary: "List staff invitations",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
 		responses: {
 			200: {
 				content: {
@@ -137,7 +139,7 @@ staffRouter.openapi(
 		path: "/invitations/{id}",
 		tags: ["Staff"],
 		summary: "Revoke a pending invitation",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			200: {
@@ -164,7 +166,7 @@ staffRouter.openapi(
 		description:
 			"Issues a fresh token, revokes the old one, and sends a new invitation email. " +
 			"Works for PENDING and EXPIRED invitations. Returns the new acceptUrl.",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
 		request: { params: z.object({ id: z.string().uuid() }) },
 		responses: {
 			201: {
@@ -527,7 +529,7 @@ staffRouter.openapi(
 		path: "/",
 		tags: ["Staff"],
 		summary: "List staff members",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager", "coordinator", "customer_service", "consultant", "finance")] as const,
+		middleware: [requireAuth, requireMfa, requireStaff] as const,
 		responses: {
 			200: {
 				content: {
@@ -600,7 +602,7 @@ staffRouter.openapi(
 		path: "/{id}",
 		tags: ["Staff"],
 		summary: "Update a staff member's role, branch or active flag",
-		middleware: [requireAuth, requireMfa, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
 		request: {
 			params: z.object({ id: z.string().uuid() }),
 			body: {

@@ -18,7 +18,7 @@ import { MoneyTab } from "./tabs/MoneyTab";
 import { tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
 import { CaseHeader, NextActionBand, Sheet, type NextAction } from "century-nit-core/ui";
-import { type MockApplication } from "century-nit-core/ops";
+import { type MockApplication, branchName } from "century-nit-core/ops";
 import {
 
 
@@ -112,10 +112,7 @@ function currentTabFor(app: MockApplication): TabId {
  * opens on the chapter the applicant is currently in.
  */
 export function CaseDetail({ app, initialTab }: { app: MockApplication; initialTab?: TabId }) {
-	const { opsRole, opsUser, canAssignWork, hasPermission } = useOpsAuth();
-	// Issuing an invoice (what lets the applicant pay) is finance work; raising
-	// the proforma is handler work. The buttons follow the same split as the API.
-	const canIssueInvoices = hasPermission("invoices");
+	const { opsRole, opsUser, canAssignWork, canIssueInvoices } = useOpsAuth();
 	const {
 		handoffs,
 		travelRequests,
@@ -282,7 +279,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// What this case is waiting on from us — the same tasks the dashboard
 	// lists for it, plus the three gates that only exist here (handoff,
 	// consent, acceptance), each with the control that clears it.
-	const pendingHandoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending") ?? null;
+	// A closed case is a record, not a queue — no handoff, consent, or
+	// acceptance prompts survive past it.
+	const caseClosed = app.stage === "completed" || app.status === "Rejected";
+	const pendingHandoff = caseClosed
+		? null
+		: (handoffs.find((h) => h.applicationId === app.id && h.status === "pending") ?? null);
 	const nextActions: NextAction[] = [];
 	if (pendingHandoff) {
 		const stageLabel = JOURNEY_STAGE_LABELS[pendingHandoff.stage as JourneyStage] ?? pendingHandoff.stage;
@@ -306,7 +308,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			) : undefined,
 		});
 	}
-	if (app.proceedStatus !== "accepted") {
+	if (!caseClosed && app.proceedStatus !== "accepted") {
 		nextActions.push({
 			id: "consent",
 			title:
@@ -340,7 +342,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</>
 			),
 		});
-	} else if (app.status !== "Accepted") {
+	} else if (!caseClosed && app.status !== "Accepted") {
 		nextActions.push({
 			id: "accept",
 			title: `Case is ${CASE_STATUS_LABELS[app.status] ?? app.status} — accept it to activate the client`,
@@ -354,7 +356,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	}
 	// Stage advance lives here too, so nobody is sent to the Workflow board.
 	// The shared guard says why it is blocked; ready cases get the button.
-	const coarseStage = (JOURNEY_STAGES.find((st) => st === app.stage) ?? JOURNEY_STAGES[0]) as JourneyStage;
+	// Normalise through stageIdx — a legacy payment_execution row resolves to
+	// travel_assistance here instead of falling back to the first stage.
+	const coarseStage = (JOURNEY_STAGES[Math.max(0, stageIdx(app.stage))] ?? JOURNEY_STAGES[0]) as JourneyStage;
 	const nextStage = JOURNEY_STAGES[JOURNEY_STAGES.indexOf(coarseStage) + 1] as JourneyStage | undefined;
 	const advanceBlock = nextStage ? canAdvanceToStage(coarseStage, nextStage, app) : null;
 	const mayAdvance = canAssignWork || app.assignedStaffEmail === opsUser?.email;
@@ -426,7 +430,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+		<div className="cn-detail">
 			{actionSuccess && <p className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess}</p>}
 			{actionError && <p className="ops-modal__error" style={{ margin: 0 }}>{actionError}</p>}
 {(() => {
@@ -435,9 +439,11 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 										<CaseHeader
 											name={app.applicantName}
 											reference={app.appId}
-											branch={app.branch}
+											branch={branchName(app.branch)}
 											stage={app.stage}
-											portalStage={app.journey?.portalStage ?? null}
+											// Ops closed the case — the pill says so even when the client's
+											// own signals still owe a step (a fee settled off-platform).
+											portalStage={app.stage === "completed" ? "completed" : (app.journey?.portalStage ?? null)}
 											handlerName={app.assignedStaff || null}
 											handlerAction={
 												canAssignWork ? (

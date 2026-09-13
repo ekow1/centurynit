@@ -12,35 +12,14 @@ import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, canAdvanceToStage, isTravelResolv
  * vocabulary. A view of the Cases page, not a page of its own.
  */
 
-const STAGE_COLORS: Record<JourneyStage, string> = {
-	document_verification: "#3b82f6",
-	school_submission: "#8b5cf6",
-	offer_letter_review: "#f59e0b",
-	visa_processing: "#06b6d4",
-	payment_execution: "#ec4899",
-	travel_assistance: "#f97316",
-	completed: "#22c55e",
-};
-
-const STAGE_NUMBERS: Record<JourneyStage, number> = {
-	document_verification: 1,
-	school_submission: 2,
-	offer_letter_review: 3,
-	visa_processing: 4,
-	travel_assistance: 5,
-	payment_execution: 6,
-	completed: 7,
-};
-
-
 function preDepartureProgress(tasks?: PreDepartureTask[]): number {
 	if (!tasks || tasks.length === 0) return 0;
 	return Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100);
 }
 
-/** Anything with an unrecognised stage lands in the first column. */
+/** Legacy payment_execution rows live in Departure; anything else unrecognised lands in the first column. */
 function normaliseStage(stage: string): JourneyStage {
-	const match = JOURNEY_STAGES.find((s) => s === stage);
+	const match = JOURNEY_STAGES.find((s) => s === (stage === "payment_execution" ? "travel_assistance" : stage));
 	return match ?? JOURNEY_STAGES[0];
 }
 
@@ -118,10 +97,9 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 			)}
 
 			<div className="ops-board" style={{ display: "flex", gap: "1rem", overflowX: "auto", paddingBottom: "1.5rem", alignItems: "flex-start" }}>
-				{JOURNEY_STAGES.map((stage) => {
+				{JOURNEY_STAGES.map((stage, stageNum) => {
 					const cards = columns.get(stage) ?? [];
 					const isTarget = dragOver === stage;
-					const color = STAGE_COLORS[stage];
 					return (
 						<div
 							key={stage}
@@ -154,7 +132,7 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 							{/* Column header */}
 							<div style={{
 								padding: "0.75rem 1rem",
-								borderBottom: `2px solid ${color}`,
+								borderBottom: "2px solid var(--foreground)",
 								display: "flex",
 								justifyContent: "space-between",
 								alignItems: "center",
@@ -165,9 +143,9 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 										fontSize: "0.75rem",
 										fontWeight: 700,
 										fontFamily: "var(--font-mono)",
-										color: isTarget ? "var(--background)" : color,
+										color: isTarget ? "var(--background)" : "var(--foreground)",
 									}}>
-										{STAGE_NUMBERS[stage]}
+										{stageNum + 1}
 									</span>
 									<h3 className="section-title" style={{ fontSize: "0.85rem", color: "inherit", margin: 0 }}>{JOURNEY_STAGE_LABELS[stage]}</h3>
 								</div>
@@ -299,7 +277,7 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 
 											{stage === "visa_processing" && app.visaStage && (
 													<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-														<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
+														<span className="wf-dot" style={{ background: "var(--foreground)" }} />
 														<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)", textTransform: "capitalize" }}>
 															{app.visaStage === "locked" ? "Awaiting payment" : app.visaStage}
 														</span>
@@ -309,23 +287,14 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 													</div>
 												)}
 
-											{stage === "payment_execution" && (
-												<div className="wf-card__indicator" style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-													<span className="wf-dot" style={{ background: STAGE_COLORS[stage] }} />
-													<span style={{ fontSize: "0.68rem", fontFamily: "var(--font-mono)" }}>
-														{app.paymentPlanId === "installment" ? "Installments" : app.paymentPlanId === "full" ? "Full payment" : "Not selected"}
-													</span>
-												</div>
-											)}
-
 											{stage === "travel_assistance" && (
 													<div className="wf-card__indicator" style={{ marginTop: "0.5rem" }}>
 														<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.2rem" }}>
 															<span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)" }}>Pre-departure</span>
-															<span style={{ fontSize: "0.6rem", fontFamily: "var(--font-mono)", fontWeight: 600, color: pdProg === 100 ? "#22c55e" : "var(--muted-foreground)" }}>{pdProg}%</span>
+															<span style={{ fontSize: "0.6rem", fontFamily: "var(--font-mono)", fontWeight: 600, color: pdProg === 100 ? "var(--foreground)" : "var(--muted-foreground)" }}>{pdProg}%</span>
 														</div>
 														<div style={{ width: "100%", height: "3px", background: "var(--muted)", overflow: "hidden" }}>
-															<div style={{ width: `${pdProg}%`, height: "100%", background: pdProg === 100 ? "#22c55e" : STAGE_COLORS[stage], transition: "width 0.4s ease" }} />
+															<div style={{ width: `${pdProg}%`, height: "100%", background: "var(--foreground)", transition: "width 0.4s ease" }} />
 														</div>
 														{!isTravelResolved(app.travelAssistanceStatus) && (
 															<span className="wf-badge wf-badge--warn" style={{ marginTop: "0.3rem" }}>Travel pending</span>
@@ -339,7 +308,7 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 														<span className="muted" style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)" }}>
 															{done}/{app.checklist.length} checks
 														</span>
-														<span style={{ fontSize: "0.6rem", fontFamily: "var(--font-mono)", fontWeight: 600, color: progress === 100 ? "#22c55e" : "var(--muted-foreground)" }}>
+														<span style={{ fontSize: "0.6rem", fontFamily: "var(--font-mono)", fontWeight: 600, color: progress === 100 ? "var(--foreground)" : "var(--muted-foreground)" }}>
 															{progress}%
 														</span>
 													</div>
@@ -347,7 +316,7 @@ export function CaseBoard({ apps, onOpen }: { apps: MockApplication[]; onOpen: (
 														<div style={{
 															width: `${progress}%`,
 															height: "100%",
-															background: progress === 100 ? "#22c55e" : "var(--foreground)",
+															background: "var(--foreground)",
 															transition: "width 0.4s ease",
 														}} />
 													</div>

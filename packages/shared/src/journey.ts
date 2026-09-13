@@ -7,6 +7,7 @@ import {
 	type TravelAssistanceStatus,
 } from "./schemas/cases.js";
 import { PORTAL_STAGE_LABELS } from "./labels.js";
+import { ownershipCapabilityFor, roleHasCapability } from "./schemas/ops.js";
 
 /**
  * The applicant journey, derived from facts.
@@ -313,9 +314,15 @@ export const STAGE_ASSIGNABLE_ROLES: Record<JourneyStage | "consultation", reado
 	completed: [],
 };
 
-export function canOwnStage(role: string | null | undefined, stage: string): boolean {
-	const allowed = STAGE_ASSIGNABLE_ROLES[stage as keyof typeof STAGE_ASSIGNABLE_ROLES];
-	return Boolean(role && allowed?.includes(role));
+export function canOwnStage(
+	role: string | null | undefined,
+	stage: string,
+	permissions?: Record<string, readonly string[]>,
+): boolean {
+	if (!role) return false;
+	const cap = ownershipCapabilityFor(stage);
+	if (!cap) return false;
+	return roleHasCapability(role, cap, permissions);
 }
 
 /**

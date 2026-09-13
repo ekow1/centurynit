@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { requireAuth, requireRole, type AuthVariables } from "../middleware/auth.js";
+import { requireAuth, requireRole, type AuthVariables, requireCapability } from "../middleware/auth.js";
 import { HttpError } from "../middleware/error.js";
 import {
 	banClientUser,
@@ -56,7 +56,7 @@ clientUsersRouter.openapi(
 		method: "get",
 		path: "/",
 		tags: ["Client Directory & Access Control"],
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager", "coordinator")] as const,
+		middleware: [requireAuth, requireCapability("see_all_cases")] as const,
 		request: {
 			query: z.object({
 				status: z.enum(["all", "active", "inactive", "banned", "unverified"]).optional(),
@@ -84,7 +84,7 @@ clientUsersRouter.openapi(
 		method: "post",
 		path: "/{id}/revoke-sessions",
 		tags: ["Client Directory & Access Control"],
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireCapability("manage_clients")] as const,
 		request: {
 			params: idParamSchema,
 		},
@@ -116,7 +116,7 @@ clientUsersRouter.openapi(
 		method: "post",
 		path: "/{id}/ban",
 		tags: ["Client Directory & Access Control"],
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireCapability("manage_clients")] as const,
 		request: {
 			params: idParamSchema,
 			body: {
@@ -159,7 +159,7 @@ clientUsersRouter.openapi(
 		method: "post",
 		path: "/{id}/unban",
 		tags: ["Client Directory & Access Control"],
-		middleware: [requireAuth, requireRole("super_admin", "admin", "manager")] as const,
+		middleware: [requireAuth, requireCapability("manage_clients")] as const,
 		request: {
 			params: idParamSchema,
 		},

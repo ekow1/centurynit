@@ -157,9 +157,9 @@ import {
 	requireAuth,
 	requireMfa,
 	requireModule,
-	requireRole,
-	type AuthVariables,
 
+	type AuthVariables,
+	requireCapability,
 } from "../middleware/auth.js";
 
 
@@ -191,7 +191,7 @@ export function registerHandoffRoutes(router: OpenAPIHono<{ Variables: AuthVaria
 			method: "get",
 			path: "/handoffs",
 			tags: ["Applications"],
-			middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+			middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 			request: {
 				query: listStageHandoffsQuerySchema,
 			},
@@ -213,7 +213,7 @@ export function registerHandoffRoutes(router: OpenAPIHono<{ Variables: AuthVaria
 			method: "get",
 			path: "/handoffs/{id}",
 			tags: ["Applications"],
-			middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+			middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 			request: { params: idParams },
 			responses: {
 				200: {
@@ -230,7 +230,7 @@ export function registerHandoffRoutes(router: OpenAPIHono<{ Variables: AuthVaria
 			method: "post",
 			path: "/handoffs/{id}/resolve",
 			tags: ["Applications"],
-			middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+			middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 			request: {
 				params: idParams,
 				body: { content: { "application/json": { schema: resolveStageHandoffSchema } }, required: true },
@@ -261,7 +261,7 @@ export function registerHandoffRoutes(router: OpenAPIHono<{ Variables: AuthVaria
 			method: "post",
 			path: "/handoffs/{id}/defer",
 			tags: ["Applications"],
-			middleware: [requireAuth, requireMfa, requireModule("applications"), requireRole("manager", "coordinator", "admin", "super_admin")] as const,
+			middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("assign_work")] as const,
 			request: {
 				params: idParams,
 				body: { content: { "application/json": { schema: deferStageHandoffSchema } }, required: true },

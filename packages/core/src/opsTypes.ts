@@ -507,11 +507,10 @@ export const EMPTY_DIRECTIVES: OpsDirectives = {
 /**
  * @deprecated The ops ↔ portal stage translation tables used to live here.
  * Both sides now share the `JourneyStage` enum from `century-nit-shared`, and
- * the portal maps it to its fine-grained `ProcessStageId` via
- * `JOURNEY_STAGE_TO_PORTAL` (see `packages/shared/src/schemas/cases.ts`).
- * The `ProcessStageId` is then refined by invoice / school signals in
- * `getCurrentProcessStage` — there is no longer a separate ops-stage namespace
- * to translate between.
+ * the fine-grained `ProcessStageId` is derived from it plus the invoice /
+ * school signals by `deriveJourney` (via `JOURNEY_STAGE_FLOOR` in
+ * `packages/shared/src/journey.ts`) — there is no longer a separate
+ * ops-stage namespace to translate between.
  */
 
 /**

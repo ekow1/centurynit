@@ -18,9 +18,11 @@ import {
 	type JourneyStage,
 	patchApplicationSchema,
 	type ProceedQuotation,
+	permissionsGrant,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { normalizeTravelStatus } from "./travelAssistance.js";
+import { livePermissions } from "./roles.js";
 import { documentChecklistForApplication } from "./documentChecklist.js";
 // Comments and document requests target either record; the consultation half lives next door.
 import { getConsultation } from "./consultations.js";
@@ -102,7 +104,7 @@ export async function loadStaff(id: string | null) {
 export async function loadAssignableStaff(id: string, stage: string) {
 	const employee = await loadStaff(id);
 	if (!employee?.active) throw new HttpError(404, "NOT_FOUND", "Employee not found");
-	if (!canOwnStage(employee.role, stage)) {
+	if (!canOwnStage(employee.role, stage, await livePermissions())) {
 		throw new HttpError(
 			409,
 			"ROLE_CANNOT_OWN_STAGE",
@@ -138,14 +140,9 @@ export function toComment(row: CommentRow) {
 	};
 }
 
-/** Roles that see, and may assign, every case. */
+/** Whoever holds the capability sees every case (the root role always does). */
 export function canSeeAllCases(staff: StaffContext | null): boolean {
-	return (
-		staff?.role === "manager" ||
-		staff?.role === "coordinator" ||
-		staff?.role === "admin" ||
-		staff?.role === "super_admin"
-	);
+	return Boolean(staff) && permissionsGrant(staff!.role, staff!.permissions, "see_all_cases");
 }
 
 /**

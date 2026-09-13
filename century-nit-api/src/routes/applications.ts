@@ -159,7 +159,7 @@ import {
 	requireModule,
 
 	type AuthVariables,
-
+	requireCapability,
 } from "../middleware/auth.js";
 
 
@@ -465,7 +465,7 @@ applicationsRouter.openapi(
 		method: "post",
 		path: "/{id}/issue-application-invoice",
 		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications"), requireModule("invoices")] as const,
+		middleware: [requireAuth, requireMfa, requireModule("applications"), requireCapability("issue_invoices")] as const,
 		request: { params: idParams },
 		responses: {
 			200: {

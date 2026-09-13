@@ -547,6 +547,13 @@
       "when": 1789600006000,
       "tag": "0079_fold_payment_execution",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1789600007000,
+      "tag": "0080_role_capabilities",
+      "breakpoints": true
     }
   ]
 }

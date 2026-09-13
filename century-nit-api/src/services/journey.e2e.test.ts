@@ -17,13 +17,15 @@ import {
 import {
 	assignApplication,
 	canAccessApplication,
-	completeConsultationAssessment,
 	getApplicantByUserId,
 	latestApplicationForApplicant,
 	listApplications,
 	serializeApplication,
 	setApplicationPackage,
 } from "./cases.js";
+import {
+	completeConsultationAssessment,
+} from "./consultations.js";
 import { getApplicationActivity } from "./applicationActivity.js";
 import { releaseOfficerCases } from "./caseOwnership.js";
 import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js";

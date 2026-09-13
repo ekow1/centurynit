@@ -33,7 +33,10 @@ import {
 	resendMeetingLinkForBooking,
 	type BookingRow,
 } from "../services/booking.js";
-import { ensureCaseForBooking, syncConsultationAssignment } from "../services/cases.js";
+import {
+	ensureCaseForBooking,
+	syncConsultationAssignment,
+} from "../services/consultations.js";
 import { createConsultationInvoice, getFeeSchedule } from "../services/invoice.js";
 import { postPaymentSettlement } from "../services/paymentSettlement.js";
 import {

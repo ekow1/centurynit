@@ -4,53 +4,27 @@ import { z } from "zod";
 
 
 import {
-
 	addCaseComment,
-
+	canSeeAllCases,
+	requestCaseDocuments,
+	serializeApplication,
+} from "../services/cases.js";
+import {
 	applicantUserIdOfConsultation,
-
 	assignConsultation,
 	cancelConsultation,
-	canSeeAllCases,
-
 	canSeeConsultation,
 	completeConsultationAssessment,
-
 	confirmConsultationSlot,
-
-
-
-
-
-
 	getConsultation,
-
-
-
-
-
-
 	listConsultations,
-
-
-
-
-	requestCaseDocuments,
-
-	serializeApplication,
 	serializeConsultation,
-
-
-
-
 	startConsultationAssessment,
-
-
 	delegateCoordinator,
 	reassignCoordinator,
 	getStaffWorkload,
 	getConsultationActivity,
-} from "../services/cases.js";
+} from "../services/consultations.js";
 
 
 

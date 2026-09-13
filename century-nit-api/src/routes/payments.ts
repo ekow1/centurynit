@@ -19,7 +19,9 @@ import {
 import { listPaystackTransactions, verifyPaystackTransaction } from "../services/paystack.js";
 import { createBooking, notifyBookingCreated } from "../services/booking.js";
 import { createConsultationInvoice } from "../services/invoice.js";
-import { ensureCaseForBooking } from "../services/cases.js";
+import {
+	ensureCaseForBooking,
+} from "../services/consultations.js";
 import { resolveServiceName } from "../services/availability.js";
 import { zonedTimeToUtc } from "../lib/time.js";
 import { sendPaymentReceiptEmail } from "../services/receiptEmail.js";

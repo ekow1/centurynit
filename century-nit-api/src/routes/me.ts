@@ -4,49 +4,24 @@ import { and, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
-
-
 	completeFromDeparture,
-
-
-
-
-
-
-
-
 	acceptProceedForApplication,
-
 	declineProceedForApplication,
-
 	ensureVisaInvoiceForApplication,
-
 	getApplicantByUserId,
-
-
-
-
 	latestApplicationForApplicant,
-	latestConsultationForApplicant,
-
-
-
 	patchApplicant,
 	pauseProceedForApplication,
-
 	respondToOutcome,
-
 	serializeApplicant,
 	serializeApplication,
-	serializeConsultation,
 	setApplicationPackage,
 	setApplicationPaymentPlan,
-
-
-
-
-
 } from "../services/cases.js";
+import {
+	latestConsultationForApplicant,
+	serializeConsultation,
+} from "../services/consultations.js";
 import {
 	getForApplication as getTravelAssistanceForApplication,
 

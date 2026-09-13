@@ -246,7 +246,7 @@ export async function createBooking(input: {
 	// a lost slot race, and must not roll the appointment back.
 	let consultationId: string | undefined;
 	try {
-		const { ensureCaseForBooking } = await import("./cases.js");
+		const { ensureCaseForBooking } = await import("./consultations.js");
 		const consultation = await ensureCaseForBooking(booking);
 		consultationId = consultation.id;
 	} catch (err) {
@@ -411,7 +411,7 @@ export async function assignBooking(input: {
 			.catch(() => {});
 	}
 
-	const { syncConsultationAssignment } = await import("./cases.js");
+	const { syncConsultationAssignment } = await import("./consultations.js");
 	await syncConsultationAssignment(updated.id, employeeId, actor);
 
 	return updated;
@@ -787,7 +787,7 @@ export async function rescheduleBooking(input: {
 	// The slot moved — the old confirmation is void. The consultant must confirm
 	// the new time again before the assessment can start.
 	try {
-		const { syncConsultationRescheduled } = await import("./cases.js");
+		const { syncConsultationRescheduled } = await import("./consultations.js");
 		await syncConsultationRescheduled(updated.id);
 	} catch (err) {
 		console.error("[booking] could not reset consultation confirmation after reschedule:", err);
@@ -966,7 +966,7 @@ export async function decideRescheduleBooking(
 
 		// The approved move voids the previous confirmation; require a re-confirm.
 		try {
-			const { syncConsultationRescheduled } = await import("./cases.js");
+			const { syncConsultationRescheduled } = await import("./consultations.js");
 			await syncConsultationRescheduled(updated.id);
 		} catch (err) {
 			console.error("[booking] could not reset consultation confirmation after approved reschedule:", err);
@@ -1100,7 +1100,7 @@ export async function cancelBooking(input: {
 		endReason: "cancelled",
 	});
 
-	const { syncConsultationCancelled } = await import("./cases.js");
+	const { syncConsultationCancelled } = await import("./consultations.js");
 	await syncConsultationCancelled(booking.id);
 
 	if (booking.meetingSpace) {

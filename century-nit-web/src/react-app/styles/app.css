@@ -6617,3 +6617,615 @@ img.profile-monogram {
 	font-size: var(--text-sm);
 	color: var(--muted-foreground);
 }
+
+/* =========================================================
+   Portal chapter grammar — journey map, enrolment rail,
+   money ledger, booking rail, visa page. Ink carries state:
+   solid = live, filled = done, hollow = not yet.
+   ========================================================= */
+
+.portal-pill--solid {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.portal-pill--hollow {
+	color: var(--muted-foreground);
+	border-color: var(--border-light);
+	background: transparent;
+}
+
+.portal-pill--done {
+	background: var(--muted);
+	border-color: var(--border-light);
+	color: var(--muted-foreground);
+}
+
+/* content + contextual rail (the "summary never scrolls away" split) */
+
+.psplit {
+	display: grid;
+	grid-template-columns: 1fr 19.5rem;
+	gap: 1.5rem;
+	align-items: start;
+}
+
+.prail {
+	position: sticky;
+	top: 1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+}
+
+.prail .sharp-card {
+	padding: 1.1rem;
+}
+
+.prail .sharp-card--key {
+	border-color: var(--border);
+	border-width: 1.5px;
+}
+
+@media (max-width: 900px) {
+	.psplit {
+		grid-template-columns: 1fr;
+	}
+	.prail {
+		position: static;
+	}
+}
+
+/* key-value lines inside rail cards */
+
+.pkv {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.45rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: var(--text-xs);
+}
+
+.pkv:last-child {
+	border-bottom: none;
+}
+
+.pkv__k {
+	font-family: var(--font-mono);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+	font-size: 0.62rem;
+	padding-top: 0.1rem;
+}
+
+.pkv__v {
+	text-align: right;
+}
+
+.pkv--due .pkv__k {
+	color: var(--foreground);
+}
+
+.pkv--due .pkv__v {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 0.9rem;
+}
+
+/* numbered section heads — one sequence per page */
+
+.psec {
+	margin-bottom: 1.75rem;
+}
+
+.psec__no {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.4rem;
+	height: 1.4rem;
+	border: 1px solid var(--border);
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	font-weight: 700;
+	margin-right: 0.5rem;
+}
+
+.psec__no--done {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+}
+
+.psec__title {
+	font-weight: 700;
+	font-size: 0.95rem;
+}
+
+.psec__hint {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	margin: 0.35rem 0 0.75rem;
+}
+
+/* monochrome choice cards + chips — selected inverts, never accent-blue */
+
+.pcards {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+	gap: 0.6rem;
+}
+
+.pick {
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 0.9rem 1rem;
+	text-align: left;
+	font: inherit;
+	cursor: pointer;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	position: relative;
+}
+
+.pick:hover:not(:disabled) {
+	box-shadow: inset 0 0 0 1px var(--foreground);
+}
+
+.pick:disabled {
+	cursor: default;
+}
+
+.pick--on {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.pick--on .muted,
+.pick--on .eyebrow {
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.pick__name {
+	font-weight: 700;
+}
+
+.pick__price {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	margin-top: 0.2rem;
+}
+
+.pick__tag {
+	position: absolute;
+	top: 0.7rem;
+	right: 0.7rem;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	border: 1px solid currentColor;
+	padding: 0.12rem 0.4rem;
+}
+
+.pchips {
+	display: flex;
+	gap: 0.45rem;
+	flex-wrap: wrap;
+}
+
+.pchip {
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 0.55rem 0.8rem;
+	font: inherit;
+	font-size: var(--text-xs);
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.pchip:disabled {
+	cursor: default;
+}
+
+.pchip--on {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.pchip small {
+	display: block;
+	font-weight: 400;
+	color: inherit;
+	opacity: 0.65;
+	margin-top: 0.1rem;
+}
+
+/* step pill row — wizard sub-steps with done/current/later states */
+
+.psteps {
+	display: flex;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+	list-style: none;
+	padding: 0;
+	margin: 0 0 1.75rem;
+}
+
+.psteps .portal-pill {
+	font-size: 0.65rem;
+	cursor: pointer;
+	background: none;
+	font-family: var(--font-mono);
+}
+
+.psteps .portal-pill:disabled {
+	cursor: default;
+}
+
+/* journey map — six chapters, seals carry state */
+
+.jmap__chapter {
+	display: flex;
+	gap: 1.1rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 1.1rem 1.25rem;
+	margin-bottom: 0.6rem;
+}
+
+.jmap__chapter--current {
+	border: 1.5px solid var(--border);
+	box-shadow: inset 4px 0 0 var(--foreground);
+}
+
+.jmap__chapter--locked {
+	color: var(--muted-foreground);
+}
+
+.jmap__seal {
+	width: 2.4rem;
+	height: 2.4rem;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: 0.8rem;
+	font-weight: 700;
+}
+
+.jmap__chapter--done .jmap__seal {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+.jmap__chapter--current .jmap__seal {
+	border: 2px solid var(--border);
+	color: var(--foreground);
+}
+
+.jmap__chapter--locked .jmap__seal {
+	border-style: dashed;
+	color: var(--border-light);
+}
+
+.jmap__body {
+	flex: 1;
+	min-width: 0;
+}
+
+.jmap__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 1rem;
+}
+
+.jmap__name {
+	font-weight: 700;
+	font-size: 1rem;
+}
+
+.jmap__name .mono {
+	color: var(--muted-foreground);
+	font-weight: 400;
+	font-size: var(--text-xs);
+	margin-right: 0.5rem;
+}
+
+.jmap__state {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	white-space: nowrap;
+}
+
+.jmap__chapter--done .jmap__state {
+	color: var(--muted-foreground);
+}
+
+.jmap__chapter--current .jmap__state {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.jmap__blurb {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+
+.jmap__steps {
+	list-style: none;
+	padding: 0;
+	margin: 0.9rem 0 0;
+	border-top: 1px solid var(--border-light);
+}
+
+.jmap__step {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	padding: 0.55rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: var(--text-sm);
+}
+
+.jmap__step:last-child {
+	border-bottom: none;
+}
+
+.jmap__mark {
+	width: 1.15rem;
+	height: 1.15rem;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border-light);
+	border-radius: 50%;
+	font-size: 0.6rem;
+	font-family: var(--font-mono);
+}
+
+.jmap__step--done .jmap__mark {
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--accent-foreground);
+}
+
+.jmap__step--skipped .jmap__mark {
+	border-style: dashed;
+	color: var(--muted-foreground);
+}
+
+.jmap__step--skipped .jmap__stepname {
+	text-decoration: line-through;
+	color: var(--muted-foreground);
+}
+
+.jmap__step--current {
+	font-weight: 600;
+}
+
+.jmap__step--current .jmap__mark {
+	background: var(--foreground);
+	border-color: var(--foreground);
+	color: var(--accent-foreground);
+	box-shadow: 0 0 0 3px var(--muted);
+}
+
+.jmap__step--locked {
+	color: var(--muted-foreground);
+}
+
+.jmap__step--locked .jmap__mark {
+	border-color: var(--border-light);
+	color: var(--border-light);
+}
+
+.jmap__note {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+.jmap__step--current .jmap__note {
+	color: var(--foreground);
+}
+
+.jmap__go {
+	margin-top: 0.9rem;
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.jmap__hint {
+	font-size: var(--text-xs);
+	margin-top: 0.6rem;
+	color: var(--muted-foreground);
+}
+
+.jmap__doneline {
+	margin-top: 0.6rem;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+	letter-spacing: 0.03em;
+}
+
+.jmap__doneline b {
+	color: var(--foreground);
+	font-weight: 600;
+}
+
+.jmap__legend {
+	display: flex;
+	gap: 1.1rem;
+	flex-wrap: wrap;
+	margin: 1.75rem 0 0;
+	padding-top: 1rem;
+	border-top: 1px solid var(--border-light);
+}
+
+.jmap__legend span {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	color: var(--muted-foreground);
+	letter-spacing: 0.05em;
+}
+
+/* money — the position band and the chapter ledger */
+
+.pposition {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	border: 1.5px solid var(--border);
+	margin-bottom: 2rem;
+}
+
+.pposition > div {
+	padding: 1rem 1.25rem;
+	border-right: 1px solid var(--border-light);
+}
+
+.pposition > div:last-child {
+	border-right: none;
+}
+
+.pposition__num {
+	font-family: var(--font-mono);
+	font-size: 1.4rem;
+	font-weight: 700;
+	margin-top: 0.25rem;
+}
+
+.pposition__due {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+}
+
+.pposition__due .eyebrow {
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.pposition__due .mono {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 900px) {
+	.pposition {
+		grid-template-columns: 1fr;
+	}
+	.pposition > div {
+		border-right: none;
+		border-bottom: 1px solid var(--border-light);
+	}
+}
+
+.ptable {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--text-sm);
+}
+
+.ptable th {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+	text-align: left;
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1.5px solid var(--border);
+}
+
+.ptable td {
+	padding: 0.7rem 0.75rem;
+	border-bottom: 1px solid var(--border-light);
+	vertical-align: top;
+}
+
+.ptable tr.ptable__now td {
+	background: var(--muted);
+	border-bottom-color: var(--border);
+	font-weight: 600;
+}
+
+.ptable tr.ptable__now td:first-child {
+	box-shadow: inset 4px 0 0 var(--foreground);
+}
+
+.ptable__amt {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.ptable__sub {
+	display: block;
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	font-weight: 400;
+	margin-top: 0.15rem;
+}
+
+.ptable__mark {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+}
+
+/* visa document checklist */
+
+.vdocs {
+	list-style: none;
+	padding: 0;
+	margin: 0.6rem 0 0;
+}
+
+.vdocs li {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.55rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: var(--text-sm);
+}
+
+.vdocs li:last-child {
+	border-bottom: none;
+}
+
+.vdocs__st {
+	font-family: var(--font-mono);
+	font-size: 0.65rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	white-space: nowrap;
+}
+
+.vdocs__st--ok {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.vdocs__st--wait {
+	color: var(--muted-foreground);
+}
+
+.vdocs__st--fix {
+	text-decoration: underline;
+}

@@ -158,7 +158,7 @@ export function PortalAwaitingHandler() {
 								width: "8px",
 								height: "8px",
 								borderRadius: "50%",
-								background: "var(--accent, #3b82f6)",
+								background: "var(--foreground)",
 								display: "inline-block",
 								animation: "pulse 1.5s infinite ease-in-out",
 							}}
@@ -266,7 +266,7 @@ export function PortalAwaitingInvoice() {
 								width: "8px",
 								height: "8px",
 								borderRadius: "50%",
-								background: "var(--accent, #3b82f6)",
+								background: "var(--foreground)",
 								display: "inline-block",
 								animation: "pulse 1.5s infinite ease-in-out",
 							}}
@@ -464,6 +464,18 @@ function SchoolPackageInner() {
 		}
 	}
 
+	const scopeFeatures =
+		selectedPkg?.features && selectedPkg.features.length > 0
+			? selectedPkg.features
+			: [
+					"Academic credential evaluation",
+					"Document verification & notarisation",
+					"Direct university portal submissions",
+					"Statement of purpose polishing",
+					"Courier & international dispatch",
+					"Visa mock-interview coaching",
+				];
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
@@ -471,320 +483,302 @@ function SchoolPackageInner() {
 					<p className="eyebrow">Chapter II · Enrolment</p>
 					<h1 className="page-title mt-1">Enrol with Century NIT</h1>
 					<p className="lead mt-2">
-						One page: confirm you're enrolling, choose your package and payment plan, and pay the deposit.
-						Your consultant is assigned as soon as the deposit lands.
+						Confirm you're enrolling, choose your package and plan, pay the deposit — your
+						consultant is assigned when it lands.
 					</p>
 				</div>
 			</header>
 
-			<ol className="mt-3" style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+			<ol className="psteps mt-3">
 				{enrolSteps.map((st, i) => {
 					const current = !st.done && enrolSteps.slice(0, i).every((x) => x.done);
 					return (
 						<li key={st.label}>
-							<StatusPill tone={st.done ? "done" : current ? "current" : "neutral"} dot={st.done || current}>
+							<span
+								className={`portal-pill${st.done ? " portal-pill--done" : current ? " portal-pill--solid" : " portal-pill--hollow"}`}
+							>
 								{i + 1} · {st.label}
-							</StatusPill>
+								{st.done ? " ✓" : ""}
+							</span>
 						</li>
 					);
 				})}
 			</ol>
 
-			<section className="mt-4">
-				<div className="sharp-card">
-					<p className="eyebrow">1 · Confirm your enrolment</p>
-					<div className="mt-2">
-						<EnrolmentDecision />
-					</div>
-				</div>
-			</section>
-
-			{!confirmed && (
-				<p className="muted mt-4" style={{ fontSize: "0.9rem" }}>
-					Confirm above to choose your package and plan.
-				</p>
-			)}
-
-			{chosen ? (
-				isDepositPaid ? (
-					<div className="alert alert--success mb-4" role="status">
-						Package locked:{" "}
-						<strong>
-							{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack)?.name)} ·{" "}
-							{SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel)?.name} ·{" "}
-							{application.targetSchoolCount ?? targetSchoolCount} Target Schools
-						</strong>
-						<span> · Deposit paid. You can now select schools.</span>
-					</div>
-				) : (
-					<div className="alert alert--info mb-4" role="status">
-						Selected Package:{" "}
-						<strong>
-							{(selectedPkg?.name || SCHOOL_FUNDING_TRACKS.find((f) => f.id === activeFunding)?.name)} ·{" "}
-							{SCHOOL_DEGREE_LEVELS.find((d) => d.id === activeLevel)?.name} ·{" "}
-							{targetSchoolCount} Target Schools
-						</strong>
-						<span> · You can freely adjust your package, track, and degree level below before paying the 10% deposit.</span>
-					</div>
-				)
-			) : null}
-
-			{confirmed && (<>
-			{/* 2 · Package: funding track, level, target schools */}
-			<section className="mb-5">
-				<p className="eyebrow mb-2">1 · Funding track</p>
-				<div className="card-grid card-grid--3">
-					{packageCards.map((f) => (
-						<button
-							key={f.id}
-							type="button"
-							className={`card card--pad card--selectable school-pkg-card${activeFunding === f.id ? " card--selected" : ""}`}
-							onClick={() => !isLocked && setFunding(f.id)}
-							disabled={isLocked}
-							aria-pressed={activeFunding === f.id}
-						>
-							<span className="school-pkg-card__check" aria-hidden>
-								✓
-							</span>
-							{recommendedTrack === f.id && (
-								<span
-									className="portal-pill portal-pill--verified mb-1"
-									style={{ fontSize: "0.72rem", alignSelf: "flex-start", fontWeight: 700 }}
-								>
-									★ Advisor Recommendation
-								</span>
-							)}
-							<span className="eyebrow">{f.tagline}</span>
-							<span className="school-pkg-card__name display">{f.name}</span>
-							<p className="school-pkg-card__blurb muted">{f.blurb}</p>
-							{f.priceCents > 0 && (
-								<div className="mt-2" style={{ fontWeight: 700, fontSize: "1.05rem" }}>
-									<Money usd={f.priceCents / 100} />
-								</div>
-							)}
-						</button>
-					))}
-				</div>
-			</section>
-
-			{/* 2 · Degree level */}
-			<section className="mb-5">
-				<p className="eyebrow mb-2">2 · Degree level</p>
-				<div className="degree-chip-grid">
-					{SCHOOL_DEGREE_LEVELS.map((d) => (
-						<button
-							key={d.id}
-							type="button"
-							className={`degree-chip${activeLevel === d.id ? " degree-chip--selected" : ""}`}
-							onClick={() => !isLocked && setLevel(d.id)}
-							disabled={isLocked}
-							aria-pressed={activeLevel === d.id}
-						>
-							<span className="degree-chip__check" aria-hidden>
-								✓
-							</span>
-							<strong>{d.short}</strong>
-							<span className="muted">{d.name}</span>
-							{recommendedLevel === d.id && (
-								<span style={{ fontSize: "0.68rem", color: "var(--primary, #2563eb)", fontWeight: 700, display: "block" }}>
-									★ Recommended
-								</span>
-							)}
-						</button>
-					))}
-				</div>
-			</section>
-
-			{/* 3 · Target school count */}
-			<section className="mb-5">
-				<p className="eyebrow mb-2">3 · Number of target schools</p>
-				<p className="muted mb-3" style={{ fontSize: "0.9rem" }}>
-					How many institutions do you plan to apply to? We prepare, review, and lodge submissions across your full target list.
-				</p>
-				<div className="degree-chip-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))" }}>
-					{[1, 2, 3, 4, 5, 6].map((count) => (
-						<button
-							key={count}
-							type="button"
-							className={`degree-chip${targetSchoolCount === count ? " degree-chip--selected" : ""}`}
-							onClick={() => !isLocked && setTargetSchoolCount(count)}
-							disabled={isLocked}
-							aria-pressed={targetSchoolCount === count}
-						>
-							<span className="degree-chip__check" aria-hidden>
-								✓
-							</span>
-							<strong>{count} {count === 1 ? "School" : "Schools"}</strong>
-							<span className="muted">{count === 3 ? "Recommended" : count === 5 ? "Comprehensive" : ""}</span>
-						</button>
-					))}
-				</div>
-			</section>
-
-			{funding && level ? (
-				<div className="sharp-card mb-5 package-compose">
-					<div>
-						<p className="eyebrow">Your composed package</p>
-						<p className="display mt-2" style={{ fontSize: "1.5rem" }}>
-							{fundMeta?.name} × {levelMeta?.short} ({targetSchoolCount} {targetSchoolCount === 1 ? "School" : "Schools"})
+			<div className="psplit mt-4">
+				{/* left: the choices, numbered once */}
+				<div>
+					<section className="psec">
+						<p>
+							<span className={`psec__no${confirmed ? " psec__no--done" : ""}`}>1</span>
+							<span className="psec__title">Confirm your enrolment</span>
 						</p>
-					</div>
-					<span className="package-compose__badge mono">
-						{chosen ? "Locked" : "Ready to lock"}
-					</span>
-					<p className="muted package-compose__note">
-						Only institutions and programs matching this track and degree level will be shown during school selection.
-					</p>
-				</div>
-			) : null}
-
-			{funding && level ? (
-				<section className="pkg-cost mb-5">
-					<header className="pkg-cost__head">
-						<p className="eyebrow">Century NIT Service Package & Scope</p>
-						<p className="pkg-cost__note">
-							Transparent all-inclusive pricing covering full advisory, credential evaluation, and filing.
-						</p>
-					</header>
-
-					<ul className="pkg-cost__lines">
-						<li className="pkg-cost__line pkg-cost__line--total">
-							<span className="pkg-cost__label">
-								Century NIT Consultancy Service Fee
-								<span className="pkg-cost__when">
-									Full advisory, verification, portal setup & visa coaching for {targetSchoolCount} school{targetSchoolCount === 1 ? "" : "s"}
-								</span>
-							</span>
-							<Money usd={serviceFee} className="pkg-cost__amt" />
-						</li>
-						<li className="pkg-cost__line" style={{ borderTop: "1px dashed var(--border, #e5e7eb)", paddingTop: "0.75rem", marginTop: "0.5rem" }}>
-							<span className="pkg-cost__label">
-								<strong>Deposit (10%) — due now</strong>
-								<span className="pkg-cost__when">
-									Assigns your consultant and opens school selection
-								</span>
-							</span>
-							<span style={{ color: "var(--accent, #3b82f6)", fontWeight: 700 }}>
-								<Money usd={depositUsd} className="pkg-cost__amt" />
-							</span>
-						</li>
-						<li className="pkg-cost__line">
-							<span className="pkg-cost__label">
-								Remaining 90% balance
-								<span className="pkg-cost__when">
-									{plan === "full" ? "Due before you depart" : "50% before you depart · 40% after you arrive"}
-								</span>
-							</span>
-							<Money usd={remainingUsd} className="pkg-cost__amt" />
-						</li>
-					</ul>
-
-					<div className="sharp-card mt-4" style={{ background: "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
-						<p className="eyebrow" style={{ color: "var(--success, #10b981)" }}>All-Inclusive Consultancy Scope</p>
-						<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
-							The following are 100% covered by Century NIT — never charged as hidden desk fees:
-						</p>
-						<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
-							{((selectedPkg?.features && selectedPkg.features.length > 0) ? selectedPkg.features : [
-								"Academic Credential Evaluation",
-								"Document Verification & Notarization",
-								"Direct University Portal Submissions",
-								"Statement of Purpose (SOP) Polishing",
-								"Courier & International Postal Dispatch",
-								"Dedicated Visa Mock Interview Coaching",
-							]).map((feat, idx) => (
-								<li key={idx}>✓ {feat}</li>
-							))}
-						</ul>
-					</div>
-
-					{selectedPkg?.exclusions && selectedPkg.exclusions.length > 0 && (
-						<div className="sharp-card mt-3" style={{ background: "rgba(239, 68, 68, 0.04)", border: "1px solid rgba(239, 68, 68, 0.15)" }}>
-							<p className="eyebrow" style={{ color: "var(--danger, #ef4444)" }}>Package Exclusions</p>
-							<ul className="mt-2" style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.5rem", fontSize: "0.85rem" }}>
-								{selectedPkg.exclusions.map((excl, idx) => (
-									<li key={idx}>✗ {excl}</li>
-								))}
-							</ul>
+						<div className="sharp-card" style={{ marginTop: "0.6rem" }}>
+							<EnrolmentDecision />
 						</div>
-					)}
+						{!confirmed && (
+							<p className="psec__hint">Confirm above to choose your package and plan.</p>
+						)}
+					</section>
 
-					<p className="pkg-cost__excl mt-3">
-						Institutional university application fees and tuition are <strong>not</strong> agency fees. Application fees are billed per school selected, and tuition is paid directly to whichever university issues your offer.
-						The service fee is settled in milestones: the deposit now, the pre-departure milestone once your visa is approved, the rest after you arrive. <strong>Your admission letter and visa documents are released, and your ticket is issued, after the pre-departure milestone.</strong>
-					</p>
-				</section>
-			) : null}
+					{confirmed && (
+						<>
+							<section className="psec">
+								<p>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>2</span>
+									<span className="psec__title">Funding track</span>
+								</p>
+								<div className="pcards" style={{ marginTop: "0.6rem" }}>
+									{packageCards.map((f) => (
+										<button
+											key={f.id}
+											type="button"
+											className={`pick${activeFunding === f.id ? " pick--on" : ""}`}
+											onClick={() => !isLocked && setFunding(f.id)}
+											disabled={isLocked}
+											aria-pressed={activeFunding === f.id}
+										>
+											{recommendedTrack === f.id && <span className="pick__tag">Advisor's pick</span>}
+											<span className="eyebrow">{f.tagline}</span>
+											<span className="pick__name">{f.name}</span>
+											<span className="muted" style={{ fontSize: "var(--text-xs)" }}>{f.blurb}</span>
+											{f.priceCents > 0 && (
+												<span className="pick__price">
+													<Money usd={f.priceCents / 100} />
+												</span>
+											)}
+										</button>
+									))}
+								</div>
+							</section>
 
-			{/* 3 · Payment plan — chosen here, so the money is agreed before any work starts */}
-			<section className="mt-4">
-				<div className="sharp-card">
-					<p className="eyebrow">3 · Payment plan</p>
-					<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
-						The deposit (10%) is due now either way. The rest of your service fee follows your plan.
-					</p>
-					<div className="portal-grid portal-grid--2 mt-3">
-						{PAYMENT_PLANS.map((pl) => {
-							const on = plan === pl.id;
-							return (
-								<button
-									key={pl.id}
-									type="button"
-									className={`card card--pad${on ? " card--selected" : ""}`}
-									style={{ textAlign: "left", cursor: isLocked ? "default" : "pointer", borderColor: on ? "var(--accent, #3b82f6)" : undefined }}
-									disabled={isLocked || savingPlan}
-									onClick={() => void savePlan(pl.id)}
-									aria-pressed={on}
-								>
-									<p style={{ fontWeight: 600, margin: 0 }}>{PAYMENT_PLAN_LABELS[pl.id] ?? pl.name}</p>
-									<p className="muted mt-1" style={{ fontSize: "0.85rem", margin: 0 }}>
-										{pl.id === "full"
-											? "10% now · the remaining 90% before you depart."
-											: "10% now · 50% before you depart · 40% after you arrive, on a schedule you choose."}
+							<section className="psec">
+								<p>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>3</span>
+									<span className="psec__title">Degree level</span>
+								</p>
+								<div className="pchips" style={{ marginTop: "0.6rem" }}>
+									{SCHOOL_DEGREE_LEVELS.map((d) => (
+										<button
+											key={d.id}
+											type="button"
+											className={`pchip${activeLevel === d.id ? " pchip--on" : ""}`}
+											onClick={() => !isLocked && setLevel(d.id)}
+											disabled={isLocked}
+											aria-pressed={activeLevel === d.id}
+										>
+											{d.short}
+											<small>
+												{d.name}
+												{recommendedLevel === d.id ? " · advisor's pick" : ""}
+											</small>
+										</button>
+									))}
+								</div>
+							</section>
+
+							<section className="psec">
+								<p>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>4</span>
+									<span className="psec__title">Target schools</span>
+								</p>
+								<p className="psec__hint">
+									We prepare, review and lodge submissions across your full list. Three is the
+									recommended spread.
+								</p>
+								<div className="pchips">
+									{[1, 2, 3, 4, 5, 6].map((count) => (
+										<button
+											key={count}
+											type="button"
+											className={`pchip${targetSchoolCount === count ? " pchip--on" : ""}`}
+											onClick={() => !isLocked && setTargetSchoolCount(count)}
+											disabled={isLocked}
+											aria-pressed={targetSchoolCount === count}
+										>
+											{count}
+											{count === 3 ? <small>recommended</small> : null}
+										</button>
+									))}
+								</div>
+							</section>
+
+							<section className="psec">
+								<p>
+									<span className={`psec__no${isLocked ? " psec__no--done" : ""}`}>5</span>
+									<span className="psec__title">Payment plan</span>
+								</p>
+								<p className="psec__hint">
+									The deposit is due now either way — the plan decides how the rest follows.
+								</p>
+								<div className="pcards" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}>
+									{PAYMENT_PLANS.map((pl) => {
+										const on = plan === pl.id;
+										return (
+											<button
+												key={pl.id}
+												type="button"
+												className={`pick${on ? " pick--on" : ""}`}
+												disabled={isLocked || savingPlan}
+												onClick={() => void savePlan(pl.id)}
+												aria-pressed={on}
+											>
+												<span className="pick__name">{PAYMENT_PLAN_LABELS[pl.id] ?? pl.name}</span>
+												<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+													{pl.id === "full"
+														? "10% now · 90% before you depart"
+														: "10% now · 50% before you depart · 40% after you arrive"}
+												</span>
+											</button>
+										);
+									})}
+								</div>
+								{isLocked && (
+									<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.6rem" }}>
+										Plan: <strong>{PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—"}</strong>. To
+										change it, message your consultant.
 									</p>
-								</button>
-							);
-						})}
-					</div>
-					{isLocked && (
-						<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
-							Plan: <strong>{PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—"}</strong>. To change it, message your consultant.
-						</p>
+								)}
+							</section>
+
+							<section className="psec">
+								<p className="eyebrow" style={{ marginBottom: "0.5rem" }}>
+									Covered by the service fee
+								</p>
+								<div className="sharp-card">
+									<ul
+										style={{
+											listStyle: "none",
+											padding: 0,
+											margin: 0,
+											columns: 2,
+											columnGap: "2rem",
+											fontSize: "var(--text-xs)",
+										}}
+									>
+										{scopeFeatures.map((feat, idx) => (
+											<li key={idx} style={{ padding: "0.3rem 0", borderBottom: "1px dashed var(--border-light)" }}>
+												✓ {feat}
+											</li>
+										))}
+									</ul>
+									{(selectedPkg?.exclusions?.length ?? 0) > 0 && (
+										<ul style={{ listStyle: "none", padding: 0, margin: "0.6rem 0 0", fontSize: "var(--text-xs)" }}>
+											{selectedPkg!.exclusions.map((excl, idx) => (
+												<li key={idx} className="muted" style={{ padding: "0.3rem 0" }}>
+													✗ {excl}
+												</li>
+											))}
+										</ul>
+									)}
+									<ul style={{ listStyle: "none", padding: 0, margin: "0.6rem 0 0", fontSize: "var(--text-xs)" }}>
+										<li className="muted" style={{ padding: "0.3rem 0" }}>
+											✗ University application fees — billed per school selected
+										</li>
+										<li className="muted" style={{ padding: "0.3rem 0" }}>
+											✗ Tuition — paid to the university that admits you
+										</li>
+									</ul>
+								</div>
+							</section>
+						</>
 					)}
 				</div>
-			</section>
 
-			{/* 4 · Deposit */}
-			<div className="row mt-4" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
-				{isDepositPaid ? (
-					<Button type="button" arrow onClick={() => nav("/portal/application")}>
-						Next · Applications →
-					</Button>
-				) : (
-					<>
-						<Button
-							type="button"
-							onClick={() => void confirm(true)}
-							arrow
-							disabled={!funding || !level || saving || payingDeposit}
-						>
-							{payingDeposit ? "Connecting to Paystack…" : <>Pay the deposit (<MoneyInline usd={depositUsd} />) →</>}
-						</Button>
-						<Button
-							type="button"
-							variant="secondary"
-							onClick={() => void confirm(false)}
-							disabled={!funding || !level || saving || payingDeposit}
-						>
-							{saving ? "Saving…" : "Save & pay later"}
-						</Button>
-					</>
-				)}
-				<Button to="/portal/consultation" variant="ghost">
-					← Consultation
-				</Button>
+				{/* right: the composed package — the money never scrolls away */}
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">Your package</p>
+						{funding && level ? (
+							<>
+								<p style={{ fontWeight: 700, fontSize: "1.05rem", margin: "0.3rem 0 0.6rem" }}>
+									{fundMeta?.name} × {levelMeta?.short} · {targetSchoolCount}{" "}
+									{targetSchoolCount === 1 ? "school" : "schools"}
+								</p>
+								<div className="pkv">
+									<span className="pkv__k">Service fee</span>
+									<span className="pkv__v">
+										<MoneyInline usd={serviceFee} />
+									</span>
+								</div>
+								<div className="pkv pkv--due">
+									<span className="pkv__k">Deposit · due now (10%)</span>
+									<span className="pkv__v">
+										{isDepositPaid ? "Paid ✓" : <MoneyInline usd={depositUsd} />}
+									</span>
+								</div>
+								<div className="pkv">
+									<span className="pkv__k">Pre-departure milestone</span>
+									<span className="pkv__v">
+										<MoneyInline usd={remainingUsd} />
+									</span>
+								</div>
+								<div className="pkv">
+									<span className="pkv__k">— due</span>
+									<span className="pkv__v muted">after your visa is approved</span>
+								</div>
+								<p
+									className="muted"
+									style={{ fontSize: "0.68rem", lineHeight: 1.5, margin: "0.8rem 0" }}
+								>
+									By paying the deposit you agree: your admission letter and visa documents are
+									released, and your ticket is issued, after the pre-departure milestone. School
+									application fees and tuition are the institutions', not ours.
+								</p>
+								{isDepositPaid ? (
+									<Button
+										type="button"
+										arrow
+										onClick={() => nav("/portal/application")}
+										style={{ width: "100%" }}
+									>
+										Next · Applications →
+									</Button>
+								) : (
+									<>
+										<Button
+											type="button"
+											onClick={() => void confirm(true)}
+											arrow
+											disabled={!funding || !level || saving || payingDeposit}
+											style={{ width: "100%" }}
+										>
+											{payingDeposit ? (
+												"Connecting to Paystack…"
+											) : (
+												<>
+													Pay the deposit · <MoneyInline usd={depositUsd} /> →
+												</>
+											)}
+										</Button>
+										<Button
+											type="button"
+											variant="ghost"
+											onClick={() => void confirm(false)}
+											disabled={!funding || !level || saving || payingDeposit}
+											style={{ width: "100%", marginTop: "0.5rem" }}
+										>
+											{saving ? "Saving…" : "Save & pay later"}
+										</Button>
+									</>
+								)}
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem" }}>
+								Pick a funding track and degree level — the fee and deposit compose here.
+							</p>
+						)}
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">What the deposit opens</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							Your consultant is assigned within 1–2 business days, and school selection opens in{" "}
+							<strong style={{ color: "var(--foreground)" }}>Chapter III · Applications</strong>.
+						</p>
+					</div>
+				</div>
 			</div>
-			</>)}
 		</div>
 	);
 }
@@ -2051,27 +2045,31 @@ export function PortalConsultationBookingFlow() {
 				</div>
 			</header>
 
-			<div className="dash-tabs" role="tablist">
+			<ol className="psteps" role="tablist">
 				{steps.map((id, i) => {
 					const isLocked = id === "outcome" && !outcomeUnlocked;
+					const done = i < stepIndex && !isLocked;
 					return (
-						<button
-							key={id}
-							type="button"
-							role="tab"
-							aria-selected={step === id}
-							aria-disabled={isLocked}
-							className={`dash-tabs__btn${step === id ? " dash-tabs__btn--active" : ""}${isLocked ? " dash-tabs__btn--locked" : ""}`}
-							onClick={() => !isLocked && setSelectedStep(id)}
-						>
-							<span className="mono">{i + 1}</span> {CONSULT_STEP_LABELS[id]}
-							{isLocked ? <span className="dash-tabs__lock">🔒</span> : null}
-						</button>
+						<li key={id}>
+							<button
+								type="button"
+								role="tab"
+								aria-selected={step === id}
+								aria-disabled={isLocked}
+								disabled={isLocked}
+								className={`portal-pill${step === id ? " portal-pill--solid" : done ? " portal-pill--done" : " portal-pill--hollow"}`}
+								onClick={() => !isLocked && setSelectedStep(id)}
+							>
+								{i + 1} · {CONSULT_STEP_LABELS[id]}
+								{done ? " ✓" : isLocked ? " —" : ""}
+							</button>
+						</li>
 					);
 				})}
-			</div>
+			</ol>
 
-			<div className="sharp-card mt-3">
+			<div className="psplit">
+			<div className="sharp-card">
 				{step === "type" && (
 					<>
 						<p className="eyebrow">Meeting type</p>
@@ -2271,6 +2269,87 @@ export function PortalConsultationBookingFlow() {
 						{step === "assessment" ? "Continue to schedule →" : "Next →"}
 					</Button>
 				</div>
+			</div>
+
+			{/* the booking rail — what you're about to pay for, always visible */}
+			<div className="prail">
+				<div className="sharp-card sharp-card--key">
+					<p className="eyebrow">Your booking</p>
+					<div style={{ marginTop: "0.4rem" }}>
+						<div className="pkv">
+							<span className="pkv__k">Type</span>
+							<span className={`pkv__v${booking.consultationType ? "" : " muted"}`}>
+								{booking.consultationType === "online"
+									? "Online"
+									: booking.consultationType === "in_person"
+										? "In person"
+										: "Not chosen"}
+							</span>
+						</div>
+						{booking.consultationType !== "online" && (
+							<div className="pkv">
+								<span className="pkv__k">Branch</span>
+								<span className={`pkv__v${booking.branchId ? "" : " muted"}`}>
+									{booking.branchId ? getBranchName(booking.branchId) : "Not chosen"}
+								</span>
+							</div>
+						)}
+						<div className="pkv">
+							<span className="pkv__k">About you</span>
+							<span className={`pkv__v${booking.assessment.firstName ? "" : " muted"}`}>
+								{booking.assessment.firstName ? "Complete ✓" : "In progress"}
+							</span>
+						</div>
+						<div className="pkv">
+							<span className="pkv__k">Date</span>
+							<span className={`pkv__v${booking.date ? "" : " muted"}`}>{booking.date || "Not picked"}</span>
+						</div>
+						<div className="pkv">
+							<span className="pkv__k">Time</span>
+							<span className={`pkv__v${booking.time ? "" : " muted"}`}>
+								{booking.time ? `${booking.time} · 45 min` : "Not picked"}
+							</span>
+						</div>
+						<div className="pkv pkv--due">
+							<span className="pkv__k">Consultation fee</span>
+							<span className="pkv__v">
+								{payState === "paid" ? "Paid ✓" : formatDualCurrency(consultationFeeUsd)}
+							</span>
+						</div>
+					</div>
+					{payState === "paid" ? (
+						<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
+							Booked · Ref {booking.confirmationId}
+						</p>
+					) : (
+						<Button
+							type="button"
+							arrow
+							disabled={payState === "processing" || payState === "success"}
+							onClick={() => (step === "pay" ? void startPayment() : setSelectedStep("pay"))}
+							style={{ width: "100%", marginTop: "0.8rem" }}
+						>
+							{payState === "processing"
+								? "Processing…"
+								: step === "pay"
+									? `Pay & book · ${formatDualCurrency(consultationFeeUsd)} →`
+									: "Review & pay →"}
+						</Button>
+					)}
+					<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.7rem", lineHeight: 1.5 }}>
+						The fee confirms the slot. Reschedule free up to 24h before.
+					</p>
+				</div>
+
+				<div className="sharp-card">
+					<p className="eyebrow">What happens next</p>
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+						You get the confirmation and a reminder the day before. Your consultant reads your
+						assessment form first — that's why step {steps.indexOf("assessment") + 1} asked all those
+						questions.
+					</p>
+				</div>
+			</div>
 			</div>
 		</div>
 	);
@@ -2928,8 +3007,8 @@ function ApplicationHubInner() {
 							</div>
 						</div>
 					) : !depositPaid ? (
-						<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--accent, #3b82f6)" }}>
-							<p className="eyebrow" style={{ color: "var(--accent, #3b82f6)" }}>10% Commitment Deposit Required</p>
+						<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--foreground)" }}>
+							<p className="eyebrow">10% Commitment Deposit Required</p>
 							<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Activate Your File to Unlock School Selection</h3>
 							<p className="muted mt-2" style={{ maxWidth: "44rem", lineHeight: 1.6 }}>
 								A 10% commitment deposit is required to begin preparing and submitting your university applications. This covers your comprehensive credential review, document verification, and portal account setup.
@@ -3303,9 +3382,9 @@ function TrackingPageInner() {
 			</header>
 
 			{application.pendingHandoff && (
-				<div className="sharp-card mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
-					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
-					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.4rem" }}>
+				<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--foreground)" }}>
+					<p className="eyebrow">Assigning your visa officer</p>
+					<p className="muted" style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.4rem" }}>
 						We're assigning your{" "}
 						{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ??
 							application.pendingHandoff.stage}{" "}
@@ -4027,185 +4106,236 @@ function VisaHubInner() {
 		);
 	}
 
+	const bandTitle = !hasAdmit
+		? "Waiting on an offer"
+		: !isConsented && !paid
+			? "Your decision is needed"
+			: isAwaitingSpecialist
+				? "Assigning your visa officer"
+				: isPendingInvoice
+					? "Preparing your visa invoice"
+					: paid
+						? "Visa fee settled"
+						: "Pay the visa fee";
+	const bandDetail = !hasAdmit
+		? "Pay the application invoice on Schools, then wait for tracking to reach Decision Reached."
+		: !isConsented && !paid
+			? "You've been admitted. Continue with visa processing so we can assign your visa officer and raise the visa fee."
+			: isAwaitingSpecialist
+				? "Consent recorded — operations is matching your case to a specialist. This page updates automatically."
+				: isPendingInvoice
+					? `${application.assignedStaffName ? `${application.assignedStaffName} is` : "Your consultant is"} finalising the fee — payment unlocks here the moment it's issued.`
+					: paid
+						? "Your visa case opens on the tracking page — your officer updates it there."
+						: `Visa processing starts once this invoice is paid · ${formatDualCurrency(amount)}`;
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · Visa</p>
-					<h1 className="page-title mt-1">{paid ? "Visa tracking" : "Visa stage · Application & Processing"}</h1>
+					<p className="eyebrow">Chapter IV · Visa</p>
+					<h1 className="page-title mt-1">Visa</h1>
 					<p className="lead mt-2">
-						{paid
-							? "Visa invoice settled. Your consultant will open your visa case and update you through the tracking page."
-							: isAwaitingSpecialist
-								? "Your consent has been recorded. Operations is assigning your dedicated consultant."
-								: isPendingInvoice
-									? "Your consultant is preparing your official visa application fee invoice."
-									: "Review and pay your official visa application invoice to begin active visa processing."}
+						{chosen
+							? [chosen.universityName ?? getUniversity(chosen.universityId)?.name, chosen.programName ?? getProgram(chosen.programId)?.name, chosen.intake]
+									.filter(Boolean)
+									.join(" · ")
+							: "Application & processing — the visa chapter."}
 					</p>
 				</div>
 			</header>
 
-			<ol className="mini-steps mb-4">
-				<li className={hasAdmit ? "is-done" : "is-current"}>1 · Admitted</li>
-				<li className={hasAdmit ? (paid ? "is-done" : "is-current") : ""}>
-					2 · {paid ? "Visa fee paid" : isAwaitingSpecialist ? "Assigning visa officer" : isPendingInvoice ? "Preparing invoice" : "Visa invoice"}
-				</li>
-				<li className={paid ? "is-current" : ""}>3 · Visa tracking</li>
-			</ol>
-
-			{hasAdmit && !paid && !isConsented && (
-				<div className="mb-4">
-					<StageConsentCard
-						stage="visa"
-						currentDecision={application.visaConsent?.decision ?? null}
-						title="Continue with visa processing?"
-						lead="You've been admitted. Continue with your visa so we can assign your visa officer and raise the visa fee."
-						continueDetail="A visa officer will be assigned and the visa fee will be raised. You'll pay it before your visa case opens."
-						holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
-						optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
-						onDecided={() => void syncFromServer()}
-					/>
+			{/* the live state */}
+			<div className="journey-now mt-4">
+				<div>
+					<p className="eyebrow">Current update</p>
+					<p className="display journey-now__title" style={{ fontSize: "1.15rem" }}>
+						{bandTitle}
+					</p>
+					<p className="journey-now__detail">{bandDetail}</p>
 				</div>
-			)}
-
-			<div className="portal-grid portal-grid--2 portal-grid--align-start mb-2">
 				{!hasAdmit ? (
-					<div className="sharp-card">
-						<p className="display" style={{ fontSize: "1.25rem" }}>
-							No admission yet
-						</p>
-						<p className="muted mt-2">
-							Pay the application invoice on Schools, then wait for handler tracking to reach{" "}
-							<strong>Decision Reached</strong> (your consultant confirms the decision).
-						</p>
-						<div className="row mt-3">
-							<Button to="/portal/application" arrow>
-								Back to schools tracking
-							</Button>
-						</div>
-					</div>
-				) : chosen ? (
-					// The visa is for one school — the accepted offer heads the chapter.
-					<div className="sharp-card">
-						<p className="eyebrow">Visa for</p>
-						<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
-							{chosen.universityName ?? getUniversity(chosen.universityId)?.name}
-						</p>
-						<p className="muted mt-1">
-							{[chosen.programName ?? getProgram(chosen.programId)?.name, chosen.intake].filter(Boolean).join(" · ")}
-						</p>
-						{accepted.length > 1 && (
-							<p className="muted mt-2" style={{ fontSize: "0.8rem" }}>
-								{accepted.length - 1} other offer{accepted.length > 2 ? "s" : ""} on file — change your choice on Tracking.
-							</p>
-						)}
-					</div>
-				) : (
-					<div className="sharp-card">
-						<p className="eyebrow">Your offers</p>
-						<ul className="portal-snapshot mt-2">
-							{accepted.map((s) => (
-								<li key={s.id}>
-									<span>{getUniversity(s.universityId)?.name}</span>
-									<strong>{getProgram(s.programId)?.name} · {trackLabel(s)}</strong>
-								</li>
-							))}
-						</ul>
-						{accepted.length > 1 && (
-							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
-								You hold {accepted.length} offers. Accept the one you are going with on{" "}
-								<Link to="/portal/tracking">Tracking</Link> — your visa is prepared for that school.
-							</p>
-						)}
-					</div>
-				)}
-
-				{isAwaitingSpecialist ? (
-					<div className="sharp-card">
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
-								Awaiting Visa Specialist
-							</span>
-							<span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Checking automatically</span>
-						</div>
-						<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>
-							Assigning Your Visa Specialist
-						</h3>
-						<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
-							Your consent to proceed has been received. Our Operations management team is currently assigning your dedicated visa counselor.
-						</p>
-						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
-							<div>
-								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Matching your case with a consultant…</p>
-								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
-									Once assigned, your specialist will prepare and issue your official visa application fee invoice. This screen updates in real time.
-								</p>
-							</div>
-						</div>
-					</div>
-				) : isPendingInvoice ? (
-					<div className="sharp-card">
-						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-							<span style={{ background: "#fef3c7", color: "#92400e", padding: "0.25rem 0.6rem", borderRadius: "9999px", fontSize: "0.75rem", fontWeight: 600 }}>
-								Invoice in Review
-							</span>
-							<span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Checking automatically</span>
-						</div>
-						<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>
-							Pending Visa Application Fee Invoice
-						</h3>
-						<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
-							{application.assignedStaffName ? `${application.assignedStaffName} has been assigned as your consultant.` : "Your consultant has been assigned."}{" "}
-							They are currently preparing and reviewing your official visa fee invoice.
-						</p>
-						<div className="mt-4" style={{ background: "rgba(0,0,0,0.03)", border: "1px solid var(--border)", borderRadius: "8px", padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-							<div className="spinner" style={{ width: "20px", height: "20px", borderWidth: "2px", borderColor: "var(--foreground) transparent transparent transparent" }} />
-							<div>
-								<p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Being reviewed and issued…</p>
-								<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.2rem" }}>
-									{serverInv?.invoiceNumber ? `Draft #${serverInv.invoiceNumber} is being reviewed.` : "Your invoice is being finalised."}{" "}
-									Payment will unlock automatically on this page as soon as the invoice is issued.
-								</p>
-							</div>
-						</div>
-					</div>
-				) : (hasIssuedInvoice || paid) && serverInv ? (
-					<section className="sharp-card mb-4">
-						<InvoiceCard
-							title="Visa invoice"
-							invoice={serverInv}
-							actions={
-								serverInv.status === "paid" ? (
-									<Button variant="secondary" onClick={() => downloadReceipt(serverInv, "Visa invoice")}>
-										Download receipt
-									</Button>
-								) : serverInv.balanceCents > 0 ? (
-									<Button onClick={pay} arrow>
-										Pay {formatMoney(serverInv.balanceCents, "ghs")}
-									</Button>
-								) : null
-							}
-							hint={paid ? undefined : "Visa processing starts once this invoice is paid."}
-						/>
-					</section>
-				) : null}
-			</div>
-
-			<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-				<Button to="/portal/tracking" variant="secondary">
-					← Back to admission tracking
-				</Button>
-				<Button to="/portal/financial" variant="ghost">
-					View all invoices
-				</Button>
-				{paid ? (
-					<Button to="/portal/visa/tracking" arrow>
-						Continue to visa tracking
+					<Button to="/portal/tracking" variant="inverted" arrow>
+						Back to admission tracking
+					</Button>
+				) : paid ? (
+					<Button to="/portal/visa/tracking" variant="inverted" arrow>
+						Open visa tracking
+					</Button>
+				) : hasIssuedInvoice && serverInv && serverInv.balanceCents > 0 ? (
+					<Button variant="inverted" onClick={pay} arrow>
+						Pay {formatMoney(serverInv.balanceCents, "ghs")}
 					</Button>
 				) : null}
 			</div>
 
+			<div className="psplit mt-4">
+				<div>
+					{hasAdmit && !paid && !isConsented && (
+						<div className="mb-4">
+							<StageConsentCard
+								stage="visa"
+								currentDecision={application.visaConsent?.decision ?? null}
+								title="Continue with visa processing?"
+								lead="You've been admitted. Continue with your visa so we can assign your visa officer and raise the visa fee."
+								continueDetail="A visa officer will be assigned and the visa fee will be raised. You'll pay it before your visa case opens."
+								holdDetail="You can come back and continue with visa processing whenever you're ready. Nothing is sent to our team until you continue."
+								optOutDetail="Visa processing will be cancelled. You won't be able to use travel assistance without a visa."
+								onDecided={() => void syncFromServer()}
+							/>
+						</div>
+					)}
+
+					{hasAdmit && !chosen ? (
+						<div className="sharp-card mb-4">
+							<p className="eyebrow">Your offers</p>
+							<ul className="portal-snapshot mt-2">
+								{accepted.map((s) => (
+									<li key={s.id}>
+										<span>{getUniversity(s.universityId)?.name}</span>
+										<strong>
+											{getProgram(s.programId)?.name} · {trackLabel(s)}
+										</strong>
+									</li>
+								))}
+							</ul>
+							{accepted.length > 1 && (
+								<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
+									You hold {accepted.length} offers. Accept the one you are going with on{" "}
+									<Link to="/portal/tracking">Tracking</Link> — your visa is prepared for that school.
+								</p>
+							)}
+						</div>
+					) : null}
+
+					{isAwaitingSpecialist ? (
+						<div className="sharp-card">
+							<span className="portal-pill">Awaiting visa officer</span>
+							<h3 className="display mt-2" style={{ fontSize: "1.25rem" }}>
+								Matching your case with a consultant
+							</h3>
+							<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
+								Your consent to proceed has been received. Our operations team is assigning your
+								dedicated visa officer — once assigned, they'll prepare and issue your official visa
+								application fee invoice.
+							</p>
+							<p className="muted mt-3" style={{ fontSize: "0.8rem" }}>
+								Nothing needed from you — this page updates in real time.
+							</p>
+						</div>
+					) : isPendingInvoice ? (
+						<div className="sharp-card">
+							<span className="portal-pill">Invoice in review</span>
+							<h3 className="display mt-2" style={{ fontSize: "1.25rem" }}>
+								Your visa fee invoice is being finalised
+							</h3>
+							<p className="muted mt-2" style={{ lineHeight: 1.6 }}>
+								{application.assignedStaffName
+									? `${application.assignedStaffName} has been assigned as your consultant.`
+									: "Your consultant has been assigned."}{" "}
+								{serverInv?.invoiceNumber
+									? `Draft #${serverInv.invoiceNumber} is being reviewed.`
+									: "They are preparing and reviewing your official visa fee invoice."}{" "}
+								Payment unlocks automatically here as soon as it's issued.
+							</p>
+						</div>
+					) : (hasIssuedInvoice || paid) && serverInv ? (
+						<section className="sharp-card">
+							<InvoiceCard
+								title="Visa invoice"
+								invoice={serverInv}
+								actions={
+									serverInv.status === "paid" ? (
+										<Button variant="secondary" onClick={() => downloadReceipt(serverInv, "Visa invoice")}>
+											Download receipt
+										</Button>
+									) : serverInv.balanceCents > 0 ? (
+										<Button onClick={pay} arrow>
+											Pay {formatMoney(serverInv.balanceCents, "ghs")}
+										</Button>
+									) : null
+								}
+								hint={paid ? undefined : "Visa processing starts once this invoice is paid."}
+							/>
+						</section>
+					) : null}
+
+					<div className="row mt-4" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+						<Button to="/portal/tracking" variant="secondary">
+							← Admission tracking
+						</Button>
+						<Button to="/portal/financial" variant="ghost">
+							View all invoices
+						</Button>
+					</div>
+				</div>
+
+				{/* the rail — who and where the case stands */}
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">Your visa officer</p>
+						{application.assignedStaffName ? (
+							<>
+								<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{application.assignedStaffName}</p>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+									Visa processing
+								</p>
+								<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+									<Button to="/portal/home" variant="ghost" size="sm">
+										Message
+									</Button>
+									<Button to="/portal/appointments" variant="ghost" size="sm">
+										Book call
+									</Button>
+								</div>
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
+								Assigned when you continue with visa processing.
+							</p>
+						)}
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">The case file</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							{chosen ? (
+								<div className="pkv">
+									<span className="pkv__k">Visa for</span>
+									<span className="pkv__v">
+										{chosen.universityName ?? getUniversity(chosen.universityId)?.name}
+									</span>
+								</div>
+							) : null}
+							<div className="pkv">
+								<span className="pkv__k">Visa fee</span>
+								<span className="pkv__v">
+									{paid ? "Paid ✓" : hasIssuedInvoice ? "Issued — due" : "Not yet"}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Officer</span>
+								<span className="pkv__v muted">
+									{application.assignedStaffName ?? "Awaiting assignment"}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Tracking</span>
+								<span className="pkv__v muted">{paid ? "Open" : "Opens when the fee clears"}</span>
+							</div>
+						</div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">After the visa</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							Once approved, <strong style={{ color: "var(--foreground)" }}>Chapter V · Departure</strong>{" "}
+							opens: the pre-departure milestone, then your ticket. Your letter and visa documents
+							release with the milestone.
+						</p>
+					</div>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -4276,8 +4406,9 @@ function VisaTrackingInner() {
 		{ id: "complete", label: "Visa granted", detail: completeDetail },
 	] as const;
 	// The appointment is the one date the client must not miss.
+	const [now] = useState(() => Date.now());
 	const appointmentSoon =
-		vd.appointmentAt && !vd.biometricsAt && new Date(vd.appointmentAt).getTime() > Date.now() - 6 * 3_600_000
+		vd.appointmentAt && !vd.biometricsAt && new Date(vd.appointmentAt).getTime() > now - 6 * 3_600_000
 			? new Date(vd.appointmentAt)
 			: null;
 	const order = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"] as const;
@@ -4309,126 +4440,220 @@ function VisaTrackingInner() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · Visa</p>
+					<p className="eyebrow">Chapter IV · Visa</p>
 					<h1 className="page-title mt-1">Visa tracking</h1>
-					<p className="lead mt-2">Follow your visa case updates from your consultant.</p>
+					<p className="lead mt-2">Follow your visa case updates from your visa officer.</p>
 				</div>
 			</header>
-			<ol className="mini-steps mb-4">
-				<li className="is-done">1 · Admitted</li>
-				<li className="is-done">2 · Visa invoice</li>
-				<li className="is-current">3 · Visa tracking</li>
-			</ol>
-			<div className={`card card--pad mb-4${refused ? " cn-next" : ""}`}>
-				<p className="eyebrow">Current update</p>
-				<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
-					{refused
-						? "The visa authority refused this application."
-						: (VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…")}
-				</p>
-				{refused && (
-					<p className="muted mt-2">
-						This is not the end of the road. Your consultant will review the refusal reasons with you and, where it makes
-						sense, reopen your case for a reapplication. Check your messages, or reach your consultant from the
-						Communication Centre.
+
+			{/* the live state */}
+			<div className="journey-now mt-4">
+				<div>
+					<p className="eyebrow">Current update</p>
+					<p className="display journey-now__title" style={{ fontSize: "1.15rem" }}>
+						{refused
+							? "The visa authority refused this application"
+							: (VISA_UPDATE_BY_STAGE[application.visaStatus] ?? "Visa case updating…")}
 					</p>
+					{refused ? (
+						<p className="journey-now__detail">
+							This is not the end of the road. Your consultant will review the refusal reasons with
+							you and, where it makes sense, reopen your case for a reapplication.
+						</p>
+					) : null}
+				</div>
+				{application.visaStatus === "complete" ? (
+					<Button variant="inverted" arrow onClick={() => nav("/portal/pre-departure")}>
+						Continue to Departure
+					</Button>
+				) : (
+					<Button to="/portal/home" variant="inverted">
+						Message your visa officer →
+					</Button>
 				)}
 			</div>
+
 			{/* The refusal reason and any note for the client arrive as history
 			    lines; the legacy counselor note shows only when there are none. */}
 			{application.visaCounselorNote && !application.comments.some(isVisaUpdate) && (
-				<div className="sharp-card mb-4">
+				<div className="sharp-card mt-4">
 					<p className="eyebrow">Message from your consultant</p>
 					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
 						{application.visaCounselorNote}
 					</p>
 				</div>
 			)}
+
+			{/* the one date the client must not miss gets the heavy frame */}
 			{appointmentSoon && (
-				<div className="sharp-card mb-4" style={{ border: "2px solid var(--foreground)" }}>
+				<div className="sharp-card mt-4" style={{ border: "2px solid var(--foreground)" }}>
 					<p className="eyebrow">Your visa appointment</p>
 					<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
 						{when(vd.appointmentAt)}
 					</p>
 					{vd.appointmentCentre ? <p className="mt-1">{vd.appointmentCentre}</p> : null}
 					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
-						Arrive early with your passport, the appointment confirmation and every document in your visa list below.
+						Arrive early with your passport, the appointment confirmation and every document in your
+						visa list below.
 					</p>
 				</div>
 			)}
+
 			{assigningHandler && (
-				<div className="sharp-card mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
-					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
-					<p style={{ fontSize: "0.95rem", lineHeight: 1.6, color: "#713f12", marginTop: "0.5rem" }}>
-						Your payment is confirmed. Centurion is matching your case to a consultant — you'll get a
-						notification with your consultant's details once your case is open.
-					</p>
-				</div>
-			)}
-			<ol className="visa-track">
-				{steps.map((step, index) => {
-					const stepIndex = order.indexOf(step.id);
-					const done = currentIndex >= stepIndex && application.visaStatus !== "locked";
-					const current = application.visaStatus === step.id;
-					return (
-						<li
-							key={step.id}
-							className={`visa-track__item${done ? " visa-track__item--done" : ""}${current ? " visa-track__item--current" : ""}`}
-						>
-							<span className="visa-track__dot">{done ? "✓" : index + 1}</span>
-							<div>
-								<strong>{step.label}</strong>
-								<p className="muted">{step.detail}</p>
-							</div>
-						</li>
-					);
-				})}
-			</ol>
-			<ConsultantUpdates comments={application.comments} filter={isVisaUpdate} title="Your visa case, as recorded" className="mt-4" />
-			{application.visaDocumentChecklist.length > 0 && (
 				<div className="sharp-card mt-4">
-					<div className="between">
-						<p className="eyebrow">Your visa documents</p>
-						<span className="mono muted" style={{ fontSize: "0.75rem" }}>
-							{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length}/{application.visaDocumentChecklist.length} verified
-						</span>
-					</div>
-					<ul className="portal-snapshot mt-2">
-						{application.visaDocumentChecklist.map((x) => (
-							<li key={x.id}>
-								<span title={x.hint}>{x.name}</span>
-								<strong>
-									{x.status === "VERIFIED" ? "Verified" : x.status === "UPLOADED" ? "Under review" : x.status === "REJECTED" ? "Re-upload needed" : "Upload"}
-								</strong>
-							</li>
-						))}
-					</ul>
-					<div className="row mt-3">
-						<Button to="/portal/documents" variant="secondary" arrow>
-							Upload in your vault
-						</Button>
-					</div>
+					<span className="portal-pill">Assigning your visa officer</span>
+					<p className="muted" style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.6rem" }}>
+						Your payment is confirmed. Century NIT is matching your case to a visa officer — you'll
+						get a notification with their details once your case is open.
+					</p>
 				</div>
 			)}
-			<div className="sharp-card mt-5 next-action">
-				<p className="eyebrow">Continue</p>
-				{application.visaStatus === "complete" ? (
-					<div className="row mt-3">
-						<Button
-							type="button"
-							arrow
-							onClick={() => nav("/portal/pre-departure")}
-						>
-							Continue to travel assistance
-						</Button>
+
+			<div className="psplit mt-4">
+				<div>
+					{/* the spine */}
+					<ol className="visa-track">
+						{steps.map((step, index) => {
+							const stepIndex = order.indexOf(step.id);
+							const done = currentIndex >= stepIndex && application.visaStatus !== "locked";
+							const current = application.visaStatus === step.id;
+							return (
+								<li
+									key={step.id}
+									className={`visa-track__item${done ? " visa-track__item--done" : ""}${current ? " visa-track__item--current" : ""}`}
+								>
+									<span className="visa-track__dot">{done ? "✓" : index + 1}</span>
+									<div>
+										<strong>
+											{step.label}
+											{current ? (
+												<span className="mono muted" style={{ fontSize: "0.6rem", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 400 }}>
+													{" "}· now
+												</span>
+											) : null}
+										</strong>
+										<p className="muted">{step.detail}</p>
+									</div>
+								</li>
+							);
+						})}
+					</ol>
+
+					{/* the checklist — the action item is the underlined one */}
+					{application.visaDocumentChecklist.length > 0 && (
+						<div className="sharp-card mt-4">
+							<div className="between">
+								<p className="eyebrow">Your visa documents</p>
+								<span className="mono muted" style={{ fontSize: "0.75rem" }}>
+									{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length}/
+									{application.visaDocumentChecklist.length} verified
+								</span>
+							</div>
+							<ul className="vdocs">
+								{application.visaDocumentChecklist.map((x) => (
+									<li key={x.id}>
+										<span title={x.hint}>{x.name}</span>
+										<span
+											className={`vdocs__st${x.status === "VERIFIED" ? " vdocs__st--ok" : x.status === "REJECTED" ? " vdocs__st--fix" : " vdocs__st--wait"}`}
+										>
+											{x.status === "VERIFIED"
+												? "Verified"
+												: x.status === "UPLOADED"
+													? "Under review"
+													: x.status === "REJECTED"
+														? "Re-upload needed"
+														: "Upload"}
+										</span>
+									</li>
+								))}
+							</ul>
+							<div className="row mt-3">
+								<Button to="/portal/documents" variant="secondary" arrow>
+									Upload in your vault
+								</Button>
+							</div>
+						</div>
+					)}
+
+					<div className="sharp-card mt-4">
+						<ConsultantUpdates
+							comments={application.comments}
+							filter={isVisaUpdate}
+							title="Your visa case, as recorded"
+						/>
 					</div>
-				) : (
-					<p className="muted mt-1">
-						{refused
-							? "Travel assistance stays closed while the refusal is reviewed. Your consultant will let you know the next step."
-							: "Visa tracking is in progress. Travel assistance unlocks once your visa is complete."}
-					</p>
-				)}
+				</div>
+
+				{/* the rail */}
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">Your visa officer</p>
+						{application.assignedStaffName ? (
+							<>
+								<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{application.assignedStaffName}</p>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>
+									Visa processing
+								</p>
+								<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+									<Button to="/portal/home" variant="ghost" size="sm">
+										Message
+									</Button>
+									<Button to="/portal/appointments" variant="ghost" size="sm">
+										Book call
+									</Button>
+								</div>
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
+								Being assigned — you'll be notified once your case is open.
+							</p>
+						)}
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">The case file</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv">
+								<span className="pkv__k">Visa fee</span>
+								<span className="pkv__v">Paid ✓</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Lodged</span>
+								<span className="pkv__v muted">
+									{vd.submittedAt ? day(vd.submittedAt) : "Not yet"}
+									{vd.reference ? ` · ${vd.reference}` : ""}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Biometrics</span>
+								<span className="pkv__v muted">
+									{vd.biometricsAt ? `${day(vd.biometricsAt)} ✓` : vd.appointmentAt ? when(vd.appointmentAt) : "Not yet"}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Decision</span>
+								<span className="pkv__v muted">
+									{application.visaStatus === "complete"
+										? `Approved ${vd.decidedAt ? day(vd.decidedAt) : ""} ✓`
+										: refused
+											? "Refused"
+											: "Pending"}
+								</span>
+							</div>
+						</div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">After the visa</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							{application.visaStatus === "complete"
+								? "Chapter V · Departure is open — the pre-departure milestone, then your ticket."
+								: refused
+									? "Departure stays closed while the refusal is reviewed. Your consultant will let you know the next step."
+									: "Once approved, Chapter V · Departure opens: the pre-departure milestone, then your ticket. Your letter and visa documents release with the milestone."}
+						</p>
+					</div>
+				</div>
 			</div>
 		</div>
 	);

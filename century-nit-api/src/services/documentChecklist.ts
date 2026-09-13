@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { DEFAULT_REQUIRED_DOCUMENT_IDS, documentTypesFor } from "century-nit-core/content";
+import { DEFAULT_REQUIRED_DOCUMENT_IDS, VISA_DOCUMENT_IDS, documentTypesFor } from "century-nit-core/content";
 import type { DocumentChecklistItem } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { applicantDocuments, applications, consultations, servicePackages } from "../db/schema.js";
@@ -45,14 +45,23 @@ export async function documentChecklistFor(input: {
 	recommendedPackage?: string | null;
 }): Promise<DocumentChecklistItem[]> {
 	const ids = await requiredDocumentIdsFor(input);
+	return checklistForIds(input.ownerUserId, ids);
+}
+
+/** The visa-stage set against the client's uploads — the visa officer's working list. */
+export async function visaDocumentChecklistFor(ownerUserId: string | null | undefined): Promise<DocumentChecklistItem[]> {
+	return checklistForIds(ownerUserId, VISA_DOCUMENT_IDS);
+}
+
+async function checklistForIds(ownerUserId: string | null | undefined, ids: readonly string[]): Promise<DocumentChecklistItem[]> {
 	const meta = documentTypesFor(ids);
 	const best = new Map<string, { status: string; documentId: string }>();
-	if (input.ownerUserId && ids.length > 0) {
+	if (ownerUserId && ids.length > 0) {
 		const rows = await db
 			.select({ id: applicantDocuments.id, documentType: applicantDocuments.documentType, status: applicantDocuments.status })
 			.from(applicantDocuments)
 			.where(
-				and(eq(applicantDocuments.ownerUserId, input.ownerUserId), inArray(applicantDocuments.documentType, ids)),
+				and(eq(applicantDocuments.ownerUserId, ownerUserId), inArray(applicantDocuments.documentType, [...ids])),
 			);
 		for (const r of rows) {
 			const cur = best.get(r.documentType);

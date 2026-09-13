@@ -19,6 +19,7 @@ import {
 	type AssignScholarship,
 	type StudentScholarship,
 	type VisaStage,
+	type VisaDetails,
 	type JourneyStage,
 	type PackageCode,
 	type UpdateSchoolStatus,
@@ -159,6 +160,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		visaOutcome: row.visaOutcome ?? null,
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote ?? undefined,
+		visaDetails: row.visaDetails ?? {},
+		visaDocumentChecklist: row.visaDocumentChecklist ?? [],
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
@@ -426,10 +429,16 @@ export function useCasesApi() {
 			});
 			await refresh();
 		},
-		setVisaStage: async (appId: string, stage: VisaStage, note?: string, outcome?: "approved" | "refused") => {
+		setVisaStage: async (appId: string, stage: VisaStage, note?: string, outcome?: "approved" | "refused", details?: VisaDetails) => {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
-			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note, outcome));
+			replaceApplication(await applicationsApi.setVisaStage(app.id, stage, note, outcome, details));
+			await refresh();
+		},
+		setVisaDetails: async (appId: string, details: VisaDetails) => {
+			const app = applications.find((a) => a.appId === appId);
+			if (!app) return;
+			replaceApplication(await applicationsApi.setVisaDetails(app.id, details));
 			await refresh();
 		},
 		updateSchoolApplication: async (

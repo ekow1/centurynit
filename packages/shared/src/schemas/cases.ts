@@ -250,6 +250,33 @@ export const APPLICATION_STATUS_TO_OPS: Record<CaseApplicationStatus, string> = 
 
 export const visaStageSchema = z.enum(["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"]);
 export type VisaStage = z.infer<typeof visaStageSchema>;
+
+/**
+ * The facts of one visa application, filled in as the milestones happen.
+ * Every field is optional: the officer records what they know when they
+ * know it. Dates are ISO; `appointmentAt` carries the time.
+ */
+export const visaDetailsSchema = z.object({
+	/** "UK Student visa", "Canada study permit", "US F-1"… */
+	visaType: z.string().max(120).nullable().optional(),
+	/** The authority's reference — GWF, UCI, SEVIS, application number. */
+	reference: z.string().max(120).nullable().optional(),
+	/** Application lodged online. */
+	submittedAt: z.string().datetime().nullable().optional(),
+	/** Biometrics / document appointment at the visa centre. */
+	appointmentAt: z.string().datetime().nullable().optional(),
+	appointmentCentre: z.string().max(200).nullable().optional(),
+	/** Biometrics given. */
+	biometricsAt: z.string().datetime().nullable().optional(),
+	/** The authority's decision reached the client. */
+	decidedAt: z.string().datetime().nullable().optional(),
+	/** Visa validity, once approved. */
+	validFrom: z.string().datetime().nullable().optional(),
+	validTo: z.string().datetime().nullable().optional(),
+	/** Passport / permit collected. */
+	collectedAt: z.string().datetime().nullable().optional(),
+});
+export type VisaDetails = z.infer<typeof visaDetailsSchema>;
 /** How the visa decision went; `complete` implies approved, a refusal stays at `decision`. */
 export const visaOutcomeSchema = z.enum(["approved", "refused"]);
 export type VisaOutcome = z.infer<typeof visaOutcomeSchema>;
@@ -544,6 +571,9 @@ export const applicationSchema = z.object({
 	visaOutcome: visaOutcomeSchema.nullable().optional(),
 	visaInvoicePaid: z.boolean(),
 	visaCounselorNote: z.string().nullable(),
+	visaDetails: visaDetailsSchema.default({}),
+	/** The visa-stage documents and where the client's upload of each stands. */
+	visaDocumentChecklist: z.array(documentChecklistItemSchema).default([]),
 	paymentPlanId: z.string().nullable(),
 	packageId: z.string().uuid().nullable(),
 	packageSelectedAt: z.string().datetime().nullable(),
@@ -668,7 +698,10 @@ export const setVisaStageSchema = z.object({
 	 * `approved`; moving back to `pending` clears it (reapplication).
 	 */
 	outcome: visaOutcomeSchema.optional(),
+	/** Facts recorded with the move — the biometrics date, the decision date, validity. */
+	details: visaDetailsSchema.optional(),
 });
+export const updateVisaDetailsSchema = visaDetailsSchema;
 
 /**
  * Applicant acceptance of the post-consultation "start your application?"

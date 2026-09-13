@@ -4016,14 +4016,37 @@ function VisaTrackingInner() {
 	}, []);
 	const serverPaid = serverInv?.status === "paid";
 	const paid = application.visaInvoice.status === "paid" || serverPaid;
+	const vd = application.visaDetails ?? {};
+	const day = (iso: string | null | undefined) =>
+		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : null;
+	const when = (iso: string | null | undefined) =>
+		iso ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
 	const refusedDetail =
-		application.visaStatus === "decision" && application.visaOutcome === "refused" ? "Refused — your consultant will advise" : "Awaiting decision";
+		application.visaStatus === "decision" && application.visaOutcome === "refused" ? "Refused — your consultant will advise" : "Awaiting the authority's decision";
+	const lodgedDetail = [vd.visaType, vd.reference ? `Ref ${vd.reference}` : null, vd.submittedAt ? `Submitted ${day(vd.submittedAt)}` : null]
+		.filter(Boolean)
+		.join(" · ");
+	const appointmentDetail = vd.biometricsAt
+		? `Biometrics given ${day(vd.biometricsAt)}`
+		: vd.appointmentAt
+			? `${when(vd.appointmentAt)}${vd.appointmentCentre ? ` · ${vd.appointmentCentre}` : ""} — bring your passport and the documents your consultant listed`
+			: "Your consultant will tell you when and where";
+	const decisionDetail = vd.decidedAt && application.visaStatus === "complete" ? `Approved ${day(vd.decidedAt)}` : refusedDetail;
+	const completeDetail =
+		vd.validFrom || vd.validTo
+			? `Valid ${day(vd.validFrom) ?? "…"} → ${day(vd.validTo) ?? "…"}${vd.collectedAt ? ` · collected ${day(vd.collectedAt)}` : ""}`
+			: "Passport back with the visa — then Departure";
 	const steps = [
-		{ id: "pending", label: "Case opened", detail: "Handler opens your file" },
-		{ id: "biometrics", label: "Biometrics / appointment", detail: "Attend your appointment" },
-		{ id: "decision", label: "Authority decision", detail: refusedDetail },
-		{ id: "complete", label: "Visa complete", detail: "Ready for payment plan" },
+		{ id: "pending", label: "Application lodged", detail: lodgedDetail || "Your consultant opens your file and lodges the application" },
+		{ id: "biometrics", label: "Appointment & biometrics", detail: appointmentDetail },
+		{ id: "decision", label: "Authority decision", detail: decisionDetail },
+		{ id: "complete", label: "Visa granted", detail: completeDetail },
 	] as const;
+	// The appointment is the one date the client must not miss.
+	const appointmentSoon =
+		vd.appointmentAt && !vd.biometricsAt && new Date(vd.appointmentAt).getTime() > Date.now() - 6 * 3_600_000
+			? new Date(vd.appointmentAt)
+			: null;
 	const order = ["locked", "awaiting_handler", "pending", "biometrics", "decision", "complete"] as const;
 	const currentIndex = order.indexOf(application.visaStatus);
 	const assigningHandler = application.visaStatus === "awaiting_handler";
@@ -4086,6 +4109,18 @@ function VisaTrackingInner() {
 					</p>
 				</div>
 			)}
+			{appointmentSoon && (
+				<div className="card card--pad mb-4" style={{ border: "2px solid var(--foreground)" }}>
+					<p className="eyebrow">Your visa appointment</p>
+					<p className="display mt-1" style={{ fontSize: "1.25rem" }}>
+						{when(vd.appointmentAt)}
+					</p>
+					{vd.appointmentCentre ? <p className="mt-1">{vd.appointmentCentre}</p> : null}
+					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+						Arrive early with your passport, the appointment confirmation and every document in your visa list below.
+					</p>
+				</div>
+			)}
 			{assigningHandler && (
 				<div className="card card--pad mb-4" style={{ background: "#fef9c3", borderColor: "#fde047" }}>
 					<p className="eyebrow" style={{ color: "#854d0e" }}>Assigning your visa officer</p>
@@ -4114,6 +4149,31 @@ function VisaTrackingInner() {
 					);
 				})}
 			</ol>
+			{application.visaDocumentChecklist.length > 0 && (
+				<div className="card card--pad mt-4">
+					<div className="between">
+						<p className="eyebrow">Your visa documents</p>
+						<span className="mono muted" style={{ fontSize: "0.75rem" }}>
+							{application.visaDocumentChecklist.filter((x) => x.status === "VERIFIED").length}/{application.visaDocumentChecklist.length} verified
+						</span>
+					</div>
+					<ul className="portal-snapshot mt-2">
+						{application.visaDocumentChecklist.map((x) => (
+							<li key={x.id}>
+								<span title={x.hint}>{x.name}</span>
+								<strong>
+									{x.status === "VERIFIED" ? "Verified" : x.status === "UPLOADED" ? "Under review" : x.status === "REJECTED" ? "Re-upload needed" : "Upload"}
+								</strong>
+							</li>
+						))}
+					</ul>
+					<div className="row mt-3">
+						<Button to="/portal/documents" variant="secondary" arrow>
+							Upload in your vault
+						</Button>
+					</div>
+				</div>
+			)}
 			<div className="card card--pad mt-5 next-action">
 				<p className="eyebrow">Continue</p>
 				{application.visaStatus === "complete" ? (

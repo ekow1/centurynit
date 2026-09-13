@@ -24,6 +24,8 @@ import {
 	DEFAULT_FEE_CENTS,
 	usdFromCents,
 	type TravelAssistanceRequest,
+	type VisaDetails,
+	type DocumentChecklistItem,
 } from "century-nit-shared";
 import {
 	APPLICATION_FEE,
@@ -271,6 +273,10 @@ export type ApplicationData = {
 	visaStatus: VisaStatus;
 	/** `refused` keeps the case at the decision step until the consultant reopens it. */
 	visaOutcome: "approved" | "refused" | null;
+	/** The visa application's facts, as the officer records them. */
+	visaDetails: VisaDetails;
+	/** The visa-stage documents — asked once the chapter opens. */
+	visaDocumentChecklist: DocumentChecklistItem[];
 	visaUpdatedAt: string | null;
 	/** Set to true once the Travel invoice (flights/ticketing) is fully paid */
 	travelInvoicePaid: boolean;
@@ -532,6 +538,8 @@ const defaultApplication: ApplicationData = {
 	postArrivalPaymentIndex: 0,
 	visaStatus: "locked",
 	visaOutcome: null,
+	visaDetails: {},
+	visaDocumentChecklist: [],
 	visaUpdatedAt: null,
 	travelInvoicePaid: false,
 	completedAt: null,
@@ -2238,6 +2246,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 					offerAcceptedAt: a.offerAcceptedAt ?? null,
 					visaStatus: (a.visaStage as VisaStatus) || prev.visaStatus,
 					visaOutcome: a.visaOutcome ?? null,
+					visaDetails: a.visaDetails ?? {},
+					visaDocumentChecklist: a.visaDocumentChecklist ?? [],
 					visaCounselorNote: a.visaCounselorNote ?? prev.visaCounselorNote,
 					visaInvoice: a.visaInvoicePaid
 						? {

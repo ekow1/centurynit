@@ -22,6 +22,8 @@ import {
 	listApplications,
 	serializeApplication,
 	setApplicationPackage,
+	setApplicationVisaStage,
+	updateVisaDetails,
 } from "./cases.js";
 import {
 	completeConsultationAssessment,
@@ -292,6 +294,21 @@ describe("the applicant journey, end to end", () => {
 		expect(serialized.journey?.chapterUnlocks).toEqual(journey.chapterUnlocks);
 		expect(serialized.journey?.chapterUnlocks?.visa).toBe(true);
 		expect(serialized.journey?.chapterUnlocks?.travel_assistance).toBe(false);
+		// The visa document set is asked once the chapter opens (consent given).
+		expect(serialized.visaDocumentChecklist.map((d) => d.id)).toContain("admission_letter");
+
+		// ── Visa facts: recorded milestone by milestone, merged, and told ──
+		await updateVisaDetails(appId, { visaType: "UK Student visa", reference: "GWF0001", appointmentAt: "2027-01-10T09:00:00.000Z", appointmentCentre: "VFS Accra" }, ACTOR);
+		await expect(setApplicationVisaStage(appId, "biometrics", undefined, ACTOR, undefined, { biometricsAt: "2027-01-10T12:00:00.000Z" })).rejects.toMatchObject({
+			code: "VISA_ASSIGNMENT_PENDING",
+		});
+		const [withFacts] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(withFacts.visaDetails).toMatchObject({ visaType: "UK Student visa", reference: "GWF0001", appointmentCentre: "VFS Accra" });
+		// `null` clears one fact and leaves the rest.
+		await updateVisaDetails(appId, { appointmentCentre: null }, ACTOR);
+		const [cleared] = await db.select().from(applications).where(eq(applications.id, appId));
+		expect(cleared.visaDetails).toMatchObject({ reference: "GWF0001" });
+		expect((cleared.visaDetails as Record<string, unknown>).appointmentCentre).toBeUndefined();
 
 		// The application timeline is assembled from what the walk wrote.
 		const events = await getApplicationActivity(appId);

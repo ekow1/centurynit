@@ -19,11 +19,13 @@ import {
 	patchApplicationSchema,
 	type ProceedQuotation,
 	permissionsGrant,
+	type VisaDetails,
+	VISA_STAGE_LABELS,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
 import { normalizeTravelStatus } from "./travelAssistance.js";
 import { livePermissions } from "./roles.js";
-import { documentChecklistForApplication } from "./documentChecklist.js";
+import { documentChecklistForApplication, visaDocumentChecklistFor } from "./documentChecklist.js";
 // Comments and document requests target either record; the consultation half lives next door.
 import { getConsultation } from "./consultations.js";
 import type { z } from "zod";
@@ -252,6 +254,9 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		getStageConsent(row.id, "travel"),
 		getTravelAssistanceStatusForApplication(row.id),
 	]);
+	// The visa set is only asked once the chapter has opened.
+	const visaDocumentChecklist =
+		row.visaStage !== "locked" || visaConsent?.decision === "continue" ? await visaDocumentChecklistFor(applicant?.userId) : [];
 
 	// Who owns which stage right now (visa / travel / finance specialists).
 	const stageHandlers = await db
@@ -304,6 +309,8 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		visaOutcome: (row.visaOutcome as "approved" | "refused" | null) ?? null,
 		visaInvoicePaid: row.visaInvoicePaid,
 		visaCounselorNote: row.visaCounselorNote,
+		visaDetails: (row.visaDetails ?? {}) as ApiApplication["visaDetails"],
+		visaDocumentChecklist,
 		paymentPlanId: row.paymentPlanId,
 		packageId: row.packageId,
 		packageSelectedAt: row.packageSelectedAt?.toISOString() ?? null,
@@ -1721,15 +1728,97 @@ export async function toggleApplicationChecklist(
 	return updated;
 }
 
+/* ── Visa facts ────────────────────────────────────────────────────────── */
+
+const VISA_DATE = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const VISA_DATETIME = (iso: string) =>
+	new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+/** A patch merged over the stored facts: `undefined` leaves a field, `null` clears it. */
+function mergeVisaDetails(current: VisaDetails | null | undefined, patch: VisaDetails | undefined): VisaDetails {
+	const next: VisaDetails = { ...(current ?? {}) };
+	for (const [k, v] of Object.entries(patch ?? {}) as [keyof VisaDetails, VisaDetails[keyof VisaDetails]][]) {
+		if (v === undefined) continue;
+		if (v === null || v === "") delete next[k];
+		else next[k] = v as never;
+	}
+	return next;
+}
+
+/** One line per fact recorded — what the case history says about this change. */
+function describeVisaDetails(patch: VisaDetails | undefined, merged: VisaDetails): string[] {
+	const lines: string[] = [];
+	if (!patch) return lines;
+	if (patch.visaType !== undefined || patch.reference !== undefined || patch.submittedAt !== undefined) {
+		const bits = [merged.visaType, merged.reference ? `ref ${merged.reference}` : null, merged.submittedAt ? `lodged ${VISA_DATE(merged.submittedAt)}` : null].filter(Boolean);
+		lines.push(`Visa application — ${bits.length ? bits.join(" · ") : "details cleared"}`);
+	}
+	if (patch.appointmentAt !== undefined || patch.appointmentCentre !== undefined) {
+		lines.push(
+			merged.appointmentAt
+				? `Visa appointment — ${VISA_DATETIME(merged.appointmentAt)}${merged.appointmentCentre ? ` · ${merged.appointmentCentre}` : ""}`
+				: "Visa appointment cleared",
+		);
+	}
+	if (patch.biometricsAt !== undefined) lines.push(merged.biometricsAt ? `Biometrics given — ${VISA_DATE(merged.biometricsAt)}` : "Biometrics date cleared");
+	if (patch.decidedAt !== undefined) lines.push(merged.decidedAt ? `Visa decision received — ${VISA_DATE(merged.decidedAt)}` : "Decision date cleared");
+	if (patch.validFrom !== undefined || patch.validTo !== undefined) {
+		lines.push(
+			merged.validFrom || merged.validTo
+				? `Visa valid ${merged.validFrom ? VISA_DATE(merged.validFrom) : "…"} → ${merged.validTo ? VISA_DATE(merged.validTo) : "…"}`
+				: "Visa validity cleared",
+		);
+	}
+	if (patch.collectedAt !== undefined) lines.push(merged.collectedAt ? `Passport / permit collected — ${VISA_DATE(merged.collectedAt)}` : "Collection date cleared");
+	return lines;
+}
+
+/** Record visa facts without moving the stage — the reference, the appointment, validity. */
+export async function updateVisaDetails(id: string, patch: VisaDetails, actor: Actor): Promise<ApplicationRow> {
+	const row = await getApplication(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const merged = mergeVisaDetails(row.visaDetails, patch);
+	const [updated] = await db
+		.update(applications)
+		.set({ visaDetails: merged, updatedAt: new Date() })
+		.where(eq(applications.id, id))
+		.returning();
+	const lines = describeVisaDetails(patch, merged);
+	if (lines.length > 0) {
+		await db.insert(caseComments).values({
+			targetType: "application",
+			targetId: id,
+			kind: "status",
+			visibility: "applicant",
+			text: lines.join("\n"),
+			authorName: actor.name,
+			authorOpsUserId: actor.opsUserId,
+		});
+		const clientUserId = await applicantUserIdOfApplication(id);
+		if (clientUserId && patch.appointmentAt) {
+			notify({
+				recipientUserId: clientUserId,
+				type: "visa.stage_changed",
+				title: "Visa appointment",
+				body: lines.find((l) => l.startsWith("Visa appointment")) ?? lines[0],
+				link: "/portal/visa/tracking",
+			}).catch(() => {});
+		}
+	}
+	return updated;
+}
+
 export async function setApplicationVisaStage(
 	id: string,
 	stage: ApplicationRow["visaStage"],
 	note: string | undefined,
 	actor: Actor,
 	outcome?: "approved" | "refused",
+	details?: VisaDetails,
 ): Promise<ApplicationRow> {
 	const row = await getApplication(id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const mergedDetails = mergeVisaDetails(row.visaDetails, details);
 
 	// The decision: a refusal is recorded at `decision` and stays there (the
 	// case is reopened for a reapplication by moving back to `pending`);
@@ -1775,21 +1864,27 @@ export async function setApplicationVisaStage(
 		.set({
 			visaStage: stage,
 			visaOutcome,
-			visaCounselorNote: note ?? row.visaCounselorNote,
+			// A refusal reason becomes the note the client reads; a reason for a
+			// plain move (a step back, a reopen) stays in the history only.
+			visaCounselorNote: outcome ? (note ?? row.visaCounselorNote) : row.visaCounselorNote,
+			visaDetails: mergedDetails,
 			updatedAt: new Date(),
 		})
 		.where(eq(applications.id, id))
 		.returning();
+	const factLines = describeVisaDetails(details, mergedDetails);
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: id,
 		kind: "status",
-		text:
+		text: [
 			visaOutcome === "refused"
 				? `Visa refused${note ? ` — ${note}` : ""}`
 				: visaOutcome === "approved"
 					? `Visa approved${note ? ` — ${note}` : ""}`
-					: `Visa stage → ${stage}`,
+					: `Visa stage → ${VISA_STAGE_LABELS[stage] ?? stage}${note ? ` — ${note}` : ""}`,
+			...factLines,
+		].join("\n"),
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});

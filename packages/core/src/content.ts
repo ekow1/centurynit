@@ -2415,12 +2415,39 @@ export const DOCUMENT_TYPES = [
 		name: "Passport photograph",
 		hint: "Recent, plain background, as required for visa forms",
 	},
+	// ── Visa stage ────────────────────────────────────────────────────────
+	{
+		id: "admission_letter",
+		name: "Admission letter / CAS / LOA / I-20",
+		hint: "The accepted school's official letter or sponsorship number the visa application is built on",
+	},
+	{
+		id: "visa_form",
+		name: "Visa application form",
+		hint: "The completed online form, as submitted, with the payment confirmation",
+	},
+	{
+		id: "tb_test",
+		name: "TB test certificate",
+		hint: "From an approved clinic, where the destination requires one",
+	},
+	{
+		id: "police_clearance",
+		name: "Police clearance",
+		hint: "Where the destination requires one — issued within the last 6 months",
+	},
 ] as const;
 
 export type DocumentTypeId = (typeof DOCUMENT_TYPES)[number]["id"];
 
 /** The standard set, asked of every client at consultation unless their package says otherwise. */
 export const DEFAULT_REQUIRED_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "transcript", "diploma", "statement", "recommendation", "english"];
+
+/**
+ * The visa-stage set: what the officer builds the application from. Asked
+ * once the visa chapter opens, on top of the consultation set.
+ */
+export const VISA_DOCUMENT_IDS: DocumentTypeId[] = ["passport", "photo", "financial", "admission_letter", "visa_form", "tb_test"];
 
 /** The standard set with its names and hints — what the vault renders when no package applies. */
 export const REQUIRED_DOCUMENTS = DOCUMENT_TYPES.filter((d) => (DEFAULT_REQUIRED_DOCUMENT_IDS as string[]).includes(d.id));
@@ -2450,6 +2477,10 @@ export const DOCUMENT_TYPE_CATEGORIES: Record<string, string> = {
 	sponsorship: "FINANCIAL",
 	recommendation: "ACADEMIC",
 	photo: "IDENTITY",
+	admission_letter: "VISA",
+	visa_form: "VISA",
+	tb_test: "VISA",
+	police_clearance: "VISA",
 	visa_receipt: "OFFICIAL",
 	flight_receipt: "OFFICIAL",
 	additional: "OTHER",

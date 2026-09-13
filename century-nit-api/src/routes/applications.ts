@@ -45,6 +45,7 @@ import {
 	setApplicationPackage,
 	setApplicationStage,
 	setApplicationVisaStage,
+	updateVisaDetails,
 
 	toggleApplicationChecklist,
 	updateApplication,
@@ -117,6 +118,7 @@ import {
 	requestDocumentsSchema,
 	setStageSchema,
 	setVisaStageSchema,
+	updateVisaDetailsSchema,
 	toggleChecklistSchema,
 
 
@@ -640,7 +642,31 @@ applicationsRouter.openapi(
 			body.note,
 			actorFrom(c.get("staff")!),
 			body.outcome,
+			body.details,
 		);
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── PATCH /applications/{id}/visa-details — the facts, without a stage move ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/{id}/visa-details",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: updateVisaDetailsSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "Visa facts recorded" },
+		},
+	}),
+	async (c) => {
+		await assertApplicationAccess(c, c.req.valid("param").id);
+		const updated = await updateVisaDetails(c.req.valid("param").id, c.req.valid("json"), actorFrom(c.get("staff")!));
 		return c.json(await serializeApplication(updated));
 	},
 );

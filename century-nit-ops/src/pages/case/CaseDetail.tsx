@@ -548,7 +548,17 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			)}
 
 			{current === "visa" && (
-				<VisaTab app={app} handoffs={handoffs} visaApiInvoice={visaApiInvoice} canIssueInvoices={canIssueInvoices} flash={flash} fail={fail} />
+				<VisaTab
+					app={app}
+					handoffs={handoffs}
+					visaApiInvoice={visaApiInvoice}
+					canIssueInvoices={canIssueInvoices}
+					canWork={canWork}
+					setTab={setTab}
+					onAssign={() => setAssignOpen(true)}
+					flash={flash}
+					fail={fail}
+				/>
 			)}
 
 			{current === "travel" && (

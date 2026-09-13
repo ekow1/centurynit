@@ -85,7 +85,11 @@ export function PortalDocumentVault() {
 		setLoadError(null);
 		try {
 			const [res, me] = await Promise.all([documentsApi.list(), meApi.application().catch(() => null)]);
-			const list = me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [];
+			const base = me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [];
+			// The visa set joins the list once the visa chapter has opened.
+			const visa = me?.application?.visaDocumentChecklist ?? [];
+			const seen = new Set(base.map((d) => d.id));
+			const list = [...base, ...visa.filter((d) => !seen.has(d.id))];
 			if (list.length > 0) setRequired(list.map((d) => ({ id: d.id, name: d.name, hint: d.hint })));
 			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
 		} catch (err) {

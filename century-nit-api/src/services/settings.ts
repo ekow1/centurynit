@@ -53,17 +53,6 @@ export type SettingKey =
 	| "WEEKLY_SLOT_SCHEDULE"
 	| "PAYSTACK_SECRET_KEY"
 	| "STRIPE_SECRET_KEY"
-	| "APP_BASE_FEE_CENTS"
-	| "APP_PER_SCHOOL_FEE_CENTS"
-	| "APP_DOC_VERIFY_FEE_CENTS"
-	| "APP_MATCH_REVIEW_FEE_CENTS"
-	| "VISA_BASE_FEE_CENTS"
-	| "VISA_BIOMETRICS_FEE_CENTS"
-	| "VISA_TRANSLATION_FEE_CENTS"
-	| "CONSULTATION_FEE_CENTS"
-	| "TRAVEL_COORDINATION_FEE_CENTS"
-	| "HOUSING_ASSISTANCE_FEE_CENTS"
-	| "PRE_DEPARTURE_BRIEFING_FEE_CENTS"
 	| "PLATFORM_EXCHANGE_RATE"
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
@@ -255,87 +244,6 @@ export const SETTING_DEFS: Record<
 		description:
 			"Server-side Stripe key used for international USD/GBP card checkouts. Starts with sk_live_ or sk_test_.",
 	},
-	APP_BASE_FEE_CENTS: {
-		label: "Application Base Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Application processing base fee in USD cents. Default: 35000 ($350).",
-	},
-	APP_PER_SCHOOL_FEE_CENTS: {
-		label: "Per-School Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Per-university application fee in USD cents. Default: 10000 ($100).",
-	},
-	APP_DOC_VERIFY_FEE_CENTS: {
-		label: "Document Verification Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Document verification and courier fee in USD cents. Default: 4000 ($40).",
-	},
-	APP_MATCH_REVIEW_FEE_CENTS: {
-		label: "Match Review Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Course matching and credit evaluation fee in USD cents. Default: 3000 ($30).",
-	},
-	VISA_BASE_FEE_CENTS: {
-		label: "Visa Base Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Visa processing base fee in USD cents. Default: 35000 ($350).",
-	},
-	VISA_BIOMETRICS_FEE_CENTS: {
-		label: "Visa Biometrics Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Visa biometrics appointment booking fee in USD cents. Default: 4000 ($40).",
-	},
-	VISA_TRANSLATION_FEE_CENTS: {
-		label: "Visa Translation Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Document translation assistance fee in USD cents. Default: 3000 ($30).",
-	},
-	CONSULTATION_FEE_CENTS: {
-		label: "Consultation Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Initial consultation fee in USD cents. Default: 7500 ($75).",
-	},
-	TRAVEL_COORDINATION_FEE_CENTS: {
-		label: "Travel Coordination Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Flight and travel booking assistance fee in USD cents. Default: 5000 ($50).",
-	},
-	HOUSING_ASSISTANCE_FEE_CENTS: {
-		label: "Housing Assistance Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Student housing and accommodation guidance fee in USD cents. Default: 10000 ($100).",
-	},
-	PRE_DEPARTURE_BRIEFING_FEE_CENTS: {
-		label: "Pre-Departure Briefing Fee (cents)",
-		group: "Fee Schedule",
-		secret: false,
-		description: "Pre-departure and airport arrival support fee in USD cents. Default: 4000 ($40).",
-	},
-
-	FEE_ISSUANCE_MODES: {
-		label: "Fee Issuance Modes",
-		group: "Finance",
-		secret: false,
-		description: "JSON array of per-fee issuance mode preferences.",
-		hidden: true,
-	},
-	CUSTOM_FEE_ITEMS: {
-		label: "Custom Fee Items",
-		group: "Finance",
-		secret: false,
-		description: "JSON array of dynamically created fee objects.",
-		hidden: true,
-	}
 };
 
 

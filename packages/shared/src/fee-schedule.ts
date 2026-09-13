@@ -1,11 +1,12 @@
 /**
- * Published Century NIT fee schedule — integer USD cents.
+ * Legacy fee shape, kept for the portal's offline fallback only.
  *
- * Portal previews, proforma generation and the ops review modal all read these
- * defaults. Live deployments may override them via the non-secret Fee Schedule
- * keys in platform settings; the numbers here are what a clean install uses.
- *
- * Never store these as formatted currency strings.
+ * The API prices nothing from these numbers any more: Century's fee is the
+ * package's service fee plus the fee catalogue's items (GET /api/v1/fees),
+ * and the universities' application fees and destinations' visa costs are
+ * third-party tariffs on the catalogue rows, paid on the client's behalf at
+ * cost. `feesApi.schedule()` fills this shape from the catalogue, with the
+ * charges that are no longer Century's at zero.
  */
 
 export const DEFAULT_FEE_CENTS = {

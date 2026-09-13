@@ -213,7 +213,7 @@ bookingsRouter.openapi(
 		const body = c.req.valid("json");
 		const origin = c.req.header("origin") || c.req.header("referer")?.split("/").slice(0, 3).join("/") || "https://centurynit.softclicksolutions.com";
 
-		// Live consultation fee from platform_settings (CONSULTATION_FEE_CENTS),
+		// The consultation fee from the fee catalogue,
 		// falling back to the shared default when unset. Previously hardcoded at
 		// 7500 cents ($75), so Paystack always charged GHS 1,125 regardless of
 		// what ops configured.

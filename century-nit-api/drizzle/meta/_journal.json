@@ -582,6 +582,13 @@
       "when": 1789600011000,
       "tag": "0084_fee_catalogue",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1789600012000,
+      "tag": "0085_drop_fee_settings",
+      "breakpoints": true
     }
   ]
 }

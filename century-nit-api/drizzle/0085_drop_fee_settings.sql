@@ -1,0 +1,8 @@
+-- The fee catalogue (0084) replaced the per-fee settings keys; their rows are
+-- dead weight now — and the issuance-mode / custom-item JSON was never read.
+DELETE FROM "platform_settings" WHERE "key" IN (
+	'APP_BASE_FEE_CENTS', 'APP_PER_SCHOOL_FEE_CENTS', 'APP_DOC_VERIFY_FEE_CENTS', 'APP_MATCH_REVIEW_FEE_CENTS',
+	'VISA_BASE_FEE_CENTS', 'VISA_BIOMETRICS_FEE_CENTS', 'VISA_TRANSLATION_FEE_CENTS', 'CONSULTATION_FEE_CENTS',
+	'TRAVEL_COORDINATION_FEE_CENTS', 'HOUSING_ASSISTANCE_FEE_CENTS', 'PRE_DEPARTURE_BRIEFING_FEE_CENTS',
+	'FEE_ISSUANCE_MODES', 'CUSTOM_FEE_ITEMS'
+);

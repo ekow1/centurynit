@@ -1,9 +1,21 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Button";
-import { useAppState, type PendingAction } from "../../context/AppState";
+import { useAppState } from "../../context/AppState";
 import { PROCESS_STAGES, type ProcessStageId } from "century-nit-core";
+import {
+	CHAPTERS,
+	PORTAL_STAGE_ORDER,
+	PORTAL_STEP_CHAPTER,
+	type ChapterId,
+	type PortalStepId,
+	type Booking,
+} from "century-nit-shared";
+import { bookingsApi, documentsApi, meApi } from "century-nit-core/api";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
+import { ConsultantUpdates } from "./ConsultantUpdates";
+import { MoneyInline } from "../../components/ui/Money";
 
 /**
  * Where "continue" goes for the current stage, with a verb that names the
@@ -66,16 +78,32 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };
 
-/** Which snapshot stat cell a pending action belongs to (for the hot-link hint). */
-function statCellForAction(a: PendingAction | null): "consultation" | "app_invoice" | "visa_invoice" | null {
-	if (!a) return null;
-	if (a.kind === "appointment") return "consultation";
-	if (a.kind === "app_invoice") return "app_invoice";
-	if (a.kind === "visa_invoice") return "visa_invoice";
-	return null;
+/** Each chapter's home page, for the strip. */
+const CHAPTER_PATH: Record<ChapterId, string> = {
+	consult: "/portal/consultation",
+	enrol: "/portal/package",
+	apply: "/portal/application",
+	visa: "/portal/visa",
+	depart: "/portal/pre-departure",
+	done: "/portal/complete",
+};
+
+function chapterStateOf(
+	ch: ChapterId,
+	current: ProcessStageId,
+	statuses: Record<string, "done" | "current" | "locked" | "skipped"> | null,
+): "done" | "current" | "locked" {
+	if (PORTAL_STEP_CHAPTER[current as PortalStepId] === ch) return "current";
+	const steps = PORTAL_STAGE_ORDER.filter((s) => PORTAL_STEP_CHAPTER[s as PortalStepId] === ch);
+	if (steps.length === 0) return "locked";
+	const done = steps.every((s) => {
+		const st = statuses?.[s];
+		return st === "done" || st === "skipped";
+	});
+	return done ? "done" : "locked";
 }
 
-/** Overview - one glance: what to do next, where you are, and your references. */
+/** Overview - one glance: what to do next, where you are, and who is on it. */
 export function DashboardHome() {
 	const {
 		journeyPhase,
@@ -84,29 +112,70 @@ export function DashboardHome() {
 		booking,
 		schoolApplications,
 		authUser,
+		stageStatuses,
 	} = useAppState();
 	const { syncFromServer } = useAppState();
 	const current = journeyPhase.stage;
 	const cta = currentStageCta(current, application.proceedStatus);
 	const meta = STAGE_META[current];
 	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
-	const hotCell = statCellForAction(pendingAction);
-	const selectionConfirmed = Boolean(application.schoolSelectionDoneAt);
 
 	// Reference ID depends on the stage:
 	// consultation ref exists once the consultation is booked+paid,
 	// application ID exists once the application invoice is paid.
 	const consultationRef = booking.confirmationId;
 	const applicationId = application.appNumber;
-	const appInvoice = application.applicationInvoice;
-	const visaInvoice = application.visaInvoice;
 
-	const consultationStatus =
-		booking.paymentStatus === "success" && booking.confirmationId
-			? "Booked & paid"
-			: booking.consultationType
-				? "Draft"
-				: "Not started";
+	const currentChapter = PORTAL_STEP_CHAPTER[current as PortalStepId] as ChapterId | undefined;
+
+	/* ── Rail data: money position, next appointment, documents on file ── */
+	const [money, setMoney] = useState<{ paid: number; due: number; next: string | null } | null>(null);
+	const [nextAppt, setNextAppt] = useState<Booking | null>(null);
+	const [docsOnFile, setDocsOnFile] = useState<number | null>(null);
+
+	useEffect(() => {
+		let alive = true;
+		meApi
+			.invoices()
+			.then(({ invoices }) => {
+				if (!alive) return;
+				const live = invoices.filter((i) => i.status !== "void");
+				const paid =
+					live
+						.filter((i) => i.status === "paid")
+						.reduce((n, i) => n + i.subtotalCents - i.balanceCents, 0) / 100 +
+					(booking.paymentStatus === "success" ? 0 : 0);
+				const dueList = live.filter((i) => i.balanceCents > 0 && i.status !== "proforma");
+				const due = dueList.reduce((n, i) => n + i.balanceCents, 0) / 100;
+				setMoney({
+					paid,
+					due,
+					next: dueList[0] ? `${dueList[0].invoiceNumber}` : null,
+				});
+			})
+			.catch(() => {});
+		bookingsApi
+			.list()
+			.then(({ bookings }) => {
+				if (!alive) return;
+				const upcoming = bookings
+					.filter((b) => b.status !== "CANCELLED" && new Date(b.startsAt).getTime() > Date.now())
+					.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+				setNextAppt(upcoming[0] ?? null);
+			})
+			.catch(() => {});
+		documentsApi
+			.list()
+			.then((res) => {
+				if (alive) setDocsOnFile(res.documents.length);
+			})
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+	}, [booking.paymentStatus]);
+
+	const offersCount = schoolApplications.filter((s) => s.outcome === "Admitted").length;
 
 	return (
 		<div className="portal-page dash-home">
@@ -116,7 +185,7 @@ export function DashboardHome() {
 					Welcome{authUser ? `, ${authUser.name.split(" ")[0]}` : ""}
 				</h1>
 				<p className="lead mt-2">
-					One glance at your journey - where you are, your reference, and what happens next.
+					One glance at your journey — where you are, what needs you, and who is on your file.
 				</p>
 				<div className="dash-refs">
 					<span className="dash-ref">
@@ -126,7 +195,7 @@ export function DashboardHome() {
 						Consultation reference · <strong>{consultationRef ?? "Not booked"}</strong>
 					</span>
 				</div>
-		</header>
+			</header>
 
 			{/* Assessment Outcome & Consent Decision */}
 			{current === "proceed" && (
@@ -144,7 +213,7 @@ export function DashboardHome() {
 				/>
 			)}
 
-			{/* Action required OR You are here - unified block to prevent duplicate competing banners */}
+			{/* The one ask — action required, else where you stand */}
 			{current !== "proceed" && (pendingAction ? (
 				<div className="action-now mt-5">
 					<div>
@@ -174,54 +243,164 @@ export function DashboardHome() {
 				</div>
 			))}
 
-			{/* Snapshot - stat cells double as shortcuts; the cell belonging to a
-			    pending action is highlighted so the way to resolve it is one click. */}
+			{/* The six chapters, at a glance — the journey map's edge into home */}
 			{current !== "proceed" && (
-				<div className="stat-band mt-5">
-					<Link
-						to="/portal/consultation"
-						className={`stat-cell stat-cell--link${hotCell === "consultation" ? " stat-cell--cta" : ""}`}
-					>
-						<p className="stat-cell__label">
-							{hotCell === "consultation" ? "Action required" : "Consultation"}
-						</p>
-						<p className="stat-cell__value stat-cell__value--sm">
-							{hotCell === "consultation" ? "Confirm →" : consultationStatus}
-						</p>
-					</Link>
-					<Link
-						to="/portal/financial"
-						className={`stat-cell stat-cell--link${hotCell === "app_invoice" ? " stat-cell--cta" : ""}`}
-					>
-						<p className="stat-cell__label">
-							{hotCell === "app_invoice" ? "Action required" : "Application invoice"}
-						</p>
-						<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
-							{hotCell === "app_invoice" ? "Pay now →" : appInvoice.status}
-						</p>
-						<p className="stat-cell__sub">
-							{schoolApplications.length} school{schoolApplications.length === 1 ? "" : "s"}
-							{selectionConfirmed ? " · selection locked" : ""}
-						</p>
-					</Link>
-					<Link
-						to="/portal/visa"
-						className={`stat-cell stat-cell--link${hotCell === "visa_invoice" ? " stat-cell--cta" : ""}`}
-					>
-						<p className="stat-cell__label">
-							{hotCell === "visa_invoice" ? "Action required" : "Visa invoice"}
-						</p>
-						<p className="stat-cell__value stat-cell__value--sm stat-cell__value--cap">
-							{hotCell === "visa_invoice" ? "Pay now →" : visaInvoice.status}
-						</p>
-						<p className="stat-cell__sub">
-							{application.paymentPlanId ? (
-								<>Plan · {application.paymentPlanId}</>
+				<div className="jmini mt-4">
+					{CHAPTERS.map((ch) => {
+						const st = chapterStateOf(ch.id, current, stageStatuses);
+						return (
+							<Link
+								key={ch.id}
+								to={CHAPTER_PATH[ch.id]}
+								className={`jmini--${st === "current" ? "now" : st}`}
+							>
+								<span className="jmini__n">{st === "done" ? "✓" : ch.numeral}</span>
+								<p className="jmini__name">{ch.label}</p>
+								<p className="jmini__st">
+									{st === "done" ? "Done" : st === "current" ? "You are here" : "Locked"}
+								</p>
+							</Link>
+						);
+					})}
+				</div>
+			)}
+
+			{current !== "proceed" && (
+				<div className="psplit mt-5">
+					<div>
+						{/* Now — the live detail of the chapter you are in */}
+						<div className="psec">
+							<span className="psec__title">Now · {CHAPTERS.find((c) => c.id === currentChapter)?.label ?? meta.title}</span>
+							<span className="psec__hint">
+								{currentChapter === "apply" && schoolApplications.length > 0
+									? `${schoolApplications.length} school${schoolApplications.length === 1 ? "" : "s"} filed`
+									: (STAGE_SHORT[current] ?? stageMeta?.label ?? "")}
+							</span>
+						</div>
+						<div className="nowlist">
+							{currentChapter === "apply" && schoolApplications.length > 0 ? (
+								<>
+									{schoolApplications.map((s) => (
+										<div key={s.id} className="nowlist__row">
+											<span>
+												<strong>{s.universityName ?? "University"}</strong>
+												{s.programName ? ` · ${s.programName}` : ""}
+											</span>
+											<span className={`portal-pill${s.outcome === "Admitted" ? " portal-pill--solid" : ""}`}>
+												{s.outcome ?? s.status}
+											</span>
+										</div>
+									))}
+									<div className="nowlist__row nowlist__foot">
+										<span>
+											{offersCount > 0
+												? `${offersCount} offer${offersCount === 1 ? "" : "s"} in — accepting one opens the visa chapter.`
+												: "Your handler lodges each file and chases replies — changes land here first."}
+										</span>
+										<Link to="/portal/application" className="jlink">Open applications →</Link>
+									</div>
+								</>
 							) : (
-								"No payment plan"
+								<div className="nowlist__row nowlist__foot" style={{ borderTop: "none" }}>
+									<span>{meta.desc}</span>
+									<Link to={cta.to} className="jlink">{cta.label} →</Link>
+								</div>
 							)}
+						</div>
+
+						{/* From your file — the consultant's latest notes, newest first */}
+						<ConsultantUpdates comments={application.comments} limit={3} title="From your file" className="mt-4" />
+						<p className="mt-3">
+							<Link to="/portal/journey" className="jlink">Open the journey map →</Link>
 						</p>
-					</Link>
+					</div>
+
+					{/* The rail — money, calendar, people, documents */}
+					<div className="prail">
+						<div className="sharp-card sharp-card--key">
+							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
+							{money ? (
+								<>
+									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.25)" }}>
+										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.55)" }}>Paid to date</span>
+										<span className="pkv__v"><strong><MoneyInline usd={money.paid} /></strong></span>
+									</div>
+									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.25)" }}>
+										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.55)" }}>Due now</span>
+										<span className="pkv__v">{money.due > 0 ? <MoneyInline usd={money.due} /> : "—"}</span>
+									</div>
+								</>
+							) : (
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", color: "rgba(255,255,255,0.7)" }}>
+									Loading your ledger…
+								</p>
+							)}
+							<p style={{ marginTop: "0.8rem" }}>
+								<Link to="/portal/financial" className="jlink" style={{ color: "rgba(255,255,255,0.85)" }}>Open the ledger →</Link>
+							</p>
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">Next appointment</p>
+							{nextAppt ? (
+								<>
+									<div className="appt-mini">
+										<div className="appt-mini__date">
+											<b>{new Date(nextAppt.startsAt).getDate()}</b>
+											<span>{new Date(nextAppt.startsAt).toLocaleDateString(undefined, { month: "short" })}</span>
+										</div>
+										<div>
+											<p style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{nextAppt.serviceName}</p>
+											<p className="mono muted" style={{ fontSize: "0.62rem" }}>
+												{new Date(nextAppt.startsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+												{" · "}{nextAppt.type === "online" ? "Online" : "In person"}
+												{nextAppt.employeeName ? ` · ${nextAppt.employeeName}` : ""}
+											</p>
+										</div>
+									</div>
+									<p style={{ marginTop: "0.8rem" }}>
+										<Link to="/portal/appointments" className="jlink">Join / manage →</Link>
+									</p>
+								</>
+							) : (
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem" }}>
+									Nothing scheduled.
+								</p>
+							)}
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">Your people</p>
+							<div style={{ marginTop: "0.4rem" }}>
+								<div className="pkv">
+									<span className="pkv__k">Consultant</span>
+									<span className="pkv__v">{booking.consultantName ?? application.assignedStaffName ?? "Assigning…"}</span>
+								</div>
+								<div className="pkv">
+									<span className="pkv__k">Handler</span>
+									<span className="pkv__v">{application.assignedStaffName ?? "—"}</span>
+								</div>
+								<div className="pkv">
+									<span className="pkv__k">Travel officer</span>
+									<span className="pkv__v">{application.travelAssistance?.assignedOpsUserName ?? "assigned later"}</span>
+								</div>
+							</div>
+							<p className="muted" style={{ fontSize: "0.72rem", marginTop: "0.6rem" }}>
+								Message any of them through the chat, bottom right.
+							</p>
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">Documents</p>
+							<div className="pkv" style={{ marginTop: "0.4rem" }}>
+								<span className="pkv__k">On file</span>
+								<span className="pkv__v"><strong>{docsOnFile !== null ? `${docsOnFile}` : "—"}</strong></span>
+							</div>
+							<p style={{ marginTop: "0.8rem" }}>
+								<Link to="/portal/documents" className="jlink">Open the vault →</Link>
+							</p>
+						</div>
+					</div>
 				</div>
 			)}
 

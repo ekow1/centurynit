@@ -31,7 +31,6 @@ import {
 	AGENCY_DEPOSIT_PORTION,
 	APPLICANT_COUNTRIES,
 	POST_ARRIVAL_SCHEDULES,
-	formatDualCurrency,
 	getDestination,
 	getProgram,
 	getUniversity,
@@ -126,7 +125,6 @@ export function PortalProfile() {
 		interview,
 		updateAssessment,
 		updateAccount,
-		fees,
 		setAvatarImage,
 		schoolApplications,
 	} = useAppState();
@@ -200,14 +198,6 @@ export function PortalProfile() {
 		authUser?.name || [a.firstName, a.lastName].filter(Boolean).join(" ") || "Century Applicant";
 
 	const eligibility = booking.eligibilityOutcome.replace("_", " ");
-	const eligibilityVariant =
-		booking.eligibilityOutcome.toLowerCase().includes("eligible") && !booking.eligibilityOutcome.toLowerCase().includes("not")
-			? "eligible"
-			: booking.eligibilityOutcome.toLowerCase().includes("conditional")
-				? "conditional"
-					: booking.eligibilityOutcome.toLowerCase().includes("not_eligible")
-						? "not_eligible"
-						: "pending";
 	const uploadedDocs = liveDocs ? liveDocs.size : 0;
 	const totalDocs = REQUIRED_DOCUMENTS.length;
 
@@ -367,285 +357,144 @@ export function PortalProfile() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dossier / Account Record</p>
-					<h1 className="page-title mt-1">Applicant Dossier</h1>
+					<p className="eyebrow">Profile</p>
+					<h1 className="page-title mt-1">Your file</h1>
 					<p className="lead mt-2">
-						Comprehensive record holding your identity, assessment qualifications, study aspirations, and verified documents.
+						What Century NIT holds on you — identity, qualifications, aspirations, documents.
+						Edit in place; your consultant sees the same record.
 					</p>
 				</div>
 			</header>
 
-			{/* Dossier Cover */}
-			<section className="profile-hero-card mt-4">
-				<div className="profile-hero">
-					<div className="profile-hero__main">
-						<div className="profile-avatar" style={{ position: "relative" }}>
-							<Avatar name={fullName} image={authUser?.image} className="profile-monogram" />
-							<button
-								type="button"
-								className="profile-avatar__overlay-btn"
-								onClick={() => setAvatarOpen(true)}
-								title="Change photo"
-							>
-								<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-									<path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
-								</svg>
-							</button>
-						</div>
-						<div>
-							<div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-								<p className="display profile-hero__name" style={{ margin: 0 }}>{fullName}</p>
-								<span className={`profile-eligibility profile-eligibility--${eligibilityVariant}`}>
-									{eligibility}
-								</span>
-							</div>
-							<p className="profile-hero__meta">{authUser?.email || a.email || "No email on file"}</p>
-							<p className="mono profile-hero__meta mt-1">
-								Signed in via {signInMethodLabel(authUser?.method)}
-								{authUser?.signedInAt
-									? ` · ${new Date(authUser.signedInAt).toLocaleString()}`
-									: ""}
-							</p>
-						</div>
-					</div>
-					<div className="profile-hero__side">
-						<button
-							type="button"
-							className="btn btn--primary"
-							onClick={() =>
-								editing === "account"
-									? setEditing(null)
-									: startEdit("account", { name: fullName })
-							}
-							aria-expanded={editing === "account"}
-						>
-							{editing === "account" ? "Cancel" : "Edit account"}
-						</button>
-					</div>
+			{/* The cover — who this file is, references at a glance */}
+			<section className="pcover mt-4">
+				<div className="profile-avatar" style={{ position: "relative" }}>
+					<Avatar name={fullName} image={authUser?.image} className="profile-monogram" />
+					<button
+						type="button"
+						className="profile-avatar__overlay-btn"
+						onClick={() => setAvatarOpen(true)}
+						title="Change photo"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+							<path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>
+						</svg>
+					</button>
 				</div>
-
-				{editing === "account" ? (
-					<div className="profile-edit mt-4 pt-3" style={{ borderTop: "1px solid var(--border-light)" }}>
-						<ProfileEditForm
-							fields={ACCOUNT_FIELDS}
-							draft={draft}
-							errors={errors}
-							saving={saving === "account"}
-							onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-							onCancel={() => setEditing(null)}
-							onSave={saveAccount}
-						/>
-						<p className="profile-hero__note mt-2">
-							To change your email, use the{" "}
-							<button
-								type="button"
-								className="link-arrow"
-								onClick={() => {
-									setEditing(null);
-									setChangeEmailOpen(true);
-								}}
-							>
-								Change email flow
-							</button>
-							.
-						</p>
-					</div>
-				) : null}
-
-				<div className="profile-refs">
-					<div className="profile-ref">
-						<p className="profile-ref__label">Application ID</p>
-						<p className="profile-ref__value mono">
-							{a.appNumber ?? <span className="profile-hero__empty">Not issued yet</span>}
-						</p>
-					</div>
-					<div className="profile-ref">
-						<p className="profile-ref__label">Consultation reference</p>
-						<p className="profile-ref__value mono">
-							{booking.confirmationId ?? <span className="profile-hero__empty">Not booked</span>}
-						</p>
-					</div>
-					<div className="profile-ref">
-						<p className="profile-ref__label">Documents on file</p>
-						<p className="profile-ref__value mono">
-							{liveDocs ? `${uploadedDocs}/${totalDocs}` : <span className="profile-hero__empty">-</span>}
-						</p>
-					</div>
-					<div className="profile-ref">
-						<p className="profile-ref__label">Target Intake</p>
-						<p className="profile-ref__value mono">
-							{titleCase(a.intake || ass.intakePreference) || <span className="profile-hero__empty">Not set</span>}
-						</p>
-					</div>
+				<div>
+					<p className="eyebrow">Applicant · {eligibility}</p>
+					<p className="pcover__name">{fullName}</p>
+					<p className="pcover__meta">
+						{authUser?.email || a.email || "No email on file"} · signed in via {signInMethodLabel(authUser?.method)}
+						{authUser?.signedInAt ? ` · since ${new Date(authUser.signedInAt).toLocaleString()}` : ""}
+					</p>
+					<button
+						type="button"
+						className="jlink mt-2"
+						style={{ color: "rgba(255,255,255,0.85)" }}
+						onClick={() =>
+							editing === "account"
+								? setEditing(null)
+								: startEdit("account", { name: fullName })
+						}
+						aria-expanded={editing === "account"}
+					>
+						{editing === "account" ? "Cancel edit" : "Edit account →"}
+					</button>
+				</div>
+				<div className="pcover__refs">
+					<div><p className="pcover__k">Application</p><p className="pcover__v">{a.appNumber ?? "Not issued"}</p></div>
+					<div><p className="pcover__k">Consultation</p><p className="pcover__v">{booking.confirmationId ?? "Not booked"}</p></div>
+					<div><p className="pcover__k">Documents</p><p className="pcover__v">{liveDocs ? `${uploadedDocs}/${totalDocs}` : "—"}</p></div>
+					<div><p className="pcover__k">Intake</p><p className="pcover__v">{titleCase(a.intake || ass.intakePreference) || "—"}</p></div>
 				</div>
 			</section>
 
-			{/* Dossier Panels */}
-			<div className="dossier-panel" style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "2rem" }}>
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Academic Path &amp; Target Application</h2>
-								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-									STATUS: {uploadedDocs < totalDocs ? "IN PROGRESS" : "APPLICATION SUBMITTED"}
-								</span>
-							</div>
-							<div className="dossier-grid">
-								<DossierField label="Target Destination" value={targetDestination} />
-								<DossierField label="Target Institution" value={targetInstitution} />
-								<DossierField label="Academic Programme" value={targetProgram} />
-								<DossierField label="Target Intake" value={titleCase(a.intake || ass.intakePreference)} />
-								<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
-								<DossierField label="Payment Plan" value={planName || "Direct / Unassigned"} />
-								<DossierField label="Schools Selection" value={a.schoolSelectionDoneAt ? "Confirmed" : "In Progress"} />
-							</div>
-						</div>
+			{editing === "account" ? (
+				<div className="sharp-card mt-3">
+					<ProfileEditForm
+						fields={ACCOUNT_FIELDS}
+						draft={draft}
+						errors={errors}
+						saving={saving === "account"}
+						onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+						onCancel={() => setEditing(null)}
+						onSave={saveAccount}
+					/>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>
+						To change your email, use the{" "}
+						<button
+							type="button"
+							className="jlink"
+							onClick={() => {
+								setEditing(null);
+								setChangeEmailOpen(true);
+							}}
+						>
+							Change email flow
+						</button>
+						.
+					</p>
+				</div>
+			) : null}
 
-						<div className="dossier-card">
+			<div className="psplit psplit--profile mt-4">
+				{/* The index — jump, don't scroll */}
+				<nav className="pindex" aria-label="File sections">
+					<a href="#p-identity"><span>Identity</span><span className="pindex__n">01</span></a>
+					<a href="#p-passport"><span>Passport</span><span className="pindex__n">02</span></a>
+					<a href="#p-academics"><span>Academics &amp; work</span><span className="pindex__n">03</span></a>
+					<a href="#p-aspirations"><span>Aspirations</span><span className="pindex__n">04</span></a>
+					<a href="#p-record"><span>On record</span><span className="pindex__n">05</span></a>
+					<a href="#p-documents"><span>Documents</span><span className="pindex__n">06</span></a>
+					<a href="#p-security"><span>Security</span><span className="pindex__n">07</span></a>
+				</nav>
+
+				<div>
+					{editing === "assessment" ? (
+						<div className="dossier-card" id="p-identity">
 							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Consultation &amp; Advisory Record</h2>
-								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-									REF: {booking.confirmationId || "—"}
-								</span>
+								<h2 className="dossier-card__title">Editing your background</h2>
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>IDENTITY · PASSPORT · ACADEMICS</span>
 							</div>
-							<div className="dossier-grid">
-								<DossierField label="Format" value={consultationTypeLabel(booking.consultationType) || "Scheduled Consultation"} />
-								<DossierField label="Scheduled Date" value={booking.date || "Pending schedule"} />
-								<DossierField label="Scheduled Time" value={booking.time || "Pending schedule"} />
-								<DossierField label="Century Office" value={getBranchName(booking.branchId)} />
-								<DossierField label="Location" value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ") || "Virtual / Remote"} />
-								<DossierField
-									label="Consultation Fee"
-									value={
-										booking.paymentStatus === "success"
-											? `Paid · ${formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents))}`
-											: "Unpaid / Pending"
-									}
+							<div className="mt-2" style={{ padding: "0 1.25rem 1.25rem" }}>
+								<ProfileEditForm
+									fields={ASSESSMENT_FIELDS}
+									draft={draft}
+									errors={errors}
+									saving={saving === "assessment"}
+									onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+									onCancel={() => setEditing(null)}
+									onSave={saveAssessment}
 								/>
-								<DossierField label="Eligibility Assessment" value={eligibility} />
-								<DossierField label="Evaluator Notes" value={booking.eligibilityNote || "Initial profile submitted."} />
 							</div>
 						</div>
-
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Required Documents Status</h2>
-								<Link to="/portal/documents" className="profile-edit-btn">
-									Open Document Vault →
-								</Link>
-							</div>
-							<p className="mono muted mb-3" style={{ fontSize: "var(--text-xs)" }}>
-								{liveDocs ? `${uploadedDocs} of ${totalDocs} required documents uploaded or verified` : "Loading documents..."}
-							</p>
-							<ul className="profile-docs">
-								{REQUIRED_DOCUMENTS.map((r) => {
-									const live = liveDocs?.get(r.id) ?? null;
-									const status = live
-										? live.status === "VERIFIED"
-											? "verified"
-											: live.status === "REJECTED"
-												? "rejected"
-												: "uploaded"
-										: "missing";
-									return (
-										<li key={r.id} className="profile-doc">
-											<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
-											<span className={`portal-pill portal-pill--${status}`}>
-												{status}
-											</span>
-											{live?.id ? (
-												<button
-													type="button"
-													className="profile-doc__action"
-													onClick={async () => {
-														try {
-															const { url } = await documentsApi.downloadUrl(live.id);
-															window.open(url, "_blank", "noopener,noreferrer");
-														} catch {
-															toast.error("Could not open the document. Please try again.");
-														}
-													}}
-												>
-													View
-												</button>
-											) : (
-												<label className="profile-doc__action" style={{ cursor: "pointer", display: "inline-block" }}>
-													Upload
-													<input
-														type="file"
-														hidden
-														accept={ALLOWED_DOCUMENT_TYPES.join(",")}
-														onChange={async (e) => {
-															const file = e.target.files?.[0];
-															if (!file) return;
-															if (file.size > MAX_DOCUMENT_BYTES) {
-																toast.error(`${file.name} is larger than 15 MB.`);
-																return;
-															}
-															try {
-																toast.info(`Uploading ${file.name}...`);
-																const ready = await prepareDocumentForUpload(file, () => {});
-																const saved = await documentsApi.upload(ready, r.id, { onProgress: () => {} });
-																setLiveDocs(prev => new Map(prev ?? []).set(saved.documentType, saved));
-																toast.success(`${file.name} uploaded successfully.`);
-															} catch {
-																toast.error("Could not upload. Please try again.");
-															}
-															e.target.value = "";
-														}}
-													/>
-												</label>
-											)}
-										</li>
-									);
-								})}
-							</ul>
-						</div>
-
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Personal &amp; Contact Background</h2>
-								<button
-									type="button"
-									className="profile-edit-btn"
-									onClick={() =>
-										editing === "assessment"
-											? setEditing(null)
-											: startEdit(
-													"assessment",
-													Object.fromEntries(
-														ASSESSMENT_FIELDS.map((f) => [
-															f.key,
-															(f.key === "phone"
-																? ass.phone || a.phone
-																: scalar(ass, f.key)) ?? "",
-														]),
-													),
-												)
-									}
-									aria-expanded={editing === "assessment"}
-								>
-									{editing === "assessment" ? "Cancel" : "Edit Background"}
-								</button>
-							</div>
-
-							{editing === "assessment" ? (
-								<div className="mt-2">
-									<ProfileEditForm
-										fields={ASSESSMENT_FIELDS}
-										draft={draft}
-										errors={errors}
-										saving={saving === "assessment"}
-										onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-										onCancel={() => setEditing(null)}
-										onSave={saveAssessment}
-									/>
+					) : (
+						<>
+							{/* 01 — identity & contact */}
+							<div className="dossier-card" id="p-identity">
+								<div className="dossier-card__head">
+									<h2 className="dossier-card__title">Identity &amp; contact</h2>
+									<button
+										type="button"
+										className="profile-edit-btn"
+										onClick={() =>
+											startEdit(
+												"assessment",
+												Object.fromEntries(
+													ASSESSMENT_FIELDS.map((f) => [
+														f.key,
+														(f.key === "phone" ? ass.phone || a.phone : scalar(ass, f.key)) ?? "",
+													]),
+												),
+											)
+										}
+									>
+										Edit →
+									</button>
 								</div>
-							) : (
 								<div className="dossier-grid">
-									<DossierField
-										label="Full Legal Name"
-										value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ") || fullName}
-									/>
+									<DossierField label="Full Legal Name" value={[ass.firstName, ass.middleName, ass.lastName].filter(Boolean).join(" ") || fullName} />
 									<DossierField label="Email Address" value={ass.email || authUser?.email || a.email} />
 									<DossierField label="Primary Phone" value={ass.phone || a.phone} />
 									<DossierField label="Date of Birth" value={ass.dateOfBirth} />
@@ -654,308 +503,325 @@ export function PortalProfile() {
 									<DossierField label="Residential Address" value={ass.address} />
 									<DossierField label="Referral Source" value={a.referralSource} />
 								</div>
-							)}
-						</div>
-
-						{editing !== "assessment" && (
-							<>
-								<div className="dossier-card">
-									<div className="dossier-card__head">
-										<h2 className="dossier-card__title">Passport &amp; Travel Identification</h2>
-									</div>
-									<div className="dossier-grid">
-										<DossierField label="Passport Number" value={ass.passportNumber} />
-										<DossierField label="Issuing Country" value={ass.passportCountry} />
-										<DossierField label="Issue Date" value={ass.passportIssue} />
-										<DossierField label="Expiry Date" value={ass.passportExpiry} />
-									</div>
-								</div>
-
-								<div className="dossier-card">
-									<div className="dossier-card__head">
-										<h2 className="dossier-card__title">Academic Qualifications</h2>
-									</div>
-									<div className="dossier-grid">
-										<DossierField label="Highest Education" value={ass.highestEducation} />
-										<DossierField label="Institution Attended" value={ass.institution} />
-										<DossierField label="Field of Study" value={ass.fieldOfStudy} />
-										<DossierField label="Graduation Year" value={ass.graduationYear} />
-										<DossierField label="Grade Point Average (GPA)" value={ass.gpa} />
-									</div>
-								</div>
-
-								<div className="dossier-card">
-									<div className="dossier-card__head">
-										<h2 className="dossier-card__title">Professional Background</h2>
-									</div>
-									<div className="dossier-grid">
-										<DossierField label="Employment Status" value={ass.employmentStatus} />
-										<DossierField label="Employer / Organization" value={ass.employer} />
-										<DossierField label="Position / Title" value={ass.jobTitle} />
-										<DossierField label="Years of Experience" value={ass.yearsExperience} />
-									</div>
-								</div>
-
-								<div className="dossier-card">
-									<div className="dossier-card__head">
-										<h2 className="dossier-card__title">Language Proficiency</h2>
-									</div>
-									<div className="dossier-grid">
-										<DossierField label="English Examination" value={ass.englishTest} />
-										<DossierField label="Score / Band" value={ass.englishScore} />
-										<DossierField label="Examination Date" value={ass.englishDate} />
-									</div>
-								</div>
-							</>
-						)}
-
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Study Aspirations &amp; Goals</h2>
-								<button
-									type="button"
-									className="profile-edit-btn"
-									onClick={() =>
-										editing === "preferences"
-											? setEditing(null)
-											: startEdit(
-													"preferences",
-													Object.fromEntries(
-														PREFERENCE_FIELDS.map((f) => [f.key, scalar(ass, f.key) ?? ""]),
-													),
-												)
-									}
-									aria-expanded={editing === "preferences"}
-								>
-									{editing === "preferences" ? "Cancel" : "Edit Preferences"}
-								</button>
 							</div>
 
-							{editing === "preferences" ? (
-								<div className="mt-2">
-									<ProfileEditForm
-										fields={PREFERENCE_FIELDS}
-										draft={draft}
-										errors={errors}
-										saving={saving === "preferences"}
-										onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
-										onCancel={() => setEditing(null)}
-										onSave={savePreferences}
-									/>
-								</div>
-							) : (
-								<>
-									<div className="dossier-grid">
-										<DossierField label="Target Degree Level" value={getDegreeLevelName(ass.preferredLevel)} />
-										<DossierField label="Preferred Countries" value={ass.preferredCountries} />
-										<DossierField label="Preferred Major / Field" value={ass.preferredField} />
-									</div>
-									{ass.studyChoices.some((c) => c.country || c.university || c.program) ? (
-										<ol className="choice-list mt-3">
-											{ass.studyChoices
-												.filter((c) => c.country || c.university || c.program)
-												.map((c, i) => (
-													<li key={i}>
-														<span className="mono">{i + 1}.</span>{" "}
-														{[c.country, c.university, c.program || c.field, c.intake && titleCase(c.intake)].filter(Boolean).join(" · ")}
-													</li>
-												))}
-										</ol>
-									) : null}
-								</>
-							)}
-						</div>
-
-						{editing !== "preferences" && (
-							<div className="dossier-card">
+							{/* 02 — passport */}
+							<div className="dossier-card" id="p-passport">
 								<div className="dossier-card__head">
-									<h2 className="dossier-card__title">Funding &amp; Financial Planning</h2>
+									<h2 className="dossier-card__title">Passport &amp; travel ID</h2>
+									<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>EDIT UNDER IDENTITY</span>
 								</div>
 								<div className="dossier-grid">
+									<DossierField label="Passport Number" value={ass.passportNumber} />
+									<DossierField label="Issuing Country" value={ass.passportCountry} />
+									<DossierField label="Issue Date" value={ass.passportIssue} />
+									<DossierField label="Expiry Date" value={ass.passportExpiry} />
+								</div>
+							</div>
+
+							{/* 03 — academics & work */}
+							<div className="dossier-card" id="p-academics">
+								<div className="dossier-card__head">
+									<h2 className="dossier-card__title">Academics &amp; work</h2>
+									<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>EDIT UNDER IDENTITY</span>
+								</div>
+								<div className="dossier-grid">
+									<DossierField label="Highest Education" value={ass.highestEducation} />
+									<DossierField label="Institution Attended" value={ass.institution} />
+									<DossierField label="Field of Study" value={ass.fieldOfStudy} />
+									<DossierField label="Graduation Year" value={ass.graduationYear} />
+									<DossierField label="Grade Point Average (GPA)" value={ass.gpa} />
+									<DossierField label="Employment Status" value={ass.employmentStatus} />
+									<DossierField label="Employer / Organization" value={ass.employer} />
+									<DossierField label="Position / Title" value={ass.jobTitle} />
+									<DossierField label="Years of Experience" value={ass.yearsExperience} />
+									<DossierField label="English Examination" value={ass.englishTest} />
+									<DossierField label="Score / Band" value={ass.englishScore} />
+									<DossierField label="Examination Date" value={ass.englishDate} />
+								</div>
+							</div>
+						</>
+					)}
+
+					{/* 04 — aspirations & funding */}
+					<div className="dossier-card" id="p-aspirations">
+						<div className="dossier-card__head">
+							<h2 className="dossier-card__title">Aspirations &amp; funding</h2>
+							<button
+								type="button"
+								className="profile-edit-btn"
+								onClick={() =>
+									editing === "preferences"
+										? setEditing(null)
+										: startEdit(
+												"preferences",
+												Object.fromEntries(
+													PREFERENCE_FIELDS.map((f) => [f.key, scalar(ass, f.key) ?? ""]),
+												),
+											)
+								}
+								aria-expanded={editing === "preferences"}
+							>
+								{editing === "preferences" ? "Cancel" : "Edit →"}
+							</button>
+						</div>
+
+						{editing === "preferences" ? (
+							<div className="mt-2" style={{ padding: "0 1.25rem 1.25rem" }}>
+								<ProfileEditForm
+									fields={PREFERENCE_FIELDS}
+									draft={draft}
+									errors={errors}
+									saving={saving === "preferences"}
+									onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+									onCancel={() => setEditing(null)}
+									onSave={savePreferences}
+								/>
+							</div>
+						) : (
+							<>
+								<div className="dossier-grid">
+									<DossierField label="Target Degree Level" value={getDegreeLevelName(ass.preferredLevel)} />
+									<DossierField label="Preferred Countries" value={ass.preferredCountries} />
+									<DossierField label="Preferred Major / Field" value={ass.preferredField} />
 									<DossierField label="Target Intake" value={ass.intakePreference} />
 									<DossierField label="Funding Source" value={ass.fundingSource} />
 									<DossierField label="Budget Range" value={ass.budgetRange} />
 									<DossierField label="Sponsor Name" value={ass.sponsorName} />
 									<DossierField label="Sponsor Relationship" value={ass.sponsorRelationship} />
 								</div>
-							</div>
+								{ass.studyChoices.some((c) => c.country || c.university || c.program) ? (
+									<ol className="choice-list mt-3" style={{ padding: "0 1.25rem 1rem" }}>
+										{ass.studyChoices
+											.filter((c) => c.country || c.university || c.program)
+											.map((c, i) => (
+												<li key={i}>
+													<span className="mono">{i + 1}.</span>{" "}
+													{[c.country, c.university, c.program || c.field, c.intake && titleCase(c.intake)].filter(Boolean).join(" · ")}
+												</li>
+											))}
+									</ol>
+								) : null}
+							</>
 						)}
+					</div>
 
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Consultation Session</h2>
-								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-									{booking.confirmationId ? `Ref: ${booking.confirmationId}` : "Unbooked"}
-								</span>
-							</div>
-							<div className="dossier-grid">
-								<DossierField label="Consultation Type" value={consultationTypeLabel(booking.consultationType)} />
-								<DossierField label="Location" value={[booking.city, booking.region, booking.country].filter(Boolean).join(", ")} />
-								<DossierField label="Branch Office" value={getBranchName(booking.branchId)} />
-								<DossierField label="Date" value={booking.date} />
-								<DossierField label="Time" value={booking.time} />
-								<DossierField
-									label="Consultation Fee"
-									value={
-										booking.paymentStatus === "success"
-											? `Paid · ${formatDualCurrency(usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents))}`
-											: "Unpaid"
-									}
-								/>
-								<DossierField label="Eligibility Outcome" value={eligibility} />
-								<DossierField label="Eligibility Note" value={booking.eligibilityNote} />
-							</div>
+					{/* 05 — on record: the merged read-only card (was four repeating cards) */}
+					<div className="dossier-card" id="p-record">
+						<div className="dossier-card__head">
+							<h2 className="dossier-card__title">On record</h2>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>SET BY YOUR FILE — READ ONLY</span>
 						</div>
-
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Application Record</h2>
-							</div>
-							<div className="dossier-grid">
-								<DossierField label="Destination" value={targetDestination} />
-								<DossierField label="Target University" value={targetInstitution} />
-								<DossierField label="Programme" value={targetProgram} />
-								<DossierField label="Intake" value={a.intake} />
-								<DossierField label="Package Track" value={packageName} />
-								<DossierField label="Payment Plan" value={planName} />
-								<DossierField label="Schools Selection Status" value={a.schoolSelectionDoneAt ? "Confirmed" : "Not yet finalized"} />
-							</div>
+						<div className="dossier-grid">
+							<DossierField label="Service Package" value={packageName || "Standard Advisory"} />
+							<DossierField label="Payment Plan" value={planName || "Direct / unassigned"} />
+							<DossierField label="Schools Selection" value={a.schoolSelectionDoneAt ? "Confirmed" : "In progress"} />
+							<DossierField label="Target Institution" value={targetInstitution} />
+							<DossierField label="Academic Programme" value={targetProgram} />
+							<DossierField label="Target Destination" value={targetDestination} />
+							<DossierField
+								label="Consultation"
+								value={
+									booking.paymentStatus === "success"
+										? `${consultationTypeLabel(booking.consultationType) || "Session"} · paid · ${[booking.date, getBranchName(booking.branchId)].filter(Boolean).join(" · ") || "held"}`
+										: "Unpaid / pending"
+								}
+							/>
+							<DossierField label="Eligibility" value={eligibility} />
+							<DossierField label="Evaluator Notes" value={booking.eligibilityNote} />
+							<DossierField label="Interview" value={interview.confirmationCode ? `${interview.confirmationCode} (${interview.mode || "video"})` : "Not scheduled"} />
+							<DossierField label="Document Review" value={a.docReviewStatus} />
+							<DossierField label="Application Status" value={(a.journeyStage || a.pipelineStatus || "IN PROGRESS").replace(/_/g, " ").toUpperCase()} />
 						</div>
+					</div>
 
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Interview &amp; Verification Audit</h2>
-							</div>
-							<div className="dossier-grid">
-								<DossierField
-									label="Interview Confirmation"
-									value={
-										interview.confirmationCode
-											? `${interview.confirmationCode} (${interview.mode || "video"})`
-											: "Not scheduled"
-									}
-								/>
-								<DossierField label="Document Review Status" value={a.docReviewStatus} />
-								<DossierField label="Application Status" value={(a.journeyStage || a.pipelineStatus || "IN PROGRESS").replace(/_/g, " ").toUpperCase()} />
-							</div>
+					{/* 06 — documents */}
+					<div className="dossier-card" id="p-documents">
+						<div className="dossier-card__head">
+							<h2 className="dossier-card__title">Documents</h2>
+							<Link to="/portal/documents" className="profile-edit-btn">
+								Open Document Vault →
+							</Link>
 						</div>
-
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Sign-in Identity &amp; Provider</h2>
-							</div>
-							<div className="dossier-grid">
-								<DossierField label="Sign-in Method" value={signInMethodLabel(authUser?.method)} />
-								<DossierField label="Primary Account Email" value={authUser?.email || a.email || "No email on file"} />
-								<DossierField
-									label="Session Authenticated"
-									value={authUser?.signedInAt ? new Date(authUser.signedInAt).toLocaleString() : "Active session"}
-								/>
-								<DossierField
-									label="Password Management"
-									value={
-										authUser?.method === "email" ? (
-											<span>
-												Password set ·{" "}
-												<button
-													type="button"
-													className="link-arrow"
-													onClick={() => setChangePasswordOpen(true)}
-												>
-													Change password
-												</button>
-											</span>
+						<p className="mono muted mb-3" style={{ fontSize: "var(--text-xs)", padding: "0 1.25rem" }}>
+							{liveDocs ? `${uploadedDocs} of ${totalDocs} required documents uploaded or verified` : "Loading documents..."}
+						</p>
+						<ul className="profile-docs" style={{ padding: "0 1.25rem 1.25rem" }}>
+							{REQUIRED_DOCUMENTS.map((r) => {
+								const live = liveDocs?.get(r.id) ?? null;
+								const status = live
+									? live.status === "VERIFIED"
+										? "verified"
+										: live.status === "REJECTED"
+											? "rejected"
+											: "uploaded"
+									: "missing";
+								return (
+									<li key={r.id} className="profile-doc">
+										<span className="profile-doc__name">{DOC_LABELS[r.id] ?? r.id}</span>
+										<span className={`portal-pill portal-pill--${status}`}>
+											{status}
+										</span>
+										{live?.id ? (
+											<button
+												type="button"
+												className="profile-doc__action"
+												onClick={async () => {
+													try {
+														const { url } = await documentsApi.downloadUrl(live.id);
+														window.open(url, "_blank", "noopener,noreferrer");
+													} catch {
+														toast.error("Could not open the document. Please try again.");
+													}
+												}}
+											>
+												View
+											</button>
 										) : (
-											<span className="muted">
-												{authUser?.method === "google"
-													? "Managed by your Google account — password not required"
-													: "Managed by your sign-in provider — password not required"}
-											</span>
-										)
-									}
-								/>
-							</div>
-						</div>
+											<label className="profile-doc__action" style={{ cursor: "pointer", display: "inline-block" }}>
+												Upload
+												<input
+													type="file"
+													hidden
+													accept={ALLOWED_DOCUMENT_TYPES.join(",")}
+													onChange={async (e) => {
+														const file = e.target.files?.[0];
+														if (!file) return;
+														if (file.size > MAX_DOCUMENT_BYTES) {
+															toast.error(`${file.name} is larger than 15 MB.`);
+															return;
+														}
+														try {
+															toast.info(`Uploading ${file.name}...`);
+															const ready = await prepareDocumentForUpload(file, () => {});
+															const saved = await documentsApi.upload(ready, r.id, { onProgress: () => {} });
+															setLiveDocs(prev => new Map(prev ?? []).set(saved.documentType, saved));
+															toast.success(`${file.name} uploaded successfully.`);
+														} catch {
+															toast.error("Could not upload. Please try again.");
+														}
+														e.target.value = "";
+													}}
+												/>
+											</label>
+										)}
+									</li>
+								);
+							})}
+						</ul>
+					</div>
 
-						<div className="dossier-card">
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title">Two-Factor Authentication (2FA)</h2>
-								{mfaStatus?.applicable !== false && (
-									<Link
-										to="/portal/security"
-										className="profile-edit-btn"
-										aria-label="Manage two-factor authentication"
-									>
-										{mfaStatus?.enrolled ? "Manage 2FA" : "Set up 2FA"}
-									</Link>
-								)}
-							</div>
-							<div className="dossier-grid">
+					{/* 07 — security */}
+					<div className="dossier-card" id="p-security">
+						<div className="dossier-card__head">
+							<h2 className="dossier-card__title">Security</h2>
+							{mfaStatus?.applicable !== false && (
+								<Link
+									to="/portal/security"
+									className="profile-edit-btn"
+									aria-label="Manage two-factor authentication"
+								>
+									{mfaStatus?.enrolled ? "Manage 2FA" : "Set up 2FA"}
+								</Link>
+							)}
+						</div>
+						<div className="dossier-grid">
+							<DossierField label="Sign-in Method" value={signInMethodLabel(authUser?.method)} />
+							<DossierField label="Primary Account Email" value={authUser?.email || a.email || "No email on file"} />
+							<DossierField
+								label="Session Authenticated"
+								value={authUser?.signedInAt ? new Date(authUser.signedInAt).toLocaleString() : "Active session"}
+							/>
+							<DossierField
+								label="Password Management"
+								value={
+									authUser?.method === "email" ? (
+										<span>
+											Password set ·{" "}
+											<button
+												type="button"
+												className="jlink"
+												onClick={() => setChangePasswordOpen(true)}
+											>
+												Change password
+											</button>
+										</span>
+									) : (
+										<span className="muted">
+											{authUser?.method === "google"
+												? "Managed by your Google account — password not required"
+												: "Managed by your sign-in provider — password not required"}
+										</span>
+									)
+								}
+							/>
+							<DossierField
+								label="2FA Status"
+								value={
+									mfaStatus == null ? (
+										<span className="muted">-</span>
+									) : mfaStatus.enrolled ? (
+										<span>
+											Active
+											{mfaStatus.method
+												? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
+												: ""}
+										</span>
+									) : mfaStatus.applicable === false ? (
+										<span className="muted">Not applicable</span>
+									) : (
+										<span className="muted">Not set — recommended</span>
+									)
+								}
+							/>
+							{mfaStatus?.applicable !== false && (
 								<DossierField
-									label="2FA Status"
-									value={
-										mfaStatus == null ? (
-											<span className="muted">-</span>
-										) : mfaStatus.enrolled ? (
-											<span>
-												Active
-												{mfaStatus.method
-													? ` · ${mfaStatus.method === "totp" ? "Authenticator app" : mfaStatus.method === "email_otp" ? "Email code" : mfaStatus.method}`
-													: ""}
-											</span>
-										) : mfaStatus.applicable === false ? (
-											<span className="muted">Not applicable</span>
-										) : (
-											<span className="muted">Not set — recommended</span>
-										)
-									}
+									label="Policy Requirement"
+									value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
 								/>
-								{mfaStatus?.applicable !== false && (
-									<DossierField
-										label="Policy Requirement"
-										value={mfaStatus?.required ? "Required for your account" : "Optional (recommended)"}
-									/>
-								)}
-							</div>
-							<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem" }}>
-								{authUser?.method === "email"
-									? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
-									: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
-							</p>
+							)}
 						</div>
+						<p className="muted mt-3" style={{ fontSize: "var(--text-sm)", maxWidth: "42rem", padding: "0 1.25rem 1.25rem" }}>
+							{authUser?.method === "email"
+								? "Add a second step at sign-in to keep your application documents and payment history safe. If you use a password, keep it strong and change it if you ever suspect it has been compromised."
+								: "You sign in using a single sign-on provider. Your account password and security settings are managed directly by that provider."}
+						</p>
+					</div>
 
-						<div className="dossier-card" style={{ borderColor: "#fecaca" }}>
-							<div className="dossier-card__head">
-								<h2 className="dossier-card__title" style={{ color: "#ef4444" }}>Danger Zone</h2>
-							</div>
-							<div className="dossier-grid">
-								<div style={{ gridColumn: "1 / -1" }}>
-									<p className="muted" style={{ marginBottom: "1rem" }}>
-										Permanently delete your Century NIT student portal account. If you have paid invoices or ongoing applications, your data may be retained for compliance, otherwise it will be purged immediately. This action cannot be undone.
-									</p>
-									<button 
-										type="button" 
-										className="btn btn--danger btn--sm" 
-										onClick={() => {
-											if (window.confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.")) {
-												meApi.deleteAccount("archive")
-													.then((res) => {
-														alert(res.action === "archive" 
-															? "Your account has been deleted and archived for compliance." 
-															: "Your account has been permanently deleted.");
-														window.location.href = "/";
-													})
-													.catch(err => {
-														toast.error(err instanceof Error ? err.message : "Failed to delete account");
-													});
-											}
-										}}
-									>
-										Delete Account
-									</button>
-								</div>
+					{/* Danger zone */}
+					<div className="dossier-card">
+						<div className="dossier-card__head">
+							<h2 className="dossier-card__title">Danger zone</h2>
+						</div>
+						<div className="dossier-grid">
+							<div style={{ gridColumn: "1 / -1" }}>
+								<p className="muted" style={{ marginBottom: "1rem" }}>
+									Permanently delete your Century NIT student portal account. If you have paid invoices or ongoing applications, your data may be retained for compliance, otherwise it will be purged immediately. This action cannot be undone.
+								</p>
+								<button
+									type="button"
+									className="btn btn--danger btn--sm"
+									onClick={() => {
+										if (window.confirm("Are you absolutely sure you want to delete your account? This action cannot be undone.")) {
+											meApi.deleteAccount("archive")
+												.then((res) => {
+													alert(res.action === "archive"
+														? "Your account has been deleted and archived for compliance."
+														: "Your account has been permanently deleted.");
+													window.location.href = "/";
+												})
+												.catch(err => {
+													toast.error(err instanceof Error ? err.message : "Failed to delete account");
+												});
+										}
+									}}
+								>
+									Delete Account
+								</button>
 							</div>
 						</div>
+					</div>
+				</div>
 			</div>
 
 			<AvatarCropModal
@@ -1484,6 +1350,9 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 	// Find the application‑type and visa‑type invoice from the API list
 	const appInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "application") : null;
 	const visaInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "visa") : null;
+	const consultInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "consultation") : null;
+	const agencyInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "agency") : null;
+	const travelInvoiceType = invoicesLoaded ? invoices.find((i) => i.type === "travel" && i.status !== "void") : null;
 
 	const appPaid = isAppInvoicePaid(a) || (invoicesLoaded && appInvoiceType?.status === "paid");
 	const visaPaid = isVisaInvoicePaid(a) || (invoicesLoaded && visaInvoiceType?.status === "paid");
@@ -1665,7 +1534,12 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 								<tbody>
 									<tr className={!consultationPaid ? "ptable__now" : undefined}>
 										<td className="ptable__mark">I</td>
-										<td>Consultation fee</td>
+										<td>
+											Consultation fee
+											{consultInvoiceType ? (
+												<span className="ptable__sub">{consultInvoiceType.invoiceNumber}</span>
+											) : null}
+										</td>
 										<td>Your session &amp; assessment</td>
 										<td>At booking</td>
 										<td className="ptable__amt">
@@ -1681,12 +1555,21 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												<Button to="/portal/consultation" size="sm" variant="primary">
 													Pay →
 												</Button>
+											) : consultInvoiceType ? (
+												<button type="button" className="jlink" onClick={() => downloadReceipt(consultInvoiceType, "Consultation fee")}>
+													Receipt
+												</button>
 											) : null}
 										</td>
 									</tr>
 									<tr className={a.agencyTotal > 0 && !depositPaid ? "ptable__now" : undefined}>
 										<td className="ptable__mark">II</td>
-										<td>Deposit · 10%</td>
+										<td>
+											Deposit · 10%
+											{agencyInvoiceType ? (
+												<span className="ptable__sub">{agencyInvoiceType.invoiceNumber}</span>
+											) : null}
+										</td>
 										<td>Enrolment — assigns your consultant</td>
 										<td>At enrolment</td>
 										<td className="ptable__amt">
@@ -1704,6 +1587,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												<Button to="/portal/package" size="sm" variant="primary">
 													Pay →
 												</Button>
+											) : depositPaid && agencyInvoiceType ? (
+												<button type="button" className="jlink" onClick={() => downloadReceipt(agencyInvoiceType, "Service fee deposit")}>
+													Receipt
+												</button>
 											) : null}
 										</td>
 									</tr>
@@ -1716,6 +1603,9 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 													{schoolApplications.length} school
 													{schoolApplications.length === 1 ? "" : "s"}
 												</span>
+											) : null}
+											{appInvoiceType ? (
+												<span className="ptable__sub">{appInvoiceType.invoiceNumber}</span>
 											) : null}
 										</td>
 										<td>Submissions to your selected schools</td>
@@ -1735,6 +1625,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												<Button to="/portal/application" size="sm" variant="primary">
 													Pay →
 												</Button>
+											) : appPaid && appInvoiceType ? (
+												<button type="button" className="jlink" onClick={() => downloadReceipt(appInvoiceType, "Application invoice")}>
+													Receipt
+												</button>
 											) : null}
 										</td>
 									</tr>
@@ -1743,6 +1637,9 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										<td>
 											Visa fee
 											<span className="ptable__sub">processing + biometrics handling</span>
+											{visaInvoiceType ? (
+												<span className="ptable__sub">{visaInvoiceType.invoiceNumber}</span>
+											) : null}
 										</td>
 										<td>Your visa file</td>
 										<td>When a school admits you</td>
@@ -1761,6 +1658,10 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												<Button to="/portal/visa" size="sm" variant="primary">
 													Pay →
 												</Button>
+											) : visaPaid && visaInvoiceType ? (
+												<button type="button" className="jlink" onClick={() => downloadReceipt(visaInvoiceType, "Visa invoice")}>
+													Receipt
+												</button>
 											) : null}
 										</td>
 									</tr>
@@ -1807,7 +1708,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</td>
 									</tr>
 									{(() => {
-										const travelInvoice = invoicesLoaded ? invoices.find((i) => i.type === "travel") : null;
+										const travelInvoice = travelInvoiceType;
 										if (!travelInvoice) return null;
 										const travelPaid = travelInvoice.status === "paid";
 										return (
@@ -1832,7 +1733,11 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 														<Button to="/portal/pre-departure" size="sm" variant="primary">
 															Pay →
 														</Button>
-													) : null}
+													) : (
+														<button type="button" className="jlink" onClick={() => downloadReceipt(travelInvoice, "Ticket invoice")}>
+															Receipt
+														</button>
+													)}
 												</td>
 											</tr>
 										);
@@ -1866,6 +1771,114 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 								</tbody>
 							</table>
 						</section>
+						{/* Second ledger — deliberately never merged with the one above.
+						    Century NIT does not collect tuition, and a combined total would
+						    imply that it does. */}
+						{offers.length > 0 ? (
+							<section className="mt-6">
+								<div className="uni-ledger">
+								<header className="uni-ledger__head">
+									<div>
+										<p className="eyebrow">University tuition</p>
+										<p className="uni-ledger__sub">
+											Paid directly to the institution — not to Century NIT
+										</p>
+									</div>
+								</header>
+
+								{offers.map((o) => (
+									<div key={o.id} className="uni-ledger__row">
+										<div className="uni-ledger__who">
+											<span className="uni-ledger__uni">{o.uni}</span>
+											<span className="uni-ledger__prog">{o.program}</span>
+										</div>
+										<div className="uni-ledger__figs">
+											<span className="uni-ledger__fig">
+												<span className="uni-ledger__fig-label mono">Tuition</span>
+												<Money usd={o.tuitionUsd} className="uni-ledger__money" />
+											</span>
+											{o.depositUsd ? (
+												<span className="uni-ledger__fig">
+													<span className="uni-ledger__fig-label mono">
+														Deposit {o.depositPaidAt ? "· paid" : "· due"}
+													</span>
+													<Money usd={o.depositUsd} className="uni-ledger__money" />
+												</span>
+											) : null}
+										</div>
+									</div>
+								))}
+
+								<p className="uni-ledger__note">
+									You pay tuition for the <strong>one</strong> institution you take up — these
+									figures are not cumulative, and none of them is billed by Century NIT.
+								</p>
+							</div>
+						</section>
+					) : null}
+
+					<section className="mt-6">
+						<p className="muted" style={{ maxWidth: "36rem" }}>
+							Each invoice is itemised by your consultant and may add handling fees, so the
+							amounts above are the base figures. The application invoice grows by{" "}
+							<MoneyInline usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents)} /> for each school you add. Cedi amounts
+							convert at GH₵{GHS_RATE} to $1. University tuition is never billed here — it is paid
+							directly to the institution.
+						</p>
+					</section>
+
+					{/* Payment receipts — every recorded payment across all invoices */}
+					{receipts.length > 0 ? (
+						<section className="mt-6">
+							<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Receipts</h2>
+							<table className="ptable">
+								<thead>
+									<tr>
+										<th>Receipt</th>
+										<th>For</th>
+										<th>Method</th>
+										<th>Amount</th>
+										<th>Date</th>
+										<th></th>
+									</tr>
+								</thead>
+								<tbody>
+									{receipts.map((r) => {
+										const inv = invoices.find((i) => i.invoiceNumber === r.invoiceNumber);
+										return (
+											<tr key={r.id}>
+												<td className="mono">{r.invoiceNumber}</td>
+												<td>{INVOICE_TYPE_LABELS[r.invoiceType] ?? r.invoiceType}</td>
+												<td>{r.method}</td>
+												<td className="ptable__amt">
+													<Money usd={r.amountCents / 100} />
+												</td>
+												<td className="ptable__mark">
+													{new Date(r.at).toLocaleDateString(undefined, {
+														year: "numeric",
+														month: "short",
+														day: "numeric",
+													})}
+													{r.reference ? ` · ${r.reference}` : ""}
+												</td>
+												<td>
+													{inv ? (
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => downloadReceipt(inv, INVOICE_TYPE_LABELS[r.invoiceType] ?? "Invoice")}
+														>
+															PDF
+														</Button>
+													) : null}
+												</td>
+											</tr>
+										);
+									})}
+								</tbody>
+							</table>
+						</section>
+					) : null}
 					</div>
 
 					{/* the rail — next payment, plan, the fixed order */}
@@ -1917,6 +1930,15 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 									Set once your package and plan are confirmed in Chapter II.
 								</p>
 							)}
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">Two pots of money</p>
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+								<strong>Ledger</strong> — fees to Century NIT, in a fixed chapter order.<br /><br />
+								<strong>Universities</strong> — tuition and deposits paid to the school itself, on
+								the offer's terms. We never hold university money.
+							</p>
 						</div>
 
 						<div className="sharp-card">
@@ -2223,118 +2245,6 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</section>
 				) : null}
 
-				{!planView ? (
-				<>
-				{/* Second ledger — deliberately never merged with the one above.
-				    Century NIT does not collect tuition, and a combined total would
-				    imply that it does. */}
-				{offers.length > 0 ? (
-					<section className="mt-6">
-						<div className="uni-ledger">
-						<header className="uni-ledger__head">
-							<div>
-								<p className="eyebrow">University tuition</p>
-								<p className="uni-ledger__sub">
-									Paid directly to the institution — not to Century NIT
-								</p>
-							</div>
-						</header>
-
-						{offers.map((o) => (
-							<div key={o.id} className="uni-ledger__row">
-								<div className="uni-ledger__who">
-									<span className="uni-ledger__uni">{o.uni}</span>
-									<span className="uni-ledger__prog">{o.program}</span>
-								</div>
-								<div className="uni-ledger__figs">
-									<span className="uni-ledger__fig">
-										<span className="uni-ledger__fig-label mono">Tuition</span>
-										<Money usd={o.tuitionUsd} className="uni-ledger__money" />
-									</span>
-									{o.depositUsd ? (
-										<span className="uni-ledger__fig">
-											<span className="uni-ledger__fig-label mono">
-												Deposit {o.depositPaidAt ? "· paid" : "· due"}
-											</span>
-											<Money usd={o.depositUsd} className="uni-ledger__money" />
-										</span>
-									) : null}
-								</div>
-							</div>
-						))}
-
-						<p className="uni-ledger__note">
-							You pay tuition for the <strong>one</strong> institution you take up — these
-							figures are not cumulative, and none of them is billed by Century NIT.
-						</p>
-					</div>
-				</section>
-			) : null}
-
-			<section className="mt-6">
-				<p className="muted" style={{ maxWidth: "36rem" }}>
-					Each invoice is itemised by your consultant and may add handling fees, so the
-					amounts above are the base figures. The application invoice grows by{" "}
-					<MoneyInline usd={usdFromCents((fees || FALLBACK_FEE_SCHEDULE).appPerSchoolCents)} /> for each school you add. Cedi amounts
-					convert at GH₵{GHS_RATE} to $1. University tuition is never billed here — it is paid
-					directly to the institution.
-				</p>
-			</section>
-
-			{/* Payment receipts — every recorded payment across all invoices */}
-			{receipts.length > 0 ? (
-				<section className="mt-6">
-					<h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "0.75rem" }}>Receipts</h2>
-					<table className="ptable">
-						<thead>
-							<tr>
-								<th>Receipt</th>
-								<th>For</th>
-								<th>Method</th>
-								<th>Amount</th>
-								<th>Date</th>
-								<th></th>
-							</tr>
-						</thead>
-						<tbody>
-							{receipts.map((r) => {
-								const inv = invoices.find((i) => i.invoiceNumber === r.invoiceNumber);
-								return (
-									<tr key={r.id}>
-										<td className="mono">{r.invoiceNumber}</td>
-										<td>{INVOICE_TYPE_LABELS[r.invoiceType] ?? r.invoiceType}</td>
-										<td>{r.method}</td>
-										<td className="ptable__amt">
-											<Money usd={r.amountCents / 100} />
-										</td>
-										<td className="ptable__mark">
-											{new Date(r.at).toLocaleDateString(undefined, {
-												year: "numeric",
-												month: "short",
-												day: "numeric",
-											})}
-											{r.reference ? ` · ${r.reference}` : ""}
-										</td>
-										<td>
-											{inv ? (
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => downloadReceipt(inv, INVOICE_TYPE_LABELS[r.invoiceType] ?? "Invoice")}
-												>
-													PDF
-												</Button>
-											) : null}
-										</td>
-									</tr>
-								);
-							})}
-						</tbody>
-					</table>
-				</section>
-			) : null}
-				</>
-			) : null}
 			{planView ? (
 				<p className="muted mt-5" style={{ maxWidth: "36rem" }}>
 					Your full invoice ledger — consultation, application, visa and the travel invoice —

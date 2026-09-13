@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
+import { Button } from "../../components/ui/Button";
 import type { AvailabilitySlot, Booking } from "century-nit-shared";
 
 /**
@@ -62,6 +63,23 @@ const STATUS_COPY: Record<string, { label: string; note: string }> = {
 	COMPLETED: { label: "Completed", note: "This appointment has taken place." },
 	NO_SHOW: { label: "Missed", note: "This appointment was not attended." },
 };
+
+/** Monochrome pill variant per status — ink marks the live ones. */
+function statusPill(status: string): string {
+	if (status === "CONFIRMED" || status === "ASSIGNED") return "portal-pill portal-pill--solid";
+	if (status === "COMPLETED" || status === "CANCELLED" || status === "NO_SHOW") return "portal-pill portal-pill--done";
+	if (status === "UNASSIGNED") return "portal-pill portal-pill--hollow";
+	return "portal-pill";
+}
+
+/** A booking's effective display state — a COMPLETED in the future is still confirmed. */
+function displayState(booking: Booking): { displayStatus: string; isOver: boolean } {
+	const isFutureCompleted =
+		booking.status === "COMPLETED" && new Date(booking.startsAt).getTime() > Date.now();
+	const displayStatus = isFutureCompleted ? "CONFIRMED" : booking.status;
+	const isOver = (displayStatus === "CANCELLED" || displayStatus === "COMPLETED") && !isFutureCompleted;
+	return { displayStatus, isOver };
+}
 
 /* ── Slot picker, shared by booking and rescheduling ─────────────────────── */
 
@@ -167,7 +185,6 @@ function SlotPicker({
 	);
 }
 
-/* ── Booking form ────────────────────────────────────────────────────────── */
 /* ── Reschedule ──────────────────────────────────────────────────────────── */
 
 function RescheduleForm({
@@ -257,33 +274,25 @@ function RescheduleForm({
 	);
 }
 
-/* ── Card ────────────────────────────────────────────────────────────────── */
+/* ── Cancel — shared by the hero and the rows ─────────────────────────────── */
 
-function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
-	const [rescheduling, setRescheduling] = useState(false);
+function useCancelBooking(onChanged: () => void) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const { confirm, toast } = useNotifier();
-	
-	// Override 'COMPLETED' if the appointment hasn't happened yet
-	const isFutureCompleted = booking.status === "COMPLETED" && new Date(booking.startsAt).getTime() > Date.now();
-	const displayStatus = isFutureCompleted ? "CONFIRMED" : booking.status;
-	const copy = STATUS_COPY[displayStatus] ?? { label: displayStatus, note: "" };
-	
-	// If it's a future completed booking, it's not actually 'over'
-	const isOver = (displayStatus === "CANCELLED" || displayStatus === "COMPLETED") && !isFutureCompleted;
 
-	async function cancel() {
+	async function cancel(id: string) {
 		const ok = await confirm({
 			title: "Cancel this consultation?",
-			message: "If you cancel this consultation appointment, your entire consultation process will be cancelled. You will need to start over and pay again. The selected time will also be released back to other applicants.",
+			message:
+				"If you cancel this consultation appointment, your entire consultation process will be cancelled. You will need to start over and pay again. The selected time will also be released back to other applicants.",
 			confirmText: "Yes, Cancel",
 			tone: "danger",
 		});
 		if (!ok) return;
 		setBusy(true);
 		try {
-			await bookingsApi.cancel(booking.id);
+			await bookingsApi.cancel(id);
 			toast.success("Appointment cancelled.");
 			onChanged();
 		} catch (err) {
@@ -295,83 +304,79 @@ function BookingCard({ booking, onChanged }: { booking: Booking; onChanged: () =
 		}
 	}
 
+	return { cancel, busy, error };
+}
+
+/* ── Row — one line in the book, expands to the reschedule form ──────────── */
+
+function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
+	const [rescheduling, setRescheduling] = useState(false);
+	const { cancel, busy, error } = useCancelBooking(onChanged);
+	const { displayStatus, isOver } = displayState(booking);
+	const copy = STATUS_COPY[displayStatus] ?? { label: displayStatus, note: "" };
+	const d = new Date(booking.startsAt);
+
 	return (
-		<article className={`appt-card ${isOver ? "appt-card--over" : ""}`}>
-			<header className="appt-card__head">
-				<div>
-					<h3 className="appt-card__title">{booking.serviceName}</h3>
-					<p className="appt-card__when">{formatWhen(booking)}</p>
-				</div>
-				<span className={`appt-status appt-status--${displayStatus.toLowerCase()}`}>
-					{copy.label}
-				</span>
-			</header>
-
-			<dl className="appt-meta">
-				<div>
-					<dt>Reference</dt>
-					<dd>{booking.reference}</dd>
-				</div>
-				<div>
-					<dt>Duration</dt>
-					<dd>{booking.durationMinutes} minutes</dd>
-				</div>
-				{booking.employeeName && (
-					<div>
-						<dt>With</dt>
-						<dd>{booking.employeeName}</dd>
-					</div>
-				)}
-			</dl>
-
-			{copy.note && <p className="appt-note">{copy.note}</p>}
-			
-			{booking.rescheduleRequestedAt && !isOver && (
-				<div className="appt-note" style={{ backgroundColor: "var(--bg-warning)", color: "var(--text-warning)" }}>
-					<strong>Reschedule Requested</strong>
-					<br/>
-					You requested to move this appointment to <strong>{new Date(booking.rescheduleRequestedStartsAt!).toLocaleString()}</strong>. Waiting for approval.
-				</div>
-			)}
-
-			{booking.meetingUrl && !isOver && (
-				<a className="btn btn--primary btn--sm" href={booking.meetingUrl} target="_blank" rel="noreferrer">
-					Join the meeting
-				</a>
-			)}
-
-			{/* Assigned but the calendar has not caught up: say so plainly rather
-			    than showing a Join button that goes nowhere. */}
-			{!booking.meetingUrl && booking.type === "online" && !isOver && booking.employeeId && (
-				<p className="appt-muted">
-					Your meeting link is being prepared and will be emailed to you shortly.
-				</p>
-			)}
-
-			{error && <p className="appt-error">{error}</p>}
-
-			{!isOver && !rescheduling && !booking.rescheduleRequestedAt && (
-				<div className="appt-actions">
-					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setRescheduling(true)}>
-						Request Reschedule
-					</button>
-					<button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={cancel}>
-						{busy ? "Cancelling…" : "Cancel"}
-					</button>
-				</div>
-			)}
-
-			{rescheduling && (
-				<RescheduleForm
-					booking={booking}
-					onCancel={() => setRescheduling(false)}
-					onDone={() => {
-						setRescheduling(false);
-						onChanged();
-					}}
-				/>
-			)}
-		</article>
+		<>
+			<tr className={isOver ? "ptable__over" : undefined}>
+				<td className="ptable__mark" style={{ fontWeight: 700 }}>
+					{d.toLocaleDateString(undefined, { day: "numeric", month: "short" }).toUpperCase()}
+					<span className="ptable__sub">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
+				</td>
+				<td>
+					<strong>{booking.serviceName}</strong>
+					<span className="ptable__sub">
+						{d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: booking.timezone })}
+						{" · "}{booking.durationMinutes} min · {booking.type === "online" ? "Online" : "In person"}
+					</span>
+					{booking.rescheduleRequestedAt && !isOver && (
+						<div className="preq">
+							<b>Reschedule requested</b>
+							You asked to move to {new Date(booking.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for approval.
+						</div>
+					)}
+					{!booking.meetingUrl && booking.type === "online" && !isOver && booking.employeeId && (
+						<p className="ptable__sub">Meeting link is being prepared and will be emailed to you.</p>
+					)}
+					{error && <p className="appt-error">{error}</p>}
+				</td>
+				<td className="mono" style={{ fontSize: "0.7rem" }}>{booking.employeeName?.toUpperCase() ?? "—"}</td>
+				<td><span className={statusPill(displayStatus)}>{copy.label}</span></td>
+				<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+					{booking.meetingUrl && !isOver ? (
+						<>
+							<a className="jlink" href={booking.meetingUrl} target="_blank" rel="noreferrer">Join</a>
+							{" · "}
+						</>
+					) : null}
+					{!isOver && !booking.rescheduleRequestedAt ? (
+						<>
+							<button type="button" className="jlink" onClick={() => setRescheduling((v) => !v)}>
+								{rescheduling ? "Close" : "Move"}
+							</button>
+							{" · "}
+							<button type="button" className="jlink" disabled={busy} onClick={() => void cancel(booking.id)}>
+								{busy ? "Cancelling…" : "Cancel"}
+							</button>
+						</>
+					) : null}
+				</td>
+			</tr>
+			{rescheduling ? (
+				<tr>
+					<td colSpan={5} style={{ background: "var(--muted)" }}>
+						<RescheduleForm
+							booking={booking}
+							onCancel={() => setRescheduling(false)}
+							onDone={() => {
+								setRescheduling(false);
+								onChanged();
+							}}
+						/>
+					</td>
+				</tr>
+			) : null}
+		</>
 	);
 }
 
@@ -381,6 +386,7 @@ export function PortalAppointments() {
 	const [bookings, setBookings] = useState<Booking[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [filter, setFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled">("All");
+	const [reschedulingNext, setReschedulingNext] = useState(false);
 
 	const load = useCallback(() => {
 		bookingsApi
@@ -401,62 +407,189 @@ export function PortalAppointments() {
 			});
 	}, []);
 
+	const { cancel: cancelNext, busy: cancelBusy } = useCancelBooking(load);
+
 	useEffect(load, [load]);
 
-	const filteredBookings = useMemo(() => {
-		if (!bookings) return [];
-		return bookings.filter((b) => {
-			const isPast = b.status === "COMPLETED" && new Date(b.startsAt).getTime() <= Date.now();
-			const isCancelled = b.status === "CANCELLED";
-			const isUpcoming = !isCancelled && !isPast;
-			
-			if (filter === "All") return true;
-			if (filter === "Upcoming") return isUpcoming;
-			if (filter === "Past") return isPast;
-			if (filter === "Cancelled") return isCancelled;
-			return true;
-		});
-	}, [bookings, filter]);
+	const [now] = useState(() => Date.now());
+
+	const buckets = useMemo(() => {
+		const list = bookings ?? [];
+		const isPast = (b: Booking) =>
+			b.status === "COMPLETED" && new Date(b.startsAt).getTime() <= now;
+		return {
+			All: list,
+			Upcoming: list.filter((b) => b.status !== "CANCELLED" && !isPast(b)),
+			Past: list.filter(isPast),
+			Cancelled: list.filter((b) => b.status === "CANCELLED"),
+		};
+	}, [bookings, now]);
+
+	// The next upcoming appointment — lifted out of the list as the hero.
+	const next = useMemo(() => {
+		return [...buckets.Upcoming].sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0] ?? null;
+	}, [buckets]);
+
+	const filteredBookings = buckets[filter];
+	const nextState = next ? displayState(next) : null;
 
 	return (
-		<div className="appt-page">
-			<header className="appt-page__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+		<div className="portal-page">
+			<header className="portal-page__header">
 				<div>
-					<p className="lead mt-1" style={{ fontSize: "var(--text-sm)", margin: 0 }}>
-						View and manage your consultation appointments.
+					<p className="eyebrow">Appointments</p>
+					<h1 className="page-title mt-1">Your calendar</h1>
+					<p className="lead mt-2">
+						Consultations and check-ins with your Century NIT team. Reschedules are requests — your consultant confirms them.
 					</p>
 				</div>
-				<a href="/portal/consultation" className="btn btn--primary">
-					+ Book New Appointment
-				</a>
+				<Button to="/portal/consultation" variant="primary">
+					+ Book appointment
+				</Button>
 			</header>
 
 			{error && <p className="appt-error">{error}</p>}
-
 			{!bookings && !error && <p className="appt-muted">Loading…</p>}
 
-			{bookings && bookings.length > 0 && (
-				<nav className="dossier-tabs" style={{ marginBottom: "1.5rem" }} aria-label="Appointment Filters">
-					{(["All", "Upcoming", "Past", "Cancelled"] as const).map((t) => (
-						<button
-							key={t}
-							type="button"
-							className={`dossier-tab-btn ${filter === t ? "dossier-tab-btn--active" : ""}`}
-							onClick={() => setFilter(t)}
-						>
-							{t}
+			{/* Next up — lifted out of the book */}
+			{next && nextState ? (
+				<div className="pnext mt-4">
+					<div className="pnext__date">
+						<b>{new Date(next.startsAt).getDate()}</b>
+						<span>{new Date(next.startsAt).toLocaleDateString(undefined, { month: "short" })}</span>
+					</div>
+					<div className="pnext__what">
+						<p className="eyebrow">Next appointment</p>
+						<p className="pnext__title">{next.serviceName}</p>
+						<p className="pnext__meta">
+							{formatWhen(next)} · {next.durationMinutes} min · {next.type === "online" ? "Online" : "In person"}
+							{next.employeeName ? ` · with ${next.employeeName}` : ""} · ref {next.reference}
+						</p>
+						{next.rescheduleRequestedAt ? (
+							<div className="preq">
+								<b>Reschedule requested</b>
+								You asked to move to {new Date(next.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for your consultant to confirm. The original time holds until they do.
+							</div>
+						) : null}
+						{!next.meetingUrl && next.type === "online" && next.employeeId ? (
+							<p className="pnext__note">Your meeting link is being prepared and will be emailed to you.</p>
+						) : null}
+						{reschedulingNext ? (
+							<div className="sharp-card mt-3">
+								<RescheduleForm
+									booking={next}
+									onCancel={() => setReschedulingNext(false)}
+									onDone={() => {
+										setReschedulingNext(false);
+										load();
+									}}
+								/>
+							</div>
+						) : null}
+					</div>
+					<div className="pnext__acts">
+						{next.meetingUrl ? (
+							<a className="btn btn--primary" href={next.meetingUrl} target="_blank" rel="noreferrer">
+								Join the meeting
+							</a>
+						) : null}
+						{!next.rescheduleRequestedAt ? (
+							<button type="button" className="btn btn--ghost" onClick={() => setReschedulingNext((v) => !v)}>
+								{reschedulingNext ? "Keep current time" : "Reschedule"}
+							</button>
+						) : null}
+						<button type="button" className="btn btn--ghost" disabled={cancelBusy} onClick={() => void cancelNext(next.id)}>
+							{cancelBusy ? "Cancelling…" : "Cancel"}
 						</button>
-					))}
-				</nav>
-			)}
+					</div>
+				</div>
+			) : bookings && bookings.length === 0 && !error ? (
+				<div className="sharp-card mt-4">
+					<p className="eyebrow">Nothing scheduled</p>
+					<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
+						Book your consultation to start your journey — or a check-in once you're enrolled.
+					</p>
+				</div>
+			) : null}
 
-			{bookings && filteredBookings.length === 0 && (
-				<p className="appt-muted">No appointments found for this filter.</p>
-			)}
+			{bookings && bookings.length > 0 ? (
+				<div className="psplit mt-5">
+					<div>
+						{/* The book — every appointment, filtered by chips with counts */}
+						<div className="psteps" role="tablist" aria-label="Appointment filters">
+							{(["All", "Upcoming", "Past", "Cancelled"] as const).map((t) => (
+								<button
+									key={t}
+									type="button"
+									className={`portal-pill${filter === t ? " portal-pill--solid" : ""}`}
+									style={{ cursor: "pointer" }}
+									onClick={() => setFilter(t)}
+								>
+									{t} · {buckets[t].length}
+								</button>
+							))}
+						</div>
 
-			{filteredBookings.map((b) => (
-				<BookingCard key={b.id} booking={b} onChanged={load} />
-			))}
+						{filteredBookings.length === 0 ? (
+							<p className="appt-muted mt-3">No appointments found for this filter.</p>
+						) : (
+							<table className="ptable mt-3">
+								<thead>
+									<tr>
+										<th>Date</th>
+										<th>Appointment</th>
+										<th>With</th>
+										<th>Status</th>
+										<th></th>
+									</tr>
+								</thead>
+								<tbody>
+									{filteredBookings.map((b) => (
+										<BookingRow key={b.id} booking={b} onChanged={load} />
+									))}
+								</tbody>
+							</table>
+						)}
+					</div>
+
+					{/* The rail — book, how it works, the office */}
+					<div className="prail">
+						<div className="sharp-card sharp-card--key">
+							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Book a slot</p>
+							<p style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem", lineHeight: 1.6, color: "rgba(255,255,255,0.85)" }}>
+								Check-ins are free once you're enrolled. Pick a day and a time — we confirm by email.
+							</p>
+							<Button to="/portal/consultation" variant="inverted" style={{ width: "100%", marginTop: "0.9rem", textAlign: "center" }}>
+								Book appointment →
+							</Button>
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">How rescheduling works</p>
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
+								You request a new time; your consultant confirms it. The old slot holds until they
+								do — nothing is lost if they can't take the new one.
+							</p>
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">Cancelling</p>
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
+								Cancelling a <strong>paid consultation</strong> cancels the consultation itself —
+								the slot releases and a new booking means a new fee. Check-ins after enrolment
+								cancel freely.
+							</p>
+						</div>
+
+						<div className="sharp-card">
+							<p className="eyebrow">The office</p>
+							<div className="pkv"><span className="pkv__k">Accra HQ</span><span className="pkv__v">14 Independence Ave</span></div>
+							<div className="pkv"><span className="pkv__k">Hours</span><span className="pkv__v">Mon–Fri · 09:00–17:00</span></div>
+							<div className="pkv"><span className="pkv__k">Online</span><span className="pkv__v">Meet link emailed</span></div>
+						</div>
+					</div>
+				</div>
+			) : null}
 		</div>
 	);
 }

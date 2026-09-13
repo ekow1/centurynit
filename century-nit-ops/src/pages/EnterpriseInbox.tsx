@@ -1,415 +1,270 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useOpsAuth } from "./OpsAuthContext";
-import { useCases } from "../hooks/useCases";
-import { useOpsNotifications } from "../hooks/useOpsNotifications";
-import { documentsApi } from "century-nit-core/api";
-import type { ApplicantDocument, ApiLead } from "century-nit-shared";
-import { money } from "./currency";
-import { API_PREFIX } from "century-nit-shared";
-import { apiFetch } from "../lib/api";
+import { useOpsNotifications, type OpsNotification } from "../hooks/useOpsNotifications";
 
-type NotificationItem = {
-	id: string;
-	type: "assignment" | "document" | "lead" | "consultation" | "application" | "finance" | "system";
-	title: string;
-	detail: string;
-	time: string;
-	link?: string;
-	unread: boolean;
-};
+/**
+ * Inbox — what happened. One feed of the events the API pushes to this
+ * user (assignments, stage moves, bookings, documents, payments, leads),
+ * grouped by day, unread first by ink not colour. Things *to do* are the
+ * Workspace's; this page never re-lists them.
+ */
 
-function relativeTime(iso: string) {
-	const diff = Date.now() - new Date(iso).getTime();
-	const mins = Math.round(diff / 60000);
-	if (mins < 1) return "just now";
-	if (mins < 60) return `${mins}m ago`;
-	const hours = Math.round(mins / 60);
-	if (hours < 24) return `${hours}h ago`;
-	return `${Math.round(hours / 24)}d ago`;
+type Category = "assignments" | "cases" | "bookings" | "documents" | "payments" | "leads" | "messages" | "system";
+const CATEGORIES: { id: "all" | "unread" | Category; label: string }[] = [
+	{ id: "all", label: "All" },
+	{ id: "unread", label: "Unread" },
+	{ id: "assignments", label: "Assignments" },
+	{ id: "cases", label: "Cases" },
+	{ id: "bookings", label: "Bookings" },
+	{ id: "payments", label: "Payments" },
+	{ id: "documents", label: "Documents" },
+	{ id: "leads", label: "Leads" },
+	{ id: "messages", label: "Messages" },
+	{ id: "system", label: "System" },
+];
+
+/** The event type as the API names it ("stage.changed") → where it files. */
+function categoryOf(type: string): Category {
+	const t = type.toLowerCase();
+	if (/^assignment\.|\.assigned$|needs_handler|awaiting_assignment|handoff/.test(t)) return "assignments";
+	if (/^(stage|case|visa|assessment|application)\./.test(t)) return "cases";
+	if (/^booking\.|^consultation\./.test(t)) return "bookings";
+	if (/^document\./.test(t)) return "documents";
+	if (/^(payment|invoice|finance|agency)\b/.test(t)) return "payments";
+	if (/^lead\./.test(t)) return "leads";
+	if (/^chat\./.test(t)) return "messages";
+	return "system";
 }
 
-const TYPE_META: Record<NotificationItem["type"], { label: string; color: string }> = {
-	assignment: { label: "Assignment", color: "#3b82f6" },
-	document: { label: "Document", color: "#f59e0b" },
-	lead: { label: "Lead", color: "#8b5cf6" },
-	consultation: { label: "Consultation", color: "#06b6d4" },
-	application: { label: "Application", color: "#10b981" },
-	finance: { label: "Finance", color: "#ef4444" },
-	system: { label: "System", color: "#6b7280" },
+const KICKERS: Record<string, string> = {
+	"case.assigned": "Owner assigned · Case",
+	"consultation.assigned": "Assigned · Consultation",
+	"booking.assigned": "Assigned · Booking",
+	"assignment.released": "Owner released · Case",
+	"assignment.handoff_resolved": "Handoff resolved · Case",
+	"stage.needs_handler": "Needs a handler · Stage",
+	"application.awaiting_assignment": "Awaiting assignment · Case",
+	"stage.changed": "Stage moved · Case",
+	"visa.stage_changed": "Visa · Stage moved",
+	"case.updated": "Updated · Case",
+	"assessment.complete": "Assessment complete · Consultation",
+	"booking.new": "New booking",
+	"booking.rescheduled": "Rescheduled · Booking",
+	"booking.cancelled": "Cancelled · Booking",
+	"booking.slot_confirmed": "Slot confirmed · Booking",
+	"booking.meeting_link": "Meeting link · Booking",
+	"document.uploaded": "Uploaded · Document",
+	"document.requested": "Requested · Document",
+	"lead.new": "New lead",
+	"chat.message": "Message",
+	"roles.changed": "Roles changed · System",
+	"email.failed": "Email failed · System",
 };
+function kickerOf(type: string): string {
+	if (KICKERS[type]) return KICKERS[type];
+	const [head, ...rest] = type.split(".");
+	const tail = rest.join(" ").replace(/_/g, " ");
+	const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+	return tail ? `${cap(tail)} · ${cap(head)}` : cap(head);
+}
+
+const hm = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+/** Today · Yesterday · Earlier this week · a dated group beyond that. */
+function dayGroup(iso: string, now: Date): { key: string; label: string; order: number } {
+	const d = new Date(iso);
+	if (sameDay(d, now)) return { key: "today", label: `Today · ${now.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`, order: 0 };
+	const y = new Date(now);
+	y.setDate(y.getDate() - 1);
+	if (sameDay(d, y)) return { key: "yesterday", label: "Yesterday", order: 1 };
+	if (now.getTime() - d.getTime() < 7 * 86_400_000) return { key: "week", label: "Earlier this week", order: 2 };
+	const label = d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+	return { key: `m-${d.getFullYear()}-${d.getMonth()}`, label, order: 3 + (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()) };
+}
+
+function whenLabel(iso: string, now: Date): string {
+	const d = new Date(iso);
+	if (sameDay(d, now)) return hm(iso);
+	if (now.getTime() - d.getTime() < 7 * 86_400_000) return d.toLocaleDateString(undefined, { weekday: "short" }) + " " + hm(iso);
+	return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function linkLabel(n: OpsNotification): string {
+	const c = categoryOf(n.type);
+	if (c === "documents") return "Review →";
+	if (c === "payments") return "Ledger →";
+	if (c === "messages") return "Reply →";
+	return "Open →";
+}
 
 export function EnterpriseInbox() {
-	const { opsUser, opsRole, scopeRecords, hasPermission } = useOpsAuth();
-	const { consultations, applications, applicants } = useCases();
-	const { notifications: realNotifications, unreadCount: realUnreadCount, markRead, markAllRead } = useOpsNotifications();
-	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
-	const [reviewDocuments, setReviewDocuments] = useState<ApplicantDocument[]>([]);
-	const [filter, setFilter] = useState<"all" | "unread">("all");
+	const { notifications, unreadCount, markRead, markAllRead } = useOpsNotifications();
+	const [chip, setChip] = useState<"all" | "unread" | Category>("all");
+	const [search, setSearch] = useState("");
 	const navigate = useNavigate();
+	const now = new Date();
 
-	const loadApiLeads = useCallback(async () => {
-		try {
-			const res = await apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`);
-			if (res && Array.isArray(res.leads)) {
-				setApiLeads(res.leads);
-			}
-		} catch {
-			// ignore if offline
+	const counts = useMemo(() => {
+		const c: Record<string, number> = { all: notifications.length, unread: unreadCount };
+		for (const n of notifications) {
+			const k = categoryOf(n.type);
+			c[k] = (c[k] ?? 0) + 1;
 		}
-	}, []);
+		return c;
+	}, [notifications, unreadCount]);
 
-	const loadReviewDocuments = useCallback(async () => {
-		try {
-			const res = await documentsApi.list();
-			if (res?.documents) {
-				// A document that is UPLOADED is awaiting staff review.
-				setReviewDocuments(res.documents.filter((d) => d.status === "UPLOADED"));
-			}
-		} catch {
-			// ignore if offline or forbidden
-		}
-	}, []);
+	const todayCount = notifications.filter((n) => sameDay(new Date(n.createdAt), now)).length;
 
-	useEffect(() => {
-		void loadApiLeads();
-		void loadReviewDocuments();
-		const leadTimer = setInterval(loadApiLeads, 30000);
-		const docTimer = setInterval(loadReviewDocuments, 30000);
-		return () => {
-			clearInterval(leadTimer);
-			clearInterval(docTimer);
-		};
-	}, [loadApiLeads, loadReviewDocuments]);
-
-	const meEmail = opsUser?.email ?? "";
-
-	const notifications = useMemo<NotificationItem[]>(() => {
-		const items: NotificationItem[] = [];
-
-		for (const c of consultations) {
-			const isMine = c.assignedOfficerEmail === meEmail;
-			if (c.status === "Under Review" && !c.assignedOfficerEmail) {
-				items.push({
-					id: `unassigned-c-${c.id}`,
-					type: "consultation",
-					title: `Unassigned consultation: ${c.applicantName}`,
-					detail: `Booked for ${c.dateTime} · ${c.targetCountry}`,
-					time: c.dateTime,
-					link: "/consultations",
-					unread: true,
-				});
-			}
-			if (isMine && c.status === "Assigned" && !c.slotConfirmed) {
-				items.push({
-					id: `confirm-c-${c.id}`,
-					type: "assignment",
-					title: `Confirm your slot: ${c.applicantName}`,
-					detail: `Scheduled for ${c.dateTime}`,
-					time: c.dateTime,
-					link: "/consultations",
-					unread: true,
-				});
-			}
-			if (isMine && c.status === "In Assessment") {
-				items.push({
-					id: `assess-c-${c.id}`,
-					type: "consultation",
-					title: `Assessment pending: ${c.applicantName}`,
-					detail: `In assessment · ${c.targetCountry}`,
-					time: c.dateTime,
-					link: "/consultations",
-					unread: false,
-				});
-			}
-		}
-
-		for (const a of applications) {
-			const isMine = a.assignedStaffEmail === meEmail;
-			if (isMine && a.status === "Under Review") {
-				items.push({
-					id: `app-review-${a.id}`,
-					type: "application",
-					title: `Application under review: ${a.applicantName}`,
-					detail: `${a.appId} · ${a.university} · ${a.stage}`,
-					time: a.submittedDate,
-					link: "/applications",
-					unread: false,
-				});
-			}
-			const unchecked = a.checklist.filter((c) => !c.checked).length;
-			if (unchecked > 0 && (isMine || opsRole === "manager" || opsRole === "coordinator")) {
-				items.push({
-					id: `app-checklist-${a.id}`,
-					type: "application",
-					title: `${unchecked} checklist items open: ${a.applicantName}`,
-					detail: `${a.appId} · ${a.university}`,
-					time: a.submittedDate,
-					link: "/applications",
-					unread: false,
-				});
-			}
-		}
-
-		const scopedApplicants = scopeRecords(applicants, (a) => a.assignedOfficerEmail === meEmail);
-		for (const a of scopedApplicants) {
-			const outstanding = money(a.financials.outstanding);
-			if (outstanding > 0 && hasPermission("finance")) {
-				items.push({
-					id: `fin-${a.id}`,
-					type: "finance",
-					title: `Outstanding balance: ${a.name}`,
-					detail: `${a.financials.outstanding} · ${a.financials.plan}`,
-					time: a.enrolledDate,
-					link: "/finance",
-					unread: false,
-				});
-			}
-		}
-
-		// Real documents awaiting review — pulled from the documents API, where a
-		// status of UPLOADED means the applicant has uploaded it and it is waiting
-		// on staff. (The old heuristic filtered mock `requestedDocuments` on a
-		// "Pending Review" status that never existed in the enum, so it never showed
-		// anything.)
-		for (const d of reviewDocuments) {
-			items.push({
-				id: `doc-${d.id}`,
-				type: "document",
-				title: `Document pending review: ${d.documentType}`,
-				detail: `${d.fileName}${d.ownerEmail ? ` · ${d.ownerEmail}` : ""}`,
-				time: relativeTime(d.uploadedAt ?? d.createdAt),
-				link: "/documents",
-				unread: true,
-			});
-		}
-
-		for (const al of apiLeads) {
-			if (al.stage === "new" || al.stage === "contacted") {
-				items.push({
-					id: `api-lead-${al.id}`,
-					type: "lead",
-					title: `New client lead: ${al.name}`,
-					detail: `${al.source || "Portal Sign-In"} · ${al.email}${al.phone && al.phone !== "-" ? ` · ${al.phone}` : ""}`,
-					time: relativeTime(al.createdAt || al.updatedAt),
-					link: "/leads",
-					unread: al.stage === "new",
-				});
-			}
-		}
-
-		return items.sort((a, b) => {
-			if (a.unread !== b.unread) return a.unread ? -1 : 1;
-			return 0;
+	const filtered = useMemo(() => {
+		const q = search.trim().toLowerCase();
+		return notifications.filter((n) => {
+			if (chip === "unread" && n.read) return false;
+			if (chip !== "all" && chip !== "unread" && categoryOf(n.type) !== chip) return false;
+			if (q && !`${n.title} ${n.body} ${n.type}`.toLowerCase().includes(q)) return false;
+			return true;
 		});
-	}, [consultations, applications, applicants, apiLeads, reviewDocuments, meEmail, opsRole, scopeRecords, hasPermission]);
+	}, [notifications, chip, search]);
 
-	const filtered = filter === "unread" ? notifications.filter((n) => n.unread) : notifications;
-	const unreadCount = notifications.filter((n) => n.unread).length;
-	const totalUnread = realUnreadCount + unreadCount;
+	const groups = useMemo(() => {
+		const map = new Map<string, { label: string; order: number; rows: OpsNotification[] }>();
+		for (const n of filtered) {
+			const g = dayGroup(n.createdAt, now);
+			const cur = map.get(g.key) ?? { label: g.label, order: g.order, rows: [] };
+			cur.rows.push(n);
+			map.set(g.key, cur);
+		}
+		return [...map.values()].sort((a, b) => a.order - b.order);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
+	}, [filtered]);
 
-	const handleNotificationClick = useCallback(
-		(id: string, link: string | null) => {
-			void markRead(id);
-			if (link) navigate(link);
-		},
-		[markRead, navigate],
-	);
+	function open(n: OpsNotification) {
+		if (!n.read) void markRead(n.id);
+		if (n.link) navigate(n.link);
+	}
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
-					<h1 className="page-title">Notifications</h1>
-					<p className="lead mt-2">
-						{totalUnread > 0 ? `${totalUnread} unread notification${totalUnread > 1 ? "s" : ""}` : "You're all caught up"}
-					</p>
+					<h1 className="page-title">Inbox</h1>
+					<p className="lead mt-2">What happened — assignments, moves, bookings, payments, documents. Things to do live in the Workspace.</p>
 				</div>
-				<div style={{ display: "flex", gap: "0.5rem" }}>
-					{realUnreadCount > 0 && (
-						<button
-							type="button"
-							className="btn btn--sm btn--ghost"
-							onClick={() => void markAllRead()}
-						>
-							Mark all read
-						</button>
-					)}
-					<button
-						type="button"
-						className={`btn btn--sm ${filter === "all" ? "btn--primary" : "btn--ghost"}`}
-						onClick={() => setFilter("all")}
-					>
-						All ({notifications.length})
+				{unreadCount > 0 && (
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => void markAllRead()}>
+						Mark all read
 					</button>
-					<button
-						type="button"
-						className={`btn btn--sm ${filter === "unread" ? "btn--primary" : "btn--ghost"}`}
-						onClick={() => setFilter("unread")}
-					>
-						Unread ({unreadCount})
-					</button>
-				</div>
-			</div>
-
-			{/* Real, server-pushed notifications */}
-			<div className="card" style={{ marginBottom: "1.5rem" }}>
-				<p className="eyebrow" style={{ padding: "0.85rem 1rem 0.5rem", fontSize: "0.6rem" }}>
-					Inbox
-					{realUnreadCount > 0 && (
-						<span style={{ marginLeft: "0.5rem", fontWeight: 700, color: "var(--foreground)" }}>
-							{realUnreadCount} unread
-						</span>
-					)}
-				</p>
-				{realNotifications.length === 0 ? (
-					<p style={{ padding: "1.5rem 1rem", textAlign: "center", fontSize: "0.75rem", color: "var(--muted-foreground)", margin: 0 }}>
-						No notifications yet
-					</p>
-				) : (
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{realNotifications.map((n) => (
-							<li
-								key={n.id}
-								style={{
-									display: "flex",
-									alignItems: "flex-start",
-									gap: "0.85rem",
-									padding: "0.85rem 1rem",
-									borderBottom: "1px solid var(--border-light)",
-									background: n.read ? "transparent" : "var(--muted)",
-									cursor: n.link ? "pointer" : "default",
-								}}
-								onClick={() => handleNotificationClick(n.id, n.link)}
-								role={n.link ? "button" : undefined}
-							>
-								<span
-									style={{
-										width: "8px",
-										height: "8px",
-										borderRadius: "50%",
-										background: n.read ? "var(--muted-foreground)" : "#3b82f6",
-										flexShrink: 0,
-										marginTop: "0.4rem",
-									}}
-									aria-hidden
-								/>
-								<div style={{ flex: 1, minWidth: 0 }}>
-									<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
-										<span
-											style={{
-												fontFamily: "var(--font-mono)",
-												fontSize: "0.6rem",
-												textTransform: "uppercase",
-												letterSpacing: "0.08em",
-												color: "var(--muted-foreground)",
-											}}
-										>
-											{n.type}
-										</span>
-										{!n.read && (
-											<span
-												style={{
-													fontFamily: "var(--font-mono)",
-													fontSize: "0.6rem",
-													textTransform: "uppercase",
-													letterSpacing: "0.08em",
-													color: "#3b82f6",
-												}}
-											>
-												New
-											</span>
-										)}
-									</div>
-									<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{n.title}</p>
-									{n.body && (
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>{n.body}</p>
-									)}
-								</div>
-								<span className="muted" style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)", flexShrink: 0 }}>
-									{relativeTime(n.createdAt)}
-								</span>
-							</li>
-						))}
-					</ul>
 				)}
 			</div>
 
-			<p className="eyebrow" style={{ marginBottom: "0.5rem", fontSize: "0.6rem" }}>Case activity</p>
-			<div className="card">
-				{filtered.length === 0 ? (
-					<p className="muted" style={{ padding: "2rem", textAlign: "center", fontSize: "var(--text-sm)" }}>
-						No notifications{filter === "unread" ? " unread" : ""}.
-					</p>
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{unreadCount}</strong> <span className="dash-day__date">unread</span>
+				</span>
+				<span>
+					<strong>{todayCount}</strong> <span className="dash-day__date">today</span>
+				</span>
+				<span>
+					<strong>{notifications.length}</strong> <span className="dash-day__date">kept</span>
+				</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<Link to="/workspace" className="dash-link">
+					Open the Worklist →
+				</Link>
+			</div>
+
+			<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)" }}>
+				<div className="cn-scaffold__chips" role="tablist" aria-label="Inbox">
+					{CATEGORIES.map((c) => {
+						const n = counts[c.id] ?? 0;
+						if (n === 0 && c.id !== "all" && c.id !== "unread") return null;
+						const on = chip === c.id;
+						return (
+							<button
+								key={c.id}
+								type="button"
+								role="tab"
+								aria-selected={on}
+								className="ops-pill"
+								onClick={() => setChip(c.id)}
+								style={{
+									cursor: "pointer",
+									marginLeft: 0,
+									border: "1px solid var(--border)",
+									background: on ? "var(--foreground)" : "transparent",
+									color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+									fontWeight: c.id === "unread" && n > 0 && !on ? 700 : 500,
+								}}
+							>
+								{c.label}
+								<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+									{n}
+								</span>
+							</button>
+						);
+					})}
+				</div>
+				<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+					<input type="search" className="cn-search" placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search notifications" style={{ flex: "1 1 14rem", width: "auto" }} />
+				</div>
+			</div>
+
+			<div className="ops-inbox">
+				{groups.length === 0 ? (
+					<p className="ops-people__empty">{notifications.length === 0 ? "Nothing yet — events land here as they happen." : "Nothing matches."}</p>
 				) : (
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						{filtered.map((n) => {
-							const meta = TYPE_META[n.type];
-							return (
-								<li
+					groups.map((g) => (
+						<div key={g.label}>
+							<div className="ops-inbox__day">
+								<span>{g.label}</span>
+								<span className="ops-inbox__day-n">{g.rows.length}</span>
+							</div>
+							{g.rows.map((n) => (
+								<div
 									key={n.id}
-									style={{
-										display: "flex",
-										alignItems: "flex-start",
-										gap: "0.85rem",
-										padding: "0.85rem 1rem",
-										borderBottom: "1px solid var(--border-light)",
-										background: n.unread ? "var(--muted)" : "transparent",
+									className={`ops-ib${n.read ? " ops-ib--read" : " ops-ib--unread"}`}
+									role={n.link ? "button" : undefined}
+									tabIndex={n.link ? 0 : undefined}
+									onClick={() => open(n)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.preventDefault();
+											open(n);
+										}
 									}}
 								>
-									<span
-										style={{
-											width: "8px",
-											height: "8px",
-											borderRadius: "50%",
-											background: meta.color,
-											flexShrink: 0,
-											marginTop: "0.4rem",
-										}}
-										aria-hidden
-									/>
-									<div style={{ flex: 1, minWidth: 0 }}>
-										<div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.15rem" }}>
-											<span
-												style={{
-													fontFamily: "var(--font-mono)",
-													fontSize: "0.6rem",
-													textTransform: "uppercase",
-													letterSpacing: "0.08em",
-													color: meta.color,
+									<span className={`ops-ib__mark${n.read ? " ops-ib__mark--read" : ""}`} aria-hidden />
+									<div style={{ minWidth: 0 }}>
+										<div className="ops-ib__kicker">{kickerOf(n.type)}</div>
+										<div className="ops-ib__title">{n.title}</div>
+										{n.body && <div className="ops-ib__body">{n.body}</div>}
+									</div>
+									<div className="ops-ib__side">
+										<span className="ops-ib__when" title={new Date(n.createdAt).toLocaleString()}>
+											{whenLabel(n.createdAt, now)}
+										</span>
+										{n.link ? (
+											<span className="dash-link">{linkLabel(n)}</span>
+										) : !n.read ? (
+											<button
+												type="button"
+												className="dash-link"
+												style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }}
+												onClick={(e) => {
+													e.stopPropagation();
+													void markRead(n.id);
 												}}
 											>
-												{meta.label}
-											</span>
-											{n.unread && (
-												<span
-													style={{
-														fontFamily: "var(--font-mono)",
-														fontSize: "0.6rem",
-														textTransform: "uppercase",
-														letterSpacing: "0.08em",
-														color: "var(--muted-foreground)",
-													}}
-												>
-													New
-												</span>
-											)}
-										</div>
-										<p style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>{n.title}</p>
-										<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.15rem" }}>{n.detail}</p>
+												Mark read
+											</button>
+										) : null}
 									</div>
-									<div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.3rem", flexShrink: 0 }}>
-										<span className="muted" style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>{n.time}</span>
-										{n.link && (
-											<Link to={n.link} className="link-arrow" style={{ fontSize: "var(--text-xs)" }}>
-												View →
-											</Link>
-										)}
-									</div>
-								</li>
-							);
-						})}
-					</ul>
+								</div>
+							))}
+						</div>
+					))
 				)}
 			</div>
 		</div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import {
 	useChatConversations,
@@ -39,7 +39,47 @@ const TYPE_LABELS: Record<string, string> = {
 	entity: "Conversation",
 };
 
-type Filter = "all" | "unread" | "awaiting";
+type Filter = "all" | "awaiting" | "unread" | "mine" | "support" | "case" | "stage" | "applicant";
+const CHIPS: { id: Filter; label: string }[] = [
+	{ id: "all", label: "All" },
+	{ id: "awaiting", label: "Awaiting reply" },
+	{ id: "unread", label: "Unread" },
+	{ id: "support", label: "Support" },
+	{ id: "case", label: "Case" },
+	{ id: "stage", label: "Stage" },
+	{ id: "applicant", label: "Applicant" },
+	{ id: "mine", label: "Mine" },
+];
+
+/** The client wrote last and nobody has answered. */
+const awaitingReply = (c: ChatConversation) => Boolean(c.lastMessage?.senderUserId) || (c.unreadCount || 0) > 0;
+const isClosed = (c: ChatConversation) => c.status === "closed" || c.status === "archived";
+/** How long the client has been waiting, in hours; 0 when not waiting. */
+function waitingHours(c: ChatConversation, now: number): number {
+	if (!awaitingReply(c) || isClosed(c)) return 0;
+	const at = new Date(c.lastMessage?.createdAt ?? c.updatedAt).getTime();
+	return Number.isNaN(at) ? 0 : Math.max(0, (now - at) / 3_600_000);
+}
+const waitLabel = (h: number) => (h < 1 ? "just now" : h < 24 ? `${Math.floor(h)} h` : `${Math.floor(h / 24)} d`);
+/** The client's name: the last client message's author, else the title (support/applicant threads are titled by the client). */
+function clientName(c: ChatConversation): string {
+	if (c.lastMessage?.senderUserId) return c.lastMessage.senderName;
+	if (c.type === "support" || c.type === "applicant") return c.title || "Client";
+	return c.title || "Conversation";
+}
+/** "Support · APP-2026-0142", "Stage · Consultation" — the thread's subject without opening it. */
+function kickerOf(c: ChatConversation): string {
+	const type = TYPE_LABELS[c.type] ?? c.type;
+	if (c.type === "case" || c.type === "stage") return `${type} · ${c.title}`;
+	if (c.linkedEntityType) return `${type} · ${c.linkedEntityType}`;
+	return type;
+}
+function entityLink(c: ChatConversation): { to: string; label: string } | null {
+	if (!c.linkedEntityId) return null;
+	if (c.linkedEntityType === "application") return { to: `/applications?id=${c.linkedEntityId}`, label: "Open case" };
+	if (c.linkedEntityType === "consultation") return { to: `/consultations?id=${c.linkedEntityId}`, label: "Open consultation" };
+	return null;
+}
 
 export function EnterpriseHelpdesk() {
 	const { opsUser, opsRole } = useOpsAuth();
@@ -52,6 +92,7 @@ export function EnterpriseHelpdesk() {
 
 	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
 	const [filter, setFilter] = useState<Filter>("all");
+	const [showClosed, setShowClosed] = useState(false);
 	const [search, setSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
@@ -84,28 +125,67 @@ export function EnterpriseHelpdesk() {
 			.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
 	}, [conversations]);
 
+	const now = Date.now();
+	const isMine = useCallback((c: ChatConversation) => Boolean(opsUser) && c.participants.some((p) => p.opsUserId === opsUser!.opsUserId), [opsUser]);
+
 	const stats = useMemo(() => {
-		const open = queue.filter((c) => c.status !== "closed" && c.status !== "archived").length;
-		const unread = queue.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-		const awaiting = queue.filter((c) => (c.unreadCount || 0) > 0).length;
-		return { open, unread, awaiting };
+		const open = queue.filter((c) => !isClosed(c));
+		const waiting = open.filter(awaitingReply);
+		const longest = waiting.reduce((m, c) => Math.max(m, waitingHours(c, now)), 0);
+		return {
+			open: open.length,
+			unread: queue.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
+			awaiting: waiting.length,
+			longest,
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
 	}, [queue]);
+
+	const counts = useMemo<Record<Filter, number>>(() => {
+		const open = queue.filter((c) => !isClosed(c));
+		return {
+			all: open.length,
+			awaiting: open.filter(awaitingReply).length,
+			unread: open.filter((c) => (c.unreadCount || 0) > 0).length,
+			mine: open.filter(isMine).length,
+			support: open.filter((c) => c.type === "support").length,
+			case: open.filter((c) => c.type === "case").length,
+			stage: open.filter((c) => c.type === "stage").length,
+			applicant: open.filter((c) => c.type === "applicant").length,
+		};
+	}, [queue, isMine]);
 
 	const filtered = useMemo(() => {
 		let list = queue;
 		if (filter === "unread") list = list.filter((c) => (c.unreadCount || 0) > 0);
-		if (filter === "awaiting") list = list.filter((c) => (c.unreadCount || 0) > 0);
+		else if (filter === "awaiting") list = list.filter(awaitingReply);
+		else if (filter === "mine") list = list.filter(isMine);
+		else if (filter !== "all") list = list.filter((c) => c.type === filter);
 		if (search.trim()) {
 			const q = search.toLowerCase();
 			list = list.filter(
 				(c) =>
 					c.title.toLowerCase().includes(q) ||
 					(c.lastMessage?.content ?? "").toLowerCase().includes(q) ||
+					(c.lastMessage?.senderName ?? "").toLowerCase().includes(q) ||
 					c.participants.some((p) => p.name.toLowerCase().includes(q)),
 			);
 		}
 		return list;
-	}, [queue, filter, search]);
+	}, [queue, filter, search, isMine]);
+
+	/** Bands by who owes the next word: waiting on you (longest first), in conversation, closed (folded). */
+	const bands = useMemo(() => {
+		const waiting = filtered.filter((c) => !isClosed(c) && awaitingReply(c)).sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
+		const talking = filtered.filter((c) => !isClosed(c) && !awaitingReply(c));
+		const closed = filtered.filter(isClosed);
+		return [
+			{ id: "waiting", label: "Awaiting your reply", note: "longest wait first", rows: waiting },
+			{ id: "talking", label: "In conversation", note: "you replied last", rows: talking },
+			{ id: "closed", label: "Closed", note: showClosed ? "hide" : "show ▸", rows: closed },
+		].filter((b) => b.rows.length > 0);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
+	}, [filtered, showClosed]);
 
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 	const activeInQueue = activeConv && CLIENT_TYPES.has(activeConv.type);
@@ -215,9 +295,7 @@ export function EnterpriseHelpdesk() {
 			<div className="admin-section-head" style={{ marginBottom: "1rem" }}>
 				<div>
 					<h1 className="page-title">Helpdesk</h1>
-					<p className="lead mt-1">
-						Client requests from the portal — one shared conversation thread per request.
-					</p>
+					<p className="lead mt-1">Every client conversation, the ones waiting on you first.</p>
 				</div>
 			</div>
 
@@ -231,70 +309,137 @@ export function EnterpriseHelpdesk() {
 						<p className="muted mt-2" style={{ color: "var(--error, #b00)" }}>{error}</p>
 					)}
 
-					<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
-						<HdStat label="Active requests" value={stats.open} note="Open client conversations" />
-						<HdStat label="Unread" value={stats.unread} note="Messages not yet read" accent={stats.unread > 0} />
-						<HdStat label="Awaiting reply" value={stats.awaiting} note="Need your response" inverted={stats.awaiting > 0} />
+					<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+						<span>
+							<strong>{stats.open}</strong> <span className="dash-day__date">open</span>
+						</span>
+						<span>
+							<strong>{stats.awaiting}</strong> <span className="dash-day__date">awaiting your reply</span>
+						</span>
+						<span>
+							<strong>{stats.unread}</strong> <span className="dash-day__date">unread</span>
+						</span>
+						<span>
+							<strong>{stats.longest > 0 ? waitLabel(stats.longest) : "—"}</strong> <span className="dash-day__date">longest wait</span>
+						</span>
+						<span className="dash-day__sep" aria-hidden>
+							|
+						</span>
+						<Link to="/workspace" className="dash-link">
+							Open the Worklist →
+						</Link>
 					</div>
 
 					<div className="ops-split hd-split">
 						{/* Queue list */}
 						<div className="ops-split__list hd-list">
 							<div className="hd-list__head">
+								<div className="cn-scaffold__chips" role="tablist" aria-label="Conversations">
+									{CHIPS.map((f) => {
+										const n = counts[f.id];
+										const on = filter === f.id;
+										if (n === 0 && f.id !== "all" && f.id !== "awaiting" && f.id !== "unread" && f.id !== "mine") return null;
+										return (
+											<button
+												key={f.id}
+												type="button"
+												role="tab"
+												aria-selected={on}
+												className="ops-pill"
+												onClick={() => setFilter(f.id)}
+												style={{
+													cursor: "pointer",
+													marginLeft: 0,
+													border: "1px solid var(--border)",
+													background: on ? "var(--foreground)" : "transparent",
+													color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+													fontWeight: f.id === "awaiting" && n > 0 && !on ? 700 : 500,
+												}}
+											>
+												{f.label}
+												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+													{n}
+												</span>
+											</button>
+										);
+									})}
+								</div>
 								<input
 									type="search"
-									className="input input--sm"
-									placeholder="Search request, client…"
+									className="cn-search"
+									placeholder="Search client, request…"
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
-									style={{ width: "100%" }}
+									aria-label="Search conversations"
+									style={{ marginTop: "0.5rem" }}
 								/>
-								<div className="admin-env-tabs" style={{ marginTop: "0.5rem" }}>
-									{(["all", "awaiting", "unread"] as const).map((f) => (
-										<button
-											key={f}
-											className={`admin-env-tab${filter === f ? " admin-env-tab--active" : ""}`}
-											onClick={() => setFilter(f)}
-										>
-											{f === "all" ? "All" : f === "awaiting" ? "Awaiting" : "Unread"}
-										</button>
-									))}
-								</div>
 							</div>
 
 							<div className="hd-list__body">
 								{convsLoading ? (
 									<p className="muted hd-empty">Loading conversations…</p>
-								) : filtered.length === 0 ? (
+								) : bands.length === 0 ? (
 									<p className="muted hd-empty">No client requests match.</p>
 								) : (
-									filtered.map((c) => (
-										<button
-											key={c.id}
-											className={`hd-row${activeConvId === c.id ? " hd-row--active" : ""}`}
-											onClick={() => openConversation(c)}
-										>
-											<span className="hd-row__top">
-												<span className="hd-row__ref mono">{TYPE_LABELS[c.type] ?? c.type}</span>
-												{c.unreadCount > 0 ? (
-													<span className="hd-row__unread mono">{c.unreadCount}</span>
-												) : null}
-											</span>
-											<span className="hd-row__title">{c.title || "Conversation"}</span>
-											<span className="hd-row__meta mono">
-												{c.lastMessage
-													? `${c.lastMessage.senderName}: ${c.lastMessage.content}`
-													: c.participants.map((p) => p.name).join(", ")}
-											</span>
-											<span className="hd-row__foot">
-												<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-													{convTime(c.updatedAt)}
+									bands.map((band) => (
+										<div key={band.id}>
+											<div
+												className={`ops-band hd-band${band.id === "closed" ? " ops-band--toggle" : ""}`}
+												role={band.id === "closed" ? "button" : undefined}
+												tabIndex={band.id === "closed" ? 0 : undefined}
+												onClick={band.id === "closed" ? () => setShowClosed((v) => !v) : undefined}
+												onKeyDown={
+													band.id === "closed"
+														? (e) => {
+																if (e.key === "Enter" || e.key === " ") {
+																	e.preventDefault();
+																	setShowClosed((v) => !v);
+																}
+															}
+														: undefined
+												}
+											>
+												<span className="ops-band__name">
+													{band.label} · {band.rows.length}
 												</span>
-												<span className="hd-row__owner mono">
-													{c.status !== "open" ? c.status : ""}
-												</span>
-											</span>
-										</button>
+												<span className="ops-band__note">{band.note}</span>
+											</div>
+											{(band.id !== "closed" || showClosed) &&
+												band.rows.map((c) => {
+													const hours = waitingHours(c, now);
+													const link = entityLink(c);
+													return (
+														<button
+															key={c.id}
+															type="button"
+															className={`hd-row${activeConvId === c.id ? " hd-row--active" : ""}${hours >= 24 ? " hd-row--wait" : ""}`}
+															onClick={() => openConversation(c)}
+														>
+															<span className="hd-row__line">
+																<span className="hd-row__main">
+																	<span className="hd-row__ref mono">{kickerOf(c)}</span>
+																	<span className="hd-row__title">{clientName(c)}</span>
+																	<span className="hd-row__meta">
+																		{c.lastMessage
+																			? `${c.lastMessage.senderUserId ? c.lastMessage.senderName : "You"}: ${c.lastMessage.content}`
+																			: link
+																				? link.label.replace("Open ", "")
+																				: c.participants.map((p) => p.name).join(", ")}
+																	</span>
+																</span>
+																<span className="hd-row__side">
+																	<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+																		{convTime(c.lastMessage?.createdAt ?? c.updatedAt)}
+																	</span>
+																	{c.unreadCount > 0 ? <span className="hd-row__unread mono">{c.unreadCount}</span> : null}
+																	{hours > 0 && band.id === "waiting" ? <span className={`hd-row__wait mono${hours >= 24 ? " hd-row__wait--long" : ""}`}>waiting {waitLabel(hours)}</span> : null}
+																	{isClosed(c) ? <span className="hd-row__owner mono">{c.status}</span> : null}
+																</span>
+															</span>
+														</button>
+													);
+												})}
+										</div>
 									))
 								)}
 							</div>
@@ -423,18 +568,23 @@ function ConversationThread({
 					←
 				</button>
 				<div style={{ minWidth: 0, flex: 1 }}>
-					<div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-						{conversation.title ?? "Conversation"}
-					</div>
+					<div className="cn-detailhead__kicker" style={{ marginBottom: 0 }}>{kickerOf(conversation)}</div>
+					<div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{clientName(conversation)}</div>
 					<div style={{ fontSize: 10, color: "#52525b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
-						{conversation.participants.map((p) => p.name).join(", ")}
+						{conversation.participants.length > 0 ? `with ${conversation.participants.map((p) => p.name).join(", ")}` : ""}
+						{conversation.status !== "open" ? ` · ${conversation.status}` : ""}
 					</div>
 				</div>
-				{conversation.linkedEntityType && (
-					<span style={stagePillMiniStyle}>
-						{conversation.linkedEntityType.toUpperCase()}
-					</span>
-				)}
+				{(() => {
+					const link = entityLink(conversation);
+					return link ? (
+						<Link to={link.to} className="btn btn--ghost btn--sm" style={{ flexShrink: 0 }}>
+							{link.label} →
+						</Link>
+					) : conversation.linkedEntityType ? (
+						<span style={stagePillMiniStyle}>{conversation.linkedEntityType.toUpperCase()}</span>
+					) : null;
+				})()}
 			</div>
 
 			<MessageList
@@ -497,43 +647,6 @@ function convTime(iso?: string) {
 	if (diffDays === 1) return "Yesterday";
 	if (diffDays < 7) return date.toLocaleDateString([], { weekday: "short" });
 	return date.toLocaleDateString([], { month: "short", day: "numeric" });
-}
-
-function HdStat({
-	label,
-	value,
-	note,
-	accent,
-	inverted,
-}: {
-	label: string;
-	value: number;
-	note: string;
-	accent?: boolean;
-	inverted?: boolean;
-}) {
-	return (
-		<div
-			className="card"
-			style={
-				inverted
-					? { background: "var(--foreground)", color: "var(--background)" }
-					: accent
-						? { borderColor: "var(--foreground)", borderWidth: "2px" }
-						: undefined
-			}
-		>
-			<p className="eyebrow" style={inverted ? { color: "var(--muted)" } : undefined}>
-				{label}
-			</p>
-			<p className="page-title mt-1" style={{ fontSize: "1.75rem", ...(inverted ? { color: "var(--background)" } : {}) }}>
-				{value}
-			</p>
-			<p className="muted mt-1" style={{ fontSize: "var(--text-xs)", ...(inverted ? { color: "var(--muted)" } : {}) }}>
-				{note}
-			</p>
-		</div>
-	);
 }
 
 const streamContainerStyle: CSSProperties = {

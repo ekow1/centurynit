@@ -17,7 +17,9 @@ type UniversityFormInput = CatalogUniversityUpdate & { id?: string };
 type DestinationFormInput = CatalogDestinationUpdate & { id?: string };
 
 export function EnterpriseUniversities() {
-	const { canEditUniversities } = useOpsAuth();
+	const { canEditUniversities, hasPermission } = useOpsAuth();
+	// Form dropdowns are the admin's (the "lookups" module); no tab for anyone else.
+	const canSeeLookups = hasPermission("lookups");
 	const [tab, setTab] = useState<Tab>("universities");
 	const [search, setSearch] = useState("");
 	
@@ -169,7 +171,9 @@ export function EnterpriseUniversities() {
 
 			{/* Tabs */}
 			<div style={{ display: "flex", gap: "1rem", marginBottom: "2rem", borderBottom: "1px solid var(--border-light)", overflowX: "auto", whiteSpace: "nowrap", paddingBottom: "2px" }}>
-				{([["universities", "Universities"], ["countries", "Countries"], ["form-dropdowns", "Form Dropdowns"]] as const).map(([key, label]) => (
+				{([["universities", "Universities"], ["countries", "Countries"], ["form-dropdowns", "Form Dropdowns"]] as const)
+					.filter(([key]) => key !== "form-dropdowns" || canSeeLookups)
+					.map(([key, label]) => (
 					<button
 						key={key}
 						onClick={() => { setTab(key); setSearch(""); }}

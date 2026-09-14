@@ -1,6 +1,6 @@
 
-import type { TDocumentDefinitions, TableCell, StyleDictionary } from "pdfmake/interfaces.js";
-import { formatGhs, formatUsd } from "./receiptEmail.js";
+import type { Content, TDocumentDefinitions, TableCell } from "pdfmake/interfaces.js";
+import { formatUsd } from "./receiptEmail.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -40,28 +40,14 @@ const fonts = {
 const urlResolver = new URLResolver(virtualfs, undefined);
 const printer = new PdfPrinter(fonts, virtualfs, urlResolver, undefined);
 
+const INK = "#000000";
+const GRAY = "#666666";
+const HAIR = "#d4d4d8";
 
-
-const defaultStyles: StyleDictionary = {
-	header: {
-		fontSize: 18,
-		bold: true,
-		margin: [0, 0, 0, 10],
-	},
-	subheader: {
-		fontSize: 12,
-		bold: true,
-		margin: [0, 10, 0, 5],
-	},
-	tableExample: {
-		margin: [0, 5, 0, 15],
-	},
-	tableHeader: {
-		bold: true,
-		fontSize: 10,
-		color: "black",
-	},
-};
+// The built-in Helvetica has no cedi glyph (₵) — PDFs spell the currency out.
+function formatGhsPdf(amount: number): string {
+	return `GHS ${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 async function generatePdfBuffer(docDefinition: TDocumentDefinitions): Promise<Buffer> {
 	// createPdfKitDocument resolves fonts/images first — it's async in 0.3.x
@@ -93,6 +79,12 @@ export type PdfInvoiceInput = {
 	lineItems: LineItemInput[];
 	totalGhs: number;
 	totalUsd?: number | null;
+	/** Journey label — "Chapter III · Applications". */
+	chapter?: string | null;
+	/** Amount already settled (USD) — drives "Paid to date" and the balance row. */
+	paidUsd?: number | null;
+	/** Word under the invoice number — "Issued", "Part paid", "Paid". */
+	statusLabel?: string | null;
 };
 
 export type PdfReceiptInput = {
@@ -106,119 +98,265 @@ export type PdfReceiptInput = {
 	lineItems: LineItemInput[];
 	totalGhs: number;
 	totalUsd?: number | null;
+	/** Journey label — "Chapter III · Applications". */
+	chapter?: string | null;
+	/** What is still owed after this payment (USD) — "settled in full" when 0. */
+	balanceUsd?: number | null;
 };
 
-export async function generateInvoicePdf(input: PdfInvoiceInput): Promise<Buffer> {
-	const tableBody: TableCell[][] = [
-		[
-			{ text: "DESCRIPTION", style: "tableHeader", border: [false, true, false, true] },
-			{ text: "AMOUNT", style: "tableHeader", border: [false, true, false, true], alignment: "right" as const },
-		],
-	];
+/* ── shared document parts ───────────────────────────────────────────────── */
 
-	for (const item of input.lineItems) {
-		tableBody.push([
+/** Black masthead — the bordered CENTURY NIT tag, the company, the document
+ * kind + number on the right. Same on invoice and receipt. */
+function masthead(kind: string, number: string, statusLabel?: string | null): Content {
+	return {
+		table: {
+			widths: ["*", "auto"],
+			body: [
+				[
+					{
+						stack: [
+							{
+								table: {
+									widths: ["auto"],
+									body: [[{ text: "CENTURY NIT", fontSize: 7, bold: true, color: "#ffffff", margin: [5, 3, 5, 3] }]],
+								},
+								layout: {
+									hLineWidth: () => 0.75,
+									vLineWidth: () => 0.75,
+									hLineColor: () => "#ffffff",
+									vLineColor: () => "#ffffff",
+								},
+							},
+							{ text: "Century NIT Consult", fontSize: 15, bold: true, color: "#ffffff", margin: [0, 7, 0, 0] },
+							{ text: "Accra, Ghana · London, United Kingdom", fontSize: 7.5, color: "#bbbbbb", margin: [0, 3, 0, 0] },
+						],
+						border: [false, false, false, false],
+						fillColor: INK,
+						margin: [18, 16, 0, 18],
+					},
+					{
+						stack: [
+							{ text: kind.toUpperCase(), fontSize: 7, color: "#bbbbbb", alignment: "right" as const, characterSpacing: 1.5 },
+							{ text: number, fontSize: 16, bold: true, color: "#ffffff", alignment: "right" as const, margin: [0, 3, 0, 0] },
+							...(statusLabel
+								? [{
+										table: {
+											widths: ["auto"],
+											body: [[{ text: statusLabel.toUpperCase(), fontSize: 7, bold: true, color: "#ffffff", margin: [5, 2, 5, 2] }]],
+										},
+										layout: {
+											hLineWidth: () => 0.75,
+											vLineWidth: () => 0.75,
+											hLineColor: () => "#ffffff",
+											vLineColor: () => "#ffffff",
+										},
+										alignment: "right" as const,
+										margin: [0, 6, 0, 0],
+									} as Content]
+								: []),
+						],
+						border: [false, false, false, false],
+						fillColor: INK,
+						margin: [0, 16, 18, 18],
+					},
+				],
+			],
+		},
+		layout: "noBorders",
+	};
+}
+
+/** The four-cell meta strip — label in mono-smallcaps, value below. */
+function metaStrip(cells: { label: string; value: string; sub?: string }[]): Content {
+	const body: TableCell[][] = [
+		cells.map((cell): TableCell => ({
+			stack: [
+				{ text: cell.label.toUpperCase(), fontSize: 6.5, color: GRAY, characterSpacing: 1 },
+				{ text: cell.value, fontSize: 9.5, bold: true, margin: [0, 4, 0, 0] as [number, number, number, number] },
+				...(cell.sub ? [{ text: cell.sub, fontSize: 8, color: GRAY, margin: [0, 2, 0, 0] as [number, number, number, number] }] : []),
+			],
+			margin: [10, 9, 10, 10],
+		})),
+	];
+	return {
+		table: {
+			widths: cells.map(() => "*"),
+			body,
+		},
+		layout: {
+			hLineWidth: (i: number) => (i === 0 ? 0 : 1.25),
+			vLineWidth: (i: number) => (i === 0 || i === cells.length ? 0 : 0.5),
+			hLineColor: () => INK,
+			vLineColor: () => HAIR,
+		},
+		margin: [0, 0, 0, 18],
+	};
+}
+
+/** The line-items table — hairline rows, mono amounts. */
+function itemsTable(items: LineItemInput[]): Content {
+	const body: TableCell[][] = [
+		[
+			{ text: "ITEM", fontSize: 6.5, color: GRAY, characterSpacing: 1, border: [false, false, false, false], margin: [0, 0, 0, 6] },
+			{ text: "AMOUNT", fontSize: 6.5, color: GRAY, characterSpacing: 1, alignment: "right" as const, border: [false, false, false, false], margin: [0, 0, 0, 6] },
+		],
+		...items.map((item): TableCell[] => [
 			{
 				stack: [
-					{ text: item.label, bold: true },
-					...(item.detail ? [{ text: item.detail, fontSize: 9, color: "gray", margin: [0, 2, 0, 0] as [number, number, number, number] }] : []),
+					{ text: item.label, fontSize: 9.5, bold: true },
+					...(item.detail ? [{ text: item.detail, fontSize: 8, color: GRAY, margin: [0, 2, 0, 0] as [number, number, number, number] }] : []),
 				],
-				border: [false, false, false, true],
-				margin: [0, 5, 0, 5] as [number, number, number, number],
+				border: [false, false, false, false],
+				margin: [0, 7, 0, 7],
 			},
 			{
-				text: formatGhs(item.amountGhs),
+				text: formatUsd(item.amountUsd),
+				fontSize: 9.5,
 				alignment: "right" as const,
-				border: [false, false, false, true],
-				margin: [0, 5, 0, 5] as [number, number, number, number],
+				border: [false, false, false, false],
+				margin: [0, 7, 0, 7],
 			},
-		]);
-	}
+		]),
+	];
+	return {
+		table: { headerRows: 1, widths: ["*", "auto"], body },
+		layout: {
+			hLineWidth: (i: number, node: { table: { body: unknown[] } }) =>
+				i === 0 ? 0 : i === 1 ? 1.25 : i === node.table.body.length ? 0 : 0.5,
+			vLineWidth: () => 0,
+			hLineColor: (i: number) => (i === 1 ? INK : HAIR),
+		},
+	};
+}
+
+/** Right-aligned totals column; the last row can be the inverted one
+ * (black cell, white type — the number that matters). */
+function totalsTable(rows: { label: string; value: string; inverted?: boolean; muted?: boolean }[]): Content {
+	return {
+		columns: [
+			{ text: "", width: "*" },
+			{
+				width: "auto",
+				table: {
+					widths: ["auto", "auto"],
+					body: rows.map((row) => [
+						{
+							text: row.label,
+							fontSize: row.inverted ? 7.5 : 9,
+							bold: !!row.inverted,
+							characterSpacing: row.inverted ? 1 : 0,
+							color: row.inverted ? "#ffffff" : row.muted ? GRAY : INK,
+							fillColor: row.inverted ? INK : undefined,
+							margin: [10, row.inverted ? 7 : 4, 10, row.inverted ? 7 : 4],
+							border: [false, false, false, false],
+						},
+						{
+							text: row.value,
+							fontSize: row.inverted ? 12 : 9,
+							bold: true,
+							color: row.inverted ? "#ffffff" : row.muted ? GRAY : INK,
+							fillColor: row.inverted ? INK : undefined,
+							alignment: "right" as const,
+							margin: [10, row.inverted ? 5 : 4, 10, row.inverted ? 5 : 4],
+							border: [false, false, false, false],
+						},
+					]),
+				},
+				layout: {
+					hLineWidth: (i: number) => (i === 0 ? 0 : 0.5),
+					vLineWidth: () => 0,
+					hLineColor: () => HAIR,
+				},
+			},
+		],
+		margin: [0, 0, 0, 18],
+	};
+}
+
+/** Two-column notes block — terms / company record. */
+function notesBlock(left: { head: string; body: string }, right: { head: string; body: string }): Content {
+	return {
+		table: {
+			widths: ["*", "*"],
+			body: [
+				[
+					{
+						stack: [
+							{ text: left.head.toUpperCase(), fontSize: 6.5, bold: true, characterSpacing: 1, margin: [0, 0, 0, 4] },
+							{ text: left.body, fontSize: 8, color: GRAY, lineHeight: 1.4 },
+						],
+						border: [false, false, false, false],
+						margin: [12, 10, 12, 12],
+					},
+					{
+						stack: [
+							{ text: right.head.toUpperCase(), fontSize: 6.5, bold: true, characterSpacing: 1, margin: [0, 0, 0, 4] },
+							{ text: right.body, fontSize: 8, color: GRAY, lineHeight: 1.4 },
+						],
+						border: [false, false, false, false],
+						margin: [12, 10, 12, 12],
+					},
+				],
+			],
+		},
+		layout: {
+			hLineWidth: (i: number) => (i === 0 ? 1.25 : 0),
+			vLineWidth: (i: number) => (i === 1 ? 0.5 : 0),
+			hLineColor: () => INK,
+			vLineColor: () => HAIR,
+		},
+	};
+}
+
+/** `INVOICE · PAGE 1 OF 1` — same on every document. */
+function pageFooter(left: string): TDocumentDefinitions["footer"] {
+	return (currentPage: number, pageCount: number) => ({
+		columns: [
+			{ text: "CENTURY NIT CONSULT", fontSize: 6.5, color: GRAY, characterSpacing: 1 },
+			{ text: `${left} · PAGE ${currentPage} OF ${pageCount}`, fontSize: 6.5, color: GRAY, alignment: "right" as const },
+		],
+		margin: [40, 8, 40, 0],
+	});
+}
+
+/* ── the documents ───────────────────────────────────────────────────────── */
+
+export async function generateInvoicePdf(input: PdfInvoiceInput): Promise<Buffer> {
+	const totalUsd = input.totalUsd ?? input.lineItems.reduce((sum, i) => sum + i.amountUsd, 0);
+	const paidUsd = input.paidUsd ?? 0;
+	const balanceUsd = Math.max(0, totalUsd - paidUsd);
+	const statusLabel = input.statusLabel ?? (balanceUsd <= 0 ? "Paid" : paidUsd > 0 ? "Part paid" : "Issued");
 
 	const docDefinition: TDocumentDefinitions = {
 		defaultStyle: { font: "Helvetica", fontSize: 10 },
-		styles: defaultStyles,
+		pageMargins: [40, 36, 40, 48],
+		footer: pageFooter(input.invoiceNumber),
 		content: [
-			{
-				columns: [
-					{
-						text: "CENTURY NIT CONSULT",
-						fontSize: 16,
-						bold: true,
-					},
-					{
-						text: "INVOICE",
-						fontSize: 24,
-						bold: true,
-						alignment: "right" as const,
-					},
-				],
-				margin: [0, 0, 0, 20],
-			},
-			{
-				canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2 }],
-				margin: [0, 0, 0, 20],
-			},
-			{
-				columns: [
-					{
-						stack: [
-							{ text: "BILLED TO:", bold: true, fontSize: 8 },
-							{ text: input.clientName, bold: true, margin: [0, 2, 0, 0] },
-							{ text: input.clientEmail },
-							...(input.clientPhone ? [{ text: input.clientPhone }] : []),
-						],
-					},
-					{
-						stack: [
-							{ text: `Invoice Number: ${input.invoiceNumber}`, alignment: "right" as const },
-							{ text: `Date Issued: ${input.issueDate}`, alignment: "right" as const },
-							{ text: `Due Date: ${input.dueAt}`, alignment: "right" as const },
-						],
-					},
-				],
-				margin: [0, 0, 0, 30],
-			},
-			{
-				table: {
-					headerRows: 1,
-					widths: ["*", "auto"],
-					body: tableBody,
+			masthead("Invoice", input.invoiceNumber, statusLabel),
+			metaStrip([
+				{ label: "Issued", value: input.issueDate },
+				{ label: "Due", value: input.dueAt },
+				{ label: "Billed to", value: input.clientName, sub: input.clientEmail },
+				{ label: "Chapter", value: input.chapter ?? "—" },
+			]),
+			itemsTable(input.lineItems),
+			totalsTable([
+				{ label: "Subtotal", value: formatUsd(totalUsd), muted: true },
+				{ label: "Paid to date", value: formatUsd(paidUsd), muted: true },
+				{ label: "GHS equivalent", value: formatGhsPdf(input.totalGhs), muted: true },
+				{ label: "BALANCE DUE", value: formatUsd(balanceUsd), inverted: true },
+			]),
+			notesBlock(
+				{
+					head: "How to pay",
+					body: "Pay through your portal — the Money ledger — or the secure link in your invoice email. Card and mobile money are accepted via Paystack. A receipt issues automatically on settlement.",
 				},
-				layout: {
-					hLineWidth: (i: number, node: any) => {
-						return (i === 0 || i === node.table.body.length) ? 2 : 1;
-					},
-					vLineWidth: () => 0,
-					hLineColor: (i: number, node: any) => {
-						return (i === 0 || i === node.table.body.length) ? "black" : "#cccccc";
-					},
+				{
+					head: "Terms",
+					body: "Due by the date above. Pass-through charges (application, visa and travel costs) are non-refundable once submitted to the institution. Questions — reply to your consultant.",
 				},
-			},
-			{
-				columns: [
-					{ text: "", width: "*" },
-					{
-						table: {
-							widths: ["auto", "auto"],
-							body: [
-								[
-									{ text: "TOTAL DUE", bold: true, margin: [0, 10, 10, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-									{ text: formatGhs(input.totalGhs), bold: true, fontSize: 14, margin: [0, 10, 0, 0] as [number, number, number, number], alignment: "right" as const, border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-								],
-								...(input.totalUsd
-									? [[
-											{ text: "USD EQUIVALENT", fontSize: 8, margin: [0, 2, 10, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-											{ text: formatUsd(input.totalUsd), fontSize: 8, alignment: "right" as const, margin: [0, 2, 0, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-									  ]]
-									: []),
-							],
-						},
-						layout: "noBorders",
-					},
-				],
-				margin: [0, 10, 0, 0],
-			},
+			),
 		],
 	};
 
@@ -226,125 +364,71 @@ export async function generateInvoicePdf(input: PdfInvoiceInput): Promise<Buffer
 }
 
 export async function generateReceiptPdf(input: PdfReceiptInput): Promise<Buffer> {
-	const tableBody: TableCell[][] = [
-		[
-			{ text: "DESCRIPTION", style: "tableHeader", border: [false, true, false, true] },
-			{ text: "AMOUNT", style: "tableHeader", border: [false, true, false, true], alignment: "right" as const },
-		],
-	];
-
-	for (const item of input.lineItems) {
-		tableBody.push([
-			{
-				stack: [
-					{ text: item.label, bold: true },
-					...(item.detail ? [{ text: item.detail, fontSize: 9, color: "gray", margin: [0, 2, 0, 0] as [number, number, number, number] }] : []),
-				],
-				border: [false, false, false, true],
-				margin: [0, 5, 0, 5] as [number, number, number, number],
-			},
-			{
-				text: formatGhs(item.amountGhs),
-				alignment: "right" as const,
-				border: [false, false, false, true],
-				margin: [0, 5, 0, 5] as [number, number, number, number],
-			},
-		]);
-	}
+	const totalUsd = input.totalUsd ?? input.lineItems.reduce((sum, i) => sum + i.amountUsd, 0);
+	const balanceUsd = input.balanceUsd ?? 0;
+	const settled = balanceUsd <= 0.004;
 
 	const docDefinition: TDocumentDefinitions = {
 		defaultStyle: { font: "Helvetica", fontSize: 10 },
-		styles: defaultStyles,
+		pageMargins: [40, 36, 40, 48],
+		footer: pageFooter(input.receiptNumber),
 		content: [
+			masthead("Official receipt", input.receiptNumber, "Paid"),
+			// the stamp — PAID seal next to the amount
 			{
 				columns: [
 					{
-						text: "CENTURY NIT CONSULT",
-						fontSize: 16,
-						bold: true,
-					},
-					{
-						text: "RECEIPT",
-						fontSize: 24,
-						bold: true,
-						alignment: "right" as const,
-					},
-				],
-				margin: [0, 0, 0, 20],
-			},
-			{
-				canvas: [{ type: "line", x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2 }],
-				margin: [0, 0, 0, 20],
-			},
-			{
-				columns: [
-					{
-						stack: [
-							{ text: "RECEIVED FROM:", bold: true, fontSize: 8 },
-							{ text: input.clientName, bold: true, margin: [0, 2, 0, 0] },
-							{ text: input.clientEmail },
-						],
-					},
-					{
-						stack: [
-							{ text: `Receipt Number: ${input.receiptNumber}`, alignment: "right" as const },
-							{ text: `Invoice Number: ${input.invoiceNumber}`, alignment: "right" as const },
-							{ text: `Date Paid: ${input.paymentDate}`, alignment: "right" as const },
-							{ text: `Payment Method: ${input.paymentChannel}`, alignment: "right" as const },
-							{ text: `Reference: ${input.reference}`, alignment: "right" as const },
-						],
-					},
-				],
-				margin: [0, 0, 0, 30],
-			},
-			{
-				table: {
-					headerRows: 1,
-					widths: ["*", "auto"],
-					body: tableBody,
-				},
-				layout: {
-					hLineWidth: (i: number, node: any) => {
-						return (i === 0 || i === node.table.body.length) ? 2 : 1;
-					},
-					vLineWidth: () => 0,
-					hLineColor: (i: number, node: any) => {
-						return (i === 0 || i === node.table.body.length) ? "black" : "#cccccc";
-					},
-				},
-			},
-			{
-				columns: [
-					{ text: "", width: "*" },
-					{
+						width: "auto",
 						table: {
-							widths: ["auto", "auto"],
-							body: [
-								[
-									{ text: "TOTAL PAID", bold: true, margin: [0, 10, 10, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-									{ text: formatGhs(input.totalGhs), bold: true, fontSize: 14, margin: [0, 10, 0, 0] as [number, number, number, number], alignment: "right" as const, border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-								],
-								...(input.totalUsd
-									? [[
-											{ text: "USD EQUIVALENT", fontSize: 8, margin: [0, 2, 10, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-											{ text: formatUsd(input.totalUsd), fontSize: 8, alignment: "right" as const, margin: [0, 2, 0, 0] as [number, number, number, number], border: [false, false, false, false] as [boolean, boolean, boolean, boolean] },
-									  ]]
-									: []),
-							],
+							widths: ["auto"],
+							body: [[{ text: "PAID", fontSize: 11, bold: true, characterSpacing: 2, margin: [10, 6, 10, 6] }]],
 						},
-						layout: "noBorders",
+						layout: {
+							hLineWidth: () => 1.5,
+							vLineWidth: () => 1.5,
+							hLineColor: () => INK,
+							vLineColor: () => INK,
+						},
+						margin: [0, 6, 0, 0],
+					},
+					{
+						width: "*",
+						stack: [
+							{ text: formatUsd(totalUsd), fontSize: 22, bold: true },
+							{ text: `${input.paymentDate} · via ${input.paymentChannel}`, fontSize: 8.5, color: GRAY, margin: [0, 3, 0, 0] },
+						],
+						margin: [16, 0, 0, 0],
 					},
 				],
-				margin: [0, 10, 0, 0],
+				margin: [0, 16, 0, 20],
 			},
-			{
-				text: "PAID IN FULL",
-				bold: true,
-				fontSize: 16,
-				color: "black",
-				alignment: "center" as const,
-				margin: [0, 40, 0, 0],
-			},
+			metaStrip([
+				{ label: "Received from", value: input.clientName, sub: input.clientEmail },
+				{ label: "Invoice", value: input.invoiceNumber, sub: input.chapter ?? undefined },
+				{ label: "Method", value: input.paymentChannel.replace(/_/g, " ").toUpperCase() },
+				{ label: "Reference", value: input.reference },
+			]),
+			itemsTable(input.lineItems),
+			totalsTable([
+				{ label: "Invoice total", value: formatUsd(totalUsd), muted: true },
+				{ label: "Paid in GHS", value: formatGhsPdf(input.totalGhs), muted: true },
+				{ label: "AMOUNT PAID", value: formatUsd(totalUsd), inverted: true },
+				{
+					label: "Balance remaining",
+					value: settled ? `${formatUsd(0)} — settled in full` : formatUsd(balanceUsd),
+					muted: true,
+				},
+			]),
+			notesBlock(
+				{
+					head: "Record",
+					body: `Verified against payment reference ${input.reference}. This receipt is proof of payment — keep it with your file.`,
+				},
+				{
+					head: "Century NIT Consult",
+					body: "Accra, Ghana · London, United Kingdom · support@centurynit.com",
+				},
+			),
 		],
 	};
 

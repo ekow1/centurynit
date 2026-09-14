@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { invoicePayments, invoiceLines, paymentTransactions, applicants } from "../db/schema.js";
 import { getSetting } from "./settings.js";
-import { receiptEmailMessage } from "./receiptEmail.js";
+import { receiptEmailMessage, INVOICE_CHAPTERS } from "./receiptEmail.js";
 import { queueEmail } from "../worker/queues.js";
 import { getInvoice, recordPayment } from "./invoice.js";
 import { generateInvoicePdf, generateReceiptPdf } from "./pdfEngine.js";
@@ -128,14 +128,26 @@ async function sendReceipt(input: {
 		lineItems: lineItems ?? [{ label: `Settlement for Invoice ${invoice.invoiceNumber}`, amountGhs, amountUsd }],
 	};
 
+	const paidCents = await paidCentsOfInvoice(invoice.id);
+	const balanceUsd = Math.max(0, invoice.subtotalCents - invoice.creditedCents - paidCents) / 100;
+	const chapter = INVOICE_CHAPTERS[invoice.type] ?? null;
+
 	let invoicePdfBase64: string | undefined;
 	let receiptPdfBase64: string | undefined;
 
 	try {
-		const invoicePdfBuffer = await generateInvoicePdf(baseData);
+		const invoicePdfBuffer = await generateInvoicePdf({
+			...baseData,
+			chapter,
+			paidUsd: paidCents / 100,
+		});
 		invoicePdfBase64 = invoicePdfBuffer.toString("base64");
 
-		const receiptPdfBuffer = await generateReceiptPdf(baseData);
+		const receiptPdfBuffer = await generateReceiptPdf({
+			...baseData,
+			chapter,
+			balanceUsd,
+		});
 		receiptPdfBase64 = receiptPdfBuffer.toString("base64");
 	} catch (err) {
 		console.error("[paymentSettlement] Failed to generate PDFs:", err);
@@ -154,6 +166,8 @@ async function sendReceipt(input: {
 		reference: baseData.reference,
 		description: `Settlement for Invoice ${invoice.invoiceNumber}`,
 		lineItems,
+		invoiceType: invoice.type,
+		balanceUsd,
 	});
 
 	if (invoicePdfBase64 && receiptPdfBase64) {

@@ -1,4 +1,6 @@
 import { sendEmail } from "../lib/resend.js";
+import { emailLayout, escapeHtml } from "../lib/email-templates.js";
+import { env } from "../env.js";
 import type { QueuedEmail } from "./notifications.js";
 
 export interface ReceiptLineItem {
@@ -23,6 +25,11 @@ export interface ReceiptEmailData {
 	/** Real invoice line items — when provided, rendered instead of the
 	 * hardcoded single-row fallback. */
 	lineItems?: ReceiptLineItem[];
+	/** Invoice kind — rendered as the chapter line ("Chapter III · Applications"). */
+	invoiceType?: string;
+	/** What is still owed on the invoice after this payment (USD). Rendered
+	 * as a "Balance remaining" row only when positive. */
+	balanceUsd?: number | null;
 }
 
 export function formatGhs(amount: number): string {
@@ -33,147 +40,153 @@ export function formatUsd(amount: number): string {
 	return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Which journey chapter an invoice belongs to — the receipt reads in the
+ * client's vocabulary, not the ledger's. */
+export const INVOICE_CHAPTERS: Record<string, string> = {
+	consultation: "Chapter I · Consultation",
+	agency: "Chapter II · Enrolment",
+	application: "Chapter III · Applications",
+	visa: "Chapter IV · Visa",
+	travel: "Chapter V · Departure",
+};
+
 export function generateReceiptHtml(data: ReceiptEmailData): string {
 	const ghsStr = formatGhs(data.amountGhs);
 	const usdStr = data.amountUsd != null ? formatUsd(data.amountUsd) : "";
-	const desc = data.description || `Settlement for Invoice ${data.invoiceNumber}`;
+	const desc = escapeHtml(data.description || `Settlement for Invoice ${data.invoiceNumber}`);
+	const ledgerUrl = `${env.FRONTEND_URL}/portal/financial`;
+	const chapter = data.invoiceType ? INVOICE_CHAPTERS[data.invoiceType] : undefined;
+	const channel = escapeHtml(data.paymentChannel.replace(/_/g, " ").toUpperCase());
+	const remaining = data.balanceUsd != null && data.balanceUsd > 0.004 ? formatUsd(data.balanceUsd) : null;
 
-	const lineItemsHtml =
-		data.lineItems && data.lineItems.length > 0
-			? data.lineItems
-					.map(
-						(item) => `
+	const itemRow = (label: string, detail: string | null | undefined, amount: string, last = false) => {
+		const border = last ? "border-bottom:1px solid #d4d4d8;" : "";
+		return `
 						<tr>
-							<td style="padding: 8px 0 16px 0; vertical-align: top;">
-								<strong style="color: #1d1d1f; font-size: 14px; display: block; font-weight: 600;">${item.label}</strong>
-								${item.detail ? `<span style="font-size: 13px; color: #687385; display: block; margin-top: 4px;">${item.detail}</span>` : ""}
+							<td style="padding:8px 0 14px;vertical-align:top;${border}">
+								<strong style="font-size:14px;font-weight:600">${label}</strong>
+								${detail ? `<span style="display:block;font-size:12px;color:#666666;margin-top:3px">${detail}</span>` : ""}
 							</td>
-							<td style="padding: 8px 0 16px 0; text-align: right; color: #1d1d1f; font-size: 14px; vertical-align: top; font-weight: 500;">
-								${formatGhs(item.amountGhs)}
-							</td>
-						</tr>`,
-					)
-					.join("")
-			: `
-					<tr>
-						<td style="padding: 8px 0 16px 0; vertical-align: top;">
-							<strong style="color: #1d1d1f; font-size: 14px; display: block; font-weight: 600;">${desc}</strong>
-						</td>
-						<td style="padding: 8px 0 16px 0; text-align: right; color: #1d1d1f; font-size: 14px; vertical-align: top; font-weight: 500;">
-							${ghsStr}
-						</td>
-					</tr>`;
+							<td style="padding:8px 0 14px;text-align:right;font-size:14px;font-weight:500;vertical-align:top;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;${border}">${amount}</td>
+						</tr>`;
+	};
 
-	return `<!DOCTYPE html>
-<html>
-<head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Receipt from Century NIT Consult</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #f6f9fc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
-	<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f6f9fc; padding: 40px 20px;">
-		<tr>
-			<td>
-				<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; margin: 0 auto;">
-					<!-- Header / Logo -->
+	const items = data.lineItems && data.lineItems.length > 0
+		? data.lineItems
+		: [{ label: desc, detail: null, amountUsd: data.amountUsd ?? 0, amountGhs: data.amountGhs }];
+
+	const lineItemsHtml = items
+		.map((item, i) =>
+			itemRow(
+				escapeHtml(item.label),
+				item.detail ? escapeHtml(item.detail) : null,
+				formatUsd(item.amountUsd),
+				i === items.length - 1,
+			),
+		)
+		.join("");
+
+	const subtotalUsd = items.reduce((sum, item) => sum + item.amountUsd, 0);
+
+	const bodyHtml = `
+		<!-- Summary — amount first, then the refs -->
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
+			<td style="padding:28px 36px 24px;border-bottom:1px solid #d4d4d8;">
+				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
+					<td>
+						<p style="margin:0;color:#666666;font-size:13px;">Receipt from Century NIT Consult</p>
+						<p style="margin:10px 0 0;font-size:34px;font-weight:800;letter-spacing:-1px;font-family:Georgia,'Times New Roman',Times,serif;">${ghsStr}</p>
+						<p style="margin:6px 0 0;color:#666666;font-size:13px;">Paid ${escapeHtml(data.paymentDate)}${usdStr ? ` · ≈ ${usdStr}` : ""}</p>
+						<p style="margin:16px 0 0;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;font-size:12px;">
+							<a href="${escapeHtml(ledgerUrl)}" style="color:#000000;text-decoration:underline;text-underline-offset:3px;">↓ Download invoice</a>
+							&nbsp;&nbsp;
+							<a href="${escapeHtml(ledgerUrl)}" style="color:#000000;text-decoration:underline;text-underline-offset:3px;">↓ Download receipt</a>
+						</p>
+					</td>
+					<td align="right" valign="top" style="width:64px;">
+						<div style="width:44px;height:56px;border:2px solid #000000;padding:8px 7px;">
+							<div style="height:2px;background:#000000;margin-bottom:5px;"></div>
+							<div style="height:2px;background:#000000;margin-bottom:5px;"></div>
+							<div style="height:2px;background:#000000;margin-bottom:5px;"></div>
+							<div style="height:2px;background:#000000;width:60%;"></div>
+						</div>
+					</td>
+				</tr></table>
+
+				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:20px;">
 					<tr>
-						<td align="center" style="padding-bottom: 24px;">
-							<h2 style="margin: 0; color: #1d1d1f; font-size: 16px; font-weight: 700; letter-spacing: 0.5px;">CENTURY NIT CONSULT</h2>
-						</td>
+						<td style="padding:6px 0;color:#666666;font-size:13px;width:45%;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:.3px;">Receipt number</td>
+						<td style="padding:6px 0;color:#000000;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(data.receiptNumber)}</td>
 					</tr>
-					
-					<!-- Card 1: Summary -->
 					<tr>
-						<td style="padding-bottom: 16px;">
-							<table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);">
-								<tr>
-									<td style="padding: 32px 40px;">
-										<p style="margin: 0; color: #687385; font-size: 14px; font-weight: 500;">Receipt from Century NIT Consult</p>
-										<h1 style="margin: 12px 0; color: #1d1d1f; font-size: 36px; font-weight: 700; letter-spacing: -0.5px;">${ghsStr}</h1>
-										<p style="margin: 0; color: #687385; font-size: 14px;">Paid ${data.paymentDate}</p>
-										
-										<div style="margin: 24px 0; border-top: 1px solid #e6ebf1;"></div>
-										
-										<table width="100%" border="0" cellpadding="0" cellspacing="0">
-											<tr>
-												<td style="padding: 6px 0; color: #687385; font-size: 14px; width: 40%;">Receipt number</td>
-												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.receiptNumber}</td>
-											</tr>
-											<tr>
-												<td style="padding: 6px 0; color: #687385; font-size: 14px;">Invoice number</td>
-												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.invoiceNumber}</td>
-											</tr>
-											<tr>
-												<td style="padding: 6px 0; color: #687385; font-size: 14px;">Payment method</td>
-												<td style="padding: 6px 0; color: #1d1d1f; font-size: 14px; font-weight: 500; text-align: right;">${data.paymentChannel}</td>
-											</tr>
-										</table>
-									</td>
-								</tr>
-							</table>
-						</td>
+						<td style="padding:6px 0;color:#666666;font-size:13px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:.3px;">Invoice number</td>
+						<td style="padding:6px 0;color:#000000;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(data.invoiceNumber)}</td>
 					</tr>
-					
-					<!-- Card 2: Details -->
 					<tr>
-						<td>
-							<table width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);">
-								<tr>
-									<td style="padding: 32px 40px;">
-										<h3 style="margin: 0 0 24px 0; color: #1d1d1f; font-size: 16px; font-weight: 600;">Receipt ${data.receiptNumber}</h3>
-										
-										<table width="100%" border="0" cellpadding="0" cellspacing="0">
-											${lineItemsHtml}
-											
-											<tr>
-												<td colspan="2" style="padding: 16px 0; border-top: 1px solid #e6ebf1; border-bottom: 1px solid #e6ebf1;">
-													<table width="100%" border="0" cellpadding="0" cellspacing="0">
-														<tr>
-															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600;">Total</td>
-															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600; text-align: right;">${ghsStr}</td>
-														</tr>
-														<tr>
-															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600;">Amount paid</td>
-															<td style="padding: 8px 0; color: #1d1d1f; font-size: 14px; font-weight: 600; text-align: right;">${ghsStr}</td>
-														</tr>
-													</table>
-												</td>
-											</tr>
-											
-											${usdStr ? `
-											<tr>
-												<td colspan="2" style="padding: 16px 0 0 0;">
-													<table width="100%" border="0" cellpadding="0" cellspacing="0">
-														<tr>
-															<td style="padding: 4px 0; color: #687385; font-size: 13px;">USD Equivalent</td>
-															<td style="padding: 4px 0; color: #687385; font-size: 13px; text-align: right; font-weight: 500;">${usdStr}</td>
-														</tr>
-													</table>
-												</td>
-											</tr>
-											` : ""}
-										</table>
-									</td>
-								</tr>
-							</table>
-						</td>
-					</tr>
-					
-					<!-- Footer -->
-					<tr>
-						<td align="center" style="padding: 32px 0 16px 0;">
-							<p style="margin: 0; color: #687385; font-size: 13px;">
-								Questions? Contact us at <a href="mailto:info@century-nit.com" style="color: #635bff; text-decoration: none; font-weight: 500;">info@century-nit.com</a>.
-							</p>
-						</td>
+						<td style="padding:6px 0;color:#666666;font-size:13px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:.3px;">Payment method</td>
+						<td style="padding:6px 0;color:#000000;font-size:13px;font-weight:600;text-align:right;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${channel}</td>
 					</tr>
 				</table>
 			</td>
-		</tr>
-	</table>
-</body>
-</html>`;
+		</tr></table>
+
+		<!-- Detail — what the payment covered -->
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
+			<td style="padding:28px 36px;">
+				<p style="margin:0 0 4px;font-size:15px;font-weight:700;">Receipt ${escapeHtml(data.receiptNumber)}</p>
+				<p style="margin:0 0 20px;color:#666666;font-size:12px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${escapeHtml(chapter ?? desc)} — paid ${escapeHtml(data.paymentDate)}</p>
+
+				<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+					${lineItemsHtml}
+					<tr>
+						<td colspan="2" style="padding:14px 0 0;">
+							<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+								<tr>
+									<td style="padding:5px 0;color:#666666;font-size:13px;">Subtotal</td>
+									<td style="padding:5px 0;color:#000000;font-size:13px;text-align:right;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${formatUsd(subtotalUsd)}</td>
+								</tr>
+								<tr>
+									<td style="padding:10px 0 5px;color:#000000;font-size:14px;font-weight:700;border-top:1.5px solid #000000;">Total</td>
+									<td style="padding:10px 0 5px;color:#000000;font-size:14px;font-weight:700;text-align:right;border-top:1.5px solid #000000;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${formatUsd(subtotalUsd)}</td>
+								</tr>
+								<tr>
+									<td style="padding:5px 0;color:#000000;font-size:14px;font-weight:700;">Amount paid</td>
+									<td style="padding:5px 0;color:#000000;font-size:14px;font-weight:700;text-align:right;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${usdStr || ghsStr}</td>
+								</tr>
+								${remaining ? `
+								<tr>
+									<td style="padding:5px 0;color:#666666;font-size:13px;">Balance remaining</td>
+									<td style="padding:5px 0;color:#666666;font-size:13px;text-align:right;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${remaining}</td>
+								</tr>` : ""}
+								<tr>
+									<td style="padding:5px 0;color:#666666;font-size:12px;">Paid in GHS</td>
+									<td style="padding:5px 0;color:#666666;font-size:12px;text-align:right;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;">${ghsStr}</td>
+								</tr>
+							</table>
+						</td>
+					</tr>
+				</table>
+
+				<p style="margin:22px 0 0;color:#666666;font-size:13px;">
+					Invoice and receipt are attached as PDFs. Questions? Reply to this email or visit your
+					<a href="${escapeHtml(ledgerUrl)}" style="color:#000000;text-decoration:underline;text-underline-offset:3px;">Money ledger</a>.
+				</p>
+			</td>
+		</tr></table>
+
+		<table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
+			<td align="center" style="padding:0 36px 20px;">
+				<p style="margin:0;color:#999999;font-size:11px;font-family:ui-monospace,'Cascadia Code','SF Mono',Consolas,monospace;letter-spacing:.5px;">PAYMENTS PROCESSED BY PAYSTACK</p>
+			</td>
+		</tr></table>`;
+
+	return emailLayout({
+		title: "Your receipt from Century NIT Consult",
+		preheader: `${ghsStr} received — receipt ${data.receiptNumber}`,
+		bodyHtml,
+		footerNote: `Reference: ${escapeHtml(data.reference)}`,
+		flush: true,
+	});
 }
 
 /**
@@ -192,6 +205,7 @@ export function receiptEmailMessage(data: ReceiptEmailData): QueuedEmail {
 		`Date: ${data.paymentDate}\n` +
 		`Channel: ${data.paymentChannel}\n` +
 		`Ref: ${data.reference}\n\n` +
+		`Your invoice and receipt are attached as PDFs.\n` +
 		`Thank you for choosing Century NIT Consult.`;
 
 	return {

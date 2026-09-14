@@ -51,7 +51,7 @@ import { Money, MoneyInline } from "../../components/ui/Money";
 import { getMfaEnrollment, type MfaEnrollmentStatus } from "../../lib/api";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import { prepareDocumentForUpload } from "../../lib/upload";
-import { downloadReceipt } from "../../lib/receipt";
+import { downloadInvoice, downloadReceipt } from "../../lib/receipt";
 
 /* ========== Profile ========== */
 
@@ -1552,9 +1552,16 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</td>
 										<td>
 											{!consultationPaid ? (
-												<Button to="/portal/consultation" size="sm" variant="primary">
-													Pay →
-												</Button>
+												<>
+													<Button to="/portal/consultation" size="sm" variant="primary">
+														Pay →
+													</Button>
+													{consultInvoiceType ? (
+														<button type="button" className="jlink" onClick={() => downloadInvoice(consultInvoiceType, "Consultation fee")}>
+															Invoice
+														</button>
+													) : null}
+												</>
 											) : consultInvoiceType ? (
 												<button type="button" className="jlink" onClick={() => downloadReceipt(consultInvoiceType, "Consultation fee")}>
 													Receipt
@@ -1584,9 +1591,16 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</td>
 										<td>
 											{a.agencyTotal > 0 && !depositPaid ? (
-												<Button to="/portal/package" size="sm" variant="primary">
-													Pay →
-												</Button>
+												<>
+													<Button to="/portal/package" size="sm" variant="primary">
+														Pay →
+													</Button>
+													{agencyInvoiceType ? (
+														<button type="button" className="jlink" onClick={() => downloadInvoice(agencyInvoiceType, "Service fee deposit")}>
+															Invoice
+														</button>
+													) : null}
+												</>
 											) : depositPaid && agencyInvoiceType ? (
 												<button type="button" className="jlink" onClick={() => downloadReceipt(agencyInvoiceType, "Service fee deposit")}>
 													Receipt
@@ -1622,9 +1636,16 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</td>
 										<td>
 											{appOutstanding > 0 ? (
-												<Button to="/portal/application" size="sm" variant="primary">
-													Pay →
-												</Button>
+												<>
+													<Button to="/portal/application" size="sm" variant="primary">
+														Pay →
+													</Button>
+													{appInvoiceType ? (
+														<button type="button" className="jlink" onClick={() => downloadInvoice(appInvoiceType, "Application invoice")}>
+															Invoice
+														</button>
+													) : null}
+												</>
 											) : appPaid && appInvoiceType ? (
 												<button type="button" className="jlink" onClick={() => downloadReceipt(appInvoiceType, "Application invoice")}>
 													Receipt
@@ -1655,9 +1676,16 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 										</td>
 										<td>
 											{visaOutstanding > 0 ? (
-												<Button to="/portal/visa" size="sm" variant="primary">
-													Pay →
-												</Button>
+												<>
+													<Button to="/portal/visa" size="sm" variant="primary">
+														Pay →
+													</Button>
+													{visaInvoiceType ? (
+														<button type="button" className="jlink" onClick={() => downloadInvoice(visaInvoiceType, "Visa invoice")}>
+															Invoice
+														</button>
+													) : null}
+												</>
 											) : visaPaid && visaInvoiceType ? (
 												<button type="button" className="jlink" onClick={() => downloadReceipt(visaInvoiceType, "Visa invoice")}>
 													Receipt
@@ -1730,9 +1758,14 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 												</td>
 												<td>
 													{!travelPaid ? (
-														<Button to="/portal/pre-departure" size="sm" variant="primary">
-															Pay →
-														</Button>
+														<>
+															<Button to="/portal/pre-departure" size="sm" variant="primary">
+																Pay →
+															</Button>
+															<button type="button" className="jlink" onClick={() => downloadInvoice(travelInvoice, "Ticket invoice")}>
+																Invoice
+															</button>
+														</>
 													) : (
 														<button type="button" className="jlink" onClick={() => downloadReceipt(travelInvoice, "Ticket invoice")}>
 															Receipt

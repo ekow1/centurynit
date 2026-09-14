@@ -6,7 +6,7 @@
  * thick borders, no gradients or shadows.
  */
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
 	return value
 		.replace(/&/g, "&amp;")
 		.replace(/</g, "&lt;")
@@ -15,17 +15,21 @@ function escapeHtml(value: string): string {
 		.replace(/'/g, "&#39;");
 }
 
-/** Base email wrapper layout — monochrome, sharp edges */
-function emailLayout({
+/** Base email wrapper layout — monochrome, sharp edges.
+ * `flush` removes the default body padding so the template can run its own
+ * edge-to-edge sections (the receipt's two-card anatomy does this). */
+export function emailLayout({
 	title,
 	preheader,
 	bodyHtml,
 	footerNote,
+	flush = false,
 }: {
 	title: string;
 	preheader?: string;
 	bodyHtml: string;
 	footerNote?: string;
+	flush?: boolean;
 }): string {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -67,7 +71,7 @@ function emailLayout({
 
 					<!-- Content -->
 					<tr>
-						<td style="padding:36px 36px 28px 36px;font-size:15px;line-height:1.65;color:#000000;">
+						<td style="${flush ? "padding:0;" : "padding:36px 36px 28px 36px;"}font-size:15px;line-height:1.65;color:#000000;">
 							${bodyHtml}
 						</td>
 					</tr>

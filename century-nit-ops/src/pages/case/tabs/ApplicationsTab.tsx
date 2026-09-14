@@ -253,29 +253,48 @@ function SchoolRow({
 		}
 	}
 
-	/** One file slot: the input, progress, the on-file mark and remove. A plain
-	 * render helper, not a component — a component defined inside the row
-	 * would remount (and lose its input) on every keystroke. */
+	/** One file slot: a dashed slot with the button over the hidden input, the
+	 * file's state on the same line, Remove, and a progress rule while it
+	 * uploads. A plain render helper, not a component — a component defined
+	 * inside the row would remount (and lose its input) on every keystroke. */
 	function fileSlot(kind: SchoolFileKind, present: boolean, hint: string) {
 		const isUploading = uploading === kind;
+		const inputId = `su-file-${school.id}-${kind}`;
 		return (
-			<div style={{ marginTop: "0.6rem" }}>
-				<p className="muted" style={{ marginBottom: "0.15rem" }}>
-					{SCHOOL_FILE_LABELS[kind]} (PDF / image / Word) — {hint}
-				</p>
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-					<input type="file" accept={ALLOWED_DOCUMENT_TYPES.join(",")} onChange={(e) => upload(kind, e)} disabled={uploading !== null} className="text-xs" />
+			<div className={`su-slot${present && !isUploading ? " su-slot--on" : ""}`}>
+				<input id={inputId} type="file" accept={ALLOWED_DOCUMENT_TYPES.join(",")} onChange={(e) => upload(kind, e)} disabled={uploading !== null} className="su-slot__in" />
+				<label htmlFor={inputId} className={`su-slot__btn${uploading !== null ? " su-slot__btn--off" : ""}`}>
+					↑ {present ? "Replace" : "Choose file"}
+				</label>
+				<span className="su-slot__name">
 					{isUploading ? (
-						<span className="muted">Uploading… {uploadPct}%</span>
+						<>
+							Uploading…<small>{SCHOOL_FILE_LABELS[kind]} · {uploadPct}%</small>
+						</>
 					) : present ? (
 						<>
-							<span style={{ fontWeight: 600 }}>✓ On file</span>
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => removeFile(kind)} disabled={uploading !== null}>
-								Remove
-							</button>
+							{SCHOOL_FILE_LABELS[kind]}
+							<small>✓ on file · {hint}</small>
 						</>
-					) : null}
-				</div>
+					) : (
+						<>
+							<span className="muted">{SCHOOL_FILE_LABELS[kind]} — {hint}</span>
+							<small>PDF · image · Word</small>
+						</>
+					)}
+				</span>
+				{present && !isUploading ? (
+					<button type="button" className="su-slot__x" onClick={() => removeFile(kind)} disabled={uploading !== null}>
+						Remove
+					</button>
+				) : (
+					<span />
+				)}
+				{isUploading ? (
+					<span className="su-slot__bar" aria-hidden>
+						<i style={{ width: `${uploadPct}%` }} />
+					</span>
+				) : null}
 			</div>
 		);
 	}
@@ -407,123 +426,164 @@ function SchoolRow({
 				)}
 			</div>
 
-			{/* Editor — folded under the record */}
+			{/* Editor — folded under the record; four steps, opened by the move */}
 			{editing && (
-				<div
-					style={{
-						borderTop: "1px solid var(--border-light)",
-						padding: "0.75rem",
-						background: "var(--background)",
-						display: "flex",
-						flexDirection: "column",
-						gap: "0.6rem",
-						fontSize: "var(--text-xs)",
-					}}
-				>
-					<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-						<select className="input input--sm" value={status} onChange={(e) => setStatus(e.target.value as SchoolTrackStatus)} style={{ width: "auto" }}>
-							{SCHOOL_TRACK_STAGES.map((s) => (
-								<option key={s} value={s}>
-									{SCHOOL_TRACK_STATUS_LABELS[s]}
-								</option>
-							))}
-						</select>
-						{willDecide && (
-							<select className="input input--sm" value={outcome} onChange={(e) => setOutcome(e.target.value as SchoolOutcome)} style={{ width: "auto" }}>
-								{OUTCOMES.map((o) => (
-									<option key={o} value={o}>
-										{SCHOOL_OUTCOME_LABELS[o]}
-									</option>
-								))}
-							</select>
-						)}
-						{movingBack && <span className="muted">← moving back</span>}
+				<div className="su">
+					<div className="su__h">
+						<b>Update · {school.universityName || school.universityId}</b>
+						<span className="su__esc">{SCHOOL_TRACK_STATUS_LABELS[school.status]} today</span>
 					</div>
 
-					<label>
-						<span className="muted">School's application reference (their number for this application)</span>
-						<input className="input input--sm" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UCAS 1234567890 / OX-2026-44871" />
-					</label>
-
-					{status !== "Preparing Application" &&
-						fileSlot("submission-proof", hasProof, "the confirmation page or receipt showing we submitted")}
-
-					{movingBack && (
-						<div>
-							<p className="muted" style={{ marginBottom: "0.15rem" }}>
-								Reason — recorded in the school's timeline
-							</p>
-							<input
-								className="input input--sm"
-								value={reason}
-								onChange={(e) => setReason(e.target.value)}
-								placeholder="e.g. Submission bounced — missing transcript, resubmitting"
-							/>
+					<div className="su-step">
+						<div className="su-step__h">
+							<span className="su-step__no">1</span>
+							<span className="su-step__t">The move</span>
+							<span className="su-step__hint">
+								{status === school.status
+									? "no change"
+									: `${SCHOOL_TRACK_STATUS_LABELS[school.status]} → ${SCHOOL_TRACK_STATUS_LABELS[status]}${movingBack ? " · moving back" : ""}`}
+							</span>
 						</div>
-					)}
-
-					{willAdmit && (
-						<div style={{ border: "1px solid var(--border-light)", padding: "0.6rem 0.75rem" }}>
-							<p className="eyebrow" style={{ marginBottom: "0.5rem" }}>
-								Offer terms · the client sees these with a deadline countdown
-							</p>
-							<div className="cn-facts">
-								<label>
-									<span className="muted">Tuition (USD)</span>
-									<input className="input input--sm" inputMode="numeric" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} placeholder="28000" />
-								</label>
-								<label>
-									<span className="muted">Tuition as written on the offer</span>
-									<input className="input input--sm" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} placeholder="£22,500 per year" />
-								</label>
-								<label>
-									<span className="muted">Deposit to hold the place (USD)</span>
-									<input className="input input--sm" inputMode="numeric" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} placeholder="2000" />
-								</label>
-								<label>
-									<span className="muted">Deposit due</span>
-									<input className="input input--sm" type="date" value={depositDue} onChange={(e) => setDepositDue(e.target.value)} />
-								</label>
-								<label>
-									<span className="muted">Deposit paid on</span>
-									<input className="input input--sm" type="date" value={depositPaid} onChange={(e) => setDepositPaid(e.target.value)} />
-								</label>
+						<div className="su-chips">
+							{SCHOOL_TRACK_STAGES.map((st, i) => {
+								const on = status === st;
+								const reachedDate = i <= currentIdx ? fmtDate(reachedAt(school, st)) : null;
+								const done = i <= currentIdx && !on;
+								return (
+									<button key={st} type="button" className={`su-chip${on ? " su-chip--on" : done ? " su-chip--done" : ""}`} onClick={() => setStatus(st)} aria-pressed={on}>
+										<span className="su-chip__m">{done ? "✓" : i + 1}</span>
+										{SCHOOL_TRACK_STATUS_LABELS[st]}
+										<span className="su-chip__s">{on && movingBack ? "again" : on && i > currentIdx ? "today" : reachedDate ?? ""}</span>
+									</button>
+								);
+							})}
+						</div>
+						{willDecide && (
+							<div className="su-chips su-chips--4">
+								{OUTCOMES.map((o) => (
+									<button key={o} type="button" className={`su-chip${outcome === o ? " su-chip--on" : ""}`} onClick={() => setOutcome(o)} aria-pressed={outcome === o}>
+										<span className="su-chip__m">{outcome === o ? "■" : ""}</span>
+										{SCHOOL_OUTCOME_LABELS[o]}
+									</button>
+								))}
 							</div>
-
-							{fileSlot("offer-letter", hasLetter, "filed in the client's vault and attached to the email")}
-						</div>
-					)}
-
-					{willDecide && (
-						<div>
-							<p className="muted" style={{ marginBottom: "0.15rem" }}>
-								Note to client (optional — blank uses the standard message)
-							</p>
-							<textarea
-								className="input input--sm"
-								value={note}
-								onChange={(e) => setNote(e.target.value)}
-								rows={2}
-								placeholder="Leave blank for the standard message, or write your own…"
-							/>
-							<p className="muted" style={{ margin: "0.4rem 0 0.15rem" }}>
-								The client will see:
-							</p>
-							<div style={{ border: "1px solid var(--border-light)", padding: "0.5rem 0.6rem", whiteSpace: "pre-wrap" }}>{previewNote}</div>
-							<label style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", cursor: "pointer", marginTop: "0.5rem" }}>
-								<input type="checkbox" checked={sendUpdateEmail} onChange={(e) => setSendUpdateEmail(e.target.checked)} />
-								<span>Email the client this decision{willAdmit ? " (offer terms and letter included)" : ""}</span>
+						)}
+						{movingBack && (
+							<label className="su-fld">
+								<span className="su-k">Why — recorded in the school's timeline</span>
+								<input className="input input--sm" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Submission bounced — missing transcript, resubmitting" autoFocus />
 							</label>
+						)}
+					</div>
+
+					{!movingBack && (
+						<div className="su-step">
+							<div className="su-step__h">
+								<span className="su-step__no">2</span>
+								<span className="su-step__t">The school's file</span>
+								<span className="su-step__hint">their reference{status !== "Preparing Application" ? " and the proof we submitted" : ""}</span>
+							</div>
+							<label className="su-fld">
+								<span className="su-k">School's application reference (their number for this application)</span>
+								<input className="input input--sm su-mono" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. UCAS 1234567890 / OX-2026-44871" />
+							</label>
+							{status !== "Preparing Application" && fileSlot("submission-proof", hasProof, "the confirmation page or receipt showing we submitted")}
 						</div>
 					)}
 
-					<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditing(false)} disabled={saving}>
-							Cancel
-						</button>
-						<button type="button" className="btn btn--sm btn--primary" onClick={save} disabled={saving}>
-							{saving ? "Saving…" : "Save"}
-						</button>
+					{!movingBack && (
+						<div className={`su-step${willAdmit ? "" : " su-step--dim"}`}>
+							<div className="su-step__h">
+								<span className={`su-step__no${willAdmit ? "" : " su-step__no--dim"}`}>3</span>
+								<span className="su-step__t">The offer</span>
+								{willAdmit && <span className="su-step__hint">the client sees these with a deadline countdown</span>}
+							</div>
+							{willAdmit ? (
+								<>
+									<div className="su-grid su-grid--3">
+										<label className="su-fld">
+											<span className="su-k">Tuition as written on the offer</span>
+											<input className="input input--sm" value={tuitionLabel} onChange={(e) => setTuitionLabel(e.target.value)} placeholder="£22,500 per year" />
+										</label>
+										<label className="su-fld">
+											<span className="su-k">Tuition (USD)</span>
+											<input className="input input--sm su-mono" inputMode="numeric" value={tuitionUsd} onChange={(e) => setTuitionUsd(e.target.value)} placeholder="28000" />
+										</label>
+										<label className="su-fld">
+											<span className="su-k">Deposit to hold the place (USD)</span>
+											<input className="input input--sm su-mono" inputMode="numeric" value={depositUsd} onChange={(e) => setDepositUsd(e.target.value)} placeholder="2000" />
+										</label>
+									</div>
+									<div className="su-grid su-grid--3">
+										<label className="su-fld">
+											<span className="su-k">Deposit due</span>
+											<input className="input input--sm" type="date" value={depositDue} onChange={(e) => setDepositDue(e.target.value)} />
+										</label>
+										<label className="su-fld">
+											<span className="su-k">Deposit paid on</span>
+											<input className="input input--sm" type="date" value={depositPaid} onChange={(e) => setDepositPaid(e.target.value)} />
+										</label>
+									</div>
+									{fileSlot("offer-letter", hasLetter, "filed in the client's vault and attached to the email")}
+								</>
+							) : (
+								<p className="su-later">Asked once the school decides and admits.</p>
+							)}
+						</div>
+					)}
+
+					{!movingBack && (
+						<div className={`su-step${willDecide ? "" : " su-step--dim"}`}>
+							<div className="su-step__h">
+								<span className={`su-step__no${willDecide ? "" : " su-step__no--dim"}`}>4</span>
+								<span className="su-step__t">Tell the client</span>
+								{willDecide && <span className="su-step__hint">what lands in the portal and the email</span>}
+							</div>
+							{willDecide ? (
+								<>
+									<div className="su-grid su-grid--2">
+										<label className="su-fld">
+											<span className="su-k">Your note (blank uses the standard message)</span>
+											<textarea className="input input--sm" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="Leave blank for the standard message, or write your own…" />
+										</label>
+										<div className="su-preview">
+											<span className="su-k">The client will see</span>
+											{previewNote}
+										</div>
+									</div>
+									<div className="su-row">
+										<label className="su-tog">
+											<input type="checkbox" className="su-tog__in" checked={sendUpdateEmail} onChange={(e) => setSendUpdateEmail(e.target.checked)} />
+											<span className="su-tog__bx" aria-hidden />
+											Email the client this decision{willAdmit ? " · offer terms and letter included" : ""}
+										</label>
+										{decided && <span className="su-k">Already announced — tick to send it again</span>}
+									</div>
+								</>
+							) : (
+								<p className="su-later">A submission is not emailed — the client sees the move on their card. Decisions are.</p>
+							)}
+						</div>
+					)}
+
+					<div className="su-foot">
+						<span className="su-foot__cons">
+							{movingBack
+								? "Saving moves the file back and writes the reason on the timeline. Nothing is emailed."
+								: willAdmit
+									? `Saving records the decision on the timeline, files the letter in the client's vault${sendUpdateEmail ? ", emails the client" : ""}, and opens Chapter IV for them.`
+									: willDecide
+										? `Saving records the decision on the timeline${sendUpdateEmail ? " and emails the client" : ""}.`
+										: `Saving marks the file ${SCHOOL_TRACK_STATUS_LABELS[status].toLowerCase()} on the timeline; the client's card moves with it.`}
+						</span>
+						<div className="su-foot__btns">
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setEditing(false)} disabled={saving}>
+								Cancel
+							</button>
+							<button type="button" className="btn btn--sm btn--primary" onClick={save} disabled={saving}>
+								{saving ? "Saving…" : willDecide && sendUpdateEmail ? "Save & notify →" : "Save →"}
+							</button>
+						</div>
 					</div>
 				</div>
 			)}

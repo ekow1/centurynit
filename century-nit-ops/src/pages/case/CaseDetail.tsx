@@ -229,6 +229,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// The standard documents were collected at consultation; nothing is
 	// invoiced while any is still unverified (the API refuses too).
 	const outstandingDocs = (app.documentChecklist ?? []).filter((d) => d.status !== "VERIFIED").map((d) => d.name);
+	// The Money view's count — invoices on this case still carrying a balance.
+	const dueInvoices = allInvoices.filter((i) => i.applicationId === app.id && (i.status === "issued" || i.status === "partial" || i.status === "overdue")).length;
 	// Why a control is off, in the words the server would use to refuse it.
 	const completeBlock = app.stage === "travel_assistance" ? canAdvanceToStage("travel_assistance", "completed", app) : null;
 	// The pre-departure fee milestone gates the ticket; the same words the API refuses with.
@@ -512,9 +514,9 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				done={app.stage === "completed"}
 				onChange={setTab}
 				utils={[
-					{ id: "overview", label: "Overview", glyph: "◌" },
-					{ id: "payments", label: "Money", glyph: "₵" },
-					{ id: "documents", label: "Docs", glyph: "▤" },
+					{ id: "overview", label: "Overview" },
+					{ id: "payments", label: "Money", note: dueInvoices > 0 ? `${dueInvoices} due` : null },
+					{ id: "documents", label: "Docs", note: outstandingDocs.length > 0 ? String(outstandingDocs.length) : null },
 				]}
 			/>
 

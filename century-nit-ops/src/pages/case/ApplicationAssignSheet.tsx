@@ -6,39 +6,43 @@ import { handoffOffersKeep } from "../../lib/pendingTasks";
 import { AssignSheet } from "./AssignSheet";
 
 /**
- * What an application is waiting on, assignment-wise: a pending stage
- * handoff (resolved by keep / reassign), or no whole-case handler at all.
- * Null when nobody needs to act — the chip on the queue card and the
- * header's button both read this so they agree.
+ * What an application is waiting on, handler-wise: a pending stage
+ * handoff (the next chapter asking for a handler), or no handler on the
+ * current stage at all. Null when nobody needs to act — the chip on the
+ * queue card and the header's button both read this so they agree.
  */
 export function assignmentNeeded(
 	app: MockApplication,
 	handoffs: StageHandoff[],
-): { kind: "handoff"; handoff: StageHandoff } | { kind: "owner" } | null {
+): { kind: "handoff"; handoff: StageHandoff } | { kind: "handler" } | null {
 	// A closed case needs nobody — even a stale pending handoff is ignored.
 	if (app.stage === "completed" || app.status === "Rejected") return null;
 	const handoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending");
 	if (handoff) return { kind: "handoff", handoff };
-	if (!app.assignedStaff) return { kind: "owner" };
+	// The seat is filled by the whole-case handler or a stage-scoped seat on
+	// the chapter the case is actually in.
+	const stageSeated = (app.stageHandlers ?? []).some((h) => h.stage === app.stage);
+	if (!app.assignedStaff && !stageSeated) return { kind: "handler" };
 	return null;
 }
 
 function whyHandoff(h: StageHandoff): string {
 	const stageLabel = JOURNEY_STAGE_LABELS[h.stage as JourneyStage] ?? h.stage;
 	return h.source === "deposit_payment"
-		? "Deposit received — this case needs a consultant before school selection can proceed."
+		? "Deposit received — this case needs a handler before school selection can proceed."
 		: h.source === "visa_payment" || h.source === "visa_consent_continue"
-			? "The client is ready for their visa — assign a visa officer."
+			? "The client is ready for their visa — place a handler."
 			: h.source === "offboarding"
-				? "The previous owner has left — this chapter needs a new one."
-				: `This case needs an owner for ${stageLabel}.`;
+				? "The previous handler has left — this chapter needs a new one."
+				: `This case needs a handler for ${stageLabel}.`;
 }
 
 /**
- * The assignment sheet for an application. Resolves the pending stage
- * handoff when there is one (visa specialist, travel desk, a replacement
- * after offboarding), otherwise sets or changes the whole-case handler.
- * Opened from the case header and from the queue cards.
+ * The handler sheet for an application. A pending stage handoff is the
+ * next chapter asking for a handler — resolved by the same placement
+ * (keep the previous handler, or place a new one). Coverage decides
+ * whether the seat re-opens at the next chapter or the handler carries
+ * the case end-to-end; a branch change refers the file to that office.
  */
 export function ApplicationAssignSheet({
 	app,
@@ -52,9 +56,11 @@ export function ApplicationAssignSheet({
 	/** Called with a one-line confirmation after a successful change. */
 	onDone?: (message: string) => void;
 }) {
-	const { assignees, handoffs, resolveHandoff, assignApplication } = useCases();
+	const { assignees, handoffs, resolveHandoff, assignApplication, referApplication } = useCases();
 	const need = assignmentNeeded(app, handoffs);
 	const handoff = need?.kind === "handoff" ? need.handoff : null;
+	const stage = handoff ? handoff.stage : app.stage;
+	const stageLabel = JOURNEY_STAGE_LABELS[stage as JourneyStage] ?? stage;
 
 	return (
 		<AssignSheet
@@ -62,46 +68,52 @@ export function ApplicationAssignSheet({
 			onClose={onClose}
 			title={
 				handoff
-					? `Assign · ${JOURNEY_STAGE_LABELS[handoff.stage as JourneyStage] ?? handoff.stage}`
+					? `Handler · ${stageLabel}`
 					: app.assignedStaff
 						? "Change handler"
-						: "Assign consultant"
+						: `Handler · ${stageLabel}`
 			}
-			stage={handoff ? handoff.stage : "school_submission"}
+			stage={stage}
 			staff={assignees}
 			branch={app.branch}
 			currentName={handoff ? null : app.assignedStaff || null}
 			keepName={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+			keepOpsUserId={handoff && handoffOffersKeep(handoff) ? handoff.fromOpsUserId : null}
 			withReason={Boolean(handoff)}
 			why={handoff ? whyHandoff(handoff) : null}
-			onAssign={async (opsUserId, reason) => {
+			coverage
+			onAssign={async ({ opsUserId, reason, scope, branch }) => {
 				if (handoff) {
-					await resolveHandoff(handoff.id, "assign", { opsUserId, reason });
+					await resolveHandoff(handoff.id, "assign", { opsUserId, reason, scope, branch });
 				} else {
 					const to = assignees.find((a) => a.opsUserId === opsUserId);
 					if (!to) throw new Error("That staff member is no longer available");
-					await assignApplication(app.id, to);
+					await assignApplication(app.id, to, { scope, branch });
 				}
-				onDone?.("Owner assigned.");
+				onDone?.("Handler placed.");
 			}}
 			onKeep={
 				handoff
 					? async (reason) => {
 							await resolveHandoff(handoff.id, "keep", { reason });
-							onDone?.("Owner kept.");
+							onDone?.("Handler kept.");
 						}
 					: undefined
 			}
+			onLeaveOpen={async (branch) => {
+				await referApplication(app.id, branch);
+				onDone?.("Referred — left open for the branch to staff.");
+			}}
 		/>
 	);
 }
 
 /**
- * The "Assign" chip on a queue card — present only when the case is
- * waiting on an assignment and the viewer may make one. Stops the click so
+ * The "Handler…" chip on a queue card — present only when the case is
+ * waiting on a placement and the viewer may make one. Stops the click so
  * the row underneath does not also open.
  */
-export function AssignChip({ label = "Assign", onClick }: { label?: string; onClick: () => void }) {
+export function AssignChip({ label = "Handler…", onClick }: { label?: string; onClick: () => void }) {
 	return (
 		<button
 			type="button"

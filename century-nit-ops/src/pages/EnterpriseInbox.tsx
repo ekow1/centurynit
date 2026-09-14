@@ -37,10 +37,10 @@ function categoryOf(type: string): Category {
 }
 
 const KICKERS: Record<string, string> = {
-	"case.assigned": "Owner assigned · Case",
+	"case.assigned": "Handler assigned · Case",
 	"consultation.assigned": "Assigned · Consultation",
 	"booking.assigned": "Assigned · Booking",
-	"assignment.released": "Owner released · Case",
+	"assignment.released": "Handler released · Case",
 	"assignment.handoff_resolved": "Handoff resolved · Case",
 	"stage.needs_handler": "Needs a handler · Stage",
 	"application.awaiting_assignment": "Awaiting assignment · Case",

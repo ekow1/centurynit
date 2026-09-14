@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
+import { branchName } from "century-nit-core/ops";
 import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
@@ -473,6 +474,7 @@ export function ClientDirectory() {
 									<span className="cl-kv__k">{a.appId}</span>
 									<span>
 										{JOURNEY_STAGE_LABELS[a.stage as JourneyStage] ?? a.stage}
+										{a.branch ? ` · ${branchName(a.branch)}` : ""}
 										{" · "}
 										<Link to={`/applications?id=${a.id}`} className="dash-link">open →</Link>
 									</span>
@@ -480,7 +482,7 @@ export function ClientDirectory() {
 							))
 						)}
 						{selectedCases[0]?.assignedStaff && (
-							<div className="cl-kv"><span className="cl-kv__k">Consultant</span><span>{selectedCases[0].assignedStaff}</span></div>
+							<div className="cl-kv"><span className="cl-kv__k">Handler</span><span>{selectedCases[0].assignedStaff}</span></div>
 						)}
 
 						{canManageAccess && (

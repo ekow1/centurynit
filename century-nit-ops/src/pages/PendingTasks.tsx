@@ -1,22 +1,25 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { applicationsApi } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
 import type { Booking } from "century-nit-shared";
-import { OPS_BRANCHES } from "century-nit-core/ops";
+import { branchName } from "century-nit-core/ops";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useWorkQueue } from "../hooks/useWorkQueue";
-import { AssignControl } from "century-nit-core/ui";
 import { AssignDialog } from "./UnassignedBookings";
+import { AssignSheet, type HandlerPlacement } from "./case/AssignSheet";
 import {
 	isOverdue,
+	isDueToday,
+	timeAgo,
 	priorityNotches,
 	queueBand,
 	QUEUE_BAND_LABEL,
 	type QueueBand,
 	handoffOffersKeep,
 	taskActionLabel,
+	taskKindLabel,
 	TASK_KIND_LABEL,
 	whenLabel,
 	type PendingTask,
@@ -36,18 +39,25 @@ import {
  *  - stage handoff        → assignee selector + reason (resolveHandoff)
  */
 
+/**
+ * The placement sheet for a queue task — the shared branch → handler →
+ * coverage sheet (AssignSheet). Travel keeps a stage-only seat (nothing
+ * follows it); consultations, applications and handoffs offer coverage.
+ */
 export function AssignTaskDialog({
 	task,
 	assignees,
 	onClose,
 	onAssign,
 	onKeepHandler,
+	onLeaveOpen,
 }: {
 	task: PendingTask;
 	assignees: Assignee[];
 	onClose: () => void;
-	onAssign: (to: Assignee, reason?: string) => Promise<unknown>;
+	onAssign: (to: Assignee, placement: HandlerPlacement) => Promise<unknown>;
 	onKeepHandler?: (reason?: string) => Promise<unknown>;
+	onLeaveOpen?: (branch: string) => Promise<unknown>;
 }) {
 	// Which stage the picker is staffing — decides which roles are offered.
 	const stageForRoles =
@@ -56,62 +66,42 @@ export function AssignTaskDialog({
 			: task.kind === "travel"
 				? "travel_assistance"
 				: task.kind === "application"
-					? "school_submission"
+					? task.record.stage
 					: "consultation";
-	const current = task.owner && task.owner !== "Unassigned" ? task.owner : null;
+	const open = !task.owner || task.owner === "Unassigned" || task.owner === "—" || task.owner === "— open";
+	const current = open ? null : task.owner;
+	const handoff = task.kind === "handoff" ? task.record : null;
 
 	return (
-		<div
-			className="ops-modal-backdrop"
-			role="dialog"
-			aria-modal="true"
-			aria-label={current ? "Reassign task" : "Assign task"}
-		>
-			<div className="ops-modal">
-				<header className="ops-modal__head">
-					<div>
-						<h2 className="ops-modal__title">
-							{current ? "Reassign" : "Assign"} {taskActionLabel(task).toLowerCase()}
-						</h2>
-						<p className="ops-modal__sub">
-							{task.title} · {task.subtitle}
-						</p>
-					</div>
-					<button type="button" className="btn btn--ghost btn--sm" onClick={onClose}>
-						Close
-					</button>
-				</header>
-
-				<AssignControl
-					stage={stageForRoles}
-					staff={assignees}
-					branch={task.branch}
-					currentName={current}
-					keepName={task.kind === "handoff" && onKeepHandler && handoffOffersKeep(task.record) ? task.record.fromOpsUserName : null}
-					withReason={task.kind === "handoff"}
-					onAssign={async (opsUserId, reason) => {
-						const to = assignees.find((a) => a.opsUserId === opsUserId);
-						if (!to) throw new Error("Staff member not found");
-						await onAssign(to, reason);
-						onClose();
-					}}
-					onKeep={
-						onKeepHandler
-							? async (reason) => {
-									await onKeepHandler(reason);
-									onClose();
-								}
-							: undefined
-					}
-				/>
-
-				<p className="ops-modal__foot">
-					{current
-						? "Reassigning transfers ownership to the new staff member and notifies them."
-						: "Assigning notifies the staff member and moves the item out of the pending queue."}
-				</p>
-			</div>
-		</div>
+		<AssignSheet
+			open
+			onClose={onClose}
+			title={`Handler · ${taskKindLabel(task)}`}
+			stage={stageForRoles}
+			staff={assignees}
+			branch={task.branch}
+			currentName={current}
+			keepName={handoff && onKeepHandler && handoffOffersKeep(handoff) ? handoff.fromOpsUserName : null}
+			keepOpsUserId={handoff && onKeepHandler && handoffOffersKeep(handoff) ? handoff.fromOpsUserId : null}
+			withReason={Boolean(handoff)}
+			why={handoff ? `${task.title} — ${task.subtitle}` : `${task.title} · ${task.subtitle}`}
+			coverage={task.kind !== "travel"}
+			onAssign={async (placement) => {
+				const to = assignees.find((a) => a.opsUserId === placement.opsUserId);
+				if (!to) throw new Error("Staff member not found");
+				await onAssign(to, placement);
+				onClose();
+			}}
+			onKeep={
+				onKeepHandler
+					? async (reason) => {
+							await onKeepHandler(reason);
+							onClose();
+						}
+					: undefined
+			}
+			onLeaveOpen={onLeaveOpen}
+		/>
 	);
 }
 
@@ -121,6 +111,7 @@ export function PendingTaskTable({
 	canAssignWork,
 	onAssign,
 	onKeepHandler,
+	onLeaveOpen,
 	onAssigned,
 	onSelect,
 	selectedId,
@@ -131,8 +122,9 @@ export function PendingTaskTable({
 	assignees: Assignee[];
 	canAssignWork: boolean;
 
-	onAssign: (task: PendingTask, to: Assignee, reason?: string) => Promise<unknown>;
+	onAssign: (task: PendingTask, to: Assignee, placement: HandlerPlacement) => Promise<unknown>;
 	onKeepHandler?: (task: PendingTask, reason?: string) => Promise<unknown>;
+	onLeaveOpen?: (task: PendingTask, branch: string) => Promise<unknown>;
 	onAssigned: () => void | Promise<void>;
 	onSelect?: (task: PendingTask) => void;
 	selectedId?: string | null;
@@ -178,7 +170,7 @@ export function PendingTaskTable({
 								<th>Type</th>
 								<th>When / Details</th>
 								{canSeeAllBranches && <th>Branch</th>}
-								<th>Assigned</th>
+								<th>Handler</th>
 								<th />
 							</tr>
 						</thead>
@@ -195,10 +187,10 @@ export function PendingTaskTable({
 										</tr>
 									) : null;
 								const rows = g.rows.map((t) => {
-								// Assign shows only for unowned work — a handoff is unowned
-								// by definition (its "owner" column is the previous handler).
-								const canAssign =
-									isAssignable(t) && (t.owner === "Unassigned" || t.action === "resolve");
+								// The handler action shows only for open seats — a handoff
+								// is open by definition (its seat is being decided now).
+								const seatOpen = !t.owner || t.owner === "— open" || t.owner === "Unassigned" || t.owner === "—";
+								const canAssign = isAssignable(t) && (seatOpen || t.action === "resolve");
 								const selected = selectedId === t.id;
 								const overdue = isOverdue(t);
 								const notches = priorityNotches(t.priority);
@@ -244,8 +236,8 @@ export function PendingTaskTable({
 											<div className="ops-table__sub">{taskActionLabel(t)}</div>
 										</td>
 										<td className="ops-table__when" title={t.at ? new Date(t.at).toLocaleString() : undefined}>{whenLabel(t.at)}</td>
-										{canSeeAllBranches && <td>{OPS_BRANCHES.find(b => b.id === t.branch)?.name || t.branch || "—"}</td>}
-										<td>{t.owner}</td>
+										{canSeeAllBranches && <td>{branchName(t.branch || "") || "—"}</td>}
+										<td>{seatOpen ? <span className="town--none">— open</span> : t.owner}</td>
 										<td
 											style={{ textAlign: "right", whiteSpace: "nowrap" }}
 											onClick={(e) => e.stopPropagation()}
@@ -258,7 +250,7 @@ export function PendingTaskTable({
 														t.kind === "booking" ? setBooking(t.record) : setTask(t)
 													}
 												>
-													{t.kind === "booking" ? "Assign employee" : "Assign"}
+													Handler…
 												</button>
 											) : (
 												<Link to={t.linkTo} className="btn btn--ghost btn--sm">
@@ -299,8 +291,8 @@ export function PendingTaskTable({
 					task={task}
 					assignees={assignees}
 					onClose={() => setTask(null)}
-					onAssign={(to, reason) =>
-						onAssign(task, to, reason).then(() => {
+					onAssign={(to, placement) =>
+						onAssign(task, to, placement).then(() => {
 							void onAssigned();
 						})
 					}
@@ -312,37 +304,25 @@ export function PendingTaskTable({
 									})
 							: undefined
 					}
+					onLeaveOpen={
+						onLeaveOpen
+							? (branch) =>
+									onLeaveOpen(task, branch).then(() => {
+										void onAssigned();
+									})
+							: undefined
+					}
 				/>
 			)}
 		</>
 	);
 }
 
-/* ── The queue as people ─────────────────────────────────────────────── */
+/* ── The queue as a task ledger ──────────────────────────────────────── */
 
-/** One card per client per band: their things together. */
-type PersonCard = { name: string; things: PendingTask[]; due: number };
+type TaskSection = { band: QueueBand; count: number; note?: string; rows: PendingTask[] };
 
-function personCards(rows: PendingTask[], byDue: boolean): PersonCard[] {
-	const byName = new Map<string, PersonCard>();
-	for (const t of rows) {
-		const card = byName.get(t.title) ?? { name: t.title, things: [], due: Number.POSITIVE_INFINITY };
-		card.things.push(t);
-		const due = t.due ? new Date(t.due).getTime() : Number.NaN;
-		if (!Number.isNaN(due)) card.due = Math.min(card.due, due);
-		byName.set(t.title, card);
-	}
-	// Queue order puts a client where their most urgent thing sits; the
-	// Today band reads by the clock instead — the earliest slot first.
-	const cards = [...byName.values()];
-	if (byDue) cards.sort((a, b) => a.due - b.due || a.name.localeCompare(b.name));
-	return cards;
-}
-
-type CardSection = { band: QueueBand | null; count: number; note?: string; cards: PersonCard[] };
-
-function cardSections(items: PendingTask[], bands: boolean, now: Date): CardSection[] {
-	if (!bands) return [{ band: null, count: items.length, cards: personCards(items, false) }];
+function taskSections(items: PendingTask[], now: Date): TaskSection[] {
 	const by: Record<QueueBand, PendingTask[]> = { today: [], overdue: [], rest: [] };
 	for (const t of items) by[queueBand(t, now)].push(t);
 	const live = by.today.filter((t) => t.isLive).length;
@@ -353,61 +333,90 @@ function cardSections(items: PendingTask[], bands: boolean, now: Date): CardSect
 	const oldestDays = Math.floor(oldestMs / 86_400_000);
 	return (
 		[
-			{ band: "today", count: by.today.length, note: live > 0 ? `${live} live now` : undefined, cards: personCards(by.today, true) },
-			{ band: "overdue", count: by.overdue.length, note: oldestDays >= 1 ? `oldest ${oldestDays} day${oldestDays === 1 ? "" : "s"}` : undefined, cards: personCards(by.overdue, false) },
-			{ band: "rest", count: by.rest.length, cards: personCards(by.rest, false) },
-		] as CardSection[]
+			{ band: "today", count: by.today.length, note: live > 0 ? `${live} live now` : undefined, rows: by.today },
+			{ band: "overdue", count: by.overdue.length, note: oldestDays >= 1 ? `oldest ${oldestDays} day${oldestDays === 1 ? "" : "s"}` : undefined, rows: by.overdue },
+			{ band: "rest", count: by.rest.length, rows: by.rest },
+		] as TaskSection[]
 	).filter((s) => s.count > 0);
 }
 
-/** The card's head stamp: the earliest deadline, or when the thing last moved. */
-function cardWhen(card: PersonCard, now: Date): string {
-	if (Number.isFinite(card.due)) {
-		const d = new Date(card.due);
-		const today = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-		if (today) return `Today ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
-		return `Due ${d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}`;
+/**
+ * A client's tasks cluster under one separator — grouping survives, but
+ * the row stays the unit of work instead of hiding inside a person-card.
+ * Groups keep first-occurrence order; a lone task renders bare.
+ */
+function clusterRows(rows: PendingTask[]): { client: string; tasks: PendingTask[] }[] {
+	const out: { client: string; tasks: PendingTask[] }[] = [];
+	const idx = new Map<string, number>();
+	for (const t of rows) {
+		const i = idx.get(t.title);
+		if (i === undefined) {
+			idx.set(t.title, out.length);
+			out.push({ client: t.title, tasks: [t] });
+		} else {
+			out[i].tasks.push(t);
+		}
 	}
-	return whenLabel(card.things[0]?.at);
+	return out;
+}
+
+/** The when cell: a deadline beats an activity stamp, and pills name states. */
+function taskWhen(t: PendingTask, now: Date): ReactNode {
+	if (t.isLive) {
+		const time = t.due
+			? new Date(t.due).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+			: "now";
+		return <span className="ops-pill ops-pill--live">Live {time}</span>;
+	}
+	if (isOverdue(t, now)) {
+		const days = t.due ? Math.floor((now.getTime() - new Date(t.due).getTime()) / 86_400_000) : 0;
+		return <span className="ops-pill ops-pill--strong">{days >= 1 ? `${days}d over` : "Overdue"}</span>;
+	}
+	if (t.due && isDueToday(t, now)) {
+		return `today ${new Date(t.due).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+	}
+	return timeAgo(t.at);
 }
 
 /**
- * The Workspace queue: person cards in the day's bands. The same tasks and
- * the same Assign affordances as the table; a thing is clicked to preview
- * it in the rail, the card's foot assigns an unowned one.
+ * The Workspace queue: one row per task, banded by the day. The kicker
+ * states the work once — ACTION · KIND — the client and ref carry the
+ * title, and the handler action sits on the row it staffs rather than
+ * guessing at the first assignable thing inside a card.
  */
-export function PendingTaskCards({
+export function PendingTaskRows({
 	items,
 	assignees,
 	canAssignWork,
 	onAssign,
 	onKeepHandler,
+	onLeaveOpen,
 	onAssigned,
 	onSelect,
 	selectedId,
 	emptyLabel,
-	bands = false,
 }: {
 	items: PendingTask[];
 	assignees: Assignee[];
 	canAssignWork: boolean;
-	onAssign: (task: PendingTask, to: Assignee, reason?: string) => Promise<unknown>;
+	onAssign: (task: PendingTask, to: Assignee, placement: HandlerPlacement) => Promise<unknown>;
 	onKeepHandler?: (task: PendingTask, reason?: string) => Promise<unknown>;
+	onLeaveOpen?: (task: PendingTask, branch: string) => Promise<unknown>;
 	onAssigned: () => void | Promise<void>;
 	onSelect: (task: PendingTask) => void;
 	selectedId?: string | null;
 	emptyLabel?: string;
-	/** Cut the queue into Today (by the clock) · Overdue · Everything else. */
-	bands?: boolean;
 }) {
-	const { canSeeAllBranches } = useOpsAuth();
 	const [booking, setBooking] = useState<Booking | null>(null);
 	const [task, setTask] = useState<PendingTask | null>(null);
 	const [justAssigned, setJustAssigned] = useState<string | null>(null);
+	const { canSeeAllBranches } = useOpsAuth();
 	const now = new Date();
-	// Cheap for a queue's worth of tasks; recomputed with the clock each render.
-	const sections = cardSections(items, bands, now);
+	const sections = taskSections(items, now);
+	let rank = 0;
 
+	const isOpen = (t: PendingTask) =>
+		!t.owner || t.owner === "— open" || t.owner === "Unassigned" || t.owner === "—";
 	const isAssignable = (t: PendingTask) =>
 		canAssignWork &&
 		(t.kind === "booking" ||
@@ -415,7 +424,7 @@ export function PendingTaskCards({
 			t.kind === "application" ||
 			(t.kind === "travel" && t.action === "assign") ||
 			t.action === "resolve") &&
-		(t.owner === "Unassigned" || t.action === "resolve");
+		(isOpen(t) || t.action === "resolve");
 
 	return (
 		<>
@@ -423,98 +432,85 @@ export function PendingTaskCards({
 			{items.length === 0 ? (
 				<p className="ops-people__empty">{emptyLabel ?? "Nothing pending right now."}</p>
 			) : (
-				<div className="ops-bands">
+				<div className="ops-bands" style={{ padding: 0 }}>
 					{sections.map((section) => (
-						<div key={section.band ?? "all"}>
-							{section.band && (
-								<div className="ops-band">
-									<span className="ops-band__name">
-										{QUEUE_BAND_LABEL[section.band]} · {section.count}
-									</span>
-									{section.note && <span className="ops-band__note">{section.note}</span>}
-								</div>
-							)}
-							<div className="ops-people">
-								{section.cards.map((card) => {
-									const live = card.things.some((t) => t.isLive);
-									const overdue = card.things.some((t) => isOverdue(t, now));
-									const toAssign = card.things.find(isAssignable) ?? null;
-									const owners = [...new Set(card.things.map((t) => t.owner).filter((o) => o && o !== "Unassigned"))];
-									const branch = card.things[0]?.branch;
-									const branchName = branch ? OPS_BRANCHES.find((b) => b.id === branch)?.name || branch : null;
-									return (
-										<div key={`${section.band ?? "all"}-${card.name}`} className={`ops-person${live ? " ops-person--live" : ""}${overdue ? " ops-person--overdue" : ""}`}>
-											<div className="ops-person__head">
-												<span className="ops-person__name" title={card.name}>
-													{card.name}
-													{card.things.length > 1 && <span className="ops-person__count">{card.things.length} things</span>}
-												</span>
-												<span className="ops-person__when">{cardWhen(card, now)}</span>
-											</div>
-											<ul className="ops-things">
-												{card.things.map((t) => {
-													const selected = selectedId === t.id;
-													const late = isOverdue(t, now);
-													const notches = priorityNotches(t.priority);
-													const pick = () => onSelect(t);
-													return (
-														<li
-															key={t.id}
-															className={`ops-thing${selected ? " ops-thing--selected" : ""}`}
-															role="button"
-															tabIndex={0}
-															aria-pressed={selected}
-															onClick={pick}
-															onKeyDown={(e) => {
-																if (e.key === "Enter" || e.key === " ") {
-																	e.preventDefault();
-																	pick();
-																}
-															}}
-														>
-															<span className="ops-meter" aria-hidden title={notches === 3 ? "Urgent — top of the queue" : notches === 2 ? "Soon" : "Routine"}>
-																<span>{"●".repeat(notches)}</span>
-																<span className="ops-meter__off">{"●".repeat(3 - notches)}</span>
-															</span>
-															<div className="ops-thing__main">
-																<div className="ops-thing__top">
-																	<span className="ops-thing__kicker">
-																		{taskActionLabel(t)} <span className="ops-thing__kind">· {TASK_KIND_LABEL[t.kind]}</span>
-																	</span>
-																	{t.isLive && <span className="ops-pill ops-pill--live">LIVE NOW</span>}
-																	{late && <span className="ops-pill ops-pill--strong">Overdue</span>}
-																</div>
-																<div className="ops-thing__sub" title={t.subtitle}>
-																	{t.subtitle}
-																	{t.kind === "booking" ? ` · ${t.record.clientEmail}` : ""}
-																</div>
-															</div>
-															<span className="ops-thing__arrow" aria-hidden>
-																→
-															</span>
-														</li>
-													);
-												})}
-											</ul>
-											<div className="ops-person__foot">
-												<span className="ops-person__meta">
-													{canSeeAllBranches && branchName ? `${branchName} · ` : ""}
-													{owners.length > 0 ? `Assigned: ${owners.join(", ")}` : "Unassigned"}
-												</span>
-												{toAssign && (
-													<button
-														type="button"
-														className="cn-row__assign"
-														onClick={() => (toAssign.kind === "booking" ? setBooking(toAssign.record) : setTask(toAssign))}
-													>
-														{toAssign.kind === "booking" ? "Assign employee" : "Assign"}
-													</button>
-												)}
-											</div>
-										</div>
-									);
-								})}
+						<div key={section.band}>
+							<div className={`ops-band${section.band === "today" ? " ops-band--now" : ""}`}>
+								<span className="ops-band__name">
+									{QUEUE_BAND_LABEL[section.band]} · {section.count}
+								</span>
+								{section.note && <span className="ops-band__note">{section.note}</span>}
 							</div>
+							{clusterRows(section.rows).map((group) => (
+								<div key={`${section.band}-${group.client}`}>
+									{group.tasks.length > 1 && (
+										<div className="tgroup">
+											{group.client} · {group.tasks.length} tasks
+										</div>
+									)}
+									{group.tasks.map((t) => {
+										rank += 1;
+										const selected = selectedId === t.id;
+										const canAssign = isAssignable(t);
+										const open = isOpen(t);
+										return (
+											<div
+												key={t.id}
+												className={`trow${selected ? " trow--on" : ""}`}
+												role="button"
+												tabIndex={0}
+												aria-pressed={selected}
+												onClick={() => onSelect(t)}
+												onKeyDown={(e) => {
+													if (e.key === "Enter" || e.key === " ") {
+														e.preventDefault();
+														onSelect(t);
+													}
+												}}
+											>
+												<span className="trank">{String(rank).padStart(2, "0")}</span>
+												<div style={{ minWidth: 0 }}>
+													<p className="tkick">
+														{taskActionLabel(t)} · {taskKindLabel(t)}
+													</p>
+													<p className="tname">
+														{t.title}
+														{t.meta ? <span className="tname__ref">{t.meta}</span> : null}
+													</p>
+													<p className="tsub" title={t.subtitle}>
+														{t.subtitle}
+														{t.kind === "booking" ? ` · ${t.record.clientEmail}` : ""}
+													</p>
+												</div>
+												<span className="twhen">{taskWhen(t, now)}</span>
+												<span className={`town${open ? " town--none" : ""}`}>
+													{open ? "— open" : t.owner}
+												</span>
+												{canSeeAllBranches ? (
+													<span className="tbranch">{branchName(t.branch || "") || "—"}</span>
+												) : (
+													<span className="tbranch" />
+												)}
+												<span onClick={(e) => e.stopPropagation()}>
+													{canAssign ? (
+														<button
+															type="button"
+															className="btn btn--primary btn--sm"
+															onClick={() => (t.kind === "booking" ? setBooking(t.record) : setTask(t))}
+														>
+															Handler…
+														</button>
+													) : (
+														<Link to={t.linkTo} className="btn btn--ghost btn--sm">
+															Open →
+														</Link>
+													)}
+												</span>
+											</div>
+										);
+									})}
+								</div>
+							))}
 						</div>
 					))}
 				</div>
@@ -543,8 +539,8 @@ export function PendingTaskCards({
 					task={task}
 					assignees={assignees}
 					onClose={() => setTask(null)}
-					onAssign={(to, reason) =>
-						onAssign(task, to, reason).then(() => {
+					onAssign={(to, placement) =>
+						onAssign(task, to, placement).then(() => {
 							void onAssigned();
 						})
 					}
@@ -552,6 +548,14 @@ export function PendingTaskCards({
 						onKeepHandler
 							? (reason) =>
 									onKeepHandler(task, reason).then(() => {
+										void onAssigned();
+									})
+							: undefined
+					}
+					onLeaveOpen={
+						onLeaveOpen
+							? (branch) =>
+									onLeaveOpen(task, branch).then(() => {
 										void onAssigned();
 									})
 							: undefined
@@ -570,21 +574,23 @@ export function PendingTasks({
 	branchFilter?: string;
 }) {
 	const { canAssignWork } = useOpsAuth();
-	const { assignees, assignConsultation, assignApplication, resolveHandoff } = useCases();
+	const { assignees, assignConsultation, assignApplication, referConsultation, referApplication, resolveHandoff } = useCases();
 	const { items, loading, error, refresh } = useWorkQueue(branchFilter);
 
 	const doAssign = useCallback(
-		async (task: PendingTask, to: Assignee, reason?: string) => {
+		async (task: PendingTask, to: Assignee, placement: HandlerPlacement) => {
 			if (task.kind === "consultation") {
-				return assignConsultation(task.record.id, to);
+				return assignConsultation(task.record.id, to, { scope: placement.scope, branch: placement.branch });
 			}
 			if (task.kind === "application") {
-				return assignApplication(task.record.id, to);
+				return assignApplication(task.record.id, to, { scope: placement.scope, branch: placement.branch });
 			}
 			if (task.kind === "handoff" && task.action === "resolve") {
 				return resolveHandoff(task.record.id, "assign", {
 					opsUserId: to.opsUserId,
-					reason: reason || undefined,
+					reason: placement.reason,
+					scope: placement.scope,
+					branch: placement.branch,
 				});
 			}
 			if (task.kind === "travel" && to.opsUserId) {
@@ -603,6 +609,19 @@ export function PendingTasks({
 			throw new Error("This task does not support keeping the previous handler.");
 		},
 		[resolveHandoff],
+	);
+
+	// "Leave it open" refers the file to the chosen branch — the receiving
+	// desk staffs it from their own queue. Bookings keep their own dialog.
+	const doLeaveOpen = useCallback(
+		async (task: PendingTask, branch: string) => {
+			if (task.kind === "consultation") return referConsultation(task.record.id, branch);
+			if (task.kind === "application" || task.kind === "visa") return referApplication(task.record.id, branch);
+			if (task.kind === "handoff" && task.record.applicationId) return referApplication(task.record.applicationId, branch);
+			if (task.kind === "travel") return referApplication(task.record.applicationId, branch);
+			throw new Error("This task cannot be referred from here.");
+		},
+		[referConsultation, referApplication],
 	);
 
 	if (!canAssignWork) return null;
@@ -630,6 +649,7 @@ export function PendingTasks({
 					canAssignWork={canAssignWork}
 					onAssign={doAssign}
 					onKeepHandler={doKeepHandler}
+					onLeaveOpen={doLeaveOpen}
 					onAssigned={refresh}
 					emptyLabel="Nothing waiting to be assigned. All caught up."
 				/>

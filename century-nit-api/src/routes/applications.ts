@@ -9,6 +9,7 @@ import {
 
 
 	assignApplication,
+	referApplicationBranch,
 
 
 	canSeeAllCases,
@@ -93,6 +94,7 @@ import {
 	applicationListSchema,
 	applicationSchema,
 	assignCaseSchema,
+	referCaseSchema,
 	CASE_ERROR_CODES,
 	choosePackageSchema,
 
@@ -363,9 +365,50 @@ applicationsRouter.openapi(
 		if (!canSeeAllCases(staff)) {
 			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can assign applications");
 		}
+		const body = c.req.valid("json");
 		const updated = await assignApplication({
 			id: c.req.valid("param").id,
-			employeeId: c.req.valid("json").employeeId,
+			employeeId: body.employeeId,
+			scope: body.scope,
+			branch: body.branch,
+			actor: actorFrom(staff),
+		});
+		return c.json(await serializeApplication(updated));
+	},
+);
+
+/**
+ * Refer a case to another handling branch — the office that owns the file
+ * moves, the handler seat opens in the receiving desk's queue. Distinct from
+ * assign: no person is picked here.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/refer",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: referCaseSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationSchema } },
+				description: "Referred to another branch",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can refer applications");
+		}
+		const body = c.req.valid("json");
+		const updated = await referApplicationBranch({
+			id: c.req.valid("param").id,
+			branch: body.branch,
+			note: body.note,
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeApplication(updated));

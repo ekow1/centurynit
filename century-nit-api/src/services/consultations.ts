@@ -22,6 +22,7 @@ import {
 
 
 import { documentChecklistFor } from "./documentChecklist.js";
+import { canonicalBranchId } from "./availability.js";
 
 import { db } from "../db/index.js";
 import {
@@ -446,6 +447,7 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 		assignedOfficerId: isBookingCancelled ? null : row.assignedOfficerId,
 		assignedOfficerName: isBookingCancelled ? null : (officer?.name ?? null),
 		assignedOfficerEmail: isBookingCancelled ? null : (officer?.email ?? null),
+		handlerCarriesCase: row.handlerCarriesCase,
 		coordinatorId: row.coordinatorId,
 		coordinatorName: coordinator?.name ?? null,
 		coordinatorEmail: coordinator?.email ?? null,
@@ -494,6 +496,14 @@ export async function getConsultation(id: string): Promise<ConsultationRow | nul
 export async function assignConsultation(input: {
 	id: string;
 	employeeId: string;
+	/**
+	 * Coverage — `stage` staffs this consultation only; `all` lets the
+	 * handler carry the case it opens (the application starts with them as
+	 * its handler instead of an empty seat).
+	 */
+	scope?: "stage" | "all";
+	/** Referral — move the file's handling branch with the placement. */
+	branch?: string;
 	actor: Actor;
 }): Promise<ConsultationRow> {
 	const row = await getConsultation(input.id);
@@ -527,6 +537,11 @@ export async function assignConsultation(input: {
 		}
 	}
 
+	const referredBranch = input.branch ? canonicalBranchId(input.branch) : null;
+	if (input.branch && !referredBranch) {
+		throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+	}
+
 	// Officer, applicant contact, history and audit line change together.
 	const { startAssignment } = await import("./caseAssignments.js");
 	const updated = await db.transaction(async (tx) => {
@@ -538,6 +553,8 @@ export async function assignConsultation(input: {
 				assignedAt: new Date(),
 				assignedBy: input.actor.opsUserId,
 				status: row.status === "IN_ASSESSMENT" ? "IN_ASSESSMENT" : "ASSIGNED",
+				handlerCarriesCase: input.scope === "all",
+				...(referredBranch ? { branch: referredBranch } : {}),
 				updatedAt: new Date(),
 			})
 			.where(eq(consultations.id, row.id))
@@ -557,7 +574,7 @@ export async function assignConsultation(input: {
 			targetType: "consultation",
 			targetId: row.id,
 			kind: "assignment",
-			text: `Assigned to ${employee.name}`,
+			text: `Assigned to ${employee.name}${input.scope === "all" ? " — carries the case it opens" : ""}${referredBranch ? ` · referred to ${referredBranch}` : ""}`,
 			authorName: input.actor.name,
 			authorOpsUserId: input.actor.opsUserId,
 		});
@@ -847,9 +864,16 @@ export async function completeConsultationAssessment(input: {
 				program: input.result.recProgram || "TBC",
 				country: input.result.recCountry || row.targetCountry || applicant.targetCountry || "TBC",
 				degreeLevel: (applicant.profile as ApplicantProfile)?.degreeLevel || "Master's",
-				// Deliberately null: the consultation's officer must NOT be inherited —
-				// a manager assigns the application handler from the ops workspace.
-				assignedStaffId: null,
+				// Normally null: the consultation's officer is not inherited — a
+				// manager assigns the application handler from the ops workspace.
+				// The exception is a carry-through placement (`handlerCarriesCase`
+				// set when the consultation was staffed with "rest of the case"
+				// coverage): the officer opens the case already holding it.
+				assignedStaffId: row.handlerCarriesCase ? row.assignedOfficerId : null,
+				// The file's owning office follows the consultation's branch —
+				// a Kumasi client whose consultation was referred to Accra keeps
+				// the case in Accra.
+				branch: canonicalBranchId(row.branch) ?? null,
 				stage: "document_verification",
 				status: "UNDER_REVIEW",
 				// The application is locked until the client consents to start it.
@@ -862,11 +886,14 @@ export async function completeConsultationAssessment(input: {
 			})
 			.returning();
 
-		// Fully release the consultant — same principle as assignedStaffId above.
-		await tx
-			.update(applicants)
-			.set({ assignedOfficerId: null, updatedAt: new Date() })
-			.where(eq(applicants.id, row.applicantId));
+		// Fully release the consultant — same principle as assignedStaffId
+		// above. A carry-through handler keeps the seat instead.
+		if (!row.handlerCarriesCase) {
+			await tx
+				.update(applicants)
+				.set({ assignedOfficerId: null, updatedAt: new Date() })
+				.where(eq(applicants.id, row.applicantId));
+		}
 
 		return app;
 	});
@@ -875,11 +902,14 @@ export async function completeConsultationAssessment(input: {
 		await linkApplicationToLead(created.id, applicant.email, input.actor.name);
 	}
 
+	const carrying = Boolean(row.handlerCarriesCase && row.assignedOfficerId);
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: created.id,
 		kind: "assignment",
-		text: "Application opened — awaiting assignment",
+		text: carrying
+			? "Application opened — handler carried through from the consultation"
+			: "Application opened — awaiting handler",
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
@@ -890,25 +920,76 @@ export async function completeConsultationAssessment(input: {
 	// accepted to proceed yet, and a pending handoff for a declined applicant
 	// would sit in the ops queue as a phantom entry.
 
-	// In-app: hand the case to management — it needs an owner before work starts.
-	getManagerAndCoordinatorUserIds()
-		.then((recipients) =>
-			notifyMany(
-				recipients.map((r) => ({
-					recipientUserId: r.userId,
-					type: "application.awaiting_assignment",
-					title: "New application awaiting assignment",
-					body: `${applicant.name ?? "A client"}'s application ${created.appNumber} opened from consultation ${updated.reference} — awaiting assignment.`,
-					link: "/applications",
-					entityType: "case",
-					entityId: created.id,
-					caseId: created.id,
-				})),
-			),
-		)
-		.catch(() => {});
+	// In-app: hand the case to management — it needs a handler before work
+	// starts. A carry-through case already has one; nothing to place.
+	if (!carrying) {
+		getManagerAndCoordinatorUserIds()
+			.then((recipients) =>
+				notifyMany(
+					recipients.map((r) => ({
+						recipientUserId: r.userId,
+						type: "application.awaiting_assignment",
+						title: "New application awaiting assignment",
+						body: `${applicant.name ?? "A client"}'s application ${created.appNumber} opened from consultation ${updated.reference} — awaiting assignment.`,
+						link: "/applications",
+						entityType: "case",
+						entityId: created.id,
+						caseId: created.id,
+					})),
+				),
+			)
+			.catch(() => {});
+	}
 
 	return { consultation: updated, application: created };
+}
+
+/**
+ * Refer a consultation to another handling branch without placing a
+ * handler — the receiving desk staffs it from their own queue. The branch
+ * is the office that owns the file, not the client's location.
+ */
+export async function referConsultationBranch(input: {
+	id: string;
+	branch: string;
+	note?: string;
+	actor: Actor;
+}): Promise<ConsultationRow> {
+	const row = await getConsultation(input.id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
+	}
+	const branch = canonicalBranchId(input.branch);
+	if (!branch) throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+
+	const [updated] = await db
+		.update(consultations)
+		.set({ branch, updatedAt: new Date() })
+		.where(eq(consultations.id, row.id))
+		.returning();
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "assignment",
+		text: `Referred to ${branch}${input.note ? ` — ${input.note}` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	const recipients = await getManagerAndCoordinatorUserIds();
+	await notifyMany(
+		recipients.map((r) => ({
+			recipientUserId: r.userId,
+			type: "case.updated",
+			title: "Consultation referred to a branch",
+			body: `${row.reference} was referred to ${branch}${input.note ? ` — ${input.note}` : ""}`,
+			link: `/consultations?id=${row.id}`,
+		})),
+	).catch(() => {});
+
+	return updated;
 }
 
 export async function applicantUserIdOfConsultation(id: string): Promise<string | null> {

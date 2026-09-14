@@ -845,10 +845,21 @@ export const consultationsApi = {
 	get(id: string): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}`);
 	},
-	assign(id: string, employeeId: string): Promise<ApiConsultation> {
+	assign(
+		id: string,
+		employeeId: string,
+		opts?: { scope?: "stage" | "all"; branch?: string },
+	): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/assign`, {
 			method: "POST",
-			...json({ employeeId }),
+			...json({ employeeId, scope: opts?.scope, branch: opts?.branch }),
+		});
+	},
+	/** Refer the consultation to another handling branch — no handler picked. */
+	refer(id: string, body: { branch: string; note?: string }): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/refer`, {
+			method: "POST",
+			...json(body),
 		});
 	},
 	confirmSlot(id: string): Promise<ApiConsultation> {
@@ -941,10 +952,21 @@ export const applicationsApi = {
 	get(id: string): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}`);
 	},
-	assign(id: string, employeeId: string): Promise<ApiApplication> {
+	assign(
+		id: string,
+		employeeId: string,
+		opts?: { scope?: "stage" | "all"; branch?: string },
+	): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/assign`, {
 			method: "POST",
-			...json({ employeeId }),
+			...json({ employeeId, scope: opts?.scope, branch: opts?.branch }),
+		});
+	},
+	/** Refer the case to another handling branch — no handler picked. */
+	refer(id: string, body: { branch: string; note?: string }): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/refer`, {
+			method: "POST",
+			...json(body),
 		});
 	},
 	setStage(id: string, stage: string): Promise<ApiApplication> {

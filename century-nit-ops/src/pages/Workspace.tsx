@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { OPS_BRANCHES } from "century-nit-core/ops";
+import { OPS_BRANCHES, branchName } from "century-nit-core/ops";
 
 import { fmtGhs, fmtUsd, money } from "./currency";
 import type {
@@ -18,7 +18,7 @@ import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
-import { AssignControl } from "century-nit-core/ui";
+import { AssignSheet } from "./case/AssignSheet";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
 import {
 	buildInvoiceRows,
@@ -32,7 +32,8 @@ import {
 	VISA_STEP_LABELS,
 	type PendingTask,
 } from "../lib/pendingTasks";
-import { PendingTaskCards } from "./PendingTasks";
+import { PendingTaskRows } from "./PendingTasks";
+import type { HandlerPlacement } from "./case/AssignSheet";
 import { NowPane } from "./NowPane";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseTabs, useCaseTab } from "./case/CaseTabs";
@@ -55,19 +56,20 @@ const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
  * backlog categories from buildPendingTasks. Each chip carries its live
  * count, so the shape of the day reads before anything is clicked.
  */
-const QUEUE_FILTERS: { id: string; label: string; time?: boolean }[] = [
+const QUEUE_FILTERS: { id: string; label: string }[] = [
 	{ id: "all", label: "All" },
-	{ id: "today", label: "Today", time: true },
-	{ id: "overdue", label: "Overdue", time: true },
-	{ id: "needs_assignment", label: "Unassigned" },
-	{ id: "needs_action", label: "My Tasks" },
+	{ id: "mine", label: "Mine" },
+	{ id: "needs_assignment", label: "No handler" },
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
 ];
-const passesQueueFilter = (item: PendingTask, filter: string): boolean => {
+const passesQueueFilter = (item: PendingTask, filter: string, me?: { name?: string; email?: string }): boolean => {
 	if (filter === "all") return true;
-	if (filter === "today") return isDueToday(item);
-	if (filter === "overdue") return isOverdue(item);
+	// "Mine" is a real handler check — the seat is held by this officer.
+	if (filter === "mine") {
+		const who = [me?.name, me?.email].filter(Boolean);
+		return who.some((w) => item.owner === w);
+	}
 	return item.category === filter;
 };
 
@@ -100,6 +102,8 @@ export function Workspace() {
 		refresh,
 		assignConsultation,
 		assignApplication,
+		referConsultation,
+		referApplication,
 		resolveHandoff,
 		deferHandoff,
 	} = useCases();
@@ -135,7 +139,7 @@ export function Workspace() {
 					const mapped = (res.leads || []).map((l) => ({
 						...l,
 						country: l.country || l.targetCountry || "Ghana",
-						assignedTo: l.assignedTo || l.assignedStaffName || "Unassigned",
+						assignedTo: l.assignedTo || l.assignedStaffName || "— open",
 						lastContactAt: l.lastContactAt || l.updatedAt || l.createdAt || new Date().toISOString(),
 						phone: l.phone || "—",
 					}));
@@ -214,7 +218,7 @@ export function Workspace() {
 		const q = search.toLowerCase().trim();
 		const result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
-			if (!passesQueueFilter(item, activeFilter)) return false;
+			if (!passesQueueFilter(item, activeFilter, opsUser ?? undefined)) return false;
 			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
@@ -233,25 +237,29 @@ export function Workspace() {
 		for (const i of items) counts.set(i.category, (counts.get(i.category) ?? 0) + 1);
 		counts.set("today", items.filter((i) => isDueToday(i)).length);
 		counts.set("overdue", items.filter((i) => isOverdue(i)).length);
+		const me = [opsUser?.name, opsUser?.email].filter(Boolean);
+		counts.set("mine", items.filter((i) => me.some((w) => i.owner === w)).length);
 		const overdue = invoiceRows.filter((r) => r.status === "overdue").length;
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
 		return { counts, overdue, totalOutstanding };
-	}, [items, invoiceRows, applicants]);
+	}, [items, invoiceRows, applicants, opsUser]);
 
 	const loading = casesLoading || invoicesLoading || leadsLoading;
 
 	const doAssign = useCallback(
-		async (task: PendingTask, to: Assignee, reason?: string) => {
+		async (task: PendingTask, to: Assignee, placement: HandlerPlacement) => {
 			if (task.kind === "consultation") {
-				return assignConsultation(task.record.id, to);
+				return assignConsultation(task.record.id, to, { scope: placement.scope, branch: placement.branch });
 			}
 			if (task.kind === "application") {
-				return assignApplication(task.record.id, to);
+				return assignApplication(task.record.id, to, { scope: placement.scope, branch: placement.branch });
 			}
 			if (task.kind === "handoff" && task.action === "resolve") {
 				return resolveHandoff(task.record.id, "assign", {
 					opsUserId: to.opsUserId,
-					reason: reason || undefined,
+					reason: placement.reason,
+					scope: placement.scope,
+					branch: placement.branch,
 				});
 			}
 			if (task.kind === "travel" && to.opsUserId) {
@@ -262,6 +270,17 @@ export function Workspace() {
 			throw new Error("This task cannot be assigned from here.");
 		},
 		[assignConsultation, assignApplication, resolveHandoff, refresh],
+	);
+
+	const doLeaveOpen = useCallback(
+		async (task: PendingTask, branch: string) => {
+			if (task.kind === "consultation") return referConsultation(task.record.id, branch);
+			if (task.kind === "application" || task.kind === "visa") return referApplication(task.record.id, branch);
+			if (task.kind === "handoff" && task.record.applicationId) return referApplication(task.record.applicationId, branch);
+			if (task.kind === "travel") return referApplication(task.record.applicationId, branch);
+			throw new Error("This task cannot be referred from here.");
+		},
+		[referConsultation, referApplication],
 	);
 
 	return (
@@ -316,7 +335,7 @@ export function Workspace() {
 												border: "1px solid var(--border)",
 												background: on ? "var(--foreground)" : "transparent",
 												color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-												fontWeight: f.time && n > 0 && !on ? 700 : 500,
+												fontWeight: f.id === "mine" && n > 0 && !on ? 700 : 500,
 											}}
 										>
 											{f.label}
@@ -390,23 +409,22 @@ export function Workspace() {
 							</div>
 						</div>
 						<div className="cn-scaffold__rows">
-							<PendingTaskCards
+							<PendingTaskRows
 								items={filtered}
 								assignees={assignees}
 								canAssignWork={canAssignWork}
 								onAssign={doAssign}
+								onLeaveOpen={doLeaveOpen}
+								onKeepHandler={async (t, reason) => {
+									if (t.kind === "handoff") await resolveHandoff(t.record.id, "keep", { reason });
+								}}
 								onAssigned={refresh}
 								onSelect={(t) => setSelected((cur) => (cur?.id === t.id ? null : t))}
 								selectedId={selected?.id}
-								bands={activeFilter === "all" && dateSort === "default"}
 								emptyLabel={
 									loading
 										? "Loading your queue…"
-										: activeFilter === "today"
-											? "Nothing is due today — the Overdue and Unassigned cuts are where the rest is."
-											: activeFilter === "overdue"
-												? "Nothing overdue. Good."
-												: "You're all caught up! Nothing on your desk right now."
+										: "You're all caught up! Nothing on your desk right now."
 								}
 							/>
 						</div>
@@ -421,6 +439,8 @@ export function Workspace() {
 							onAssigned={refresh}
 							onAssignConsultation={assignConsultation}
 							onAssignApplication={assignApplication}
+							onReferConsultation={referConsultation}
+							onReferApplication={referApplication}
 							onResolveHandoff={resolveHandoff}
 							onDeferHandoff={deferHandoff}
 						/>
@@ -448,6 +468,8 @@ function PreviewPane({
 	onAssigned,
 	onAssignConsultation,
 	onAssignApplication,
+	onReferConsultation,
+	onReferApplication,
 	onResolveHandoff,
 	onDeferHandoff,
 }: {
@@ -455,9 +477,11 @@ function PreviewPane({
 	assignees: Assignee[];
 	canAssignWork: boolean;
 	onAssigned: () => void | Promise<void>;
-	onAssignConsultation: (id: string, to: Assignee) => Promise<unknown>;
-	onAssignApplication: (id: string, to: Assignee) => Promise<unknown>;
-	onResolveHandoff: (handoffId: string, decision: "keep" | "assign", opts?: { opsUserId?: string; reason?: string }) => Promise<unknown>;
+	onAssignConsultation: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
+	onAssignApplication: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
+	onReferConsultation: (id: string, branch: string, note?: string) => Promise<unknown>;
+	onReferApplication: (id: string, branch: string, note?: string) => Promise<unknown>;
+	onResolveHandoff: (handoffId: string, decision: "keep" | "assign", opts?: { opsUserId?: string; reason?: string; scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
 	onDeferHandoff: (handoffId: string, reason?: string) => Promise<unknown>;
 }) {
 	const [deferring, setDeferring] = useState(false);
@@ -488,19 +512,33 @@ function PreviewPane({
 					: "consultation";
 
 	const byId = (opsUserId: string) => assignees.find((a) => a.opsUserId === opsUserId);
+	const [handlerSheet, setHandlerSheet] = useState(false);
 
-	async function assignTo(opsUserId: string, reason?: string) {
-		const to = byId(opsUserId);
+	async function placeHandler(placement: HandlerPlacement) {
+		const to = byId(placement.opsUserId);
 		if (!to || !item.record) throw new Error("Staff member not found");
 		if (item.kind === "consultation" && item.action === "assign") {
-			await onAssignConsultation(item.record.id, to);
+			await onAssignConsultation(item.record.id, to, { scope: placement.scope, branch: placement.branch });
 		} else if (item.kind === "application" && item.action === "assign") {
-			await onAssignApplication(item.record.id, to);
+			await onAssignApplication(item.record.id, to, { scope: placement.scope, branch: placement.branch });
 		} else if (item.kind === "handoff" && item.action === "resolve") {
-			await onResolveHandoff(item.record.id, "assign", { opsUserId, reason });
+			await onResolveHandoff(item.record.id, "assign", {
+				opsUserId: placement.opsUserId,
+				reason: placement.reason,
+				scope: placement.scope,
+				branch: placement.branch,
+			});
 		} else if (item.kind === "travel" && item.action === "assign") {
-			await applicationsApi.assignTravelHandler(item.record.id, opsUserId);
+			await applicationsApi.assignTravelHandler(item.record.id, placement.opsUserId);
 		}
+		await onAssigned();
+	}
+
+	async function leaveOpen(branch: string) {
+		if (item.kind === "consultation") await onReferConsultation(item.record.id, branch);
+		else if (item.kind === "application" || item.kind === "visa") await onReferApplication(item.record.id, branch);
+		else if (item.kind === "handoff" && item.record.applicationId) await onReferApplication(item.record.applicationId, branch);
+		else if (item.kind === "travel") await onReferApplication(item.record.applicationId, branch);
 		await onAssigned();
 	}
 
@@ -534,7 +572,7 @@ function PreviewPane({
 				{/* `meta` is prose or a reference, never shouted; the mono line below is for facts. */}
 				{!item.details && item.meta && <p className="cn-detailhead__sub">{item.meta}</p>}
 				<p className="cn-detailhead__meta">
-					{item.branch ? `${OPS_BRANCHES.find(b => b.id === item.branch)?.name || item.branch} · ` : ""}Assigned: {item.owner}
+					{item.branch ? `${branchName(item.branch)} · ` : ""}Handler: {item.owner}
 				</p>
 			</div>
 
@@ -565,38 +603,29 @@ function PreviewPane({
 				</div>
 			</div>
 
-			{item.kind === "handoff" && canAssignWork && (
+			{(item.action === "assign" || item.action === "resolve") && canAssignWork && (
 				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
 					<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
-						This stage needs an owner before it can start.
+						{item.action === "resolve"
+							? "This stage needs a handler before it can start."
+							: "This seat is open — place a handler."}
 					</p>
-					<AssignControl
-						stage={item.record.stage}
-						staff={assignees}
-						branch={item.branch}
-						keepName={handoffOffersKeep(item.record) ? item.record.fromOpsUserName : null}
-						withReason
-						onAssign={assignTo}
-						onKeep={keepHandler}
-					/>
-					<div style={{ marginTop: "0.6rem" }}>
-						<button type="button" className="btn btn--ghost btn--sm" onClick={() => void defer()} disabled={deferring}>
-							{deferring ? "Deferring…" : "Assign later"}
+					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+						<button type="button" className="btn btn--primary btn--sm" onClick={() => setHandlerSheet(true)}>
+							Handler…
 						</button>
-						{deferError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{deferError}</p>}
+						{item.kind === "handoff" && handoffOffersKeep(item.record) && (
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => void keepHandler()}>
+								Keep {item.record.fromOpsUserName}
+							</button>
+						)}
+						{item.kind === "handoff" && (
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => void defer()} disabled={deferring}>
+								{deferring ? "Deferring…" : "Later"}
+							</button>
+						)}
 					</div>
-				</div>
-			)}
-
-			{item.action === "assign" && canAssignWork && (
-				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
-					<AssignControl
-						stage={stageForRoles}
-						staff={assignees}
-						branch={item.branch}
-						currentName={item.owner && item.owner !== "Unassigned" ? item.owner : null}
-						onAssign={assignTo}
-					/>
+					{deferError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{deferError}</p>}
 				</div>
 			)}
 
@@ -636,6 +665,22 @@ function PreviewPane({
 				}}
 			/>
 			{actionOk && <p className="ops-panel__ok mt-2">{actionOk}</p>}
+			<AssignSheet
+				open={handlerSheet}
+				onClose={() => setHandlerSheet(false)}
+				title={item.action === "resolve" ? `Handler for ${JOURNEY_STAGE_LABELS[item.record.stage as JourneyStage] ?? item.record.stage}` : `Handler for ${item.title}`}
+				stage={stageForRoles}
+				staff={assignees}
+				branch={item.branch}
+				currentName={item.owner && item.owner !== "— open" ? item.owner : null}
+				keepName={item.kind === "handoff" && handoffOffersKeep(item.record) ? item.record.fromOpsUserName : null}
+				keepOpsUserId={item.kind === "handoff" ? item.record.fromOpsUserId : null}
+				withReason={item.action === "resolve"}
+				coverage
+				coverageDefault={item.action === "resolve" ? "stage" : "all"}
+				onAssign={placeHandler}
+				onLeaveOpen={leaveOpen}
+			/>
 		</div>
 	);
 }
@@ -647,7 +692,7 @@ function ConsultationDetails({ c }: { c: MockConsultation }) {
 			<p style={{ margin: 0 }}><strong>Type:</strong> {c.type}</p>
 			<p style={{ margin: 0 }}><strong>When:</strong> {c.dateTime}</p>
 			<p style={{ margin: 0 }}><strong>Target country:</strong> {c.targetCountry || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Assigned:</strong> {c.assignedOfficer || "Unassigned"}</p>
+			<p style={{ margin: 0 }}><strong>Handler:</strong> {c.assignedOfficer || "— open"}</p>
 			{c.meetingLink && (
 				<p style={{ margin: 0 }}>
 					<strong>Meeting:</strong>{" "}
@@ -668,7 +713,7 @@ function ApplicationDetails({ a }: { a: MockApplication }) {
 			<p style={{ margin: 0 }}><strong>Status:</strong> {a.status}</p>
 			<p style={{ margin: 0 }}><strong>Stage:</strong> {JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}</p>
 			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
+			<p style={{ margin: 0 }}><strong>Handler:</strong> {a.assignedStaff || "— open"}</p>
 			<p style={{ margin: 0 }}><strong>Application tasks open:</strong> {open}</p>
 		</div>
 	);
@@ -682,7 +727,7 @@ function VisaDetails({ a }: { a: MockApplication }) {
 			<p style={{ margin: 0 }}><strong>Visa stage:</strong> {step}</p>
 			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Invoice paid:</strong> {a.visaInvoicePaid ? "Yes" : "No"}</p>
-			<p style={{ margin: 0 }}><strong>Assigned:</strong> {a.assignedStaff || "Unassigned"}</p>
+			<p style={{ margin: 0 }}><strong>Handler:</strong> {a.assignedStaff || "— open"}</p>
 		</div>
 	);
 }
@@ -745,7 +790,7 @@ function LeadDetails({ lead }: { lead: Lead }) {
 			<p style={{ margin: 0 }}><strong>Phone:</strong> {lead.phone || "—"}</p>
 			<p style={{ margin: 0 }}><strong>Stage:</strong> {LEAD_STAGE_LABELS[lead.stage as LeadStage] ?? lead.stage}</p>
 			<p style={{ margin: 0 }}><strong>Source:</strong> {lead.source || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Assigned:</strong> {lead.assignedTo || "Unassigned"}</p>
+			<p style={{ margin: 0 }}><strong>Handler:</strong> {lead.assignedTo || "— open"}</p>
 			<p style={{ margin: 0 }}><strong>Last contact:</strong> {timeAgo(lead.lastContactAt)}</p>
 			{lead.notes && <p style={{ margin: 0, fontStyle: "italic" }}>{lead.notes}</p>}
 		</div>

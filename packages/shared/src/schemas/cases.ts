@@ -581,6 +581,12 @@ export const consultationSchema = z.object({
 	assignedOfficerId: z.string().uuid().nullable(),
 	assignedOfficerName: z.string().nullable(),
 	assignedOfficerEmail: z.string().email().nullable(),
+	/**
+	 * Coverage chosen at placement — when true the assigned officer carries
+	 * the application this consultation opens (it starts with them as
+	 * `assignedStaffId` rather than parking on a handoff).
+	 */
+	handlerCarriesCase: z.boolean().optional(),
 	/** The coordinator who manages this case (delegated by manager/owner). */
 	coordinatorId: z.string().uuid().nullable(),
 	coordinatorName: z.string().nullable(),
@@ -800,7 +806,24 @@ export const applicationListSchema = z.object({
 
 export const assignCaseSchema = z.object({
 	employeeId: z.string().uuid(),
+	/**
+	 * Coverage — how far the handler carries the file. `stage` staffs the
+	 * current stage only (the seat re-opens when the chapter closes);
+	 * `all` makes them the case's handler end-to-end.
+	 */
+	scope: z.enum(["stage", "all"]).optional(),
+	/** Referral — the office that owns the file, when it moves with this placement. */
+	branch: z.string().min(1).max(64).optional(),
 });
+/**
+ * Refer a case or consultation to another handling branch without placing a
+ * handler — the receiving desk's manager staffs it from their own queue.
+ */
+export const referCaseSchema = z.object({
+	branch: z.string().min(1).max(64),
+	note: z.string().max(500).optional(),
+});
+export type ReferCase = z.infer<typeof referCaseSchema>;
 export const completeAssessmentSchema = assessmentResultSchema;
 export const cancelConsultationSchema = z.object({
 	reason: z.string().max(1000).optional(),

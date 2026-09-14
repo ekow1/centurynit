@@ -323,7 +323,9 @@ export function formatBookingWhen(booking: Booking): { date: string; time: strin
 }
 
 export function taskActionLabel(task: PendingTask): string {
-	if (task.action === "assign") return "Assign";
+	// Staffing asks — a handoff is just the next chapter asking for a
+	// handler, not a separate kind of work.
+	if (task.action === "assign" || task.action === "resolve") return "Needs handler";
 	if (task.action === "assess") return "Assess";
 	if (task.action === "reschedule") return "Reschedule";
 	if (task.action === "review") return "Review";
@@ -335,8 +337,14 @@ export function taskActionLabel(task: PendingTask): string {
 	if (task.action === "book") return "Record booking";
 	if (task.action === "chase") return "Chase payment";
 	if (task.action === "followup") return "Follow up";
-	if (task.action === "resolve") return "Resolve";
 	return task.action;
+}
+
+/** Who currently holds the seat — the case owner, else the stage-scoped handler. */
+export function caseHandlerName(a: MockApplication): string {
+	if (a.assignedStaff) return a.assignedStaff;
+	const stageSeat = (a.stageHandlers ?? []).find((h) => h.stage === a.stage);
+	return stageSeat?.opsUserName ?? "";
 }
 
 /**
@@ -361,8 +369,15 @@ export const TASK_KIND_LABEL: Record<PendingTask["kind"], string> = {
 	applicant: "Applicant",
 	invoice: "Invoice",
 	lead: "Lead",
-	handoff: "Handoff",
+	handoff: "Stage",
 };
+
+/** The kind label with the handoff folded into the stage it asks to staff. */
+export function taskKindLabel(task: PendingTask): string {
+	if (task.kind !== "handoff") return TASK_KIND_LABEL[task.kind];
+	return JOURNEY_STAGE_LABELS[task.record.stage as JourneyStage] ??
+		task.record.stage.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+}
 
 const COMPACT_WHEN =
 	typeof Intl !== "undefined"
@@ -448,7 +463,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				subtitle: `Consultation · ${c.type} · ${c.targetCountry || "—"}`,
 				meta: c.dateTime,
 				branch: c.branch,
-				owner: "Unassigned",
+				owner: "— open",
 				linkTo: `/consultations?id=${c.id}`,
 				at: c.updatedAt,
 				due: slotIso(c),
@@ -512,7 +527,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 		// that (invited / on hold / declined) there is nothing to work on, and
 		// assigning someone would only create noise for both sides.
 		if (a.proceedStatus && a.proceedStatus !== "accepted") continue;
-		if (!a.assignedStaff) {
+		// The seat is filled by either the whole-case owner or a stage-scoped
+		// handler covering the chapter the case is actually in.
+		const stageSeated = (a.stageHandlers ?? []).some((h) => h.stage === a.stage);
+		if (!a.assignedStaff && !stageSeated) {
 			q.push({
 				id: `a-assign-${a.id}`,
 				category: "needs_assignment",
@@ -520,10 +538,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "assign",
 				record: a,
 				title: `${a.applicantName}`,
-				subtitle: `Application ${a.appId} · Stage: ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
+				subtitle: `Needs handler · ${JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage} · ${a.country || "—"}`,
 				meta: stageMeta(a),
 				branch: a.branch,
-				owner: "Unassigned",
+				owner: "— open",
 				linkTo: `/applications?id=${a.id}`,
 				at: a.updatedAt,
 				priority: PRIORITY.assign_application,
@@ -540,7 +558,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				subtitle: `${open} open checklist item${open === 1 ? "" : "s"}`,
 				meta: stageMeta(a),
 				branch: a.branch,
-				owner: a.assignedStaff,
+				owner: caseHandlerName(a),
 				linkTo: `/applications?id=${a.id}`,
 				at: a.updatedAt,
 				priority: PRIORITY.checklist,
@@ -577,7 +595,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			subtitle: `Application invoice needed · ${a.schoolApplications?.length ?? 0} school(s) selected`,
 			meta: `App ${a.appId}`,
 			branch: a.branch,
-			owner: a.assignedStaff || "—",
+			owner: caseHandlerName(a) || "—",
 			linkTo: `/applications?id=${a.id}`,
 			at: a.updatedAt,
 			priority: PRIORITY.issue,
@@ -598,7 +616,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				subtitle: `Visa refused · advise the applicant, then reopen for reapplication or close · ${a.university || a.country || "—"}`,
 				meta: a.appId,
 				branch: a.branch,
-				owner: a.assignedStaff || "—",
+				owner: caseHandlerName(a) || "—",
 				linkTo: `/applications?chapter=visa&id=${a.id}`,
 				at: a.updatedAt,
 				priority: PRIORITY.review_application,
@@ -614,7 +632,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				subtitle: `Visa processing · ${VISA_STEP_LABELS[stage] ?? stage} · ${a.university || a.country || "—"}`,
 				meta: `App ${a.appId}`,
 				branch: a.branch,
-				owner: a.assignedStaff || "—",
+				owner: caseHandlerName(a) || "—",
 				linkTo: `/applications?chapter=visa&id=${a.id}`,
 				at: a.updatedAt,
 				priority: PRIORITY.review_application,
@@ -632,7 +650,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					subtitle: `Visa proforma to issue · ${fmtGhs(visaInv.subtotal)}`,
 					meta: visaInv.invoiceNumber,
 					branch: a.branch,
-					owner: visaInv.issuedBy || a.assignedStaff || "—",
+					owner: visaInv.issuedBy || caseHandlerName(a) || "—",
 					linkTo: `/applications?chapter=visa&id=${a.id}`,
 					at: a.updatedAt,
 					priority: PRIORITY.issue,
@@ -648,7 +666,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 					subtitle: `Visa invoice ${visaInv.invoiceNumber} · ${fmtGhs(balance)} due`,
 					meta: `App ${a.appId}`,
 					branch: a.branch,
-					owner: visaInv.issuedBy || a.assignedStaff || "—",
+					owner: visaInv.issuedBy || caseHandlerName(a) || "—",
 					linkTo: `/applications?chapter=visa&id=${a.id}`,
 					at: a.updatedAt,
 					priority: PRIORITY.chase,
@@ -659,14 +677,19 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 
 	for (const h of handoffs) {
 		if (h.status !== "pending") continue;
+		// A pending handoff is not a separate kind of work — it is the next
+		// chapter asking for a handler. The kicker reads "Needs handler ·
+		// {stage}" like any other placement row; the previous handler and the
+		// reason it parked are context on the fact line, and the seat is open.
 		const stageLabel =
 			h.stage === "visa_processing"
-				? "Visa specialist"
+				? "Visa processing"
 				: h.stage
 						.split("_")
 						.map((s) => s.charAt(0).toUpperCase() + s.slice(1))
 						.join(" ");
 		const handoffApp = h.applicationId ? appById.get(h.applicationId) : undefined;
+		const was = h.fromOpsUserName ? `was ${h.fromOpsUserName}` : "no previous handler";
 		q.push({
 			id: `handoff-${h.id}`,
 			category: "needs_assignment",
@@ -674,10 +697,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			action: "resolve",
 			record: h,
 			title: h.applicantName ?? "Applicant",
-			subtitle: `Assignment required · ${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""}${h.source === "offboarding" ? " · previous handler left" : ""}`,
-			meta: `${h.stage === "visa_processing" ? "Visa processing" : h.stage} · ${h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision"}`,
+			subtitle: `${stageLabel}${h.source === "visa_payment" ? " · payment received" : ""}${h.source === "deposit_payment" ? " · 10% deposit received" : ""} · ${was}${h.source === "offboarding" ? " — left" : ""}${h.reason ? ` · “${h.reason}”` : ""}`,
+			meta: h.deferCount > 0 ? `deferred ${h.deferCount}×` : "awaiting decision",
 			branch: handoffApp?.branch ?? "",
-			owner: h.fromOpsUserName ?? "No previous handler",
+			owner: "— open",
 			linkTo: h.stage === "visa_processing" ? `/applications?chapter=visa&id=${h.applicationId}` : `/applications?id=${h.applicationId}`,
 			at: h.deferredAt ?? h.createdAt,
 			priority: PRIORITY.assign_consultation,
@@ -706,7 +729,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "assign",
 				subtitle: `Travel officer needed · ${ref}`,
 				meta: "Client asked us to book their flight",
-				owner: "Unassigned",
+				owner: "— open",
 				priority: PRIORITY.assign_application,
 			});
 		} else if (ta.status === "review" && ta.assignedOpsUserId && !ta.invoiceId && app && !preDepartureFeePaid(app)) {
@@ -719,7 +742,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "invoice",
 				subtitle: `Pre-departure fee milestone due · ${ref}`,
 				meta: app.paymentPlanId ? "Ticket is issued once the milestone is paid" : "Client has not chosen a payment plan",
-				owner: ta.assignedOpsUserName ?? "Owner",
+				owner: ta.assignedOpsUserName ?? "—",
 				priority: PRIORITY.chase,
 			});
 		} else if (ta.status === "review" && ta.assignedOpsUserId && !ta.invoiceId) {
@@ -731,7 +754,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "invoice",
 				subtitle: `Ticket invoice to raise · ${ref}`,
 				meta: "Fee milestone paid — client is waiting for their ticket invoice",
-				owner: ta.assignedOpsUserName ?? "Owner",
+				owner: ta.assignedOpsUserName ?? "—",
 				priority: PRIORITY.issue,
 			});
 		} else if (ta.status === "invoiced" && ta.invoiceId) {
@@ -759,7 +782,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "book",
 				subtitle: `Flight to book · ${ref}`,
 				meta: "Ticket paid — record the booking once the airline confirms",
-				owner: ta.assignedOpsUserName ?? "Owner",
+				owner: ta.assignedOpsUserName ?? "—",
 				priority: PRIORITY.review_application,
 			});
 		}
@@ -796,7 +819,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 							: "Not uploaded",
 			})),
 			branch: a.branch,
-			owner: a.assignedStaff || "—",
+			owner: caseHandlerName(a) || "—",
 			linkTo: `/applications?id=${a.id}&tab=documents`,
 			at: a.updatedAt,
 			priority: toReview > 0 ? PRIORITY.review_application : PRIORITY.chase,
@@ -899,7 +922,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				subtitle: `${LEAD_STAGE_LABELS[lead.stage] ?? lead.stage} · ${lead.country || "Ghana"}`,
 				meta: `Last contact ${timeAgo(lead.lastContactAt)}`,
 				branch: "",
-				owner: lead.assignedTo || "Unassigned",
+				owner: lead.assignedTo || "— open",
 				linkTo: `/leads`,
 				at: lead.lastContactAt,
 				priority: PRIORITY.followup,

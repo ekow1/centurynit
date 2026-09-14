@@ -283,18 +283,18 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 			pendingHandoff.source === "deposit_payment"
 				? "Deposit received — this case needs a consultant before school selection can proceed."
 				: pendingHandoff.source === "visa_payment" || pendingHandoff.source === "visa_consent_continue"
-					? "The client is ready for their visa — assign a visa officer."
+					? "The client is ready for their visa — place a visa officer."
 					: pendingHandoff.source === "offboarding"
-						? "The previous owner has left — this chapter needs a new one."
-						: `This case needs an owner for ${stageLabel}.`;
+						? "The previous handler has left — this chapter needs a new one."
+						: `This case needs a handler for ${stageLabel}.`;
 		nextActions.push({
 			id: `handoff-${pendingHandoff.id}`,
-			title: `Needs an owner · ${stageLabel}`,
+			title: `Needs a handler · ${stageLabel}`,
 			detail: why,
 			tone: "blocked",
 			action: canAssignWork ? (
 				<button type="button" className="btn btn--sm btn--primary" onClick={() => setAssignOpen(true)}>
-					Assign owner
+					Handler…
 				</button>
 			) : undefined,
 		});
@@ -425,7 +425,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				handlerAction={
 					canAssignWork ? (
 						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
-							{pendingHandoff ? "Assign" : app.assignedStaff ? "Change" : "Assign"}
+							Handler…
 						</button>
 					) : undefined
 				}

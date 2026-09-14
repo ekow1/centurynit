@@ -22,7 +22,7 @@ function isKnown(v: string | undefined | null): v is string {
 export function EnterpriseConsultations() {
 	const [searchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { consultations, assignees, assignConsultation, error: casesError } = useCases();
+	const { consultations, assignees, assignConsultation, referConsultation, error: casesError } = useCases();
 	// Assignment from the list: the card's chip opens the same control the detail uses.
 	const [assignFor, setAssignFor] = useState<MockConsultation | null>(null);
 	const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -87,7 +87,7 @@ export function EnterpriseConsultations() {
 				<div>
 					<h1 className="page-title">Consultations</h1>
 					<p className="lead mt-1">
-						Bookings arrive from the client portal. {canAssignWork ? "Assign to a consultant to begin the assessment." : "You see the ones assigned to you."}
+						Bookings arrive from the client portal. {canAssignWork ? "Place a handler to begin the assessment." : "You see the ones assigned to you."}
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -189,7 +189,7 @@ export function EnterpriseConsultations() {
 													{c.assignedOfficer ? (
 														<StaffChatBadge opsUserId={opsUserIdByEmail(c.assignedOfficerEmail)} name={c.assignedOfficer} email={c.assignedOfficerEmail} />
 													) : (
-														<span>Unassigned</span>
+														<span className="cn-row__unassigned">No handler</span>
 													)}
 													{canAssignWork && !c.assignedOfficer && c.status !== "Completed" && c.status !== "Cancelled" && (
 														<AssignChip onClick={() => setAssignFor(c)} />
@@ -220,16 +220,21 @@ export function EnterpriseConsultations() {
 				<AssignSheet
 					open
 					onClose={() => setAssignFor(null)}
-					title="Assign consultant"
+					title={assignFor.assignedOfficer ? "Change handler" : "Handler · Consultation"}
 					stage="consultation"
 					staff={assignees}
 					branch={assignFor.branch}
 					currentName={assignFor.assignedOfficer || null}
-					onAssign={async (opsUserId) => {
+					coverage
+					onAssign={async ({ opsUserId, scope, branch }) => {
 						const to = assignees.find((a) => a.opsUserId === opsUserId);
 						if (!to) throw new Error("That staff member is no longer available");
-						await assignConsultation(assignFor.id, to);
-						showToast("success", "Consultant assigned.");
+						await assignConsultation(assignFor.id, to, { scope, branch });
+						showToast("success", scope === "all" ? "Handler placed — carries the case it opens." : "Handler placed.");
+					}}
+					onLeaveOpen={async (branch) => {
+						await referConsultation(assignFor.id, branch);
+						showToast("success", "Referred — left open for the branch to staff.");
 					}}
 				/>
 			)}

@@ -121,6 +121,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		coordinatorAssignedAt: row.coordinatorAssignedAt,
 		coordinatorAssignedByName: row.coordinatorAssignedByName ?? null,
 		delegationNote: row.delegationNote ?? null,
+		handlerCarriesCase: row.handlerCarriesCase ?? false,
 		workflow: row.workflow,
 		applicationId: row.applicationId ?? null,
 		applicationNumber: row.applicationNumber ?? null,
@@ -530,8 +531,17 @@ export function useCasesApi() {
 				}),
 			);
 		},
-		assignConsultation: async (id: string, to: Assignee) =>
-			replaceConsultation(await consultationsApi.assign(id, await staffIdByEmail(to.email))),
+		assignConsultation: async (
+			id: string,
+			to: Assignee,
+			opts?: { scope?: "stage" | "all"; branch?: string },
+		) =>
+			replaceConsultation(
+				await consultationsApi.assign(id, to.opsUserId ?? (await staffIdByEmail(to.email)), opts),
+			),
+		/** Refer the consultation to another handling branch — no handler picked. */
+		referConsultation: async (id: string, branch: string, note?: string) =>
+			replaceConsultation(await consultationsApi.refer(id, { branch, note })),
 		confirmConsultationSlot: async (id: string) =>
 			replaceConsultation(await consultationsApi.confirmSlot(id)),
 		startConsultationAssessment: async (id: string) =>
@@ -563,8 +573,17 @@ export function useCasesApi() {
 			}),
 		addApplication: async (applicantId: string, input: any) =>
 			applicationsApi.addForApplicant(applicantId, input),
-		assignApplication: async (id: string, to: Assignee) =>
-			replaceApplication(await applicationsApi.assign(id, await staffIdByEmail(to.email))),
+		assignApplication: async (
+			id: string,
+			to: Assignee,
+			opts?: { scope?: "stage" | "all"; branch?: string },
+		) =>
+			replaceApplication(
+				await applicationsApi.assign(id, to.opsUserId ?? (await staffIdByEmail(to.email)), opts),
+			),
+		/** Refer the case to another handling branch — no handler picked. */
+		referApplication: async (id: string, branch: string, note?: string) =>
+			replaceApplication(await applicationsApi.refer(id, { branch, note })),
 		toggleApplicationChecklist: async (id: string, itemId: string, checked: boolean) =>
 			replaceApplication(await applicationsApi.toggleChecklist(id, itemId, checked)),
 		commentOnApplication: async (id: string, kind: CommentKind, text: string, visibility: "internal" | "applicant" = "internal") =>
@@ -580,11 +599,17 @@ export function useCasesApi() {
 		resolveHandoff: async (
 			handoffId: string,
 			decision: StageHandoffDecision,
-			opts?: { opsUserId?: string; reason?: string },
+			opts?: { opsUserId?: string; reason?: string; scope?: "stage" | "all"; branch?: string },
 		) => {
 			await apiFetch<StageHandoff>(`${API_PREFIX}/applications/handoffs/${handoffId}/resolve`, {
 				method: "POST",
-				body: JSON.stringify({ decision, opsUserId: opts?.opsUserId, reason: opts?.reason }),
+				body: JSON.stringify({
+					decision,
+					opsUserId: opts?.opsUserId,
+					reason: opts?.reason,
+					scope: opts?.scope,
+					branch: opts?.branch,
+				}),
 			});
 			await refresh();
 		},

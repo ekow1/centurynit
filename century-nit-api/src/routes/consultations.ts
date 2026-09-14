@@ -22,6 +22,7 @@ import {
 	startConsultationAssessment,
 	delegateCoordinator,
 	reassignCoordinator,
+	referConsultationBranch,
 	getStaffWorkload,
 	getConsultationActivity,
 } from "../services/consultations.js";
@@ -68,6 +69,7 @@ import {
 
 	applicationSchema,
 	assignCaseSchema,
+	referCaseSchema,
 	CASE_ERROR_CODES,
 	cancelConsultationSchema,
 
@@ -236,6 +238,47 @@ consultationsRouter.openapi(
 		const updated = await assignConsultation({
 			id,
 			employeeId: body.employeeId,
+			scope: body.scope,
+			branch: body.branch,
+			actor: actorFrom(staff),
+		});
+		return c.json(await serializeConsultation(updated));
+	},
+);
+
+/**
+ * Refer a consultation to another handling branch without placing a
+ * handler — the receiving desk staffs it from their own queue. The client's
+ * home branch is not the same thing: a Kumasi client can be handled by
+ * Accra.
+ */
+consultationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/refer",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: referCaseSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Referred to another branch",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers or coordinators can refer consultations");
+		}
+		const body = c.req.valid("json");
+		const updated = await referConsultationBranch({
+			id: c.req.valid("param").id,
+			branch: body.branch,
+			note: body.note,
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeConsultation(updated));

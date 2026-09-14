@@ -610,6 +610,20 @@
       "when": 1789600015000,
       "tag": "0088_notification_log_dedup",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1789600016000,
+      "tag": "0089_applications_branch",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1789600017000,
+      "tag": "0090_consultations_handler_carries",
+      "breakpoints": true
     }
   ]
 }

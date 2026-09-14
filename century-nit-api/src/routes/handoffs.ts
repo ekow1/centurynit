@@ -250,6 +250,8 @@ export function registerHandoffRoutes(router: OpenAPIHono<{ Variables: AuthVaria
 					decision: body.decision,
 					opsUserId: body.opsUserId,
 					reason: body.reason,
+					scope: body.scope,
+					branch: body.branch,
 					actor: actorFrom(c.get("staff")!),
 				}),
 			);

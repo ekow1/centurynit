@@ -158,14 +158,39 @@ export async function createOrGetHandoff(input: {
 export async function ensureVisaHandoffForApplication(input: {
 	applicationId: string;
 	tx?: typeof db;
-}): Promise<HandoffRow> {
+}): Promise<HandoffRow | null> {
 	const txDb = input.tx ?? db;
 	const [app] = await txDb
-		.select({ id: applications.id, stage: applications.stage })
+		.select({ id: applications.id, stage: applications.stage, assignedStaffId: applications.assignedStaffId })
 		.from(applications)
 		.where(eq(applications.id, input.applicationId))
 		.limit(1);
 	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+
+	// Carry-through: a whole-case owner (assignedStaffId, coverage "all")
+	// continues into the visa chapter without a placement decision — the seat
+	// is theirs until a manager reassigns. Only a stage-only or empty seat
+	// parks the case on a handoff.
+	if (app.assignedStaffId) {
+		await txDb
+			.update(applications)
+			.set({ visaStage: "pending", updatedAt: new Date() })
+			.where(and(eq(applications.id, app.id), eq(applications.visaStage, "awaiting_handler")));
+		// Write goes through the outer db — it can outlive this transaction.
+		// A failure still leaves the owner as the stage's handler via
+		// activeHandlerFor's assignedStaffId fallback, so it is best-effort.
+		const { assignStageOfficer } = await import("./communication.js");
+		await assignStageOfficer({
+			applicationId: app.id,
+			stage: "visa_processing",
+			opsUserId: app.assignedStaffId,
+			assignedBy: app.assignedStaffId,
+			reason: "carry-through: whole-case handler",
+			scope: "stage",
+		}).catch(() => {});
+		return null;
+	}
+
 	const handler = await activeHandlerFor(app.id, app.stage, txDb);
 	return createOrGetHandoff({
 		applicationId: app.id,
@@ -187,14 +212,29 @@ export async function ensureVisaHandoffForApplication(input: {
 export async function ensureTravelHandoffForApplication(input: {
 	applicationId: string;
 	tx?: typeof db;
-}): Promise<HandoffRow> {
+}): Promise<HandoffRow | null> {
 	const txDb = input.tx ?? db;
 	const [app] = await txDb
-		.select({ id: applications.id, stage: applications.stage })
+		.select({ id: applications.id, stage: applications.stage, assignedStaffId: applications.assignedStaffId })
 		.from(applications)
 		.where(eq(applications.id, input.applicationId))
 		.limit(1);
 	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+
+	// Carry-through — same rule as the visa handoff above.
+	if (app.assignedStaffId) {
+		const { assignStageOfficer } = await import("./communication.js");
+		await assignStageOfficer({
+			applicationId: app.id,
+			stage: "travel_assistance",
+			opsUserId: app.assignedStaffId,
+			assignedBy: app.assignedStaffId,
+			reason: "carry-through: whole-case handler",
+			scope: "stage",
+		}).catch(() => {});
+		return null;
+	}
+
 	const handler = await activeHandlerFor(app.id, app.stage, txDb);
 	return createOrGetHandoff({
 		applicationId: app.id,
@@ -345,6 +385,14 @@ export async function resolveStageHandoff(input: {
 	decision: "keep" | "assign";
 	opsUserId?: string;
 	reason?: string;
+	/**
+	 * Coverage — `stage` seats the handler on this stage only (the seat
+	 * re-opens at the next chapter); `all` makes them carry the rest of the
+	 * case. Keep resolutions always seat the stage only.
+	 */
+	scope?: "stage" | "all";
+	/** Referral — the branch the case is owned by after this resolution. */
+	branch?: string;
 	actor: Actor;
 }): Promise<StageHandoff> {
 	const row = await getHandoffRow(input.handoffId);
@@ -392,25 +440,36 @@ export async function resolveStageHandoff(input: {
 	}
 
 	const { assignStageOfficer, recordEvent } = await import("./communication.js");
+	// Coverage defaults to this stage only — carry-through is an explicit
+	// choice, never the silent default. "keep" is always stage-scoped.
+	const scope = input.decision === "keep" ? "stage" : (input.scope ?? "stage");
 	await assignStageOfficer({
 		applicationId: row.applicationId,
 		stage: row.stage,
 		opsUserId: resolvedOpsUserId,
 		assignedBy: input.actor.opsUserId,
 		reason: input.reason ?? (input.decision === "keep" ? "handoff: keep current handler" : "handoff: assign specialist"),
+		scope,
 	});
 
-	// The school_submission handoff establishes the case owner for the whole
-	// application and unlocks school selection. Advance the stage from
-	// document_verification to school_submission and write assignedStaffId.
+	// A referral moves the file's owning office — recorded on the case, not
+	// the applicant: the client's location is not the branch that handles them.
+	let referredBranch: string | null = null;
+	if (input.branch) {
+		const { canonicalBranchId } = await import("./availability.js");
+		referredBranch = canonicalBranchId(input.branch);
+		if (!referredBranch) throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+		await db
+			.update(applications)
+			.set({ branch: referredBranch, updatedAt: new Date() })
+			.where(eq(applications.id, row.applicationId));
+	}
+
+	// The school_submission handoff opens school selection once staffed.
+	// Whole-case ownership follows coverage — `scope === "all"` already wrote
+	// it through assignStageOfficer above; a stage-scoped seat leaves the
+	// case-owner seat open so the next chapter asks for a handler again.
 	if (row.stage === "school_submission") {
-		const { setCaseOwner } = await import("./caseOwnership.js");
-		await setCaseOwner({
-			applicationId: row.applicationId,
-			opsUserId: resolvedOpsUserId,
-			assignedBy: input.actor.opsUserId,
-			note: input.reason ?? `handoff: ${input.decision}`,
-		});
 		await db
 			.update(applications)
 			.set({ stage: "school_submission", updatedAt: new Date() })
@@ -485,14 +544,21 @@ export async function resolveStageHandoff(input: {
 		.where(eq(opsUsers.id, resolvedOpsUserId))
 		.limit(1);
 
+	const coverageNote =
+		input.decision === "keep"
+			? ""
+			: input.scope === "all"
+				? " — carries the rest of the case"
+				: " — this stage only";
+	const branchNote = referredBranch ? ` · file referred to ${referredBranch}` : "";
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: row.applicationId,
 		kind: "assignment",
 		text:
 			input.decision === "keep"
-				? `Handoff: kept ${officer?.name ?? resolvedOpsUserId} on ${row.stage} (confirmed by ${input.actor.name}).`
-				: `Handoff: assigned ${officer?.name ?? resolvedOpsUserId} to ${row.stage} (by ${input.actor.name}).`,
+				? `Handoff: kept ${officer?.name ?? resolvedOpsUserId} on ${row.stage} (confirmed by ${input.actor.name}).${branchNote}`
+				: `Handoff: assigned ${officer?.name ?? resolvedOpsUserId} to ${row.stage}${coverageNote}${branchNote} (by ${input.actor.name}).`,
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
@@ -502,7 +568,7 @@ export async function resolveStageHandoff(input: {
 		actorOpsUserId: input.actor.opsUserId,
 		applicationId: row.applicationId,
 		stageKey: row.stage,
-		metadata: { handoffId: row.id, decision: input.decision, officer: resolvedOpsUserId, reason: input.reason },
+		metadata: { handoffId: row.id, decision: input.decision, officer: resolvedOpsUserId, reason: input.reason, scope: input.scope, branch: input.branch },
 	});
 
 	// Notify the chosen handler.
@@ -511,8 +577,8 @@ export async function resolveStageHandoff(input: {
 		await notify({
 			recipientUserId: staffUserId,
 			type: "assignment.handoff_resolved",
-			title: "You own a chapter",
-			body: `You are the owner for ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage}.`,
+			title: "You handle a chapter",
+			body: `You are the handler for ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage}.`,
 			link: "/applications",
 		}).catch(() => {});
 	}
@@ -578,7 +644,7 @@ export async function deferStageHandoff(input: {
 		recipients.map((r) => ({
 			recipientUserId: r.userId,
 			type: "stage.needs_handler",
-			title: "Case still needs an owner",
+			title: "Case still needs a handler",
 			body: `Application ${row.applicationId} still awaits a ${JOURNEY_STAGE_LABELS[row.stage as JourneyStage] ?? row.stage} assignment.`,
 			link: "/applications",
 			entityType: "case",

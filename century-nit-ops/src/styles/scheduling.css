@@ -257,6 +257,223 @@
 	margin-left: 0;
 }
 
+/* ── Workspace queue: the day as a task ledger ──
+   One row per task — rank · kicker (action · kind) · client + ref · one
+   fact line · when · handler · branch · one action. Client grouping
+   survives as a separator line, never a card. */
+
+.trow {
+	display: grid;
+	grid-template-columns: 2.2rem minmax(0, 1fr) auto 9rem 7rem auto;
+	align-items: center;
+	gap: 0.9rem;
+	padding: 0.55rem 1rem;
+	border-bottom: 1px solid var(--border-light);
+	cursor: pointer;
+	background: var(--background);
+}
+
+.trow:hover {
+	background: var(--muted);
+}
+
+.trow:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: -2px;
+}
+
+.trow--on,
+.trow--on:hover {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.trow--on .tkick,
+.trow--on .tsub,
+.trow--on .twhen,
+.trow--on .town,
+.trow--on .tbranch,
+.trow--on .tname__ref {
+	color: rgba(255, 255, 255, 0.75);
+	opacity: 1;
+}
+
+.trow--on .ops-pill {
+	border-color: currentColor;
+}
+
+.trow--on .ops-pill--live {
+	background: var(--background);
+	color: var(--foreground);
+}
+
+.trank {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
+	opacity: 0.55;
+}
+
+.tkick {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin: 0 0 0.1rem;
+}
+
+.tname {
+	font-weight: 600;
+	font-size: var(--text-sm);
+	margin: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tname__ref {
+	font-family: var(--font-mono);
+	font-weight: 400;
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	margin-left: 0.5rem;
+}
+
+.tsub {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	margin: 0.1rem 0 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.twhen {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	text-align: right;
+}
+
+.town {
+	font-size: var(--text-sm);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: right;
+}
+
+.town--none {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.tbranch {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	text-align: right;
+}
+
+.tgroup {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	padding: 0.5rem 1rem 0.2rem;
+}
+
+/* ── Handler sheet: branch → handler → coverage ──
+   Three numbered pick-lists; a picked row inverts. */
+
+.hsheet__eyebrow {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	font-weight: 700;
+	margin: 1.1rem 0 0.4rem;
+}
+
+.hsheet__list {
+	border: 1px solid var(--border-light);
+}
+
+.hsheet__row {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.75rem;
+	width: 100%;
+	padding: 0.55rem 0.8rem;
+	border: none;
+	border-bottom: 1px solid var(--border-light);
+	background: var(--background);
+	font-size: var(--text-sm);
+	text-align: left;
+	cursor: pointer;
+}
+
+.hsheet__row:last-child {
+	border-bottom: none;
+}
+
+.hsheet__row:hover {
+	background: var(--muted);
+}
+
+.hsheet__row--on,
+.hsheet__row--on:hover {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.hsheet__row--on .hsheet__hint {
+	color: rgba(255, 255, 255, 0.75);
+}
+
+.hsheet__row--open {
+	font-style: normal;
+}
+
+.hsheet__hint {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.04em;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+.hsheet__empty {
+	padding: 0.7rem 0.8rem;
+	font-size: var(--text-sm);
+	color: var(--muted-foreground);
+	margin: 0;
+}
+
+.hsheet__foot {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 1.25rem;
+	padding-top: 0.9rem;
+	border-top: 1px solid var(--border-light);
+	flex-wrap: wrap;
+}
+
 .ops-person__foot {
 	display: flex;
 	justify-content: space-between;

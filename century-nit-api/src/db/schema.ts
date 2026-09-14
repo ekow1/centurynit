@@ -924,6 +924,13 @@ export const consultations = pgTable(
 		}),
 		assignedAt: timestamp("assigned_at", { withTimezone: true }),
 		assignedBy: uuid("assigned_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		/**
+		 * Coverage chosen at placement: when true, the officer assigned here
+		 * carries the whole case — the application opened from this
+		 * consultation starts with them as `assignedStaffId` instead of an
+		 * empty seat.
+		 */
+		handlerCarriesCase: boolean("handler_carries_case").notNull().default(false),
 		/** The coordinator who manages this case. Delegated by manager/owner. */
 		coordinatorId: uuid("coordinator_id").references(() => opsUsers.id, {
 			onDelete: "set null",
@@ -1013,6 +1020,12 @@ export const applications = pgTable(
 		assignedStaffId: uuid("assigned_staff_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
+		/**
+		 * The office that owns this case — the handling branch, independent of
+		 * the client's location. Null means "same as the applicant's branch"
+		 * (cases opened before referrals existed, and unreferred cases).
+		 */
+		branch: varchar("branch", { length: 64 }),
 		stage: journeyStageEnum("stage").notNull().default("document_verification"),
 		status: applicationStatusEnum("status").notNull().default("UNDER_REVIEW"),
 		/**

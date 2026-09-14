@@ -467,6 +467,13 @@ export const resolveStageHandoffSchema = z.object({
 	/** Required when `decision === "assign"`; ignored for `keep`. */
 	opsUserId: z.string().uuid().optional(),
 	reason: z.string().max(500).optional(),
+	/**
+	 * Coverage — `stage` staffs only the stage the handoff opened; `all`
+	 * makes the handler carry the rest of the case (no further placement).
+	 */
+	scope: z.enum(["stage", "all"]).optional(),
+	/** Referral — move the case to another handling branch with this resolution. */
+	branch: z.string().min(1).max(64).optional(),
 });
 export type ResolveStageHandoff = z.infer<typeof resolveStageHandoffSchema>;
 

@@ -40,16 +40,25 @@ export const OPS_BRANCHES = [
 
 export type BranchId = (typeof OPS_BRANCHES)[number]["id"];
 
-/** Canonical id for a branch, matched by id or name (case-insensitive). */
+/**
+ * Canonical id for a branch. Records store content-catalogue ids (`accra-hq`,
+ * `kumasi`…) while staff rows carry ops ids (`accra`…) — this normalizes both
+ * spellings plus city names to the ops id space so comparisons always work.
+ */
 export function branchId(name: string): string {
 	const needle = name.trim().toLowerCase();
-	const match = OPS_BRANCHES.find((b) => b.id === needle || b.name.toLowerCase() === needle);
+	const match =
+		OPS_BRANCHES.find((b) => b.id === needle || b.name.toLowerCase() === needle) ??
+		OPS_BRANCHES.find((b) => needle.startsWith(`${b.id}-`)) ??
+		// "accra-hq" / "Accra Headquarters" → accra
+		OPS_BRANCHES.find((b) => needle.includes(b.name.toLowerCase()));
 	return match?.id ?? needle;
 }
 
-/** Display name for a canonical branch id (falls back to the raw id). */
+/** Display name for a branch id in either spelling (falls back to the raw id). */
 export function branchName(id: string): string {
-	const match = OPS_BRANCHES.find((b) => b.id === id);
+	const canonical = branchId(id);
+	const match = OPS_BRANCHES.find((b) => b.id === canonical);
 	return match?.name ?? id;
 }
 
@@ -164,6 +173,8 @@ export interface MockConsultation {
 	coordinatorAssignedAt?: string | null;
 	coordinatorAssignedByName?: string | null;
 	delegationNote?: string | null;
+	/** Coverage — the assigned officer carries the case this consultation opens. */
+	handlerCarriesCase?: boolean;
 	workflow: ConsultationWorkflow;
 	/** Application opened from this completed consultation, if any. */
 	applicationId?: string | null;

@@ -571,7 +571,7 @@ export function WorkspaceCaseload() {
 												</div>
 												<div className="ops-client__foot">
 													<span className="ops-client__meta">
-														{r.staffName ? `Assigned: ${r.staffName}` : "Unassigned"}
+														{r.staffName ? `Handler: ${r.staffName}` : "No handler"}
 														{r.staffId && r.staffId !== me && (
 															<>
 																{" · "}

@@ -74,6 +74,7 @@ export function ConsultationDetail({
 		assignees,
 		completeConsultationAssessment,
 		assignConsultation,
+		referConsultation,
 		confirmConsultationSlot,
 		startConsultationAssessment,
 		commentOnConsultation,
@@ -291,7 +292,7 @@ export function ConsultationDetail({
 					handlerAction={
 						canAssignWork && consultation.status !== "Completed" && consultation.status !== "In Assessment" && consultation.status !== "Cancelled" ? (
 							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
-								{consultation.assignedOfficer ? "Change" : "Assign"}
+								Handler…
 							</button>
 						) : undefined
 					}
@@ -339,16 +340,21 @@ export function ConsultationDetail({
 			<AssignSheet
 				open={assignOpen}
 				onClose={() => setAssignOpen(false)}
-				title={consultation.assignedOfficer ? "Change consultant" : "Assign consultant"}
+				title={consultation.assignedOfficer ? "Change handler" : "Handler · Consultation"}
 				stage="consultation"
 				staff={assignees}
 				branch={consultation.branch}
 				currentName={consultation.assignedOfficer || null}
-				onAssign={async (opsUserId) => {
+				coverage
+				onAssign={async ({ opsUserId, scope, branch }) => {
 					const to = assignees.find((a) => a.opsUserId === opsUserId);
 					if (!to) throw new Error("That staff member is no longer available");
-					await assignConsultation(consultation.id, to);
-					onToast("success", "Consultant assigned.");
+					await assignConsultation(consultation.id, to, { scope, branch });
+					onToast("success", scope === "all" ? "Handler placed — carries the case it opens." : "Handler placed.");
+				}}
+				onLeaveOpen={async (branch) => {
+					await referConsultation(consultation.id, branch);
+					onToast("success", "Referred — left open for the branch to staff.");
 				}}
 			/>
 

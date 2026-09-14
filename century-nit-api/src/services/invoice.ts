@@ -663,7 +663,7 @@ export async function recordPayment(input: {
 				// The trigger has already recomputed depositPaid / agencyStageIndex
 				// from the ledger inside this transaction; read them back.
 				const [paidApp] = await txDb
-					.select({ stage: applications.stage, depositPaid: applications.depositPaid })
+					.select({ stage: applications.stage, depositPaid: applications.depositPaid, assignedStaffId: applications.assignedStaffId })
 					.from(applications)
 					.where(eq(applications.id, targetAppId))
 					.limit(1);
@@ -675,17 +675,10 @@ export async function recordPayment(input: {
 					const { activeHandlerFor, createOrGetHandoff } = await import("./handoffs.js");
 					const handler = await activeHandlerFor(targetAppId, "school_submission", txDb);
 					if (handler) {
-						// A handler was assigned ahead of the deposit (directly from
-						// the ops queue). Nothing to hand off — open the stage now,
-						// exactly as resolving a handoff would.
-						const { setCaseOwner } = await import("./caseOwnership.js");
-						await setCaseOwner({
-							applicationId: targetAppId,
-							opsUserId: handler.opsUserId,
-							assignedBy: null,
-							note: "deposit paid; handler already assigned",
-							tx: txDb,
-						});
+						// A handler was seated ahead of the deposit — either the
+						// whole-case owner carrying through or a stage-scoped seat.
+						// Open the stage; keep the handler's coverage as placed —
+						// a stage-only seat must NOT be promoted to case owner.
 						await txDb
 							.update(applications)
 							.set({ stage: "school_submission", updatedAt: new Date() })

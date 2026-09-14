@@ -25,6 +25,7 @@ import {
 	VISA_STAGE_LABELS,
 } from "century-nit-shared";
 import { serviceFeeFor, type SchoolFundingTrack } from "century-nit-core/content";
+import { canonicalBranchId } from "./availability.js";
 import { normalizeTravelStatus } from "./travelAssistance.js";
 import { livePermissions } from "./roles.js";
 import { documentChecklistForApplication, visaDocumentChecklistFor } from "./documentChecklist.js";
@@ -301,7 +302,9 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		applicantName: applicant?.name ?? "",
 		email: applicant?.email ?? "",
 		phone: applicant?.phone ?? null,
-		branch: applicant?.branch ?? "",
+		// The office that owns the case — a referral writes applications.branch;
+		// unreferred cases are handled by the applicant's home office.
+		branch: row.branch ?? applicant?.branch ?? "",
 		university: row.university,
 		program: row.program,
 		country: row.country,
@@ -914,25 +917,51 @@ export async function requestCaseDocuments(input: {
 export async function assignApplication(input: {
 	id: string;
 	employeeId: string;
+	/**
+	 * Coverage — `stage` staffs the current stage only (the seat re-opens when
+	 * the chapter closes); `all` makes the handler carry the rest of the case.
+	 * Default "all" preserves the historical whole-case-owner behaviour.
+	 */
+	scope?: "stage" | "all";
+	/** Referral — move the file to this handling branch with the placement. */
+	branch?: string;
 	actor: Actor;
 }): Promise<ApplicationRow> {
 	const row = await getApplication(input.id);
 	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	const employee = await loadAssignableStaff(input.employeeId, "school_submission");
+	const scope = input.scope ?? "all";
+	// A stage-only placement must hold a role that may own the stage they
+	// will actually sit on — a paid deposit opens school_submission below,
+	// so validate against that stage, not the one that is closing. The
+	// whole-case handler is validated against the school-submission tier.
+	const stageOpened = row.stage === "document_verification" && row.depositPaid;
+	const employee = await loadAssignableStaff(input.employeeId, scope === "stage" ? (stageOpened ? "school_submission" : row.stage) : "school_submission");
 
 	const applicant = await getApplicant(row.applicantId);
+	const referredBranch = input.branch ? canonicalBranchId(input.branch) : null;
+	if (input.branch && !referredBranch) {
+		throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+	}
 
-	// The owner change and the pending handoff it answers must land together.
+	// The handler change, the pending handoff it answers and any referral must
+	// land together.
 	const { setCaseOwner } = await import("./caseOwnership.js");
-	const stageOpened = row.stage === "document_verification" && row.depositPaid;
 	const updated = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
-		await setCaseOwner({
-			applicationId: row.id,
-			opsUserId: input.employeeId,
-			assignedBy: input.actor.opsUserId,
-			tx: txDb,
-		});
+		if (scope === "all") {
+			await setCaseOwner({
+				applicationId: row.id,
+				opsUserId: input.employeeId,
+				assignedBy: input.actor.opsUserId,
+				tx: txDb,
+			});
+		}
+		if (referredBranch) {
+			await txDb
+				.update(applications)
+				.set({ branch: referredBranch, updatedAt: new Date() })
+				.where(eq(applications.id, row.id));
+		}
 
 		// The handler has been assigned directly, so any pending handoff is
 		// answered. Without this the portal would keep showing "awaiting
@@ -971,6 +1000,21 @@ export async function assignApplication(input: {
 		return app;
 	});
 
+	// Stage-only coverage seats them on the stage the case is actually in —
+	// after the document_verification → school_submission advance above, not
+	// before it, or the assignment would cover a stage that just closed.
+	if (scope === "stage") {
+		const { assignStageOfficer } = await import("./communication.js");
+		await assignStageOfficer({
+			applicationId: row.id,
+			stage: stageOpened ? "school_submission" : row.stage,
+			opsUserId: input.employeeId,
+			assignedBy: input.actor.opsUserId,
+			reason: input.branch ? `stage handler · referred to ${referredBranch}` : "stage handler",
+			scope: "stage",
+		});
+	}
+
 	if (stageOpened) {
 		const clientUserId = await applicantUserIdOfApplication(row.id);
 		if (clientUserId) {
@@ -992,7 +1036,7 @@ export async function assignApplication(input: {
 		targetType: "application",
 		targetId: row.id,
 		kind: "assignment",
-		text: `Assigned to ${employee.name}`,
+		text: `Assigned to ${employee.name}${scope === "stage" ? " — this stage only" : " — carries the rest of the case"}${referredBranch ? ` · file referred to ${referredBranch}` : ""}`,
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
@@ -1041,6 +1085,54 @@ export async function assignApplication(input: {
 			link: "/applications",
 		}).catch(() => {});
 	}
+
+	await broadcastCaseUpdate(updated, input.actor);
+	return updated;
+}
+
+/**
+ * Refer a case to another handling branch without placing a handler — the
+ * receiving desk staffs it from their own queue. The branch is the office
+ * that owns the file, not the client's location; a Kumasi client can be
+ * handled by Accra without rewriting their applicant record.
+ */
+export async function referApplicationBranch(input: {
+	id: string;
+	branch: string;
+	note?: string;
+	actor: Actor;
+}): Promise<ApplicationRow> {
+	const row = await getApplication(input.id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
+	const branch = canonicalBranchId(input.branch);
+	if (!branch) throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
+
+	const [updated] = await db
+		.update(applications)
+		.set({ branch, updatedAt: new Date() })
+		.where(eq(applications.id, row.id))
+		.returning();
+
+	await db.insert(caseComments).values({
+		targetType: "application",
+		targetId: row.id,
+		kind: "assignment",
+		text: `Referred to ${branch}${input.note ? ` — ${input.note}` : ""}`,
+		authorName: input.actor.name,
+		authorOpsUserId: input.actor.opsUserId,
+	});
+
+	// Tell the receiving desk's managers a file landed in their queue.
+	const recipients = await getManagerAndCoordinatorUserIds();
+	await notifyMany(
+		recipients.map((r) => ({
+			recipientUserId: r.userId,
+			type: "case.updated",
+			title: "Case referred to a branch",
+			body: `${row.appNumber} was referred to ${branch}${input.note ? ` — ${input.note}` : ""}`,
+			link: `/applications?id=${row.id}`,
+		})),
+	).catch(() => {});
 
 	await broadcastCaseUpdate(updated, input.actor);
 	return updated;
@@ -1126,8 +1218,8 @@ async function signalStageNeedsHandler(applicationId: string, stage: JourneyStag
 			recipients.map((r) => ({
 				recipientUserId: r.userId,
 				type: "stage.needs_handler",
-				title: "Chapter has no owner",
-				body: `${JOURNEY_STAGE_LABELS[stage]} on ${app?.appNumber ?? "a case"} has no owner.`,
+				title: "Chapter has no handler",
+				body: `${JOURNEY_STAGE_LABELS[stage]} on ${app?.appNumber ?? "a case"} has no handler.`,
 				link: "/applications",
 				entityType: "case",
 				entityId: applicationId,

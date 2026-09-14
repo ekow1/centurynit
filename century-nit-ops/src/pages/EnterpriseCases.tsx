@@ -291,7 +291,7 @@ export function EnterpriseCases() {
 					<>
 						<span className="dash-day__sep">·</span>
 						<span className="dash-day__cut">
-							<strong>{unassignedCases}</strong> need{unassignedCases === 1 ? "s" : ""} an owner
+							<strong>{unassignedCases}</strong> need{unassignedCases === 1 ? "s" : ""} a handler
 						</span>
 					</>
 				)}
@@ -398,12 +398,12 @@ export function EnterpriseCases() {
 														{app.assignedStaff ? (
 															<StaffChatBadge opsUserId={opsUserIdByEmail(app.assignedStaffEmail)} name={app.assignedStaff} email={app.assignedStaffEmail} />
 														) : (
-															<span className="cn-row__unassigned">No owner</span>
+															<span className="cn-row__unassigned">No handler</span>
 														)}
 														<span> · </span>
 														<RowMeta app={app} chapter={chapter} invoices={allInvoices} taStatus={taStatusOf(app)} />
 														{canAssignWork && need && (
-															<AssignChip label={need.kind === "handoff" ? "Assign owner" : "Assign"} onClick={() => setAssignFor(app)} />
+															<AssignChip label="Handler…" onClick={() => setAssignFor(app)} />
 														)}
 														{todo > 0 && <span className="cn-row__needs">· {todo} to do</span>}
 													</div>

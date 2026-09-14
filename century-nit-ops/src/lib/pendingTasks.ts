@@ -528,22 +528,6 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				at: a.updatedAt,
 				priority: PRIORITY.assign_application,
 			});
-		} else if (a.status === "Under Review") {
-			q.push({
-				id: `a-review-${a.id}`,
-				category: "needs_action",
-				kind: "application",
-				action: "review",
-				record: a,
-				title: `${a.applicantName}`,
-				subtitle: `Application under review · ${a.university || a.country || "—"}`,
-				meta: stageMeta(a),
-				branch: a.branch,
-				owner: a.assignedStaff,
-				linkTo: `/applications?id=${a.id}`,
-				at: a.updatedAt,
-				priority: PRIORITY.review_application,
-			});
 		} else if (a.checklist.some((i) => !i.checked)) {
 			const open = a.checklist.filter((i) => !i.checked).length;
 			q.push({

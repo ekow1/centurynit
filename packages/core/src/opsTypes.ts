@@ -249,6 +249,10 @@ export interface MockApplication {
 	preDepartureTasks?: PreDepartureTask[];
 	/** Consent gate: "invited" (awaiting applicant), "accepted", "declined", "paused" */
 	proceedStatus?: ProceedStatus;
+	/** When the client confirmed enrolment. */
+	proceededAt?: string | null;
+	/** Why the client paused or declined, in their words. */
+	declinedReason?: string | null;
 	/** Number of target schools requested in service package */
 	targetSchoolCount?: number | null;
 	/** The admitted school the client accepted — visa, deposit and departure hang off it. */

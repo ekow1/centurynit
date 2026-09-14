@@ -25,7 +25,6 @@ import {
 
 	JOURNEY_STAGES,
 	JOURNEY_STAGE_LABELS,
-	CASE_STATUS_LABELS,
 
 
 
@@ -118,7 +117,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		handoffs,
 		travelRequests,
 		consultations,
-		acceptApplication,
 
 		commentOnApplication,
 		requestApplicationDocs,
@@ -171,14 +169,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		setActionError(err instanceof Error ? err.message : fallback);
 	};
 
-	async function handleAcceptApplication() {
-		try {
-			const updated = await acceptApplication(app.id);
-			flash(`Application ${updated.appId} has been accepted & approved.`);
-		} catch (err) {
-			fail(err, "Could not accept the application");
-		}
-	}
 	// Consent override and decline both need a reason; a sheet asks for it
 	// (a browser prompt cannot be styled, validated or read by a screen reader).
 	const [reasonFor, setReasonFor] = useState<"record" | "decline" | null>(null);
@@ -343,17 +333,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</>
 			),
 		});
-	} else if (!caseClosed && app.status !== "Accepted") {
-		nextActions.push({
-			id: "accept",
-			title: `Case is ${CASE_STATUS_LABELS[app.status] ?? app.status} — accept it to activate the client`,
-			detail: "Accepting activates the case and the client's record.",
-			action: (
-				<button type="button" onClick={() => handleAcceptApplication()} className="btn btn--sm btn--primary">
-					Accept & approve
-				</button>
-			),
-		});
 	}
 	// Stage advance lives here too, so nobody is sent to the Workflow board.
 	// The shared guard says why it is blocked; ready cases get the button.
@@ -464,6 +443,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					{ label: "Programme", value: app.program || "—" },
 				]}
 			/>
+
+			<CaseStateLine app={app} closed={caseClosed} />
 
 			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
@@ -618,6 +599,51 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					checklist={app.documentChecklist}
 				/>
 			)}
+		</div>
+	);
+}
+
+
+/**
+ * Where the case stands, read from what happened — the client's consent,
+ * the deposit, a hold, a close — so nobody has to set it by hand.
+ */
+function CaseStateLine({ app, closed }: { app: MockApplication; closed: boolean }) {
+	const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
+	const opened = day(app.submittedDate);
+	const from = app.consultationNumber ? ` from consultation ${app.consultationNumber}` : "";
+	let pill: { label: string; tone: "ink" | "hollow" | "line" };
+	const facts: string[] = [];
+	if (closed) {
+		pill = { label: app.stage === "completed" ? "Completed" : "Closed", tone: "hollow" };
+		facts.push(app.stage === "completed" ? "journey completed" : "closed by ops");
+	} else if (app.status === "Action Required") {
+		pill = { label: "Needs attention", tone: "line" };
+		facts.push(app.proceedStatus === "accepted" ? `client confirmed ${day(app.proceededAt) ?? ""}`.trim() : "awaiting the client's confirmation");
+	} else if (app.proceedStatus === "paused") {
+		pill = { label: "New", tone: "hollow" };
+		facts.push("on hold by the client" + (app.declinedReason ? ` · "${app.declinedReason}"` : ""));
+	} else if (app.proceedStatus === "declined") {
+		pill = { label: "New", tone: "hollow" };
+		facts.push("declined to enrol" + (app.declinedReason ? ` · "${app.declinedReason}"` : ""));
+	} else if (app.proceedStatus && app.proceedStatus !== "accepted") {
+		pill = { label: "New", tone: "hollow" };
+		facts.push("awaiting the client's confirmation" + (opened ? ` · invited ${opened}` : ""));
+	} else {
+		pill = { label: "Active", tone: "ink" };
+		facts.push(`client confirmed${day(app.proceededAt) ? ` ${day(app.proceededAt)}` : ""}`);
+		facts.push(app.depositPaid ? "deposit paid · enrolled" : "deposit due");
+	}
+	if (opened) facts.push(`opened ${opened}${from}`);
+	return (
+		<div className="cn-state">
+			<span className={`cn-state__pill cn-state__pill--${pill.tone}`}>{pill.label}</span>
+			{facts.map((f, i) => (
+				<span key={f} className="cn-state__fact">
+					{i > 0 && <span className="cn-state__sep" aria-hidden>·</span>}
+					{f}
+				</span>
+			))}
 		</div>
 	);
 }

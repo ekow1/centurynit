@@ -947,9 +947,6 @@ export const applicationsApi = {
 			...json({ employeeId }),
 		});
 	},
-	accept(id: string): Promise<ApiApplication> {
-		return request(`${API_PREFIX}/applications/${id}/accept`, { method: "POST" });
-	},
 	setStage(id: string, stage: string): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/stage`, {
 			method: "POST",

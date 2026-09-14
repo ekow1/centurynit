@@ -5,7 +5,6 @@ import { and, desc, eq, isNull, not } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
 import {
-	acceptApplication,
 	addCaseComment,
 
 
@@ -517,27 +516,6 @@ applicationsRouter.openapi(
 	},
 );
 
-
-applicationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/accept",
-		tags: ["Applications"],
-		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: applicationSchema } },
-				description: "Accepted",
-			},
-		},
-	}),
-	async (c) => {
-		await assertApplicationAccess(c, c.req.valid("param").id);
-		const updated = await acceptApplication(c.req.valid("param").id, actorFrom(c.get("staff")!));
-		return c.json(await serializeApplication(updated));
-	},
-);
 
 applicationsRouter.openapi(
 	createRoute({

@@ -729,6 +729,11 @@ export async function recordPayment(input: {
 		return updated;
 	}).then(async (updated) => {
 		if (updated.status === "paid") await notifyClientInvoice(updated, "paid");
+		// The deposit is the moment the client enrolled — the lead follows it.
+		if (updated.type === "agency") {
+			const { markLeadEnrolledForInvoice } = await import("./leads.js");
+			await markLeadEnrolledForInvoice(updated.id, input.actor.name);
+		}
 		return updated;
 	});
 }

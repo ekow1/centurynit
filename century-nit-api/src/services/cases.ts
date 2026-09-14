@@ -65,7 +65,6 @@ import { resolvePreDepartureTasks, seedPreDepartureTasks } from "./preDeparture.
 import {
 
 	syncLeadAssignment,
-	syncLeadFromApplicationStatus,
 } from "./leads.js";
 import {
 	activeHandlerFor,
@@ -236,6 +235,16 @@ function accessibleApplicationsFilter(staff: StaffContext) {
 /* ── Serialise ───────────────────────────────────────────────────────────── */
 
 
+/**
+ * The case's state is derived from what happened: the client's consent
+ * makes it Active — nobody "accepts" a case by hand. The two hand-set states
+ * (ACTION_REQUIRED, REJECTED) are kept as stored.
+ */
+export function caseStatusOf(row: Pick<ApplicationRow, "status" | "proceedStatus">): CaseApplicationStatus {
+	if (row.status === "UNDER_REVIEW" && row.proceedStatus === "accepted") return "ACCEPTED";
+	return row.status;
+}
+
 async function serializeApplication(row: ApplicationRow, forApplicant = false): Promise<ApiApplication> {
 	const [applicant, staff, comments, documentChecklist, preDepartureTasks] = await Promise.all([
 		db.select().from(applicants).where(eq(applicants.id, row.applicantId)).limit(1).then((r) => r[0]),
@@ -301,7 +310,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		assignedStaffName: staff?.name ?? null,
 		assignedStaffEmail: staff?.email ?? null,
 		stage: row.stage as JourneyStage,
-		status: row.status,
+		status: caseStatusOf(row),
 		proceedStatus: row.proceedStatus,
 		proceededAt: row.proceededAt?.toISOString() ?? null,
 		declinedReason: row.declinedReason,
@@ -357,7 +366,7 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 async function serializeApplicant(row: ApplicantRow): Promise<ApiApplicant> {
 	const officer = await loadStaff(row.assignedOfficerId);
 	const [latestApp] = await db
-		.select({ stage: applications.stage, status: applications.status })
+		.select({ stage: applications.stage, status: applications.status, proceedStatus: applications.proceedStatus, depositPaid: applications.depositPaid })
 		.from(applications)
 		.where(eq(applications.applicantId, row.id))
 		.orderBy(desc(applications.createdAt))
@@ -372,11 +381,12 @@ async function serializeApplicant(row: ApplicantRow): Promise<ApiApplicant> {
 				.limit(1);
 
 	const currentStage = latestApp?.stage ?? "pre_application";
+	// Enrolled is the deposit, Active is the client's consent — derived, never typed.
 	const status =
-		latestApp?.status === "ACCEPTED"
+		latestApp?.depositPaid
 			? "Enrolled"
 			: latestApp
-				? "Active"
+				? caseStatusOf(latestApp) === "ACCEPTED" ? "Active" : "New"
 				: latestConsult?.status === "COMPLETED"
 					? "Assessed"
 					: "Active";
@@ -575,6 +585,8 @@ export async function acceptProceedForApplication(input: {
 				proceedStatus: "accepted",
 				proceededAt: new Date(),
 				declinedReason: null,
+				// The client said yes — the case is Active from this moment.
+				status: row.status === "UNDER_REVIEW" ? ("ACCEPTED" satisfies CaseApplicationStatus) : row.status,
 				fundingTrack: input.fundingTrack ?? row.fundingTrack,
 				degreeLevel: input.degreeLevel ?? row.degreeLevel,
 				country: input.country ?? row.country,
@@ -1231,40 +1243,6 @@ export async function updateApplication(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
-
-	await broadcastCaseUpdate(updated, actor);
-	return updated;
-}
-
-export async function acceptApplication(id: string, actor: Actor): Promise<ApplicationRow> {
-	const row = await getApplication(id);
-	if (!row) throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "Application not found");
-	// Accepting the application activates the applicant; it says nothing
-	// about the visa. Visa tracking opens on its own path — consent, paid
-	// visa invoice, specialist assigned — and used to be forced to "pending"
-	// here, which opened the visa chapter on every case at document review.
-	const [updated] = await db
-		.update(applications)
-		.set({ status: "ACCEPTED" satisfies CaseApplicationStatus, updatedAt: new Date() })
-		.where(eq(applications.id, id))
-		.returning();
-	await db.insert(caseComments).values({
-		targetType: "application",
-		targetId: id,
-		kind: "status",
-		text: "Application accepted",
-		authorName: actor.name,
-		authorOpsUserId: actor.opsUserId,
-	});
-
-	// Accepting the application concludes whatever stage it was being
-	// processed in.
-	markStageCompleted(id, row.stage, actor.opsUserId);
-
-	const applicant = await getApplicant(row.applicantId);
-	if (applicant?.email) {
-		await syncLeadFromApplicationStatus(updated.id, applicant.email, updated.status, actor.name);
-	}
 
 	await broadcastCaseUpdate(updated, actor);
 	return updated;

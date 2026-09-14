@@ -1,6 +1,6 @@
 import { desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
+import { applicants, applications, invoices, leads, leadEvents, opsUsers, staffInvitations } from "../db/schema.js";
 import { notifyMany, getManagerAndCoordinatorContacts, getCustomerServiceContacts } from "./notify.js";
 import { queueEmails } from "../worker/queues.js";
 import { leadCreatedForManager } from "./notifications.js";
@@ -602,6 +602,27 @@ export async function linkApplicationToLead(
  * Sync the lead stage from an application's current status.
  * Called when an application is accepted or a payment settles.
  */
+/**
+ * A service-fee payment landed. If it carried the case over the deposit
+ * line, the client is enrolled — the lead says so. Idempotent: a later
+ * instalment finds the lead already converted and changes nothing.
+ */
+export async function markLeadEnrolledForInvoice(invoiceId: string, actorName?: string | null): Promise<void> {
+	try {
+		const [row] = await db
+			.select({ applicationId: invoices.applicationId, depositPaid: applications.depositPaid, email: applicants.email })
+			.from(invoices)
+			.innerJoin(applications, eq(invoices.applicationId, applications.id))
+			.innerJoin(applicants, eq(applications.applicantId, applicants.id))
+			.where(eq(invoices.id, invoiceId))
+			.limit(1);
+		if (!row?.applicationId || !row.depositPaid || !row.email) return;
+		await syncLeadFromApplicationStatus(row.applicationId, row.email, "ACCEPTED", actorName);
+	} catch (err) {
+		console.warn("[leads] Failed to mark the lead enrolled after the deposit:", err);
+	}
+}
+
 export async function syncLeadFromApplicationStatus(
 	applicationId: string,
 	email: string,

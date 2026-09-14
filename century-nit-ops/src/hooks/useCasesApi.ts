@@ -176,6 +176,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		depositPaid: row.depositPaid,
 		appFeePaid: row.appFeePaid,
 		proceedStatus: row.proceedStatus ?? "invited",
+		proceededAt: row.proceededAt ?? null,
+		declinedReason: row.declinedReason ?? null,
 		journey: row.journey ?? null,
 		stageHandlers: row.stageHandlers ?? [],
 		applicantUserId: row.applicantUserId ?? null,
@@ -563,7 +565,6 @@ export function useCasesApi() {
 			applicationsApi.addForApplicant(applicantId, input),
 		assignApplication: async (id: string, to: Assignee) =>
 			replaceApplication(await applicationsApi.assign(id, await staffIdByEmail(to.email))),
-		acceptApplication: async (id: string) => replaceApplication(await applicationsApi.accept(id)),
 		toggleApplicationChecklist: async (id: string, itemId: string, checked: boolean) =>
 			replaceApplication(await applicationsApi.toggleChecklist(id, itemId, checked)),
 		commentOnApplication: async (id: string, kind: CommentKind, text: string, visibility: "internal" | "applicant" = "internal") =>

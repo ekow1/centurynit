@@ -6,11 +6,10 @@ import type { ApiInvoice } from "../../../lib/api";
 
 import { useState } from "react";
 import type { PreDepartureTask } from "century-nit-core/ops";
-import { DOCUMENT_TYPES } from "century-nit-core/content";
-import { documentsReleased, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
+import { documentsReleased, type TravelAssistanceRequest } from "century-nit-shared";
 import { formatMoney } from "century-nit-core/ui";
 import type { Flash, Fail, TabId } from "./types";
-import { Sheet, StatusPill } from "century-nit-core/ui";
+import { Sheet } from "century-nit-core/ui";
 import type { DepartureDetails } from "century-nit-shared";
 import { TravelCard } from "../TravelCard";
 
@@ -158,15 +157,26 @@ export function DepartureTab({
 		}
 	}
 	const tasks: PreDepartureTask[] = app.preDepartureTasks ?? [];
-	const required = tasks.filter((t) => t.required !== false);
-	const requiredTotal = required.length;
-	const requiredDone = required.filter((t) => t.done || Boolean(t.waivedReason)).length;
-	const pdProg = tasks.length === 0 ? 0 : Math.round((tasks.filter((t) => t.done || Boolean(t.waivedReason)).length / tasks.length) * 100);
-	const checklistDone = tasks.length > 0 && preDepartureChecklistDone(tasks);
+	// Century's deliverables gate completion; the client's items are reminders.
+	const deliverables = tasks.filter((t) => t.owner === "century");
+	const clientTasks = tasks.filter((t) => t.owner !== "century");
+	const closedCount = deliverables.filter((t) => t.done || Boolean(t.waivedReason)).length;
 	const canTick = canWork && app.stage === "travel_assistance";
 	const [busy, setBusy] = useState<string | null>(null);
 	const [waiving, setWaiving] = useState<string | null>(null);
 	const [waiveReason, setWaiveReason] = useState("");
+	const [clientOpen, setClientOpen] = useState(false);
+	async function unwaive(task: PreDepartureTask) {
+		setBusy(task.id);
+		try {
+			await setPreDepartureTask(app.appId, task.id, { done: false, waivedReason: null });
+			flash(`${task.label} — waiver withdrawn`);
+		} catch (e) {
+			fail(e, "Could not withdraw the waiver");
+		} finally {
+			setBusy(null);
+		}
+	}
 
 	async function toggle(task: PreDepartureTask) {
 		setBusy(task.id);
@@ -309,166 +319,147 @@ export function DepartureTab({
 				)}
 			</div>
 
-			{/* Arrival — the facts the client flies with. Recording the briefing
-			    and the pickup closes those checklist items; the fact is the tick. */}
+			{/* Before they fly — Century's deliverables closed by their facts, the
+			    arrival facts under them, the client's own list folded. Waive
+			    only what will not happen, with the reason on the record. */}
 			{travelOpen && (
 				<div className="card">
 					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
-						<p className="eyebrow" style={{ margin: 0 }}>
-							Arrival
-						</p>
-						<p className="text-xs" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-							{flyDays !== null && (
-								<span style={{ fontWeight: 700 }}>{flyDays > 0 ? `Flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "Flies today" : `Flew ${-flyDays} day${flyDays === -1 ? "" : "s"} ago`}</span>
-							)}
+						<p className="eyebrow" style={{ margin: 0 }}>Before they fly</p>
+						<p className="text-xs mono muted" style={{ margin: 0, display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+							{flyDays !== null && <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{flyDays > 0 ? `flies in ${flyDays} day${flyDays === 1 ? "" : "s"}` : flyDays === 0 ? "flies today" : `flew ${-flyDays} day${flyDays === -1 ? "" : "s"} ago`}</span>}
 							{reportDays !== null && (
-								<span className={reportDays < 0 && !dd.arrivedAt ? "" : "muted"} style={reportDays < 0 && !dd.arrivedAt ? { color: "var(--danger, #b91c1c)", fontWeight: 600 } : undefined}>
-									{reportDays >= 0 ? `Report by ${fmtDate(dd.reportBy)} · ${reportDays} day${reportDays === 1 ? "" : "s"}` : `Report-by date passed ${-reportDays} day${reportDays === -1 ? "" : "s"} ago`}
+								<span style={reportDays < 0 && !dd.arrivedAt ? { color: "var(--foreground)", fontWeight: 700 } : undefined}>
+									{reportDays >= 0 ? `report by ${fmtDate(dd.reportBy)}` : `report-by passed ${-reportDays} day${reportDays === -1 ? "" : "s"} ago`}
 								</span>
 							)}
+							<span>
+								<b style={{ color: "var(--foreground)" }}>{closedCount} of {deliverables.length}</b> deliverables closed
+							</span>
 						</p>
 					</div>
-					<div className="cn-facts">
+					<p className="muted text-xs" style={{ margin: "0 0 0.5rem" }}>
+						Century's deliverables close by their facts — the booking, the briefing, the pickup, the copies in the vault — not by a tick.
+					</p>
+					<div className="cn-dl">
+						{deliverables.map((task) => {
+							const waived = !task.done && Boolean(task.waivedReason);
+							const state = task.done ? "done" : waived ? "waived" : "open";
+							const isBusy = busy === task.id;
+							const doneAt = fmtDate(task.doneAt);
+							const byFact = task.id === "pd-flights" || task.id === "pd-briefing" || task.id === "pd-airport" || Boolean(task.evidence);
+							let how: string;
+							let action: React.ReactNode = null;
+							if (task.id === "pd-flights") {
+								how = task.done
+									? `closed by the booking${selectedTa?.booking?.confirmationCode ? ` · ${selectedTa.booking.confirmationCode}` : ""}${task.doneBy === "client" ? " · booked by the client" : ""}${doneAt ? ` · ${doneAt}` : ""}`
+									: "closes when the booking is recorded — milestone 5 above";
+								action = !task.done && !waived ? <span className="text-xs mono muted">milestone 5</span> : null;
+							} else if (task.id === "pd-briefing") {
+								how = task.done ? `recorded${dd.briefingAt ? ` · ${fmtDateTime(dd.briefingAt)}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the briefing is recorded — arrival, the first week, who to call";
+								action = !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--secondary" onClick={openFacts}>Record briefing…</button> : null;
+							} else if (task.id === "pd-airport") {
+								how = task.done ? `recorded${dd.pickupBy ? ` · ${dd.pickupBy}${dd.pickupNote ? ` · ${dd.pickupNote}` : ""}` : doneAt ? ` · ${doneAt}` : ""}` : "closes when the pickup is recorded — the university's, or ours";
+								action = !task.done && !waived && canWork ? <button type="button" className="btn btn--sm btn--secondary" onClick={openFacts}>Record pickup…</button> : null;
+							} else if (task.evidence) {
+								how = task.done
+									? `closed by the vault${task.doneBy ? ` · verified by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}`
+									: task.proofStatus === "UPLOADED"
+										? "uploaded — verify it on the Documents tab to close this"
+										: task.proofStatus === "REJECTED"
+											? "the upload was rejected — the client re-uploads in the portal"
+											: "closes when the document is in the vault and verified";
+								action = !task.done && !waived ? <button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>Documents →</button> : null;
+							} else {
+								how = task.done ? `done${task.doneBy ? ` by ${task.doneBy}` : ""}${doneAt ? ` · ${doneAt}` : ""}` : (task.detail ?? "closed by the officer");
+								action = canTick && !waived ? (
+									<button type="button" className="btn btn--sm btn--ghost" disabled={isBusy} onClick={() => void toggle(task)}>
+										{task.done ? "Reopen" : "Mark done"}
+									</button>
+								) : null;
+							}
+							return (
+								<div key={task.id} className={`cn-dl__r cn-dl__r--${state}`}>
+									<span className="cn-dl__m" aria-hidden>
+										{task.done ? "✓" : waived ? "–" : ""}
+									</span>
+									<span className="cn-dl__t">
+										{task.label}
+										<small>{waived ? `waived — ${task.waivedReason}` : how}</small>
+									</span>
+									<span className="cn-dl__a">
+										{waiving === task.id ? (
+											<>
+												<input className="input input--sm" value={waiveReason} onChange={(e) => setWaiveReason(e.target.value)} placeholder="Why it will not happen" style={{ minWidth: "14rem" }} autoFocus />
+												<button type="button" className="btn btn--sm btn--primary" disabled={isBusy || !waiveReason.trim()} onClick={() => void waive(task)}>
+													{isBusy ? "Saving…" : "Waive"}
+												</button>
+												<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setWaiving(null); setWaiveReason(""); }}>Cancel</button>
+											</>
+										) : (
+											<>
+												{action}
+												{waived && canTick && (
+													<button type="button" className="plnk plnk--dim" disabled={isBusy} onClick={() => void unwaive(task)}>undo</button>
+												)}
+												{!task.done && !waived && canTick && task.required !== false && byFact && (
+													<button type="button" className="plnk plnk--dim" onClick={() => { setWaiving(task.id); setWaiveReason(""); }}>waive…</button>
+												)}
+											</>
+										)}
+									</span>
+								</div>
+							);
+						})}
+						{deliverables.length === 0 && <p className="muted text-sm" style={{ padding: "0.5rem 0" }}>No deliverables are seeded on this case yet.</p>}
+					</div>
+
+					<div className="cn-facts mt-3">
 						<div><p className="muted text-xs">Report to the school by</p><p className="text-sm">{fmtDate(dd.reportBy) ?? <span className="muted">—</span>}</p></div>
 						<div><p className="muted text-xs">Orientation</p><p className="text-sm">{fmtDate(dd.orientationAt) ?? <span className="muted">—</span>}</p></div>
-						<div><p className="muted text-xs">Pre-departure briefing</p><p className="text-sm">{fmtDateTime(dd.briefingAt) ?? <span className="muted">not held</span>}</p></div>
-						<div><p className="muted text-xs">Airport pickup</p><p className="text-sm">{dd.pickupBy ? `${dd.pickupBy}${dd.pickupNote ? ` · ${dd.pickupNote}` : ""}` : <span className="muted">not arranged</span>}</p></div>
 						<div><p className="muted text-xs">Accommodation</p><p className="text-sm">{dd.accommodationAddress ? `${dd.accommodationAddress}${dd.accommodationMoveInAt ? ` · from ${fmtDate(dd.accommodationMoveInAt)}` : ""}` : <span className="muted">—</span>}</p></div>
 						<div><p className="muted text-xs">Emergency contact abroad</p><p className="text-sm">{dd.emergencyContactName ? `${dd.emergencyContactName}${dd.emergencyContactRelation ? ` (${dd.emergencyContactRelation})` : ""}${dd.emergencyContactPhone ? ` · ${dd.emergencyContactPhone}` : ""}` : <span className="muted">—</span>}</p></div>
-						{dd.arrivedAt && <div><p className="muted text-xs">Arrived</p><p className="text-sm">{fmtDate(dd.arrivedAt)}</p></div>}
+						<div><p className="muted text-xs">Arrived</p><p className="text-sm">{fmtDate(dd.arrivedAt) ?? <span className="muted">—</span>}</p></div>
+						{canWork && (
+							<div style={{ alignSelf: "end" }}>
+								<button type="button" className="btn btn--sm btn--ghost" onClick={openFacts}>
+									{Object.keys(dd).length ? "Edit arrival facts" : "Record arrival facts"}
+								</button>
+							</div>
+						)}
 					</div>
-					{canWork && (
-						<button type="button" className="btn btn--sm btn--ghost mt-3" onClick={openFacts}>
-							{Object.keys(dd).length ? "Edit arrival facts" : "Record arrival facts"}
-						</button>
-					)}
-				</div>
-			)}
 
-			{/* Pre-departure checklist — one list, two owners. The client ticks
-			    theirs in the portal (with proof where it says so); the officer
-			    ticks Century's here, can tick a client's item on their word, and
-			    can waive a required one with a reason. */}
-			{travelOpen && (
-				<div className="card">
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
-						<p className="eyebrow" style={{ margin: 0 }}>
-							Pre-departure checklist
-						</p>
-						<span style={{ fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>
-							{requiredDone}/{requiredTotal} required · {pdProg}%
-						</span>
-					</div>
-					<div style={{ height: "6px", background: "var(--muted)", overflow: "hidden", marginBottom: "0.75rem" }}>
-						<div style={{ width: `${pdProg}%`, height: "100%", background: "var(--foreground)", transition: "width 0.4s ease" }} />
-					</div>
-					<p className="text-sm mb-3">
-						<span className="muted">Next · </span>
-						{checklistDone ? "Century's deliverables are all closed — the case can be completed from Money." : `${requiredTotal - requiredDone} of Century's deliverable${requiredTotal - requiredDone === 1 ? "" : "s"} still open.`}
-					</p>
-
-					{tasks.length === 0 ? (
-						<p className="muted text-sm">No checklist yet — it is seeded when the visa is approved.</p>
-					) : (
-						<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-							{(["century", "client"] as const).map((owner) => {
-								const rows = tasks.filter((t) => (t.owner ?? "client") === owner);
-								if (rows.length === 0) return null;
-								return (
-									<div key={owner} style={{ border: "1px solid var(--border-light)", padding: "0.75rem" }}>
-										<p className="text-sm--strong">{owner === "century" ? "Century's items" : "Client's items"}</p>
-										<p className="muted text-xs mb-2">
-											{owner === "century" ? "Century's deliverables — the only items that gate completion. Closed by the officer, or by the fact (booking, briefing, pickup)." : "The client's own arrangements with the school and for the move — reminders they tick in the portal, never a gate."}
-										</p>
-										<div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-											{rows.map((task) => {
-												const waived = !task.done && Boolean(task.waivedReason);
-												const closed = task.done || waived;
-												return (
-													<div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", padding: "0.4rem", border: "1px solid var(--border-light)", opacity: task.required === false && !closed ? 0.75 : 1 }}>
-														<button
-															type="button"
-															onClick={() => canTick && !task.evidence && void toggle(task)}
-															disabled={!canTick || Boolean(task.evidence) || busy === task.id}
-															title={task.evidence ? "Closes when the proof is verified on the Documents tab" : canTick ? (task.done ? "Untick" : "Tick as done") : undefined}
-															style={{
-																width: "18px",
-																height: "18px",
-																flexShrink: 0,
-																display: "flex",
-																alignItems: "center",
-																justifyContent: "center",
-																fontSize: "0.65rem",
-																fontWeight: 700,
-																border: "2px solid",
-																borderColor: closed ? "var(--foreground)" : "var(--border)",
-																color: closed ? "var(--background)" : "transparent",
-																background: closed ? "var(--foreground)" : "transparent",
-																cursor: canTick ? "pointer" : "default",
-																padding: 0,
-															}}
-														>
-															{task.done ? "✓" : waived ? "–" : ""}
-														</button>
-														<div style={{ flex: 1, minWidth: 0 }}>
-															<p style={{ fontWeight: closed ? 400 : 500, fontSize: "var(--text-xs)", textDecoration: task.done ? "line-through" : "none", opacity: closed ? 0.7 : 1 }}>
-																{task.label}
-																{task.required === false && <span className="muted"> · optional</span>}
-															</p>
-															{task.detail && <p className="muted" style={{ fontSize: "0.68rem" }}>{task.detail}</p>}
-															{task.evidence && (
-																<div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.2rem" }}>
-																	<span className="muted" style={{ fontSize: "0.68rem" }}>
-																		Proof: {DOCUMENT_TYPES.find((d) => d.id === task.evidence)?.name ?? task.evidence}
-																	</span>
-																	<StatusPill tone={task.proofStatus === "VERIFIED" ? "done" : task.proofStatus === "UPLOADED" ? "waiting" : task.proofStatus === "REJECTED" ? "blocked" : "neutral"}>
-																		{task.proofStatus === "VERIFIED" ? "Verified" : task.proofStatus === "UPLOADED" ? "To review" : task.proofStatus === "REJECTED" ? "Rejected" : "Not uploaded"}
-																	</StatusPill>
-																	{task.proofStatus === "UPLOADED" && (
-																		<button type="button" className="btn btn--ghost btn--sm" style={{ padding: "0 0.3rem", fontSize: "0.68rem" }} onClick={() => setTab("documents")}>
-																			Verify in Documents →
-																		</button>
-																	)}
-																</div>
-															)}
-															{task.done && task.doneBy && (
-																<p className="muted" style={{ fontSize: "0.68rem" }}>
-																	Done by {task.doneBy === "client" ? "the client" : task.doneBy}
-																	{task.doneAt ? ` · ${new Date(task.doneAt).toLocaleDateString(undefined, { dateStyle: "medium" })}` : ""}
-																</p>
-															)}
-															{waived && <p className="muted" style={{ fontSize: "0.68rem" }}>Waived — {task.waivedReason}</p>}
-															{canTick && !closed && task.required !== false && waiving !== task.id && (
-																<button type="button" className="btn btn--ghost btn--sm" style={{ padding: "0 0.3rem", fontSize: "0.68rem" }} onClick={() => setWaiving(task.id)}>
-																	Waive…
-																</button>
-															)}
-															{waiving === task.id && (
-																<div style={{ display: "flex", gap: "0.3rem", marginTop: "0.3rem" }}>
-																	<input className="input input--sm" value={waiveReason} onChange={(e) => setWaiveReason(e.target.value)} placeholder="Why this item does not apply" autoFocus />
-																	<button type="button" className="btn btn--sm btn--primary" disabled={!waiveReason.trim() || busy === task.id} onClick={() => void waive(task)}>
-																		Waive
-																	</button>
-																	<button
-																		type="button"
-																		className="btn btn--sm btn--ghost"
-																		onClick={() => {
-																			setWaiving(null);
-																			setWaiveReason("");
-																		}}
-																	>
-																		Cancel
-																	</button>
-																</div>
-															)}
-														</div>
-													</div>
-												);
-											})}
+					{clientTasks.length > 0 && (
+						<div className="cn-fold mt-3">
+							<div className="cn-fold__h">
+								<span>
+									<b>The client's own list</b>
+									<span className="text-xs mono muted" style={{ marginLeft: "0.6rem" }}>
+										{clientTasks.filter((t) => t.done).length} of {clientTasks.length} ticked in the portal · reminders, never a gate
+									</span>
+								</span>
+								<button type="button" className="plnk plnk--dim" onClick={() => setClientOpen((v) => !v)}>
+									{clientOpen ? "hide" : "show"}
+								</button>
+							</div>
+							{clientOpen && (
+								<div className="cn-fold__b">
+									{clientTasks.map((task) => (
+										<div key={task.id} className={`cn-fold__it${task.done ? " cn-fold__it--on" : ""}`}>
+											<span className="cn-fold__bx" aria-hidden />
+											<span>
+												{task.label}
+												{task.done && fmtDate(task.doneAt) ? <span className="muted"> · {fmtDate(task.doneAt)}</span> : null}
+											</span>
+											{canTick && (
+												<button type="button" className="plnk plnk--dim" disabled={busy === task.id} onClick={() => void toggle(task)} title={task.done ? "Reopen" : "Mark on their word"}>
+													{task.done ? "reopen" : "mark…"}
+												</button>
+											)}
 										</div>
-									</div>
-								);
-							})}
+									))}
+								</div>
+							)}
 						</div>
 					)}
 				</div>

@@ -1,29 +1,43 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { applicationsApi, ApiError } from "century-nit-core/api";
-import { InvoiceCard, TravelStatusPill } from "century-nit-core/ui";
+import { InvoiceCard, Sheet, formatMoney } from "century-nit-core/ui";
 import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../../lib/api";
 import { ArtifactCard } from "./ArtifactCard";
 import { ApproveInvoiceSheet } from "./ApproveInvoiceSheet";
 
 /**
- * One travel request as ops works it — one path, one card:
+ * One travel request as ops works it — the same shape as every other
+ * chapter: the invoice card at the top, as everywhere, then the flight
+ * milestone by milestone with one action each:
  *
- *   decide → handler assigned → ticket invoice raised (and issued) → paid →
- *   booked. "Booking their own" and "on hold" leave the path.
+ *   1 Decision · 2 Quote & invoice · 3 Approved & issued · 4 Paid · 5 Booked
  *
- * `TravelCard` is the case-tab view: status, the flight, and the single
- * next action. `TaQueueRow` wraps it for the Travel queue with the
- * applicant's name and the assign control (assignment inside a case lives
- * in the case header).
+ * "Booking their own" and "on hold" leave the path at 1. The forms — the
+ * quote and the booking — live in sheets, like Approve & issue. Nothing here
+ * waits on the service fee: the ticket is bought when it is paid; the
+ * e-ticket is handed over with the papers.
  */
 
-function fmtWhen(iso?: string): string {
+function fmtWhen(iso?: string | null): string {
 	if (!iso) return "";
 	const d = new Date(iso);
 	if (Number.isNaN(d.getTime())) return iso;
 	return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+function fmtDay(iso?: string | null): string | null {
+	if (!iso) return null;
+	const d = new Date(iso);
+	return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** The flight on one line — carrier and number, route, departure. */
+export function flightLine(flight: TravelFlight | null | undefined): string {
+	if (!flight) return "";
+	const route = [flight.from, flight.to].filter(Boolean).join(" → ");
+	const num = [flight.carrier, flight.flightNumber].filter(Boolean).join(" ");
+	return [route, num, flight.departAt ? fmtWhen(flight.departAt) : ""].filter(Boolean).join(" · ");
 }
 
 /** The flight as a few rows; the same rendering for the invoice's flight and the booked one. */
@@ -59,22 +73,26 @@ const toLocalInput = (iso?: string) => (iso ? new Date(iso).toISOString().slice(
 const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : undefined);
 
 /**
- * The flight form — raising the ticket invoice (fare + flight) or recording
- * the booking (PNR + the flight as actually booked, prefilled from the
- * invoice's flight).
+ * The quote (raises the ticket proforma) or the booking (records the PNR),
+ * in a sheet: labelled fields in a grid, the fare in cedis, and a line
+ * saying what the client will see.
  */
-export function FlightForm({
+export function FlightSheet({
 	mode,
+	open,
 	initial,
 	busy,
+	error,
 	onSubmit,
-	onCancel,
+	onClose,
 }: {
 	mode: "raise" | "book";
+	open: boolean;
 	initial?: TravelFlight | null;
 	busy: boolean;
+	error?: string | null;
 	onSubmit: (input: { flight: TravelFlight; fareCents?: number; confirmationCode?: string }) => void;
-	onCancel: () => void;
+	onClose: () => void;
 }) {
 	const [carrier, setCarrier] = useState(initial?.carrier ?? "");
 	const [flightNumber, setFlightNumber] = useState(initial?.flightNumber ?? "");
@@ -86,82 +104,128 @@ export function FlightForm({
 	const [fare, setFare] = useState("");
 	const [pnr, setPnr] = useState("");
 
-	const fareCents = Math.round(Number(fare) * 100);
+	const fareCents = Math.round(Number(fare.replace(/[^0-9.]/g, "")) * 100);
 	const ready = mode === "raise" ? fareCents > 0 : pnr.trim().length > 0;
+	const preview = flightLine({ carrier, flightNumber, from, to, departAt: fromLocalInput(departAt) });
 
 	return (
-		<form
-			className="cn-assign"
-			onSubmit={(e) => {
-				e.preventDefault();
-				if (!ready) return;
-				onSubmit({
-					flight: {
-						carrier: carrier || undefined,
-						flightNumber: flightNumber || undefined,
-						from: from || undefined,
-						to: to || undefined,
-						departAt: fromLocalInput(departAt),
-						arriveAt: fromLocalInput(arriveAt),
-						notes: notes || undefined,
-					},
-					fareCents: mode === "raise" ? fareCents : undefined,
-					confirmationCode: mode === "book" ? pnr.trim() : undefined,
-				});
-			}}
-		>
-			{mode === "book" && (
-				<input className="input input--sm" placeholder="PNR / confirmation code" value={pnr} onChange={(e) => setPnr(e.target.value)} disabled={busy} autoFocus />
-			)}
-			<div className="cn-assign__row">
-				<input className="input input--sm" placeholder="Airline" value={carrier} onChange={(e) => setCarrier(e.target.value)} disabled={busy} />
-				<input className="input input--sm" placeholder="Flight no." value={flightNumber} onChange={(e) => setFlightNumber(e.target.value)} disabled={busy} style={{ flex: "0 1 8rem", minWidth: "6rem" }} />
-			</div>
-			<div className="cn-assign__row">
-				<input className="input input--sm" placeholder="From (e.g. ACC)" value={from} onChange={(e) => setFrom(e.target.value)} disabled={busy} />
-				<input className="input input--sm" placeholder="To (e.g. LHR)" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} />
-			</div>
-			<div className="cn-assign__row">
-				<label className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1 }}>
-					Departs
-					<input type="datetime-local" className="input input--sm" value={departAt} onChange={(e) => setDepartAt(e.target.value)} disabled={busy} />
+		<Sheet open={open} onClose={() => (busy ? undefined : onClose())} title={mode === "raise" ? "Quote the flight" : "Record the booking"}>
+			<form
+				className="cn-assign"
+				onSubmit={(e) => {
+					e.preventDefault();
+					if (!ready) return;
+					onSubmit({
+						flight: {
+							carrier: carrier || undefined,
+							flightNumber: flightNumber || undefined,
+							from: from || undefined,
+							to: to || undefined,
+							departAt: fromLocalInput(departAt),
+							arriveAt: fromLocalInput(arriveAt),
+							notes: notes || undefined,
+						},
+						fareCents: mode === "raise" ? fareCents : undefined,
+						confirmationCode: mode === "book" ? pnr.trim() : undefined,
+					});
+				}}
+			>
+				<p className="cn-assign__current">
+					{mode === "raise"
+						? "The flight as quoted and the fare — this raises the ticket proforma for approval. The client sees it once it is issued."
+						: "The ticket is bought — record the airline's confirmation. The e-ticket is uploaded on the card and handed over with the papers."}
+				</p>
+				{mode === "book" && (
+					<label className="su-fld">
+						<span className="su-k">PNR / confirmation code</span>
+						<input className="input input--sm su-mono" value={pnr} onChange={(e) => setPnr(e.target.value)} disabled={busy} autoFocus />
+					</label>
+				)}
+				<div className="su-grid su-grid--2">
+					<label className="su-fld">
+						<span className="su-k">Airline</span>
+						<input className="input input--sm" value={carrier} onChange={(e) => setCarrier(e.target.value)} disabled={busy} placeholder="e.g. British Airways" autoFocus={mode === "raise"} />
+					</label>
+					<label className="su-fld">
+						<span className="su-k">Flight no.</span>
+						<input className="input input--sm su-mono" value={flightNumber} onChange={(e) => setFlightNumber(e.target.value)} disabled={busy} placeholder="e.g. BA 078" />
+					</label>
+				</div>
+				<div className="su-grid su-grid--2">
+					<label className="su-fld">
+						<span className="su-k">From</span>
+						<input className="input input--sm su-mono" value={from} onChange={(e) => setFrom(e.target.value)} disabled={busy} placeholder="e.g. ACC" />
+					</label>
+					<label className="su-fld">
+						<span className="su-k">To</span>
+						<input className="input input--sm su-mono" value={to} onChange={(e) => setTo(e.target.value)} disabled={busy} placeholder="e.g. LHR" />
+					</label>
+				</div>
+				<div className="su-grid su-grid--2">
+					<label className="su-fld">
+						<span className="su-k">Departs</span>
+						<input type="datetime-local" className="input input--sm cn-dt" value={departAt} onChange={(e) => setDepartAt(e.target.value)} disabled={busy} />
+					</label>
+					<label className="su-fld">
+						<span className="su-k">Arrives</span>
+						<input type="datetime-local" className="input input--sm cn-dt" value={arriveAt} onChange={(e) => setArriveAt(e.target.value)} disabled={busy} />
+					</label>
+				</div>
+				{mode === "raise" && (
+					<label className="su-fld">
+						<span className="su-k">Fare · GH₵ — the airline ticket only; the service fee is in the package</span>
+						<input className="input input--sm su-mono" inputMode="decimal" value={fare} onChange={(e) => setFare(e.target.value)} disabled={busy} placeholder="e.g. 9800.00" />
+					</label>
+				)}
+				<label className="su-fld">
+					<span className="su-k">Note to the client (optional)</span>
+					<textarea className="input input--sm" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} placeholder="e.g. 23kg checked bag included; change fee applies after 20 Oct" />
 				</label>
-				<label className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1 }}>
-					Arrives
-					<input type="datetime-local" className="input input--sm" value={arriveAt} onChange={(e) => setArriveAt(e.target.value)} disabled={busy} />
-				</label>
+				{(preview || fareCents > 0 || pnr) && (
+					<p className="su-preview">
+						<span className="su-k">The client will see</span>
+						{[preview, mode === "raise" && fareCents > 0 ? formatMoney(fareCents, "ghs") : "", mode === "book" && pnr ? `PNR ${pnr.trim()}` : ""].filter(Boolean).join(" · ")}
+						{mode === "raise" ? ' — "Flight ticket" on their Money page once issued.' : " — on their Departure page, with the e-ticket once uploaded."}
+					</p>
+				)}
+				{mode === "raise" && !ready && fare.length > 0 && <p className="cn-assign__error">The fare must be more than zero.</p>}
+				{error && <p className="cn-assign__error">{error}</p>}
+				<div className="cn-assign__row">
+					<button type="submit" className="btn btn--primary" disabled={busy || !ready}>
+						{busy ? "Saving…" : mode === "raise" ? "Raise ticket invoice →" : "Record booking →"}
+					</button>
+					<button type="button" className="btn btn--ghost" onClick={onClose} disabled={busy}>
+						Cancel
+					</button>
+				</div>
+			</form>
+		</Sheet>
+	);
+}
+
+/** One milestone row — the visa tab's shape: a numbered square, the title, its facts, one action. */
+function Step({ n, title, state, facts, action }: { n: number; title: string; state: "done" | "current" | "todo"; facts: (string | null | false | undefined)[]; action?: React.ReactNode }) {
+	const shown = facts.filter(Boolean) as string[];
+	return (
+		<div className={`cn-ms cn-ms--${state}`}>
+			<span className="cn-ms__n">{state === "done" ? "✓" : n}</span>
+			<div className="cn-ms__b">
+				<span className="cn-ms__t">{title}</span>
+				{shown.map((f) => (
+					<span key={f} className="cn-ms__f">
+						{f}
+					</span>
+				))}
+				{action && <div className="cn-ms__a">{action}</div>}
 			</div>
-			{mode === "raise" && (
-				<input
-					type="number"
-					min="0"
-					step="0.01"
-					className="input input--sm"
-					placeholder="Fare (USD) — the airline ticket only; the service fee is in the package"
-					value={fare}
-					onChange={(e) => setFare(e.target.value)}
-					disabled={busy}
-					autoFocus
-				/>
-			)}
-			<textarea className="input" rows={2} placeholder="Notes for the applicant (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={busy} />
-			<div className="cn-assign__row">
-				<button type="submit" className="btn btn--sm btn--primary" disabled={busy || !ready}>
-					{busy ? "Saving…" : mode === "raise" ? "Raise ticket invoice" : "Record booking"}
-				</button>
-				<button type="button" className="btn btn--sm btn--ghost" onClick={onCancel} disabled={busy}>
-					Cancel
-				</button>
-			</div>
-		</form>
+		</div>
 	);
 }
 
 /**
- * Status, the flight, and the one next action. `invoice` is the ticket
- * invoice when the caller has it (the case detail does; the queue does
- * not) — it decides whether "raised" means "awaiting issue" or "awaiting
- * payment" and gives finance the link to issue it.
+ * The flight: the ticket invoice card (the same as every other invoice),
+ * then the five milestones. `invoice` is the ticket invoice when the caller
+ * has it (the case detail does; the queue does not).
  */
 export function TravelCard({
 	ta,
@@ -204,43 +268,23 @@ export function TravelCard({
 	}
 
 	const status = ta.status;
-	const line =
-		status === "decision_pending"
-			? "Waiting for the applicant to decide how they want to book."
-			: status === "review" && !ta.assignedOpsUserId
-				? "Assign a travel handler to raise the ticket invoice."
-				: status === "review"
-					? `${ta.assignedOpsUserName ?? "The handler"} raises the ticket invoice for the flight.`
-					: status === "invoiced"
-						? invoice?.status === "proforma"
-							? "Ticket invoice raised — finance reviews and issues it, then the applicant can pay."
-							: "Ticket invoice issued — waiting for the applicant to pay."
-						: status === "ticket_paid"
-							? "Ticket paid — record the booking once the airline confirms it."
-							: status === "booked"
-								? "Flight booked. The case has moved on to Payment Execution."
-								: status === "declined"
-									? "The applicant is booking their own flight. Travel is settled."
-									: "Travel assistance is on hold — the applicant can resume from the portal.";
+	const offPath = status === "declined" || status === "on_hold";
+	const decided = Boolean(ta.decision);
+	const decidedOn = fmtDay(ta.updatedAt);
+	const invoiceIssued = Boolean(invoice && invoice.status !== "proforma" && invoice.status !== "void");
+	const paid = invoice?.status === "paid" || status === "ticket_paid" || status === "booked";
+	const booked = status === "booked";
+	const issuedBy = invoice?.issuedByName ?? null;
+	const paidAt = invoice?.payments?.length ? [...invoice.payments].sort((a, b) => (a.at < b.at ? 1 : -1))[0]?.at : null;
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-			<div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-				<TravelStatusPill status={status} />
-				<p className="muted" style={{ fontSize: "var(--text-sm)", margin: 0 }}>{line}</p>
-			</div>
-
-			{status === "booked" && ta.booking ? (
-				<FlightSummary flight={ta.booking} confirmationCode={ta.booking.confirmationCode} />
-			) : ta.flight ? (
-				<FlightSummary flight={ta.flight} />
-			) : null}
-
 			<ApproveInvoiceSheet invoice={approving} onClose={() => setApproving(null)} onIssued={onChanged} onDeclined={onChanged} />
 
-			{invoice && (
+			{/* The ticket invoice — the same card as the application and visa invoices */}
+			{invoice ? (
 				<InvoiceCard
-					compact
+					compact={invoice.status === "paid"}
 					title="Ticket invoice"
 					invoice={invoice}
 					hint={invoice.status === "proforma" ? "Awaiting approval — the client cannot see or pay it until it is issued." : undefined}
@@ -258,54 +302,129 @@ export function TravelCard({
 						) : undefined
 					}
 				/>
+			) : (
+				<div className="cn-inv-none">
+					<div>
+						<b>Ticket invoice</b>
+						<small>
+							{offPath
+								? status === "declined"
+									? "not needed — the client is booking their own flight"
+									: "on hold — the client can resume from the portal"
+								: status === "decision_pending"
+									? "raised once the client asks us to book"
+									: "not raised yet — quote the flight below; the client pays it in Money"}
+						</small>
+					</div>
+					<span className="cn-inv-none__k">—</span>
+				</div>
 			)}
 
-			{canWork && form === "none" && status === "review" && ta.assignedOpsUserId && (
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")}>
-						Raise ticket invoice
-					</button>
-					<span className="muted" style={{ fontSize: "var(--text-xs)" }}>Not held by the service fee — the e-ticket is handed over with the papers.</span>
-				</div>
-			)}
-			{canWork && form === "none" && status === "ticket_paid" && (
-				<div>
-					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("book")}>
-						Record booking
-					</button>
-				</div>
-			)}
-			{form === "raise" && (
-				<FlightForm
-					mode="raise"
-					busy={busy}
-					onCancel={() => setForm("none")}
-					onSubmit={({ flight, fareCents }) =>
-						void run(() => applicationsApi.raiseTravelInvoice(ta.id, { fareCents: fareCents ?? 0, flight }))
+			<div className="cn-stack">
+				<Step
+					n={1}
+					title="Decision"
+					state={decided ? "done" : "current"}
+					facts={[
+						!decided && "Waiting for the client to decide how they want to book — on their Departure page.",
+						ta.decision === "yes" && `Asked us to book${decidedOn ? ` · ${decidedOn}` : ""}`,
+						ta.decision === "no" && `Booking their own flight${decidedOn ? ` · ${decidedOn}` : ""} — travel is settled on their word`,
+						ta.decision === "hold" && `On hold${decidedOn ? ` · ${decidedOn}` : ""} — they can resume from the portal`,
+						ta.applicantNote && `“${ta.applicantNote}”`,
+					]}
+				/>
+				<Step
+					n={2}
+					title="Quote & invoice"
+					state={invoice ? "done" : !offPath && status === "review" ? "current" : "todo"}
+					facts={[
+						offPath && "Not on this path.",
+						!invoice && status === "review" && !ta.assignedOpsUserId && "Assign a departure officer first — from the case header.",
+						!invoice && status === "review" && ta.assignedOpsUserId && `${ta.assignedOpsUserName ?? "The officer"} quotes the flight and its fare; this raises the proforma. Nothing waits on the service fee.`,
+						invoice && flightLine(ta.flight),
+						invoice && `${formatMoney(invoice.subtotalCents, "ghs")}${invoice.raisedAt ? ` · quoted ${fmtDay(invoice.raisedAt)}` : invoice.createdAt ? ` · quoted ${fmtDay(invoice.createdAt)}` : ""}`,
+						invoice && ta.flight?.notes && `Note to the client: ${ta.flight.notes}`,
+					]}
+					action={
+						canWork && !invoice && status === "review" && ta.assignedOpsUserId ? (
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")}>
+								Quote the flight…
+							</button>
+						) : undefined
 					}
 				/>
-			)}
-			{form === "book" && (
-				<FlightForm
-					mode="book"
-					initial={ta.flight}
-					busy={busy}
-					onCancel={() => setForm("none")}
-					onSubmit={({ flight, confirmationCode }) =>
-						void run(() => applicationsApi.recordTravelBooking(ta.id, { ...flight, confirmationCode }))
+				<Step
+					n={3}
+					title="Approved & issued"
+					state={invoiceIssued || paid ? "done" : invoice?.status === "proforma" ? "current" : "todo"}
+					facts={[
+						invoice?.status === "proforma" && "Waiting on finance — Approve & issue above. The client sees it once issued.",
+						invoiceIssued && `Issued${invoice?.reviewedAt ? ` ${fmtDay(invoice.reviewedAt)}` : ""}${issuedBy ? ` by ${issuedBy}` : ""}`,
+						!invoice && !offPath && "Finance approves; the client can then see and pay it.",
+					]}
+				/>
+				<Step
+					n={4}
+					title="Paid"
+					state={paid ? "done" : invoiceIssued ? "current" : "todo"}
+					facts={[
+						paid && `Paid${paidAt ? ` ${fmtDay(paidAt)}` : ""}${invoice ? ` · ${formatMoney(invoice.subtotalCents, "ghs")}` : ""}`,
+						!paid && invoiceIssued && "Waiting for the client — it is on their Money page. Record a transfer from the invoice.",
+						!paid && !invoiceIssued && !offPath && "Recorded from the ledger.",
+					]}
+				/>
+				<Step
+					n={5}
+					title="Booked"
+					state={booked ? "done" : status === "ticket_paid" ? "current" : "todo"}
+					facts={[
+						booked && ta.booking && `${ta.booking.confirmationCode ? `PNR ${ta.booking.confirmationCode} · ` : ""}${flightLine(ta.booking)}`,
+						booked && `Booked${ta.updatedAt ? ` ${fmtDay(ta.updatedAt)}` : ""} — the e-ticket is handed over with the papers.`,
+						status === "ticket_paid" && "Buy the ticket and record the PNR; upload the e-ticket — it is handed over with the papers.",
+						!booked && status !== "ticket_paid" && !offPath && "PNR and the e-ticket — held with the papers until the 30%.",
+					]}
+					action={
+						canWork && status === "ticket_paid" ? (
+							<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("book")}>
+								Record booking…
+							</button>
+						) : undefined
 					}
 				/>
-			)}
-			{(status === "ticket_paid" || status === "booked") && ownerUserId && (
+			</div>
+
+			{(status === "ticket_paid" || booked) && ownerUserId && (
 				<ArtifactCard
 					ownerUserId={ownerUserId}
 					documentType="flight_receipt"
-					title="Flight booking receipt"
-					hint="The issued ticket or booking confirmation — shared with the client via their document vault."
+					title="E-ticket · flight booking receipt"
+					hint="The issued ticket or booking confirmation — filed in the client's vault and released with the papers once the pre-departure milestone is paid."
 					canUpload={canUploadArtifacts}
 				/>
 			)}
-			{error && <p className="cn-assign__error">{error}</p>}
+
+			{form !== "none" && (
+				<FlightSheet
+					key={form}
+					mode={form}
+					open
+					initial={form === "book" ? ta.flight : null}
+					busy={busy}
+					error={error}
+					onClose={() => {
+						setForm("none");
+						setError(null);
+					}}
+					onSubmit={({ flight, fareCents, confirmationCode }) =>
+						void run(() =>
+							form === "raise"
+								? applicationsApi.raiseTravelInvoice(ta.id, { fareCents: fareCents ?? 0, flight })
+								: applicationsApi.recordTravelBooking(ta.id, { ...flight, confirmationCode }),
+						)
+					}
+				/>
+			)}
+			{error && form === "none" && <p className="cn-assign__error">{error}</p>}
 		</div>
 	);
 }

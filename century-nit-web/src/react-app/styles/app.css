@@ -6654,6 +6654,13 @@ img.profile-monogram {
 	border-width: 1.5px;
 }
 
+/* the rail's lead card reads inverted — black face, white text */
+.sharp-card--invert {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
 .prail__title {
 	font-weight: 700;
 	font-size: 1.05rem;

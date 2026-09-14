@@ -320,7 +320,7 @@ export function DashboardHome() {
 
 					{/* The rail — money, calendar, people, documents */}
 					<div className="prail">
-						<div className="sharp-card sharp-card--key">
+						<div className="sharp-card sharp-card--key sharp-card--invert">
 							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
 							{money ? (
 								<>

@@ -553,7 +553,7 @@ export function PortalAppointments() {
 
 					{/* The rail — book, how it works, the office */}
 					<div className="prail">
-						<div className="sharp-card sharp-card--key">
+						<div className="sharp-card sharp-card--key sharp-card--invert">
 							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Book a slot</p>
 							<p style={{ fontSize: "var(--text-sm)", marginTop: "0.5rem", lineHeight: 1.6, color: "rgba(255,255,255,0.85)" }}>
 								Check-ins are free once you're enrolled. Pick a day and a time — we confirm by email.

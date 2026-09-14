@@ -10,10 +10,10 @@ import { AGENCY_STAGES } from "century-nit-core/content";
 import { db } from "../db/index.js";
 import { applicants, applications, caseComments, invoiceLines, invoicePayments, invoices, travelAssistanceRequests } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
-import { postArrivalCatalogue, serviceFeeSplit } from "./fees.js";
+import { exchangeRate, postArrivalCatalogue, serviceFeeSplit } from "./fees.js";
 import { cancelQueued, queueReminder } from "../worker/queues.js";
 import { instalmentDueForClient } from "./notifications.js";
-import { formatGhs } from "./receiptEmail.js";
+import { formatGhs, formatUsd } from "./receiptEmail.js";
 import { env } from "../env.js";
 
 type Actor = { opsUserId?: string | null; name: string };
@@ -218,6 +218,7 @@ async function queueInstalmentReminders(applicationId: string, invoiceId: string
 		.limit(1);
 	if (!who?.email) return;
 	const { lines, paidCents } = await linesAndPaid(invoiceId);
+	const rate = await exchangeRate();
 	let cum = 0;
 	for (const line of lines) {
 		cum += line.amountCents;
@@ -233,7 +234,7 @@ async function queueInstalmentReminders(applicationId: string, invoiceId: string
 				clientEmail: who.email,
 				invoiceNumber,
 				lineLabel: line.label,
-				amountGhsFormatted: formatGhs(line.amountCents),
+				amountGhsFormatted: `${formatGhs((line.amountCents / 100) * rate)} (${formatUsd(line.amountCents / 100)})`,
 				dueAtFormatted: new Date(line.dueAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
 				payUrl: `${env.FRONTEND_URL}/portal/payment-execution`,
 			}),

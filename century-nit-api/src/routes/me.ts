@@ -7,7 +7,6 @@ import {
 	completeFromDeparture,
 	acceptProceedForApplication,
 	declineProceedForApplication,
-	ensureVisaInvoiceForApplication,
 	getApplicantByUserId,
 	latestApplicationForApplicant,
 	patchApplicant,
@@ -1426,13 +1425,8 @@ export async function processConsentDecision(input: {
 			});
 		}
 
-		if (existingHandler) {
-			await ensureVisaInvoiceForApplication(input.userId, {
-				opsUserId: existingHandler.opsUserId,
-				name: existingHandler.name,
-				email: existingHandler.email,
-			});
-		}
+		// The visa officer raises the visa invoice from the case — the tariff
+		// pre-fills it, the officer decides the lines; nothing raises itself.
 	}
 
 	return { consent };

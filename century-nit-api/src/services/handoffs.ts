@@ -503,15 +503,8 @@ export async function resolveStageHandoff(input: {
 			.set({ visaStage: "pending", updatedAt: new Date() })
 			.where(and(eq(applications.id, row.applicationId), eq(applications.visaStage, "awaiting_handler")));
 
-		const { applicantUserIdOfApplication, ensureVisaInvoiceForApplication } = await import("./cases.js");
-		const clientUserId = await applicantUserIdOfApplication(row.applicationId);
-		if (clientUserId) {
-			await ensureVisaInvoiceForApplication(clientUserId, {
-				opsUserId: input.actor.opsUserId,
-				name: input.actor.name,
-				email: input.actor.email,
-			}).catch(() => {});
-		}
+		// The seated officer raises the visa invoice from the case; the
+		// Workspace carries it as a task until they do.
 	} else if (row.stage === "travel_assistance") {
 		// Travel handoff resolved from the Workspace queue: mirror the
 		// assignment onto the travel assistance request so the Travel page

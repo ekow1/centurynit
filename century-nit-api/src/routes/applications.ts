@@ -538,13 +538,61 @@ async function ensureApplicationProforma(id: string, raisedBy: { opsUserId?: str
  * issuing — which is what lets the applicant pay — needs the invoices module
  * (below), the same two-step the visa and ticket invoices follow.
  */
+const raiseLinesSchema = z.object({
+	lines: z
+		.array(
+			z.object({
+				label: z.string().min(1).max(200),
+				detail: z.string().max(300).optional(),
+				amountCents: z.number().int().min(0).max(1_000_000_000),
+				schoolApplicationId: z.string().uuid().nullable().optional(),
+			}),
+		)
+		.min(1)
+		.max(40),
+	note: z.string().max(1000).optional(),
+});
+
+/** The lines the sheet starts from — the school list and the catalogue — and what still gates the raise. */
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/application-invoice-preview",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							lines: z.array(z.object({ label: z.string(), detail: z.string(), amountCents: z.number().int(), schoolApplicationId: z.string().nullable() })),
+							outstandingDocuments: z.array(z.string()),
+						}),
+					},
+				},
+				description: "The suggested lines and the documents still outstanding",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const [lines, checklist] = await Promise.all([applicationFeeLinesFor(id), documentChecklistForApplication(id)]);
+		return c.json({ lines: lines.map((l) => ({ ...l, schoolApplicationId: l.schoolApplicationId ?? null })), outstandingDocuments: outstandingDocuments(checklist) });
+	},
+);
+
 applicationsRouter.openapi(
 	createRoute({
 		method: "post",
 		path: "/{id}/raise-application-invoice",
 		tags: ["Applications"],
 		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
-		request: { params: idParams },
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: raiseLinesSchema } }, required: false },
+		},
 		responses: {
 			200: {
 				content: { "application/json": { schema: z.object({ invoice: invoiceSchema.nullable(), nothingDue: z.boolean() }) } },
@@ -555,10 +603,124 @@ applicationsRouter.openapi(
 	async (c) => {
 		const { id } = c.req.valid("param");
 		await assertApplicationAccess(c, id, "raise an invoice for");
-		const appInvoice = await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
+		const body = c.req.valid("json") as z.infer<typeof raiseLinesSchema> | undefined;
+		// The officer's lines, when the sheet sent them; the catalogue's otherwise.
+		const appInvoice = body?.lines ? await raiseApplicationProformaWithLines(id, body, actorFrom(c.get("staff")!)) : await ensureApplicationProforma(id, actorFrom(c.get("staff")!));
 		return c.json({ invoice: appInvoice ? await serializeInvoice(appInvoice) : null, nothingDue: !appInvoice });
 	},
 );
+
+/** The visa invoice's suggested lines — the destination's tariff. */
+applicationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/visa-invoice-preview",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireModule("applications")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ lines: z.array(z.object({ label: z.string(), detail: z.string(), amountCents: z.number().int() })) }) } },
+				description: "The tariff's lines for this case's destination",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const row = await getApplication(id);
+		if (!row) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+		const { visaCostLinesFor } = await import("../services/cases.js");
+		return c.json({ lines: await visaCostLinesFor(row) });
+	},
+);
+
+/**
+ * The visa officer raises the visa invoice — the tariff's lines as the
+ * sheet edited them. A proforma; finance approves and issues it. One live
+ * visa invoice per case.
+ */
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/raise-visa-invoice",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: { content: { "application/json": { schema: raiseLinesSchema } }, required: true },
+		},
+		responses: {
+			200: { content: { "application/json": { schema: invoiceSchema } }, description: "The visa proforma, awaiting approval" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id, "raise an invoice for");
+		const body = c.req.valid("json");
+		const row = await getApplication(id);
+		if (!row) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+		const [live] = await db
+			.select({ id: schema.invoices.id, invoiceNumber: schema.invoices.invoiceNumber })
+			.from(schema.invoices)
+			.where(and(eq(schema.invoices.applicationId, id), eq(schema.invoices.type, "visa"), not(eq(schema.invoices.status, "void"))))
+			.limit(1);
+		if (live) throw new HttpError(409, "VISA_INVOICE_EXISTS", `A visa invoice is already on this case (${live.invoiceNumber}).`);
+		const [applicant] = await db.select().from(schema.applicants).where(eq(schema.applicants.id, row.applicantId)).limit(1);
+		const created = await createProforma({
+			data: {
+				applicantName: applicant?.name ?? "Applicant",
+				applicantEmail: applicant?.email ?? undefined,
+				clientUserId: applicant?.userId ?? undefined,
+				applicationId: id,
+				type: "visa",
+				status: "proforma",
+				lines: body.lines.filter((l) => l.amountCents > 0 || l.label.trim()).map((l) => ({ label: l.label.trim(), detail: l.detail?.trim() || undefined, amountCents: l.amountCents })),
+				note: body.note?.trim() || "Visa costs paid on your behalf, at cost.",
+			},
+			raisedBy: actorFrom(c.get("staff")!),
+		});
+		return c.json(await serializeInvoice(created));
+	},
+);
+
+/**
+ * The handler's lines for the application invoice — the sheet's, not the
+ * catalogue's. The documents gate still stands; one live invoice per case.
+ */
+async function raiseApplicationProformaWithLines(
+	id: string,
+	body: z.infer<typeof raiseLinesSchema>,
+	raisedBy: { opsUserId?: string | null; name: string; email?: string | null },
+): Promise<typeof schema.invoices.$inferSelect> {
+	const outstanding = outstandingDocuments(await documentChecklistForApplication(id));
+	if (outstanding.length > 0) {
+		throw new HttpError(409, "DOCUMENTS_OUTSTANDING", `Verify the client's documents before invoicing applications. Outstanding: ${outstanding.join(", ")}.`);
+	}
+	const [app] = await db.select().from(schema.applications).where(eq(schema.applications.id, id)).limit(1);
+	if (!app) throw new HttpError(404, "APPLICATION_NOT_FOUND", "Application not found");
+	const [live] = await db
+		.select({ id: schema.invoices.id, invoiceNumber: schema.invoices.invoiceNumber })
+		.from(schema.invoices)
+		.where(and(eq(schema.invoices.applicationId, id), eq(schema.invoices.type, "application"), not(eq(schema.invoices.status, "void"))))
+		.limit(1);
+	if (live) throw new HttpError(409, "APPLICATION_INVOICE_EXISTS", `An application invoice is already on this case (${live.invoiceNumber}).`);
+	const [applicant] = await db.select().from(schema.applicants).where(eq(schema.applicants.id, app.applicantId)).limit(1);
+	const schools = new Set(body.lines.map((l) => l.schoolApplicationId).filter(Boolean)).size;
+	return createProforma({
+		data: {
+			applicantName: applicant?.name ?? "Applicant",
+			applicantEmail: applicant?.email ?? undefined,
+			clientUserId: applicant?.userId ?? undefined,
+			applicationId: app.id,
+			type: "application",
+			status: "proforma",
+			lines: body.lines.map((l) => ({ label: l.label.trim(), detail: l.detail?.trim() || undefined, amountCents: l.amountCents, schoolApplicationId: l.schoolApplicationId ?? null })),
+			note: body.note?.trim() || `University application fees${schools > 0 ? ` for ${schools} school(s)` : ""}, paid on your behalf.`,
+		},
+		raisedBy,
+	});
+}
 
 
 applicationsRouter.openapi(

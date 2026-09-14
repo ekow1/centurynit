@@ -19,6 +19,7 @@ import {
 	schoolApplications,
 	servicePackages,
 	travelAssistanceRequests,
+	opsUsers,
 } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError } from "../middleware/error.js";
@@ -420,7 +421,7 @@ export async function createInvoice(input: {
 					invoiceNumber: row.invoiceNumber,
 					invoiceType: row.type,
 					amountFormatted: formatUsd(row.subtotalCents / 100),
-					amountGhsFormatted: formatGhs(row.subtotalCents / 100),
+					amountGhsFormatted: await ghsText(row.subtotalCents),
 					dueAtFormatted,
 					payUrl,
 				}),
@@ -746,7 +747,7 @@ export async function voidInvoice(input: {
 	reason: string;
 	actor: Actor;
 }): Promise<InvoiceRow> {
-	return db.transaction(async (tx) => {
+	const voided = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
 		const [row] = await tx
 			.select()
@@ -788,6 +789,9 @@ export async function voidInvoice(input: {
 
 		return updated;
 	});
+	// A declined proforma goes back to the raiser with the reason.
+	if (voided.status === "void" && voided.invoiceNumber.startsWith("PRO-")) await notifyRaiser(voided, "declined", input.reason).catch(() => {});
+	return voided;
 }
 
 export async function creditInvoice(input: {
@@ -960,7 +964,77 @@ export async function createProforma(input: {
 		return created;
 	});
 
+	await notifyApproversOfProforma(row, raiser.opsUserId ?? null).catch(() => {});
 	return row;
+}
+
+/** The amount in cedis at the live rate — the ledger is USD cents, the client pays in GHS. */
+async function ghsText(cents: number): Promise<string> {
+	const { exchangeRate } = await import("./fees.js");
+	return formatGhs((cents / 100) * (await exchangeRate()));
+}
+
+/**
+ * A proforma was raised: everyone who may issue it is told, in the app and
+ * by email — except the raiser, who knows. The link opens the case's Money
+ * tab, where Approve & issue lives.
+ */
+async function notifyApproversOfProforma(row: InvoiceRow, raiserOpsUserId: string | null): Promise<void> {
+	const { notify, getInvoiceApproverContacts } = await import("./notify.js");
+	const { emailLayout, escapeHtml } = await import("../lib/email-templates.js");
+	const approvers = await getInvoiceApproverContacts();
+	const label = INVOICE_TYPE_LABEL[row.type] ?? row.type;
+	const amount = `${formatUsd(row.subtotalCents / 100)} · ${await ghsText(row.subtotalCents)}`;
+	const link = row.applicationId ? `/applications?id=${row.applicationId}&tab=payments` : `/invoices?open=${row.id}`;
+	const consoleUrl = `${env.CONSOLE_URL}${link}`;
+	for (const a of approvers) {
+		if (a.opsUserId === raiserOpsUserId) continue;
+		await notify({
+			recipientUserId: a.userId,
+			type: "invoice.awaiting_approval",
+			title: `Awaiting your approval · ${amount}`,
+			body: `${label} invoice for ${row.applicantName} · ${row.invoiceNumber} · raised by ${row.raisedByName ?? row.issuedByName}.`,
+			link,
+			entityType: "invoice",
+			entityId: row.id,
+			eventId: `invoice:awaiting:${row.id}:${a.userId}`,
+			email: {
+				to: a.email,
+				subject: `Awaiting your approval · ${row.invoiceNumber} · ${amount}`,
+				text: `${label} invoice for ${row.applicantName} — ${row.invoiceNumber}, ${amount}, raised by ${row.raisedByName ?? row.issuedByName}. Approve and issue it: ${consoleUrl}`,
+				html: emailLayout({
+					title: "Awaiting your approval",
+					preheader: `${row.invoiceNumber} · ${amount}`,
+					bodyHtml: `<p>${escapeHtml(label)} invoice for <strong>${escapeHtml(row.applicantName)}</strong> — ${escapeHtml(row.invoiceNumber)}, <strong>${escapeHtml(amount)}</strong>, raised by ${escapeHtml(row.raisedByName ?? row.issuedByName)}.</p><p>The client cannot see or pay it until it is issued.</p><p><a href="${consoleUrl}">Approve &amp; issue →</a></p>`,
+				}),
+				idempotencyKey: `invoice:awaiting:${row.id}:${a.email}`,
+				template: "Invoice awaiting approval",
+				reference: row.invoiceNumber,
+			},
+		});
+	}
+}
+
+/** The raiser is told what became of their proforma — issued, or declined with the reason. */
+async function notifyRaiser(row: InvoiceRow, kind: "issued" | "declined", reason?: string | null): Promise<void> {
+	if (!row.raisedBy) return;
+	const [who] = await db.select({ userId: opsUsers.userId }).from(opsUsers).where(eq(opsUsers.id, row.raisedBy)).limit(1);
+	if (!who?.userId) return;
+	const { notify } = await import("./notify.js");
+	const label = INVOICE_TYPE_LABEL[row.type] ?? row.type;
+	await notify({
+		recipientUserId: who.userId,
+		type: kind === "issued" ? "invoice.issued_by_finance" : "invoice.declined",
+		title: kind === "issued" ? `Issued · ${row.invoiceNumber}` : `Declined · ${row.invoiceNumber}`,
+		body:
+			kind === "issued"
+				? `Your ${label} invoice for ${row.applicantName} went out as ${row.invoiceNumber} — ${formatUsd(row.subtotalCents / 100)} · ${await ghsText(row.subtotalCents)}. The client can pay it now.`
+				: `Your ${label} invoice for ${row.applicantName} was declined${reason ? ` — “${reason}”` : ""}. Raise it again from the case.`,
+		link: row.applicationId ? `/applications?id=${row.applicationId}&tab=payments` : `/invoices?open=${row.id}`,
+		entityType: "invoice",
+		entityId: row.id,
+		eventId: `invoice:${kind}:raiser:${row.id}`,
+	});
 }
 
 /* ── Application invoice lines follow the school list ───────────────────── */
@@ -1036,7 +1110,7 @@ export async function issueProforma(input: {
 	dueAt?: string | null;
 	actor: Actor;
 }): Promise<InvoiceRow> {
-	return db.transaction(async (tx) => {
+	const issued = await db.transaction(async (tx) => {
 		const txDb = tx as unknown as typeof db;
 		const [row] = await tx
 			.select()
@@ -1117,6 +1191,8 @@ export async function issueProforma(input: {
 		await notifyClientInvoice(updated, "issued");
 		return updated;
 	});
+	await notifyRaiser(issued, "issued").catch(() => {});
+	return issued;
 }
 
 /**

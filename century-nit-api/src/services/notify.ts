@@ -191,6 +191,25 @@ export async function getManagerAndCoordinatorContacts(): Promise<
 }
 
 /**
+ * Everyone who may approve and issue an invoice — active staff whose role
+ * carries `issue_invoices` (managers and finance by default). Told when a
+ * proforma is raised so nobody has to go looking for it.
+ */
+export async function getInvoiceApproverContacts(): Promise<{ userId: string; email: string; name: string; opsUserId: string }[]> {
+	const { livePermissions } = await import("./roles.js");
+	const perms = await livePermissions();
+	const roles = Object.entries(perms)
+		.filter(([, caps]) => caps.includes("issue_invoices"))
+		.map(([role]) => role);
+	if (roles.length === 0) return [];
+	const rows = await db
+		.select({ userId: opsUsers.userId, email: opsUsers.email, name: opsUsers.name, opsUserId: opsUsers.id })
+		.from(opsUsers)
+		.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, roles)));
+	return rows.filter((r): r is { userId: string; email: string; name: string; opsUserId: string } => r.userId !== null);
+}
+
+/**
  * Get user.ids for all active customer_service staff.
  */
 export async function getCustomerServiceUserIds(): Promise<

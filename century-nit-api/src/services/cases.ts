@@ -1739,10 +1739,8 @@ export async function setApplicationStage(
 		}
 	}
 
-	// ── Auto-raise visa invoice on entering visa_processing ──────────────
-	if (stage === "visa_processing" && !hasVisaInvoice && applicant) {
-		await raiseVisaInvoiceForApplication(row, applicant, actor);
-	}
+	// The visa invoice is the officer's to raise from the case — nothing
+	// raises itself on a stage move.
 
 	const [updated] = await db
 		.update(applications)

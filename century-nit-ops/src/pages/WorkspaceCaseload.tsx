@@ -510,8 +510,10 @@ export function WorkspaceCaseload() {
 				</div>
 			</div>
 
-			{/* The records, by where they sit — the manager's sweep. */}
-			{view === "stages" && (bands.length === 0 ? (
+			{/* The records, by where they sit — the manager's sweep. Always
+			    rendered: the officer split narrows them via the staff filter,
+			    and unassigned records only ever appear here. */}
+			{bands.length === 0 ? (
 				<p className="ops-people__empty">{loading ? "Loading caseload…" : "No records match the current filters."}</p>
 			) : (
 				<div className="ops-bands" style={{ padding: 0 }}>
@@ -593,7 +595,7 @@ export function WorkspaceCaseload() {
 						);
 					})}
 				</div>
-			))}
+			)}
 		</div>
 	);
 }

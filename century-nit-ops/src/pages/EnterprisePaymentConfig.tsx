@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { PAYMENT_PLANS, POST_ARRIVAL_SCHEDULES } from "century-nit-core";
-import { invoiceAgeDays, invoiceBalance } from "century-nit-core/ops";
-import { API_PREFIX } from "century-nit-shared";
+import { PAYMENT_PLANS } from "century-nit-core";
+import { invoiceAgeDays, invoiceBalance, invoicePaid } from "century-nit-core/ops";
+import {
+	API_PREFIX,
+	DEFAULT_POST_ARRIVAL_CATALOGUE,
+	POST_ARRIVAL_FREQUENCIES,
+	POST_ARRIVAL_FREQUENCY_LABELS,
+	feePlanSentences,
+	type PostArrivalCatalogue,
+	type PostArrivalFrequency,
+} from "century-nit-shared";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
@@ -17,10 +25,13 @@ import { fmtGhs } from "./currency";
  * the pre-departure milestone, the remainder after arrival), which plan
  * each client is on, and who is behind on a milestone.
  *
- * The two plans and the post-arrival schedules are the platform's
- * vocabulary (PAYMENT_PLANS, POST_ARRIVAL_SCHEDULES); the split is a
- * setting and is edited here.
+ * The two plans are the platform's vocabulary (PAYMENT_PLANS); the split
+ * and the post-arrival catalogue — the durations and frequencies a client
+ * may pick, the grace after arrival, the reminder lead — are settings and
+ * are edited here. The sentence the client reads is written from them.
  */
+
+const DURATION_CHOICES = [3, 6, 9, 12, 18, 24];
 
 const shortDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—");
 
@@ -32,6 +43,7 @@ export function EnterprisePaymentConfig() {
 	const { catalogue, reload } = useFeeCatalogue();
 	const [deposit, setDeposit] = useState("");
 	const [preDeparture, setPreDeparture] = useState("");
+	const [pa, setPa] = useState<PostArrivalCatalogue>(DEFAULT_POST_ARRIVAL_CATALOGUE);
 	const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 	const [saving, setSaving] = useState(false);
 
@@ -39,7 +51,35 @@ export function EnterprisePaymentConfig() {
 		if (!catalogue) return;
 		setDeposit(String(catalogue.serviceFeeSplit.depositPercent));
 		setPreDeparture(String(catalogue.serviceFeeSplit.preDeparturePercent));
+		setPa(catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE);
 	}, [catalogue]);
+
+	const toggleDuration = (m: number) =>
+		setPa((prev) => ({ ...prev, durations: prev.durations.includes(m) ? prev.durations.filter((x) => x !== m) : [...prev.durations, m].sort((a, b) => a - b) }));
+	const toggleFrequency = (f: PostArrivalFrequency) =>
+		setPa((prev) => ({ ...prev, frequencies: prev.frequencies.includes(f) ? prev.frequencies.filter((x) => x !== f) : [...prev.frequencies, f] }));
+	const validCatalogue = pa.durations.length > 0 && pa.frequencies.length > 0 && pa.graceDays >= 0 && pa.remindDays >= 0;
+
+	async function saveCatalogue() {
+		if (!validCatalogue) {
+			setToast({ tone: "error", text: "Offer at least one duration and one frequency." });
+			return;
+		}
+		setSaving(true);
+		try {
+			const put = (key: string, value: string) => apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key, value }) });
+			await put("POST_ARRIVAL_DURATIONS", pa.durations.join(","));
+			await put("POST_ARRIVAL_FREQUENCIES", pa.frequencies.join(","));
+			await put("POST_ARRIVAL_GRACE_DAYS", String(pa.graceDays));
+			await put("POST_ARRIVAL_REMIND_DAYS", String(pa.remindDays));
+			await reload();
+			setToast({ tone: "success", text: "The post-arrival catalogue is saved — clients choosing from now on see it." });
+		} catch (err) {
+			setToast({ tone: "error", text: err instanceof ApiError ? err.message : "Could not save the catalogue." });
+		} finally {
+			setSaving(false);
+		}
+	}
 
 	const d = Number.parseInt(deposit, 10);
 	const p = Number.parseInt(preDeparture, 10);
@@ -69,12 +109,32 @@ export function EnterprisePaymentConfig() {
 		const withPlan = applications.filter((a) => a.paymentPlanId);
 		const full = withPlan.filter((a) => a.paymentPlanId === "full");
 		const inst = withPlan.filter((a) => a.paymentPlanId === "installment");
-		// A service-fee invoice past its due date with a balance — the client is behind on that milestone.
-		const behind = invoices
-			.filter((i) => i.type === "Agency" && i.status !== "void" && i.status !== "proforma" && invoiceBalance(i) > 0)
-			.map((i) => ({ inv: i, age: invoiceAgeDays(i) ?? 0 }))
-			.filter((x) => x.age > 0)
-			.sort((a, b) => b.age - a.age);
+		// Behind: a dated instalment line whose date has passed and whose
+		// cumulative amount the payments have not covered; or, on an invoice
+		// with its own due date, a balance past it.
+		const today = new Date().getTime();
+		const behind: { inv: (typeof invoices)[number]; label: string; amount: number; age: number }[] = [];
+		for (const i of invoices) {
+			if (i.type !== "Agency" || i.status === "void" || i.status === "proforma" || invoiceBalance(i) <= 0) continue;
+			const paid = invoicePaid(i);
+			let cum = 0;
+			let found = false;
+			for (const line of i.lines) {
+				cum += line.amount;
+				if (!line.dueAt || paid >= cum) continue;
+				const age = Math.floor((today - new Date(line.dueAt).getTime()) / 86_400_000);
+				if (age > 0) {
+					behind.push({ inv: i, label: line.label, amount: Math.min(line.amount, cum - paid), age });
+					found = true;
+				}
+				break;
+			}
+			if (!found) {
+				const age = invoiceAgeDays(i) ?? 0;
+				if (age > 0 && !i.lines.some((l) => l.dueAt)) behind.push({ inv: i, label: i.lines[0]?.label ?? i.invoiceNumber, amount: invoiceBalance(i), age });
+			}
+		}
+		behind.sort((a, b) => b.age - a.age);
 		// Post-arrival: instalment plans past the pre-departure milestone and not settled.
 		const postArrival = inst.filter((a) => (a.agencyStageIndex ?? 0) >= 2 && !a.agencySettled);
 		return { withPlan, full, inst, behind, postArrival, none: applications.length - withPlan.length };
@@ -83,6 +143,11 @@ export function EnterprisePaymentConfig() {
 	const example = 500; // GH₵ 5.00 — the test-price service fee, as a worked example
 	const pct = (n: number) => (Number.isFinite(n) ? `${n} %` : "—");
 	const of = (n: number) => (Number.isFinite(n) ? fmtGhs((example * n) / 100 / 100) : "—");
+	const sentences = feePlanSentences(
+		{ depositPercent: Number.isInteger(d) ? d : 10, preDeparturePercent: Number.isInteger(p) ? p : 30, postArrivalPercent: Number.isInteger(post) ? post : 60 },
+		validCatalogue ? pa : DEFAULT_POST_ARRIVAL_CATALOGUE,
+	);
+	const listOf = (parts: string[]) => (parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}`);
 
 	return (
 		<div className="page-content fade-in">
@@ -141,7 +206,7 @@ export function EnterprisePaymentConfig() {
 										<div className="ops-mstep ops-mstep--cur">
 											<span className="ops-mstep__l">Pre-departure</span>
 											<span className="ops-mstep__v">{pct(p)}</span>
-											<span className="ops-mstep__s">after the visa · releases the letter and the ticket</span>
+											<span className="ops-mstep__s">after the visa · releases the travel documents</span>
 										</div>
 										<div className="ops-mstep">
 											<span className="ops-mstep__l">Post-arrival</span>
@@ -153,22 +218,26 @@ export function EnterprisePaymentConfig() {
 									<div className="ops-mstep ops-mstep--cur">
 										<span className="ops-mstep__l">Balance</span>
 										<span className="ops-mstep__v">{pct(100 - d)}</span>
-										<span className="ops-mstep__s">after the visa, before travel · releases the letter and the ticket</span>
+										<span className="ops-mstep__s">after the visa · releases the travel documents</span>
 									</div>
 								)}
 							</div>
 							{inst && (
 								<>
-									<p className="cn-detail__eyebrow" style={{ margin: "0.75rem 0 0" }}>Post-arrival schedules</p>
+									<p className="cn-detail__eyebrow" style={{ margin: "0.75rem 0 0" }}>Post-arrival · what the client may pick</p>
 									<div className="cn-detail__rows">
-										{POST_ARRIVAL_SCHEDULES.map((s) => (
-											<div key={s.id} className="cn-detail__row">
-												<span>{s.label}</span>
-												<span className="cn-detail__row-note">
-													{s.payments} payments · every {s.intervalDays} d · {s.graceDays} d grace
-												</span>
-											</div>
-										))}
+										<div className="cn-detail__row">
+											<span>Over</span>
+											<span className="cn-detail__row-note">{listOf(pa.durations.map((m) => `${m} months`))}</span>
+										</div>
+										<div className="cn-detail__row">
+											<span>Paid</span>
+											<span className="cn-detail__row-note">{listOf(pa.frequencies.map((f) => POST_ARRIVAL_FREQUENCY_LABELS[f].toLowerCase()))}</span>
+										</div>
+										<div className="cn-detail__row">
+											<span>First instalment</span>
+											<span className="cn-detail__row-note">{pa.graceDays} days after arrival · reminder {pa.remindDays} days before each</span>
+										</div>
 									</div>
 								</>
 							)}
@@ -188,7 +257,7 @@ export function EnterprisePaymentConfig() {
 					</label>
 					<label className="ops-rule">
 						<span>
-							Pre-departure milestone<small>releases the admission letter, visa documents and the ticket</small>
+							Pre-departure milestone<small>after the visa · releases the admission letter, visa documents and e-ticket</small>
 						</span>
 						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={preDeparture} disabled={!canEdit} onChange={(e) => setPreDeparture(e.target.value)} aria-label="Pre-departure percent" />
 					</label>
@@ -213,18 +282,66 @@ export function EnterprisePaymentConfig() {
 				</section>
 
 				<section className="card cn-now">
-					<p className="cn-detail__eyebrow">Behind on a milestone · {facts.behind.length}</p>
+					<p className="cn-detail__eyebrow">Post-arrival catalogue · what the client may pick</p>
+					<p className="cn-detailhead__meta" style={{ margin: "0.25rem 0 0.5rem" }}>Over</p>
+					<div className="ops-togs">
+						{DURATION_CHOICES.map((m) => (
+							<button key={m} type="button" className={`ops-tog${pa.durations.includes(m) ? " ops-tog--on" : ""}`} disabled={!canEdit} onClick={() => toggleDuration(m)} aria-pressed={pa.durations.includes(m)}>
+								<span className="ops-tog__bx" aria-hidden />
+								{m} months
+							</button>
+						))}
+					</div>
+					<p className="cn-detailhead__meta" style={{ margin: "0.75rem 0 0.5rem" }}>Paid</p>
+					<div className="ops-togs">
+						{POST_ARRIVAL_FREQUENCIES.map((f) => (
+							<button key={f} type="button" className={`ops-tog${pa.frequencies.includes(f) ? " ops-tog--on" : ""}`} disabled={!canEdit} onClick={() => toggleFrequency(f)} aria-pressed={pa.frequencies.includes(f)}>
+								<span className="ops-tog__bx" aria-hidden />
+								{POST_ARRIVAL_FREQUENCY_LABELS[f]}
+							</button>
+						))}
+					</div>
+					<label className="ops-rule" style={{ marginTop: "0.75rem" }}>
+						<span>
+							Grace after arrival<small>days before the first instalment</small>
+						</span>
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={String(pa.graceDays)} disabled={!canEdit} onChange={(e) => setPa((prev) => ({ ...prev, graceDays: Number.parseInt(e.target.value, 10) || 0 }))} aria-label="Grace days" />
+					</label>
+					<label className="ops-rule" style={{ borderBottom: "none" }}>
+						<span>
+							Remind before<small>days ahead of each instalment</small>
+						</span>
+						<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="numeric" value={String(pa.remindDays)} disabled={!canEdit} onChange={(e) => setPa((prev) => ({ ...prev, remindDays: Number.parseInt(e.target.value, 10) || 0 }))} aria-label="Remind days" />
+					</label>
+					{canEdit && (
+						<div className="cn-now__actions">
+							<button type="button" className="btn btn--sm btn--primary" disabled={saving || !validCatalogue} onClick={() => void saveCatalogue()}>
+								{saving ? "Saving…" : "Save catalogue"}
+							</button>
+						</div>
+					)}
+				</section>
+
+				<section className="card cn-now">
+					<p className="cn-detail__eyebrow">The plans, in the client's words · written from the settings</p>
+					<p className="ops-sentence"><b>Instalments.</b> {sentences.installment}</p>
+					<p className="ops-sentence"><b>Full payment.</b> {sentences.full}</p>
+					<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>This is the text on the portal's plan cards and its Fees chapter. Nothing else spells a number.</p>
+				</section>
+
+				<section className="card cn-now">
+					<p className="cn-detail__eyebrow">Behind · an instalment past its date · {facts.behind.length}</p>
 					{facts.behind.length === 0 ? (
 						<p className="ops-panel__muted">Nobody is behind.</p>
 					) : (
 						<div className="cn-detail__rows">
-							{facts.behind.slice(0, 8).map(({ inv, age }) => (
+							{facts.behind.slice(0, 8).map(({ inv, label, amount, age }) => (
 								<Link key={inv.id} to={`/invoices?open=${inv.id}`} className="cn-detail__row">
 									<span>
-										{inv.applicantName} · {inv.lines[0]?.label ?? inv.invoiceNumber} · {fmtGhs(invoiceBalance(inv))}
+										{inv.applicantName} · {label} · {fmtGhs(amount)}
 									</span>
 									<span className="cn-detail__row-note">
-										{age} d overdue · due {shortDate(inv.dueAt)}
+										{age} d late
 									</span>
 								</Link>
 							))}

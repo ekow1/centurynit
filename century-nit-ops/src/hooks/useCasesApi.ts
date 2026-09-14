@@ -172,6 +172,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		})),
 		visaDocumentChecklist: row.visaDocumentChecklist ?? [],
 		paymentPlanId: (row.paymentPlanId as MockApplication["paymentPlanId"]) ?? "",
+		postArrivalMonths: row.postArrivalMonths ?? null,
+		postArrivalFrequency: row.postArrivalFrequency ?? null,
 		agencyStageIndex: row.agencyStageIndex,
 		agencySettled: row.agencySettled,
 		depositPaid: row.depositPaid,

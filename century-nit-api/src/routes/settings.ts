@@ -236,7 +236,15 @@ settingsRouter.openapi(
 
 		// The fee schedule (amounts, the exchange rate, the milestone split) is
 		// finance's day-to-day work, not a credential: no step-up for it.
-		const FEE_SCHEDULE_KEYS = new Set(["PLATFORM_EXCHANGE_RATE", "SERVICE_FEE_DEPOSIT_PERCENT", "SERVICE_FEE_PRE_DEPARTURE_PERCENT"]);
+		const FEE_SCHEDULE_KEYS = new Set([
+			"PLATFORM_EXCHANGE_RATE",
+			"SERVICE_FEE_DEPOSIT_PERCENT",
+			"SERVICE_FEE_PRE_DEPARTURE_PERCENT",
+			"POST_ARRIVAL_DURATIONS",
+			"POST_ARRIVAL_FREQUENCIES",
+			"POST_ARRIVAL_GRACE_DAYS",
+			"POST_ARRIVAL_REMIND_DAYS",
+		]);
 		const isSensitiveSetting = !FEE_SCHEDULE_KEYS.has(body.key);
 
 		if (isSensitiveSetting && !activeStepUp) {

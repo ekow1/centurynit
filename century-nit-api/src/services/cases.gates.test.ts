@@ -14,7 +14,7 @@ import { canAdvanceTo } from "./cases.js";
  * §Departure gate — one server-driven lifecycle: visa_processing →
  * travel_assistance (Departure) → completed. Departure opens once the visa
  * is approved. Inside it, the pre-departure service fee milestone (the 90%
- * balance on a full plan, the 50% second milestone on instalments) is due
+ * balance on a full plan, the second milestone on instalments) is due
  * before the ticket is invoiced; completion needs that milestone, settled
  * travel (booked, booking their own, or on hold) and a finished checklist.
  * The post-arrival remainder is aftercare and never gates. The travel

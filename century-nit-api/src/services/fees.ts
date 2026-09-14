@@ -1,10 +1,14 @@
 import { asc, eq } from "drizzle-orm";
 import {
 	DEFAULT_EXCHANGE_RATE,
+	DEFAULT_POST_ARRIVAL_CATALOGUE,
 	DEFAULT_SERVICE_FEE_SPLIT,
+	POST_ARRIVAL_FREQUENCIES,
 	type DestinationTariff,
 	type FeeCatalogue,
 	type FeeItem,
+	type PostArrivalCatalogue,
+	type PostArrivalFrequency,
 	type ServiceFeeSplit,
 	type UpdateDestinationTariff,
 	type UpdateFeeItem,
@@ -133,7 +137,32 @@ export async function serviceFeeSplit(): Promise<ServiceFeeSplit> {
 	return { depositPercent, preDeparturePercent, postArrivalPercent: 100 - depositPercent - preDeparturePercent };
 }
 
+/** What the client may pick for the post-arrival remainder — from settings, with the defaults behind them. */
+export async function postArrivalCatalogue(): Promise<PostArrivalCatalogue> {
+	const d = DEFAULT_POST_ARRIVAL_CATALOGUE;
+	const ints = (raw: string | undefined, min: number, max: number) =>
+		(raw ?? "")
+			.split(",")
+			.map((x) => Number.parseInt(x.trim(), 10))
+			.filter((n) => Number.isFinite(n) && n >= min && n <= max);
+	const durations = ints(await getSetting("POST_ARRIVAL_DURATIONS"), 1, 36);
+	const frequencies = (await getSetting("POST_ARRIVAL_FREQUENCIES") ?? "")
+		.split(",")
+		.map((x) => x.trim())
+		.filter((x): x is PostArrivalFrequency => (POST_ARRIVAL_FREQUENCIES as readonly string[]).includes(x));
+	const days = async (key: "POST_ARRIVAL_GRACE_DAYS" | "POST_ARRIVAL_REMIND_DAYS", fallback: number, max: number) => {
+		const n = Number.parseInt((await getSetting(key)) ?? "", 10);
+		return Number.isFinite(n) && n >= 0 && n <= max ? n : fallback;
+	};
+	return {
+		durations: durations.length > 0 ? [...new Set(durations)].sort((a, b) => a - b) : d.durations,
+		frequencies: frequencies.length > 0 ? [...new Set(frequencies)] : d.frequencies,
+		graceDays: await days("POST_ARRIVAL_GRACE_DAYS", d.graceDays, 180),
+		remindDays: await days("POST_ARRIVAL_REMIND_DAYS", d.remindDays, 60),
+	};
+}
+
 export async function feeCatalogue(): Promise<FeeCatalogue> {
-	const [items, tariffs, rate, split] = await Promise.all([listFeeItems(), listDestinationTariffs(), exchangeRate(), serviceFeeSplit()]);
-	return { items, destinations: tariffs, exchangeRate: rate, serviceFeeSplit: split };
+	const [items, tariffs, rate, split, postArrival] = await Promise.all([listFeeItems(), listDestinationTariffs(), exchangeRate(), serviceFeeSplit(), postArrivalCatalogue()]);
+	return { items, destinations: tariffs, exchangeRate: rate, serviceFeeSplit: split, postArrival };
 }

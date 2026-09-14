@@ -30,7 +30,6 @@ import {
 
 
 	canAdvanceToStage,
-	feeMilestoneBlockReason,
 
 	type ApplicationActivityEvent,
 
@@ -235,7 +234,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// Why a control is off, in the words the server would use to refuse it.
 	const completeBlock = app.stage === "travel_assistance" ? canAdvanceToStage("travel_assistance", "completed", app) : null;
 	// The pre-departure fee milestone gates the ticket; the same words the API refuses with.
-	const feeBlock = feeMilestoneBlockReason(app, "The ticket cannot be invoiced yet");
 
 
 	// ── Tabs: one per chapter of the case, unlocked as the case reaches it ──
@@ -568,7 +566,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 					caseInvoices={caseInvoices}
 					canWork={canWork}
 					canIssueInvoices={canIssueInvoices}
-					feeBlock={feeBlock}
 					travelOpen={travelOpen}
 					onInvoicesChanged={() => setInvoiceRefresh((n) => n + 1)}
 					setTab={setTab}

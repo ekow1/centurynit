@@ -2181,7 +2181,7 @@ export const PAYMENT_PLANS = [
 	{
 		id: "installment" as const,
 		name: "Installment plan",
-		blurb: "Split the remaining balance: one payment before departure, one after arrival.",
+		blurb: "A milestone after your visa, then the rest after you arrive on a schedule you choose.",
 		discountLabel: "Flexible",
 	},
 ];
@@ -2293,23 +2293,21 @@ export const AGENCY_STAGES = [
 	{
 		id: "agency_predeparture",
 		label: "Service fee · pre-departure",
-		detail: "Due before you travel to your destination",
-		portion: 0.5,
+		detail: "Due after your visa is approved — releases your travel documents",
+		portion: 0.3,
 	},
 	{
 		id: "agency_postarrival",
 		label: "Service fee · post-arrival",
-		detail: "Settle after you've arrived — no deadline pressure",
-		portion: 0.4,
+		detail: "After you arrive, on the schedule you choose",
+		portion: 0.6,
 	},
 ] as const;
 
 /**
- * Recurring schedule options for the post-arrival portion of the installment plan.
- *
- * After choosing the installment plan and paying the pre-departure milestone,
- * the applicant picks a frequency for the remaining 40%. Each option splits
- * the balance into equal payments with a grace period before the first one.
+ * @deprecated The post-arrival schedule is a duration × frequency the server
+ * turns into dated instalments (see `postArrivalInstalments` in shared).
+ * Kept only for the old portal-state shape; nothing new reads it.
  */
 export const POST_ARRIVAL_SCHEDULES = [
 	{

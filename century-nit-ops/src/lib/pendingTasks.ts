@@ -15,7 +15,6 @@ import {
 	type TravelAssistanceRequest,
 	VISA_STAGE_LABELS,
 	isOwnerClassBoundary,
-	preDepartureFeePaid,
 } from "century-nit-shared";
 import { fmtGhs, money } from "../pages/currency";
 
@@ -764,19 +763,6 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				owner: "— open",
 				priority: PRIORITY.assign_application,
 			});
-		} else if (ta.status === "review" && ta.assignedOpsUserId && !ta.invoiceId && app && !preDepartureFeePaid(app)) {
-			// The ticket waits on the pre-departure fee milestone — chase that.
-			q.push({
-				...base,
-				id: `travel-fee-${ta.id}`,
-				category: "needs_followup",
-				kind: "travel",
-				action: "invoice",
-				subtitle: `Pre-departure fee milestone due · ${ref}`,
-				meta: app.paymentPlanId ? "Ticket is issued once the milestone is paid" : "Client has not chosen a payment plan",
-				owner: ta.assignedOpsUserName ?? "—",
-				priority: PRIORITY.chase,
-			});
 		} else if (ta.status === "review" && ta.assignedOpsUserId && !ta.invoiceId) {
 			q.push({
 				...base,
@@ -785,7 +771,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				kind: "travel",
 				action: "invoice",
 				subtitle: `Ticket invoice to raise · ${ref}`,
-				meta: "Fee milestone paid — client is waiting for their ticket invoice",
+				meta: "Quote approved — client is waiting for their ticket invoice",
 				owner: ta.assignedOpsUserName ?? "—",
 				priority: PRIORITY.issue,
 			});

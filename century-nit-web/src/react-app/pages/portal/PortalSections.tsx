@@ -42,7 +42,6 @@ import {
 } from "century-nit-core";
 import { documentsApi, meApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import { useNotifier } from "../../components/notifier/Notifier";
-import { ChapterGate } from "./PortalLayout";
 import { Avatar } from "../../components/ui/Avatar";
 import { AvatarCropModal } from "../../components/portal/AvatarCropModal";
 import { ChangePasswordModal, ChangeEmailModal } from "../../components/portal/SecurityModals";
@@ -1252,13 +1251,7 @@ export function PortalJourney() {
 /* ========== Financial ========== */
 
 /** Payment execution — confirm the plan, settle the service fee, cover travel. */
-export function PortalPaymentExecution() {
-	return (
-		<ChapterGate chapter="payment_execution">
-			<PortalFinancial view="plan" />
-		</ChapterGate>
-	);
-}
+/** The Fees chapter lives in PortalFeesChapter; the ledger stays here. */
 
 /** Financial - every payment, settlement, and what's still outstanding.
  *
@@ -1702,8 +1695,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 									>
 										<td className="ptable__mark">V</td>
 										<td>
-											{a.paymentPlanId === "installment" ? "Pre-departure milestone · 50%" : "Pre-departure milestone · balance"}
-											<span className="ptable__sub">releases your letter, visa documents &amp; ticket</span>
+											{a.paymentPlanId === "installment" ? "Pre-departure milestone" : "Pre-departure milestone · balance"}
+											<span className="ptable__sub">releases your letter, visa documents &amp; e-ticket</span>
 										</td>
 										<td>The balance of your service fee</td>
 										<td>After the visa is approved</td>
@@ -1978,8 +1971,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 							<p className="eyebrow">The order is fixed</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 								Deposit at enrolment · application fee at submissions · visa fee after an offer · the
-								milestone after your visa — and your letter, visa documents and ticket are released
-								with it.
+								milestone after your visa — your letter, visa documents and e-ticket are released
+								with it; your flight is booked regardless.
 							</p>
 						</div>
 					</div>

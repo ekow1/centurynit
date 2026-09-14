@@ -137,6 +137,8 @@ export const invoiceLineSchema = z.object({
 	detail: z.string().nullable(),
 	amountCents: z.number().int(),
 	schoolApplicationId: z.string().uuid().nullable().optional(),
+	/** When this line falls due — set on post-arrival instalments; null otherwise. */
+	dueAt: z.string().datetime().nullable().optional(),
 });
 
 export const invoicePaymentSchema = z.object({

@@ -51,10 +51,11 @@ export const JOURNEY_STAGE_LABELS: Record<JourneyStage, string> = STAGE_LABELS a
  * Workflow board share the same rule set.
  */
 /**
- * The pre-departure service fee milestone: on a full plan the 90% balance,
- * on instalments the 50% second milestone (the deposit is the first). Due
- * after the visa is approved and before the ticket is issued — where the
- * agency's leverage is. The post-arrival remainder is aftercare.
+ * The pre-departure service fee milestone: on a full plan the balance, on
+ * instalments the second milestone (the deposit is the first). Due after
+ * the visa is approved; it holds the travel documents — the admission
+ * letter, the visa papers, the e-ticket handover — never the booking. The
+ * post-arrival remainder follows on the client's schedule.
  */
 export function preDepartureFeePaid(checks: {
 	paymentPlanId?: string | null;
@@ -74,18 +75,18 @@ export function feeMilestoneBlockReason(
 	if (!checks.paymentPlanId) return `${prefix}: no payment plan has been chosen.`;
 	if (preDepartureFeePaid(checks)) return null;
 	return checks.paymentPlanId === "installment"
-		? `${prefix}: the pre-departure instalment (50%) is not paid.`
+		? `${prefix}: the pre-departure instalment of the service fee is not paid.`
 		: `${prefix}: the service fee balance is not paid.`;
 }
 
 /**
  * What the agency holds until the pre-departure fee milestone: the admission
- * letter and the visa documents it received as the client's agent. The
- * ticket is not held — it is simply not bought before the milestone. A
+ * letter, the visa documents it received as the client's agent, and the
+ * e-ticket once the flight is booked. The booking itself never waits. A
  * manager may release early with a reason (a transfer finance has not
  * recorded yet); the reason is the record.
  */
-export const RELEASE_GATED_DOCUMENT_TYPES: readonly string[] = ["visa_receipt", "visa_grant"];
+export const RELEASE_GATED_DOCUMENT_TYPES: readonly string[] = ["visa_receipt", "visa_grant", "flight_receipt"];
 
 export function documentsReleased(checks: {
 	paymentPlanId?: string | null;
@@ -727,6 +728,9 @@ export const applicationSchema = z.object({
 	/** The visa-stage documents and where the client's upload of each stands. */
 	visaDocumentChecklist: z.array(documentChecklistItemSchema).default([]),
 	paymentPlanId: z.string().nullable(),
+	/** The post-arrival schedule the client chose — months and frequency; null until chosen. */
+	postArrivalMonths: z.number().int().nullable().optional(),
+	postArrivalFrequency: z.string().nullable().optional(),
 	packageId: z.string().uuid().nullable(),
 	packageSelectedAt: z.string().datetime().nullable(),
 	agencyStageIndex: z.number().int(),

@@ -27,7 +27,7 @@ import {
 	emptyStudyChoice,
 	flattenStudyChoices,
 } from "../../context/AppState";
-import { usdFromCents } from "century-nit-shared";
+import { usdFromCents, feePlanSentences, DEFAULT_SERVICE_FEE_SPLIT, DEFAULT_POST_ARRIVAL_CATALOGUE } from "century-nit-shared";
 import {
 	destinations,
 	formatDualCurrency,
@@ -450,7 +450,7 @@ function normaliseDegreeLevel(raw: string | null | undefined): SchoolDegreeLevel
 }
 
 function SchoolPackageInner() {
-	const { application, chooseSchoolPackage, payAgencyInstallment, booking, choosePaymentPlan } = useAppState();
+	const { application, chooseSchoolPackage, payAgencyInstallment, booking, choosePaymentPlan, fees } = useAppState();
 	const { toast } = useNotifier();
 	const nav = useNavigate();
 	const [dbPackages, setDbPackages] = useState<ServicePackage[]>([]);
@@ -621,6 +621,9 @@ function SchoolPackageInner() {
 		}
 	}
 
+	// The plans in the client's words — from the configured split, never a typed number.
+	const planWords = feePlanSentences(fees?.catalogue.serviceFeeSplit ?? DEFAULT_SERVICE_FEE_SPLIT, fees?.catalogue.postArrival ?? DEFAULT_POST_ARRIVAL_CATALOGUE);
+
 	const scopeFeatures =
 		selectedPkg?.features && selectedPkg.features.length > 0
 			? selectedPkg.features
@@ -782,9 +785,7 @@ function SchoolPackageInner() {
 											>
 												<span className="pick__name">{PAYMENT_PLAN_LABELS[pl.id] ?? pl.name}</span>
 												<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-													{pl.id === "full"
-														? "10% now · 90% before you depart"
-														: "10% now · 50% before you depart · 40% after you arrive"}
+													{pl.id === "full" ? planWords.fullShort : planWords.installmentShort}
 												</span>
 											</button>
 										);
@@ -879,9 +880,9 @@ function SchoolPackageInner() {
 									className="muted"
 									style={{ fontSize: "0.68rem", lineHeight: 1.5, margin: "0.8rem 0" }}
 								>
-									By paying the deposit you agree: your admission letter and visa documents are
-									released, and your ticket is issued, after the pre-departure milestone. School
-									application fees and tuition are the institutions', not ours.
+									By paying the deposit you agree: your admission letter, visa documents and e-ticket
+									are released after the pre-departure milestone — your flight is booked meanwhile.
+									School application fees and tuition are the institutions', not ours.
 								</p>
 								{isDepositPaid ? (
 									<Button

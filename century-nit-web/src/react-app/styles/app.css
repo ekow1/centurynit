@@ -8891,3 +8891,110 @@ a.portal-ch--on:hover {
 		display: none;
 	}
 }
+
+/* ── Chapter V · Fees — the milestone card, the schedule ── */
+.sharp-card--soft {
+	border-color: var(--border-light);
+}
+
+.amt {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 1.35rem;
+	letter-spacing: -0.01em;
+}
+
+.amt small {
+	font-size: 0.75rem;
+	font-weight: 400;
+	color: var(--muted-foreground);
+	margin-left: 0.4rem;
+}
+
+.rel {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.5rem;
+	margin-top: 0.6rem;
+}
+
+.rel div {
+	border: 1px dashed var(--border-light);
+	padding: 0.5rem 0.6rem;
+	font-size: 0.8rem;
+	line-height: 1.35;
+}
+
+.rel div b {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-bottom: 0.15rem;
+	font-weight: 400;
+}
+
+.inst {
+	border-top: 1px solid var(--foreground);
+}
+
+.inst__r {
+	display: grid;
+	grid-template-columns: 3.4rem 8rem minmax(0, 1fr) auto auto;
+	gap: 0.9rem;
+	align-items: center;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.85rem;
+}
+
+.inst__i {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+}
+
+.inst__d {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+}
+
+.inst__a {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	text-align: right;
+}
+
+.inst__s {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	text-align: right;
+}
+
+.inst__r--paid {
+	color: var(--muted-foreground);
+}
+
+.inst__r--due .inst__s {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+@media (max-width: 640px) {
+	.rel {
+		grid-template-columns: 1fr;
+	}
+	.inst__r {
+		grid-template-columns: 3rem 1fr auto;
+	}
+	.inst__r > span:nth-child(3),
+	.inst__r > span:nth-child(5) {
+		grid-column: 2 / -1;
+	}
+}

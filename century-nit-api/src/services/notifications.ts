@@ -509,6 +509,37 @@ export function consultantAssignedForClient(ctx: {
 	};
 }
 
+/** A post-arrival instalment falls due soon — queued ahead of its date. */
+export function instalmentDueForClient(ctx: {
+	idempotencyKey: string;
+	clientName: string;
+	clientEmail: string;
+	invoiceNumber: string;
+	lineLabel: string;
+	amountGhsFormatted: string;
+	dueAtFormatted: string;
+	payUrl: string;
+}): QueuedEmail {
+	const { html, text } = renderInvoiceRaisedEmail({
+		clientName: ctx.clientName,
+		invoiceNumber: ctx.invoiceNumber,
+		invoiceType: ctx.lineLabel,
+		amountFormatted: ctx.amountGhsFormatted,
+		amountGhsFormatted: ctx.amountGhsFormatted,
+		dueAtFormatted: ctx.dueAtFormatted,
+		payUrl: ctx.payUrl,
+	});
+	return {
+		to: ctx.clientEmail,
+		subject: `Instalment due ${ctx.dueAtFormatted} · ${ctx.amountGhsFormatted}`,
+		html,
+		text,
+		idempotencyKey: ctx.idempotencyKey,
+		template: "Instalment due",
+		reference: ctx.invoiceNumber,
+	};
+}
+
 export function invoiceRaisedForClient(ctx: {
 	/** Invoice row id — keys the dedup; invoice numbers recycle. */
 	entityId?: string;

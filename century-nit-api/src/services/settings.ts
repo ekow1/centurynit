@@ -57,6 +57,10 @@ export type SettingKey =
 	| "SERVICE_FEE_DEPOSIT_PERCENT"
 	| "PRE_DEPARTURE_TEMPLATE"
 	| "SERVICE_FEE_PRE_DEPARTURE_PERCENT"
+	| "POST_ARRIVAL_DURATIONS"
+	| "POST_ARRIVAL_FREQUENCIES"
+	| "POST_ARRIVAL_GRACE_DAYS"
+	| "POST_ARRIVAL_REMIND_DAYS"
 	| string;
 
 
@@ -243,7 +247,31 @@ export const SETTING_DEFS: Record<
 		label: "Service fee · pre-departure %",
 		group: "Fee Schedule",
 		secret: false,
-		description: "Share of the service fee due after the visa, before travel. The rest is due after arrival. Default: 50.",
+		description: "Share of the service fee due after the visa is approved — it releases the travel documents. The rest is due after arrival. Default: 30.",
+	},
+	POST_ARRIVAL_DURATIONS: {
+		label: "Post-arrival · durations (months)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Comma-separated months the client may spread the post-arrival remainder over. Default: 3,6,9,12.",
+	},
+	POST_ARRIVAL_FREQUENCIES: {
+		label: "Post-arrival · frequencies",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Comma-separated: monthly, biweekly, weekly. Default: monthly,biweekly.",
+	},
+	POST_ARRIVAL_GRACE_DAYS: {
+		label: "Post-arrival · grace (days)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "Days after arrival before the first instalment falls due. Default: 30.",
+	},
+	POST_ARRIVAL_REMIND_DAYS: {
+		label: "Post-arrival · remind (days before)",
+		group: "Fee Schedule",
+		secret: false,
+		description: "How many days before an instalment the reminder email goes. Default: 7.",
 	},
 	STRIPE_SECRET_KEY: {
 		label: "Stripe Secret Key",

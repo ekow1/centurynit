@@ -68,7 +68,7 @@ const PortalTrackingPage = lazyNamed(portalPages, "PortalTrackingPage");
 const PortalVisa = lazyNamed(portalPages, "PortalVisa");
 const PortalVisaTracking = lazyNamed(portalPages, "PortalVisaTracking");
 const PortalFinancial = lazyNamed(portalSections, "PortalFinancial");
-const PortalPaymentExecution = lazyNamed(portalSections, "PortalPaymentExecution");
+const PortalFeesChapter = lazyNamed(() => import("./pages/portal/PortalFeesChapter"), "PortalFeesChapter");
 const PortalJourney = lazyNamed(portalSections, "PortalJourney");
 const PortalProfile = lazyNamed(portalSections, "PortalProfile");
 const PortalDocumentVault = lazyNamed(() => import("./pages/portal/PortalDocumentVault"), "PortalDocumentVault");
@@ -168,7 +168,7 @@ function AppShell() {
 						<Route path="profile" element={<PortalProfile />} />
 						<Route path="journey" element={<PortalJourney />} />
 						<Route path="financial" element={<PortalFinancial />} />
-						<Route path="payment-execution" element={<PortalPaymentExecution />} />
+						<Route path="payment-execution" element={<PortalFeesChapter />} />
 						<Route path="consultation" element={<PortalConsultation />} />
 						<Route path="package" element={<PortalPackage />} />
 						<Route path="awaiting-handler" element={<PortalAwaitingHandler />} />

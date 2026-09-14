@@ -7,7 +7,8 @@ import type { ApiInvoice } from "../../../lib/api";
 import { useState } from "react";
 import type { PreDepartureTask } from "century-nit-core/ops";
 import { DOCUMENT_TYPES } from "century-nit-core/content";
-import { PAYMENT_PLAN_LABELS, documentsReleased, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
+import { documentsReleased, preDepartureChecklistDone, type TravelAssistanceRequest } from "century-nit-shared";
+import { formatMoney } from "century-nit-core/ui";
 import type { Flash, Fail, TabId } from "./types";
 import { Sheet, StatusPill } from "century-nit-core/ui";
 import type { DepartureDetails } from "century-nit-shared";
@@ -42,6 +43,8 @@ const dateTimeToIso = (v: string): string | null => {
 	return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 /** Whole days from now to `iso`, negative once passed. */
+const fmtGhs = (cents: number) => formatMoney(cents, "ghs");
+
 function daysUntil(iso: string | null | undefined): number | null {
 	if (!iso) return null;
 	const t = new Date(iso).getTime();
@@ -56,7 +59,6 @@ export function DepartureTab({
 	caseInvoices,
 	canWork,
 	canIssueInvoices,
-	feeBlock,
 	travelOpen,
 	onInvoicesChanged,
 	setTab,
@@ -68,8 +70,6 @@ export function DepartureTab({
 	caseInvoices: ApiInvoice[];
 	canWork: boolean;
 	canIssueInvoices: boolean;
-	/** Why the ticket cannot be invoiced yet (the pre-departure fee milestone), or null. */
-	feeBlock: string | null;
 	travelOpen: boolean;
 	onInvoicesChanged: () => void;
 	setTab: (t: TabId) => void;
@@ -95,6 +95,20 @@ export function DepartureTab({
 			setBusy(null);
 		}
 	}
+	// The pre-departure milestone as the ledger carries it: the second line of
+	// the live agency invoice (the balance on a full plan), covered or not.
+	const agencyInv = caseInvoices.filter((i) => i.type === "agency" && i.status !== "void").sort((x, y) => (x.createdAt < y.createdAt ? 1 : -1))[0] ?? null;
+	const milestone = (() => {
+		if (!agencyInv || agencyInv.lines.length < 2) return null;
+		const line = agencyInv.lines[1];
+		const cum = agencyInv.lines[0].amountCents + line.amountCents;
+		const paid = agencyInv.paidCents >= cum;
+		const issued = new Date(agencyInv.createdAt);
+		const ageDays = paid ? null : Math.max(0, Math.floor((new Date().getTime() - issued.getTime()) / 86_400_000));
+		const lastPayment = [...(agencyInv.payments ?? [])].sort((x, y) => (x.at < y.at ? 1 : -1))[0];
+		return { label: line.label.replace(/^Service fee · /, "").replace(/^\w/, (ch) => ch.toUpperCase()), amountCents: line.amountCents, invoiceNumber: agencyInv.invoiceNumber, issuedAt: agencyInv.createdAt, paid, paidAt: paid ? (lastPayment?.at ?? null) : null, ageDays };
+	})();
+	const acceptedSchool = (app.schoolApplications ?? []).find((sa) => sa.id === app.acceptedSchoolId) ?? (app.schoolApplications ?? []).find((sa) => sa.outcome === "Admitted") ?? null;
 	const flightAt = selectedTa?.booking?.departAt ?? selectedTa?.flight?.departAt ?? null;
 	const flyDays = daysUntil(flightAt);
 	const reportDays = daysUntil(dd.reportBy);
@@ -180,65 +194,6 @@ export function DepartureTab({
 	}
 	return (
 		<>
-			{/* The pre-departure fee milestone comes first: due once the visa
-			    is approved, before the ticket is issued. */}
-			<div className="card">
-				<p className="eyebrow mb-1">Pre-departure fee milestone</p>
-				<p className="text-sm">
-					{feeBlock
-						? feeBlock.replace(/^The ticket cannot be invoiced yet: /, "")
-						: app.paymentPlanId === "installment"
-							? "Pre-departure instalment paid — the ticket can be invoiced."
-							: "Service fee balance paid — the ticket can be invoiced."}
-				</p>
-				<p className="muted mt-1 text-xs">
-					Plan: {PAYMENT_PLAN_LABELS[app.paymentPlanId ?? ""] ?? "not chosen"} · {app.agencyStageIndex ?? 0} milestone{(app.agencyStageIndex ?? 0) === 1 ? "" : "s"} paid
-					{app.agencySettled ? " · settled" : ""}
-				</p>
-				{/* What the milestone holds: the letter and the visa documents in the
-				    client's vault. A manager can release early with a reason. */}
-				<div className="mt-3" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "0.6rem" }}>
-					<p className="text-sm">
-						<span className="muted">Admission letter & visa documents · </span>
-						{released ? (
-							dd.releaseOverrideAt ? (
-								<>
-									released early by {dd.releaseOverrideBy ?? "a manager"}
-									{dd.releaseOverrideAt ? ` on ${fmtDate(dd.releaseOverrideAt)}` : ""} — {dd.releaseOverrideReason}
-								</>
-							) : (
-								"released — the milestone is paid"
-							)
-						) : (
-							"held in the client's vault until the milestone is paid"
-						)}
-					</p>
-					{canIssueInvoices && !releasing && (
-						<button type="button" className="btn btn--sm btn--ghost mt-2" onClick={() => setReleasing(true)}>
-							{dd.releaseOverrideAt ? "Withdraw early release…" : !released ? "Release early…" : null}
-						</button>
-					)}
-					{releasing && (
-						<div className="mt-2" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
-							{!dd.releaseOverrideAt && (
-								<input className="input input--sm" style={{ flex: "1 1 18rem" }} value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} placeholder="Why — e.g. bank transfer received, finance records it Monday" autoFocus />
-							)}
-							<button
-								type="button"
-								className="btn btn--sm btn--primary"
-								disabled={busy === "release" || (!dd.releaseOverrideAt && !releaseReason.trim())}
-								onClick={() => void release()}
-							>
-								{busy === "release" ? "Saving…" : dd.releaseOverrideAt ? "Withdraw" : "Release now"}
-							</button>
-							<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReleasing(false); setReleaseReason(""); }}>
-								Cancel
-							</button>
-						</div>
-					)}
-				</div>
-			</div>
-
 			{/* Flight — status, the flight, the one next action. Departure is
 			    the last chapter; completion is recorded from the Money tab or
 			    by the client. */}
@@ -252,7 +207,6 @@ export function DepartureTab({
 						canIssueInvoices={canIssueInvoices}
 						canUploadArtifacts={hasPermission("documents")}
 						ownerUserId={app.applicantUserId}
-						feeBlock={feeBlock}
 						onChanged={() => {
 							void refresh();
 							onInvoicesChanged();
@@ -270,6 +224,88 @@ export function DepartureTab({
 						Decided {new Date(selectedTa.updatedAt).toLocaleDateString()} · {selectedTa.decision === "yes" ? "asked us to book" : selectedTa.decision === "hold" ? "on hold" : "booking their own"}
 						{selectedTa.applicantNote ? ` · "${selectedTa.applicantNote}"` : ""}
 					</p>
+				)}
+			</div>
+
+			{/* Papers before they fly — what the pre-departure milestone holds:
+			    the letter, the visa documents, the e-ticket handover. The
+			    milestone invoice sits above them; a manager can release early. */}
+			<div className="card">
+				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }} className="mb-2">
+					<p className="eyebrow" style={{ margin: 0 }}>Papers before they fly</p>
+					<span className="text-xs mono muted">
+						{released ? (dd.releaseOverrideAt ? "released early" : "released") : `held until the ${milestone?.label ?? "pre-departure milestone"}`}
+					</span>
+				</div>
+				{milestone ? (
+					<div className={`cn-paper-ms${milestone.paid ? " cn-paper-ms--done" : ""}`}>
+						<div>
+							<b>{milestone.label} · {fmtGhs(milestone.amountCents)}</b>
+							<small>
+								{milestone.invoiceNumber} · {milestone.paid ? `paid${milestone.paidAt ? ` ${fmtDate(milestone.paidAt)}` : ""} · released the papers` : `issued ${fmtDate(milestone.issuedAt) ?? "—"} · unpaid${milestone.ageDays != null ? ` · ${milestone.ageDays} day${milestone.ageDays === 1 ? "" : "s"}` : ""}`}
+							</small>
+						</div>
+						{!milestone.paid && (
+							<div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+								<button type="button" className="btn btn--sm btn--secondary" onClick={() => setTab("payments")}>Record payment</button>
+							</div>
+						)}
+					</div>
+				) : (
+					<p className="muted text-sm">
+						{app.paymentPlanId ? "No service-fee invoice on this case yet." : "The client has not chosen a payment plan — the milestone is raised once they do."}
+					</p>
+				)}
+				<div className="cn-papers">
+					{[
+						{ label: "Admission letter", sub: acceptedSchool ? `${acceptedSchool.universityName ?? "University"}${acceptedSchool.offerLetterStorageKey ? " · on file" : " · not uploaded yet"}` : "no accepted offer yet" },
+						{ label: "Visa documents", sub: "visa grant · visa receipt — uploaded on the Visa tab" },
+						{ label: "E-ticket", sub: selectedTa?.status === "booked" ? `${selectedTa.booking?.confirmationCode ? `${selectedTa.booking.confirmationCode} · ` : ""}booked` : "lands here once the ticket is paid and booked" },
+					].map((p) => (
+						<div key={p.label} className="cn-papers__r">
+							<div>
+								{p.label}
+								<small>{p.sub}</small>
+							</div>
+							<span className={`cn-papers__st${released ? " cn-papers__st--on" : ""}`}>
+								{released ? (dd.releaseOverrideAt ? "released early" : "released") : "held"}
+							</span>
+						</div>
+					))}
+				</div>
+				{released && dd.releaseOverrideAt && (
+					<p className="text-sm mt-2">
+						Released early by <b>{dd.releaseOverrideBy ?? "a manager"}</b>
+						{dd.releaseOverrideAt ? ` on ${fmtDate(dd.releaseOverrideAt)}` : ""} — {dd.releaseOverrideReason}
+					</p>
+				)}
+				{canIssueInvoices && !releasing && (
+					<div className="mt-2" style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+						{(dd.releaseOverrideAt || !released) && (
+							<button type="button" className="btn btn--sm btn--ghost" onClick={() => setReleasing(true)}>
+								{dd.releaseOverrideAt ? "Withdraw early release…" : "Release early…"}
+							</button>
+						)}
+						{!released && <span className="muted text-xs">A manager can release the papers before the milestone lands — the reason goes on the record.</span>}
+					</div>
+				)}
+				{releasing && (
+					<div className="mt-2" style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+						{!dd.releaseOverrideAt && (
+							<input className="input input--sm" style={{ flex: "1 1 18rem" }} value={releaseReason} onChange={(e) => setReleaseReason(e.target.value)} placeholder="Why — e.g. bank transfer received, finance records it Monday" autoFocus />
+						)}
+						<button
+							type="button"
+							className="btn btn--sm btn--primary"
+							disabled={busy === "release" || (!dd.releaseOverrideAt && !releaseReason.trim())}
+							onClick={() => void release()}
+						>
+							{busy === "release" ? "Saving…" : dd.releaseOverrideAt ? "Withdraw" : "Release now"}
+						</button>
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => { setReleasing(false); setReleaseReason(""); }}>
+							Cancel
+						</button>
+					</div>
 				)}
 			</div>
 

@@ -331,6 +331,8 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		departureDetails: (row.departureDetails ?? {}) as ApiApplication["departureDetails"],
 		visaDocumentChecklist,
 		paymentPlanId: row.paymentPlanId,
+		postArrivalMonths: row.postArrivalMonths ?? null,
+		postArrivalFrequency: row.postArrivalFrequency ?? null,
 		packageId: row.packageId,
 		packageSelectedAt: row.packageSelectedAt?.toISOString() ?? null,
 		agencyStageIndex: row.agencyStageIndex,
@@ -1326,6 +1328,12 @@ export async function updateApplication(
 		.where(eq(applications.id, id))
 		.returning();
 
+	// Ops changed the plan: the invoice follows it, as it does for the client.
+	if (input.paymentPlanId !== undefined && input.paymentPlanId && input.paymentPlanId !== row.paymentPlanId) {
+		const { reshapeAgencyInvoiceForPlan } = await import("./serviceFee.js");
+		await reshapeAgencyInvoiceForPlan(id, input.paymentPlanId);
+	}
+
 	const changedFields = Object.keys(input).join(", ");
 	await db.insert(caseComments).values({
 		targetType: "application",
@@ -2007,6 +2015,11 @@ export async function updateDepartureDetails(id: string, patch: DepartureDetails
 		.set({ departureDetails: merged, preDepartureTasks: tasks, updatedAt: new Date() })
 		.where(eq(applications.id, id))
 		.returning();
+	// Arrival recorded: the post-arrival instalments take their dates from it.
+	if (patch.arrivedAt !== undefined) {
+		const { refreshPostArrivalDates } = await import("./serviceFee.js");
+		await refreshPostArrivalDates(id);
+	}
 	const lines = describeDepartureDetails(patch, merged);
 	if (lines.length > 0) {
 		await db.insert(caseComments).values({
@@ -2406,6 +2419,11 @@ export async function setApplicationPaymentPlan(input: {
 		})
 		.where(eq(applications.id, row.id))
 		.returning();
+	// The invoice follows the plan: full = deposit + balance; instalments =
+	// deposit, pre-departure, post-arrival. Only while nothing past the
+	// deposit is paid.
+	const { reshapeAgencyInvoiceForPlan } = await import("./serviceFee.js");
+	await reshapeAgencyInvoiceForPlan(row.id, input.paymentPlanId);
 	await db.insert(caseComments).values({
 		targetType: "application",
 		targetId: row.id,

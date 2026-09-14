@@ -252,6 +252,9 @@ export interface MockApplication {
 	visaDocumentChecklist?: DocumentChecklistItem[];
 	/** Payment plan selection (after visa invoice paid) */
 	paymentPlanId?: PaymentPlanId;
+	/** The post-arrival schedule the client chose — months and frequency. */
+	postArrivalMonths?: number | null;
+	postArrivalFrequency?: string | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */
@@ -364,6 +367,9 @@ export interface MockApplicant {
 	visaCounselorNote?: string;
 	/** Payment plan selection (after visa invoice paid) */
 	paymentPlanId?: PaymentPlanId;
+	/** The post-arrival schedule the client chose — months and frequency. */
+	postArrivalMonths?: number | null;
+	postArrivalFrequency?: string | null;
 	/** Agency settlement milestone index (0=deposit, 1=balance, 2=clearance) */
 	agencyStageIndex?: number;
 	/** Agency settlement fully completed */
@@ -390,6 +396,8 @@ export type OpsInvoiceLine = {
 	amount: number;
 	/** The school this line bills, on application invoices — kept through a review. */
 	schoolApplicationId?: string | null;
+	/** When the line falls due — the post-arrival instalments; null otherwise. */
+	dueAt?: string | null;
 };
 
 export type InvoiceType = "Application" | "Visa" | "Consultation" | "Agency" | "Travel" | "Custom";

@@ -170,7 +170,6 @@ export function TravelCard({
 	canIssueInvoices,
 	canUploadArtifacts = false,
 	ownerUserId = null,
-	feeBlock = null,
 	onChanged,
 }: {
 	ta: TravelAssistanceRequest;
@@ -183,8 +182,6 @@ export function TravelCard({
 	canUploadArtifacts?: boolean;
 	/** Portal user the flight receipt belongs to. */
 	ownerUserId?: string | null;
-	/** Why the ticket cannot be invoiced yet (the pre-departure fee milestone), or null. */
-	feeBlock?: string | null;
 	onChanged: () => void;
 }) {
 	const [busy, setBusy] = useState(false);
@@ -265,10 +262,10 @@ export function TravelCard({
 
 			{canWork && form === "none" && status === "review" && ta.assignedOpsUserId && (
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")} disabled={Boolean(feeBlock)} title={feeBlock ?? undefined}>
+					<button type="button" className="btn btn--sm btn--primary" onClick={() => setForm("raise")}>
 						Raise ticket invoice
 					</button>
-					{feeBlock && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{feeBlock}</span>}
+					<span className="muted" style={{ fontSize: "var(--text-xs)" }}>Not held by the service fee — the e-ticket is handed over with the papers.</span>
 				</div>
 			)}
 			{canWork && form === "none" && status === "ticket_paid" && (

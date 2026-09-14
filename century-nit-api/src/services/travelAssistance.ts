@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { JOURNEY_STAGES, documentsReleased, feeMilestoneBlockReason, type JourneyStage } from "century-nit-shared";
+import { JOURNEY_STAGES, type JourneyStage } from "century-nit-shared";
 import type {
 	TravelAssistanceBookingInput,
 	TravelAssistanceDecisionInput,
@@ -509,20 +509,10 @@ export async function raiseTicketInvoice(input: {
 		);
 	}
 
-	// The pre-departure service fee milestone is due before the ticket: the
-	// visa is granted, the flight is not yet bought — this is where the
-	// agency's leverage is, so the ticket waits on it.
-	const [feeApp] = await db
-		.select({ paymentPlanId: applications.paymentPlanId, agencyStageIndex: applications.agencyStageIndex, agencySettled: applications.agencySettled, departureDetails: applications.departureDetails })
-		.from(applications)
-		.where(eq(applications.id, existing.applicationId))
-		.limit(1);
-	// A manager's early release (a transfer not yet recorded) lets the ticket follow too.
-	const released = documentsReleased({ ...(feeApp ?? {}), departureDetails: (feeApp?.departureDetails ?? null) as { releaseOverrideAt?: string | null } | null });
-	const feeBlock = released ? null : feeMilestoneBlockReason(feeApp ?? {}, "The ticket cannot be invoiced yet");
-	if (feeBlock) {
-		throw new HttpError(409, TRAVEL_ERROR_CODES.FEE_MILESTONE_DUE, feeBlock);
-	}
+	// The ticket never waits on the service fee: the flight is invoiced and
+	// bought as soon as the officer is ready. The pre-departure milestone
+	// holds the papers — the letter, the visa documents, the e-ticket
+	// handover — not the booking.
 	if (input.fareCents <= 0) {
 		throw new HttpError(400, TRAVEL_ERROR_CODES.VALIDATION_ERROR, "The fare must be greater than zero.");
 	}
@@ -695,6 +685,11 @@ export async function recordBooking(input: {
 		.returning();
 
 	await settleTravel(existing.applicationId, "flight booked", input.actor.name);
+	// The booked departure dates the post-arrival instalments until arrival is recorded.
+	{
+		const { refreshPostArrivalDates } = await import("./serviceFee.js");
+		await refreshPostArrivalDates(existing.applicationId);
+	}
 
 	const [applicant] = await db
 		.select()
@@ -706,7 +701,7 @@ export async function recordBooking(input: {
 			recipientUserId: applicant.userId,
 			type: "stage.changed",
 			title: "Flight booked",
-			body: "Your flight is booked. The details are on your travel page; your payment plan is next.",
+			body: "Your flight is booked. The details are on your travel page; your e-ticket is released with your travel documents.",
 			link: "/portal/pre-departure",
 		}).catch(() => {});
 	}

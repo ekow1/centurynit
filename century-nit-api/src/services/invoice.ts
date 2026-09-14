@@ -165,6 +165,7 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 			detail: l.detail ?? null,
 			amountCents: l.amountCents,
 			schoolApplicationId: l.schoolApplicationId ?? null,
+			dueAt: l.dueAt?.toISOString() ?? null,
 		})),
 		subtotalCents: row.subtotalCents,
 		paidCents,

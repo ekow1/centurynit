@@ -673,6 +673,8 @@ export const invoiceLines = pgTable(
 		amountCents: integer("amount_cents").notNull(),
 		/** The school this line bills, so a draft application invoice can follow the school list. */
 		schoolApplicationId: uuid("school_application_id").references((): AnyPgColumn => schoolApplications.id, { onDelete: "set null" }),
+		/** When the line falls due — the post-arrival instalments; null on every other line. */
+		dueAt: timestamp("due_at", { withTimezone: true }),
 	},
 	(t) => ({
 		byInvoice: index("invoice_lines_invoice_idx").on(t.invoiceId, t.position),
@@ -1062,6 +1064,10 @@ export const applications = pgTable(
 		 */
 		visaOutcome: varchar("visa_outcome", { length: 16 }),
 		paymentPlanId: varchar("payment_plan_id", { length: 32 }),
+		/** The post-arrival schedule the client chose — months and frequency — on the instalment plan. */
+		postArrivalMonths: integer("post_arrival_months"),
+		postArrivalFrequency: varchar("post_arrival_frequency", { length: 16 }),
+		postArrivalChosenAt: timestamp("post_arrival_chosen_at", { withTimezone: true }),
 		agencyStageIndex: integer("agency_stage_index").notNull().default(0),
 		agencySettled: boolean("agency_settled").notNull().default(false),
 		/** True once the applicant has paid the 10% deposit (first agency milestone). */

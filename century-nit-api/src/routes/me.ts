@@ -43,6 +43,7 @@ import {
 
 } from "../services/invoice.js";
 import { serviceFeeSplit } from "../services/fees.js";
+import { nextChargeCents, setPostArrivalSchedule } from "../services/serviceFee.js";
 import { setPreDepartureTask } from "../services/preDeparture.js";
 import {
 	createPaystackCheckout,
@@ -96,6 +97,7 @@ import {
 	requestEmailChangeSchema,
 	confirmEmailChangeSchema,
 	portalStateSchema,
+	postArrivalScheduleChoiceSchema,
 	setPreDepartureTaskSchema,
 	updatePortalStateSchema,
 	notificationSchema,
@@ -605,6 +607,43 @@ meRouter.openapi(
 
 
 /**
+ * Applicant self-service: choose how to spread the post-arrival remainder —
+ * a duration and a frequency from the catalogue. Refused once an instalment
+ * has been paid.
+ */
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/application/post-arrival-schedule",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: { content: { "application/json": { schema: postArrivalScheduleChoiceSchema } }, required: true },
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: applicationSchema } },
+				description: "The updated application",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const applicant = await getApplicantByUserId(user.id);
+		if (!applicant) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "No applicant on file");
+		}
+		const application = await latestApplicationForApplicant(applicant.id);
+		if (!application) {
+			throw new HttpError(404, CASE_ERROR_CODES.APPLICATION_NOT_FOUND, "No application on file");
+		}
+		await setPostArrivalSchedule({ applicationId: application.id, choice: c.req.valid("json"), actor: { name: applicant.name ?? "Applicant" } });
+		const updated = await latestApplicationForApplicant(applicant.id);
+		return c.json(await serializeApplication(updated!));
+	},
+);
+
+/**
  * Applicant self-service: complete the journey from Payment Execution.
  *
  * The gate is per-plan — full plans need the agency service fee settled in
@@ -977,12 +1016,11 @@ meRouter.openapi(
 		if (row.status === "paid" || serialized.balanceCents <= 0) {
 			throw new HttpError(409, "INVOICE_PAID", "Invoice already paid.");
 		}
-		const { depositPercent } = await serviceFeeSplit();
-		const depositCents = Math.round((serialized.subtotalCents * depositPercent) / 100);
+		// The milestone that is due — the first line the payments have not
+		// covered — never the whole balance.
+		const depositCents = serialized.lines[0]?.amountCents ?? Math.round((serialized.subtotalCents * (await serviceFeeSplit()).depositPercent) / 100);
 		const hasPaidDeposit = serialized.paidCents >= depositCents;
-		const amountCents = !hasPaidDeposit
-			? Math.min(depositCents - serialized.paidCents, serialized.balanceCents)
-			: serialized.balanceCents;
+		const amountCents = Math.min(nextChargeCents(serialized.lines, serialized.paidCents) || serialized.balanceCents, serialized.balanceCents);
 
 		const origin = c.req.header("origin") || env.FRONTEND_URL;
 		const checkout = await createPaystackCheckout({

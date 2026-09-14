@@ -1001,6 +1001,10 @@ export const applicationsApi = {
 	setReleaseOverride(id: string, input: { reason?: string; revoke?: boolean }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/release-override`, { method: "POST", ...json(input) });
 	},
+	/** Set the client's post-arrival schedule on their behalf — the reason goes on the case. */
+	setPostArrivalSchedule(id: string, input: { months: number; frequency: string; reason: string }): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/applications/${id}/post-arrival-schedule`, { method: "POST", ...json(input) });
+	},
 	/** Record Departure facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
 	setDepartureDetails(id: string, details: DepartureDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/departure-details`, { method: "PATCH", ...json(details) });
@@ -1178,6 +1182,13 @@ export const meApi = {
 	/** Choose the post-admission payment plan (full or installment). */
 	choosePaymentPlan(input: ChoosePaymentPlan): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/me/application/payment-plan`, {
+			method: "POST",
+			...json(input),
+		});
+	},
+	/** How to spread the post-arrival remainder — months and frequency from the catalogue. */
+	choosePostArrivalSchedule(input: { months: number; frequency: string }): Promise<ApiApplication> {
+		return request(`${API_PREFIX}/me/application/post-arrival-schedule`, {
 			method: "POST",
 			...json(input),
 		});

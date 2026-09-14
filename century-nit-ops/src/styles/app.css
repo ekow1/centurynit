@@ -5416,3 +5416,184 @@
 		grid-template-columns: 1fr 1fr;
 	}
 }
+
+/* ── Departure · the papers the milestone holds ── */
+.cn-paper-ms {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 1rem;
+	align-items: center;
+	border: 1.5px solid var(--foreground);
+	padding: 0.6rem 0.8rem;
+	margin-bottom: 0.6rem;
+}
+
+.cn-paper-ms--done {
+	border: 1px solid var(--border-light);
+}
+
+.cn-paper-ms b {
+	font-size: 0.92rem;
+}
+
+.cn-paper-ms--done b {
+	color: var(--muted-foreground);
+}
+
+.cn-paper-ms small {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+
+.cn-papers {
+	border-top: 1px solid var(--foreground);
+}
+
+.cn-papers__r {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 1rem;
+	align-items: center;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.85rem;
+}
+
+.cn-papers__r small {
+	display: block;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.cn-papers__st {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+.cn-papers__st--on {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+/* ── Money · the service fee as a ledger with dates ── */
+.cn-fee {
+	border-top: 1px solid var(--foreground);
+}
+
+.cn-fee__r {
+	display: grid;
+	grid-template-columns: 3.4rem 6.5rem minmax(0, 1fr) auto auto;
+	gap: 0.9rem;
+	align-items: center;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.85rem;
+}
+
+.cn-fee__i {
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	color: var(--muted-foreground);
+}
+
+.cn-fee__d {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
+}
+
+.cn-fee__a {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	text-align: right;
+}
+
+.cn-fee__s {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	text-align: right;
+}
+
+.cn-fee__r--paid {
+	color: var(--muted-foreground);
+}
+
+.cn-fee__r--due .cn-fee__s {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.cn-fee__r--late {
+	box-shadow: inset 4px 0 0 var(--foreground);
+	padding-left: 0.6rem;
+}
+
+.cn-fee__r--late .cn-fee__s {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+/* ── Payment plans · the catalogue toggles and the sentence ── */
+.ops-togs {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+}
+
+.ops-tog {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 0.4rem 0.65rem;
+	font: inherit;
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	cursor: pointer;
+}
+
+.ops-tog:disabled {
+	cursor: default;
+}
+
+.ops-tog__bx {
+	width: 0.8rem;
+	height: 0.8rem;
+	border: 1px solid currentColor;
+}
+
+.ops-tog--on {
+	border-color: var(--foreground);
+	color: var(--foreground);
+}
+
+.ops-tog--on .ops-tog__bx {
+	background: var(--foreground);
+}
+
+.ops-sentence {
+	border: 1px dashed var(--border-light);
+	padding: 0.7rem 0.9rem;
+	font-size: 0.9rem;
+	line-height: 1.55;
+	margin: 0.5rem 0 0;
+}

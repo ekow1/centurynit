@@ -145,6 +145,7 @@ import {
 
 
 	applicationActivityResponseSchema,
+	postArrivalScheduleChoiceSchema,
 } from "century-nit-shared";
 
 
@@ -713,6 +714,36 @@ applicationsRouter.openapi(
 		await assertApplicationAccess(c, c.req.valid("param").id);
 		const updated = await updateDepartureDetails(c.req.valid("param").id, c.req.valid("json"), actorFrom(c.get("staff")!));
 		return c.json(await serializeApplication(updated));
+	},
+);
+
+/* ── POST /applications/{id}/post-arrival-schedule — ops sets the client's schedule, with a reason ── */
+
+applicationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/post-arrival-schedule",
+		tags: ["Applications"],
+		middleware: [requireAuth, requireMfa, requireModule("applications")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: { "application/json": { schema: postArrivalScheduleChoiceSchema.extend({ reason: z.string().min(1).max(500) }) } },
+				required: true,
+			},
+		},
+		responses: {
+			200: { content: { "application/json": { schema: applicationSchema } }, description: "Schedule set" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		await assertApplicationAccess(c, id);
+		const { reason, ...choice } = c.req.valid("json");
+		const { setPostArrivalSchedule } = await import("../services/serviceFee.js");
+		await setPostArrivalSchedule({ applicationId: id, choice, actor: actorFrom(c.get("staff")!), reason });
+		const updated = await getApplication(id);
+		return c.json(await serializeApplication(updated!));
 	},
 );
 

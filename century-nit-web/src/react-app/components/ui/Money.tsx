@@ -46,3 +46,14 @@ export function MoneyInline({ usd }: { usd: number }) {
 		</span>
 	);
 }
+
+/** Stacked variant for rail cards — the cedi figure is the value, the dollar is a footnote. */
+export function MoneyStack({ usd }: { usd: number }) {
+	const ghs = Math.round(usd * GHS_RATE);
+	return (
+		<span className="mline">
+			<span className="mline__big">GH₵{ghs.toLocaleString()}</span>
+			<span className="mline__alt">≈ ${usd.toLocaleString()}</span>
+		</span>
+	);
+}

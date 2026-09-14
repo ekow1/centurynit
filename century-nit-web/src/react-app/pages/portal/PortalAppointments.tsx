@@ -38,16 +38,9 @@ function upcomingDates(count = 21): { value: string; label: string }[] {
 	return out;
 }
 
-function formatWhen(booking: Booking): string {
-	return new Date(booking.startsAt).toLocaleString(undefined, {
-		weekday: "long",
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-		hour: "numeric",
-		minute: "2-digit",
-		timeZone: booking.timezone,
-	});
+/** Service names arrive lowercase — display them like the other bold labels. */
+function cap(s: string): string {
+	return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
 const STATUS_COPY: Record<string, { label: string; note: string }> = {
@@ -324,7 +317,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 					<span className="ptable__sub">{d.toLocaleDateString(undefined, { weekday: "short" })}</span>
 				</td>
 				<td>
-					<strong>{booking.serviceName}</strong>
+					<strong>{cap(booking.serviceName)}</strong>
 					<span className="ptable__sub">
 						{d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: booking.timezone })}
 						{" · "}{booking.durationMinutes} min · {booking.type === "online" ? "Online" : "In person"}
@@ -460,11 +453,17 @@ export function PortalAppointments() {
 					</div>
 					<div className="pnext__what">
 						<p className="eyebrow">Next appointment</p>
-						<p className="pnext__title">{next.serviceName}</p>
-						<p className="pnext__meta">
-							{formatWhen(next)} · {next.durationMinutes} min · {next.type === "online" ? "Online" : "In person"}
-							{next.employeeName ? ` · with ${next.employeeName}` : ""} · ref {next.reference}
-						</p>
+						<p className="pnext__title">{cap(next.serviceName)}</p>
+						<div className="pnext__facts">
+							<span>
+								<b>{new Date(next.startsAt).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: next.timezone })}</b>
+								{" · "}{new Date(next.startsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: next.timezone })}
+							</span>
+							<span>{next.durationMinutes} min</span>
+							<span>{next.type === "online" ? "Online" : "In person"}</span>
+							{next.employeeName ? <span>with <b>{next.employeeName}</b></span> : null}
+						</div>
+						<p className="pnext__ref">REF {next.reference}</p>
 						{next.rescheduleRequestedAt ? (
 							<div className="preq">
 								<b>Reschedule requested</b>
@@ -565,19 +564,15 @@ export function PortalAppointments() {
 						</div>
 
 						<div className="sharp-card">
-							<p className="eyebrow">How rescheduling works</p>
+							<p className="eyebrow">Good to know</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
-								You request a new time; your consultant confirms it. The old slot holds until they
-								do — nothing is lost if they can't take the new one.
+								<strong>Rescheduling.</strong> You request a new time; your consultant confirms it.
+								The old slot holds until they do — nothing is lost if they can't take the new one.
 							</p>
-						</div>
-
-						<div className="sharp-card">
-							<p className="eyebrow">Cancelling</p>
-							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.5rem", lineHeight: 1.6 }}>
-								Cancelling a <strong>paid consultation</strong> cancels the consultation itself —
-								the slot releases and a new booking means a new fee. Check-ins after enrolment
-								cancel freely.
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.6rem", lineHeight: 1.6 }}>
+								<strong>Cancelling.</strong> Cancelling a paid consultation cancels the consultation
+								itself — the slot releases and a new booking means a new fee. Check-ins after
+								enrolment cancel freely.
 							</p>
 						</div>
 

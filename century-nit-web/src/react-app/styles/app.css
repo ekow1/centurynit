@@ -6703,8 +6703,8 @@ img.profile-monogram {
 	font-family: var(--font-mono);
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
-	color: var(--muted-foreground);
-	font-size: 0.62rem;
+	color: var(--micro-foreground);
+	font-size: 0.66rem;
 	padding-top: 0.1rem;
 }
 
@@ -7312,10 +7312,10 @@ img.profile-monogram {
 
 .ptable th {
 	font-family: var(--font-mono);
-	font-size: 0.62rem;
+	font-size: 0.68rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
-	color: var(--muted-foreground);
+	color: var(--micro-foreground);
 	text-align: left;
 	padding: 0.5rem 0.75rem;
 	border-bottom: 1.5px solid var(--border);
@@ -7345,16 +7345,16 @@ img.profile-monogram {
 
 .ptable__sub {
 	display: block;
-	font-size: var(--text-xs);
-	color: var(--muted-foreground);
+	font-size: 0.74rem;
+	color: var(--micro-foreground);
 	font-weight: 400;
 	margin-top: 0.15rem;
 }
 
 .ptable__mark {
 	font-family: var(--font-mono);
-	font-size: 0.68rem;
-	color: var(--muted-foreground);
+	font-size: 0.72rem;
+	color: var(--foreground);
 }
 
 /* visa document checklist */
@@ -7568,17 +7568,18 @@ img.profile-monogram {
 .jmini__name { font-size: 0.72rem; font-weight: 600; margin-top: 0.5rem; }
 .jmini__st {
 	font-family: var(--font-mono);
-	font-size: 0.58rem;
+	font-size: 0.64rem;
 	text-transform: uppercase;
 	letter-spacing: 0.1em;
-	color: var(--muted-foreground);
+	color: var(--micro-foreground);
 	margin-top: 0.15rem;
 }
 .jmini a.jmini--done .jmini__n { background: var(--foreground); color: var(--background); }
 .jmini a.jmini--now { background: var(--muted); }
 .jmini a.jmini--now .jmini__n { border-width: 2px; }
-.jmini a.jmini--locked .jmini__n { border-style: dashed; border-color: var(--border-light); color: var(--muted-foreground); }
+.jmini a.jmini--locked .jmini__n { border-width: 1px; border-color: #737373; color: var(--muted-foreground); }
 .jmini a.jmini--locked .jmini__name { color: var(--muted-foreground); }
+.jmini a.jmini--locked .jmini__st { color: #737373; }
 
 .nowlist {
 	border: 1.5px solid var(--border);
@@ -7596,12 +7597,21 @@ img.profile-monogram {
 	font-size: var(--text-sm);
 }
 .nowlist__row:last-child { border-bottom: none; }
+.nowlist__lead {
+	font-size: 0.9rem;
+	font-weight: 600;
+}
 .nowlist__foot {
 	border-top: 1.5px solid var(--border) !important;
 	padding-top: 0.9rem !important;
-	font-size: var(--text-xs);
-	color: var(--muted-foreground);
+	font-size: 0.74rem;
+	color: var(--micro-foreground);
 }
+
+/* stacked money — one figure, one footnote */
+.mline { text-align: right; }
+.mline__big { display: block; font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mline__alt { display: block; font-family: var(--font-mono); font-size: 0.62rem; opacity: 0.6; margin-top: 0.1rem; }
 
 .pfeed { list-style: none; padding: 0; border: 1px solid var(--border-light); background: var(--background); }
 .pfeed li {
@@ -7741,9 +7751,36 @@ img.profile-monogram {
 	color: var(--muted-foreground);
 	margin-top: 0.35rem;
 }
+.pnext__facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 1.1rem;
+	margin-top: 0.55rem;
+}
+.pnext__facts span {
+	font-size: 0.78rem;
+	color: #333;
+}
+.pnext__ref {
+	font-family: var(--font-mono);
+	font-size: 0.64rem;
+	letter-spacing: 0.06em;
+	color: var(--micro-foreground);
+	margin-top: 0.5rem;
+}
 .pnext__note { font-size: var(--text-xs); color: var(--muted-foreground); margin-top: 0.5rem; max-width: 34rem; }
 .pnext__acts { display: flex; flex-direction: column; gap: 0.5rem; }
 .pnext__acts .btn { min-width: 11rem; text-align: center; }
+.pnext__acts .btn--ghost {
+	border: 1.5px solid var(--border);
+	text-decoration: none;
+	padding: 0.6rem 1rem;
+	font-size: 0.68rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 700;
+}
+.pnext__acts .btn--ghost:hover:not(:disabled) { text-decoration: none; background: var(--muted); }
 
 .preq {
 	border: 1px dashed var(--border);
@@ -7963,7 +8000,7 @@ a.portal-ch:hover {
 .portal-ch--locked {
 	grid-template-columns: 1.6rem 1fr;
 	row-gap: 0.1rem;
-	color: rgba(255, 255, 255, 0.45);
+	color: rgba(255, 255, 255, 0.75);
 	cursor: not-allowed;
 }
 
@@ -7972,11 +8009,12 @@ a.portal-ch:hover {
 	max-width: none;
 	white-space: normal;
 	line-height: 1.35;
+	color: rgba(255, 255, 255, 0.45);
 }
 
 .portal-ch--locked .portal-ch__m {
 	border-style: dashed;
-	border-color: rgba(255, 255, 255, 0.3);
+	border-color: rgba(255, 255, 255, 0.55);
 }
 
 .portal-ch__l {

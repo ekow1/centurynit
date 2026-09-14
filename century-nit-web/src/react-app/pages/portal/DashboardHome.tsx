@@ -15,7 +15,7 @@ import { bookingsApi, documentsApi, meApi } from "century-nit-core/api";
 import { STAGE_PATH, STAGE_SHORT } from "../../data/stageLabels";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
 import { ConsultantUpdates } from "./ConsultantUpdates";
-import { MoneyInline } from "../../components/ui/Money";
+import { MoneyStack } from "../../components/ui/Money";
 
 /**
  * Where "continue" goes for the current stage, with a verb that names the
@@ -301,15 +301,18 @@ export function DashboardHome() {
 									</div>
 								</>
 							) : (
-								<div className="nowlist__row nowlist__foot" style={{ borderTop: "none" }}>
-									<span>{meta.desc}</span>
-									<Link to={cta.to} className="jlink">{cta.label} →</Link>
-								</div>
+								<>
+									<div className="nowlist__row nowlist__lead" style={{ borderBottom: "none" }}>
+										<span>{meta.desc}</span>
+									</div>
+									<div className="nowlist__row nowlist__foot">
+										<span>{STAGE_SHORT[current] ?? stageMeta?.label ?? ""} · chapter {currentChapter ? CHAPTERS.find((c) => c.id === currentChapter)?.numeral : ""}</span>
+										<Link to={cta.to} className="jlink">{cta.label} →</Link>
+									</div>
+								</>
 							)}
 						</div>
 
-						{/* From your file — the consultant's latest notes, newest first */}
-						<ConsultantUpdates comments={application.comments} limit={3} title="From your file" className="mt-4" />
 						<p className="mt-3">
 							<Link to="/portal/journey" className="jlink">Open the journey map →</Link>
 						</p>
@@ -321,13 +324,13 @@ export function DashboardHome() {
 							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Money</p>
 							{money ? (
 								<>
-									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.25)" }}>
-										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.55)" }}>Paid to date</span>
-										<span className="pkv__v"><strong><MoneyInline usd={money.paid} /></strong></span>
+									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Paid to date</span>
+										<span className="pkv__v"><MoneyStack usd={money.paid} /></span>
 									</div>
-									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.25)" }}>
-										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.55)" }}>Due now</span>
-										<span className="pkv__v">{money.due > 0 ? <MoneyInline usd={money.due} /> : "—"}</span>
+									<div className="pkv" style={{ borderColor: "rgba(255,255,255,0.3)" }}>
+										<span className="pkv__k" style={{ color: "rgba(255,255,255,0.72)" }}>Due now</span>
+										<span className="pkv__v">{money.due > 0 ? <MoneyStack usd={money.due} /> : "—"}</span>
 									</div>
 								</>
 							) : (
@@ -400,6 +403,9 @@ export function DashboardHome() {
 								<Link to="/portal/documents" className="jlink">Open the vault →</Link>
 							</p>
 						</div>
+
+						{/* From your file — the consultant's latest notes, newest first */}
+						<ConsultantUpdates comments={application.comments} limit={3} title="From your file" />
 					</div>
 				</div>
 			)}

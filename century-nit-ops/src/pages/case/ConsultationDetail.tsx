@@ -12,7 +12,8 @@ import { documentsApi, bookingsApi } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
-import { CaseHeader, NextActionBand, StatusPill, type NextAction } from "century-nit-core/ui";
+import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
+import { CaseTodo } from "./CaseTodo";
 
 
 function isKnown(v: string | undefined | null): v is string {
@@ -331,7 +332,7 @@ export function ConsultationDetail({
 				</CaseHeader>
 			</div>
 
-			<NextActionBand
+			<CaseTodo
 				items={nextActions}
 				waitingOn={waitingOn}
 				blockedBy={consultation.status === "Under Review" ? "The assessment opens once a consultant is assigned." : null}

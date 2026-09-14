@@ -1,45 +1,61 @@
 import type { TabId } from "./tabs/types";
 
 /**
- * The case's journey as a spine — the portal's I–VI vocabulary on the ops
- * side, so "the client is in Chapter III" reads the same on both surfaces.
- *
- * One row: the five working chapters as cells — ✓ when passed, ink for the
- * chapter the case is in, an underline for the one being viewed, dashed when
- * locked — VI as a state cell (✓ when the case is closed), and the views
- * (Overview, Money, Documents) to the right as text tabs with a count.
+ * The case's tabs as one chip row — the chip the cases list uses for its
+ * filters. Overview first (where a case opens), then the six chapters in
+ * the portal's I–VI vocabulary, then the case's other views (Money, Docs)
+ * with the count that matters. Ink is the tab being viewed; ■ marks the
+ * chapter the case is in; ✓ a chapter passed; dashed a chapter locked.
  */
 
 type ChapterTab = { id: TabId; numeral: string; label: string; locked: boolean; hint?: string };
+type ViewTab = { id: TabId; label: string; note?: string | null };
 
 export function CaseSpine({
+	overview,
 	chapters,
 	current,
 	nowId,
 	done,
 	onChange,
-	utils,
+	views,
 }: {
+	overview: ViewTab;
 	/** The five working chapters, in journey order. */
 	chapters: ChapterTab[];
 	current: TabId;
-	/** The chapter the case is in — the inverted cell. */
+	/** The chapter the case is in — the ■ chip. */
 	nowId?: TabId | null;
-	/** The case is closed — the VI cell carries ✓. */
+	/** The case is closed — VI carries ✓. */
 	done: boolean;
 	onChange: (id: TabId) => void;
-	/** Non-chapter surfaces: overview, money, documents — with the count that matters. */
-	utils: { id: TabId; label: string; note?: string | null }[];
+	/** The case's other views: money, documents. */
+	views: ViewTab[];
 }) {
+	const nowIdx = chapters.findIndex((x) => x.id === nowId);
+	const view = (v: ViewTab) => (
+		<button
+			key={v.id}
+			type="button"
+			role="tab"
+			aria-selected={current === v.id}
+			className={`cn-chip${current === v.id ? " cn-chip--on" : ""}`}
+			onClick={() => onChange(v.id)}
+		>
+			<b>{v.label}</b>
+			{v.note ? <span className="cn-chip__n">{v.note}</span> : null}
+		</button>
+	);
 	return (
-		<div className="cn-spine" role="tablist" aria-label="Case chapters">
-			{chapters.map((c) => {
+		<div className="cn-spine" role="tablist" aria-label="Case tabs">
+			{view(overview)}
+			<span className="cn-spine__gap" aria-hidden />
+			{chapters.map((c, i) => {
 				const isNow = c.id === nowId && !c.locked;
 				const isOn = c.id === current;
-				const nowIdx = chapters.findIndex((x) => x.id === nowId);
 				// A closed case has passed every chapter — all show ✓ even though
 				// `nowId` resolves to a utility cell (payments) rather than V.
-				const reached = done || (!c.locked && nowIdx >= 0 && chapters.findIndex((x) => x.id === c.id) < nowIdx);
+				const passed = done || (!c.locked && nowIdx >= 0 && i < nowIdx);
 				return (
 					<button
 						key={c.id}
@@ -47,44 +63,34 @@ export function CaseSpine({
 						role="tab"
 						aria-selected={isOn}
 						aria-disabled={c.locked}
-						title={c.locked ? c.hint : undefined}
+						title={c.locked ? c.hint : isNow ? "The chapter the case is in" : undefined}
 						className={[
-							"cn-spine__ch",
-							reached ? "cn-spine__ch--done" : "",
-							isNow ? "cn-spine__ch--now" : "",
-							isOn && !isNow ? "cn-spine__ch--on" : "",
-							c.locked ? "cn-spine__ch--locked" : "",
-						].join(" ")}
+							"cn-chip",
+							passed ? "cn-chip--passed" : "",
+							isNow ? "cn-chip--now" : "",
+							isOn ? "cn-chip--on" : "",
+							c.locked ? "cn-chip--locked" : "",
+						]
+							.filter(Boolean)
+							.join(" ")}
 						onClick={() => !c.locked && onChange(c.id)}
 					>
-						<span className="cn-spine__rn">{reached ? "✓ " : ""}{c.numeral}</span>
-						<span className="cn-spine__lb">{c.label}</span>
+						<b>
+							{passed ? "✓ " : ""}
+							{c.numeral} {c.label}
+						</b>
 					</button>
 				);
 			})}
 			<div
-				className={`cn-spine__ch cn-spine__ch--vi${done ? " cn-spine__ch--done" : " cn-spine__ch--locked"}`}
+				className={`cn-chip${done ? " cn-chip--passed" : " cn-chip--locked"}`}
 				title={done ? "File closed" : "Closes when the journey completes"}
 				aria-hidden
 			>
-				<span className="cn-spine__rn">{done ? "✓ " : ""}VI</span>
-				<span className="cn-spine__lb">Complete</span>
+				<b>{done ? "✓ " : ""}VI Complete</b>
 			</div>
-			<div className="cn-spine__utils">
-				{utils.map((u) => (
-					<button
-						key={u.id}
-						type="button"
-						role="tab"
-						aria-selected={current === u.id}
-						className={`cn-spine__ut${current === u.id ? " cn-spine__ut--on" : ""}`}
-						onClick={() => onChange(u.id)}
-					>
-						{u.label}
-						{u.note ? <span className="cn-spine__n">{u.note}</span> : null}
-					</button>
-				))}
-			</div>
+			<span className="cn-spine__gap" aria-hidden />
+			{views.map(view)}
 		</div>
 	);
 }

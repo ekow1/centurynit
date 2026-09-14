@@ -426,6 +426,17 @@
 	cursor: pointer;
 }
 
+/* A long hint wraps onto its own line under the label instead of squeezing
+   the label into a mid-phrase wrap beside it. */
+.hsheet__row--stack {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.15rem;
+}
+.hsheet__row--stack .hsheet__hint {
+	white-space: normal;
+}
+
 .hsheet__row:last-child {
 	border-bottom: none;
 }
@@ -448,12 +459,17 @@
 	font-style: normal;
 }
 
+.hsheet__row--open:not(.hsheet__row--on) {
+	color: var(--muted-foreground);
+}
+
 .hsheet__hint {
 	font-family: var(--font-mono);
 	font-size: var(--text-xs);
 	letter-spacing: 0.04em;
 	color: var(--muted-foreground);
 	white-space: nowrap;
+	line-height: 1.5;
 }
 
 .hsheet__empty {
@@ -4464,82 +4480,96 @@ a.dash-kpi--on:hover {
 }
 
 /* ---------- Case detail: the chapter spine ---------- */
+/* The case's tabs — one chip row, the chip the list's filters use. Ink is
+   the tab being viewed, ■ the chapter the case is in, ✓ passed, dashed locked. */
 .cn-spine {
 	display: flex;
-	align-items: stretch;
 	flex-wrap: wrap;
-	border-bottom: 1px solid var(--foreground);
+	align-items: center;
+	gap: 0.4rem 0.45rem;
 	margin: 0 0 1rem;
 }
-.cn-spine__ch {
+.cn-spine__gap { width: 0.5rem; }
+.cn-chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 0.5rem;
-	padding: 0.6rem 0.9rem;
-	border: 1px solid var(--border-light);
-	border-bottom: 0;
-	margin-right: -1px;
+	gap: 0.45rem;
+	padding: 0.32rem 0.65rem;
+	border: 1px solid var(--border);
 	background: var(--background);
+	color: var(--foreground);
 	font: inherit;
 	font-family: var(--font-mono, ui-monospace, monospace);
 	font-size: 0.7rem;
-	letter-spacing: 0.08em;
+	letter-spacing: 0.06em;
 	text-transform: uppercase;
-	color: var(--muted-foreground);
+	line-height: 1.2;
 	white-space: nowrap;
 	cursor: pointer;
 }
-.cn-spine__rn {
-	font-weight: 800;
-	color: var(--foreground);
-}
-.cn-spine__lb {
-	color: inherit;
-}
-.cn-spine__ch--done { background: var(--muted); }
-.cn-spine__ch--done .cn-spine__rn { color: var(--muted-foreground); }
-.cn-spine__ch--now { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
-.cn-spine__ch--now .cn-spine__rn { color: var(--background); }
-.cn-spine__ch--on { color: var(--foreground); box-shadow: inset 0 -3px 0 var(--foreground); }
-.cn-spine__ch--on:not(.cn-spine__ch--now) .cn-spine__rn { text-decoration: underline; text-underline-offset: 3px; }
-.cn-spine__ch--locked { opacity: 0.55; cursor: default; border-style: dashed; }
-.cn-spine__ch--locked .cn-spine__rn { color: inherit; }
-.cn-spine__ch--vi { cursor: default; }
-.cn-spine__utils {
-	margin-left: auto;
+.cn-chip b { font-weight: 700; }
+.cn-chip:hover:not(.cn-chip--on):not(.cn-chip--locked) { box-shadow: inset 0 0 0 1px var(--foreground); }
+.cn-chip__n { font-weight: 400; color: var(--muted-foreground); }
+.cn-chip--passed { border-color: var(--border-light); color: var(--muted-foreground); }
+.cn-chip--passed b { font-weight: 600; }
+.cn-chip--now { border-color: var(--foreground); color: var(--foreground); }
+.cn-chip--now::before { content: ""; width: 7px; height: 7px; background: currentColor; flex-shrink: 0; }
+.cn-chip--on { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.cn-chip--on .cn-chip__n { color: rgba(255, 255, 255, 0.7); }
+.cn-chip--locked { border-style: dashed; border-color: var(--border-light); color: var(--muted-foreground); opacity: 0.75; cursor: default; }
+
+/* What the case needs from us — a numbered list on hairlines under the state line. */
+.cn-todo { display: flex; flex-direction: column; }
+.cn-todo__h {
 	display: flex;
 	align-items: center;
-	gap: 1.25rem;
-	padding-left: 1.25rem;
-	border-left: 1px solid var(--border-light);
-}
-.cn-spine__ut {
-	display: inline-flex;
-	align-items: center;
-	gap: 0.4rem;
-	padding: 0.2rem 0;
-	border: 0;
-	background: none;
-	font: inherit;
+	gap: 0.6rem;
 	font-family: var(--font-mono, ui-monospace, monospace);
-	font-size: 0.66rem;
+	font-size: 0.62rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	padding-bottom: 0.4rem;
+}
+.cn-todo__h b { color: var(--foreground); }
+.cn-todo__r { margin-left: auto; font-weight: 400; letter-spacing: 0.06em; text-align: right; }
+.cn-todo__row {
+	display: grid;
+	grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.55rem 0;
+	border-top: 1px solid var(--border-light);
+}
+.cn-todo__row:last-of-type { border-bottom: 1px solid var(--border-light); }
+.cn-todo__n {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.7rem;
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+}
+.cn-todo__n::before { content: ""; width: 7px; height: 7px; background: var(--foreground); flex-shrink: 0; }
+.cn-todo__row--wait .cn-todo__n { color: var(--muted-foreground); font-weight: 400; }
+.cn-todo__row--wait .cn-todo__n::before { background: transparent; border: 1px solid currentColor; }
+.cn-todo__t { font-size: 0.88rem; font-weight: 600; line-height: 1.35; min-width: 0; }
+.cn-todo__t span { font-weight: 400; color: var(--muted-foreground); }
+.cn-todo__row--wait .cn-todo__t { color: var(--muted-foreground); font-weight: 500; }
+.cn-todo__a { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.cn-todo__a .btn { padding: 0.45rem 0.85rem; min-height: 32px; font-size: 0.62rem; letter-spacing: 0.08em; }
+.cn-todo__a .btn--ghost { border: 1px solid var(--foreground); text-decoration: none; padding-inline: 0.85rem; }
+.cn-todo__k {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.6rem;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
 	color: var(--muted-foreground);
-	white-space: nowrap;
-	cursor: pointer;
 }
-.cn-spine__ut:hover { color: var(--foreground); }
-.cn-spine__ut--on { color: var(--foreground); font-weight: 700; box-shadow: inset 0 -2px 0 var(--foreground); }
-.cn-spine__n { font-size: 0.6rem; color: var(--foreground); letter-spacing: 0.04em; }
-@media (max-width: 860px) {
-	.cn-spine__utils { margin-left: 0; width: 100%; border-left: 0; padding: 0.5rem 0 0.35rem; border-top: 1px solid var(--border-light); }
-}
+.cn-todo__block { font-size: 0.78rem; color: var(--muted-foreground); padding: 0.5rem 0 0; line-height: 1.45; margin: 0; }
 @media (max-width: 720px) {
-	.cn-spine__ch { padding: 0.5rem 0.6rem; }
-	.cn-spine__lb { display: none; }
-	.cn-spine__ch--on .cn-spine__lb,
-	.cn-spine__ch--now .cn-spine__lb { display: inline; }
+	.cn-todo__row { grid-template-columns: 1.6rem minmax(0, 1fr); }
+	.cn-todo__a { grid-column: 2; justify-content: flex-start; }
 }
 
 /* A case with no owner reads as the ask, not a state. */

@@ -18,7 +18,8 @@ import { DepartureTab } from "./tabs/DepartureTab";
 import { MoneyTab } from "./tabs/MoneyTab";
 import { tasksForApplication, taskActionLabel, type PendingTask } from "../../lib/pendingTasks";
 import { listInvoices, getApplicationActivity, type ApiInvoice } from "../../lib/api";
-import { CaseHeader, NextActionBand, Sheet, type NextAction } from "century-nit-core/ui";
+import { CaseHeader, Sheet, type NextAction } from "century-nit-core/ui";
+import { CaseTodo } from "./CaseTodo";
 import { type MockApplication, branchName } from "century-nit-core/ops";
 import {
 
@@ -448,7 +449,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			<CaseStateLine app={app} closed={caseClosed} />
 
-			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
+			<CaseTodo items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
 			<ApplicationAssignSheet app={app} open={assignOpen} onClose={() => setAssignOpen(false)} onDone={flash} />
 
@@ -513,8 +514,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				nowId={stageTab}
 				done={app.stage === "completed"}
 				onChange={setTab}
-				utils={[
-					{ id: "overview", label: "Overview" },
+				overview={{ id: "overview", label: "Overview" }}
+				views={[
 					{ id: "payments", label: "Money", note: dueInvoices > 0 ? `${dueInvoices} due` : null },
 					{ id: "documents", label: "Docs", note: outstandingDocs.length > 0 ? String(outstandingDocs.length) : null },
 				]}

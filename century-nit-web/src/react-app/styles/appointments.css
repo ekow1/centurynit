@@ -225,6 +225,23 @@
 	margin-top: 0.1rem;
 }
 
+.resched__day-n {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	margin-top: 0.15rem;
+	opacity: 0.65;
+}
+
+.resched__day:disabled {
+	color: var(--border-light);
+	text-decoration: line-through;
+	cursor: not-allowed;
+}
+
+.resched__day:disabled .resched__day-n {
+	opacity: 1;
+}
+
 .resched__slots {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));

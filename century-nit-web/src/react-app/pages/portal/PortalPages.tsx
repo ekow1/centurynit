@@ -882,9 +882,6 @@ function SlotPickerLive({
 
 	return (
 		<div>
-			<p className="eyebrow">Date &amp; time</p>
-
-			<p className="resched__label mono mt-3">Date</p>
 			<div className="resched__days">
 				{dates.map((d) => {
 					const open = openByDate?.[d.value];
@@ -903,6 +900,7 @@ function SlotPickerLive({
 						>
 							<span className="resched__day-wd">{d.weekday}</span>
 							<span className="resched__day-num">{d.dayMonth}</span>
+							<span className="resched__day-n">{closed ? "full" : open != null ? `${open} open` : "…"}</span>
 						</button>
 					);
 				})}
@@ -912,12 +910,14 @@ function SlotPickerLive({
 			) : null}
 
 			<p className="resched__label mono mt-3">
-				Time{" "}
+				{date
+					? `${dates.find((d) => d.value === date)?.weekday ?? ""} ${dates.find((d) => d.value === date)?.dayMonth ?? date}`.trim()
+					: "Pick a day first"}{" "}
 				<span className="muted">
 					· {CONSULTATION_DURATIONS.find((d) => d.id === String(durationMinutes))?.label ?? `${durationMinutes} min`} · branch local
 				</span>
 			</p>
-			{error && <p style={{ color: "#dc2626", fontSize: "0.85rem" }}>{error}</p>}
+			{error && <p className="mono" style={{ fontSize: "0.85rem", fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "2px" }}>{error}</p>}
 			{!slots && !error && date && <p className="muted" style={{ fontSize: "0.85rem" }}>Checking live availability…</p>}
 			{date && slots && (
 				<div className="resched__slots">
@@ -2135,18 +2135,24 @@ export function PortalConsultationBookingFlow() {
 			<div className="sharp-card">
 				{step === "type" && (
 					<>
-						<p className="eyebrow">Meeting type</p>
-						<div className="card-grid card-grid--2 mt-3">
+						<div className="psec" style={{ marginBottom: "0.9rem" }}>
+							<div>
+								<span className="psec__no">1</span>
+								<span className="psec__title">How do you want to meet?</span>
+							</div>
+							<p className="psec__hint">Same session, same fee — pick what suits you.</p>
+						</div>
+						<div className="pcards">
 							{(
 								[
-									["online", "Online Consultation"],
-									["in_person", "In-Person Consultation"],
+									["online", "Video call", "Online consultation", "Meet from anywhere — the link is sent with your confirmation."],
+									["in_person", "At a branch", "In-person consultation", "Accra, Kumasi or Takoradi — you pick the branch next."],
 								] as const
-							).map(([id, name]) => (
+							).map(([id, kicker, name, blurb]) => (
 								<button
 									key={id}
 									type="button"
-									className={`card card--pad card--selectable${booking.consultationType === id ? " card--selected" : ""}`}
+									className={`pick${booking.consultationType === id ? " pick--on" : ""}`}
 									onClick={() =>
 										updateBooking(
 											id === "online"
@@ -2155,15 +2161,10 @@ export function PortalConsultationBookingFlow() {
 										)
 									}
 								>
-									<span className="display" style={{ fontSize: "1.25rem" }}>
-										{name}
-									</span>
-									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
-										{id === "online" ? "Video call with a consultant — no branch visit." : "Meet your consultant at one of our branches."}
-									</span>
-									<span className="pick__price mt-2" style={{ display: "block" }}>
-										45 min · {formatDualCurrency(consultationFeeUsd)}
-									</span>
+									<span className="eyebrow">{kicker}</span>
+									<span className="pick__name" style={{ fontSize: "1.05rem" }}>{name}</span>
+									<span className="muted">{blurb}</span>
+									<span className="pick__price">45 min · {formatDualCurrency(consultationFeeUsd)}</span>
 								</button>
 							))}
 						</div>
@@ -2171,29 +2172,28 @@ export function PortalConsultationBookingFlow() {
 				)}
 				{step === "branch" && (
 					<>
-						<p className="eyebrow">Branch</p>
-						<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.35rem 0 0.9rem" }}>
-							Earliest open slot shown on each card — the full grid comes next.
-						</p>
-						<div className="card-grid card-grid--2 mt-3">
+						<div className="psec" style={{ marginBottom: "0.9rem" }}>
+							<div>
+								<span className="psec__no">2</span>
+								<span className="psec__title">Which branch?</span>
+							</div>
+							<p className="psec__hint">Earliest available slot shown — the full grid comes next.</p>
+						</div>
+						<div className="pcards">
 							{branches.map((b) => (
 								<button
 									key={b.id}
 									type="button"
-									className={`card card--pad card--selectable${booking.branchId === b.id ? " card--selected" : ""}`}
+									className={`pick${booking.branchId === b.id ? " pick--on" : ""}`}
 									onClick={() => updateBooking({ branchId: b.id })}
 								>
-									<span className="display" style={{ fontSize: "1.2rem" }}>
-										{b.name}
-									</span>
-									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
-										{b.address}
-									</span>
-									<span className="pick__price mt-2" style={{ display: "block" }}>
+									<span className="pick__name">{b.name}</span>
+									<span className="muted">{b.address}</span>
+									<span className="pick__price">
 										{nextSlots[b.id] === undefined
 											? "Checking openings…"
 											: nextSlots[b.id]
-												? `Next slot ${nextSlots[b.id]}`
+												? `Next slot · ${nextSlots[b.id]}`
 												: "No openings in the next 14 days"}
 									</span>
 								</button>
@@ -2202,30 +2202,51 @@ export function PortalConsultationBookingFlow() {
 					</>
 				)}
 				{step === "assessment" && (
-					<AssessmentForm
-						assessment={booking.assessment}
-						assessmentDocs={booking.assessmentDocs}
-						catalog={catalog}
-						onUpdate={updateAssessment}
-						onDocUpdate={updateAssessmentDoc}
-					/>
+					<>
+						<div className="psec" style={{ marginBottom: "0.9rem" }}>
+							<div>
+								<span className="psec__no">3</span>
+								<span className="psec__title">Tell us about yourself</span>
+							</div>
+							<p className="psec__hint">Your consultant reads this before the meeting — required fields are marked.</p>
+						</div>
+						<AssessmentForm
+							assessment={booking.assessment}
+							assessmentDocs={booking.assessmentDocs}
+							catalog={catalog}
+							onUpdate={updateAssessment}
+							onDocUpdate={updateAssessmentDoc}
+						/>
+					</>
 				)}
 				{step === "schedule" && (
-					<SlotPickerLive
-						branchId={booking.branchId}
-						date={booking.date}
-						onDateChange={(d) => updateBooking({ date: d })}
-						time={booking.time}
-						onTimeChange={(t) => updateBooking({ time: t })}
-						durationMinutes={45}
-					/>
+					<>
+						<div className="psec" style={{ marginBottom: "0.9rem" }}>
+							<div>
+								<span className="psec__no">4</span>
+								<span className="psec__title">Pick your slot{booking.branchId ? ` — ${getBranchName(booking.branchId)}` : ""}</span>
+							</div>
+							<p className="psec__hint">Struck-through days are full or closed. Slots are 45 minutes, branch time.</p>
+						</div>
+						<SlotPickerLive
+							branchId={booking.branchId}
+							date={booking.date}
+							onDateChange={(d) => updateBooking({ date: d })}
+							time={booking.time}
+							onTimeChange={(t) => updateBooking({ time: t })}
+							durationMinutes={45}
+						/>
+					</>
 				)}
 				{step === "pay" && (
 					<>
-						<p className="eyebrow">Confirm &amp; pay</p>
-						<p className="muted mt-1" style={{ fontSize: "var(--text-sm)" }}>
-							Check the order — then Paystack takes card or mobile money.
-						</p>
+						<div className="psec" style={{ marginBottom: "0.9rem" }}>
+							<div>
+								<span className="psec__no">5</span>
+								<span className="psec__title">Confirm &amp; pay</span>
+							</div>
+							<p className="psec__hint">Check the order — then Paystack takes card or mobile money.</p>
+						</div>
 
 						{payState === "paid" && booking.confirmationId ? (
 							<div className="sharp-card mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
@@ -2264,6 +2285,9 @@ export function PortalConsultationBookingFlow() {
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
 										Pay with Paystack · {formatDualCurrency(consultationFeeUsd)} →
+									</Button>
+									<Button type="button" variant="ghost" onClick={() => setSelectedStep("schedule")}>
+										← Change slot
 									</Button>
 								</div>
 								<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>

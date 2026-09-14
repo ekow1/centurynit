@@ -1820,24 +1820,6 @@ body.nav-open {
 	border-color: #fecaca;
 }
 
-.portal__bottombar {
-	flex-shrink: 0;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	gap: 1rem;
-	padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem);
-	border-top: 1px solid var(--border-light);
-	background: var(--muted);
-	font-size: var(--text-xs);
-	letter-spacing: 0.06em;
-}
-
-.portal__bottombar-ref {
-	color: var(--foreground);
-	text-transform: uppercase;
-}
-
 .portal-page__header {
 	display: flex;
 	justify-content: space-between;
@@ -7718,3 +7700,347 @@ img.profile-monogram {
 }
 .assess-nav a { display: flex; justify-content: space-between; gap: 0.6rem; }
 .assess-nav__n { font-size: 0.6rem; color: var(--muted-foreground); }
+
+/* ── The portal shell: the journey as the sidebar, the page named by its chapter ──
+   Ink on the black aside as before. The six chapters are the spine — done,
+   current, locked — the files sit under them, one row of you at the foot,
+   and the top bar says where you are and what is next. */
+
+.portal-nav__section {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.72);
+	margin: 0;
+	padding: 0 0 0.45rem;
+}
+
+.portal-nav__section::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: rgba(255, 255, 255, 0.16);
+}
+
+.portal-nav__section--spaced {
+	margin-top: 1.1rem;
+	padding-top: 0.9rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.portal-ch {
+	display: grid;
+	grid-template-columns: 1.6rem 1fr auto;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.45rem 0.55rem;
+	border: 1px solid transparent;
+	color: #ffffff;
+	text-decoration: none;
+	min-width: 0;
+}
+
+a.portal-ch:hover {
+	background: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.32);
+}
+
+.portal-ch__m {
+	width: 1.6rem;
+	height: 1.6rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	font-weight: 700;
+	border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.portal-ch--done .portal-ch__m {
+	background: #ffffff;
+	color: #000000;
+	border-color: #ffffff;
+}
+
+.portal-ch--current .portal-ch__m {
+	border-color: #ffffff;
+	border-width: 2px;
+}
+
+.portal-ch--locked {
+	color: rgba(255, 255, 255, 0.45);
+	cursor: not-allowed;
+}
+
+.portal-ch--locked .portal-ch__m {
+	border-style: dashed;
+	border-color: rgba(255, 255, 255, 0.3);
+}
+
+.portal-ch__l {
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.portal-ch--done .portal-ch__l {
+	color: rgba(255, 255, 255, 0.72);
+}
+
+.portal-ch__s {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.55);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 7rem;
+}
+
+.portal-ch--current .portal-ch__s {
+	color: #ffffff;
+	font-weight: 700;
+}
+
+.portal-ch--on {
+	background: #ffffff;
+	color: #000000;
+	border-color: #ffffff;
+}
+
+.portal-ch--on .portal-ch__m {
+	background: #000000;
+	color: #ffffff;
+	border-color: #000000;
+}
+
+.portal-ch--on .portal-ch__l,
+.portal-ch--on .portal-ch__s {
+	color: #000000;
+}
+
+a.portal-ch--on:hover {
+	background: #ffffff;
+	border-color: #ffffff;
+}
+
+.portal-nav__count {
+	margin-left: auto;
+	font-family: var(--font-mono);
+	font-size: 0.66rem;
+	letter-spacing: 0.04em;
+	color: rgba(255, 255, 255, 0.55);
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.portal-nav__count--hot {
+	color: #ffffff;
+	font-weight: 700;
+}
+
+.portal-nav__item--active .portal-nav__count {
+	color: #000000;
+}
+
+.ops-shell__me {
+	display: flex;
+	align-items: center;
+	gap: 0.65rem;
+	width: 100%;
+	padding: 0.35rem 0.4rem;
+	color: #ffffff;
+	text-align: left;
+	font: inherit;
+}
+
+.ops-shell__ini {
+	width: 32px;
+	height: 32px;
+	background: #ffffff;
+	color: #000000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.ops-shell__who {
+	min-width: 0;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+.ops-shell__name {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	line-height: 1.25;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ops-shell__role {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.65);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.ops-shell__more {
+	line-height: 1;
+	padding: 0.2rem;
+	color: rgba(255, 255, 255, 0.8);
+	display: flex;
+	align-items: center;
+}
+
+.ops-shell__more:hover {
+	color: #ffffff;
+}
+
+.portal__topbar-left {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	min-width: 0;
+}
+
+.ops-breadcrumb {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: var(--text-sm);
+	min-width: 0;
+}
+
+.ops-breadcrumb__root {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
+.ops-breadcrumb__sep {
+	color: var(--muted-foreground);
+	opacity: 0.6;
+}
+
+.ops-breadcrumb__current {
+	color: var(--foreground);
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.portal-next {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.3rem 0.6rem;
+	border: 1px solid var(--foreground);
+	background: var(--foreground);
+	color: var(--background);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	text-decoration: none;
+	white-space: nowrap;
+	max-width: 20rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.portal-next:hover {
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+/* the phone: the bar stacks a NEXT strip under the title row */
+.pbar--stacked {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+	height: auto;
+	padding-bottom: 0;
+}
+
+.pbar__row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	min-height: var(--appbar-h);
+}
+
+.pbar__row .pbar__titles {
+	flex: 1;
+	min-width: 0;
+}
+
+.pbar__row .pbar__actions {
+	display: flex;
+	align-items: center;
+	gap: 0.35rem;
+	position: relative;
+}
+
+.pbar__menu {
+	right: 0;
+	left: auto;
+	top: calc(100% + 0.5rem);
+}
+
+.pbar__next {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0 calc(-1 * max(0.9rem, var(--safe-r))) 0 calc(-1 * max(0.9rem, var(--safe-l)));
+	padding: 0.5rem max(0.9rem, var(--safe-r)) 0.5rem max(0.9rem, var(--safe-l));
+	background: var(--foreground);
+	color: var(--background);
+	text-decoration: none;
+	font-size: var(--text-sm);
+	border-top: 1px solid var(--foreground);
+}
+
+.pbar__next-k {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	opacity: 0.75;
+	flex-shrink: 0;
+}
+
+.pbar__next-l {
+	flex: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-weight: 600;
+}

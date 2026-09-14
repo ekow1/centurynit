@@ -7604,3 +7604,117 @@ img.profile-monogram {
 	.pcover__refs { margin-left: 0; }
 	.pnext { flex-direction: column; align-items: flex-start; }
 }
+
+/* ========== Document vault — count band, chapter-grouped rows ========== */
+
+.dcount {
+	display: flex;
+	flex-wrap: wrap;
+	border: 1.5px solid var(--border);
+	background: var(--background);
+}
+.dcount > div { padding: 1rem 1.5rem; border-right: 1px solid var(--border-light); }
+.dcount > div:last-child { border-right: none; }
+.dcount .dcount__n { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; }
+.dcount .dcount__l {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+.dcount__act { background: var(--foreground); color: var(--background); margin-left: auto; }
+.dcount__act .dcount__l { color: rgba(255, 255, 255, 0.6); }
+
+.drow {
+	display: grid;
+	grid-template-columns: 2.2rem 1fr auto auto;
+	gap: 1.25rem;
+	align-items: center;
+	padding: 1rem 1.25rem;
+	border: 1px solid var(--border-light);
+	border-top: none;
+	background: var(--background);
+}
+.drow:first-of-type { border-top: 1px solid var(--border-light); }
+.drow__mark {
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	font-weight: 700;
+	width: 1.5rem;
+	height: 1.5rem;
+	border: 1.5px solid var(--border-light);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--muted-foreground);
+}
+.drow--ok .drow__mark { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.drow--now {
+	box-shadow: inset 4px 0 0 var(--foreground);
+	border-color: var(--border);
+	border-width: 1.5px;
+	border-top-width: 1px;
+}
+.drow--now:first-of-type { border-top-width: 1.5px; }
+.drow--locked { opacity: 0.55; }
+.drow__name { font-weight: 650; font-size: var(--text-sm); }
+.drow__hint { font-size: var(--text-xs); color: var(--muted-foreground); margin-top: 0.15rem; }
+.drow__file { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted-foreground); margin-top: 0.3rem; }
+.drow__note {
+	margin-top: 0.5rem;
+	padding: 0.6rem 0.8rem;
+	background: var(--muted);
+	border-left: 3px solid var(--foreground);
+	font-size: var(--text-xs);
+	line-height: 1.5;
+}
+.drow__acts { display: flex; gap: 0.4rem; align-items: center; }
+
+.portal-pill--act { border-width: 1.5px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ========== Booking — the pay step as an order ========== */
+
+.order { border: 1.5px solid var(--border); background: var(--background); }
+.order__row {
+	display: flex;
+	justify-content: space-between;
+	gap: 1rem;
+	padding: 0.8rem 1.25rem;
+	border-bottom: 1px solid var(--border-light);
+	font-size: var(--text-sm);
+}
+.order__row small { display: block; color: var(--muted-foreground); font-size: var(--text-xs); margin-top: 0.15rem; }
+.order__amt { font-family: var(--font-mono); font-weight: 600; white-space: nowrap; }
+.order__total {
+	display: flex;
+	justify-content: space-between;
+	padding: 1rem 1.25rem;
+	background: var(--foreground);
+	color: var(--background);
+}
+.order__total .order__amt { font-weight: 800; font-size: 1.15rem; }
+
+/* assessment section heads + TOC counts reuse .psec / .pindex */
+
+@media (max-width: 900px) {
+	.drow { grid-template-columns: 1.8rem 1fr; row-gap: 0.5rem; }
+}
+
+/* ========== Assessment form — numbered heads + counted TOC ========== */
+
+.assess-section__title {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.6rem;
+}
+.assess-section__meta {
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0.04em;
+	font-size: 0.62rem;
+}
+.assess-nav a { display: flex; justify-content: space-between; gap: 0.6rem; }
+.assess-nav__n { font-size: 0.6rem; color: var(--muted-foreground); }

@@ -1127,14 +1127,14 @@ const GENERIC_INTAKES = [
 ];
 
 const ASSESSMENT_SECTIONS = [
-	{ id: "personal", label: "Personal", icon: "◎" },
-	{ id: "passport", label: "Passport", icon: "≡" },
-	{ id: "education", label: "Education", icon: "◈" },
-	{ id: "employment", label: "Employment", icon: "◴" },
-	{ id: "english", label: "English", icon: "✦" },
-	{ id: "preferences", label: "Preferences", icon: "❖" },
-	{ id: "financial", label: "Financial", icon: "¤" },
-	{ id: "documents", label: "Documents", icon: "📎" },
+	{ id: "personal", label: "Personal", required: 4, fields: ["firstName", "middleName", "lastName", "email", "phone", "dateOfBirth", "gender", "nationality", "address"] },
+	{ id: "passport", label: "Passport", required: 0, fields: ["passportNumber", "passportCountry", "passportIssue", "passportExpiry"] },
+	{ id: "education", label: "Education", required: 0, fields: ["highestEducation", "institution", "fieldOfStudy", "graduationYear", "gpa"] },
+	{ id: "employment", label: "Employment", required: 0, fields: ["employmentStatus", "employer", "jobTitle", "yearsExperience"] },
+	{ id: "english", label: "English", required: 0, fields: ["englishTest", "englishScore", "englishDate"] },
+	{ id: "preferences", label: "Preferences", required: 0, fields: ["preferredLevel", "studyChoices"] },
+	{ id: "financial", label: "Financial", required: 0, fields: ["fundingSource", "budgetRange", "sponsorName", "sponsorRelationship"] },
+	{ id: "documents", label: "Documents", required: 0, fields: [] as string[] },
 ] as const;
 
 function AssessmentForm({
@@ -1165,6 +1165,27 @@ function AssessmentForm({
 	};
 	const [uploading, setUploading] = useState<Record<string, number>>({});
 	const [pickDocId, setPickDocId] = useState<string | null>(null);
+
+	// Filled/total per section — drives the counts in the TOC and each head.
+	function sectionProgress(id: string, fields: readonly string[]): { done: number; total: number } {
+		if (id === "documents") {
+			const total = ASSESSMENT_DOC_FIELDS.length;
+			const done = ASSESSMENT_DOC_FIELDS.filter((d) => assessmentDocs[d.id]?.fileName).length;
+			return { done, total };
+		}
+		const done = fields.filter((k) => {
+			const v = assessment[k as keyof AssessmentData];
+			if (typeof v === "string") return v.trim() !== "";
+			if (Array.isArray(v)) return v.some((c) => c.country || c.university || c.program || c.field);
+			return Boolean(v);
+		}).length;
+		return { done, total: fields.length };
+	}
+	const progress = Object.fromEntries(
+		ASSESSMENT_SECTIONS.map((s) => [s.id, sectionProgress(s.id, s.fields)]),
+	) as Record<string, { done: number; total: number }>;
+	const sectionMeta = (id: string, required: number) =>
+		`${progress[id]?.done ?? 0}/${progress[id]?.total ?? 0}${required > 0 ? ` · ${required} required` : " filled"}`;
 
 	function handleDocUpload(id: string) {
 		setPickDocId(id);
@@ -1222,16 +1243,22 @@ function AssessmentForm({
 			<div className="assess-layout mt-3">
 				<nav className="assess-nav" aria-label="Assessment sections">
 					<ul>
-						{ASSESSMENT_SECTIONS.map((s) => (
-							<li key={s.id}>
-								<a href={`#assess-${s.id}`}><span aria-hidden>{s.icon}</span> {s.label}</a>
-							</li>
-						))}
+						{ASSESSMENT_SECTIONS.map((s) => {
+							const { done, total } = sectionProgress(s.id, s.fields);
+							return (
+								<li key={s.id}>
+									<a href={`#assess-${s.id}`}>
+										<span>{s.label}</span>
+										<span className="assess-nav__n">{done}/{total}</span>
+									</a>
+								</li>
+							);
+						})}
 					</ul>
 				</nav>
 				<div className="assess-body">
 				<section id="assess-personal" className="assess-section">
-					<h3 className="assess-section__title">Personal</h3>
+					<h3 className="assess-section__title"><span>01 · Personal</span><span className="assess-section__meta">{sectionMeta("personal", 4)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fn">First name *</label>
@@ -1276,7 +1303,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-passport" className="assess-section">
-					<h3 className="assess-section__title">Passport</h3>
+					<h3 className="assess-section__title"><span>02 · Passport</span><span className="assess-section__meta">{sectionMeta("passport", 0)}</span></h3>
 					<div className="form-grid form-grid--2">
 						<div className="field">
 							<label htmlFor="a-pn">Passport number</label>
@@ -1298,7 +1325,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-education" className="assess-section">
-					<h3 className="assess-section__title">Education</h3>
+					<h3 className="assess-section__title"><span>03 · Education</span><span className="assess-section__meta">{sectionMeta("education", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-edu">Highest education</label>
@@ -1330,7 +1357,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-employment" className="assess-section">
-					<h3 className="assess-section__title">Employment</h3>
+					<h3 className="assess-section__title"><span>04 · Employment</span><span className="assess-section__meta">{sectionMeta("employment", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-es">Employment status</label>
@@ -1355,7 +1382,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-english" className="assess-section">
-					<h3 className="assess-section__title">English</h3>
+					<h3 className="assess-section__title"><span>05 · English</span><span className="assess-section__meta">{sectionMeta("english", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-et">English test taken</label>
@@ -1376,7 +1403,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-preferences" className="assess-section">
-					<h3 className="assess-section__title">Preferences</h3>
+					<h3 className="assess-section__title"><span>06 · Preferences</span><span className="assess-section__meta">{sectionMeta("preferences", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-pl">Level of study</label>
@@ -1397,7 +1424,7 @@ function AssessmentForm({
 				</section>
 
 				<section id="assess-financial" className="assess-section">
-					<h3 className="assess-section__title">Financial</h3>
+					<h3 className="assess-section__title"><span>07 · Financial</span><span className="assess-section__meta">{sectionMeta("financial", 0)}</span></h3>
 					<div className="form-grid form-grid--3">
 						<div className="field">
 							<label htmlFor="a-fs">Funding source</label>
@@ -1425,7 +1452,7 @@ function AssessmentForm({
 				</section>
 
 			<section id="assess-documents" className="assess-section">
-				<h3 className="assess-section__title">Documents</h3>
+				<h3 className="assess-section__title"><span>08 · Documents</span><span className="assess-section__meta">{sectionMeta("documents", 0)}</span></h3>
 				<div>
 					<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
 						Upload scanned copies of your documents. Accepted: PDF, JPEG, PNG, DOC, DOCX (max 15 MB each).
@@ -1443,11 +1470,11 @@ function AssessmentForm({
 											<p className="muted" style={{ fontSize: "0.75rem", marginTop: "0.2rem" }}>{doc.hint}</p>
 										</div>
 										{isUploading ? (
-											<span className="portal-pill portal-pill--draft">Uploading {pct}%</span>
+											<span className="portal-pill portal-pill--hollow">Uploading {pct}%</span>
 										) : uploaded?.fileName ? (
-											<span className="portal-pill portal-pill--approved">Uploaded</span>
+											<span className="portal-pill portal-pill--solid">Uploaded</span>
 										) : (
-											<span className="portal-pill portal-pill--needs_info">Pending</span>
+											<span className="portal-pill portal-pill--hollow">Pending</span>
 										)}
 									</div>
 									{isUploading ? (
@@ -1976,6 +2003,39 @@ export function PortalConsultationBookingFlow() {
 		booking.confirmationId ? "paid" : "method",
 	);
 
+	// Earliest open day per branch — the branch card doubles as a date hint.
+	const [nextSlots, setNextSlots] = useState<Record<string, string | null>>({});
+	useEffect(() => {
+		if (booking.consultationType !== "in_person") return;
+		const from = upcomingDates(1)[0]?.value;
+		if (!from) return;
+		let active = true;
+		Promise.all(
+			branches.map((b) =>
+				bookingsApi
+					.availabilityDays({ branchId: b.id, from, days: 14, durationMinutes: 45 })
+					.then((res) => [b.id, res.days.find((d) => d.open > 0)?.date ?? null] as const)
+					.catch(() => [b.id, null] as const),
+			),
+		).then((entries) => {
+			if (active) {
+				setNextSlots(
+					Object.fromEntries(
+						entries.map(([id, date]) => [
+							id,
+							date
+								? new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }).toUpperCase()
+								: null,
+						]),
+					),
+				);
+			}
+		});
+		return () => {
+			active = false;
+		};
+	}, [booking.consultationType]);
+
 	async function startPayment() {
 		if (payState === "paid" || payState === "processing" || payState === "success") return;
 		// Gate payment on the required booking fields — Paystack will reject
@@ -2101,6 +2161,9 @@ export function PortalConsultationBookingFlow() {
 									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
 										{id === "online" ? "Video call with a consultant — no branch visit." : "Meet your consultant at one of our branches."}
 									</span>
+									<span className="pick__price mt-2" style={{ display: "block" }}>
+										45 min · {formatDualCurrency(consultationFeeUsd)}
+									</span>
 								</button>
 							))}
 						</div>
@@ -2109,6 +2172,9 @@ export function PortalConsultationBookingFlow() {
 				{step === "branch" && (
 					<>
 						<p className="eyebrow">Branch</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", margin: "0.35rem 0 0.9rem" }}>
+							Earliest open slot shown on each card — the full grid comes next.
+						</p>
 						<div className="card-grid card-grid--2 mt-3">
 							{branches.map((b) => (
 								<button
@@ -2122,6 +2188,13 @@ export function PortalConsultationBookingFlow() {
 									</span>
 									<span className="muted mt-1" style={{ display: "block", fontSize: "0.85rem" }}>
 										{b.address}
+									</span>
+									<span className="pick__price mt-2" style={{ display: "block" }}>
+										{nextSlots[b.id] === undefined
+											? "Checking openings…"
+											: nextSlots[b.id]
+												? `Next slot ${nextSlots[b.id]}`
+												: "No openings in the next 14 days"}
 									</span>
 								</button>
 							))}
@@ -2149,11 +2222,10 @@ export function PortalConsultationBookingFlow() {
 				)}
 				{step === "pay" && (
 					<>
-						<p className="eyebrow">Consultation fee</p>
-						<p className="display mt-2" style={{ fontSize: "2rem" }}>
-							{formatDualCurrency(consultationFeeUsd)}
+						<p className="eyebrow">Confirm &amp; pay</p>
+						<p className="muted mt-1" style={{ fontSize: "var(--text-sm)" }}>
+							Check the order — then Paystack takes card or mobile money.
 						</p>
-						<p className="muted mt-1">Confirm your booking details below. Payment will be collected at the branch.</p>
 
 						{payState === "paid" && booking.confirmationId ? (
 							<div className="sharp-card mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
@@ -2166,36 +2238,38 @@ export function PortalConsultationBookingFlow() {
 						) : null}
 
 						{payState === "method" ? (
-							<div className="sharp-card mt-3" style={{ border: "1px solid var(--border-light)" }}>
-								<p className="eyebrow mb-2">Booking summary</p>
-								<div style={{ display: "grid", gap: "0.5rem", fontSize: "var(--text-sm)" }}>
-									<div style={{ display: "flex", justifyContent: "space-between" }}>
-										<span className="muted">Branch</span>
-										<span>{getBranchName(booking.branchId)}</span>
+							<>
+								<div className="order mt-3">
+									<div className="order__row">
+										<span>
+											{booking.consultationType === "online" ? "Online consultation" : "In-person consultation"} — 45 min
+											<small>{[booking.date, booking.time, getBranchName(booking.branchId)].filter(Boolean).join(" · ") || "Details in the rail"}</small>
+										</span>
+										<span className="order__amt">{formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
-									<div style={{ display: "flex", justifyContent: "space-between" }}>
-										<span className="muted">Date</span>
-										<span>{booking.date || "—"}</span>
+									<div className="order__row">
+										<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+											Includes — eligibility review, route recommendation, document checklist, named consultant
+										</span>
+										<span className="order__amt muted">—</span>
 									</div>
-									<div style={{ display: "flex", justifyContent: "space-between" }}>
-										<span className="muted">Time</span>
-										<span>{booking.time || "—"}</span>
-									</div>
-									<div style={{ display: "flex", justifyContent: "space-between" }}>
-										<span className="muted">Type</span>
-										<span>{booking.consultationType === "online" ? "Online" : "In-person"}</span>
-									</div>
-									<div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-light)", paddingTop: "0.5rem", marginTop: "0.25rem" }}>
-										<span className="muted">Fee</span>
-										<span style={{ fontWeight: 600 }}>{formatDualCurrency(consultationFeeUsd)}</span>
+									<div className="order__total">
+										<span>Due now</span>
+										<span className="order__amt">{formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
 								</div>
+								<p className="muted mt-3" style={{ fontSize: "var(--text-xs)", lineHeight: 1.6, maxWidth: "30rem" }}>
+									Free reschedule up to 24h before · refunded in full if we can't place you · receipt lands in your Money ledger.
+								</p>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
-										Confirm Booking — {formatDualCurrency(consultationFeeUsd)}
+										Pay with Paystack · {formatDualCurrency(consultationFeeUsd)} →
 									</Button>
 								</div>
-							</div>
+								<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>
+									Card · MTN MoMo · Vodafone Cash — processed by Paystack
+								</p>
+							</>
 						) : null}
 
 						{payState === "processing" ? (

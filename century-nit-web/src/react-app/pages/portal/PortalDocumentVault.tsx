@@ -5,7 +5,6 @@ import { useNotifier } from "../../components/notifier/Notifier";
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from "century-nit-shared";
 import type { ApplicantDocument } from "century-nit-shared";
 import { Button } from "../../components/ui/Button";
-import { IconDoc } from "../../components/ui/Icons";
 import { UploadProgressModal, type UploadStage } from "../../components/portal/UploadProgressModal";
 import { prepareDocumentForUpload } from "../../lib/upload";
 import { useAppState, documentsReleasedFor, documentHoldReasonFor } from "../../context/AppState";
@@ -26,10 +25,10 @@ import { OfficialDocuments, officialRows } from "../../components/OfficialDocume
  */
 
 const STATUS_META: Record<string, { label: string; pill: string }> = {
-	missing: { label: "Action Required", pill: "portal-pill--missing" },
-	uploaded: { label: "In Review", pill: "portal-pill--uploaded" },
-	verified: { label: "Verified ✓", pill: "portal-pill--verified" },
-	rejected: { label: "Resubmit", pill: "portal-pill--rejected" },
+	missing: { label: "Missing", pill: "portal-pill--hollow" },
+	uploaded: { label: "In review", pill: "portal-pill--hollow" },
+	verified: { label: "Verified", pill: "portal-pill--solid" },
+	rejected: { label: "Resubmit", pill: "portal-pill--act" },
 };
 
 /** API vocabulary → the vault's. PENDING_UPLOAD never reaches a listing. */
@@ -55,6 +54,7 @@ type VaultRow = {
 	id: string;
 	name: string;
 	hint: string;
+	chapter: "file" | "visa" | "departure";
 	live: ApplicantDocument | null;
 	status: string;
 	fileName: string | null;
@@ -62,7 +62,7 @@ type VaultRow = {
 };
 
 export function PortalDocumentVault() {
-	const { application, schoolApplications } = useAppState();
+	const { application, schoolApplications, booking } = useAppState();
 	const [allDocs, setAllDocs] = useState<ApplicantDocument[]>([]);
 	const { toast } = useNotifier();
 	const [liveDocs, setLiveDocs] = useState<Map<string, ApplicantDocument> | null>(null);
@@ -83,25 +83,29 @@ export function PortalDocumentVault() {
 
 	// Which documents this client needs: their package's list (or the one the
 	// assessment recommended), falling back to the standard set.
-	const [required, setRequired] = useState<{ id: string; name: string; hint: string }[]>(REQUIRED_DOCUMENTS.map((d) => ({ ...d })));
+	const [required, setRequired] = useState<{ id: string; name: string; hint: string; chapter: VaultRow["chapter"] }[]>(
+		REQUIRED_DOCUMENTS.map((d) => ({ ...d, chapter: "file" as const })),
+	);
 
 	const loadLive = useCallback(async () => {
 		setLoadError(null);
 		try {
 			const [res, me] = await Promise.all([documentsApi.list(), meApi.application().catch(() => null)]);
-			const base = me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [];
+			const base = (me?.application?.documentChecklist ?? me?.consultation?.documentChecklist ?? [])
+				.map((d) => ({ id: d.id, name: d.name, hint: d.hint, chapter: "file" as const }));
 			// The visa set joins the list once the visa chapter has opened; the
 			// departure proofs (insurance, accommodation) once Departure has.
-			const visa = me?.application?.visaDocumentChecklist ?? [];
+			const visa = (me?.application?.visaDocumentChecklist ?? [])
+				.map((d) => ({ id: d.id, name: d.name, hint: d.hint, chapter: "visa" as const }));
 			const departure = (me?.application?.preDepartureTasks ?? [])
 				.filter((t) => t.evidence)
 				.map((t) => {
 					const meta = DOCUMENT_TYPES.find((d) => d.id === t.evidence);
-					return { id: t.evidence as string, name: meta?.name ?? t.label, hint: meta?.hint ?? t.detail ?? "" };
+					return { id: t.evidence as string, name: meta?.name ?? t.label, hint: meta?.hint ?? t.detail ?? "", chapter: "departure" as const };
 				});
 			const seen = new Set(base.map((d) => d.id));
 			const list = [...base, ...visa.filter((d) => !seen.has(d.id)), ...departure.filter((d) => !seen.has(d.id) && !visa.some((v) => v.id === d.id))];
-			if (list.length > 0) setRequired(list.map((d) => ({ id: d.id, name: d.name, hint: d.hint })));
+			if (list.length > 0) setRequired(list);
 			setLiveDocs(new Map(res.documents.map((d) => [d.documentType, d])));
 			setAllDocs(res.documents);
 		} catch (err) {
@@ -124,15 +128,23 @@ export function PortalDocumentVault() {
 			id: meta.id,
 			name: meta.name,
 			hint: meta.hint,
+			chapter: meta.chapter,
 			live,
 			status: live ? (LIVE_STATUS[live.status] ?? "uploaded") : "missing",
 			fileName: live?.fileName ?? null,
 			uploadedAt: live?.uploadedAt ?? live?.createdAt ?? null,
 		};
 	});
+	const groups: { chapter: VaultRow["chapter"]; label: string; numeral: string | null }[] = [
+		{ chapter: "file", label: "Your file", numeral: null },
+		{ chapter: "visa", label: "Visa", numeral: "IV" },
+		{ chapter: "departure", label: "Departure", numeral: "V" },
+	];
 
 	const uploadedCount = rows.filter((d) => d.status !== "missing").length;
 	const verifiedCount = rows.filter((d) => d.status === "verified").length;
+	const inReviewCount = rows.filter((d) => d.status === "uploaded").length;
+	const needsYouCount = rows.filter((d) => d.status === "missing" || d.status === "rejected").length;
 	const allUploaded = uploadedCount === rows.length;
 	const allVerified = allUploaded && verifiedCount === rows.length;
 
@@ -296,67 +308,25 @@ export function PortalDocumentVault() {
 				</div>
 			</header>
 
-			<div className="vault-hero mt-4">
-				<div className="vault-hero__stats">
-					<div className="vault-stat-card">
-						<span className="vault-stat-card__label">Uploaded</span>
-						<div className="vault-stat-card__val-row">
-							<span className="vault-stat-card__val">{uploadedCount}</span>
-							<span className="vault-stat-card__total">/ {rows.length}</span>
-						</div>
-						<span className="vault-stat-card__hint">Documents on file</span>
-					</div>
-					<div className="vault-stat-card">
-						<span className="vault-stat-card__label">Verified</span>
-						<div className="vault-stat-card__val-row">
-							<span className="vault-stat-card__val vault-stat-card__val--green">{verifiedCount}</span>
-							<span className="vault-stat-card__total">/ {rows.length}</span>
-						</div>
-						<span className="vault-stat-card__hint">Approved by consultant</span>
-					</div>
-					<div className="vault-stat-card">
-						<span className="vault-stat-card__label">Review Status</span>
-						<div className="vault-stat-card__status">
-							<span
-								className={`vault-status-chip vault-status-chip--${allVerified ? "verified" : allUploaded ? "review" : "action"}`}
-							>
-								{allVerified ? "✓ Complete" : allUploaded ? "● In Review" : "○ Action Needed"}
-							</span>
-						</div>
-						<span className="vault-stat-card__hint">
-							{allVerified
-								? "All documents approved"
-								: `${rows.length - uploadedCount} required document(s) remaining`}
-						</span>
-					</div>
-				</div>
-				<div className="vault-progress">
-					<div className="vault-progress__bar">
-						<div
-							className="vault-progress__fill"
-							style={{ width: `${Math.round((uploadedCount / (rows.length || 1)) * 100)}%` }}
-						/>
-					</div>
-					<div className="vault-progress__meta">
-						<span>{Math.round((uploadedCount / (rows.length || 1)) * 100)}% uploaded</span>
-						<span>{Math.round((verifiedCount / (rows.length || 1)) * 100)}% verified</span>
-					</div>
-				</div>
-			</div>
-
-			<div className="vault-guidelines mt-3">
-				<div className="vault-guidelines__icon" aria-hidden="true">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-						<circle cx="12" cy="12" r="10" />
-						<line x1="12" y1="16" x2="12" y2="12" />
-						<line x1="12" y1="8" x2="12.01" y2="8" />
-					</svg>
-				</div>
-				<div className="vault-guidelines__content">
-					<p className="vault-guidelines__title">Accepted Formats & Guidelines</p>
-					<p className="vault-guidelines__desc">
-						Upload clear, readable copies in <strong>PDF, JPG, PNG, DOC, or DOCX</strong> (max <strong>15 MB</strong> per file). Large images are compressed automatically before upload.
+			{/* the count — one line of truth; the inverted cell is what needs you */}
+			<div className="dcount mt-4">
+				<div>
+					<p className="dcount__n">
+						{uploadedCount}<span className="muted" style={{ fontSize: "1rem", fontWeight: 400 }}> / {rows.length}</span>
 					</p>
+					<p className="dcount__l">On file</p>
+				</div>
+				<div>
+					<p className="dcount__n">{verifiedCount}</p>
+					<p className="dcount__l">Verified</p>
+				</div>
+				<div>
+					<p className="dcount__n">{inReviewCount}</p>
+					<p className="dcount__l">In review</p>
+				</div>
+				<div className="dcount__act">
+					<p className="dcount__n">{needsYouCount}</p>
+					<p className="dcount__l">Needs you</p>
 				</div>
 			</div>
 
@@ -389,132 +359,154 @@ export function PortalDocumentVault() {
 				</div>
 			) : null}
 
-			<OfficialDocuments
-				rows={officialRows({ schools: schoolApplications, docs: allDocs })}
-				released={documentsReleasedFor(application)}
-				holdReason={documentHoldReasonFor(application)}
-			/>
-
-			<section className="mt-4">
-				<div className="vault-list">
-					{rows.map((doc) => {
-						const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
-						const busy = busyId === doc.id;
+			<div className="psplit mt-4">
+				<div>
+					{/* documents grouped by the chapter they unlock */}
+					{groups.map((g) => {
+						const grows = rows.filter((r) => r.chapter === g.chapter);
+						if (grows.length === 0) return null;
+						const gv = grows.filter((r) => r.status === "verified").length;
+						const allGv = gv === grows.length;
 						return (
-							<div key={doc.id} className={`doc-card doc-card--${doc.status}`}>
-								<div className="doc-card__main">
-									<span className="doc-card__icon" aria-hidden="true">
-										<IconDoc size={22} />
-									</span>
-
-									<div className="doc-card__info">
-										<div className="doc-card__heading">
-											<h3 className="doc-card__title">{doc.name}</h3>
-											<p className="doc-card__hint">{doc.hint}</p>
-										</div>
-
-										{doc.live?.reviewNote ? (
-											<div className="doc-card__review-note">
-												<strong>Consultant Feedback:</strong> {doc.live.reviewNote}
-											</div>
-										) : null}
-
-										{doc.fileName ? (
-											<div className="doc-card__attachment">
-												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-													<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-													<polyline points="14 2 14 8 20 8" />
-												</svg>
-												<span className="doc-card__filename mono">{doc.fileName}</span>
-												{doc.uploadedAt ? (
-													<>
-														<span className="doc-card__sep" aria-hidden="true">·</span>
-														<span className="doc-card__date">
-															Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
-														</span>
-													</>
-												) : null}
-											</div>
-										) : null}
-									</div>
+							<div key={g.chapter}>
+								<div className="psec mt-5">
+									<span className={`psec__no${allGv ? " psec__no--done" : ""}`}>{allGv ? "✓" : g.numeral ?? "•"}</span>
+									<span className="psec__title">{g.label}</span>
+									<span className="psec__hint">{gv} of {grows.length} verified</span>
 								</div>
-
-								<div className="doc-card__side">
-									<span className={`portal-pill ${statusMeta.pill}`}>
-										{statusMeta.label}
-									</span>
-									<div className="doc-card__actions">
-										{doc.fileName ? (
-											<>
-												<button
-													type="button"
-													className="btn btn--secondary btn--sm"
-													onClick={() => void handlePreview(doc)}
-													disabled={busy}
-												>
-													Preview
-												</button>
-												{doc.status !== "verified" ? (
-													<button
-														type="button"
-														className="btn btn--secondary btn--sm"
-														onClick={() => handleUpload(doc.id)}
-														disabled={busy}
-													>
-														{busy ? "Uploading…" : "Replace"}
-													</button>
-												) : null}
-												{doc.status !== "verified" ? (
-													<button
-														type="button"
-														className="btn btn--ghost btn--sm btn--danger-hover"
-														onClick={() => void handleRemove(doc)}
-														disabled={busy}
-													>
-														Remove
-													</button>
-												) : null}
-											</>
-										) : (
-											<Button
-												type="button"
-												variant="secondary"
-												size="sm"
-												onClick={() => handleUpload(doc.id)}
-												disabled={busy || loading}
-											>
-												{busy ? "Uploading…" : "Upload"}
-											</Button>
-										)}
-									</div>
+								<div>
+									{grows.map((doc) => {
+										const statusMeta = STATUS_META[doc.status] ?? STATUS_META.missing;
+										const busy = busyId === doc.id;
+										const rowCls =
+											doc.status === "verified" ? "drow drow--ok" : doc.status === "rejected" ? "drow drow--now" : "drow";
+										const mark =
+											doc.status === "verified" ? "✓" : doc.status === "rejected" ? "!" : doc.status === "uploaded" ? "…" : "·";
+										return (
+											<div key={doc.id} className={rowCls}>
+												<span className="drow__mark">{mark}</span>
+												<div>
+													<p className="drow__name">{doc.name}</p>
+													{doc.hint ? <p className="drow__hint">{doc.hint}</p> : null}
+													{doc.fileName ? (
+														<p className="drow__file">
+															{doc.fileName}
+															{doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ""}
+														</p>
+													) : null}
+													{doc.live?.reviewNote ? (
+														<div className="drow__note">
+															<strong>Your consultant:</strong> {doc.live.reviewNote}
+														</div>
+													) : null}
+												</div>
+												<span className={`portal-pill ${statusMeta.pill}`}>{statusMeta.label}</span>
+												<span className="drow__acts">
+													{doc.fileName ? (
+														<>
+															<button type="button" className="jlink" onClick={() => void handlePreview(doc)} disabled={busy}>
+																Preview
+															</button>
+															{doc.status !== "verified" ? (
+																<>
+																	<button type="button" className="jlink" onClick={() => handleUpload(doc.id)} disabled={busy}>
+																		{busy ? "Uploading…" : "Replace"}
+																	</button>
+																	<button type="button" className="jlink" onClick={() => void handleRemove(doc)} disabled={busy}>
+																		Remove
+																	</button>
+																</>
+															) : null}
+														</>
+													) : (
+														<Button type="button" variant="primary" size="sm" onClick={() => handleUpload(doc.id)} disabled={busy || loading}>
+															{busy ? "Uploading…" : doc.status === "rejected" ? "Re-upload" : "Upload"}
+														</Button>
+													)}
+												</span>
+											</div>
+										);
+									})}
 								</div>
 							</div>
 						);
 					})}
-				</div>
-			</section>
 
-			{allUploaded && !allVerified ? (
-				<div className="card card--pad mt-5 next-action">
-					<p className="eyebrow">All documents uploaded</p>
-					<p className="muted mt-1">
-						Your consultant will review and verify each document. Check back for status updates.
-					</p>
-				</div>
-			) : null}
+					{/* what the milestone releases — now in your hands */}
+					<div className="psec mt-5">
+						<span className="psec__no">↓</span>
+						<span className="psec__title">In your hands</span>
+						<span className="psec__hint">Released to you</span>
+					</div>
+					<OfficialDocuments
+						rows={officialRows({ schools: schoolApplications, docs: allDocs })}
+						released={documentsReleasedFor(application)}
+						holdReason={documentHoldReasonFor(application)}
+					/>
 
-			{allVerified ? (
-				<div className="card card--pad mt-5">
-					<p className="eyebrow">Verification complete</p>
-					<p className="display mt-2" style={{ fontSize: "1.2rem" }}>
-						All documents verified ✓
-					</p>
-					<p className="muted mt-1">
-						Your document vault is cleared. You can proceed with school selection and
-						application tracking.
-					</p>
+					{allUploaded && !allVerified ? (
+						<div className="sharp-card mt-5">
+							<p className="eyebrow">All documents uploaded</p>
+							<p className="muted mt-1" style={{ fontSize: "var(--text-sm)" }}>
+								Your consultant will review and verify each document. Check back for status updates.
+							</p>
+						</div>
+					) : null}
+
+					{allVerified ? (
+						<div className="sharp-card sharp-card--key mt-5">
+							<p className="eyebrow">Verification complete</p>
+							<p className="mt-2" style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+								All documents verified ✓
+							</p>
+							<p className="muted mt-1" style={{ fontSize: "var(--text-sm)" }}>
+								Your document vault is cleared — the file moves with the journey.
+							</p>
+						</div>
+					) : null}
 				</div>
-			) : null}
+
+				{/* the rail */}
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">The count</p>
+						<div className="pkv"><span className="pkv__k">On file</span><span className="pkv__v">{uploadedCount} / {rows.length}</span></div>
+						<div className="pkv"><span className="pkv__k">Verified</span><span className="pkv__v">{verifiedCount}</span></div>
+						<div className="pkv"><span className="pkv__k">In review</span><span className="pkv__v">{inReviewCount}</span></div>
+						<div className="pkv"><span className="pkv__k">Needs you</span><span className="pkv__v"><strong>{needsYouCount}</strong></span></div>
+						{needsYouCount > 0 ? (
+							<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.8rem", lineHeight: 1.5 }}>
+								{needsYouCount === 1 ? "One document stands" : needsYouCount + " documents stand"} between you and a complete file.
+							</p>
+						) : null}
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">What documents unlock</p>
+						<div className="pkv"><span className="pkv__k">Chapter IV</span><span className="pkv__v">Visa submission</span></div>
+						<div className="pkv"><span className="pkv__k">Chapter V</span><span className="pkv__v">Departure proofs</span></div>
+						<div className="pkv"><span className="pkv__k">Milestone</span><span className="pkv__v">Releases your letters</span></div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">Formats</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							PDF, JPG, PNG, DOC, DOCX — max 15 MB. Clear scans; large images compress automatically.
+							Your consultant reviews every upload.
+						</p>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">Reviewer</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem" }}>
+							{booking.consultantName ? `${booking.consultantName} · your consultant` : "Your consultant"}
+						</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.2rem" }}>
+							Reviews within 1–2 working days.
+						</p>
+					</div>
+				</div>
+			</div>
 
 			{pickDocId ? (() => {
 				const doc = rows.find((r) => r.id === pickDocId);

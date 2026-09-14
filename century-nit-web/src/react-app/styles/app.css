@@ -6628,9 +6628,13 @@ img.profile-monogram {
 
 .psplit {
 	display: grid;
-	grid-template-columns: 1fr 19.5rem;
-	gap: 1.5rem;
+	grid-template-columns: minmax(0, 1fr) 21rem;
+	gap: 2rem;
 	align-items: start;
+}
+
+.psplit > * {
+	min-width: 0;
 }
 
 .prail {
@@ -6648,6 +6652,27 @@ img.profile-monogram {
 .prail .sharp-card--key {
 	border-color: var(--border);
 	border-width: 1.5px;
+}
+
+.prail__title {
+	font-weight: 700;
+	font-size: 1.05rem;
+	line-height: 1.3;
+	margin: 0.3rem 0 0.6rem;
+}
+
+/* a rail is narrow: its buttons wrap instead of running off the card */
+.prail .btn {
+	white-space: normal;
+	text-align: center;
+	line-height: 1.4;
+	padding: 0.85rem 1rem;
+	letter-spacing: 0.06em;
+	min-width: 0;
+}
+
+.prail .money-inline {
+	white-space: normal;
 }
 
 @media (max-width: 900px) {
@@ -6685,6 +6710,8 @@ img.profile-monogram {
 
 .pkv__v {
 	text-align: right;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .pkv--due .pkv__k {
@@ -6736,21 +6763,30 @@ img.profile-monogram {
 
 .pcards {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-	gap: 0.6rem;
+	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+	gap: 0.8rem;
 }
 
 .pick {
 	border: 1px solid var(--border-light);
 	background: var(--background);
-	padding: 0.9rem 1rem;
+	padding: 1.1rem 1.15rem;
 	text-align: left;
 	font: inherit;
 	cursor: pointer;
 	display: flex;
 	flex-direction: column;
-	gap: 0.3rem;
-	position: relative;
+	align-items: flex-start;
+	gap: 0.4rem;
+	min-width: 0;
+}
+
+.pick > * {
+	max-width: 100%;
+}
+
+.pick .eyebrow {
+	line-height: 1.4;
 }
 
 .pick:hover:not(:disabled) {
@@ -6783,15 +6819,13 @@ img.profile-monogram {
 }
 
 .pick__tag {
-	position: absolute;
-	top: 0.7rem;
-	right: 0.7rem;
 	font-family: var(--font-mono);
 	font-size: 0.58rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
 	border: 1px solid currentColor;
 	padding: 0.12rem 0.4rem;
+	margin-bottom: 0.15rem;
 }
 
 .pchips {
@@ -6848,6 +6882,11 @@ img.profile-monogram {
 
 .psteps .portal-pill:disabled {
 	cursor: default;
+}
+
+.psteps .portal-pill--solid {
+	background: var(--foreground);
+	color: var(--accent-foreground);
 }
 
 /* journey map — six chapters, seals carry state */
@@ -7774,8 +7813,17 @@ a.portal-ch:hover {
 }
 
 .portal-ch--locked {
+	grid-template-columns: 1.6rem 1fr;
+	row-gap: 0.1rem;
 	color: rgba(255, 255, 255, 0.45);
 	cursor: not-allowed;
+}
+
+.portal-ch--locked .portal-ch__s {
+	grid-column: 2;
+	max-width: none;
+	white-space: normal;
+	line-height: 1.35;
 }
 
 .portal-ch--locked .portal-ch__m {
@@ -8051,7 +8099,6 @@ a.portal-ch--on:hover {
 	gap: 0.8rem;
 }
 .pcards--pair .pick {
-	padding: 1.1rem 1.15rem;
 	gap: 0.45rem;
 }
 .pcards--pair .pick__price {

@@ -295,6 +295,19 @@ export function PortalPackage() {
 	);
 }
 
+/** The stored level is free text on the API — read it back to one of ours. */
+function normaliseDegreeLevel(raw: string | null | undefined): SchoolDegreeLevel | null {
+	if (!raw) return null;
+	const v = raw.toLowerCase();
+	if (SCHOOL_DEGREE_LEVELS.some((d) => d.id === v)) return v as SchoolDegreeLevel;
+	if (v.includes("master") || v.includes("msc") || v.includes("mba") || v.includes("postgrad")) return "masters";
+	if (v.includes("bachelor") || v.includes("bsc") || v.includes("undergrad")) return "bachelor";
+	if (v.includes("phd") || v.includes("doctor")) return "phd";
+	if (v.includes("diploma") || v.includes("certificate")) return "diploma";
+	if (v.includes("professional")) return "professional";
+	return null;
+}
+
 function SchoolPackageInner() {
 	const { application, chooseSchoolPackage, payAgencyInstallment, booking, choosePaymentPlan } = useAppState();
 	const { toast } = useNotifier();
@@ -398,7 +411,7 @@ function SchoolPackageInner() {
 	}, [booking.assessmentResult, application.schoolFundingTrack, application.schoolDegreeLevel]);
 
 	const activeFunding = (funding || application.schoolFundingTrack || "scholarship") as SchoolFundingTrack;
-	const activeLevel = (level || application.schoolDegreeLevel || "masters") as SchoolDegreeLevel;
+	const activeLevel = normaliseDegreeLevel(level || application.schoolDegreeLevel) ?? "masters";
 
 	const selectedPkg = dbPackages.find((p) => p.code === activeFunding);
 	const fundMeta = selectedPkg
@@ -418,7 +431,7 @@ function SchoolPackageInner() {
 		? dbPackages.map((p) => ({
 				id: p.code as SchoolFundingTrack,
 				name: p.name,
-				tagline: p.tagline || (p.code === "scholarship" ? "Funded / award-led path" : p.code === "hybrid" ? "Partial award + self-fund" : "Self-funded / family-funded"),
+				tagline: p.code === "scholarship" ? "Funded / award-led path" : p.code === "hybrid" ? "Partial award + self-fund" : "Self-funded / family-funded",
 				blurb: p.tagline || p.features?.[0] || "",
 				priceCents: p.priceCents,
 				features: p.features,
@@ -614,7 +627,7 @@ function SchoolPackageInner() {
 								<p className="psec__hint">
 									The deposit is due now either way — the plan decides how the rest follows.
 								</p>
-								<div className="pcards" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}>
+								<div className="pcards pcards--pair">
 									{PAYMENT_PLANS.map((pl) => {
 										const on = plan === pl.id;
 										return (
@@ -694,9 +707,10 @@ function SchoolPackageInner() {
 						<p className="eyebrow">Your package</p>
 						{funding && level ? (
 							<>
-								<p style={{ fontWeight: 700, fontSize: "1.05rem", margin: "0.3rem 0 0.6rem" }}>
-									{fundMeta?.name} × {levelMeta?.short} · {targetSchoolCount}{" "}
-									{targetSchoolCount === 1 ? "school" : "schools"}
+								<p className="prail__title">
+									{[fundMeta?.name, levelMeta?.short, `${targetSchoolCount} ${targetSchoolCount === 1 ? "school" : "schools"}`]
+										.filter(Boolean)
+										.join(" · ")}
 								</p>
 								<div className="pkv">
 									<span className="pkv__k">Service fee</span>
@@ -735,7 +749,7 @@ function SchoolPackageInner() {
 										onClick={() => nav("/portal/application")}
 										style={{ width: "100%" }}
 									>
-										Next · Applications →
+										Next · Applications
 									</Button>
 								) : (
 									<>
@@ -750,7 +764,7 @@ function SchoolPackageInner() {
 												"Connecting to Paystack…"
 											) : (
 												<>
-													Pay the deposit · <MoneyInline usd={depositUsd} /> →
+													Pay the deposit · <MoneyInline usd={depositUsd} />
 												</>
 											)}
 										</Button>

@@ -1535,15 +1535,13 @@ const CONSULT_STEP_LABELS: Record<ConsultStepId, string> = {
 	review: "Review",
 	outcome: "Outcome",
 };
-/** Where an online consultation is hosted — the branch whose slots and consultants it uses. */
-const ONLINE_BRANCH_ID = "accra-hq";
-
 /** Consultations run at the two Ghana offices — partner desks don't take bookings. */
 const BOOKABLE_BRANCHES = branches.filter((b) => b.id === "accra-hq" || b.id === "kumasi");
-function consultSteps(type: string | null | undefined): ConsultStepId[] {
-	return type === "online"
-		? ["type", "assessment", "schedule", "pay", "review", "outcome"]
-		: ["type", "branch", "assessment", "schedule", "pay", "review", "outcome"];
+
+// The branch is the office that handles your file — its slots, its
+// consultants — so it is picked for online meetings too, not just in-person.
+function consultSteps(_type: string | null | undefined): ConsultStepId[] {
+	return ["type", "branch", "assessment", "schedule", "pay", "review", "outcome"];
 }
 
 function ConsultationOutcome({
@@ -2009,7 +2007,6 @@ export function PortalConsultationBookingFlow() {
 	// Earliest open day per branch — the branch card doubles as a date hint.
 	const [nextSlots, setNextSlots] = useState<Record<string, string | null>>({});
 	useEffect(() => {
-		if (booking.consultationType !== "in_person") return;
 		const from = upcomingDates(1)[0]?.value;
 		if (!from) return;
 		let active = true;
@@ -2037,7 +2034,7 @@ export function PortalConsultationBookingFlow() {
 		return () => {
 			active = false;
 		};
-	}, [booking.consultationType]);
+	}, []);
 
 	async function startPayment() {
 		if (payState === "paid" || payState === "processing" || payState === "success") return;
@@ -2148,21 +2145,15 @@ export function PortalConsultationBookingFlow() {
 						<div className="pcards pcards--pair">
 							{(
 								[
-									["online", "Video call", "Online consultation", "Meet from anywhere — the link is sent with your confirmation."],
-									["in_person", "At a branch", "In-person consultation", "Accra or Kumasi — you pick the branch next."],
+									["online", "Video call", "Online consultation", "Meet from anywhere — you still pick which office handles your file."],
+									["in_person", "At a branch", "In-person consultation", "Accra or Kumasi — the office you visit."],
 								] as const
 							).map(([id, kicker, name, blurb]) => (
 								<button
 									key={id}
 									type="button"
 									className={`pick${booking.consultationType === id ? " pick--on" : ""}`}
-									onClick={() =>
-										updateBooking(
-											id === "online"
-												? { consultationType: id, branchId: ONLINE_BRANCH_ID }
-												: { consultationType: id, branchId: booking.branchId === ONLINE_BRANCH_ID ? "" : booking.branchId },
-										)
-									}
+									onClick={() => updateBooking({ consultationType: id })}
 								>
 									<span className="eyebrow">{kicker}</span>
 									<span className="pick__name" style={{ fontSize: "1.05rem" }}>{name}</span>
@@ -2178,9 +2169,9 @@ export function PortalConsultationBookingFlow() {
 						<div className="psec" style={{ marginBottom: "0.9rem" }}>
 							<div>
 								<span className="psec__no">2</span>
-								<span className="psec__title">Which branch?</span>
+								<span className="psec__title">Which branch handles you?</span>
 							</div>
-							<p className="psec__hint">Earliest available slot shown — the full grid comes next.</p>
+							<p className="psec__hint">The office your file sits with — even for a video call. Earliest slot shown; the full grid comes next.</p>
 						</div>
 						<div className="pcards pcards--pair">
 							{BOOKABLE_BRANCHES.map((b) => (
@@ -2390,14 +2381,12 @@ export function PortalConsultationBookingFlow() {
 										: "Not chosen"}
 							</span>
 						</div>
-						{booking.consultationType !== "online" && (
-							<div className="pkv">
-								<span className="pkv__k">Branch</span>
-								<span className={`pkv__v${booking.branchId ? "" : " muted"}`}>
-									{booking.branchId ? getBranchName(booking.branchId) : "Not chosen"}
-								</span>
-							</div>
-						)}
+						<div className="pkv">
+							<span className="pkv__k">Handling branch</span>
+							<span className={`pkv__v${booking.branchId ? "" : " muted"}`}>
+								{booking.branchId ? getBranchName(booking.branchId) : "Not chosen"}
+							</span>
+						</div>
 						<div className="pkv">
 							<span className="pkv__k">About you</span>
 							<span className={`pkv__v${booking.assessment.firstName ? "" : " muted"}`}>

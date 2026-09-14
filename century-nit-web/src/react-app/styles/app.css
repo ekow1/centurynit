@@ -8256,3 +8256,636 @@ a.portal-ch--on:hover {
 @media (max-width: 640px) {
 	.pcards--pair { grid-template-columns: 1fr; }
 }
+
+/* ── Chapter III · Applications — the day line, the four steps, school cards,
+   the picker, the folded sections, the rail. Ink carries state. ── */
+
+.pref {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	text-align: right;
+	line-height: 1.5;
+	flex-shrink: 0;
+}
+
+.pday {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	flex-wrap: wrap;
+	margin: 1.25rem 0 0;
+	padding: 0.65rem 0;
+	border-top: 1px solid var(--border);
+	border-bottom: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.pday strong {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.pday__now {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.pday__now::before {
+	content: "";
+	width: 8px;
+	height: 8px;
+	background: var(--foreground);
+	flex-shrink: 0;
+}
+
+.psteps4 {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.6rem;
+	margin-top: 1.25rem;
+}
+
+.pstep {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	padding: 0.7rem 0.9rem;
+	border: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	min-width: 0;
+}
+
+.pstep__m {
+	width: 1.4rem;
+	height: 1.4rem;
+	border: 1px solid currentColor;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.62rem;
+	font-weight: 700;
+	flex-shrink: 0;
+}
+
+.pstep__l {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.pstep__s {
+	margin-left: auto;
+	font-size: 0.6rem;
+	letter-spacing: 0.04em;
+	opacity: 0.8;
+	white-space: nowrap;
+}
+
+.pstep--done {
+	background: var(--muted);
+}
+
+.pstep--done .pstep__m,
+.pstep--on .pstep__m {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+
+.pstep--on {
+	border: 1.5px solid var(--foreground);
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.psec__h {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-bottom: 0.75rem;
+	flex-wrap: wrap;
+}
+
+.psec__h .psec__hint {
+	margin: 0 0 0 0.35rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.psec__no--later {
+	border-color: var(--border-light);
+	border-style: dashed;
+	color: var(--muted-foreground);
+}
+
+.psec--later .psec__title {
+	color: var(--muted-foreground);
+	font-weight: 600;
+}
+
+.psec__later {
+	font-size: 0.85rem;
+	line-height: 1.5;
+	color: var(--muted-foreground);
+	padding: 0.8rem 1rem;
+	border: 1px dashed var(--border-light);
+	margin: 0;
+}
+
+.psec__later strong {
+	color: var(--foreground);
+}
+
+/* school cards */
+.schools {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+	gap: 0.8rem;
+}
+
+.sch {
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 1.1rem 1.15rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	min-width: 0;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+}
+
+.sch--key {
+	border: 1.5px solid var(--foreground);
+}
+
+.sch--dim {
+	color: var(--muted-foreground);
+}
+
+.sch__dest {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 0.5rem;
+}
+
+.sch__uni {
+	font-weight: 700;
+	font-size: 1.05rem;
+	line-height: 1.25;
+	letter-spacing: -0.01em;
+}
+
+.sch__prog {
+	font-size: 0.9rem;
+	line-height: 1.35;
+}
+
+.sch__meta {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+
+.sch__fee {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.75rem;
+	margin-top: 0.5rem;
+	padding-top: 0.55rem;
+	border-top: 1px dashed var(--border-light);
+	font-size: 0.8rem;
+}
+
+.sch__fee b {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	font-size: 0.9rem;
+}
+
+.sch__fee span {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	text-align: right;
+}
+
+.sch__note {
+	font-size: 0.82rem;
+	line-height: 1.45;
+	color: var(--muted-foreground);
+	margin: 0.4rem 0 0;
+}
+
+.sch__act {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.75rem;
+	margin-top: 0.6rem;
+	flex-wrap: wrap;
+}
+
+.plnk {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+}
+
+.plnk--dim {
+	color: var(--muted-foreground);
+}
+
+.plnk:hover {
+	color: var(--foreground);
+}
+
+.sch--add {
+	border-style: dashed;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: 0.4rem;
+	cursor: pointer;
+	min-height: 11rem;
+}
+
+.sch--add:hover:not(:disabled) {
+	border-color: var(--foreground);
+}
+
+.sch--add:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+.sch__plus {
+	width: 2rem;
+	height: 2rem;
+	border: 1px solid var(--border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.1rem;
+	font-weight: 600;
+}
+
+.sch__addt {
+	font-weight: 700;
+	font-size: 0.95rem;
+}
+
+.sch__adds {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+/* the pipeline on a card — preparing · submitted · decided */
+.pipe {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 3px;
+	margin-top: 0.5rem;
+}
+
+.pipe span {
+	height: 4px;
+	background: var(--border-light);
+}
+
+.pipe .pipe__on {
+	background: var(--foreground);
+}
+
+.pipe .pipe__half {
+	background: repeating-linear-gradient(90deg, var(--foreground) 0 4px, transparent 4px 8px);
+}
+
+.pipe__l {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	font-family: var(--font-mono);
+	font-size: 0.56rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-top: 0.25rem;
+}
+
+.pipe__l span:nth-child(2) {
+	text-align: center;
+}
+
+.pipe__l span:nth-child(3) {
+	text-align: right;
+}
+
+.ptag {
+	display: inline-block;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	padding: 0.15rem 0.45rem;
+	border: 1px solid currentColor;
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.ptag--ink {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+
+.offer {
+	margin-top: 0.6rem;
+	border: 1px solid var(--foreground);
+	padding: 0.7rem 0.8rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	color: var(--foreground);
+}
+
+.offer__k {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.offer__row {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.6rem;
+	font-size: 0.8rem;
+}
+
+.offer__row b {
+	font-family: var(--font-mono);
+	font-weight: 700;
+	text-align: right;
+}
+
+.offer__row--sub {
+	margin-top: -0.25rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+}
+
+.offer__from {
+	font-size: 0.78rem;
+	line-height: 1.45;
+	color: var(--muted-foreground);
+	margin: 0.2rem 0 0;
+	padding-top: 0.4rem;
+	border-top: 1px dashed var(--border-light);
+}
+
+/* the picker — one row, square */
+.picker {
+	border: 1px solid var(--border);
+	padding: 1.1rem 1.15rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+	margin-top: 0.8rem;
+}
+
+.picker__row {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+	gap: 0.6rem;
+	align-items: end;
+	border: 0;
+	padding: 0;
+	margin: 0;
+	min-width: 0;
+}
+
+.picker__row:disabled {
+	opacity: 0.6;
+}
+
+.picker__row .field {
+	min-width: 0;
+	margin: 0;
+	gap: 0.3rem;
+}
+
+.picker__row .field label {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.picker__row .select {
+	height: 44px;
+	padding: 0 0.75rem;
+	font-size: 0.9rem;
+	width: 100%;
+}
+
+.picker__row .btn {
+	height: 44px;
+	min-height: 44px;
+	padding: 0 1.25rem;
+	font-size: var(--text-xs);
+}
+
+.picker__peek {
+	display: flex;
+	align-items: baseline;
+	gap: 0.75rem;
+	flex-wrap: wrap;
+	font-size: 0.85rem;
+	padding-top: 0.6rem;
+	border-top: 1px dashed var(--border-light);
+	margin: 0;
+}
+
+.picker__k {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.picker__peek b {
+	font-family: var(--font-mono);
+	font-weight: 700;
+}
+
+.picker__s {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+}
+
+.pfoot {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-top: 1rem;
+	flex-wrap: wrap;
+}
+
+.pfoot__note {
+	font-size: 0.8rem;
+	line-height: 1.5;
+	color: var(--muted-foreground);
+	margin: 0;
+}
+
+/* the rail */
+.prail__ink {
+	background: var(--foreground);
+	color: var(--background);
+	padding: 1.1rem;
+}
+
+.prail__ink-k {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.65);
+	margin: 0;
+}
+
+.prail__ink-big {
+	font-size: 1.7rem;
+	font-weight: 700;
+	line-height: 1.1;
+	margin: 0.35rem 0 0;
+}
+
+.prail__ink-s {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgba(255, 255, 255, 0.7);
+	margin: 0.35rem 0 0;
+}
+
+.prail__note {
+	font-size: 0.78rem;
+	line-height: 1.5;
+	color: var(--muted-foreground);
+	margin: 0.7rem 0 0;
+}
+
+.pnx {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	margin-top: 0.5rem;
+}
+
+.pnx__r {
+	display: grid;
+	grid-template-columns: 1.4rem 1fr;
+	gap: 0.6rem;
+	font-size: 0.85rem;
+	line-height: 1.45;
+}
+
+.pnx__n {
+	width: 1.4rem;
+	height: 1.4rem;
+	border: 1px solid var(--border-light);
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--muted-foreground);
+}
+
+.pnx__n--on {
+	border-color: var(--foreground);
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.pnx__n--done {
+	border-color: var(--foreground);
+	color: var(--foreground);
+}
+
+.pnx__d {
+	color: var(--muted-foreground);
+	font-size: 0.78rem;
+	line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+	.psteps4 {
+		gap: 0.3rem;
+	}
+	.pstep {
+		padding: 0.45rem 0.4rem;
+		justify-content: center;
+	}
+	.pstep__l,
+	.pstep__s {
+		display: none;
+	}
+	.picker__row {
+		grid-template-columns: 1fr 1fr;
+	}
+	.picker__row .btn {
+		grid-column: 1 / -1;
+	}
+	.pref {
+		display: none;
+	}
+}

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
+import { useCases } from "../hooks/useCases";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { getInvoice, type ApiInvoice } from "../lib/api";
@@ -59,6 +60,10 @@ function agingOf(rows: { balance: number; age: number | null; derived: InvoiceSt
 
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
+	// The client's own reference (CN-…) for the account card — invoices carry
+	// only the applicant's id, and on older rows that id is the name itself.
+	const { applicants } = useCases();
+	const refOf = (id: string, name: string) => applicants.find((a) => a.id === id || a.applicantId === id || a.name === name)?.applicantId ?? null;
 	const {
 		invoices,
 		loading,
@@ -460,7 +465,7 @@ export function EnterpriseInvoices() {
 										<span className="ops-acct__name" title={a.name}>
 											{a.name}
 										</span>
-										<span className="ops-acct__ref">{a.id.slice(0, 8)}</span>
+										{refOf(a.id, a.name) && <span className="ops-acct__ref">{refOf(a.id, a.name)}</span>}
 									</div>
 									<div className="ops-figs">
 										<div className="ops-fig">
@@ -482,10 +487,13 @@ export function EnterpriseInvoices() {
 												{aging.map((x, i) => (x > 0 ? <span key={i} className={`ops-aging__seg ops-aging__seg--${i + 1}`} style={{ flex: x }} /> : null))}
 											</div>
 											<div className="ops-aging__l">
-												<span>current</span>
-												<span>30</span>
-												<span>60</span>
-												<span>90+</span>
+												{(["current", "1–30 d", "31–60 d", "90+ d"] as const).map((label, i) =>
+													aging[i] > 0 ? (
+														<span key={label}>
+															{label} {fmtGhs(aging[i])}
+														</span>
+													) : null,
+												)}
 											</div>
 										</>
 									)}

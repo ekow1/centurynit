@@ -1779,7 +1779,7 @@ a.dash-kpi--on:hover {
 
 .ops-figs {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
 	gap: 0.5rem;
 	margin-top: 0.25rem;
 }
@@ -1788,7 +1788,7 @@ a.dash-kpi--on:hover {
 	display: flex;
 	flex-direction: column;
 	gap: 0.1rem;
-	padding: 0.5rem 0.6rem;
+	padding: 0.45rem 0.55rem;
 	border: 1px solid var(--border-light);
 	min-width: 0;
 }
@@ -1813,9 +1813,11 @@ a.dash-kpi--on:hover {
 
 .ops-fig__v {
 	font-family: var(--font-mono);
-	font-size: var(--text-sm);
+	font-size: 0.8rem;
 	font-weight: 700;
+	letter-spacing: -0.01em;
 	white-space: nowrap;
+	min-width: 0;
 }
 
 .ops-aging {
@@ -1829,6 +1831,8 @@ a.dash-kpi--on:hover {
 	display: block;
 	height: 100%;
 	background: var(--foreground);
+	/* a small late slice must still be seen */
+	min-width: 6px;
 }
 
 .ops-aging__seg--1 { opacity: 0.3; }
@@ -1839,6 +1843,8 @@ a.dash-kpi--on:hover {
 .ops-aging__l {
 	display: flex;
 	justify-content: space-between;
+	gap: 0.5rem;
+	flex-wrap: wrap;
 	font-family: var(--font-mono);
 	font-size: 0.6rem;
 	letter-spacing: 0.04em;

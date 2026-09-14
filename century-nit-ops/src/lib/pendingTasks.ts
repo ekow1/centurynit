@@ -287,6 +287,16 @@ export function timeAgo(iso?: string | null) {
 	return `${days}d ago`;
 }
 
+/** The when-cell label from a due date: what it actually is, not task age. */
+export function dueLabel(due: string | null): string {
+	if (!due) return "—";
+	const days = Math.floor((Date.now() - new Date(due).getTime()) / 86_400_000);
+	if (days > 1) return `${days}d overdue`;
+	if (days === 1) return "overdue yesterday";
+	if (days === 0) return "due today";
+	return `due in ${Math.abs(days)}d`;
+}
+
 function derivedStatus(inv: Invoice): InvoiceStatus {
 	const age = invoiceAgeDays(inv);
 	if (inv.status === "overdue") return "overdue";
@@ -377,6 +387,28 @@ export function taskKindLabel(task: PendingTask): string {
 	if (task.kind !== "handoff") return TASK_KIND_LABEL[task.kind];
 	return JOURNEY_STAGE_LABELS[task.record.stage as JourneyStage] ??
 		task.record.stage.split("_").map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+}
+
+/**
+ * A task's own reference — used in place of the client name when the row
+ * already sits under a client separator, so the title stops repeating it.
+ */
+export function taskRef(task: PendingTask): string {
+	switch (task.kind) {
+		case "invoice":
+			return task.record.invoiceNumber;
+		case "application":
+		case "visa":
+			return task.record.appId ?? task.record.id;
+		case "applicant":
+			return task.record.id;
+		case "consultation":
+			return task.record.ref ?? task.record.id;
+		case "handoff":
+			return task.record.applicationNumber ?? task.record.applicationId;
+		default:
+			return task.record.id;
+	}
 }
 
 const COMPACT_WHEN =
@@ -592,7 +624,7 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 			action: "review",
 			record: a,
 			title: `${a.applicantName}`,
-			subtitle: `Application invoice needed · ${a.schoolApplications?.length ?? 0} school(s) selected`,
+			subtitle: `Application invoice needed · ${a.schoolApplications?.length ?? 0} ${(a.schoolApplications?.length ?? 0) === 1 ? "school" : "schools"} selected`,
 			meta: `App ${a.appId}`,
 			branch: a.branch,
 			owner: caseHandlerName(a) || "—",
@@ -898,8 +930,8 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "chase",
 				record: r.inv,
 				title: r.inv.applicantName,
-				subtitle: `Overdue · balance ${fmtGhs(r.balance)}`,
-				meta: `Due ${r.age ?? "?"} day${r.age === 1 ? "" : "s"} ago`,
+				subtitle: `${dueLabel(r.inv.dueAt ?? null)} · balance ${fmtGhs(r.balance)}`,
+				meta: r.inv.dueAt ? dueLabel(r.inv.dueAt) : "no due date",
 				branch: "",
 				owner: r.inv.issuedBy || "—",
 				linkTo: `/invoices`,

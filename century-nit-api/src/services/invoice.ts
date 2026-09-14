@@ -120,6 +120,15 @@ async function audit(
 
 /* ── Serialization ───────────────────────────────────────────────────────── */
 
+/** Staff display names can carry an internal handle ("Enoch Enu (dont_punal)") — strip it anywhere a name is shown to the applicant. */
+function publicName(name: string): string;
+function publicName(name: string | null | undefined): string | null;
+function publicName(name: string | null | undefined): string | null {
+	if (name == null) return null;
+	const clean = name.replace(/\s*\([^)]*\)\s*$/, "").trim();
+	return clean || name;
+}
+
 export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 	const [lines, payments, events] = await Promise.all([
 		db
@@ -162,10 +171,10 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 		creditedCents: row.creditedCents,
 		balanceCents: balanceOf(row, paidCents),
 		note: row.note ?? null,
-		raisedByName: row.raisedByName ?? null,
+		raisedByName: publicName(row.raisedByName),
 		raisedAt: row.createdAt.toISOString(),
-		issuedByName: row.issuedByName,
-		reviewedByName: row.reviewedByName ?? null,
+		issuedByName: publicName(row.issuedByName),
+		reviewedByName: publicName(row.reviewedByName),
 		reviewedAt: row.reviewedAt?.toISOString() ?? null,
 		dueAt: row.dueAt?.toISOString() ?? null,
 		voidedAt: row.voidedAt?.toISOString() ?? null,
@@ -176,7 +185,7 @@ export async function serializeInvoice(row: InvoiceRow): Promise<ApiInvoice> {
 			method: p.method,
 			gateway: p.gateway ?? null,
 			reference: p.reference ?? null,
-			recordedByName: p.recordedByName,
+			recordedByName: publicName(p.recordedByName),
 			at: p.at.toISOString(),
 		})),
 		history: events.map((e) => ({
@@ -1006,7 +1015,7 @@ export async function syncApplicationProformaLines(
 		const schools = new Set(wanted.map((l) => l.schoolApplicationId)).size;
 		await tx
 			.update(invoices)
-			.set({ subtotalCents, note: schools > 0 ? `University application fees for ${schools} school(s), paid on your behalf.` : inv.note, updatedAt: new Date() })
+			.set({ subtotalCents, note: schools > 0 ? `University application fees for ${schools} ${schools === 1 ? "school" : "schools"}, paid on your behalf.` : inv.note, updatedAt: new Date() })
 			.where(eq(invoices.id, inv.id));
 		await audit(inv.id, "lines_synced", null, `Draft re-priced from the school list and the catalogue: ${wanted.length} line(s) for ${schools} school(s)`, tx as unknown as typeof db);
 	});

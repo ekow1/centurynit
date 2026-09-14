@@ -284,6 +284,7 @@ function TravelAssistanceInner() {
 									<InvoiceCard
 										title="Ticket invoice"
 										invoice={trip}
+										display="ghs"
 										actions={
 											trip.status === "paid" ? (
 												<Button variant="secondary" onClick={() => downloadReceipt(trip, "Ticket invoice")}>

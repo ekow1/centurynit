@@ -674,7 +674,7 @@ function PreviewPane({
 				branch={item.branch}
 				currentName={item.owner && item.owner !== "— open" ? item.owner : null}
 				keepName={item.kind === "handoff" && handoffOffersKeep(item.record) ? item.record.fromOpsUserName : null}
-				keepOpsUserId={item.kind === "handoff" ? item.record.fromOpsUserId : null}
+				keepOpsUserId={item.kind === "handoff" && handoffOffersKeep(item.record) ? item.record.fromOpsUserId : null}
 				withReason={item.action === "resolve"}
 				coverage
 				coverageDefault={item.action === "resolve" ? "stage" : "all"}

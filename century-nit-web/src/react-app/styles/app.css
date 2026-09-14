@@ -8605,11 +8605,11 @@ a.portal-ch--on:hover {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
 	font-family: var(--font-mono);
-	font-size: 0.56rem;
+	font-size: 0.62rem;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
 	color: var(--muted-foreground);
-	margin-top: 0.25rem;
+	margin-top: 0.3rem;
 }
 
 .pipe__l span:nth-child(2) {
@@ -8875,9 +8875,11 @@ a.portal-ch--on:hover {
 		padding: 0.45rem 0.4rem;
 		justify-content: center;
 	}
-	.pstep__l,
 	.pstep__s {
 		display: none;
+	}
+	.pstep__l {
+		font-size: 0.55rem;
 	}
 	.picker__row {
 		grid-template-columns: 1fr 1fr;

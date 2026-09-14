@@ -1,6 +1,6 @@
 import type { ApiInvoice } from "century-nit-shared";
 import { INVOICE_PROFORMA_HINT } from "century-nit-shared";
-import { Money, type MoneyDisplay } from "./Money.js";
+import { Money, formatUsd, type MoneyDisplay } from "./Money.js";
 import { InvoiceStatusPill } from "./StatusPill.js";
 
 /**
@@ -81,6 +81,10 @@ export function InvoiceCard({
 				<dt className="cn-invoice__balance">Balance</dt>
 				<dd className="cn-invoice__balance"><Money cents={invoice.balanceCents} display={display} /></dd>
 			</dl>
+
+			{display === "ghs" && (
+				<p className="cn-invoice__meta">≈ {formatUsd(invoice.subtotalCents)} · priced in USD, settled in cedis</p>
+			)}
 
 			{(due || invoice.note) && (
 				<p className="cn-invoice__meta">

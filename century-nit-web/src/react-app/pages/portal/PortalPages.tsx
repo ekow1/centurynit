@@ -3247,7 +3247,10 @@ function ApplicationHubInner() {
 	const fund = SCHOOL_FUNDING_TRACKS.find((f) => f.id === application.schoolFundingTrack);
 	const deg = SCHOOL_DEGREE_LEVELS.find((d) => d.id === application.schoolDegreeLevel);
 	const handler = application.assignedStaffName ?? null;
-	const handlerFirst = handler ? handler.split(" ")[0] : "your consultant";
+	// Staff names arrive in caps ("ENOCH ENU") — a first name reads better in sentence case.
+	const handlerFirst = handler
+		? handler.split(" ")[0].charAt(0).toUpperCase() + handler.split(" ")[0].slice(1).toLowerCase()
+		: "your consultant";
 	const reference = application.appNumber ?? booking.confirmationId ?? null;
 	const n = schoolApplications.length;
 	const filedCount = schoolApplications.filter((r) => r.status !== "Preparing Application").length;
@@ -3260,8 +3263,10 @@ function ApplicationHubInner() {
 	// The one line under the title — what to do now, then the chapter's facts.
 	const now = !selectionDone
 		? "choose your target schools"
-		: paid && application.acceptedSchoolId
+		: paid && application.acceptedSchoolId && application.visaConsent?.decision === "continue"
 			? "offer accepted — your visa chapter is open"
+			: paid && application.acceptedSchoolId
+				? "offer accepted — decide on visa processing"
 			: paid && offersCount > 0
 				? `${plural(offersCount, "offer")} in — accept one to open the visa chapter`
 				: paid
@@ -3634,6 +3639,7 @@ function ApplicationHubInner() {
 								<InvoiceCard
 									title="Application invoice"
 									invoice={serverInvoice}
+									display="ghs"
 									actions={
 										serverInvoice.status === "paid" ? (
 											<Button variant="secondary" onClick={() => downloadReceipt(serverInvoice, "Application invoice")}>
@@ -3656,6 +3662,7 @@ function ApplicationHubInner() {
 											compact
 											title="Additional schools"
 											invoice={x}
+											display="ghs"
 											actions={
 												x.status === "paid" ? (
 													<Button variant="secondary" onClick={() => downloadReceipt(x, "Application invoice")}>
@@ -3715,10 +3722,12 @@ function ApplicationHubInner() {
 							<span className={`psec__no${application.acceptedSchoolId ? " psec__no--done" : offersCount === 0 ? " psec__no--later" : ""}`}>
 								{application.acceptedSchoolId ? "✓" : "4"}
 							</span>
-							<span className="psec__title">Accept an offer</span>
+							<span className="psec__title">{application.acceptedSchoolId ? "Your decision" : "Accept an offer"}</span>
 							<span className="psec__hint">
 								{application.acceptedSchoolId
-									? `${acceptedRow ? (getUniversity(acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? "accepted") : "accepted"}`
+									? application.visaConsent?.decision === "continue"
+										? "visa processing"
+										: `${acceptedRow ? (getUniversity(acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? "accepted") : "accepted"} · visa pending`
 									: offersCount > 0
 										? `${plural(offersCount, "offer")} in`
 										: ""}
@@ -3820,7 +3829,7 @@ function ApplicationHubInner() {
 							</div>
 							<div className={`pkv${offersCount > 0 && !application.acceptedSchoolId ? " pkv--due" : ""}`}>
 								<span className="pkv__k">Next unlock</span>
-								<span className="pkv__v">IV · Visa — {offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
+								<span className="pkv__v">IV · Visa — {application.acceptedSchoolId ? (application.visaConsent?.decision === "continue" ? "chapter opens" : "your visa decision") : offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
 							</div>
 						</div>
 					</div>
@@ -4057,7 +4066,9 @@ function SchoolCard({
 	const shortDate = (iso: string | null | undefined) =>
 		iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null;
 	const tracking = mode === "tracking";
-	const note = tracking ? (row.handlerNote ?? (row.status === "Decision Reached" && row.outcome ? schoolDecisionNote({ outcome: row.outcome, universityName: uniName, programName: progName }) : null)) : null;
+	const rawNote = tracking ? (row.handlerNote ?? (row.status === "Decision Reached" && row.outcome ? schoolDecisionNote({ outcome: row.outcome, universityName: uniName, programName: progName }) : null)) : null;
+	// The consent card below carries the congratulations — the card states the fact.
+	const note = rawNote?.replace(/^Congratulations!\s*/, "") ?? null;
 
 	return (
 		<div className={`sch${tracking && admittedRow ? " sch--key" : ""}${tracking && unsuccessful ? " sch--dim" : ""}`}>
@@ -4470,6 +4481,7 @@ function VisaHubInner() {
 							<InvoiceCard
 								title="Visa invoice"
 								invoice={serverInv}
+								display="ghs"
 								actions={
 									serverInv.status === "paid" ? (
 										<Button variant="secondary" onClick={() => downloadReceipt(serverInv, "Visa invoice")}>

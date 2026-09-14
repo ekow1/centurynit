@@ -154,7 +154,10 @@ export async function lockSchoolsForApplicant(
 					type: "application",
 					status: "proforma",
 					lines,
-					note: `University application fees for ${new Set(lines.map((l) => l.schoolApplicationId)).size} school(s), paid on your behalf.`,
+					note: (() => {
+						const n = new Set(lines.map((l) => l.schoolApplicationId)).size;
+						return `University application fees for ${n} ${n === 1 ? "school" : "schools"}, paid on your behalf.`;
+					})(),
 				},
 				raisedBy: { opsUserId: null, name: `${user.name ?? "Client"} (client, portal)`, email: user.email },
 			});

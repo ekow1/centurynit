@@ -77,7 +77,9 @@ export function AssignSheet({
 
 	const currentBranch = branchId(branch ?? "") || "";
 	const [pickBranch, setPickBranch] = useState(currentBranch);
-	const [pickHandler, setPickHandler] = useState("");
+	// null = nothing picked yet — "Leave it open" only highlights once clicked.
+	const [pickHandler, setPickHandler] = useState<string | null>(null);
+	const [branchListOpen, setBranchListOpen] = useState(false);
 	const [scope, setScope] = useState<"stage" | "all">(coverageDefault);
 	const [reason, setReason] = useState("");
 	const [pending, setPending] = useState(false);
@@ -87,7 +89,8 @@ export function AssignSheet({
 	useEffect(() => {
 		if (open) {
 			setPickBranch(currentBranch);
-			setPickHandler("");
+			setPickHandler(null);
+			setBranchListOpen(false);
 			setScope(coverageDefault);
 			setReason("");
 			setError(null);
@@ -97,12 +100,12 @@ export function AssignSheet({
 	const eligible = useMemo(() => {
 		const allowed = staff.filter((s) => s.opsUserId && canOwnStage(s.role, stage, permissions));
 		const atBranch = allowed.filter((s) => branchId(s.branch ?? "") === pickBranch);
-		// The previous handler is pinned first when they still qualify —
-		// continuity is one click, not a hunt through the list.
-		const keep = keepOpsUserId ? atBranch.find((s) => s.opsUserId === keepOpsUserId) : undefined;
+		// The previous handler is pinned first only where keeping them is a real
+		// option (keepName is set) — otherwise they're just another row.
+		const keep = keepOpsUserId && keepName ? atBranch.find((s) => s.opsUserId === keepOpsUserId) : undefined;
 		const rest = keep ? atBranch.filter((s) => s.opsUserId !== keepOpsUserId) : atBranch;
 		return { keep, rest };
-	}, [staff, stage, pickBranch, permissions, keepOpsUserId]);
+	}, [staff, stage, pickBranch, permissions, keepOpsUserId, keepName]);
 
 	const referred = pickBranch !== currentBranch;
 	const stageLabel = JOURNEY_STAGE_LABELS[stage as JourneyStage] ?? stage;
@@ -121,7 +124,7 @@ export function AssignSheet({
 	}
 
 	const canReferOpen = referred && Boolean(onLeaveOpen);
-	const canSubmit = Boolean(pickHandler) || canReferOpen;
+	const canSubmit = pickHandler !== null && (Boolean(pickHandler) || canReferOpen);
 
 	return (
 		<Sheet open={open} onClose={onClose} title={title} size="tall">
@@ -131,27 +134,37 @@ export function AssignSheet({
 				</p>
 			)}
 
-			{/* 1 · Handling branch */}
+			{/* 1 · Handling branch — collapsed to the current office until a
+			   referral is asked for; the full list only expands on Refer. */}
 			<p className="hsheet__eyebrow">1 · Handling branch</p>
-			<div className="hsheet__list" role="radiogroup" aria-label="Handling branch">
-				{HANDLING_BRANCHES.map((b) => (
-					<button
-						key={b.id}
-						type="button"
-						role="radio"
-						aria-checked={pickBranch === b.id}
-						className={`hsheet__row${pickBranch === b.id ? " hsheet__row--on" : ""}`}
-						onClick={() => setPickBranch(b.id)}
-					>
-						<span>{b.name}</span>
-						{b.id === currentBranch ? (
-							<span className="hsheet__hint">current</span>
-						) : referred && pickBranch === b.id ? (
-							<span className="hsheet__hint">referred from {OPS_BRANCHES.find((x) => x.id === currentBranch)?.name ?? currentBranch}</span>
-						) : null}
+			{branchListOpen || referred ? (
+				<div className="hsheet__list" role="radiogroup" aria-label="Handling branch">
+					{HANDLING_BRANCHES.map((b) => (
+						<button
+							key={b.id}
+							type="button"
+							role="radio"
+							aria-checked={pickBranch === b.id}
+							className={`hsheet__row${pickBranch === b.id ? " hsheet__row--on" : ""}`}
+							onClick={() => setPickBranch(b.id)}
+						>
+							<span>{b.name}</span>
+							{b.id === currentBranch ? (
+								<span className="hsheet__hint">current</span>
+							) : referred && pickBranch === b.id ? (
+								<span className="hsheet__hint">referred from {OPS_BRANCHES.find((x) => x.id === currentBranch)?.name ?? currentBranch}</span>
+							) : null}
+						</button>
+					))}
+				</div>
+			) : (
+				<div className="hsheet__list">
+					<button type="button" className="hsheet__row" onClick={() => setBranchListOpen(true)}>
+						<span>{OPS_BRANCHES.find((b) => b.id === currentBranch)?.name ?? currentBranch ?? "—"}</span>
+						<span className="hsheet__hint">holds the file · refer…</span>
 					</button>
-				))}
-			</div>
+				</div>
+			)}
 
 			{/* 2 · Handler */}
 			<p className="hsheet__eyebrow">2 · Handler</p>
@@ -207,21 +220,21 @@ export function AssignSheet({
 							type="button"
 							role="radio"
 							aria-checked={scope === "stage"}
-							className={`hsheet__row${scope === "stage" ? " hsheet__row--on" : ""}`}
+							className={`hsheet__row hsheet__row--stack${scope === "stage" ? " hsheet__row--on" : ""}`}
 							onClick={() => setScope("stage")}
 						>
 							<span>This stage only</span>
-							<span className="hsheet__hint">seat re-opens at the next chapter</span>
+							<span className="hsheet__hint">Seat re-opens at the next chapter — a new needs-handler task appears for it.</span>
 						</button>
 						<button
 							type="button"
 							role="radio"
 							aria-checked={scope === "all"}
-							className={`hsheet__row${scope === "all" ? " hsheet__row--on" : ""}`}
+							className={`hsheet__row hsheet__row--stack${scope === "all" ? " hsheet__row--on" : ""}`}
 							onClick={() => setScope("all")}
 						>
 							<span>Rest of the case</span>
-							<span className="hsheet__hint">carries every remaining chapter — no placement task again</span>
+							<span className="hsheet__hint">They carry every remaining chapter — no placement task appears again.</span>
 						</button>
 					</div>
 				</>
@@ -261,6 +274,7 @@ export function AssignSheet({
 								await onLeaveOpen!(pickBranch);
 								return;
 							}
+							if (!pickHandler) return;
 							await onAssign({
 								opsUserId: pickHandler,
 								reason: reason || undefined,
@@ -272,7 +286,7 @@ export function AssignSheet({
 				>
 					{pending
 						? "Placing…"
-						: !pickHandler
+						: pickHandler === "" && referred
 							? `Refer to ${OPS_BRANCHES.find((b) => b.id === pickBranch)?.name ?? pickBranch} — leave open`
 							: currentName
 								? "Change handler"

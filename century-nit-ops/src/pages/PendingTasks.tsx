@@ -20,6 +20,7 @@ import {
 	handoffOffersKeep,
 	taskActionLabel,
 	taskKindLabel,
+	taskRef,
 	TASK_KIND_LABEL,
 	whenLabel,
 	type PendingTask,
@@ -474,7 +475,7 @@ export function PendingTaskRows({
 														{taskActionLabel(t)} · {taskKindLabel(t)}
 													</p>
 													<p className="tname">
-														{t.title}
+														{group.tasks.length > 1 ? taskRef(t) : t.title}
 														{t.meta ? <span className="tname__ref">{t.meta}</span> : null}
 													</p>
 													<p className="tsub" title={t.subtitle}>

@@ -36,7 +36,7 @@ export function ConsultantUpdates({
 						<div className="cn-timeline__head">
 							<span className="cn-timeline__summary">{cm.author}</span>
 							<time className="cn-timeline__when" dateTime={cm.at}>
-								{new Date(cm.at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+								{new Date(cm.at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
 							</time>
 						</div>
 						<p className="cn-timeline__detail" style={{ whiteSpace: "pre-line" }}>

@@ -1537,6 +1537,9 @@ const CONSULT_STEP_LABELS: Record<ConsultStepId, string> = {
 };
 /** Where an online consultation is hosted — the branch whose slots and consultants it uses. */
 const ONLINE_BRANCH_ID = "accra-hq";
+
+/** Consultations run at the two Ghana offices — partner desks don't take bookings. */
+const BOOKABLE_BRANCHES = branches.filter((b) => b.id === "accra-hq" || b.id === "kumasi");
 function consultSteps(type: string | null | undefined): ConsultStepId[] {
 	return type === "online"
 		? ["type", "assessment", "schedule", "pay", "review", "outcome"]
@@ -2011,7 +2014,7 @@ export function PortalConsultationBookingFlow() {
 		if (!from) return;
 		let active = true;
 		Promise.all(
-			branches.map((b) =>
+			BOOKABLE_BRANCHES.map((b) =>
 				bookingsApi
 					.availabilityDays({ branchId: b.id, from, days: 14, durationMinutes: 45 })
 					.then((res) => [b.id, res.days.find((d) => d.open > 0)?.date ?? null] as const)
@@ -2142,11 +2145,11 @@ export function PortalConsultationBookingFlow() {
 							</div>
 							<p className="psec__hint">Same session, same fee — pick what suits you.</p>
 						</div>
-						<div className="pcards">
+						<div className="pcards pcards--pair">
 							{(
 								[
 									["online", "Video call", "Online consultation", "Meet from anywhere — the link is sent with your confirmation."],
-									["in_person", "At a branch", "In-person consultation", "Accra, Kumasi or Takoradi — you pick the branch next."],
+									["in_person", "At a branch", "In-person consultation", "Accra or Kumasi — you pick the branch next."],
 								] as const
 							).map(([id, kicker, name, blurb]) => (
 								<button
@@ -2179,8 +2182,8 @@ export function PortalConsultationBookingFlow() {
 							</div>
 							<p className="psec__hint">Earliest available slot shown — the full grid comes next.</p>
 						</div>
-						<div className="pcards">
-							{branches.map((b) => (
+						<div className="pcards pcards--pair">
+							{BOOKABLE_BRANCHES.map((b) => (
 								<button
 									key={b.id}
 									type="button"
@@ -2418,25 +2421,13 @@ export function PortalConsultationBookingFlow() {
 							</span>
 						</div>
 					</div>
-					{payState === "paid" ? (
-						<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
-							Booked · Ref {booking.confirmationId}
-						</p>
-					) : (
-						<Button
-							type="button"
-							arrow
-							disabled={payState === "processing" || payState === "success"}
-							onClick={() => (step === "pay" ? void startPayment() : setSelectedStep("pay"))}
-							style={{ width: "100%", marginTop: "0.8rem" }}
-						>
-							{payState === "processing"
-								? "Processing…"
-								: step === "pay"
-									? `Pay & book · ${formatDualCurrency(consultationFeeUsd)} →`
-									: "Review & pay →"}
-						</Button>
-					)}
+					<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
+						{payState === "paid"
+							? `Booked · Ref ${booking.confirmationId}`
+							: step === "pay"
+								? "The Pay button is on the order."
+								: "Fill each step — the Pay button is on the last one."}
+					</p>
 					<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.7rem", lineHeight: 1.5 }}>
 						The fee confirms the slot. Reschedule free up to 24h before.
 					</p>

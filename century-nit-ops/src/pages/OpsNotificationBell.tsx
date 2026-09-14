@@ -74,8 +74,12 @@ function NotifIcon({ type, read }: { type: string; read: boolean }) {
 	}
 }
 
-export function OpsNotificationBell() {
+export function OpsNotificationBell({ onUnread }: { onUnread?: (n: number) => void } = {}) {
 	const { notifications, unreadCount, markRead, markAllRead } = useOpsNotifications();
+	// The shell's nav shows the same count beside Inbox — one stream, two places.
+	useEffect(() => {
+		onUnread?.(unreadCount);
+	}, [unreadCount, onUnread]);
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
 	const nav = useNavigate();

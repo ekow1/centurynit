@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CaseDetail } from "./case/CaseDetail";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseBoard, BOARD_ORDERS, type BoardOrder } from "./case/CaseBoard";
@@ -136,16 +136,21 @@ export function EnterpriseCases() {
 	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
 
+	// A `?id=` link selects the case directly — derived, not synced through an
+	// effect, so closing the detail also clears the param.
 	const queryId = searchParams.get("id");
-	useEffect(() => {
-		if (queryId) {
-			const match = applications.find((a) => a.id === queryId);
-			if (match) setSelectedApp(match);
-		}
-	}, [queryId, applications]);
+	const queryMatch = queryId ? (applications.find((a) => a.id === queryId) ?? null) : null;
+	const closeDetail = () => {
+		setSelectedApp(null);
+		setSearchParams((prev) => {
+			const next = new URLSearchParams(prev);
+			next.delete("id");
+			return next;
+		}, { replace: true });
+	};
 
 	const canSeeAll = canSeeAllBranches;
-	const liveSelected = selectedApp ? (applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp) : null;
+	const liveSelected = (selectedApp ? (applications.find((a) => a.appId === selectedApp.appId) ?? selectedApp) : null) ?? queryMatch;
 	const opsUserIdByEmail = (email: string) => assignees.find((c) => c.email === email)?.opsUserId;
 	const isMine = (a: MockApplication) =>
 		a.assignedStaffEmail === opsUser?.email ||
@@ -194,6 +199,38 @@ export function EnterpriseCases() {
 	const unassignedCases = roleScopedApps.filter((a) => assignmentNeeded(a, handoffs)).length;
 	const initialTab = chapter === "visa" ? "visa" : chapter === "depart" ? "travel" : chapter === "done" ? "payments" : undefined;
 
+	// The same chapter pills in list and board — one control, two homes.
+	const chapterPills = (
+		<div className="cn-scaffold__chips" role="tablist" aria-label="Chapter" style={{ flexWrap: "wrap" }}>
+			{CHAPTER_FILTERS.map((c) => {
+				const n = chapterCounts.get(c.id) ?? 0;
+				const on = chapter === c.id;
+				return (
+					<button
+						key={c.id}
+						type="button"
+						role="tab"
+						aria-selected={on}
+						className="ops-pill"
+						onClick={() => setChapter(c.id)}
+						style={{
+							cursor: "pointer",
+							marginLeft: 0,
+							border: "1px solid var(--border)",
+							background: on ? "var(--foreground)" : "transparent",
+							color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+						}}
+					>
+						{c.label}
+						<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+							{n}
+						</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+
 	return (
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -213,11 +250,6 @@ export function EnterpriseCases() {
 					<button className="btn btn--primary" onClick={() => setIsAddModalOpen(true)} style={{ whiteSpace: "nowrap" }}>
 						+ Add school application
 					</button>
-					{canAssignWork && unassignedCases > 0 && (
-						<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)", whiteSpace: "nowrap" }}>
-							{unassignedCases} need{unassignedCases === 1 ? "s" : ""} an owner
-						</span>
-					)}
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
@@ -243,73 +275,40 @@ export function EnterpriseCases() {
 				<div style={{ padding: "0.85rem 1.25rem", background: "var(--foreground)", color: "var(--background)", marginBottom: "1rem" }}>✓ {actionSuccess}</div>
 			)}
 
-			<div
-				style={{
-					padding: "0.65rem 1rem",
-					border: "1px solid var(--border-light)",
-					background: canSeeAll ? "var(--foreground)" : "var(--muted)",
-					color: canSeeAll ? "var(--background)" : "var(--foreground)",
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					marginBottom: "1rem",
-					gap: "0.75rem",
-					flexWrap: "wrap",
-				}}
-			>
-				<div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-					<span style={{ fontSize: "1rem" }}>{canSeeAll ? "◱" : "◈"}</span>
-					<p style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-						{canSeeAll
-							? `${filteredApps.length} of ${roleScopedApps.length} cases · ${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
-							: requiresAssignmentScope
-								? `${filteredApps.length} of ${roleScopedApps.length} assigned to you`
-								: `${branchName(opsUser?.branch ?? "")} branch · ${filteredApps.length} of ${roleScopedApps.length} cases`}
-					</p>
-				</div>
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span className="dash-day__cut">
+					<strong>{filteredApps.length}</strong> of {roleScopedApps.length} cases
+				</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut">
+					{canSeeAll
+						? `${opsRole ? ROLE_LABELS[opsRole] : "Staff"} scope`
+						: requiresAssignmentScope
+							? "assigned to you"
+							: `${branchName(opsUser?.branch ?? "")} branch`}
+				</span>
+				{canAssignWork && unassignedCases > 0 && (
+					<>
+						<span className="dash-day__sep">·</span>
+						<span className="dash-day__cut">
+							<strong>{unassignedCases}</strong> need{unassignedCases === 1 ? "s" : ""} an owner
+						</span>
+					</>
+				)}
 				{!requiresAssignmentScope && (
-					<button
-						type="button"
-						className="btn btn--sm btn--ghost"
-						style={canSeeAll ? { color: "var(--background)", borderColor: "var(--background)" } : undefined}
-						onClick={() => setOwnerFilter(ownerFilter === "mine" ? "all" : "mine")}
-					>
-						{ownerFilter === "mine" ? "Showing my cases" : "My cases"}
-					</button>
+					<>
+						<span className="dash-day__sep">·</span>
+						<button type="button" className="dash-day__cut" style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", textTransform: "inherit", letterSpacing: "inherit" }} onClick={() => setOwnerFilter(ownerFilter === "mine" ? "all" : "mine")}>
+							{ownerFilter === "mine" ? <strong>My cases · on</strong> : "My cases"}
+						</button>
+					</>
 				)}
 			</div>
 
 			{view === "board" ? (
 				<>
 					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem", border: "1px solid var(--border-light)" }}>
-						<div className="cn-scaffold__chips" role="tablist" aria-label="Chapter">
-							{CHAPTER_FILTERS.map((c) => {
-								const n = chapterCounts.get(c.id) ?? 0;
-								const on = chapter === c.id;
-								return (
-									<button
-										key={c.id}
-										type="button"
-										role="tab"
-										aria-selected={on}
-										className="ops-pill"
-										onClick={() => setChapter(c.id)}
-										style={{
-											cursor: "pointer",
-											marginLeft: 0,
-											border: "1px solid var(--border)",
-											background: on ? "var(--foreground)" : "transparent",
-											color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-										}}
-									>
-										{c.label}
-										<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
-											{n}
-										</span>
-									</button>
-								);
-							})}
-						</div>
+						{chapterPills}
 						<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
 							<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="cn-search" style={{ flex: "1 1 14rem", width: "auto" }} />
 							<label className="cn-filter">
@@ -334,11 +333,12 @@ export function EnterpriseCases() {
 				</>
 			) : (
 				<CaseScaffold
-					onClose={() => setSelectedApp(null)}
+					onClose={closeDetail}
 					emptyHint="Select a case from the list to review it and take action."
 					list={
 						<>
 							<div className="cn-scaffold__filters">
+								{chapterPills}
 								<input
 									type="search"
 									placeholder="Search case ID, client, university…"
@@ -348,20 +348,6 @@ export function EnterpriseCases() {
 									aria-label="Search cases"
 								/>
 								<div className="cn-scaffold__filter-row">
-									<label className="cn-filter">
-										<span className="cn-filter__label">Chapter</span>
-										<select
-											className="cn-filter__select"
-											value={chapter}
-											onChange={(e) => setChapter(e.target.value as "all" | ChapterId)}
-										>
-											{CHAPTER_FILTERS.map((c) => (
-												<option key={c.id} value={c.id}>
-													{c.label} · {chapterCounts.get(c.id) ?? 0}
-												</option>
-											))}
-										</select>
-									</label>
 									<label className="cn-filter">
 										<span className="cn-filter__label">Status</span>
 										<select
@@ -412,7 +398,7 @@ export function EnterpriseCases() {
 														{app.assignedStaff ? (
 															<StaffChatBadge opsUserId={opsUserIdByEmail(app.assignedStaffEmail)} name={app.assignedStaff} email={app.assignedStaffEmail} />
 														) : (
-															<span>Unassigned</span>
+															<span className="cn-row__unassigned">No owner</span>
 														)}
 														<span> · </span>
 														<RowMeta app={app} chapter={chapter} invoices={allInvoices} taStatus={taStatusOf(app)} />

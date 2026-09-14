@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API_PREFIX } from "century-nit-shared";
+import { Link } from "react-router-dom";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
+import { useCases } from "../hooks/useCases";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 export interface ClientUser {
@@ -45,6 +47,9 @@ export function ClientDirectory() {
 	const [flash, setFlash] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "banned">("all");
+	// The record pane — a row's actions live on the record, not the row.
+	const [selectedId, setSelectedId] = useState<string | null>(null);
+	const { applications } = useCases();
 
 	// Action modals
 	const [banTarget, setBanTarget] = useState<ClientUser | null>(null);
@@ -132,6 +137,21 @@ export function ClientDirectory() {
 			return matchesStatus && matchesSearch;
 		});
 	}, [clients, statusFilter, search]);
+
+	const selected = selectedId ? (clients.find((c) => c.id === selectedId) ?? null) : null;
+	// The client's cases — matched on the portal user id first, email as the
+	// fallback for accounts that predate the link.
+	const selectedCases = useMemo(
+		() =>
+			selected
+				? applications.filter((a) => a.applicantUserId === selected.id || a.email === selected.email)
+				: [],
+		[applications, selected],
+	);
+	const withCase = useMemo(() => {
+		const linked = new Set(applications.map((a) => a.applicantUserId ?? a.email));
+		return clients.filter((c) => linked.has(c.id) || linked.has(c.email)).length;
+	}, [applications, clients]);
 
 	const handleRevokeSessions = async () => {
 		if (!revokeTarget) return;
@@ -226,245 +246,282 @@ export function ClientDirectory() {
 			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert" style={{ marginBottom: "1rem" }}>{error}</p> : null}
 
-			{/* Metrics Cards */}
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-				<div className="card">
-					<p className="eyebrow">Registered Clients</p>
-					<p className="page-title mt-1" style={{ fontSize: "1.75rem" }}>{metrics.total || clients.length}</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>Total client accounts</p>
+			<div className="hdr-row">
+				<div>
+					<h1 className="page-title">Clients</h1>
+					<p className="lead mt-1">Every portal account — who can sign in, who has a case, who needs access managed.</p>
 				</div>
-				<div className="card" style={{ borderLeft: "4px solid #10b981" }}>
-					<p className="eyebrow" style={{ color: "#10b981" }}>Active Now</p>
-					<p className="page-title mt-1" style={{ fontSize: "1.75rem", color: "#10b981" }}>
-						{metrics.active || clients.filter((c) => c.status === "active").length}
-					</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>Valid active sessions</p>
-				</div>
-				<div className="card">
-					<p className="eyebrow">Inactive / Dormant</p>
-					<p className="page-title mt-1" style={{ fontSize: "1.75rem" }}>
-						{metrics.inactive || clients.filter((c) => c.status === "inactive").length}
-					</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>No activity &gt;30 days</p>
-				</div>
-				<div className="card" style={metrics.banned > 0 ? { borderLeft: "4px solid #ef4444" } : undefined}>
-					<p className="eyebrow" style={{ color: metrics.banned > 0 ? "#ef4444" : undefined }}>Banned / Suspended</p>
-					<p className="page-title mt-1" style={{ fontSize: "1.75rem", color: metrics.banned > 0 ? "#ef4444" : undefined }}>
-						{metrics.banned || clients.filter((c) => c.banned).length}
-					</p>
-					<p className="muted mt-2" style={{ fontSize: "var(--text-xs)" }}>Access revoked</p>
+				<button type="button" className="btn btn--sm btn--ghost" onClick={fetchClients} title="Refresh client records">
+					↻ Refresh
+				</button>
+			</div>
+
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span className="dash-day__cut"><strong>{metrics.total || clients.length}</strong> registered</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{metrics.active || clients.filter((c) => c.status === "active").length}</strong> active now</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{metrics.inactive || clients.filter((c) => c.status === "inactive").length}</strong> dormant 30d+</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{withCase}</strong> with a case</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{metrics.banned || clients.filter((c) => c.banned).length}</strong> suspended</span>
+			</div>
+
+			{/* Filters — the chips carry the counts. */}
+			<div className="cn-scaffold__filters cn-scaffold__filters--row" style={{ border: "1px solid var(--border-light)", marginBottom: "0" }}>
+				<input
+					type="search"
+					placeholder="Search name, email, phone…"
+					className="cn-search"
+					value={search}
+					onChange={(e) => setSearch(e.target.value)}
+				/>
+				<div className="cn-scaffold__chips" role="tablist" aria-label="Access status">
+					{([
+						["all", "All", clients.length],
+						["active", "Active", clients.filter((c) => c.status === "active").length],
+						["inactive", "Dormant", clients.filter((c) => c.status === "inactive").length],
+						["banned", "Suspended", clients.filter((c) => c.banned).length],
+					] as const).map(([id, label, n]) => {
+						const on = statusFilter === id;
+						return (
+							<button
+								key={id}
+								type="button"
+								role="tab"
+								aria-selected={on}
+								className="ops-pill"
+								onClick={() => setStatusFilter(id)}
+								style={{
+									cursor: "pointer",
+									marginLeft: 0,
+									border: "1px solid var(--border)",
+									background: on ? "var(--foreground)" : "transparent",
+									color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+								}}
+							>
+								{label}
+								<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>{n}</span>
+							</button>
+						);
+					})}
 				</div>
 			</div>
 
-			{/* Filter Header */}
-			<div className="admin-section-head" style={{ marginBottom: "1.25rem", display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "1rem" }}>
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flex: "1 1 300px" }}>
-					<input
-						type="search"
-						placeholder="Search by name, email, or phone..."
-						className="input input--sm input--full-border"
-						style={{ maxWidth: "320px", width: "100%" }}
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-					/>
-					<button
-						type="button"
-						className="btn btn--sm btn--ghost"
-						onClick={fetchClients}
-						title="Refresh client records"
-					>
-						↻ Refresh
-					</button>
-				</div>
-
-				<div className="admin-env-tabs">
-					<button
-						type="button"
-						onClick={() => setStatusFilter("all")}
-						className={`admin-env-tab${statusFilter === "all" ? " admin-env-tab--active" : ""}`}
-					>
-						All ({clients.length})
-					</button>
-					<button
-						type="button"
-						onClick={() => setStatusFilter("active")}
-						className={`admin-env-tab${statusFilter === "active" ? " admin-env-tab--active" : ""}`}
-					>
-						Active ({clients.filter((c) => c.status === "active").length})
-					</button>
-					<button
-						type="button"
-						onClick={() => setStatusFilter("inactive")}
-						className={`admin-env-tab${statusFilter === "inactive" ? " admin-env-tab--active" : ""}`}
-					>
-						Inactive ({clients.filter((c) => c.status === "inactive").length})
-					</button>
-					<button
-						type="button"
-						onClick={() => setStatusFilter("banned")}
-						className={`admin-env-tab${statusFilter === "banned" ? " admin-env-tab--active" : ""}`}
-					>
-						Banned ({clients.filter((c) => c.banned).length})
-					</button>
-				</div>
-			</div>
-
-			{/* Client Table */}
-			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>Client</th>
-								<th>Access Status</th>
-								<th>Active Sessions</th>
-								<th>Last Active</th>
-								<th>Registered</th>
-								<th>CRM Stage</th>
-								{canManageAccess && <th style={{ textAlign: "right" }}>Access Control</th>}
-							</tr>
-						</thead>
-						<tbody>
-							{loading && clients.length === 0 ? (
+			<div className="cl-split">
+				<div className="card" style={{ padding: 0, overflow: "hidden", flex: 1, minWidth: 0 }}>
+					<div className="ops-table-wrap">
+						<table className="admin-table">
+							<thead>
 								<tr>
-									<td colSpan={7} style={{ textAlign: "center", padding: "2rem" }} className="muted">
-										Loading client directory...
-									</td>
+									<th>Client</th>
+									<th>Access</th>
+									<th>Sessions</th>
+									<th>Last seen</th>
+									<th>Joined</th>
+									<th>Stage</th>
+									<th style={{ textAlign: "right" }} />
 								</tr>
-							) : displayedClients.length === 0 ? (
-								<tr>
-									<td colSpan={7} style={{ textAlign: "center", padding: "2.5rem" }} className="muted">
-										No clients match your filter criteria.
-									</td>
-								</tr>
-							) : (
-								displayedClients.map((c) => {
-									const isBanned = c.banned;
-									const isActive = c.status === "active";
-
-									return (
-										<tr key={c.id} style={isBanned ? { background: "rgba(239, 68, 68, 0.04)" } : undefined}>
-											<td>
-												<div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.4rem" }}>
-													{c.name}
-													{c.emailVerified && (
-														<span title="Email verified" style={{ color: "#10b981", fontSize: "0.75rem" }}>✓</span>
-													)}
-												</div>
-												<div className="muted" style={{ fontSize: "var(--text-xs)" }}>
-													{c.email} {c.phoneNumber ? `· ${c.phoneNumber}` : ""}
-												</div>
-											</td>
-											<td>
-												{isBanned ? (
-													<div>
-														<span className="portal-pill" style={{ background: "#ef4444", color: "#fff", fontWeight: 600 }}>
-															BANNED
-														</span>
-														{c.banReason && (
-															<div className="muted" style={{ fontSize: "0.7rem", marginTop: "0.2rem", maxWidth: "200px" }}>
-																Reason: {c.banReason}
-															</div>
+							</thead>
+							<tbody>
+								{loading && clients.length === 0 ? (
+									<tr>
+										<td colSpan={7} style={{ textAlign: "center", padding: "2rem" }} className="muted">
+											Loading client directory…
+										</td>
+									</tr>
+								) : displayedClients.length === 0 ? (
+									<tr>
+										<td colSpan={7} style={{ textAlign: "center", padding: "2.5rem" }} className="muted">
+											No clients match the current filters.
+										</td>
+									</tr>
+								) : (
+									displayedClients.map((c) => {
+										const isBanned = c.banned;
+										const isActive = c.status === "active";
+										const on = selected?.id === c.id;
+										return (
+											<tr
+												key={c.id}
+												className={`cl-tr${on ? " cl-tr--on" : ""}${isBanned ? " cl-tr--susp" : ""}`}
+												role="button"
+												tabIndex={0}
+												onClick={() => setSelectedId(on ? null : c.id)}
+												onKeyDown={(e) => {
+													if (e.key === "Enter" || e.key === " ") setSelectedId(on ? null : c.id);
+												}}
+											>
+												<td>
+													<div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "0.4rem" }}>
+														{c.name}
+														{c.emailVerified && (
+															<span title="Email verified" className="mono" style={{ fontSize: "0.7rem" }}>✓</span>
 														)}
 													</div>
-												) : isActive ? (
-													<span className="portal-pill" style={{ background: "#10b981", color: "#fff", fontWeight: 600 }}>
-														● ACTIVE
-													</span>
-												) : c.status === "inactive" ? (
-													<span className="portal-pill" style={{ background: "var(--border)", color: "var(--muted-foreground)" }}>
-														INACTIVE
-													</span>
-												) : (
-													<span className="portal-pill" style={{ background: "var(--surface-sunken)", color: "var(--foreground)" }}>
-														REGISTERED
-													</span>
-												)}
-											</td>
-											<td>
-												{c.activeSessionsCount > 0 ? (
-													<span style={{ fontWeight: 600, color: "#10b981", fontSize: "var(--text-sm)" }}>
-														{c.activeSessionsCount} active device{c.activeSessionsCount > 1 ? "s" : ""}
-													</span>
-												) : (
-													<span className="muted" style={{ fontSize: "var(--text-xs)" }}>No active session</span>
-												)}
-											</td>
-											<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
-												{new Date(c.lastActiveAt).toLocaleString(undefined, {
-													month: "short",
-													day: "numeric",
-													hour: "2-digit",
-													minute: "2-digit",
-												})}
-											</td>
-											<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
-												{new Date(c.createdAt).toLocaleDateString()}
-											</td>
-											<td>
-												<span className="portal-pill" style={{ fontSize: "0.7rem" }}>
-													{c.leadStage || c.applicantStatus || "Lead"}
-												</span>
-											</td>
-										{canManageAccess && (
-											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-												<div style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
-													{c.activeSessionsCount > 0 && (
-														<button
-															type="button"
-															className="btn btn--xs btn--ghost"
-															onClick={() => setRevokeTarget(c)}
-															title="Force logout active devices"
-															style={{ color: "#b45309" }}
-														>
-															Revoke Sessions
-														</button>
-													)}
-
+													<div className="muted" style={{ fontSize: "var(--text-xs)" }}>
+														{c.email} {c.phoneNumber ? `· ${c.phoneNumber}` : ""}
+													</div>
+												</td>
+												<td>
 													{isBanned ? (
-														<button
-															type="button"
-															className="btn btn--xs btn--primary"
-															onClick={() => handleUnbanClient(c)}
-															style={{ background: "#166534", borderColor: "#166534" }}
-														>
-															Unban
-														</button>
+														<div>
+															<span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>
+																Suspended
+															</span>
+															{c.banReason && (
+																<div className="muted" style={{ fontSize: "0.7rem", marginTop: "0.2rem", maxWidth: "200px" }}>
+																	{c.banReason}
+																</div>
+															)}
+														</div>
+													) : isActive ? (
+														<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)" }}>Active</span>
+													) : c.status === "inactive" ? (
+														<span className="portal-pill">Dormant</span>
 													) : (
-														<button
-															type="button"
-															className="btn btn--xs btn--danger"
-															onClick={() => {
-																setBanTarget(c);
-																setBanReason("");
-															}}
-															style={{ color: "#b91c1c", borderColor: "#b91c1c" }}
-														>
-															Ban
-														</button>
+														<span className="portal-pill portal-pill--hollow">Registered</span>
 													)}
-
-													{canDelete && (
-														<button
-															type="button"
-															className="btn btn--xs btn--danger"
-															onClick={() => handleDeleteClient(c)}
-															title="Permanently delete this client, their profile, applications, files, and chat history. Invoices and payment records are retained for accounting."
-															style={{ background: "#7f1d1d", borderColor: "#7f1d1d", color: "#ffffff" }}
-														>
-															Delete
-														</button>
-													)}
-												</div>
-											</td>
-										)}
-										</tr>
-									);
-								})
-							)}
-						</tbody>
-					</table>
+												</td>
+												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
+													{c.activeSessionsCount > 0 ? `${c.activeSessionsCount} device${c.activeSessionsCount > 1 ? "s" : ""}` : "—"}
+												</td>
+												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
+													{new Date(c.lastActiveAt).toLocaleString(undefined, {
+														month: "short",
+														day: "numeric",
+														hour: "2-digit",
+														minute: "2-digit",
+													})}
+												</td>
+												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
+													{new Date(c.createdAt).toLocaleDateString()}
+												</td>
+												<td>
+													<span className="portal-pill portal-pill--hollow" style={{ fontSize: "0.7rem" }}>
+														{c.leadStage || c.applicantStatus || "Lead"}
+													</span>
+												</td>
+												<td style={{ textAlign: "right" }}>
+													<span className="dash-link">{on ? "close ↑" : "record →"}</span>
+												</td>
+											</tr>
+										);
+									})
+								)}
+							</tbody>
+						</table>
+					</div>
 				</div>
+
+				{/* The record — access facts, the file it belongs to, the danger zone. */}
+				{selected && (
+					<aside className="cl-record">
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
+							<div>
+								<p className="eyebrow" style={{ margin: 0 }}>Client record</p>
+								<h3 style={{ margin: "0.3rem 0 0", fontSize: "1.05rem", fontWeight: 800 }}>{selected.name}</h3>
+								<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>
+									{selected.email}{selected.phoneNumber ? ` · ${selected.phoneNumber}` : ""}
+								</p>
+							</div>
+							<button type="button" className="btn btn--xs btn--ghost" onClick={() => setSelectedId(null)}>✕</button>
+						</div>
+
+						<p className="cl-sec">Access</p>
+						<div className="cl-kv">
+							<span className="cl-kv__k">Status</span>
+							<span>
+								{selected.banned ? (
+									<span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>Suspended</span>
+								) : selected.status === "active" ? (
+									<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)" }}>Active</span>
+								) : selected.status === "inactive" ? (
+									<span className="portal-pill">Dormant</span>
+								) : (
+									<span className="portal-pill portal-pill--hollow">Registered</span>
+								)}
+							</span>
+						</div>
+						{selected.banReason && (
+							<div className="cl-kv"><span className="cl-kv__k">Reason</span><span className="muted" style={{ fontSize: "var(--text-xs)" }}>{selected.banReason}</span></div>
+						)}
+						<div className="cl-kv"><span className="cl-kv__k">Email verified</span><span>{selected.emailVerified ? "✓" : "not yet"}</span></div>
+						<div className="cl-kv">
+							<span className="cl-kv__k">Sessions</span>
+							<span>
+								{selected.activeSessionsCount > 0 ? `${selected.activeSessionsCount} device${selected.activeSessionsCount > 1 ? "s" : ""}` : "none"}
+								{canManageAccess && selected.activeSessionsCount > 0 && (
+									<>
+										{" · "}
+										<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setRevokeTarget(selected)}>
+											revoke all
+										</button>
+									</>
+								)}
+							</span>
+						</div>
+						<div className="cl-kv"><span className="cl-kv__k">Member since</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{new Date(selected.createdAt).toLocaleDateString()}</span></div>
+
+						<p className="cl-sec">File</p>
+						{selectedCases.length === 0 ? (
+							<div className="cl-kv"><span className="cl-kv__k">Cases</span><span className="muted">none yet — {selected.leadStage || "lead"}</span></div>
+						) : (
+							selectedCases.map((a) => (
+								<div className="cl-kv" key={a.id}>
+									<span className="cl-kv__k">{a.appId}</span>
+									<span>
+										{JOURNEY_STAGE_LABELS[a.stage as JourneyStage] ?? a.stage}
+										{" · "}
+										<Link to={`/applications?id=${a.id}`} className="dash-link">open →</Link>
+									</span>
+								</div>
+							))
+						)}
+						{selectedCases[0]?.assignedStaff && (
+							<div className="cl-kv"><span className="cl-kv__k">Consultant</span><span>{selectedCases[0].assignedStaff}</span></div>
+						)}
+
+						{canManageAccess && (
+							<div className="cl-danger">
+								<p className="cl-danger__h">Access control</p>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.5rem" }}>
+									{selected.banned
+										? "Restoring lets them sign in again immediately."
+										: "Suspending signs them out everywhere and blocks login."}
+								</p>
+								{selected.banned ? (
+									<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => handleUnbanClient(selected)}>
+										restore access
+									</button>
+								) : (
+									<button
+										type="button"
+										className="dash-link"
+										style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textDecorationStyle: "wavy" }}
+										onClick={() => { setBanTarget(selected); setBanReason(""); }}
+									>
+										suspend account
+									</button>
+								)}
+								{canDelete && (
+									<>
+										{" · "}
+										<button
+											type="button"
+											className="dash-link"
+											style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textDecorationStyle: "wavy" }}
+											onClick={() => handleDeleteClient(selected)}
+										>
+											delete…
+										</button>
+									</>
+								)}
+							</div>
+						)}
+					</aside>
+				)}
 			</div>
 
 			{/* Modal: Delete Client */}
@@ -515,7 +572,7 @@ export function ClientDirectory() {
 									</div>
 								</label>
 
-								<label className="ops-radio-card" style={{ display: "flex", gap: "1rem", padding: "1rem", border: "1px solid var(--border)", cursor: "pointer", background: deleteAction === "purge" ? "var(--bg-alt)" : "transparent", borderColor: deleteAction === "purge" ? "#ef4444" : "var(--border)" }}>
+								<label className="ops-radio-card" style={{ display: "flex", gap: "1rem", padding: "1rem", border: "1px solid var(--border)", cursor: "pointer", background: deleteAction === "purge" ? "var(--bg-alt)" : "transparent", borderColor: "var(--border)" }}>
 									<input 
 										type="radio" 
 										name="deleteAction" 
@@ -525,7 +582,7 @@ export function ClientDirectory() {
 										style={{ marginTop: "4px" }}
 									/>
 									<div>
-										<p style={{ fontWeight: 600, marginBottom: "0.25rem", color: "#ef4444" }}>Purge Everything</p>
+										<p style={{ fontWeight: 600, marginBottom: "0.25rem", textDecoration: "underline", textDecorationThickness: "2px" }}>Purge Everything</p>
 										<p className="muted" style={{ fontSize: "0.85rem" }}>
 											Completely and immediately obliterates the User login, Applicant Profile, Applications, Consultations, and Leads. Paid invoices will be orphaned. Irreversible.
 										</p>
@@ -582,14 +639,14 @@ export function ClientDirectory() {
 			{banTarget && (
 				<div className="ops-modal-backdrop" onClick={() => !banSubmitting && setBanTarget(null)}>
 					<div className="ops-modal card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
-						<h3 className="section-title" style={{ color: "#ef4444" }}>Suspend / Ban Client Account</h3>
+						<h3 className="section-title">Suspend account</h3>
 						<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
 							Banning will instantly terminate all active sessions for <strong>{banTarget.name}</strong> ({banTarget.email}) and block them from logging in or booking new consultations.
 						</p>
 
 						<div style={{ marginTop: "1rem" }}>
 							<label style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 600, textTransform: "uppercase", marginBottom: "0.4rem" }}>
-								Reason for Ban <span style={{ color: "#ef4444" }}>*</span>
+								Reason <span aria-hidden>*</span>
 							</label>
 							<textarea
 								className="input input--full-border"
@@ -616,7 +673,7 @@ export function ClientDirectory() {
 								className="btn btn--danger"
 								onClick={handleBanClient}
 								disabled={banSubmitting || !banReason.trim()}
-								style={{ background: "#ef4444", color: "#fff", borderColor: "#ef4444" }}
+								style={{ background: "var(--foreground)", color: "var(--background)", borderColor: "var(--foreground)" }}
 							>
 								{banSubmitting ? "Suspending..." : "Confirm Ban"}
 							</button>

@@ -172,6 +172,21 @@ table:not(.ops-table-wrap > table) {
 		min-height: 28rem;
 	}
 
+/* The client ledger stacks over its record pane. */
+.cl-split {
+		flex-direction: column;
+	}
+
+.cl-split > * {
+		min-width: 0 !important;
+		width: 100%;
+	}
+
+.cl-record {
+		position: static;
+		flex: 1 1 auto;
+	}
+
 /* Kanban and pipeline rails are handled in §10 alongside the tables *//* Stat/KPI grids collapse rather than shrinking to unreadable columns */
 
 .ops-stats {

@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useCases } from "../hooks/useCases";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useChatHub } from "./ChatHubContext";
 import { UnassignedQueue } from "./UnassignedBookings";
 import { OPS_BRANCHES } from "century-nit-core/ops";
+import { calendarApi, type CalendarStatus } from "century-nit-core/api";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 
 /**
@@ -101,13 +102,22 @@ const CHIPS: { id: Chip; label: string }[] = [
 
 export function WorkspaceCaseload() {
 	const { scopeRecords, opsUser, canSeeAllBranches } = useOpsAuth();
-	const { applications, consultations, assignees, loading, error, refresh: refreshCases } = useCases();
+	const { applications, consultations, assignees, handoffs, loading, error, refresh: refreshCases } = useCases();
 	const { openDM } = useChatHub();
 	const [chip, setChip] = useState<Chip>("all");
 	const [staff, setStaff] = useState<string>("all");
 	const [branch, setBranch] = useState("all");
 	const [search, setSearch] = useState("");
 	const [showCompleted, setShowCompleted] = useState(false);
+	const [view, setView] = useState<"officers" | "stages">("officers");
+	const [staffHours, setStaffHours] = useState<Record<string, CalendarStatus["workingHours"]>>({});
+
+	useEffect(() => {
+		calendarApi
+			.staffWorkingHours()
+			.then((r) => setStaffHours(Object.fromEntries(r.staff.map((s) => [s.opsUserId, s.hours]))))
+			.catch(() => {});
+	}, []);
 
 	const staffIdByEmail = (email: string | null | undefined) => (email ? (assignees.find((a) => a.email === email)?.opsUserId ?? null) : null);
 
@@ -222,34 +232,93 @@ export function WorkspaceCaseload() {
 	const completedOpen = chip === "completed" || showCompleted;
 	const me = opsUser?.opsUserId;
 
+	const unassigned = rows.filter((r) => !r.done && !r.staffId).length;
+	const selectedOfficer = staff !== "all" ? (officers.find((o) => o.id === staff) ?? null) : null;
+	const selectedAssignee = selectedOfficer ? assignees.find((a) => a.opsUserId === selectedOfficer.id) : undefined;
+	const officerRows = useMemo(
+		() => (selectedOfficer ? rows.filter((r) => r.staffId === selectedOfficer.id && !r.done).sort((a, b) => b.stalled - a.stalled || a.reference.localeCompare(b.reference)) : []),
+		[rows, selectedOfficer],
+	);
+	const officerHandoffs = useMemo(() => {
+		if (!selectedOfficer) return { away: 0, waiting: 0 };
+		const ownIds = new Set(officerRows.map((r) => r.id));
+		let away = 0;
+		let waiting = 0;
+		for (const h of handoffs) {
+			if (h.status !== "pending") continue;
+			if (h.fromOpsUserId === selectedOfficer.id) away++;
+			if (h.applicationId && ownIds.has(h.applicationId)) waiting++;
+		}
+		return { away, waiting };
+	}, [handoffs, officerRows, selectedOfficer]);
+
 	return (
 		<div>
 			{error && <p className="ops-modal__error" role="alert">{error}</p>}
 
-			{/* Who carries what — read before the rows. Clicking a card narrows them. */}
-			{officers.length > 0 && (
-				<section style={{ marginTop: "1.25rem" }}>
-					<header style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
-						<h2 className="eyebrow" style={{ margin: 0 }}>
-							Who carries what · {counts.all} open
-						</h2>
-						<span className="cn-filter__label">
-							{staff === "all" ? "click a person to narrow the list" : "showing one person"}
-							{" · "}
-							<button type="button" className="btn btn--ghost btn--sm" style={{ minHeight: 0, padding: 0 }} onClick={() => void refreshCases()} disabled={loading}>
-								{loading ? "Refreshing…" : "Refresh"}
-							</button>
-						</span>
-					</header>
-					<div className="ops-officers">
+			<header className="hdr-row" style={{ marginTop: "0.25rem" }}>
+				<div>
+					<h2 className="page-title" style={{ fontSize: "1.2rem" }}>Caseload</h2>
+					<p className="lead mt-1">Who carries what — load, mix, and what has stalled.</p>
+				</div>
+				<div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+					<button
+						type="button"
+						className="ops-pill"
+						onClick={() => setView("officers")}
+						style={{
+							cursor: "pointer",
+							marginLeft: 0,
+							border: "1px solid var(--border)",
+							background: view === "officers" ? "var(--foreground)" : "transparent",
+							color: view === "officers" ? "var(--background)" : "var(--foreground)",
+						}}
+					>
+						By officer
+					</button>
+					<button
+						type="button"
+						className="ops-pill"
+						onClick={() => setView("stages")}
+						style={{
+							cursor: "pointer",
+							marginLeft: 0,
+							border: "1px solid var(--border)",
+							background: view === "stages" ? "var(--foreground)" : "transparent",
+							color: view === "stages" ? "var(--background)" : "var(--foreground)",
+						}}
+					>
+						By stage
+					</button>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => void refreshCases()} disabled={loading}>
+						{loading ? "Refreshing…" : "↻ Refresh"}
+					</button>
+				</div>
+			</header>
+
+			<div className="dash-day" style={{ margin: "0.75rem 0 1rem" }}>
+				<span className="dash-day__cut"><strong>{officers.length}</strong> carrying work</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{counts.case}</strong> open cases</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{counts.consultation}</strong> consultations</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{unassigned}</strong> unassigned</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{counts.stalled}</strong> stalled 7d+</span>
+			</div>
+
+			{/* Who carries what — officer rows left, the selected officer's record right. */}
+			{view === "officers" && officers.length > 0 && (
+				<div className="ops-split">
+					<div className="ops-olist">
 						{officers.map((o) => {
 							const on = staff === o.id;
 							const open = o.cases + o.consultations;
-							const legend = FLIGHT_STAGES.map((s, i) => (o.stages[i] > 0 ? `${STAGE_SHORT[s]} ${o.stages[i]}` : null)).filter(Boolean);
 							return (
 								<div
 									key={o.id}
-									className={`ops-officer${on ? " ops-officer--on" : ""}`}
+									className={`ops-orow${on ? " ops-orow--on" : ""}`}
 									role="button"
 									tabIndex={0}
 									aria-pressed={on}
@@ -261,34 +330,113 @@ export function WorkspaceCaseload() {
 										}
 									}}
 								>
-									<div className="ops-officer__head">
-										<span className="ops-officer__name">
+									<span className="ops-orow__load">{open}</span>
+									<div className="ops-orow__who">
+										<b>
 											{o.name}
 											{o.id === me ? " (you)" : ""}
-										</span>
-										<span className="ops-officer__load">
-											{open}
-											<small>open</small>
-										</span>
+										</b>
+										<small>
+											{assignees.find((a) => a.opsUserId === o.id)?.role ?? "Consultant"} · {assignees.find((a) => a.opsUserId === o.id)?.branch ?? "—"}
+										</small>
+										<StageStrip counts={o.stages} />
 									</div>
-									<div className="ops-officer__sub">
-										{o.cases} case{o.cases === 1 ? "" : "s"} · {o.consultations} consultation{o.consultations === 1 ? "" : "s"}
-									</div>
-									<StageStrip counts={o.stages} />
-									<div className="ops-officer__legend">{legend.length > 0 ? legend.join(" · ") : "no cases in flight"}</div>
-									<div className="ops-officer__foot" onClick={(e) => e.stopPropagation()}>
-										{o.stalled > 0 ? <span className="ops-pill ops-pill--strong">{o.stalled} stalled</span> : <span />}
-										{o.id !== me && (
-											<button type="button" className="btn btn--ghost btn--sm" onClick={() => void openDM(o.id)}>
-												Message {o.name.split(" ")[0]}
-											</button>
-										)}
+									<div className="ops-orow__right">
+										{o.cases} case{o.cases === 1 ? "" : "s"} · {o.consultations} consult{o.consultations === 1 ? "" : "s"}
+										<br />
+										{o.stalled > 0 ? <strong>{o.stalled} stalled</strong> : <span className="muted">—</span>}
 									</div>
 								</div>
 							);
 						})}
 					</div>
-				</section>
+
+					{selectedOfficer ? (
+						<aside className="ops-opane">
+							<div className="ops-opane__head">
+								<div>
+									<p className="eyebrow" style={{ margin: 0 }}>Officer record</p>
+									<h3 style={{ margin: "0.25rem 0 0", fontSize: "1.1rem", fontWeight: 800 }}>
+										{selectedOfficer.name}
+										{selectedOfficer.id === me ? " (you)" : ""}
+									</h3>
+									<p className="muted" style={{ margin: "0.2rem 0 0", fontSize: "var(--text-xs)" }}>
+										{selectedAssignee?.role ?? "Consultant"} · {selectedAssignee?.branch ?? "—"} branch
+										{selectedAssignee?.email ? ` · ${selectedAssignee.email}` : ""}
+									</p>
+								</div>
+								{selectedOfficer.id !== me && (
+									<button type="button" className="btn btn--primary btn--sm" onClick={() => void openDM(selectedOfficer.id)}>
+										Message
+									</button>
+								)}
+							</div>
+
+							<p className="ops-dsec">Load · {selectedOfficer.cases + selectedOfficer.consultations} open</p>
+							<div className="ops-dkv">
+								<span className="ops-dkv__k">Cases</span>
+								<span>
+									{selectedOfficer.cases}
+									{(() => {
+										const heaviest = FLIGHT_STAGES.map((s, i) => ({ s, n: selectedOfficer.stages[i] })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
+										return heaviest ? ` — heaviest in ${STAGE_SHORT[heaviest.s]} (${heaviest.n})` : "";
+									})()}
+								</span>
+							</div>
+							<div className="ops-dkv"><span className="ops-dkv__k">Consultations</span><span>{selectedOfficer.consultations} upcoming</span></div>
+							<div className="ops-dkv">
+								<span className="ops-dkv__k">Stalled</span>
+								<span>{selectedOfficer.stalled > 0 ? <span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>{selectedOfficer.stalled} stalled</span> : "none"}</span>
+							</div>
+
+							<p className="ops-dsec">This week's hours</p>
+							<div className="ops-hours">
+								{[1, 2, 3, 4, 5, 6, 0].map((d) => {
+									const h = (staffHours[selectedOfficer.id] ?? []).find((w) => w.dayOfWeek === d);
+									const label = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d];
+									return (
+										<div key={d}>
+											<b className={h ? undefined : "off"}>{h ? `${h.start}–${h.end}` : "—"}</b>
+											<span>{label}</span>
+										</div>
+									);
+								})}
+							</div>
+
+							<p className="ops-dsec">Carrying · {officerRows.length}</p>
+							{officerRows.length === 0 ? (
+								<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Nothing open right now.</p>
+							) : (
+								officerRows.map((r) => (
+									<div className="ops-mini" key={r.id}>
+										<span>
+											<span className="ops-mini__ref">{r.reference}</span> <b>{r.clientName}</b>
+										</span>
+										<span className="ops-mini__st">
+											{r.stalled > 0 ? (
+												<span className="portal-pill" style={{ textDecoration: "underline", textDecorationThickness: 2, fontWeight: 700 }}>stalled {r.stalled}d</span>
+											) : (
+												r.stageLabel
+											)}
+										</span>
+										<Link to={r.link} className="dash-link">open →</Link>
+									</div>
+								))
+							)}
+
+							<p className="ops-dsec">Handoffs</p>
+							<div className="ops-dkv"><span className="ops-dkv__k">Pending on their records</span><span>{officerHandoffs.waiting}</span></div>
+							<div className="ops-dkv"><span className="ops-dkv__k">Handed off by them</span><span>{officerHandoffs.away}</span></div>
+						</aside>
+					) : (
+						<aside className="ops-opane ops-opane--empty">
+							<p className="eyebrow" style={{ margin: 0 }}>Officer record</p>
+							<p className="muted" style={{ marginTop: "0.5rem", fontSize: "var(--text-xs)" }}>
+								Select an officer to see their load, this week's hours, and the records they're carrying.
+							</p>
+						</aside>
+					)}
+				</div>
 			)}
 
 			{/* Shared triage queue — same panel as the Dashboard; collapses to a
@@ -362,8 +510,8 @@ export function WorkspaceCaseload() {
 				</div>
 			</div>
 
-			{/* The records, by where they sit. */}
-			{bands.length === 0 ? (
+			{/* The records, by where they sit — the manager's sweep. */}
+			{view === "stages" && (bands.length === 0 ? (
 				<p className="ops-people__empty">{loading ? "Loading caseload…" : "No records match the current filters."}</p>
 			) : (
 				<div className="ops-bands" style={{ padding: 0 }}>
@@ -445,7 +593,7 @@ export function WorkspaceCaseload() {
 						);
 					})}
 				</div>
-			)}
+			))}
 		</div>
 	);
 }

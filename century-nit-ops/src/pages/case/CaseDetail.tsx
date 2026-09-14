@@ -7,7 +7,8 @@ import { useInvoiceApi } from "../../hooks/useInvoiceApi";
 import { CaseDocumentsPanel } from "./CaseDocumentsPanel";
 import { ApplicationAssignSheet } from "./ApplicationAssignSheet";
 import { HistorySheet } from "./HistorySheet";
-import { CaseTabs, useCaseTab } from "./CaseTabs";
+import { useCaseTab } from "./CaseTabs";
+import { CaseSpine } from "./CaseSpine";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { ConsultationTab } from "./tabs/ConsultationTab";
 import { EnrolmentTab } from "./tabs/EnrolmentTab";
@@ -433,42 +434,36 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 		<div className="cn-detail">
 			{actionSuccess && <p className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess}</p>}
 			{actionError && <p className="ops-modal__error" style={{ margin: 0 }}>{actionError}</p>}
-{(() => {
-								return (
-									<div className="card" style={{ padding: "0.75rem 1rem" }}>
-										<CaseHeader
-											name={app.applicantName}
-											reference={app.appId}
-											branch={branchName(app.branch)}
-											stage={app.stage}
-											// Ops closed the case — the pill says so even when the client's
-											// own signals still owe a step (a fee settled off-platform).
-											portalStage={app.stage === "completed" ? "completed" : (app.journey?.portalStage ?? null)}
-											handlerName={app.assignedStaff || null}
-											handlerAction={
-												canAssignWork ? (
-													<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
-														{pendingHandoff ? "Assign" : app.assignedStaff ? "Change" : "Assign"}
-													</button>
-												) : undefined
-											}
-											actions={
-												<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
-													History{noteCount > 0 ? ` · ${noteCount}` : ""}
-												</button>
-											}
-											stageHandlers={(app.stageHandlers ?? [])
-												.filter((h) => h.opsUserName !== app.assignedStaff)
-												.map((h) => ({ stage: h.stage, name: h.opsUserName }))}
-											contact={{ email: app.email, phone: app.phone }}
-											extra={[
-												{ label: "Country", value: app.country || "—" },
-												{ label: "Programme", value: app.program || "—" },
-											]}
-										/>
-									</div>
-								);
-							})()}
+			<CaseHeader
+				name={app.applicantName}
+				reference={app.appId}
+				branch={branchName(app.branch)}
+				stage={app.stage}
+				// Ops closed the case — the pill says so even when the client's
+				// own signals still owe a step (a fee settled off-platform).
+				portalStage={app.stage === "completed" ? "completed" : (app.journey?.portalStage ?? null)}
+				handlerName={app.assignedStaff || null}
+				handlerAction={
+					canAssignWork ? (
+						<button type="button" className="btn btn--sm btn--ghost" onClick={() => setAssignOpen(true)}>
+							{pendingHandoff ? "Assign" : app.assignedStaff ? "Change" : "Assign"}
+						</button>
+					) : undefined
+				}
+				actions={
+					<button type="button" className="btn btn--sm btn--ghost" onClick={() => setHistoryOpen(true)}>
+						History{noteCount > 0 ? ` · ${noteCount}` : ""}
+					</button>
+				}
+				stageHandlers={(app.stageHandlers ?? [])
+					.filter((h) => h.opsUserName !== app.assignedStaff)
+					.map((h) => ({ stage: h.stage, name: h.opsUserName }))}
+				contact={{ email: app.email, phone: app.phone }}
+				extra={[
+					{ label: "Country", value: app.country || "—" },
+					{ label: "Programme", value: app.program || "—" },
+				]}
+			/>
 
 			<NextActionBand items={nextActions} waitingOn={app.journey?.nextUnlock ?? null} blockedBy={blockedBy} />
 
@@ -520,7 +515,27 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				</form>
 			</Sheet>
 
-			<CaseTabs tabs={tabs} current={current} onChange={setTab} nowId={stageTab} />
+			<CaseSpine
+				chapters={([
+					{ id: "consultation", numeral: "I" },
+					{ id: "enrolment", numeral: "II" },
+					{ id: "application", numeral: "III" },
+					{ id: "visa", numeral: "IV" },
+					{ id: "travel", numeral: "V" },
+				] as const).map((c) => {
+					const t = tabs.find((x) => x.id === c.id)!;
+					return { id: c.id as TabId, numeral: c.numeral, label: t.label, locked: t.locked, hint: t.hint };
+				})}
+				current={current}
+				nowId={stageTab}
+				done={app.stage === "completed"}
+				onChange={setTab}
+				utils={[
+					{ id: "overview", label: "Overview", glyph: "◌" },
+					{ id: "payments", label: "Money", glyph: "₵" },
+					{ id: "documents", label: "Docs", glyph: "▤" },
+				]}
+			/>
 
 
 			{current === "overview" && <OverviewTab app={app} consultation={consultation} canWork={canWork} flash={flash} fail={fail} />}

@@ -4047,3 +4047,257 @@ a.dash-kpi--on:hover {
 	padding: 0.4rem 0.6rem;
 	margin: 0.75rem 0 0;
 }
+
+/* ---------- Caseload: officer rows + record pane ---------- */
+.hdr-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-end;
+	gap: 1rem;
+	flex-wrap: wrap;
+}
+
+.ops-split {
+	display: flex;
+	gap: 1rem;
+	align-items: flex-start;
+}
+
+.ops-olist {
+	flex: 0 0 42%;
+	min-width: 20rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+}
+
+.ops-orow {
+	border-bottom: 1px solid var(--border-light);
+	padding: 0.7rem 0.9rem;
+	cursor: pointer;
+	display: flex;
+	gap: 0.8rem;
+	align-items: center;
+}
+.ops-orow:last-child { border-bottom: 0; }
+.ops-orow:hover { background: var(--muted); }
+.ops-orow--on,
+.ops-orow--on:hover {
+	border-left: 4px solid var(--foreground);
+	background: var(--muted);
+}
+.ops-orow__load {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-weight: 800;
+	font-size: 1.1rem;
+	min-width: 2.1rem;
+	text-align: center;
+	border: 1px solid var(--border);
+	padding: 0.25rem 0;
+}
+.ops-orow__who { min-width: 0; flex: 1; }
+.ops-orow__who b { display: block; font-weight: 650; }
+.ops-orow__who small { color: var(--muted-foreground); font-size: 0.68rem; }
+.ops-orow__who .ops-strip { margin-top: 0.35rem; }
+.ops-orow__right {
+	margin-left: auto;
+	text-align: right;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.62rem;
+	color: var(--muted-foreground);
+	line-height: 1.5;
+}
+
+.ops-opane {
+	flex: 1;
+	min-width: 0;
+	border: 1.5px solid var(--foreground);
+	background: var(--background);
+	padding: 1.1rem;
+}
+.ops-opane--empty { border-style: dashed; }
+.ops-opane__head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 1rem;
+}
+.ops-dsec {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted-foreground);
+	margin: 1.1rem 0 0.35rem;
+	padding-bottom: 0.3rem;
+	border-bottom: 1.5px solid var(--foreground);
+}
+.ops-dkv {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.35rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.75rem;
+}
+.ops-dkv__k {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+}
+.ops-mini {
+	border-bottom: 1px solid var(--border-light);
+	padding: 0.5rem 0;
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	font-size: 0.75rem;
+	align-items: baseline;
+}
+.ops-mini__ref {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.6rem;
+	color: var(--muted-foreground);
+}
+.ops-mini__st {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.6rem;
+	color: var(--muted-foreground);
+	margin-left: auto;
+}
+.ops-hours {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 0.3rem;
+	margin-top: 0.4rem;
+}
+.ops-hours > div {
+	text-align: center;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.55rem;
+	color: var(--muted-foreground);
+}
+.ops-hours b {
+	display: block;
+	border: 1px solid var(--border-light);
+	padding: 0.3rem 0;
+	font-size: 0.6rem;
+	font-weight: 600;
+	color: var(--foreground);
+}
+.ops-hours b.off { color: var(--border); }
+.ops-hours span { display: block; margin-top: 0.2rem; }
+
+/* ---------- Clients: ledger + record pane ---------- */
+.cl-split {
+	display: flex;
+	gap: 1rem;
+	align-items: flex-start;
+	margin-top: 1rem;
+}
+.cl-tr { cursor: pointer; }
+.cl-tr:hover { background: var(--muted); }
+.cl-tr--on { background: var(--muted); }
+.cl-tr--susp { box-shadow: inset 4px 0 0 var(--foreground); }
+.cl-record {
+	flex: 0 0 21rem;
+	border: 1.5px solid var(--foreground);
+	background: var(--background);
+	padding: 1.1rem;
+	position: sticky;
+	top: 1rem;
+}
+.cl-sec {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted-foreground);
+	margin: 1.1rem 0 0.35rem;
+	padding-bottom: 0.3rem;
+	border-bottom: 1.5px solid var(--foreground);
+}
+.cl-kv {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.35rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: 0.75rem;
+}
+.cl-kv__k {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+}
+.cl-danger {
+	margin-top: 1.1rem;
+	border: 1px dashed var(--border);
+	padding: 0.7rem 0.9rem;
+}
+.cl-danger__h {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.58rem;
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	margin: 0 0 0.35rem;
+}
+
+/* ---------- Case detail: the chapter spine ---------- */
+.cn-spine {
+	display: grid;
+	grid-template-columns: repeat(6, 1fr) repeat(3, auto);
+	border: 1.5px solid var(--foreground);
+	margin: 0 0 1rem;
+}
+.cn-spine__ch {
+	border: 0;
+	border-right: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 0.65rem 0.4rem 0.6rem;
+	text-align: center;
+	cursor: pointer;
+	font: inherit;
+	color: var(--foreground);
+}
+.cn-spine__ch:last-child { border-right: 0; }
+.cn-spine__rn {
+	display: block;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.85rem;
+	font-weight: 800;
+}
+.cn-spine__lb {
+	display: block;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.52rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+}
+.cn-spine__ch--done .cn-spine__rn { color: var(--muted-foreground); }
+.cn-spine__ch--now { background: var(--foreground); }
+.cn-spine__ch--now .cn-spine__rn,
+.cn-spine__ch--now .cn-spine__lb { color: var(--background); }
+.cn-spine__ch--on:not(.cn-spine__ch--now) .cn-spine__rn { text-decoration: underline; text-underline-offset: 3px; }
+.cn-spine__ch--locked { opacity: 0.45; cursor: default; }
+.cn-spine__ch--vi { border-left: 1.5px solid var(--foreground); }
+.cn-spine__ch--util .cn-spine__rn { font-size: 0.62rem; padding-top: 0.2rem; }
+@media (max-width: 720px) {
+	.cn-spine { grid-template-columns: repeat(3, 1fr); }
+	.cn-spine__ch { border-top: 1px solid var(--border-light); }
+}
+
+/* A case with no owner reads as the ask, not a state. */
+.cn-row__unassigned {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: var(--text-xs);
+	font-weight: 700;
+	text-decoration: underline;
+	text-decoration-thickness: 2px;
+	text-underline-offset: 2px;
+}

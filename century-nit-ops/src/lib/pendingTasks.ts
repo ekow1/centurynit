@@ -399,14 +399,18 @@ export function taskRef(task: PendingTask): string {
 		case "application":
 		case "visa":
 			return task.record.appId ?? task.record.id;
-		case "applicant":
-			return task.record.id;
 		case "consultation":
 			return task.record.ref ?? task.record.id;
 		case "handoff":
 			return task.record.applicationNumber ?? task.record.applicationId;
+		case "travel":
+			return task.record.applicationReference ?? task.record.applicationId;
+		case "booking":
+			return task.record.reference;
 		default:
-			return task.record.id;
+			// applicant, lead — no human reference exists; the subtitle is what
+			// tells these tasks apart under a client separator, never a uuid.
+			return task.subtitle;
 	}
 }
 

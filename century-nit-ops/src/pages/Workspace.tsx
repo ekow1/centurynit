@@ -19,7 +19,7 @@ import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { AssignSheet } from "./case/AssignSheet";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type WorkspaceTab } from "century-nit-shared";
+import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest, type WorkspaceTab } from "century-nit-shared";
 import {
 	buildInvoiceRows,
 	buildPendingTasks,
@@ -599,6 +599,8 @@ function PreviewPane({
 				{item.kind === "handoff" && <HandoffDetails h={item.record} />}
 				{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
 				{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
+				{item.kind === "travel" && <TravelDetails ta={item.record} />}
+				{item.kind === "booking" && <BookingDetails b={item.record} />}
 				{item.kind === "lead" && <LeadDetails lead={item.record} />}
 				</div>
 			</div>
@@ -779,6 +781,43 @@ function InvoiceDetails({ inv }: { inv: Invoice }) {
 			<p style={{ margin: 0 }}><strong>Balance:</strong> {fmtGhs(balance)}</p>
 			<p style={{ margin: 0 }}><strong>Status:</strong> {inv.status}</p>
 			{age !== null && <p style={{ margin: 0 }}><strong>Age:</strong> {age} day{age === 1 ? "" : "s"}</p>}
+		</div>
+	);
+}
+
+function BookingDetails({ b }: { b: Booking }) {
+	return (
+		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+			<p style={{ margin: 0 }}><strong>Reference:</strong> {b.reference}</p>
+			<p style={{ margin: 0 }}><strong>Service:</strong> {b.serviceName}</p>
+			<p style={{ margin: 0 }}>
+				<strong>When:</strong> {new Date(b.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+				{" · "}{b.durationMinutes} min · {b.type === "online" ? "Online" : "In person"}
+			</p>
+			<p style={{ margin: 0 }}><strong>With:</strong> {b.employeeName ?? "—"}</p>
+			<p style={{ margin: 0 }}><strong>Status:</strong> {b.status}</p>
+		</div>
+	);
+}
+
+function TravelDetails({ ta }: { ta: TravelAssistanceRequest }) {
+	const flight = ta.flight;
+	const route = flight ? [flight.from, flight.to].filter(Boolean).join(" → ") : "";
+	return (
+		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+			<p style={{ margin: 0 }}><strong>Case:</strong> {ta.applicationReference ?? ta.applicationId}</p>
+			<p style={{ margin: 0 }}><strong>Status:</strong> {ta.status}</p>
+			<p style={{ margin: 0 }}><strong>Handler:</strong> {ta.assignedOpsUserName ?? "— open"}</p>
+			{ta.university ? <p style={{ margin: 0 }}><strong>University:</strong> {ta.university}</p> : null}
+			{flight ? (
+				<p style={{ margin: 0 }}>
+					<strong>Flight:</strong> {[flight.carrier, flight.flightNumber].filter(Boolean).join(" ") || "—"}
+					{route ? ` · ${route}` : ""}
+					{flight.departAt ? ` · departs ${new Date(flight.departAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}
+				</p>
+			) : null}
+			{ta.booking?.confirmationCode ? <p style={{ margin: 0 }}><strong>PNR:</strong> {ta.booking.confirmationCode}</p> : null}
+			{ta.applicantNote ? <p style={{ margin: 0, fontStyle: "italic" }}>{ta.applicantNote}</p> : null}
 		</div>
 	);
 }

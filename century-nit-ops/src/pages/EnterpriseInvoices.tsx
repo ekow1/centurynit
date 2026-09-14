@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
+import { CaseScaffold } from "./case/CaseScaffold";
 import { getInvoice, type ApiInvoice } from "../lib/api";
 import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
 import {
@@ -23,7 +24,38 @@ import {
  * by person — and the invoice detail that previously did not exist anywhere.
  */
 
-const STATUS_TABS: ("all" | InvoiceStatus)[] = ["all", "proforma", "issued", "partial", "overdue", "paid", "void"];
+const STATUS_CHIPS: { id: "all" | InvoiceStatus; label: string; strong?: boolean }[] = [
+	{ id: "all", label: "All" },
+	{ id: "proforma", label: "To approve", strong: true },
+	{ id: "overdue", label: "Overdue", strong: true },
+	{ id: "issued", label: "Issued" },
+	{ id: "partial", label: "Partial" },
+	{ id: "paid", label: "Paid" },
+	{ id: "void", label: "Void" },
+];
+/** The tone each status takes in a pill — weight and shape, never hue. */
+const STATUS_TONE: Record<InvoiceStatus, string> = {
+	proforma: "waiting",
+	issued: "neutral",
+	partial: "neutral",
+	overdue: "current",
+	paid: "done",
+	void: "void",
+};
+type Band = "approve" | "overdue" | "open" | "settled";
+const BAND_LABEL: Record<Band, string> = { approve: "To approve", overdue: "Overdue", open: "Open", settled: "Settled" };
+const bandOf = (derived: InvoiceStatus): Band => (derived === "proforma" ? "approve" : derived === "overdue" ? "overdue" : derived === "paid" || derived === "void" ? "settled" : "open");
+const shortDate = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : null);
+/** Aging buckets of an account's open balance, by the oldest unpaid invoice's age. */
+function agingOf(rows: { balance: number; age: number | null; derived: InvoiceStatus }[]): [number, number, number, number] {
+	const b: [number, number, number, number] = [0, 0, 0, 0];
+	for (const r of rows) {
+		if (r.balance <= 0 || r.derived === "void") continue;
+		const a = r.derived === "overdue" && r.age !== null ? r.age : 0;
+		b[a <= 0 ? 0 : a <= 30 ? 1 : a <= 60 ? 2 : 3] += r.balance;
+	}
+	return b;
+}
 
 export function EnterpriseInvoices() {
 	const { opsUser } = useOpsAuth();
@@ -46,6 +78,8 @@ export function EnterpriseInvoices() {
 	const [flash, setFlash] = useState<string | null>(null);
 	// Approval happens on the case; only an invoice with no case is approved here.
 	const [approving, setApproving] = useState<ApiInvoice | null>(null);
+	const [showSettled, setShowSettled] = useState(false);
+	const [accountCut, setAccountCut] = useState<"all" | "owing" | "overdue" | "settled">("all");
 
 	const by = opsUser?.name ?? "Finance";
 
@@ -77,22 +111,48 @@ export function EnterpriseInvoices() {
 	});
 
 	const active = rows.find((r) => r.inv.id === openId) ?? null;
+	const counts = useMemo(() => {
+		const c: Record<InvoiceStatus, number> = { proforma: 0, issued: 0, partial: 0, overdue: 0, paid: 0, void: 0 };
+		for (const r of rows) c[r.derived] += 1;
+		return c;
+	}, [rows]);
+	/** Bands by what is needed: approve, chase, wait, done — the queue's order inside each. */
+	const bands = useMemo(() => {
+		const by: Record<Band, typeof rows> = { approve: [], overdue: [], open: [], settled: [] };
+		for (const r of filtered) by[bandOf(r.derived)].push(r);
+		by.approve.sort((a, b) => a.inv.issuedAt.localeCompare(b.inv.issuedAt));
+		by.overdue.sort((a, b) => (b.age ?? 0) - (a.age ?? 0));
+		by.open.sort((a, b) => (a.inv.dueAt ?? "9").localeCompare(b.inv.dueAt ?? "9"));
+		by.settled.sort((a, b) => b.inv.issuedAt.localeCompare(a.inv.issuedAt));
+		const oldest = by.overdue[0]?.age ?? 0;
+		return (
+			[
+				{ id: "approve" as Band, rows: by.approve, note: "raised by consultants" },
+				{ id: "overdue" as Band, rows: by.overdue, note: oldest > 0 ? `oldest ${oldest} d` : "" },
+				{ id: "open" as Band, rows: by.open, note: "due soonest first" },
+				{ id: "settled" as Band, rows: by.settled, note: `paid ${by.settled.filter((r) => r.derived === "paid").length} · void ${by.settled.filter((r) => r.derived === "void").length} · ${showSettled ? "hide" : "show ▸"}` },
+			] as { id: Band; rows: typeof rows; note: string }[]
+		).filter((b) => b.rows.length > 0);
+	}, [filtered, showSettled]);
 
 	const totals = useMemo(() => {
 		let outstanding = 0;
 		let overdue = 0;
 		let collected = 0;
+		let collectedThisWeek = 0;
+		const weekAgo = new Date().getTime() - 7 * 86_400_000;
 		for (const r of rows) {
 			outstanding += r.balance;
 			if (r.derived === "overdue") overdue += r.balance;
 			collected += invoicePaid(r.inv);
+			for (const p of r.inv.payments ?? []) if (new Date(p.at || r.inv.issuedAt).getTime() >= weekAgo) collectedThisWeek += p.amount;
 		}
-		return { outstanding, overdue, collected };
+		return { outstanding, overdue, collected, collectedThisWeek };
 	}, [rows]);
 
 	/** Per-applicant roll-up — the chase list, worst first */
 	const accounts = useMemo(() => {
-		const map = new Map<string, { name: string; billed: number; paid: number; balance: number; overdue: number; count: number }>();
+		const map = new Map<string, { name: string; billed: number; paid: number; balance: number; overdue: number; count: number; rows: typeof rows; toApprove: number; nextDue: string | null }>();
 		for (const r of rows) {
 			if (r.inv.status === "void") continue;
 			const e = map.get(r.inv.applicantId) ?? {
@@ -102,12 +162,18 @@ export function EnterpriseInvoices() {
 				balance: 0,
 				overdue: 0,
 				count: 0,
+				rows: [] as typeof rows,
+				toApprove: 0,
+				nextDue: null as string | null,
 			};
 			e.billed += r.inv.subtotal;
 			e.paid += invoicePaid(r.inv);
 			e.balance += r.balance;
 			if (r.derived === "overdue") e.overdue = Math.max(e.overdue, r.age ?? 0);
+			if (r.derived === "proforma") e.toApprove += 1;
+			if (r.balance > 0 && r.inv.dueAt && r.derived !== "proforma" && (!e.nextDue || r.inv.dueAt < e.nextDue)) e.nextDue = r.inv.dueAt;
 			e.count += 1;
+			e.rows.push(r);
 			map.set(r.inv.applicantId, e);
 		}
 		return [...map.entries()]
@@ -117,173 +183,314 @@ export function EnterpriseInvoices() {
 
 	return (
 		<div className="page-content fade-in">
-			<div className="inv-head">
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
 					<h1 className="page-title">Invoices</h1>
-					<p className="lead mt-2">What was raised, chased and settled. Invoices are raised and approved on the case; revenue analytics live under Reports.</p>
+					<p className="lead mt-2">{view === "invoices" ? "What was raised, chased and settled — the ones that need a hand first." : "By account — who owes what, and how old it is."}</p>
+				</div>
+				<div className="cn-scaffold__chips" role="tablist" aria-label="View">
+					{(["invoices", "accounts"] as const).map((v) => (
+						<button key={v} type="button" role="tab" aria-selected={view === v} className={`btn btn--sm ${view === v ? "btn--primary" : "btn--ghost"}`} onClick={() => setView(v)}>
+							{v === "invoices" ? "Invoices" : "Accounts"}
+						</button>
+					))}
 				</div>
 			</div>
 
-			{flash ? <div className="inv-flash">✓ {flash}</div> : null}
-		{invoiceError ? <div className="inv-flash" style={{ background: "var(--danger-bg, #fee)" }}>⚠ {invoiceError}</div> : null}
-		{loading ? <div className="route-loading" role="status" aria-live="polite"><span className="route-loading__spinner" aria-hidden="true" /></div> : null}
-
-			<div className="inv-stats">
-				<Stat label="Outstanding" primary={fmtGhs(totals.outstanding)} sub={fmtUsd(totals.outstanding)} />
-				<Stat label="Overdue" primary={fmtGhs(totals.overdue)} sub={fmtUsd(totals.overdue)} urgent={totals.overdue > 0} />
-				<Stat label="Collected" primary={fmtGhs(totals.collected)} sub={fmtUsd(totals.collected)} inverted />
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{fmtGhs(totals.outstanding)}</strong> <span className="dash-day__date">outstanding</span>
+				</span>
+				<span>
+					<strong>{fmtGhs(totals.overdue)}</strong> <span className="dash-day__date">overdue · {counts.overdue}</span>
+				</span>
+				<span>
+					<strong>{counts.proforma}</strong> <span className="dash-day__date">to approve</span>
+				</span>
+				<span>
+					<strong>{fmtGhs(totals.collectedThisWeek)}</strong> <span className="dash-day__date">collected this week</span>
+				</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<Link to="/finance" className="dash-link">
+					Finance reports →
+				</Link>
 			</div>
 
-			<div className="inv-tabs" role="tablist" aria-label="Invoice views">
-				{(["invoices", "accounts"] as const).map((v) => (
-					<button
-						key={v}
-						role="tab"
-						aria-selected={view === v}
-						className={`inv-tab${view === v ? " inv-tab--on" : ""}`}
-						onClick={() => setView(v)}
-					>
-						{v === "invoices" ? "By invoice" : "By account"}
-						<span className="inv-tab__count">{v === "invoices" ? rows.length : accounts.length}</span>
-					</button>
-				))}
-			</div>
+			{flash ? <p className="ops-panel__ok">✓ {flash}</p> : null}
+			{invoiceError ? <p className="ops-modal__error">⚠ {invoiceError}</p> : null}
+			{loading ? <div className="route-loading" role="status" aria-live="polite"><span className="route-loading__spinner" aria-hidden="true" /></div> : null}
 
 			{view === "invoices" ? (
+				<CaseScaffold
+					bare
+					collapseDetail
+					onClose={() => {
+						setOpenId(null);
+						setSearchParams({});
+					}}
+					bar={
+						active ? (
+							<>
+								<span className="cn-filter__label">
+									{active.inv.invoiceNumber} · {INVOICE_STATUS_LABELS[active.derived]}
+								</span>
+								{active.inv.applicationId && (
+									<Link to={`/applications?id=${active.inv.applicationId}&tab=payments`} className="btn btn--ghost btn--sm">
+										Open case
+									</Link>
+								)}
+							</>
+						) : null
+					}
+					list={
+						<>
+							<div className="cn-scaffold__filters">
+								<div className="cn-scaffold__chips" role="tablist" aria-label="Status">
+									{STATUS_CHIPS.map((c) => {
+										const n = c.id === "all" ? rows.length : counts[c.id];
+										const on = status === c.id;
+										return (
+											<button
+												key={c.id}
+												type="button"
+												role="tab"
+												aria-selected={on}
+												className="ops-pill"
+												onClick={() => setStatus(c.id)}
+												style={{
+													cursor: "pointer",
+													marginLeft: 0,
+													border: "1px solid var(--border)",
+													background: on ? "var(--foreground)" : "transparent",
+													color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+													fontWeight: c.strong && n > 0 && !on ? 700 : 500,
+												}}
+											>
+												{c.label}
+												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+													{n}
+												</span>
+											</button>
+										);
+									})}
+								</div>
+								<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+									<input type="search" className="cn-search" placeholder="Search number, client, type…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search invoices" style={{ flex: "1 1 12rem", width: "auto" }} />
+								</div>
+							</div>
+							<div className="cn-scaffold__rows">
+								{filtered.length === 0 ? (
+									<p className="ops-people__empty">No invoices match that filter.</p>
+								) : (
+									bands.map((band) => (
+										<div key={band.id}>
+											<div
+												className={`ops-band hd-band${band.id === "settled" ? " ops-band--toggle" : ""}`}
+												role={band.id === "settled" ? "button" : undefined}
+												tabIndex={band.id === "settled" ? 0 : undefined}
+												onClick={band.id === "settled" ? () => setShowSettled((v) => !v) : undefined}
+												onKeyDown={
+													band.id === "settled"
+														? (e) => {
+																if (e.key === "Enter" || e.key === " ") {
+																	e.preventDefault();
+																	setShowSettled((v) => !v);
+																}
+															}
+														: undefined
+												}
+											>
+												<span className="ops-band__name">
+													{BAND_LABEL[band.id]} · {band.rows.length}
+												</span>
+												<span className="ops-band__note">{band.note}</span>
+											</div>
+											{(band.id !== "settled" || showSettled || status === "paid" || status === "void") &&
+												band.rows.map(({ inv, derived, age, balance }) => {
+													const on = openId === inv.id;
+													const raisedBy = inv.history?.find((h) => /raised|created|proforma/i.test(h.action))?.by ?? inv.issuedBy;
+													const story = [
+														inv.lines.length === 1 && inv.lines[0]?.label ? inv.lines[0].label : `${inv.lines.length} line${inv.lines.length === 1 ? "" : "s"}`,
+														derived === "proforma" ? `raised by ${raisedBy}` : null,
+														derived === "proforma" ? shortDate(inv.issuedAt) : inv.dueAt ? `due ${shortDate(inv.dueAt)}` : `issued ${shortDate(inv.issuedAt)}`,
+													]
+														.filter(Boolean)
+														.join(" · ");
+													return (
+														<button
+															key={inv.id}
+															type="button"
+															className={`ops-payrow${on ? " ops-payrow--on" : ""}${derived === "overdue" ? " ops-payrow--late" : ""}`}
+															onClick={() => {
+																setOpenId(on ? null : inv.id);
+																setSearchParams(on ? {} : { open: inv.id });
+															}}
+														>
+															<span className="ops-payrow__main">
+																<span className="ops-payrow__kicker">
+																	{inv.invoiceNumber} · {inv.type}
+																</span>
+																<span className="ops-payrow__name">{inv.applicantName}</span>
+																<span className="ops-payrow__sub" title={story}>
+																	{story}
+																</span>
+															</span>
+															<span className="ops-payrow__side">
+																<span className="ops-payrow__amt">{derived === "partial" ? `${fmtGhs(balance)} due` : fmtGhs(inv.subtotal)}</span>
+																<span className="ops-payrow__net">{derived === "partial" ? `of ${fmtGhs(inv.subtotal)}` : fmtUsd(inv.subtotal)}</span>
+																<span className={`cn-pill cn-pill--${STATUS_TONE[derived]}`}>{INVOICE_STATUS_LABELS[derived]}</span>
+																{derived === "overdue" && age ? <span className="ops-payrow__late">{age} d late</span> : null}
+															</span>
+														</button>
+													);
+												})}
+										</div>
+									))
+								)}
+							</div>
+						</>
+					}
+					detail={
+						active ? (
+							<InvoiceDetail
+								row={active}
+								by={by}
+								account={accounts.find((a) => a.id === active.inv.applicantId) ?? null}
+								onApprove={async () => {
+									try {
+										setApproving(await getInvoice(active.inv.id));
+									} catch (e) {
+										say(e instanceof Error ? e.message : "Could not load the invoice");
+									}
+								}}
+								onPay={async (amt, method, ref) => {
+									try {
+										await apiRecordPayment(active.inv.id, amt, method, ref);
+										say(`Payment recorded on ${active.inv.invoiceNumber}.`);
+									} catch (e) {
+										say(e instanceof Error ? e.message : "Payment failed");
+									}
+								}}
+								onVoid={async (reason) => {
+									try {
+										await apiVoidInvoice(active.inv.id, reason);
+										say(`${active.inv.invoiceNumber} voided.`);
+									} catch (e) {
+										say(e instanceof Error ? e.message : "Void failed");
+									}
+								}}
+								onCredit={async (amt, reason) => {
+									try {
+										await apiCreditInvoice(active.inv.id, amt, reason);
+										say(`Credit note issued on ${active.inv.invoiceNumber}.`);
+									} catch (e) {
+										say(e instanceof Error ? e.message : "Credit failed");
+									}
+								}}
+								onResend={() => {
+									say(`${active.inv.invoiceNumber} re-sent to ${active.inv.applicantName}.`);
+								}}
+							/>
+						) : null
+					}
+				/>
+			) : (
 				<>
-					<div className="inv-filters">
-						<input
-							type="search"
-							className="input input--sm"
-							placeholder="Search number, applicant, type…"
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-						/>
-						<div className="admin-env-tabs">
-							{STATUS_TABS.map((t) => (
-								<button
-									key={t}
-									className={`admin-env-tab${status === t ? " admin-env-tab--active" : ""}`}
-									onClick={() => setStatus(t)}
-								>
-									{t === "all" ? "All" : INVOICE_STATUS_LABELS[t]}
-								</button>
-							))}
-						</div>
-					</div>
-
-					<div className="inv-split">
-						<div className="inv-list">
-							{filtered.length === 0 ? (
-								<p className="inv-none muted">No invoices match that filter.</p>
-							) : (
-								filtered.map(({ inv, derived, age, balance }) => (
+					<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)" }}>
+						<div className="cn-scaffold__chips" role="tablist" aria-label="Accounts">
+							{(
+								[
+									["all", "All", accounts.length],
+									["owing", "Owing", accounts.filter((a) => a.balance > 0).length],
+									["overdue", "Overdue", accounts.filter((a) => a.overdue > 0).length],
+									["settled", "Settled", accounts.filter((a) => a.balance <= 0).length],
+								] as const
+							).map(([id, label, n]) => {
+								const on = accountCut === id;
+								return (
 									<button
-										key={inv.id}
+										key={id}
 										type="button"
-										className={`inv-row${openId === inv.id ? " inv-row--on" : ""}`}
-										onClick={() => {
-											setOpenId(inv.id);
-											setSearchParams({ open: inv.id });
+										role="tab"
+										aria-selected={on}
+										className="ops-pill"
+										onClick={() => setAccountCut(id)}
+										style={{
+											cursor: "pointer",
+											marginLeft: 0,
+											border: "1px solid var(--border)",
+											background: on ? "var(--foreground)" : "transparent",
+											color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+											fontWeight: (id === "owing" || id === "overdue") && n > 0 && !on ? 700 : 500,
 										}}
 									>
-										<span className="inv-row__top">
-											<span className="inv-row__num mono">{inv.invoiceNumber}</span>
-											<span className={`inv-status inv-status--${derived}`}>
-												{INVOICE_STATUS_LABELS[derived]}
-											</span>
-										</span>
-										<span className="inv-row__who">{inv.applicantName}</span>
-										<span className="inv-row__meta mono">
-											{inv.type} · {new Date(inv.issuedAt).toLocaleDateString()}
-											{derived === "overdue" && age ? ` · ${age}d overdue` : ""}
-										</span>
-										<span className="inv-row__amt mono">
-											{fmtGhs(inv.subtotal)}
-											{balance > 0 && balance !== inv.subtotal ? (
-												<span className="inv-row__bal"> · {fmtGhs(balance)} due</span>
-											) : null}
+										{label}
+										<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+											{n}
 										</span>
 									</button>
-								))
-							)}
+								);
+							})}
 						</div>
-
-						<div className="inv-detail">
-							{active ? (
-								<InvoiceDetail
-									row={active}
-									by={by}
-									onApprove={async () => {
-										try {
-											setApproving(await getInvoice(active.inv.id));
-										} catch (e) {
-											say(e instanceof Error ? e.message : "Could not load the invoice");
-										}
-									}}
-									onPay={async (amt, method, ref) => {
-										try {
-											await apiRecordPayment(active.inv.id, amt, method, ref);
-											say(`Payment recorded on ${active.inv.invoiceNumber}.`);
-										} catch (e) {
-											say(e instanceof Error ? e.message : "Payment failed");
-										}
-									}}
-									onVoid={async (reason) => {
-										try {
-											await apiVoidInvoice(active.inv.id, reason);
-											say(`${active.inv.invoiceNumber} voided.`);
-										} catch (e) {
-											say(e instanceof Error ? e.message : "Void failed");
-										}
-									}}
-									onCredit={async (amt, reason) => {
-										try {
-											await apiCreditInvoice(active.inv.id, amt, reason);
-											say(`Credit note issued on ${active.inv.invoiceNumber}.`);
-										} catch (e) {
-											say(e instanceof Error ? e.message : "Credit failed");
-										}
-									}}
-									onResend={() => {
-										say(`${active.inv.invoiceNumber} re-sent to ${active.inv.applicantName}.`);
-									}}
-								/>
-							) : (
-								<div className="inv-blank">
-									<p className="inv-blank__title display">Select an invoice</p>
-									<p className="muted">
-										Line items, payment history, and the actions available on it appear here.
-									</p>
-								</div>
-							)}
+						<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+							<input type="search" className="cn-search" placeholder="Search client…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search accounts" style={{ flex: "1 1 12rem", width: "auto" }} />
 						</div>
 					</div>
-				</>
-			) : (
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>Applicant</th>
-								<th>Invoices</th>
-								<th style={{ textAlign: "right" }}>Billed</th>
-								<th style={{ textAlign: "right" }}>Paid</th>
-								<th style={{ textAlign: "right" }}>Outstanding</th>
-								<th>Aging</th>
-								<th style={{ textAlign: "right" }}>Action</th>
-							</tr>
-						</thead>
-						<tbody>
-							{accounts.map((a) => (
-								<tr key={a.id}>
-									<td><strong>{a.name}</strong></td>
-									<td>{a.count}</td>
-									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.billed)}</td>
-									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.paid)}</td>
-									<td style={{ textAlign: "right" }} className="mono">{fmtGhs(a.balance)}</td>
-									<td>{a.overdue > 0 ? <span className="inv-tag inv-tag--overdue">{a.overdue}d overdue</span> : "Current"}</td>
-									<td style={{ textAlign: "right" }}>
+					{(() => {
+						const q = search.trim().toLowerCase();
+						const list = accounts.filter((a) => {
+							if (accountCut === "owing" && a.balance <= 0) return false;
+							if (accountCut === "overdue" && a.overdue <= 0) return false;
+							if (accountCut === "settled" && a.balance > 0) return false;
+							return !q || a.name.toLowerCase().includes(q);
+						});
+						const owing = list.filter((a) => a.balance > 0);
+						const settledList = list.filter((a) => a.balance <= 0);
+						const card = (a: (typeof accounts)[number]) => {
+							const aging = agingOf(a.rows);
+							const total = aging.reduce((n, x) => n + x, 0);
+							const foot = [a.count === 1 ? "1 invoice" : `${a.count} invoices`, a.toApprove > 0 ? `${a.toApprove} to approve` : null, a.overdue > 0 ? `${a.overdue} d overdue` : a.nextDue ? `next due ${shortDate(a.nextDue)}` : null]
+								.filter(Boolean)
+								.join(" · ");
+							return (
+								<div key={a.id} className={`ops-acct${a.overdue > 0 ? " ops-acct--late" : ""}`}>
+									<div className="ops-acct__head">
+										<span className="ops-acct__name" title={a.name}>
+											{a.name}
+										</span>
+										<span className="ops-acct__ref">{a.id.slice(0, 8)}</span>
+									</div>
+									<div className="ops-figs">
+										<div className="ops-fig">
+											<span className="ops-fig__l">Billed</span>
+											<span className="ops-fig__v">{fmtGhs(a.billed)}</span>
+										</div>
+										<div className="ops-fig">
+											<span className="ops-fig__l">Paid</span>
+											<span className="ops-fig__v">{fmtGhs(a.paid)}</span>
+										</div>
+										<div className={`ops-fig${a.balance > 0 ? " ops-fig--on" : ""}`}>
+											<span className="ops-fig__l">Outstanding</span>
+											<span className="ops-fig__v">{fmtGhs(a.balance)}</span>
+										</div>
+									</div>
+									{total > 0 && (
+										<>
+											<div className="ops-aging" aria-hidden>
+												{aging.map((x, i) => (x > 0 ? <span key={i} className={`ops-aging__seg ops-aging__seg--${i + 1}`} style={{ flex: x }} /> : null))}
+											</div>
+											<div className="ops-aging__l">
+												<span>current</span>
+												<span>30</span>
+												<span>60</span>
+												<span>90+</span>
+											</div>
+										</>
+									)}
+									<div className="ops-acct__foot">
+										<span>{foot}</span>
 										<button
 											type="button"
 											className="btn btn--ghost btn--sm"
@@ -292,14 +499,38 @@ export function EnterpriseInvoices() {
 												setView("invoices");
 											}}
 										>
-											View invoices
+											Invoices →
 										</button>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
+									</div>
+								</div>
+							);
+						};
+						return list.length === 0 ? (
+							<p className="ops-people__empty">No accounts match.</p>
+						) : (
+							<div className="ops-bands" style={{ padding: 0 }}>
+								{owing.length > 0 && (
+									<div>
+										<div className="ops-band">
+											<span className="ops-band__name">Owing · {owing.length}</span>
+											<span className="ops-band__note">largest first</span>
+										</div>
+										<div className="ops-people ops-people--three">{owing.map(card)}</div>
+									</div>
+								)}
+								{settledList.length > 0 && (
+									<div>
+										<div className="ops-band ops-band--toggle" role="button" tabIndex={0} onClick={() => setShowSettled((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowSettled((v) => !v); } }}>
+											<span className="ops-band__name">Settled · {settledList.length}</span>
+											<span className="ops-band__note">{showSettled || accountCut === "settled" ? "hide" : "show ▸"}</span>
+										</div>
+										{(showSettled || accountCut === "settled") && <div className="ops-people ops-people--three">{settledList.map(card)}</div>}
+									</div>
+								)}
+							</div>
+						);
+					})()}
+				</>
 			)}
 
 			<ApproveInvoiceSheet
@@ -322,6 +553,7 @@ export function EnterpriseInvoices() {
 
 function InvoiceDetail({
 	row,
+	account,
 	by,
 	onApprove,
 	onPay,
@@ -330,6 +562,7 @@ function InvoiceDetail({
 	onResend,
 }: {
 	row: { inv: Invoice; derived: InvoiceStatus; age: number | null; balance: number };
+	account: { balance: number; overdue: number; count: number; toApprove: number; nextDue: string | null } | null;
 	by: string;
 	/** Approve here — only for a draft with no case to approve it on. */
 	onApprove: () => Promise<void>;
@@ -546,19 +779,37 @@ function InvoiceDetail({
 				</form>
 			) : null}
 
-			{/* Audit trail */}
+			{account && (
+				<div className="card cn-now" style={{ marginTop: "1rem" }}>
+					<p className="cn-detail__eyebrow">The account</p>
+					<div className="cn-detail__rows">
+						<div className="cn-detail__row">
+							<span>
+								{account.count} invoice{account.count === 1 ? "" : "s"} · {fmtGhs(account.balance)} outstanding
+							</span>
+							<span className="cn-detail__row-note">{account.overdue > 0 ? `${account.overdue} d overdue` : account.nextDue ? `next due ${shortDate(account.nextDue)}` : "nothing overdue"}</span>
+						</div>
+						<Link to="/ledger" className="cn-detail__row">
+							<span>Client ledger</span>
+							<span className="cn-detail__row-note">journal & milestones →</span>
+						</Link>
+					</div>
+				</div>
+			)}
 			{inv.history?.length ? (
-				<div className="inv-doc__history">
-					<p className="eyebrow">History</p>
-					<ul>
+				<div className="card cn-now" style={{ marginTop: "1rem" }}>
+					<p className="cn-detail__eyebrow">History</p>
+					<ul className="cn-timeline">
 						{[...inv.history].reverse().map((h, i) => (
-							<li key={`${h.at}-${i}`}>
-								<span className="mono inv-doc__hist-at">{new Date(h.at).toLocaleDateString()}</span>
-								<span className="inv-doc__hist-act">{h.action}</span>
-								<span className="inv-doc__hist-detail muted">
+							<li key={`${h.at}-${i}`} className="cn-timeline__item">
+								<div className="cn-timeline__head">
+									<span className="cn-timeline__summary">{h.action}</span>
+									<span className="cn-timeline__when">{new Date(h.at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span>
+								</div>
+								<p className="cn-timeline__meta">
 									{h.detail ? `${h.detail} · ` : ""}
 									{h.by}
-								</span>
+								</p>
 							</li>
 						))}
 					</ul>
@@ -575,16 +826,6 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 		<div className={`inv-doc__total-row${strong ? " inv-doc__total-row--strong" : ""}`}>
 			<span>{label}</span>
 			<span className="mono">{value}</span>
-		</div>
-	);
-}
-
-function Stat({ label, primary, sub, inverted, urgent }: { label: string; primary: string; sub: string; inverted?: boolean; urgent?: boolean }) {
-	return (
-		<div className={`inv-stat${inverted ? " inv-stat--inverted" : ""}${urgent ? " inv-stat--urgent" : ""}`}>
-			<p className="eyebrow">{label}</p>
-			<p className="inv-stat__value">{primary}</p>
-			<p className="inv-stat__sub mono">≈ {sub} USD</p>
 		</div>
 	);
 }

@@ -8,7 +8,9 @@ import {
 	type FeeItem,
 	type UpdateFeeItem,
 } from "century-nit-shared";
-import { Sheet, StatusPill } from "century-nit-core/ui";
+import { Sheet } from "century-nit-core/ui";
+import { packagesApi } from "century-nit-core/api";
+import type { ServicePackage } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { Toast } from "./OpsDialogs";
@@ -123,28 +125,29 @@ export function EnterpriseFeeSchedule() {
 
 	// ── exchange rate + split (settings) ────────────────────────────────
 	const [rate, setRate] = useState<string>("");
-	const [deposit, setDeposit] = useState<string>("");
-	const [preDeparture, setPreDeparture] = useState<string>("");
 	useEffect(() => {
 		if (!cat) return;
 		setRate(String(cat.exchangeRate));
-		setDeposit(String(cat.serviceFeeSplit.depositPercent));
-		setPreDeparture(String(cat.serviceFeeSplit.preDeparturePercent));
 	}, [cat]);
+	// The packages, for the worked example — the service fee is theirs.
+	const [packages, setPackages] = useState<ServicePackage[]>([]);
+	useEffect(() => {
+		packagesApi
+			.list()
+			.then((res) => setPackages(res.packages.filter((x) => x.active)))
+			.catch(() => setPackages([]));
+	}, []);
+	const [examplePackage, setExamplePackage] = useState<string>("");
+	const [exampleDestination, setExampleDestination] = useState<string>("");
 	async function putSetting(key: string, value: string) {
 		await apiFetch(`${API_PREFIX}/settings`, { method: "PUT", body: JSON.stringify({ key, value }) });
 	}
-	async function saveMoneyRules() {
+	async function saveRate() {
 		const r = Number(rate);
-		const d = Number.parseInt(deposit, 10);
-		const p = Number.parseInt(preDeparture, 10);
 		if (!Number.isFinite(r) || r <= 0) return say("error", "The exchange rate must be a positive number.");
-		if (!Number.isInteger(d) || !Number.isInteger(p) || d < 1 || p < 1 || d + p >= 100) return say("error", "Deposit and pre-departure must be whole percentages that leave something for after arrival.");
 		try {
 			await putSetting("PLATFORM_EXCHANGE_RATE", String(r));
-			await putSetting("SERVICE_FEE_DEPOSIT_PERCENT", String(d));
-			await putSetting("SERVICE_FEE_PRE_DEPARTURE_PERCENT", String(p));
-			say("success", "Money rules saved — new invoices price from them.");
+			say("success", "Exchange rate saved — new invoices price from it.");
 			await load();
 		} catch (err) {
 			say("error", err instanceof ApiError ? err.message : "Could not save");
@@ -153,63 +156,90 @@ export function EnterpriseFeeSchedule() {
 
 	const century = items.filter((i) => i.kind === "century");
 	const passThrough = items.filter((i) => i.kind === "pass_through");
-	const post = cat ? cat.serviceFeeSplit.postArrivalPercent : 100 - (Number.parseInt(deposit, 10) || 0) - (Number.parseInt(preDeparture, 10) || 0);
+	const ghs = (cents: number) => (cat ? `GH₵ ${((cents / 100) * cat.exchangeRate).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : usd(cents));
+	const whenLabel = (i: FeeItem) => (!i.active ? "off" : i.optional ? "when ticked" : "automatic");
 
-	function ItemTable({ rows, empty }: { rows: FeeItem[]; empty: string }) {
-		if (rows.length === 0) return <p className="muted text-sm">{empty}</p>;
+	function ItemRows({ rows, empty }: { rows: FeeItem[]; empty: string }) {
+		if (rows.length === 0) return <p className="ops-panel__muted" style={{ padding: "0.75rem 1rem" }}>{empty}</p>;
 		return (
-			<div style={{ overflowX: "auto" }}>
-				<table className="admin-table" style={{ width: "100%" }}>
-					<thead>
-						<tr>
-							<th>Item</th>
-							<th>Client reads</th>
-							<th>Chapter</th>
-							<th>When</th>
-							<th style={{ textAlign: "right" }}>Amount</th>
-							<th />
-						</tr>
-					</thead>
-					<tbody>
-						{rows.map((i) => (
-							<tr key={i.key} style={{ opacity: i.active ? 1 : 0.55 }}>
-								<td>
-									<p className="text-sm--strong">{i.name}</p>
-									{i.description && <p className="muted text-xs">{i.description}</p>}
-								</td>
-								<td className="text-sm">{i.clientLabel}</td>
-								<td className="text-sm">{CHAPTER_LABELS[i.chapter] ?? i.chapter}</td>
-								<td>
-									<StatusPill tone={!i.active ? "void" : i.optional ? "waiting" : "current"}>{!i.active ? "Off" : i.optional ? "When ticked" : "Automatic"}</StatusPill>
-								</td>
-								<td className="mono" style={{ textAlign: "right" }}>
-									{usd(i.amountCents)}
-								</td>
-								<td style={{ textAlign: "right" }}>
-									{canEdit && (
-										<button type="button" className="btn btn--sm btn--ghost" onClick={() => openItem(i)}>
-											Edit
-										</button>
-									)}
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			</div>
+			<>
+				{rows.map((i) => (
+					<div key={i.key} className="ops-item" style={{ opacity: i.active ? 1 : 0.55 }}>
+						<div>
+							<div className="ops-item__k">
+								{FEE_KIND_LABELS[i.kind]} · {CHAPTER_LABELS[i.chapter] ?? i.chapter}
+							</div>
+							<div className="ops-item__n">{i.name}</div>
+							<div className="ops-item__s">
+								Client reads: “{i.clientLabel}”{i.description ? ` · ${i.description}` : ""}
+							</div>
+						</div>
+						<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700, textAlign: "right" }}>
+							{ghs(i.amountCents)}
+							<span className="ops-item__s" style={{ display: "block", fontWeight: 400 }}>{usd(i.amountCents)}</span>
+						</span>
+						<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+							{whenLabel(i)}
+							{canEdit && (
+								<>
+									<br />
+									<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => openItem(i)}>
+										edit
+									</button>
+								</>
+							)}
+						</span>
+					</div>
+				))}
+			</>
 		);
 	}
 
+	// The worked example: one package, one country, the items that apply.
+	const pkg = packages.find((x) => x.id === examplePackage) ?? packages[0] ?? null;
+	const dest = cat?.destinations.find((d) => d.id === exampleDestination) ?? cat?.destinations[0] ?? null;
+	const centuryLines = century.filter((i) => i.active && !i.optional);
+	const passLines = passThrough.filter((i) => i.active && !i.optional);
+	const centuryTotal = (pkg?.priceCents ?? 0) + centuryLines.reduce((n, i) => n + i.amountCents, 0);
+	const passTotal = (dest ? dest.visaFeeCents + dest.biometricsFeeCents : 0) + passLines.reduce((n, i) => n + i.amountCents, 0);
+	const split = cat?.serviceFeeSplit;
+
 	return (
 		<div className="admin-page">
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
 					<h2 className="section-title">Fee schedule</h2>
-					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Century's fee is the package's service fee plus the items below. Everything else is paid on the client's behalf, at cost.
-						Prices are in USD; the client is charged in GHS at the rate at the bottom.
-					</p>
+					<p className="muted" style={{ marginTop: "0.25rem" }}>What a client pays — Century's fee, and what is paid on their behalf at cost. Prices are set in USD; the client is charged in GHS at the rate on the right.</p>
 				</div>
+				<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+					<Link to="/packages" className="btn btn--sm btn--ghost">
+						Packages →
+					</Link>
+					<Link to="/universities" className="btn btn--sm btn--ghost">
+						Universities →
+					</Link>
+					<Link to="/payment-config" className="btn btn--sm btn--ghost">
+						Payment plans →
+					</Link>
+				</div>
+			</div>
+
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{cat ? cat.exchangeRate.toFixed(2) : "—"}</strong> <span className="dash-day__date">GHS per USD</span>
+				</span>
+				<span>
+					<strong>{century.length}</strong> <span className="dash-day__date">Century item{century.length === 1 ? "" : "s"}</span>
+				</span>
+				<span>
+					<strong>{passThrough.length}</strong> <span className="dash-day__date">pass-through item{passThrough.length === 1 ? "" : "s"}</span>
+				</span>
+				<span>
+					<strong>{cat?.destinations.length ?? 0}</strong> <span className="dash-day__date">countries priced</span>
+				</span>
+				<span>
+					<strong>{packages.length}</strong> <span className="dash-day__date">package{packages.length === 1 ? "" : "s"}</span>
+				</span>
 			</div>
 
 			{loading && !cat ? (
@@ -217,99 +247,233 @@ export function EnterpriseFeeSchedule() {
 					<span className="route-loading__spinner" aria-hidden="true" />
 				</div>
 			) : (
-				<div className="cn-stack" style={{ gap: "1.25rem" }}>
-					<section className="card">
-						<div className="between mb-2" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.75rem" }}>
-							<p className="eyebrow" style={{ margin: 0 }}>
-								{FEE_KIND_LABELS.century}
+				<div className="ops-fees">
+					<div className="cn-stack" style={{ gap: "1rem" }}>
+						<section style={{ border: "1px solid var(--border-light)" }}>
+							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
+								<span className="ops-band__name">Century's fee · {century.length + 1}</span>
+								<span className="ops-band__note">ours · in the service fee or on top</span>
+							</div>
+							<div className="ops-item">
+								<div>
+									<div className="ops-item__k">Century · Enrolment</div>
+									<div className="ops-item__n">Service fee</div>
+									<div className="ops-item__s">
+										By package — {packages.length > 0 ? packages.map((x) => `${x.name} ${ghs(x.priceCents)}`).join(" · ") : "no active packages"} · edited under Packages
+									</div>
+								</div>
+								<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+									by package
+								</span>
+								<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+									in milestones
+									<br />
+									<Link to="/packages" className="dash-link">
+										packages →
+									</Link>
+								</span>
+							</div>
+							<ItemRows rows={century} empty="No items." />
+						</section>
+
+						<section style={{ border: "1px solid var(--border-light)" }}>
+							<div className="ops-band hd-band" style={{ borderTop: "none" }}>
+								<span className="ops-band__name">Paid on the client's behalf · {passThrough.length + 3}</span>
+								<span className="ops-band__note">at cost · ticked when the invoice is raised</span>
+							</div>
+							<div className="ops-item">
+								<div>
+									<div className="ops-item__k">Pass-through · Applications</div>
+									<div className="ops-item__n">University application fee</div>
+									<div className="ops-item__s">Set on each university · billed per school chosen</div>
+								</div>
+								<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+									per university
+								</span>
+								<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+									when schools are chosen
+									<br />
+									<Link to="/universities" className="dash-link">
+										universities →
+									</Link>
+								</span>
+							</div>
+							<div className="ops-item">
+								<div>
+									<div className="ops-item__k">Pass-through · Visa</div>
+									<div className="ops-item__n">Visa fee &amp; biometrics</div>
+									<div className="ops-item__s">By country — below · the visa invoice takes the accepted school's country</div>
+								</div>
+								<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+									per country
+								</span>
+								<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+									when the visa opens
+								</span>
+							</div>
+							<div className="ops-item">
+								<div>
+									<div className="ops-item__k">Pass-through · Departure</div>
+									<div className="ops-item__n">Flight ticket</div>
+									<div className="ops-item__s">The quote, as booked</div>
+								</div>
+								<span className="cn-money" style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>
+									as quoted
+								</span>
+								<span className="ops-item__k" style={{ textAlign: "right", minWidth: "7rem" }}>
+									after the fee milestone
+								</span>
+							</div>
+							<ItemRows rows={passThrough} empty="No optional items." />
+						</section>
+
+						<section style={{ border: "1px solid var(--border-light)", padding: "0 1rem 1rem" }}>
+							<div className="ops-band hd-band" style={{ borderTop: "none", margin: "0 -1rem" }}>
+								<span className="ops-band__name">Visa costs by country · {cat?.destinations.length ?? 0}</span>
+								<span className="ops-band__note">USD · the client pays the GHS at the rate</span>
+							</div>
+							{cat && cat.destinations.length > 0 ? (
+								<div className="ops-tariffs">
+									{cat.destinations.map((d) => {
+										const v = tariffValue(d);
+										const dirty = Boolean(tariffDraft[d.id]);
+										return (
+											<div key={d.id} className={`ops-tariff${dirty ? " ops-tariff--dirty" : ""}`}>
+												<span className="ops-tariff__n">{d.name}</span>
+												<label className="ops-tariff__row">
+													<span>Visa fee</span>
+													<input className="ops-tariff__in" inputMode="decimal" value={v.visa} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, visa: e.target.value } })} aria-label={`${d.name} visa fee`} />
+												</label>
+												<label className="ops-tariff__row">
+													<span>Biometrics</span>
+													<input className="ops-tariff__in" inputMode="decimal" value={v.biometrics} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, biometrics: e.target.value } })} aria-label={`${d.name} biometrics fee`} />
+												</label>
+												<div className="ops-tariff__foot">
+													<span className="ops-item__s">{ghs(d.visaFeeCents + d.biometricsFeeCents)} together</span>
+													{canEdit && dirty && (
+														<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveTariff(d)}>
+															Save
+														</button>
+													)}
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							) : (
+								<p className="muted text-sm" style={{ marginTop: "0.75rem" }}>No destinations in the catalogue yet.</p>
+							)}
+						</section>
+					</div>
+
+					<div className="cn-stack" style={{ gap: "1rem" }}>
+						<section className="ops-bill">
+							<p className="cn-detail__eyebrow" style={{ marginBottom: "0.5rem" }}>What a client pays · example</p>
+							<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+								<select className="cn-filter__select" value={pkg?.id ?? ""} onChange={(e) => setExamplePackage(e.target.value)} aria-label="Example package">
+									{packages.map((x) => (
+										<option key={x.id} value={x.id}>
+											{x.name}
+										</option>
+									))}
+									{packages.length === 0 && <option value="">No package</option>}
+								</select>
+								<select className="cn-filter__select" value={dest?.id ?? ""} onChange={(e) => setExampleDestination(e.target.value)} aria-label="Example country">
+									{(cat?.destinations ?? []).map((d) => (
+										<option key={d.id} value={d.id}>
+											{d.name}
+										</option>
+									))}
+									{(cat?.destinations.length ?? 0) === 0 && <option value="">No country</option>}
+								</select>
+							</div>
+							<div className="ops-bill__row ops-bill__row--head">
+								<span>Century</span>
+							</div>
+							<div className="ops-bill__row">
+								<span>
+									Service fee{pkg ? ` · ${pkg.name}` : ""}
+									{split && <small>deposit {split.depositPercent}% · pre-departure {split.preDeparturePercent}% · post-arrival {split.postArrivalPercent}%</small>}
+								</span>
+								<span className="cn-money">{pkg ? ghs(pkg.priceCents) : "—"}</span>
+							</div>
+							{centuryLines.map((i) => (
+								<div key={i.key} className="ops-bill__row">
+									<span>{i.clientLabel}</span>
+									<span className="cn-money">{ghs(i.amountCents)}</span>
+								</div>
+							))}
+							<div className="ops-bill__row ops-bill__row--head">
+								<span>On the client's behalf</span>
+							</div>
+							<div className="ops-bill__row">
+								<span>
+									Application fees<small>per university · set on each university</small>
+								</span>
+								<span className="cn-money">at cost</span>
+							</div>
+							{dest && (
+								<>
+									<div className="ops-bill__row">
+										<span>Visa fee · {dest.name}</span>
+										<span className="cn-money">{ghs(dest.visaFeeCents)}</span>
+									</div>
+									<div className="ops-bill__row">
+										<span>Biometrics · {dest.name}</span>
+										<span className="cn-money">{ghs(dest.biometricsFeeCents)}</span>
+									</div>
+								</>
+							)}
+							{passLines.map((i) => (
+								<div key={i.key} className="ops-bill__row">
+									<span>{i.clientLabel}</span>
+									<span className="cn-money">{ghs(i.amountCents)}</span>
+								</div>
+							))}
+							<div className="ops-bill__row">
+								<span>
+									Flight ticket<small>as quoted</small>
+								</span>
+								<span className="cn-money">—</span>
+							</div>
+							<div className="ops-bill__row ops-bill__row--total">
+								<span>Before application fees and the ticket</span>
+								<span className="cn-money">
+									{ghs(centuryTotal + passTotal)} <small style={{ display: "inline", fontWeight: 400 }}>≈ {usd(centuryTotal + passTotal)}</small>
+								</span>
+							</div>
+							<p className="cn-detailhead__meta" style={{ marginTop: "0.75rem" }}>
+								Century keeps {ghs(centuryTotal)} · {ghs(passTotal)} passes through
 							</p>
-							<Link to="/packages" className="btn btn--sm btn--ghost">
-								Service fee by package →
-							</Link>
-						</div>
-						<p className="muted text-xs mb-3">The service fee covers every chapter's work. These are the only fees Century charges on top of it.</p>
-						<ItemTable rows={century} empty="No items." />
-					</section>
+						</section>
 
-					<section className="card">
-						<p className="eyebrow mb-2">{FEE_KIND_LABELS.pass_through} · optional items</p>
-						<p className="muted text-xs mb-3">Third-party costs recovered at cost, offered as tick-boxes when an invoice is raised or approved. University application fees are set on each university; visa costs by country are below.</p>
-						<ItemTable rows={passThrough} empty="No items." />
-					</section>
-
-					<section className="card">
-						<p className="eyebrow mb-2">{FEE_KIND_LABELS.pass_through} · visa costs by country</p>
-						<p className="muted text-xs mb-3">The embassy's visa fee and the visa centre's biometrics fee, in USD. The visa invoice takes the accepted school's country.</p>
-						{cat && cat.destinations.length > 0 ? (
-							<div style={{ overflowX: "auto" }}>
-								<table className="admin-table" style={{ width: "100%" }}>
-									<thead>
-										<tr>
-											<th>Country</th>
-											<th style={{ width: "10rem" }}>Visa fee</th>
-											<th style={{ width: "10rem" }}>Biometrics</th>
-											<th />
-										</tr>
-									</thead>
-									<tbody>
-										{cat.destinations.map((d) => {
-											const v = tariffValue(d);
-											const dirty = Boolean(tariffDraft[d.id]);
-											return (
-												<tr key={d.id}>
-													<td className="text-sm--strong">{d.name}</td>
-													<td>
-														<input className="input input--sm" inputMode="decimal" value={v.visa} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, visa: e.target.value } })} />
-													</td>
-													<td>
-														<input className="input input--sm" inputMode="decimal" value={v.biometrics} disabled={!canEdit} onChange={(e) => setTariffDraft({ ...tariffDraft, [d.id]: { ...v, biometrics: e.target.value } })} />
-													</td>
-													<td style={{ textAlign: "right" }}>
-														{canEdit && dirty && (
-															<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveTariff(d)}>
-																Save
-															</button>
-														)}
-													</td>
-												</tr>
-											);
-										})}
-									</tbody>
-								</table>
-							</div>
-						) : (
-							<p className="muted text-sm">No destinations in the catalogue yet.</p>
-						)}
-					</section>
-
-					<section className="card">
-						<p className="eyebrow mb-2">Money rules</p>
-						<div className="cn-facts">
-							<label>
-								<span className="muted text-xs">Exchange rate — GHS per USD (the client is charged at this)</span>
-								<input className="input input--sm" inputMode="decimal" value={rate} disabled={!canEdit} onChange={(e) => setRate(e.target.value)} />
+						<section className="card cn-now">
+							<p className="cn-detail__eyebrow">Exchange rate</p>
+							<label className="ops-rule">
+								<span>
+									GHS per USD<small>the client is charged at this</small>
+								</span>
+								<input className="ops-tariff__in" style={{ width: "100%" }} inputMode="decimal" value={rate} disabled={!canEdit} onChange={(e) => setRate(e.target.value)} />
 							</label>
-							<div />
-							<label>
-								<span className="muted text-xs">Service fee · deposit %</span>
-								<input className="input input--sm" inputMode="numeric" value={deposit} disabled={!canEdit} onChange={(e) => setDeposit(e.target.value)} />
-							</label>
-							<label>
-								<span className="muted text-xs">Service fee · pre-departure % (after the visa, before travel)</span>
-								<input className="input input--sm" inputMode="numeric" value={preDeparture} disabled={!canEdit} onChange={(e) => setPreDeparture(e.target.value)} />
-							</label>
-						</div>
-						<p className="muted text-xs mt-2">
-							Post-arrival: {Number.isFinite(post) ? post : "—"} %. Changes apply to invoices raised from now on; drafts and issued invoices keep their figures.
-						</p>
-						{canEdit && (
-							<div className="mt-3">
-								<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveMoneyRules()}>
-									Save money rules
-								</button>
-							</div>
-						)}
-					</section>
+							<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>Changes apply to invoices raised from now on; drafts and issued invoices keep their figures.</p>
+							{canEdit && (
+								<div className="cn-now__actions">
+									<button type="button" className="btn btn--sm btn--primary" onClick={() => void saveRate()}>
+										Save rate
+									</button>
+								</div>
+							)}
+							{split && (
+								<p className="cn-detailhead__meta" style={{ marginTop: "0.75rem" }}>
+									The service fee is collected {split.depositPercent}% · {split.preDeparturePercent}% · {split.postArrivalPercent}% —{" "}
+									<Link to="/payment-config" style={{ textDecoration: "underline" }}>
+										set under Payment plans
+									</Link>
+									.
+								</p>
+							)}
+						</section>
+					</div>
 				</div>
 			)}
 

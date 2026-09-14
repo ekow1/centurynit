@@ -4,6 +4,8 @@ import type { ApplicantDocument } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { DocPreviewInline } from "./DocPreviewInline";
+import { CaseScaffold } from "./case/CaseScaffold";
+import { Link } from "react-router-dom";
 
 const STATUS_LABEL: Record<string, string> = {
 	UPLOADED: "Pending review",
@@ -19,6 +21,22 @@ const CATEGORY_ORDER = [
 	"PROFESSIONAL",
 	"OTHER",
 ];
+const CATEGORY_LABEL: Record<string, string> = { IDENTITY: "Identity", ACADEMIC: "Academic", LANGUAGE: "Language", FINANCIAL: "Financial", PROFESSIONAL: "Professional", OTHER: "Other" };
+type Cut = "all" | "pending" | "verified" | "rejected" | "mine" | (typeof CATEGORY_ORDER)[number];
+/** A file waiting this long is late — the reviewer's queue, not the client's. */
+const LATE_AFTER_DAYS = 3;
+const uploadedAtOf = (d: ApplicantDocument) => d.uploadedAt ?? d.createdAt;
+const daysSince = (iso: string) => Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+function agoLabel(iso: string): string {
+	const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+	if (mins < 60) return `${Math.max(1, mins)} min`;
+	const h = Math.floor(mins / 60);
+	if (h < 24) return `${h} h`;
+	const d = Math.floor(h / 24);
+	if (d < 7) return `${d} d`;
+	return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+const typeLabel = (t: string) => t.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 function formatBytes(bytes: number | null): string {
 	if (bytes == null) return "—";
@@ -27,14 +45,6 @@ function formatBytes(bytes: number | null): string {
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatWhen(iso: string | null): string {
-	if (!iso) return "—";
-	return new Date(iso).toLocaleDateString(undefined, {
-		day: "numeric",
-		month: "short",
-		year: "numeric",
-	});
-}
 
 function readableError(err: unknown, fallback: string): string {
 	if (err instanceof ApiError) {
@@ -139,9 +149,11 @@ export function EnterpriseDocuments() {
 
 	const [documents, setDocuments] = useState<ApplicantDocument[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [activeTab, setActiveTab] = useState<"ALL" | "PENDING" | "VERIFIED">("ALL");
+	const { opsUser } = useOpsAuth();
+	const [cut, setCut] = useState<Cut>("all");
+	const [search, setSearch] = useState("");
+	const [showAll, setShowAll] = useState(false);
 	const [selectedBranch, setSelectedBranch] = useState("all");
-	const [expandedFolderKeys, setExpandedFolderKeys] = useState<Set<string>>(new Set());
 	const [selectedDoc, setSelectedDoc] = useState<ApplicantDocument | null>(null);
 	const [rejectingDoc, setRejectingDoc] = useState<ApplicantDocument | null>(null);
 	const [busyDocId, setBusyDocId] = useState<string | null>(null);
@@ -161,18 +173,9 @@ export function EnterpriseDocuments() {
 
 	useEffect(load, [load]);
 
-	// Auto-expand first folder on initial load if none expanded
-	useEffect(() => {
-		if (documents && documents.length > 0 && expandedFolderKeys.size === 0) {
-			const firstKey = documents[0].ownerUserId || documents[0].ownerEmail || "";
-			if (firstKey) {
-				setExpandedFolderKeys(new Set([firstKey]));
-			}
-		}
-	}, [documents]);
 
 	// Calculate folders and statistics
-	const { folders, totalApplicants, totalDocs, pendingDocsCount, verifiedDocsCount } = useMemo(() => {
+	const { folders } = useMemo(() => {
 		if (!documents) {
 			return {
 				folders: [],
@@ -224,15 +227,7 @@ export function EnterpriseDocuments() {
 			if (doc.status === "REJECTED") folder.rejectedCount++;
 		}
 
-		let folderList = Array.from(folderMap.values());
-
-		// Tab filter
-		if (activeTab === "PENDING") {
-			folderList = folderList.filter((f) => f.pendingCount > 0);
-		} else if (activeTab === "VERIFIED") {
-			folderList = folderList.filter((f) => f.verifiedCount > 0);
-		}
-
+		const folderList = Array.from(folderMap.values());
 		return {
 			folders: folderList,
 			totalApplicants: folderList.length,
@@ -240,23 +235,78 @@ export function EnterpriseDocuments() {
 			pendingDocsCount: pendingTotal,
 			verifiedDocsCount: verifiedTotal,
 		};
-	}, [documents, selectedBranch, activeTab]);
+	}, [documents, selectedBranch]);
 
-	function toggleFolder(key: string) {
-		setExpandedFolderKeys((prev) => {
-			const next = new Set(prev);
-			if (next.has(key)) {
-				next.delete(key);
-			} else {
-				next.add(key);
-				const folder = folders.find((f) => f.key === key);
-				if (folder && folder.documents.length > 0 && !selectedDoc) {
-					setSelectedDoc(folder.documents[0]);
-				}
-			}
-			return next;
-		});
-	}
+	/** Does a file belong to the cut being looked at? */
+	const inCut = useCallback(
+		(d: ApplicantDocument, f: ApplicantFolder): boolean => {
+			if (cut === "pending") return d.status === "UPLOADED";
+			if (cut === "verified") return d.status === "VERIFIED";
+			if (cut === "rejected") return d.status === "REJECTED";
+			if (cut === "mine") return Boolean(opsUser) && f.assignedStaffName === opsUser!.name;
+			if (cut !== "all") return (d.documentCategory ?? "OTHER").toUpperCase() === cut;
+			return true;
+		},
+		[cut, opsUser],
+	);
+
+	const counts = useMemo(() => {
+		const all = folders.flatMap((f) => f.documents.map((d) => [d, f] as const));
+		const c: Record<string, number> = {
+			all: all.length,
+			pending: all.filter(([d]) => d.status === "UPLOADED").length,
+			verified: all.filter(([d]) => d.status === "VERIFIED").length,
+			rejected: all.filter(([d]) => d.status === "REJECTED").length,
+			mine: all.filter(([, f]) => Boolean(opsUser) && f.assignedStaffName === opsUser!.name).length,
+		};
+		for (const cat of CATEGORY_ORDER) c[cat] = all.filter(([d]) => (d.documentCategory ?? "OTHER").toUpperCase() === cat).length;
+		return c;
+	}, [folders, opsUser]);
+
+	const day = useMemo(() => {
+		const pending = folders.flatMap((f) => f.documents.filter((d) => d.status === "UPLOADED"));
+		const weekAgo = new Date().getTime() - 7 * 86_400_000;
+		return {
+			pending: pending.length,
+			clients: folders.filter((f) => f.pendingCount > 0).length,
+			oldest: pending.reduce((m, d) => Math.max(m, daysSince(uploadedAtOf(d))), 0),
+			verifiedThisWeek: folders.flatMap((f) => f.documents).filter((d) => d.status === "VERIFIED" && d.reviewedAt && new Date(d.reviewedAt).getTime() >= weekAgo).length,
+		};
+	}, [folders]);
+
+	/** The queue: waiting for review (oldest first), reviewed this week, everything else folded. */
+	const bands = useMemo(() => {
+		const q = search.trim().toLowerCase();
+		const weekAgo = new Date().getTime() - 7 * 86_400_000;
+		const matchesSearch = (f: ApplicantFolder, d: ApplicantDocument) => !q || `${f.applicantName} ${f.caseReference} ${f.ownerEmail} ${d.fileName} ${d.documentType}`.toLowerCase().includes(q);
+		type Card = { folder: ApplicantFolder; lines: ApplicantDocument[]; oldest: number };
+		const card = (f: ApplicantFolder, lines: ApplicantDocument[]): Card => ({ folder: f, lines, oldest: lines.reduce((m, d) => Math.max(m, daysSince(uploadedAtOf(d))), 0) });
+		if (cut !== "all") {
+			const cards = folders.map((f) => card(f, f.documents.filter((d) => inCut(d, f) && matchesSearch(f, d)))).filter((c) => c.lines.length > 0);
+			return [{ id: "cut", label: "Matching", note: `${cards.reduce((n, c) => n + c.lines.length, 0)} files`, cards, folded: false }];
+		}
+		const waiting = folders
+			.map((f) => card(f, f.documents.filter((d) => d.status === "UPLOADED" && matchesSearch(f, d))))
+			.filter((c) => c.lines.length > 0)
+			.sort((a, b) => b.oldest - a.oldest);
+		const waitingKeys = new Set(waiting.map((c) => c.folder.key));
+		const reviewed = folders
+			.filter((f) => !waitingKeys.has(f.key))
+			.map((f) => card(f, f.documents.filter((d) => d.status !== "UPLOADED" && d.reviewedAt && new Date(d.reviewedAt).getTime() >= weekAgo && matchesSearch(f, d))))
+			.filter((c) => c.lines.length > 0);
+		const reviewedKeys = new Set(reviewed.map((c) => c.folder.key));
+		const rest = folders
+			.filter((f) => !waitingKeys.has(f.key) && !reviewedKeys.has(f.key))
+			.map((f) => card(f, f.documents.filter((d) => matchesSearch(f, d))))
+			.filter((c) => c.lines.length > 0);
+		return [
+			{ id: "waiting", label: "Waiting for review", note: "oldest first", cards: waiting, folded: false },
+			{ id: "reviewed", label: "Reviewed this week", note: `verified ${reviewed.reduce((n, c) => n + c.lines.filter((d) => d.status === "VERIFIED").length, 0)} · rejected ${reviewed.reduce((n, c) => n + c.lines.filter((d) => d.status === "REJECTED").length, 0)}`, cards: reviewed, folded: false },
+			{ id: "rest", label: "All folders", note: showAll ? "hide" : "show ▸", cards: rest, folded: !showAll },
+		].filter((b) => b.cards.length > 0);
+	}, [folders, cut, search, showAll, inCut]);
+
+	const selectedFolder = selectedDoc ? (folders.find((f) => f.documents.some((d) => d.id === selectedDoc.id)) ?? null) : null;
 
 	function updateDocInList(updated: ApplicantDocument) {
 		setDocuments((current) => (current ?? []).map((d) => (d.id === updated.id ? updated : d)));
@@ -283,313 +333,266 @@ export function EnterpriseDocuments() {
 
 	return (
 		<div className="page-content fade-in">
-			{/* Page Header */}
-			<div style={{ marginBottom: "1.5rem" }}>
-				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
-					<div>
-						<h1 className="page-title">Document Vault</h1>
-						<p className="lead mt-1">
-							Organized by applicant. Review, verify, and reject documents per file.
-						</p>
-					</div>
-
-					<div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-						{canSeeAllBranches && (
-							<BranchScopeFilter value={selectedBranch} onChange={setSelectedBranch} />
-						)}
-						<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
-							Refresh
-						</button>
-					</div>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+				<div>
+					<h1 className="page-title">Documents</h1>
+					<p className="lead mt-1">What clients have uploaded — the ones waiting on a reviewer first.</p>
+				</div>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					{canSeeAllBranches && <BranchScopeFilter value={selectedBranch} onChange={setSelectedBranch} />}
+					<button type="button" className="btn btn--ghost btn--sm" onClick={load}>
+						Refresh
+					</button>
 				</div>
 			</div>
 
-			{/* KPI Stats Strip */}
-			<div className="vault-kpi">
-				<div className="vault-kpi__card">
-					<span className="vault-kpi__label">APPLICANTS</span>
-					<span className="vault-kpi__value">{totalApplicants}</span>
-					<span className="vault-kpi__sub">Folders in view</span>
-				</div>
-
-				<div className="vault-kpi__card">
-					<span className="vault-kpi__label">TOTAL DOCUMENTS</span>
-					<span className="vault-kpi__value">{totalDocs}</span>
-					<span className="vault-kpi__sub">Across folders</span>
-				</div>
-
-				<div className="vault-kpi__card">
-					<span className="vault-kpi__label">PENDING REVIEW</span>
-					<span className="vault-kpi__value">{pendingDocsCount}</span>
-					<span className="vault-kpi__sub">Awaiting decision</span>
-				</div>
-
-				<div className="vault-kpi__card vault-kpi__card--highlight">
-					<span className="vault-kpi__label">VERIFIED</span>
-					<span className="vault-kpi__value">{verifiedDocsCount}</span>
-					<span className="vault-kpi__sub">Authenticated</span>
-				</div>
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{day.pending}</strong> <span className="dash-day__date">pending review</span>
+				</span>
+				<span>
+					<strong>{day.clients}</strong> <span className="dash-day__date">client{day.clients === 1 ? "" : "s"} waiting</span>
+				</span>
+				<span>
+					<strong>{day.oldest > 0 ? `${day.oldest} d` : "—"}</strong> <span className="dash-day__date">oldest</span>
+				</span>
+				<span>
+					<strong>{day.verifiedThisWeek}</strong> <span className="dash-day__date">verified this week</span>
+				</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<Link to="/workspace" className="dash-link">
+					Open the Worklist →
+				</Link>
 			</div>
 
-			{/* Filter Tabs */}
-			<div className="vault-filter-tabs">
-				<button
-					type="button"
-					className={`vault-tab ${activeTab === "ALL" ? "vault-tab--active" : ""}`}
-					onClick={() => setActiveTab("ALL")}
-				>
-					ALL APPLICANTS
-				</button>
-				<button
-					type="button"
-					className={`vault-tab ${activeTab === "PENDING" ? "vault-tab--active" : ""}`}
-					onClick={() => setActiveTab("PENDING")}
-				>
-					PENDING REVIEW
-				</button>
-				<button
-					type="button"
-					className={`vault-tab ${activeTab === "VERIFIED" ? "vault-tab--active" : ""}`}
-					onClick={() => setActiveTab("VERIFIED")}
-				>
-					VERIFIED
-				</button>
-			</div>
-
-			{error && <p className="ops-modal__error" style={{ marginBottom: "1rem" }}>{error}</p>}
-
-			{!documents && <p className="ops-modal__muted">Loading documents…</p>}
-
-			{documents && folders.length === 0 && (
-				<div className="ops-panel" style={{ padding: "3rem", textAlign: "center" }}>
-					<p className="ops-modal__muted" style={{ margin: 0 }}>
-						{documents.length === 0
-							? "No documents have been uploaded by active applicants yet."
-							: "No applicant folders match the selected filters."}
-					</p>
-				</div>
+			{error && (
+				<p className="ops-modal__error" role="alert">
+					{error}
+				</p>
 			)}
 
-			{/* Two-column layout: Folder list (left) & Sticky Document Preview (right) */}
-			{folders.length > 0 && (
-				<div className={`vault-layout ${selectedDoc ? "vault-layout--has-preview" : ""}`}>
-					{/* Folder List (Left Column) */}
-					<div className="vault-folder-list">
-						{folders.map((folder) => {
-							const isOpen = expandedFolderKeys.has(folder.key);
-
-							// Group folder docs by Category
-							const categoriesMap = new Map<string, ApplicantDocument[]>();
-							for (const doc of folder.documents) {
-								const cat = doc.documentCategory || "OTHER";
-								const catList = categoriesMap.get(cat) || [];
-								catList.push(doc);
-								categoriesMap.set(cat, catList);
-							}
-
-							const categoriesPresent = CATEGORY_ORDER.filter((cat) => categoriesMap.has(cat));
-							// Catch any uncategorized
-							for (const cat of Array.from(categoriesMap.keys())) {
-								if (!categoriesPresent.includes(cat)) {
-									categoriesPresent.push(cat);
-								}
-							}
-
-							return (
-								<div
-									key={folder.key}
-									className={`vault-folder-card ${isOpen ? "vault-folder-card--open" : ""}`}
-								>
-									{/* Folder Accordion Header */}
-									<div
-										className="vault-folder-header"
-										onClick={() => toggleFolder(folder.key)}
-									>
-										<div className="vault-folder-header-top">
-											<div className="vault-folder-title-wrap">
-												<div className="vault-folder-icon">📁</div>
-												<div className="vault-folder-applicant-name">
-													{folder.applicantName}
-													{folder.caseReference !== "—" && (
-														<span className="vault-folder-case-ref">{folder.caseReference}</span>
-													)}
-												</div>
-											</div>
-
-											<div className="vault-folder-counts">
-												<span className="vault-folder-badge">
-													{folder.documents.length} doc{folder.documents.length === 1 ? "" : "s"}
+			<CaseScaffold
+				bare
+				collapseDetail
+				onClose={() => setSelectedDoc(null)}
+				bar={
+					selectedDoc ? (
+						<span className="cn-filter__label">
+							{typeLabel(selectedDoc.documentType)} · {selectedDoc.ownerName || selectedDoc.ownerEmail || "Applicant"}
+						</span>
+					) : null
+				}
+				list={
+					<>
+						<div className="cn-scaffold__filters">
+							<div className="cn-scaffold__chips" role="tablist" aria-label="Documents">
+								{(
+									[
+										["all", "All"],
+										["pending", "Pending"],
+										["verified", "Verified"],
+										["rejected", "Rejected"],
+										...CATEGORY_ORDER.map((c) => [c, CATEGORY_LABEL[c]] as [Cut, string]),
+										["mine", "Mine"],
+									] as [Cut, string][]
+								).map(([id, label]) => {
+									const n = counts[id] ?? 0;
+									if (n === 0 && id !== "all" && id !== "pending") return null;
+									const on = cut === id;
+									return (
+										<button
+											key={id}
+											type="button"
+											role="tab"
+											aria-selected={on}
+											className="ops-pill"
+											onClick={() => setCut(id)}
+											style={{
+												cursor: "pointer",
+												marginLeft: 0,
+												border: "1px solid var(--border)",
+												background: on ? "var(--foreground)" : "transparent",
+												color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+												fontWeight: id === "pending" && n > 0 && !on ? 700 : 500,
+											}}
+										>
+											{label}
+											<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+												{n}
+											</span>
+										</button>
+									);
+								})}
+							</div>
+							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+								<input type="search" className="cn-search" placeholder="Search client, file, type…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search documents" style={{ flex: "1 1 14rem", width: "auto" }} />
+							</div>
+						</div>
+						<div className="cn-scaffold__rows">
+							{documents === null ? (
+								<p className="ops-people__empty">Loading documents…</p>
+							) : bands.length === 0 ? (
+								<p className="ops-people__empty">{documents.length === 0 ? "No documents uploaded yet." : "Nothing matches."}</p>
+							) : (
+								<div className="ops-bands">
+									{bands.map((band) => (
+										<div key={band.id}>
+											<div
+												className={`ops-band${band.id === "rest" ? " ops-band--toggle" : ""}`}
+												role={band.id === "rest" ? "button" : undefined}
+												tabIndex={band.id === "rest" ? 0 : undefined}
+												onClick={band.id === "rest" ? () => setShowAll((v) => !v) : undefined}
+												onKeyDown={
+													band.id === "rest"
+														? (e) => {
+																if (e.key === "Enter" || e.key === " ") {
+																	e.preventDefault();
+																	setShowAll((v) => !v);
+																}
+															}
+														: undefined
+												}
+											>
+												<span className="ops-band__name">
+													{band.label} · {band.cards.length}
 												</span>
-												{folder.pendingCount > 0 && (
-													<span className="vault-folder-badge vault-folder-badge--pending">
-														{folder.pendingCount} pending
-													</span>
-												)}
-												<span style={{ fontSize: "0.85rem", opacity: 0.5, marginLeft: "0.4rem" }}>
-													{isOpen ? "▲" : "▼"}
-												</span>
+												<span className="ops-band__note">{band.note}</span>
 											</div>
-										</div>
-
-										<div className="vault-folder-meta">
-											<span>{folder.ownerEmail}</span>
-											<span>·</span>
-											<span>{folder.branch}</span>
-											<span>·</span>
-											<span>Staff: {folder.assignedStaffName}</span>
-										</div>
-									</div>
-
-									{/* Folder Body (Expanded Content) */}
-									{isOpen && (
-										<div className="vault-folder-body">
-											{categoriesPresent.map((category) => {
-												const catDocs = categoriesMap.get(category) || [];
-												return (
-													<div key={category} className="vault-category-group">
-														<div className="vault-category-title">{category}</div>
-
-														{catDocs.map((doc) => {
-															const isSelected = selectedDoc?.id === doc.id;
-															const isBusy = busyDocId === doc.id;
-															const isSettled = doc.status === "VERIFIED" || doc.status === "REJECTED";
-
-															return (
-																<div
-																	key={doc.id}
-																	className={`vault-doc-item ${isSelected ? "vault-doc-item--selected" : ""}`}
-																	onClick={() => setSelectedDoc(doc)}
-																>
-																	<div className="vault-doc-item-main">
-																		<div className="vault-doc-item-left">
-																			<div className="vault-doc-file-icon">DOC</div>
-																			<div className="vault-doc-info">
-																				<span className="vault-doc-name">
-																					{doc.fileName}
-																				</span>
-																			</div>
-																		</div>
-
-																		<div className="vault-doc-actions">
-																			<span
-																				className={`vault-doc-status vault-doc-status--${doc.status.toLowerCase()}`}
-																			>
-																				{STATUS_LABEL[doc.status] ?? doc.status}
-																			</span>
-
-																			<button
-																				type="button"
-																				className="btn btn--ghost btn--sm"
-																				onClick={(e) => {
-																					e.stopPropagation();
-																					setSelectedDoc(doc);
+											{!band.folded && (
+												<div className="ops-people">
+													{band.cards.map(({ folder, lines, oldest }) => {
+														const late = band.id === "waiting" && oldest >= LATE_AFTER_DAYS;
+														const total = folder.documents.length;
+														return (
+															<div key={folder.key} className={`ops-person${late ? " ops-person--overdue" : ""}`}>
+																<div className="ops-person__head">
+																	<span className="ops-person__name" title={folder.applicantName}>
+																		{folder.applicantName}
+																	</span>
+																	<span className="ops-person__when">{folder.caseReference !== "—" ? folder.caseReference : folder.branch}</span>
+																</div>
+																<ul className="ops-things">
+																	{lines.map((d) => {
+																		const on = selectedDoc?.id === d.id;
+																		const pending = d.status === "UPLOADED";
+																		const stale = pending && daysSince(uploadedAtOf(d)) >= LATE_AFTER_DAYS;
+																		return (
+																			<li
+																				key={d.id}
+																				className={`ops-thing${on ? " ops-thing--selected" : ""}`}
+																				role="button"
+																				tabIndex={0}
+																				aria-pressed={on}
+																				onClick={() => setSelectedDoc(on ? null : d)}
+																				onKeyDown={(e) => {
+																					if (e.key === "Enter" || e.key === " ") {
+																						e.preventDefault();
+																						setSelectedDoc(on ? null : d);
+																					}
 																				}}
 																			>
-																				Preview
-																			</button>
-
-																			{!isSettled && (
-																				<>
-																					<button
-																						type="button"
-																						className="btn btn--primary btn--sm"
-																						onClick={(e) => {
-																							e.stopPropagation();
-																							handleVerify(doc);
-																						}}
-																						disabled={isBusy}
-																					>
-																						{isBusy ? "…" : "Verify"}
-																					</button>
-
-																					<button
-																						type="button"
-																						className="btn btn--ghost btn--sm"
-																						onClick={(e) => {
-																							e.stopPropagation();
-																							setRejectingDoc(doc);
-																						}}
-																						disabled={isBusy}
-																					>
-																						Reject
-																					</button>
-																				</>
-																			)}
-																		</div>
-																	</div>
-
-																	<div className="vault-doc-sub">
-																		<span>{doc.documentType}</span>
-																		<span>·</span>
-																		<span>{formatBytes(doc.sizeBytes)}</span>
-																		<span>·</span>
-																		<span>{formatWhen(doc.uploadedAt ?? doc.createdAt)}</span>
-																	</div>
+																				<span className={`cn-now__dot${stale ? "" : " cn-now__dot--hollow"}`} aria-hidden style={{ marginTop: "0.4rem", flexShrink: 0 }} />
+																				<div className="ops-thing__main">
+																					<div className="ops-thing__top">
+																						<span className="ops-thing__kicker">
+																							{typeLabel(d.documentType)} <span className="ops-thing__kind">· {CATEGORY_LABEL[(d.documentCategory ?? "OTHER").toUpperCase()] ?? d.documentCategory}</span>
+																						</span>
+																						{!pending && <span className={`cn-pill cn-pill--${d.status === "VERIFIED" ? "done" : "blocked"}`}>{STATUS_LABEL[d.status]}</span>}
+																					</div>
+																					<div className="ops-thing__sub" title={d.fileName}>
+																						{d.fileName} · {formatBytes(d.sizeBytes)}
+																						{d.status === "REJECTED" && d.reviewNote ? ` · ${d.reviewNote}` : ""}
+																					</div>
+																				</div>
+																				<span className="ops-person__when">{agoLabel(pending ? uploadedAtOf(d) : (d.reviewedAt ?? uploadedAtOf(d)))}</span>
+																			</li>
+																		);
+																	})}
+																</ul>
+																<div className="ops-person__foot">
+																	<span className="ops-person__meta">
+																		{folder.verifiedCount} of {total} verified{folder.pendingCount > 0 ? ` · ${folder.pendingCount} pending` : ""}
+																		{folder.rejectedCount > 0 ? ` · ${folder.rejectedCount} rejected` : ""}
+																	</span>
+																	<span className="ops-person__meta">{folder.assignedStaffName}</span>
 																</div>
-															);
-														})}
-													</div>
-												);
-											})}
+															</div>
+														);
+													})}
+												</div>
+											)}
 										</div>
-									)}
+									))}
 								</div>
-							);
-						})}
-					</div>
-
-					{/* Right Document Preview Panel */}
-					<div className="vault-preview-panel">
-						{selectedDoc ? (
-							<>
-								<div className="vault-preview-head">
-									<div>
-										<div className="vault-preview-title">
-											{selectedDoc.ownerName || selectedDoc.ownerEmail || "Applicant"}
-										</div>
-										<div className="vault-preview-sub">
-											Ref: {selectedDoc.caseReference || "—"} · {selectedDoc.branch || "Global"}
-										</div>
-									</div>
-									<button
-										type="button"
-										className="btn btn--ghost btn--sm"
-										onClick={() => setSelectedDoc(null)}
-									>
-										Close
-									</button>
-								</div>
-
+							)}
+						</div>
+					</>
+				}
+				detail={
+					selectedDoc ? (
+						<div className="cn-detail">
+							<div className="card cn-now" style={{ padding: 0, overflow: "hidden" }}>
 								<DocPreviewInline
 									doc={{
 										name: selectedDoc.fileName,
 										category: selectedDoc.documentCategory,
-										status:
-											selectedDoc.status === "UPLOADED"
-												? "Pending Review"
-												: selectedDoc.status === "VERIFIED"
-													? "Verified"
-													: "Rejected",
+										status: selectedDoc.status === "UPLOADED" ? "Pending Review" : selectedDoc.status === "VERIFIED" ? "Verified" : "Rejected",
 									}}
 									documentId={selectedDoc.id}
 									applicantName={selectedDoc.ownerName || selectedDoc.ownerEmail}
 									reference={selectedDoc.caseReference}
-									onVerdict={(status) => {
-										const updated = { ...selectedDoc, status };
-										updateDocInList(updated);
-									}}
+									onVerdict={(status) => updateDocInList({ ...selectedDoc, status })}
 								/>
-							</>
-						) : (
-							<div className="vault-preview-empty">
-								<span style={{ fontSize: "2rem", marginBottom: "1rem", opacity: 0.5 }}>📄</span>
-								<h3 style={{ fontSize: "1.1rem", marginBottom: "0.5rem", color: "var(--foreground)" }}>No Document Selected</h3>
-								<p>Select a document from the list to preview it here.</p>
 							</div>
-						)}
-					</div>
-				</div>
-			)}
+							<div className="card cn-now">
+								<span className="cn-detailhead__kicker">
+									{CATEGORY_LABEL[(selectedDoc.documentCategory ?? "OTHER").toUpperCase()] ?? "Document"} · {typeLabel(selectedDoc.documentType)} · {STATUS_LABEL[selectedDoc.status]?.toLowerCase()}
+								</span>
+								<h3 className="cn-detailhead__title">{selectedDoc.ownerName || selectedDoc.ownerEmail || "Applicant"}</h3>
+								<p className="cn-detailhead__sub">
+									{selectedDoc.caseReference || "no case reference"}
+									{selectedFolder?.assignedStaffName ? ` · ${selectedFolder.assignedStaffName}` : ""}
+									{selectedDoc.branch ? ` · ${selectedDoc.branch}` : ""}
+								</p>
+								<p className="cn-detailhead__meta">
+									uploaded {new Date(uploadedAtOf(selectedDoc)).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {formatBytes(selectedDoc.sizeBytes)}
+									{selectedDoc.reviewedAt ? ` · reviewed ${new Date(selectedDoc.reviewedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}
+								</p>
+								{selectedDoc.reviewNote && <p className="cn-detailhead__sub">“{selectedDoc.reviewNote}”</p>}
+								{selectedDoc.status === "UPLOADED" && (
+									<div className="cn-now__actions">
+										<button type="button" className="btn btn--primary btn--sm" disabled={busyDocId === selectedDoc.id} onClick={() => void handleVerify(selectedDoc)}>
+											{busyDocId === selectedDoc.id ? "Verifying…" : "Verify"}
+										</button>
+										<button type="button" className="btn btn--ghost btn--sm" disabled={busyDocId === selectedDoc.id} onClick={() => setRejectingDoc(selectedDoc)}>
+											Reject…
+										</button>
+									</div>
+								)}
+							</div>
+							{selectedFolder && (
+								<div className="card cn-now">
+									<p className="cn-detail__eyebrow">
+										This client's documents · {selectedFolder.verifiedCount} of {selectedFolder.documents.length} verified
+									</p>
+									<div className="cn-detail__rows">
+										{[...selectedFolder.documents]
+											.sort((a, b) => CATEGORY_ORDER.indexOf((a.documentCategory ?? "OTHER").toUpperCase()) - CATEGORY_ORDER.indexOf((b.documentCategory ?? "OTHER").toUpperCase()))
+											.map((d) => (
+												<button key={d.id} type="button" className="cn-detail__row cn-now__row" onClick={() => setSelectedDoc(d)}>
+													<span style={{ fontWeight: d.id === selectedDoc.id ? 700 : 400 }}>{typeLabel(d.documentType)}</span>
+													<span className="cn-detail__row-note">{d.id === selectedDoc.id ? "this one" : d.status === "UPLOADED" ? `pending · ${agoLabel(uploadedAtOf(d))}` : `${STATUS_LABEL[d.status].toLowerCase()}${d.reviewedAt ? ` ${new Date(d.reviewedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}`}</span>
+												</button>
+											))}
+									</div>
+								</div>
+							)}
+						</div>
+					) : null
+				}
+			/>
 
 			{/* Reject Dialog Modal */}
 			{rejectingDoc && (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX, PRE_DEPARTURE_OWNER_LABELS, type PreDepartureTemplateItem } from "century-nit-shared";
 import { DOCUMENT_TYPES } from "century-nit-core/content";
-import { StatusPill } from "century-nit-core/ui";
+import { Link } from "react-router-dom";
 import { apiFetch, ApiError } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { Toast } from "./OpsDialogs";
@@ -55,8 +55,14 @@ function ItemEditor({
 		<div className="cn-stack" style={{ gap: "0.5rem" }}>
 			{items.length === 0 && <p className="muted text-sm">No items.</p>}
 			{items.map((it, idx) => (
-				<div key={it.id} style={{ border: "1px solid var(--border-light)", padding: "0.6rem 0.75rem", display: "grid", gridTemplateColumns: "1fr auto", gap: "0.5rem" }}>
+				<div key={it.id} className={`ops-depitem${it.owner === "century" ? " ops-depitem--century" : ""}`}>
 					<div className="cn-stack" style={{ gap: "0.4rem" }}>
+						<div className="ops-item__k">
+							{it.owner === "century" ? "Century" : "The client"}
+							{it.category ? ` · ${CATEGORIES.find((c) => c.id === it.category)?.label ?? it.category}` : ""}
+							{it.required !== false ? " · required" : " · optional"}
+							{it.evidence ? ` · proof: ${PROOF_TYPES.find((d) => d.id === it.evidence)?.name ?? it.evidence}` : ""}
+						</div>
 						<div style={{ display: "grid", gridTemplateColumns: "2fr 3fr", gap: "0.4rem" }}>
 							<input className="input input--sm" value={it.label} disabled={!canEdit} onChange={(e) => update(idx, { label: e.target.value })} placeholder="Item" />
 							<input className="input input--sm" value={it.detail ?? ""} disabled={!canEdit} onChange={(e) => update(idx, { detail: e.target.value })} placeholder="What it means for the client" />
@@ -227,26 +233,42 @@ export function EnterpriseDepartureChecklist() {
 
 	return (
 		<div className="admin-page">
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
 					<h2 className="section-title">Departure checklist</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						What happens before a client flies, seeded when the visa is approved. Century is the client's consultant, not their school: Century's own deliverables are required and gate completion; the client's arrangements with the school and for the move are reminders. Ask for proof on an item only where Century needs to see it. Changes apply to cases reaching Departure from now on.
+						What happens before a client flies, seeded when the visa is approved. Century's own deliverables are required and gate completion; the client's arrangements are reminders. Ask for proof only where Century needs to see it.
 					</p>
 				</div>
+				<Link to="/applications?chapter=depart" className="btn btn--ghost btn--sm">
+					Cases in Departure →
+				</Link>
 			</div>
 
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{template.length}</strong> <span className="dash-day__date">items on every case</span>
+				</span>
+				<span>
+					<strong>{centuryCount}</strong> <span className="dash-day__date">Century's · required</span>
+				</span>
+				<span>
+					<strong>{template.length - centuryCount}</strong> <span className="dash-day__date">the client's own</span>
+				</span>
+				<span>
+					<strong>{proofCount}</strong> <span className="dash-day__date">ask for proof</span>
+				</span>
+				<span>
+					<strong>{(catalogue?.destinations ?? []).length}</strong> <span className="dash-day__date">countries can add their own</span>
+				</span>
+			</div>
 			<div className="cn-stack" style={{ gap: "1.25rem" }}>
 				<section className="card">
 					<div className="between mb-2" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.75rem" }}>
-						<p className="eyebrow" style={{ margin: 0 }}>
-							Every case
+						<p className="ops-band__name" style={{ margin: 0 }}>
+							Every case · {template.length}
 						</p>
-						<span className="text-xs" style={{ display: "flex", gap: "0.5rem" }}>
-							<StatusPill tone="current">{template.length} items</StatusPill>
-							<StatusPill tone="neutral">{centuryCount} Century's</StatusPill>
-							<StatusPill tone="waiting">{proofCount} with proof</StatusPill>
-						</span>
+						<span className="ops-band__note">Century's {centuryCount} · the client's {template.length - centuryCount} · proof {proofCount}</span>
 					</div>
 					<ItemEditor
 						items={template}
@@ -277,7 +299,7 @@ export function EnterpriseDepartureChecklist() {
 				</section>
 
 				<section className="card">
-					<p className="eyebrow mb-2">By country</p>
+					<p className="ops-band__name mb-2">By country</p>
 					<p className="muted text-xs mb-3">Items only that destination needs — collect the BRP, the SEVIS check-in, the port-of-entry letter. Added on top of the list above for a case bound there.</p>
 					<select className="input input--sm mb-3" style={{ width: "auto" }} value={destinationId} onChange={(e) => setDestinationId(e.target.value)} aria-label="Country">
 						<option value="">Choose a country…</option>

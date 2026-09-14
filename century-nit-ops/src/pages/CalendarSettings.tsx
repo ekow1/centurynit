@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, calendarApi, type CalendarStatus, type CalendarSubscription } from "century-nit-core/api";
+import { Link } from "react-router-dom";
+import { ApiError, bookingsApi, calendarApi, type CalendarStatus, type CalendarSubscription } from "century-nit-core/api";
+import type { Booking } from "century-nit-shared";
+import { useOpsAuth } from "./OpsAuthContext";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 /**
@@ -17,7 +20,6 @@ import { ConfirmDialog, Toast } from "./OpsDialogs";
  * their own availability with the branch schedule.
  */
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 /** Monday first — the working week reads better than Sunday-first here. */
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -152,142 +154,105 @@ function WorkingHoursEditor({
 		}
 	}
 
+	const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+	const branchDay = (dow: number) => status.branchSlots?.days.find((d) => d.dayOfWeek === dow) ?? null;
+	// The bar is the branch's day: its window drawn light, mine in ink inside it.
+	const bar = (row: DayRow) => {
+		const b = branchDay(row.dayOfWeek);
+		const bOpen = b && b.enabled && b.times.length > 0;
+		const lo = Math.min(bOpen ? minutesOf(b.openStart) : 9 * 60, row.enabled ? minutesOf(row.start) : 24 * 60, 8 * 60);
+		const hi = Math.max(bOpen ? minutesOf(b.openEnd) : 17 * 60, row.enabled ? minutesOf(row.end) : 0, 18 * 60);
+		const pct = (m: number) => `${Math.round(((m - lo) / (hi - lo)) * 100)}%`;
+		return (
+			<div className="ops-avbar" aria-hidden>
+				{bOpen && <div className="ops-avbar__branch" style={{ top: pct(minutesOf(b.openStart)), bottom: `calc(100% - ${pct(minutesOf(b.openEnd))})` }} />}
+				{row.enabled && minutesOf(row.start) < minutesOf(row.end) && <div className="ops-avbar__mine" style={{ top: pct(minutesOf(row.start)), bottom: `calc(100% - ${pct(minutesOf(row.end))})` }} />}
+				<span className="ops-avbar__t" style={{ top: 2 }}>
+					{String(Math.floor(lo / 60)).padStart(2, "0")}
+				</span>
+				<span className="ops-avbar__t" style={{ bottom: 2 }}>
+					{String(Math.floor(hi / 60)).padStart(2, "0")}
+				</span>
+			</div>
+		);
+	};
+
 	return (
-		<form className="avail__card" onSubmit={submit}>
-			<div className="avail__card-head">
-				<h3 className="avail__card-title">Working hours</h3>
-				<span className="wh__duration">{timezone}</span>
+		<form onSubmit={submit}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+				<span className="eyebrow">Your week · ▮ your hours inside ▯ the branch's · {timezone}</span>
+				<span className="cn-filter__label" style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+					<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setWorkingDays([1, 2, 3, 4, 5])}>
+						Mon–Fri
+					</button>
+					<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setWorkingDays([1, 2, 3, 4, 5, 6])}>
+						Mon–Sat
+					</button>
+					<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={copyFirstWorkingDay}>
+						same hours every day
+					</button>
+					<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setWorkingDays([])}>
+						clear
+					</button>
+				</span>
 			</div>
-			<p className="ops-panel__muted">
-				You can only be assigned a consultation inside these hours, when nothing
-				already occupies the slot.
-			</p>
-
-			<div className="slotcfg__presets" style={{ marginTop: "1rem" }}>
-				<span className="slotcfg__presets-label">Quick set</span>
-				<button type="button" className="perm-quick-btn" onClick={() => setWorkingDays([1, 2, 3, 4, 5])}>
-					Weekdays only
-				</button>
-				<button
-					type="button"
-					className="perm-quick-btn"
-					onClick={() => setWorkingDays([1, 2, 3, 4, 5, 6])}
-				>
-					Include Saturday
-				</button>
-				<button type="button" className="perm-quick-btn" onClick={copyFirstWorkingDay}>
-					Match first working day
-				</button>
-				<button type="button" className="perm-quick-btn" onClick={() => setWorkingDays([])}>
-					Clear all
-				</button>
+			<div className="ops-av">
+				{rows.map((row) => {
+					const b = branchDay(row.dayOfWeek);
+					const bOpen = b && b.enabled && b.times.length > 0;
+					const bad = row.enabled && row.start >= row.end;
+					return (
+						<div key={row.dayOfWeek} className={`ops-avday${row.enabled ? "" : " ops-avday--off"}${bad ? " ops-avday--bad" : ""}`}>
+							<span className="ops-wkday__h">
+								<span className="ops-wkday__n">{DAY_SHORT[row.dayOfWeek]}</span>
+								<label className="ops-tog" title={row.enabled ? "Working — switch off" : "Off — switch on"}>
+									<input type="checkbox" checked={row.enabled} onChange={(e) => update(row.dayOfWeek, { enabled: e.target.checked })} />
+									<span className={`ops-tog__k${row.enabled ? " ops-tog__k--on" : ""}`} aria-hidden />
+								</label>
+							</span>
+							{row.enabled ? (
+								<span className="ops-avday__times">
+									<input type="time" className="ops-avday__in" value={row.start} onChange={(e) => update(row.dayOfWeek, { start: e.target.value })} aria-label={`${DAY_SHORT[row.dayOfWeek]} start`} />
+									<input type="time" className="ops-avday__in" value={row.end} onChange={(e) => update(row.dayOfWeek, { end: e.target.value })} aria-label={`${DAY_SHORT[row.dayOfWeek]} end`} />
+								</span>
+							) : (
+								<span className="ops-wkday__hours">—</span>
+							)}
+							{bar(row)}
+							<span className="ops-wkday__k">{bOpen ? `branch ${b.openStart}–${b.openEnd}` : b && !b.enabled ? "branch closed" : "branch —"}</span>
+							{row.enabled && <span className="ops-wkday__k">{bad ? "ends before it starts" : formatSpan(row)}</span>}
+						</div>
+					);
+				})}
 			</div>
-
-			<table className="wh-table">
-				<thead>
-					<tr>
-						<th scope="col">Day</th>
-						<th scope="col">Working</th>
-						<th scope="col">Hours</th>
-						<th scope="col">Total</th>
-					</tr>
-				</thead>
-				<tbody>
-					{rows.map((r) => {
-						const bad = r.enabled && r.start >= r.end;
-						return (
-							<tr
-								key={r.dayOfWeek}
-								className={bad ? "wh-row--bad" : r.enabled ? undefined : "wh-row--off"}
-							>
-								<td className="wh__day" data-col="day">
-									{DAY_NAMES[r.dayOfWeek]}
-								</td>
-								<td data-col="toggle">
-									<label className="perm-switch">
-										<input
-											type="checkbox"
-											checked={r.enabled}
-											aria-label={`${DAY_NAMES[r.dayOfWeek]} is a working day`}
-											onChange={(e) => update(r.dayOfWeek, { enabled: e.target.checked })}
-										/>
-										<span className="perm-switch__slider" />
-									</label>
-								</td>
-								<td data-col="span">
-									<span className="wh__span">
-										<input
-											type="time"
-											className="slotcfg__time"
-											value={r.start}
-											disabled={!r.enabled}
-											aria-label={`${DAY_NAMES[r.dayOfWeek]} start time`}
-											onChange={(e) => update(r.dayOfWeek, { start: e.target.value })}
-										/>
-										<span className="wh__dash" aria-hidden="true">
-											–
-										</span>
-										<input
-											type="time"
-											className="slotcfg__time"
-											value={r.end}
-											disabled={!r.enabled}
-											aria-label={`${DAY_NAMES[r.dayOfWeek]} end time`}
-											onChange={(e) => update(r.dayOfWeek, { end: e.target.value })}
-										/>
-									</span>
-								</td>
-								<td data-col="duration">
-									{bad ? (
-										<span className="wh__duration wh__duration--bad">
-											must end after it starts
-										</span>
-									) : (
-										<span className="wh__duration">
-											{r.enabled ? formatSpan(r) : "Not working"}
-										</span>
-									)}
-								</td>
-							</tr>
-						);
-					})}
-				</tbody>
-			</table>
-
-			<p className="ops-panel__muted" style={{ marginTop: "0.85rem" }}>
-				{workingDays.length === 0
-					? "No working days set — you cannot be assigned any consultation."
-					: `${workingDays.length} working ${workingDays.length === 1 ? "day" : "days"} · ${Math.round(weeklyMinutes / 60)}h a week`}
+			<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>
+				{workingDays.length === 0 ? "No working days set — you cannot be assigned any consultation." : `${workingDays.length} working ${workingDays.length === 1 ? "day" : "days"} · ${Math.round(weeklyMinutes / 60)} h a week. You can only be assigned a consultation inside these hours, when nothing already occupies the slot.`}
 			</p>
-
 			{error && <p className="ops-modal__error">{error}</p>}
 			{saved && <p className="ops-panel__ok">{saved}</p>}
-
 			{dirty && (
-				<div className="slotcfg__savebar">
-					<p className="slotcfg__savebar-note">You have unsaved changes to your hours.</p>
-					<span className="cal-actions">
-						<button
-							type="button"
-							className="btn btn--ghost btn--sm"
-							disabled={saving}
-							onClick={() => {
-								setRows(savedRows.map((r) => ({ ...r })));
-								setError(null);
-								setSaved(null);
-							}}
-						>
-							Discard
-						</button>
-						<button type="submit" className="btn btn--primary btn--sm" disabled={saving}>
-							{saving ? "Saving…" : "Save hours"}
-						</button>
-					</span>
+				<div className="cn-now__actions" style={{ marginTop: "0.5rem" }}>
+					<button type="submit" className="btn btn--primary btn--sm" disabled={saving}>
+						{saving ? "Saving…" : "Save hours"}
+					</button>
+					<button
+						type="button"
+						className="btn btn--ghost btn--sm"
+						disabled={saving}
+						onClick={() => {
+							setRows(savedRows.map((r) => ({ ...r })));
+							setError(null);
+							setSaved(null);
+						}}
+					>
+						Discard
+					</button>
 				</div>
 			)}
 		</form>
 	);
 }
+
 
 /**
  * Branch slot template — read-only for consultants.
@@ -296,88 +261,6 @@ function WorkingHoursEditor({
  * and the operating hours. This view lets every staff member see the resulting
  * times so they can align their own working hours.
  */
-function BranchSlotPreview({ slots }: { slots: CalendarStatus["branchSlots"] }) {
-	if (!slots?.days) return null;
-
-	// Monday first, matching the working hours editor directly above.
-	const ordered = [1, 2, 3, 4, 5, 6, 0]
-		.map((dow) => slots.days.find((d) => d.dayOfWeek === dow))
-		.filter((d): d is NonNullable<typeof d> => Boolean(d));
-	const open = ordered.filter((d) => d.enabled);
-	const closed = ordered.filter((d) => !d.enabled);
-
-	/*
-	 * Almost every branch runs the same hours every open day, so spelling out
-	 * seven near-identical rows buries the one line a consultant actually needs.
-	 * The detail is still one click away for the days that differ.
-	 */
-	const uniformHours =
-		open.length > 0 &&
-		open.every(
-			(d) =>
-				d.openStart === open[0].openStart &&
-				d.openEnd === open[0].openEnd &&
-				d.intervalMinutes === open[0].intervalMinutes,
-		);
-
-	return (
-		<div className="avail__card">
-			<div className="avail__card-head">
-				<h3 className="avail__card-title">Branch slots</h3>
-			</div>
-
-			{open.length === 0 ? (
-				<p className="branch-slots__summary">
-					The branch is currently closed for bookings on every day.
-				</p>
-			) : (
-				<p className="branch-slots__summary">
-					Open <strong>{open.map((d) => DAY_NAMES[d.dayOfWeek].slice(0, 3)).join(", ")}</strong>
-					{uniformHours ? (
-						<>
-							{" "}
-							<strong>
-								{open[0].openStart}–{open[0].openEnd}
-							</strong>{" "}
-							with <strong>{open[0].times.length} slots</strong> a day.
-						</>
-					) : (
-						<> with hours that vary by day.</>
-					)}{" "}
-					{closed.length > 0 && (
-						<>Closed {closed.map((d) => DAY_NAMES[d.dayOfWeek]).join(" and ")}. </>
-					)}
-					Times are shown in {slots.timezone}.
-				</p>
-			)}
-
-			<p className="ops-panel__muted">
-				Managers set this template. Your working hours above decide which of these
-				slots you can be assigned.
-			</p>
-
-			{open.length > 0 && (
-				<details className="branch-slots__detail">
-					<summary>View slot times</summary>
-					<div style={{ marginTop: "0.5rem" }}>
-						{open.map((day) => (
-							<div key={day.dayOfWeek} className="branch-slots__day">
-								<span className="branch-slots__day-name">{DAY_NAMES[day.dayOfWeek]}</span>
-								<span className="slotcfg__times">
-									{day.times.map((t) => (
-										<span key={t} className="slotcfg__chip">
-											{t}
-										</span>
-									))}
-								</span>
-							</div>
-						))}
-					</div>
-				</details>
-			)}
-		</div>
-	);
-}
 
 /**
  * Sync to your personal calendar — the company calendar as a one-way,
@@ -551,6 +434,7 @@ function SyncToPersonalCalendar({
 
 
 export function CalendarSettings() {
+	const { opsUser } = useOpsAuth();
 	const [status, setStatus] = useState<CalendarStatus | null>(null);
 	const [subscription, setSubscription] = useState<CalendarSubscription | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -595,67 +479,127 @@ export function CalendarSettings() {
 			)
 		: 0;
 
+	const [myBookings, setMyBookings] = useState<Booking[]>([]);
+	useEffect(() => {
+		if (!opsUser) return;
+		bookingsApi
+			.list({ employeeId: opsUser.opsUserId })
+			.then((res) => {
+				const from = new Date();
+				from.setHours(0, 0, 0, 0);
+				const to = new Date(from.getTime() + 7 * 86_400_000);
+				setMyBookings(res.bookings.filter((b) => b.status !== "CANCELLED" && new Date(b.startsAt) >= from && new Date(b.startsAt) < to).sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+			})
+			.catch(() => setMyBookings([]));
+	}, [opsUser]);
+	const outsideHours = (b: Booking): string | null => {
+		if (!status) return null;
+		const d = new Date(b.startsAt);
+		const h = status.workingHours.find((w) => w.dayOfWeek === d.getDay());
+		if (!h) return "not a working day";
+		const m = d.getHours() * 60 + d.getMinutes();
+		if (m < minutesOf(h.start)) return `before your ${h.start} start`;
+		if (m >= minutesOf(h.end)) return `after your ${h.end} end`;
+		return null;
+	};
+	const hm = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+	const dayOf = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: "short" });
+	const run = (() => {
+		if (!status || status.workingHours.length === 0) return null;
+		const sorted = [...status.workingHours].sort((a, b) => ((a.dayOfWeek + 6) % 7) - ((b.dayOfWeek + 6) % 7));
+		const same = sorted.every((h) => h.start === sorted[0].start && h.end === sorted[0].end);
+		const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+		return { days: sorted.length === 1 ? names[sorted[0].dayOfWeek] : `${names[sorted[0].dayOfWeek]}–${names[sorted[sorted.length - 1].dayOfWeek]}`, hours: same ? `${sorted[0].start} – ${sorted[0].end}` : "varies" };
+	})();
+
 	return (
 		<div className="page-content fade-in" aria-labelledby="calendar-heading">
-			<header className="avail__head">
-				<h1 id="calendar-heading" className="avail__title">
-					My Availability
-				</h1>
-				<p className="avail__lead">
-					When you can take consultations. Managers set which slots the branch offers;
-					these hours decide which of those slots can be assigned to you.
-				</p>
-			</header>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+				<div>
+					<h1 id="calendar-heading" className="page-title">
+						My Availability
+					</h1>
+					<p className="lead mt-2">When you can take consultations, inside the hours the branch offers.</p>
+				</div>
+				<Link to="/appointments" className="btn btn--ghost btn--sm">
+					Appointments →
+				</Link>
+			</div>
+
+			{status && (
+				<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+					{run ? (
+						<span>
+							<strong>{run.days}</strong> <span className="dash-day__date">{run.hours}</span>
+						</span>
+					) : (
+						<span>
+							<strong>no hours set</strong>
+						</span>
+					)}
+					<span>
+						<strong>{weeklyHours} h</strong> <span className="dash-day__date">a week</span>
+					</span>
+					<span>
+						<strong>{workingDays > 0 ? "bookable" : "not bookable"}</strong>
+					</span>
+					<span>
+						<strong>calendar</strong> <span className="dash-day__date">{subscription?.url ? "connected" : "off"}</span>
+					</span>
+					<span>
+						<strong>{myBookings.length}</strong> <span className="dash-day__date">booking{myBookings.length === 1 ? "" : "s"} in the next 7 days</span>
+					</span>
+				</div>
+			)}
 
 			{error && <p className="ops-modal__error">{error}</p>}
 			{!status && !error && <p className="ops-panel__muted">Loading…</p>}
-
 			{status && (
 				<>
-					<div className="avail__stats">
-						<div className="avail__stat">
-							<span className="avail__stat-label">Bookable</span>
-							<span className="avail__stat-value">
-								<span
-									className={`cal-dot ${workingDays > 0 ? "cal-dot--on" : "cal-dot--warn"}`}
-									aria-hidden="true"
-								/>
-								{workingDays > 0 ? "Yes" : "No hours set"}
-							</span>
-						</div>
-						<div className="avail__stat">
-							<span className="avail__stat-label">Working days</span>
-							<span className="avail__stat-value">{workingDays} / 7</span>
-						</div>
-						<div className="avail__stat">
-							<span className="avail__stat-label">Hours a week</span>
-							<span className="avail__stat-value">{weeklyHours}h</span>
-						</div>
-						<div className="avail__stat">
-							<span className="avail__stat-label">Calendar sync</span>
-							<span className="avail__stat-value">
-								<span
-									className={`cal-dot ${subscription?.url ? "cal-dot--on" : "cal-dot--off"}`}
-									aria-hidden="true"
-								/>
-								{subscription?.url ? "Connected" : "Off"}
-							</span>
-						</div>
-					</div>
-
-					<div className="avail__layout">
-						<div>
-							<WorkingHoursEditor status={status} onSaved={load} />
-						</div>
-						<aside>
-							<BranchSlotPreview slots={status.branchSlots} />
-							<SyncToPersonalCalendar subscription={subscription} onChanged={load} />
-						</aside>
+					<WorkingHoursEditor status={status} onSaved={load} />
+					<div className="dash-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: "1rem" }}>
+						<section className="dash-panel">
+							<header className="dash-panel__head">
+								<h2 className="dash-panel__title">Your bookings · next 7 days</h2>
+								<Link to="/appointments" className="dash-link">
+									Appointments →
+								</Link>
+							</header>
+							{myBookings.length === 0 ? (
+								<p className="dash-empty">Nothing booked with you in the next seven days.</p>
+							) : (
+								<div className="cn-detail__rows">
+									{myBookings.map((b) => {
+										const outside = outsideHours(b);
+										return (
+											<div key={b.id} className="cn-detail__row">
+												<span>
+													<span className="cn-now__time">
+														{dayOf(b.startsAt)} {hm(b.startsAt)}
+													</span>
+													{b.clientName}
+												</span>
+												<span className="cn-detail__row-note">
+													{b.serviceName} · {b.type === "online" ? "online" : "in person"}
+													{outside ? (
+														<>
+															{" · "}
+															<strong>{outside}</strong>
+														</>
+													) : null}
+												</span>
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</section>
+						<SyncToPersonalCalendar subscription={subscription} onChanged={load} />
 					</div>
 				</>
 			)}
-
 			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
+
 }

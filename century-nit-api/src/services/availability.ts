@@ -630,6 +630,36 @@ export async function listWorkingHours(opsUserId: string) {
 	}));
 }
 
+/**
+ * Every active staff member's hours, with who they are — the scheduling
+ * page reads the branch's offered week against them, so a slot nobody can
+ * take is visible before a client books it.
+ */
+export async function listStaffWorkingHours() {
+	const rows = await db
+		.select({
+			opsUserId: staffWorkingHours.opsUserId,
+			dayOfWeek: staffWorkingHours.dayOfWeek,
+			startMinute: staffWorkingHours.startMinute,
+			endMinute: staffWorkingHours.endMinute,
+			timezone: staffWorkingHours.timezone,
+			name: opsUsers.name,
+			email: opsUsers.email,
+			branch: opsUsers.branch,
+		})
+		.from(staffWorkingHours)
+		.innerJoin(opsUsers, eq(opsUsers.id, staffWorkingHours.opsUserId))
+		.where(eq(opsUsers.active, true))
+		.orderBy(opsUsers.name, staffWorkingHours.dayOfWeek);
+	const byUser = new Map<string, { opsUserId: string; name: string; email: string; branch: string | null; hours: { dayOfWeek: number; start: string; end: string; timezone: string }[] }>();
+	for (const r of rows) {
+		const u = byUser.get(r.opsUserId) ?? { opsUserId: r.opsUserId, name: r.name, email: r.email, branch: r.branch ?? null, hours: [] };
+		u.hours.push({ dayOfWeek: r.dayOfWeek, start: minutesToTime(r.startMinute), end: minutesToTime(r.endMinute), timezone: r.timezone });
+		byUser.set(r.opsUserId, u);
+	}
+	return [...byUser.values()];
+}
+
 /** Used by the webhook to decide whether a change actually affects anything. */
 export async function hasActiveBookingsInWindow(
 	employeeId: string,

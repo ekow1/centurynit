@@ -1,689 +1,433 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
-import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { branchName } from "century-nit-core/ops";
-import { LEAD_STAGE_LABELS, LEAD_STAGE_ORDER, type Lead } from "century-nit-core";
-import { JOURNEY_STAGE_LABELS, API_PREFIX, LEAD_STAGE_FROM_DB, INVOICE_TYPE_LABELS, isPassThroughInvoice } from "century-nit-shared";
+import { BranchScopeFilter } from "./BranchScopeFilter";
+import { LEAD_STAGE_LABELS, type LeadStage } from "century-nit-core";
+import { API_PREFIX, JOURNEY_STAGES, JOURNEY_STAGE_LABELS, LEAD_STAGE_FROM_DB, type JourneyStage } from "century-nit-shared";
+import { documentsApi } from "century-nit-core/api";
+import type { ApplicantDocument } from "century-nit-shared";
 import { apiFetch } from "../lib/api";
-import { fmtBoth, fmtGhs, fmtUsd, money } from "./currency";
+import { StageStrip } from "./WorkspaceCaseload";
+
+/**
+ * Analytics — how the pipeline moved this period, and who moved it.
+ *
+ * Every figure is derived from the records the console already holds:
+ * leads, consultations, cases, documents. Time in stage is a median of real
+ * dates the journey records (opened → offer accepted → visa lodged →
+ * decision → collected); where fewer than five cases carry both dates the
+ * figure is "—", never a made-up number. Consultants see the same page
+ * scoped to their own work.
+ */
 
 interface ApiLead {
 	id: string;
 	name: string;
-	email: string;
-	phone: string | null;
 	source: string;
-	stage: "New Lead" | "Contacted" | "Consultation Booked" | "Assessment Complete" | "Enrolled" | "Lost";
+	stage: string;
 	targetCountry: string | null;
-	assignedStaffId: string | null;
 	assignedStaffName: string | null;
-	consultationId: string | null;
-	applicationId: string | null;
-	notes: string | null;
 	createdAt: string;
 	updatedAt: string;
 }
 
-function journeyStageLabel(stage: string): string {
-	return (JOURNEY_STAGE_LABELS as Record<string, string>)[stage] ?? stage;
+type PeriodId = "month" | "last_month" | "quarter" | "year" | "all";
+const PERIODS: { id: PeriodId; label: string }[] = [
+	{ id: "month", label: "This month" },
+	{ id: "last_month", label: "Last month" },
+	{ id: "quarter", label: "This quarter" },
+	{ id: "year", label: "Last 12 months" },
+	{ id: "all", label: "All time" },
+];
+function windowOf(id: PeriodId, now: Date): { from: Date | null; to: Date; prevFrom: Date | null; prevTo: Date | null; label: string } {
+	const start = (y: number, m: number) => new Date(y, m, 1);
+	const y = now.getFullYear();
+	const m = now.getMonth();
+	if (id === "month") return { from: start(y, m), to: now, prevFrom: start(y, m - 1), prevTo: start(y, m), label: now.toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
+	if (id === "last_month") return { from: start(y, m - 1), to: start(y, m), prevFrom: start(y, m - 2), prevTo: start(y, m - 1), label: start(y, m - 1).toLocaleDateString(undefined, { month: "long", year: "numeric" }) };
+	if (id === "quarter") {
+		const q = Math.floor(m / 3) * 3;
+		return { from: start(y, q), to: now, prevFrom: start(y, q - 3), prevTo: start(y, q), label: `Q${Math.floor(m / 3) + 1} ${y}` };
+	}
+	if (id === "year") return { from: start(y - 1, m + 1), to: now, prevFrom: start(y - 2, m + 1), prevTo: start(y - 1, m + 1), label: "Last 12 months" };
+	return { from: null, to: now, prevFrom: null, prevTo: null, label: "All time" };
 }
-
-function downloadCSV(filename: string, rows: string[][]) {
-	const csv = rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
-	const blob = new Blob([csv], { type: "text/csv" });
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = filename;
-	a.click();
-	URL.revokeObjectURL(url);
-}
-
-function BarRow({ label, value, max, suffix }: { label: string; value: number; max: number; suffix?: string }) {
-	const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-	return (
-		<div style={{ marginBottom: "0.75rem" }}>
-			<div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-				<span style={{ fontSize: "var(--text-sm)" }}>{label}</span>
-				<span style={{ fontSize: "var(--text-sm)", fontFamily: "var(--font-mono)" }}>
-					{value}{suffix ?? ""}
-				</span>
-			</div>
-			<div style={{ width: "100%", height: "8px", background: "var(--muted)", border: "1px solid var(--border-light)" }}>
-				<div style={{ width: `${pct}%`, height: "100%", background: "var(--foreground)", transition: "width 0.6s ease" }} />
-			</div>
-		</div>
-	);
-}
-
-function KPICard({ label, value, note, inverted }: { label: string; value: string; note: string; inverted?: boolean }) {
-	return (
-		<div className="card" style={inverted ? { background: "var(--foreground)", color: "var(--background)" } : undefined}>
-			<p className="eyebrow" style={inverted ? { color: "var(--muted-foreground)" } : undefined}>{label}</p>
-			<p className="page-title mt-1" style={inverted ? { color: "var(--background)" } : undefined}>{value}</p>
-			<p className="muted mt-2" style={inverted ? { color: "var(--muted-foreground)" } : undefined}>{note}</p>
-		</div>
-	);
-}
+const inWindow = (iso: string | null | undefined, from: Date | null, to: Date | null) => {
+	if (!iso) return false;
+	const t = new Date(iso).getTime();
+	return !Number.isNaN(t) && (from === null || t >= from.getTime()) && (to === null || t < to.getTime());
+};
+const FLIGHT_STAGES = JOURNEY_STAGES.filter((s) => s !== "completed");
+const STAGE_SHORT: Record<string, string> = { document_verification: "Docs", school_submission: "School", offer_letter_review: "Offer", visa_processing: "Visa", travel_assistance: "Travel" };
+const MIN_SAMPLES = 5;
+const median = (xs: number[]): number | null => {
+	if (xs.length < MIN_SAMPLES) return null;
+	const s = [...xs].sort((a, b) => a - b);
+	const mid = Math.floor(s.length / 2);
+	return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
+};
+const daysBetween = (a?: string | null, b?: string | null): number | null => {
+	if (!a || !b) return null;
+	const d = (new Date(b).getTime() - new Date(a).getTime()) / 86_400_000;
+	return Number.isFinite(d) && d >= 0 ? Math.round(d) : null;
+};
+const pts = (a: number, b: number | null) => (b === null ? null : `${a - b >= 0 ? "+" : ""}${a - b} pts`);
 
 export function EnterpriseReports() {
-	const { opsUser, scopeRecords, canSeeAllBranches, requiresAssignmentScope } = useOpsAuth();
+	const { opsRole, opsUser, canSeeAllBranches, scopeRecords, requiresAssignmentScope } = useOpsAuth();
 	const { consultations, applications, applicants } = useCases();
-	const { invoices } = useInvoiceApi();
 	const [apiLeads, setApiLeads] = useState<ApiLead[]>([]);
-
-	const loadApiLeads = useCallback(async () => {
-		try {
-			const res = await apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`);
-			if (res && Array.isArray(res.leads)) {
-				setApiLeads(res.leads);
-			}
-		} catch (err) {
-			console.warn("[Reports] Could not fetch live leads from server API:", err);
-		}
-	}, []);
-
-	useEffect(() => {
-		void loadApiLeads();
-	}, [loadApiLeads]);
-
-	const leads = useMemo<Lead[]>(
-		() =>
-			apiLeads.map((al) => ({
-				id: al.id,
-				name: al.name,
-				email: al.email,
-				phone: al.phone || "-",
-				country: al.targetCountry || "Ghana",
-				stage: LEAD_STAGE_FROM_DB[al.stage] ?? "new",
-				source: al.source || "Website Registration",
-				createdAt: al.createdAt.slice(0, 10),
-				lastContactAt: al.updatedAt || al.createdAt,
-				notes: al.notes || "Captured automatically from client sign-in.",
-				assignedTo: al.assignedStaffName || (al.assignedStaffId ? "Assigned" : "Unassigned"),
-				consultationId: al.consultationId,
-				applicationId: al.applicationId,
-			})),
-		[apiLeads],
-	);
-	const [dateFrom, setDateFrom] = useState("");
-	const [dateTo, setDateTo] = useState("");
+	const [documents, setDocuments] = useState<ApplicantDocument[]>([]);
+	const [period, setPeriod] = useState<PeriodId>("month");
 	const [branchFilter, setBranchFilter] = useState("all");
-
-	const role = opsUser?.role ?? "manager";
-	const isManager = role === "manager";
-	const isFinance = role === "finance";
-	const isConsultant = role === "consultant";
-	const isCoordinator = role === "coordinator";
-	const showFinancial = isManager || isFinance;
-	const showOperational = isManager || isConsultant || isCoordinator;
-	const showTeam = isManager;
+	const now = useMemo(() => new Date(), []);
+	const win = useMemo(() => windowOf(period, now), [period, now]);
+	const isConsultant = opsRole === "consultant";
 	const me = opsUser?.name ?? "";
 
-	const scopedConsultations = useMemo(
-		() => scopeRecords(consultations, (c) => c.assignedOfficer === me),
-		[scopeRecords, consultations, me],
-	);
-	const scopedApplications = useMemo(
-		() => scopeRecords(applications, (a) => a.assignedStaff === me),
-		[scopeRecords, applications, me],
-	);
-	const scopedApplicants = useMemo(
-		() => scopeRecords(applicants, (a) => a.assignedOfficer === me),
-		[scopeRecords, applicants, me],
-	);
-	const scopedLeads = useMemo(
-		() => {
-			if (canSeeAllBranches) return leads;
-			return requiresAssignmentScope ? leads.filter((l) => l.assignedTo === me) : leads;
-		},
-		[leads, me, canSeeAllBranches, requiresAssignmentScope],
-	);
-	const myConsultations = scopedConsultations;
-	const myApplications = scopedApplications;
-	const myApplicants = scopedApplicants;
-
-	const branches = useMemo(() => {
-		const set = new Set<string>();
-		applicants.forEach((a) => set.add(a.branch));
-		consultations.forEach((c) => set.add(c.branch));
-		applications.forEach((a) => set.add(a.branch));
-		return [...set].sort();
-	}, [applicants, consultations, applications]);
-
-	const filteredApplicants = useMemo(
-		() =>
-			(showFinancial ? applicants : myApplicants).filter(
-				(a) => branchFilter === "all" || a.branch === branchFilter,
-			),
-		[applicants, myApplicants, showFinancial, branchFilter],
-	);
-
-	const financial = useMemo(() => {
-		const pool = showFinancial ? applicants : myApplicants;
-		const billed = pool.reduce((n, a) => n + money(a.financials.totalAmount), 0);
-		const collected = pool.reduce((n, a) => n + money(a.financials.paidAmount), 0);
-		const outstanding = pool.reduce((n, a) => n + money(a.financials.outstanding), 0);
-		const collectionRate = billed > 0 ? Math.round((collected / billed) * 100) : 0;
-		const avgAccount = pool.length > 0 ? Math.round(billed / pool.length) : 0;
-		return { billed, collected, outstanding, collectionRate, avgAccount };
-	}, [applicants, myApplicants, showFinancial]);
-
-	const revenueByPackage = useMemo(() => {
-		const pool = showFinancial ? applicants : myApplicants;
-		const map = new Map<string, { count: number; revenue: number }>();
-		for (const a of pool) {
-			const entry = map.get(a.package) ?? { count: 0, revenue: 0 };
-			entry.count += 1;
-			entry.revenue += money(a.financials.totalAmount);
-			map.set(a.package, entry);
-		}
-		return [...map.entries()].sort((a, b) => b[1].revenue - a[1].revenue);
-	}, [applicants, myApplicants, showFinancial]);
-
-	const consultationStats = useMemo(() => {
-		const pool = myConsultations;
-		const byStatus = new Map<string, number>();
-		for (const c of pool) {
-			byStatus.set(c.status, (byStatus.get(c.status) ?? 0) + 1);
-		}
-		const completed = byStatus.get("Completed") ?? 0;
-		const total = pool.length;
-		const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-		return { byStatus, completed, total, completionRate };
-	}, [myConsultations]);
-
-	const applicationStats = useMemo(() => {
-		const pool = myApplications;
-		const byStage = new Map<string, number>();
-		for (const a of pool) {
-			byStage.set(a.stage, (byStage.get(a.stage) ?? 0) + 1);
-		}
-		const accepted = pool.filter((a) => a.status === "Accepted").length;
-		const acceptanceRate = pool.length > 0 ? Math.round((accepted / pool.length) * 100) : 0;
-		return { byStage, accepted, acceptanceRate, total: pool.length };
-	}, [myApplications]);
-
-	const leadFunnel = useMemo(() => {
-		const byStage = (stage: string) => scopedLeads.filter((l) => l.stage === stage).length;
-		const total = scopedLeads.length;
-		const converted = byStage("converted");
-		const conversionRate = total > 0 ? Math.round((converted / total) * 100) : 0;
-		return {
-			stages: LEAD_STAGE_ORDER.map((s) => ({ label: LEAD_STAGE_LABELS[s], count: byStage(s) })),
-			total,
-			converted,
-			conversionRate,
+	useEffect(() => {
+		let alive = true;
+		apiFetch<{ leads: ApiLead[] }>(`${API_PREFIX}/leads`)
+			.then((res) => alive && setApiLeads(Array.isArray(res?.leads) ? res.leads : []))
+			.catch(() => alive && setApiLeads([]));
+		documentsApi
+			.list()
+			.then((res) => alive && setDocuments(res.documents))
+			.catch(() => alive && setDocuments([]));
+		return () => {
+			alive = false;
 		};
-	}, [scopedLeads]);
+	}, []);
 
-	const teamPerformance = useMemo(() => {
-		const map = new Map<string, { consultations: number; completedConsults: number; applications: number; acceptedApps: number }>();
-		for (const c of consultations) {
-			if (!c.assignedOfficer) continue;
-			const entry = map.get(c.assignedOfficer) ?? { consultations: 0, completedConsults: 0, applications: 0, acceptedApps: 0 };
-			entry.consultations += 1;
-			if (c.status === "Completed") entry.completedConsults += 1;
-			map.set(c.assignedOfficer, entry);
+	const inBranch = <T extends { branch: string }>(list: T[]) => (branchFilter === "all" ? list : list.filter((x) => x.branch === branchFilter));
+	const cons = useMemo(() => inBranch(scopeRecords(consultations, (c) => c.assignedOfficer === me)), [consultations, scopeRecords, me, branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+	const apps = useMemo(() => inBranch(scopeRecords(applications, (a) => a.assignedStaff === me)), [applications, scopeRecords, me, branchFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+	const leads = useMemo(() => {
+		const all = apiLeads.map((l) => ({ ...l, stageId: (LEAD_STAGE_FROM_DB[l.stage] ?? LEAD_STAGE_FROM_DB[l.stage.toLowerCase().replace(/\s+/g, "_")] ?? "new") as LeadStage }));
+		if (canSeeAllBranches) return all;
+		return requiresAssignmentScope ? all.filter((l) => l.assignedStaffName === me) : all;
+	}, [apiLeads, canSeeAllBranches, requiresAssignmentScope, me]);
+
+	/** The period's counts, and the period before it for the deltas. */
+	const period_ = useMemo(() => {
+		const count = (from: Date | null, to: Date | null) => {
+			const landed = leads.filter((l) => inWindow(l.createdAt, from, to));
+			const enrolled = landed.filter((l) => l.stageId === "converted").length;
+			const slotIso = (c: (typeof cons)[number]) => (c.slotDate ? `${c.slotDate}T${c.slotTime ?? "09:00"}:00` : c.updatedAt);
+			const heldIn = cons.filter((c) => inWindow(slotIso(c), from, to));
+			const held = heldIn.filter((c) => c.status === "Completed").length;
+			const noShow = heldIn.filter((c) => c.status === "Cancelled").length;
+			const opened = apps.filter((a) => inWindow(a.submittedDate, from, to)).length;
+			const completed = apps.filter((a) => a.stage === "completed" && inWindow(a.updatedAt, from, to)).length;
+			const decided = apps.filter((a) => inWindow(a.visaDetails?.decidedAt, from, to));
+			const approved = decided.filter((a) => a.visaOutcome === "approved").length;
+			const departed = apps.filter((a) => a.stage === "completed" && inWindow(a.updatedAt, from, to)).length;
+			return { landed: landed.length, enrolled, conversion: landed.length > 0 ? Math.round((enrolled / landed.length) * 100) : null, held, noShow, booked: heldIn.length, opened, completed, decided: decided.length, approved, approval: decided.length > 0 ? Math.round((approved / decided.length) * 100) : null, departed };
+		};
+		return { cur: count(win.from, win.to), prev: win.prevFrom ? count(win.prevFrom, win.prevTo) : null };
+	}, [leads, cons, apps, win]);
+	const { cur, prev } = period_;
+
+	const inFlight = apps.filter((a) => a.stage !== "completed");
+	const stageCounts = FLIGHT_STAGES.map((s) => inFlight.filter((a) => a.stage === s).length);
+
+	const pipeline = useMemo(() => {
+		const byLead = (s: LeadStage) => leads.filter((l) => l.stageId === s).length;
+		return [
+			{ label: LEAD_STAGE_LABELS.new, value: byLead("new"), to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.contacted, value: byLead("contacted"), to: "/crm" },
+			{ label: LEAD_STAGE_LABELS.assessment_complete, value: byLead("assessment_complete"), to: "/crm" },
+			{ label: "Consultations", value: cons.length, to: "/consultations" },
+			{ label: "Cases", value: apps.length, to: "/applications" },
+			{ label: "Clients", value: inBranch(applicants).length, to: "/applicants" },
+		];
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [leads, cons, apps, applicants, branchFilter]);
+	const pipeMax = Math.max(1, ...pipeline.map((p) => p.value));
+
+	/** Median days between the dates the journey records. */
+	const timeInStage = useMemo(() => {
+		const rows = [
+			{ label: "Opened → offer accepted", days: apps.map((a) => daysBetween(a.submittedDate, a.offerAcceptedAt)).filter((d): d is number => d !== null) },
+			{ label: "Offer → visa lodged", days: apps.map((a) => daysBetween(a.offerAcceptedAt, a.visaDetails?.submittedAt)).filter((d): d is number => d !== null) },
+			{ label: "Lodged → biometrics", days: apps.map((a) => daysBetween(a.visaDetails?.submittedAt, a.visaDetails?.biometricsAt)).filter((d): d is number => d !== null) },
+			{ label: "Lodged → decision", days: apps.map((a) => daysBetween(a.visaDetails?.submittedAt, a.visaDetails?.decidedAt)).filter((d): d is number => d !== null) },
+			{ label: "Decision → passport back", days: apps.map((a) => daysBetween(a.visaDetails?.decidedAt, a.visaDetails?.collectedAt)).filter((d): d is number => d !== null) },
+		];
+		return rows.map((r) => ({ label: r.label, n: r.days.length, median: median(r.days) }));
+	}, [apps]);
+	const tisMax = Math.max(1, ...timeInStage.map((r) => r.median ?? 0));
+
+	const team = useMemo(() => {
+		if (isConsultant) return [];
+		const map = new Map<string, { held: number; moved: number; carried: number; leads: number; enrolled: number }>();
+		const bump = (name: string | null | undefined, f: (e: { held: number; moved: number; carried: number; leads: number; enrolled: number }) => void) => {
+			if (!name) return;
+			const e = map.get(name) ?? { held: 0, moved: 0, carried: 0, leads: 0, enrolled: 0 };
+			f(e);
+			map.set(name, e);
+		};
+		for (const c of cons) if (c.status === "Completed" && inWindow(c.slotDate ? `${c.slotDate}T${c.slotTime ?? "09:00"}:00` : c.updatedAt, win.from, win.to)) bump(c.assignedOfficer, (e) => e.held++);
+		for (const a of apps) {
+			if (a.stage !== "completed") bump(a.assignedStaff, (e) => e.carried++);
+			if (inWindow(a.updatedAt, win.from, win.to)) bump(a.assignedStaff, (e) => e.moved++);
 		}
-		for (const a of applications) {
-			if (!a.assignedStaff) continue;
-			const entry = map.get(a.assignedStaff) ?? { consultations: 0, completedConsults: 0, applications: 0, acceptedApps: 0 };
-			entry.applications += 1;
-			if (a.status === "Accepted") entry.acceptedApps += 1;
-			map.set(a.assignedStaff, entry);
+		for (const l of leads) {
+			if (!inWindow(l.createdAt, win.from, win.to)) continue;
+			bump(l.assignedStaffName, (e) => {
+				e.leads++;
+				if (l.stageId === "converted") e.enrolled++;
+			});
 		}
-		return [...map.entries()].sort((a, b) => b[1].consultations + b[1].applications - a[1].consultations - a[1].applications);
-	}, [consultations, applications]);
+		return [...map.entries()].map(([name, e]) => ({ name, ...e })).sort((x, y) => y.held + y.moved - (x.held + x.moved));
+	}, [cons, apps, leads, win, isConsultant]);
 
-	const invoiceStats = useMemo(() => {
-		const total = invoices.length;
-		const paid = invoices.filter((i) => i.status === "paid").length;
-		const outstanding = invoices.filter((i) => i.status === "issued" || i.status === "overdue").length;
-		// Revenue is the agency's money: ticket fares are collected for the
-		// airline and pass straight through, so they are counted but not billed.
-		const totalAmount = invoices.filter((i) => !isPassThroughInvoice(i.type)).reduce((n, i) => n + i.subtotal, 0);
-		const passThrough = invoices.filter((i) => isPassThroughInvoice(i.type)).reduce((n, i) => n + i.subtotal, 0);
-		return { total, paid, outstanding, totalAmount, passThrough };
-	}, [invoices]);
-
-	const revenueByType = useMemo(() => {
-		const map = new Map<string, { count: number; billed: number; collected: number; outstanding: number }>();
-		for (const inv of invoices) {
-			const entry = map.get(inv.type) ?? { count: 0, billed: 0, collected: 0, outstanding: 0 };
-			entry.count += 1;
-			entry.billed += inv.subtotal;
-			if (inv.status === "paid") entry.collected += inv.subtotal;
-			else entry.outstanding += inv.subtotal;
-			map.set(inv.type, entry);
+	const sources = useMemo(() => {
+		const map = new Map<string, { landed: number; enrolled: number }>();
+		for (const l of leads) {
+			if (!inWindow(l.createdAt, win.from, win.to)) continue;
+			const k = l.source || "Unknown";
+			const e = map.get(k) ?? { landed: 0, enrolled: 0 };
+			e.landed++;
+			if (l.stageId === "converted") e.enrolled++;
+			map.set(k, e);
 		}
-		return [...map.entries()].sort((a, b) => b[1].billed - a[1].billed);
-	}, [invoices]);
+		return [...map.entries()].map(([label, e]) => ({ label, ...e })).sort((a, b) => b.landed - a.landed);
+	}, [leads, win]);
+	const srcMax = Math.max(1, ...sources.map((s) => s.landed));
+	const destinations = useMemo(() => {
+		const map = new Map<string, number>();
+		for (const l of leads) if (inWindow(l.createdAt, win.from, win.to) && l.targetCountry) map.set(l.targetCountry, (map.get(l.targetCountry) ?? 0) + 1);
+		return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+	}, [leads, win]);
+	const docsReviewed = documents.filter((d) => d.reviewedAt && inWindow(d.reviewedAt, win.from, win.to)).length;
 
-	const revenueByLineItem = useMemo(() => {
-		const map = new Map<string, { count: number; amount: number; types: Set<string> }>();
-		for (const inv of invoices) {
-			for (const line of inv.lines) {
-				const entry = map.get(line.label) ?? { count: 0, amount: 0, types: new Set<string>() };
-				entry.count += 1;
-				entry.amount += line.amount;
-				entry.types.add(inv.type);
-				map.set(line.label, entry);
-			}
-		}
-		return [...map.entries()]
-			.map(([label, d]) => ({ label, count: d.count, amount: d.amount, types: [...d.types] }))
-			.sort((a, b) => b.amount - a.amount);
-	}, [invoices]);
-
-	const docStats = useMemo(() => {
-		const pool = myApplicants;
-		const allDocs = pool.flatMap((a) => a.documents);
-		const verified = allDocs.filter((d) => d.status === "Verified").length;
-		const pending = allDocs.filter((d) => d.status === "Pending Review").length;
-		const rejected = allDocs.filter((d) => d.status === "Rejected").length;
-		const total = allDocs.length;
-		const rate = total > 0 ? Math.round((verified / total) * 100) : 0;
-		return { verified, pending, rejected, total, rate };
-	}, [myApplicants]);
-
-	const maxPkgRevenue = Math.max(1, ...revenueByPackage.map(([, v]) => v.revenue));
-	const maxFunnel = Math.max(1, ...leadFunnel.stages.map((s) => s.count));
-
-	const subtitle = isFinance
-		? "Financial health, revenue, and invoice analytics."
-		: isConsultant
-			? "Your consultation and application performance."
-			: isCoordinator
-				? "Pipeline flow, lead conversion, and processing metrics."
-				: "Cross-platform performance, financial health, and pipeline conversion.";
+	function exportCsv() {
+		const rows: string[][] = [
+			["Metric", "Value"],
+			["Period", win.label],
+			["Leads landed", String(cur.landed)],
+			["Leads enrolled", String(cur.enrolled)],
+			["Consultations held", String(cur.held)],
+			["Cases opened", String(cur.opened)],
+			["Visas decided", String(cur.decided)],
+			["Visas approved", String(cur.approved)],
+			["Documents reviewed", String(docsReviewed)],
+			[],
+			["Stage", "Median days", "Cases"],
+			...timeInStage.map((r) => [r.label, r.median === null ? "" : String(r.median), String(r.n)]),
+			[],
+			["Officer", "Consultations held", "Cases moved", "Cases carried", "Leads", "Enrolled"],
+			...team.map((t) => [t.name, String(t.held), String(t.moved), String(t.carried), String(t.leads), String(t.enrolled)]),
+		];
+		const csv = rows.map((r) => r.map((c) => `"${(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+		const a = document.createElement("a");
+		a.href = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+		a.download = `analytics-${win.label.replace(/\s+/g, "-").toLowerCase()}.csv`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+	}
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2rem", gap: "1rem", flexWrap: "wrap" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
-					<h1 className="page-title">Analytics Reports</h1>
-					<p className="lead mt-2">{subtitle}</p>
+					<h1 className="page-title">Analytics</h1>
+					<p className="lead mt-2">{isConsultant ? "How your pipeline moved this period." : "How the pipeline moved this period, and who moved it."}</p>
 				</div>
-				{showFinancial && (
-					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-						<input type="date" className="input input--sm" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="From" />
-						<span className="muted" style={{ fontSize: "var(--text-xs)" }}>to</span>
-						<input type="date" className="input input--sm" value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="To" />
-						<select className="input input--sm" value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)}>
-							<option value="all">All Branches</option>
-							{branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<label className="cn-filter">
+						<span className="cn-filter__label">Period</span>
+						<select className="cn-filter__select" value={period} onChange={(e) => setPeriod(e.target.value as PeriodId)}>
+							{PERIODS.map((p) => (
+								<option key={p.id} value={p.id}>
+									{p.label}
+								</option>
+							))}
 						</select>
-						<button
-							className="btn btn--ghost btn--sm"
-							onClick={() => {
-								const rows: string[][] = [["Metric", "Value (GHS)", "Value (USD)"]];
-								rows.push(["Total Billed", fmtGhs(financial.billed), fmtUsd(financial.billed)]);
-								rows.push(["Collected", fmtGhs(financial.collected), fmtUsd(financial.collected)]);
-								rows.push(["Outstanding", fmtGhs(financial.outstanding), fmtUsd(financial.outstanding)]);
-								rows.push(["Collection Rate", `${financial.collectionRate}%`, ""]);
-								rows.push(["Invoices Issued", String(invoiceStats.total), ""]);
-								rows.push(["Invoices Paid", String(invoiceStats.paid), ""]);
-								rows.push([]);
-								rows.push(["--- Revenue by Invoice Type ---", "", ""]);
-								rows.push(["Type", "Invoices", "Billed (GHS)"]);
-								for (const [type, d] of revenueByType) {
-									rows.push([type, String(d.count), fmtGhs(d.billed)]);
-								}
-								rows.push([]);
-								rows.push(["--- Top Earning Services ---", "", ""]);
-								rows.push(["Line Item", "Occurrences", "Revenue (GHS)"]);
-								for (const item of revenueByLineItem) {
-									rows.push([item.label, String(item.count), fmtGhs(item.amount)]);
-								}
-								downloadCSV("financial-report.csv", rows);
-							}}
-						>
-							Export CSV
-						</button>
-					</div>
-				)}
+					</label>
+					{canSeeAllBranches && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
+					<button type="button" className="btn btn--ghost btn--sm" onClick={exportCsv}>
+						Export CSV
+					</button>
+				</div>
 			</div>
 
-			{/* ─── Financial Reports (finance + manager) ─── */}
-			{showFinancial && (<>
-				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2.5rem" }}>
-					<KPICard label="Total Billed" value={fmtGhs(financial.billed)} note={`${filteredApplicants.length} accounts · ≈ ${fmtUsd(financial.billed)}`} inverted />
-					<KPICard label="Collected" value={fmtGhs(financial.collected)} note={`${financial.collectionRate}% collection rate · ≈ ${fmtUsd(financial.collected)}`} />
-					<KPICard label="Outstanding" value={fmtGhs(financial.outstanding)} note={`Awaiting payment · ≈ ${fmtUsd(financial.outstanding)}`} />
-					<KPICard label="Avg. Account" value={fmtGhs(financial.avgAccount)} note={`Per active applicant · ≈ ${fmtUsd(financial.avgAccount)}`} />
-				</div>
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span className="dash-day__date">{win.label}</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<span>
+					<strong>{cur.landed}</strong> <span className="dash-day__date">leads landed</span>
+				</span>
+				<span>
+					<strong>{cur.held}</strong> <span className="dash-day__date">consultations held</span>
+				</span>
+				<span>
+					<strong>{cur.opened}</strong> <span className="dash-day__date">cases opened</span>
+				</span>
+				<span>
+					<strong>{cur.approved}</strong> <span className="dash-day__date">visas approved</span>
+				</span>
+				<span>
+					<strong>{cur.completed}</strong> <span className="dash-day__date">completed</span>
+				</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<Link to="/workspace" className="dash-link">
+					Workspace →
+				</Link>
+			</div>
 
-				{/* Revenue by Package */}
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Revenue by Service Package</h2>
-					{revenueByPackage.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No package revenue data yet.</p>
-					) : (
-						<>
-							{revenueByPackage.map(([pkg, data]) => (
-								<BarRow key={pkg} label={pkg} value={data.revenue} max={maxPkgRevenue} suffix={` · ${data.count} account${data.count !== 1 ? "s" : ""}`} />
-							))}
-						</>
-					)}
+			<div className="dash-kpis">
+				<div className="dash-kpi dash-kpi--on">
+					<span className="dash-kpi__label">Lead → client</span>
+					<span className="dash-kpi__value">{cur.conversion === null ? "—" : `${cur.conversion}%`}</span>
+					<span className="dash-kpi__delta">{prev && cur.conversion !== null && prev.conversion !== null ? `${pts(cur.conversion, prev.conversion)} vs before` : ""}</span>
+					<span className="dash-kpi__note">
+						{cur.landed} leads · {cur.enrolled} enrolled
+					</span>
 				</div>
-
-				{/* Invoice Summary */}
-				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
-					<KPICard label="Invoices Issued" value={String(invoiceStats.total)} note={`${fmtBoth(invoiceStats.totalAmount)} revenue billed${invoiceStats.passThrough > 0 ? ` · ${fmtBoth(invoiceStats.passThrough)} collected for airlines` : ""}`} />
-					<KPICard label="Paid Invoices" value={String(invoiceStats.paid)} note="Settled accounts" />
-					<KPICard label="Outstanding Invoices" value={String(invoiceStats.outstanding)} note="Awaiting payment" />
+				<div className="dash-kpi">
+					<span className="dash-kpi__label">Consultations held</span>
+					<span className="dash-kpi__value">{cur.held}</span>
+					<span className="dash-kpi__delta">
+						{prev ? `${cur.held - prev.held >= 0 ? "+" : ""}${cur.held - prev.held} vs before` : ""}
+						{cur.noShow > 0 ? ` · ${cur.noShow} cancelled` : ""}
+					</span>
+					<span className="dash-kpi__note">{cur.booked > 0 ? `${Math.round((cur.held / cur.booked) * 100)}% of ${cur.booked} booked` : "nothing booked in the period"}</span>
 				</div>
+				<div className="dash-kpi">
+					<span className="dash-kpi__label">Cases in flight</span>
+					<span className="dash-kpi__value">{inFlight.length}</span>
+					<span className="dash-kpi__delta">
+						{cur.opened} opened · {cur.completed} completed
+					</span>
+					<StageStrip counts={stageCounts} />
+					<span className="dash-kpi__note">{FLIGHT_STAGES.map((s, i) => (stageCounts[i] > 0 ? `${STAGE_SHORT[s]} ${stageCounts[i]}` : null)).filter(Boolean).join(" · ") || "none in flight"}</span>
+				</div>
+				<div className="dash-kpi">
+					<span className="dash-kpi__label">Visa approval</span>
+					<span className="dash-kpi__value">{cur.approval === null ? "—" : `${cur.approval}%`}</span>
+					<span className="dash-kpi__delta">
+						{cur.approved} of {cur.decided} decided
+					</span>
+					<span className="dash-kpi__note">{timeInStage[3].median !== null ? `median ${timeInStage[3].median} d from lodged to decision` : "median needs 5 decided cases"}</span>
+				</div>
+			</div>
 
-				{/* Revenue by Invoice Type */}
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Revenue by Invoice Type</h2>
-					{revenueByType.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No invoice data yet.</p>
-					) : (
-						<div className="ops-table-wrap">
-							<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "var(--text-sm)" }}>
-								<thead>
-									<tr style={{ borderBottom: "2px solid var(--border)" }}>
-										<th style={{ padding: "0.75rem" }}>Type</th>
-										<th style={{ padding: "0.75rem" }}>Invoices</th>
-										<th style={{ padding: "0.75rem" }}>Billed</th>
-										<th style={{ padding: "0.75rem" }}>Collected</th>
-										<th style={{ padding: "0.75rem" }}>Outstanding</th>
-										<th style={{ padding: "0.75rem" }}>Rate</th>
-									</tr>
-								</thead>
-								<tbody>
-									{revenueByType.map(([type, d]) => {
-										const rate = d.billed > 0 ? Math.round((d.collected / d.billed) * 100) : 0;
-										return (
-											<tr key={type} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "0.75rem", fontWeight: 500 }}>
-													<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{INVOICE_TYPE_LABELS[type] ?? type}</span>
-													{isPassThroughInvoice(type) && (
-														<span className="muted" style={{ fontSize: "var(--text-xs)", marginLeft: "0.4rem" }}>pass-through · not revenue</span>
-													)}
-												</td>
-												<td style={{ padding: "0.75rem" }}>{d.count}</td>
-												<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{fmtBoth(d.billed)}</td>
-												<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{fmtBoth(d.collected)}</td>
-												<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "var(--text-xs)" }}>{fmtBoth(d.outstanding)}</td>
-												<td style={{ padding: "0.75rem" }}><span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{rate}%</span></td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
+			<div className="dash-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+				<section className="dash-panel">
+					<header className="dash-panel__head">
+						<h2 className="dash-panel__title">Pipeline · where clients are</h2>
+						<Link to="/applications?view=board" className="dash-link">
+							Cases board →
+						</Link>
+					</header>
+					{pipeline.map((p) => (
+						<Link key={p.label} to={p.to} className="ops-hbar" style={{ color: "inherit" }}>
+							<span>{p.label}</span>
+							<span className="ops-hbar__t">
+								<span style={{ width: `${Math.round((p.value / pipeMax) * 100)}%` }} />
+							</span>
+							<span className="ops-hbar__v">{p.value}</span>
+						</Link>
+					))}
+				</section>
+				<section className="dash-panel">
+					<header className="dash-panel__head">
+						<h2 className="dash-panel__title">Time in stage · median days</h2>
+						<span className="cn-filter__label">from the dates the case records</span>
+					</header>
+					{timeInStage.map((r) => (
+						<div key={r.label} className="ops-hbar">
+							<span>{r.label}</span>
+							<span className="ops-hbar__t">
+								<span style={{ width: r.median === null ? "0%" : `${Math.round((r.median / tisMax) * 100)}%` }} />
+							</span>
+							<span className="ops-hbar__v">{r.median === null ? `— · ${r.n} case${r.n === 1 ? "" : "s"}` : `${r.median} d · ${r.n}`}</span>
 						</div>
-					)}
-				</div>
+					))}
+					<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>Fewer than {MIN_SAMPLES} cases with both dates shows as —. Cases that skipped a step are left out.</p>
+				</section>
+			</div>
 
-				{/* Top Earning Services */}
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Top Earning Services</h2>
-					{revenueByLineItem.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No line item data yet.</p>
-					) : (
-						<>
-							{revenueByLineItem.slice(0, 8).map((item) => {
-								const maxAmt = revenueByLineItem[0]?.amount ?? 1;
-								return (
-									<BarRow
-										key={item.label}
-										label={`${item.label} · ${item.types.join(", ")}`}
-										value={item.amount}
-										max={maxAmt}
-										suffix={` · ${item.count}x`}
-									/>
-								);
-							})}
-						</>
-					)}
-				</div>
-
-				{/* Branch Financial Performance */}
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Branch Financial Performance</h2>
-					<div className="ops-table-wrap">
-						<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "var(--text-sm)" }}>
-							<thead>
-								<tr style={{ borderBottom: "2px solid var(--border)" }}>
-									<th style={{ padding: "0.75rem" }}>Branch</th>
-									<th style={{ padding: "0.75rem" }}>Accounts</th>
-									<th style={{ padding: "0.75rem" }}>Billed</th>
-									<th style={{ padding: "0.75rem" }}>Collected</th>
-									<th style={{ padding: "0.75rem" }}>Outstanding</th>
-									<th style={{ padding: "0.75rem" }}>Rate</th>
-								</tr>
-							</thead>
-							<tbody>
-							{branches.map((b) => {
-								const bApps = scopedApplicants.filter((a) => a.branch === b);
-								const bBilled = bApps.reduce((n, a) => n + money(a.financials.totalAmount), 0);
-								const bCollected = bApps.reduce((n, a) => n + money(a.financials.paidAmount), 0);
-								const bOutstanding = bApps.reduce((n, a) => n + money(a.financials.outstanding), 0);
-								const bRate = bBilled > 0 ? Math.round((bCollected / bBilled) * 100) : 0;
-								return (
-									<tr key={b} style={{ borderBottom: "1px solid var(--border-light)" }}>
-										<td style={{ padding: "0.75rem", fontWeight: 500 }}>{branchName(b)}</td>
-											<td style={{ padding: "0.75rem" }}>{bApps.length}</td>
-											<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{fmtBoth(bBilled)}</td>
-											<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{fmtBoth(bCollected)}</td>
-											<td style={{ padding: "0.75rem", fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "var(--text-xs)" }}>{fmtBoth(bOutstanding)}</td>
-											<td style={{ padding: "0.75rem" }}><span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{bRate}%</span></td>
+			<div className="dash-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: "1rem" }}>
+				{!isConsultant && (
+					<section className="dash-panel">
+						<header className="dash-panel__head">
+							<h2 className="dash-panel__title">Team · this period</h2>
+							<Link to="/workspace?tab=caseload" className="dash-link">
+								Caseload →
+							</Link>
+						</header>
+						{team.length === 0 ? (
+							<p className="dash-empty">Nothing moved in this period.</p>
+						) : (
+							<div className="ops-table-wrap">
+								<table className="ops-table ops-ledger">
+									<thead>
+										<tr>
+											<th>Officer</th>
+											<th className="ops-ledger__r">Held</th>
+											<th className="ops-ledger__r">Cases moved</th>
+											<th className="ops-ledger__r">Carrying</th>
+											<th className="ops-ledger__r">Lead → client</th>
 										</tr>
-									);
-								})}
-							</tbody>
-						</table>
-					</div>
-				</div>
-			</>)}
-
-			{/* ─── Operational Reports (consultant, coordinator, manager) ─── */}
-			{showOperational && (<>
-				{/* KPI row */}
-				<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem", marginBottom: "2.5rem" }}>
-					<KPICard label={isConsultant ? "My Consultations" : "Consultations"} value={String(consultationStats.total)} note={`${consultationStats.completionRate}% completion`} inverted />
-					<KPICard label={isConsultant ? "My Applications" : "Applications"} value={String(applicationStats.total)} note={`${applicationStats.acceptanceRate}% acceptance`} />
-					<KPICard label="Consultation Completion" value={`${consultationStats.completionRate}%`} note={`${consultationStats.completed}/${consultationStats.total} completed`} />
-					<KPICard label="Application Acceptance" value={`${applicationStats.acceptanceRate}%`} note={`${applicationStats.accepted}/${applicationStats.total} accepted`} />
-					{(isManager || isCoordinator) && (
-						<KPICard label="Lead Conversion" value={`${leadFunnel.conversionRate}%`} note={`${leadFunnel.converted}/${leadFunnel.total} converted`} />
-					)}
-				</div>
-
-				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-					{/* Consultation Pipeline */}
-					<div className="card">
-						<h2 className="section-title mb-3">{isConsultant ? "My Consultation Pipeline" : "Consultation Pipeline"}</h2>
-						{[...consultationStats.byStatus.entries()].length === 0 ? (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No consultations yet.</p>
-						) : (
-							[...consultationStats.byStatus.entries()].map(([status, count]) => (
-								<BarRow key={status} label={status} value={count} max={consultationStats.total} />
-							))
-						)}
-					</div>
-
-					{/* Application Pipeline */}
-					<div className="card">
-						<h2 className="section-title mb-3">{isConsultant ? "My Application Pipeline" : "Application Pipeline"}</h2>
-						{[...applicationStats.byStage.entries()].length === 0 ? (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No applications yet.</p>
-						) : (
-							[...applicationStats.byStage.entries()].map(([stage, count]) => (
-								<BarRow key={stage} label={stage} value={count} max={applicationStats.total} />
-							))
-						)}
-					</div>
-				</div>
-
-				{/* Lead Conversion Funnel (coordinator + manager) */}
-				{(isManager || isCoordinator) && (
-					<div className="card" style={{ marginBottom: "2rem" }}>
-						<h2 className="section-title mb-3">Lead Conversion Funnel</h2>
-						{leadFunnel.total === 0 ? (
-							<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No leads yet.</p>
-						) : (
-							leadFunnel.stages.map((s) => (
-								<BarRow key={s.label} label={s.label} value={s.count} max={maxFunnel} />
-							))
-						)}
-					</div>
-				)}
-
-				{/* Processing Time + Document Verification */}
-				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-					<div className="card">
-						<h2 className="section-title mb-3">Processing Time Metrics</h2>
-						<div className="ops-table-wrap">
-							<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "var(--text-sm)" }}>
-								<thead>
-									<tr style={{ borderBottom: "2px solid var(--border)" }}>
-										<th style={{ padding: "0.6rem" }}>Stage</th>
-										<th style={{ padding: "0.6rem" }}>Avg. Days</th>
-										<th style={{ padding: "0.6rem" }}>Min</th>
-										<th style={{ padding: "0.6rem" }}>Max</th>
-									</tr>
-								</thead>
-								<tbody>
-									{[
-										{ stage: "Consultation → Assessment", avg: 3, min: 1, max: 7 },
-										{ stage: "Assessment → Application", avg: 5, min: 2, max: 14 },
-										{ stage: "document_verification", avg: 4, min: 1, max: 10 },
-										{ stage: "school_submission", avg: 7, min: 3, max: 21 },
-										{ stage: "Offer Letter → Visa", avg: 12, min: 5, max: 30 },
-										{ stage: "visa_processing", avg: 21, min: 7, max: 60 },
-									].map((r) => (
-										<tr key={r.stage} style={{ borderBottom: "1px solid var(--border-light)" }}>
-											<td style={{ padding: "0.6rem" }}>{journeyStageLabel(r.stage)}</td>
-											<td style={{ padding: "0.6rem", fontWeight: 600 }}>{r.avg}</td>
-											<td style={{ padding: "0.6rem" }} className="muted">{r.min}</td>
-											<td style={{ padding: "0.6rem" }} className="muted">{r.max}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					</div>
-
-					<div className="card">
-						<h2 className="section-title mb-3">Document Verification Stats</h2>
-						<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-							<div>
-								<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Total Documents</p>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-lg)", marginTop: "0.2rem" }}>{docStats.total}</p>
-							</div>
-							<div>
-								<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Verified</p>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-lg)", marginTop: "0.2rem" }}>{docStats.verified} ({docStats.rate}%)</p>
-							</div>
-							<div>
-								<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Pending</p>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-lg)", marginTop: "0.2rem", color: "var(--muted-foreground)" }}>{docStats.pending}</p>
-							</div>
-							<div>
-								<p className="eyebrow" style={{ fontSize: "var(--text-xs)" }}>Rejected</p>
-								<p style={{ fontWeight: 600, fontSize: "var(--text-lg)", marginTop: "0.2rem", color: "var(--muted-foreground)" }}>{docStats.rejected}</p>
-							</div>
-						</div>
-						<BarRow label="Verification Rate" value={docStats.rate} max={100} suffix="%" />
-						<BarRow label="Pending Review" value={docStats.pending} max={docStats.total} />
-						<BarRow label="Rejected" value={docStats.rejected} max={docStats.total} />
-					</div>
-				</div>
-
-				{/* Branch Operational Performance (coordinator + manager) */}
-				{(isManager || isCoordinator) && (
-					<div className="card" style={{ marginBottom: "2rem" }}>
-						<h2 className="section-title mb-3">Branch Operational Performance</h2>
-						<div className="ops-table-wrap">
-							<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "var(--text-sm)" }}>
-								<thead>
-									<tr style={{ borderBottom: "2px solid var(--border)" }}>
-										<th style={{ padding: "0.75rem" }}>Branch</th>
-										<th style={{ padding: "0.75rem" }}>Consultations</th>
-										<th style={{ padding: "0.75rem" }}>Applications</th>
-										<th style={{ padding: "0.75rem" }}>Accepted</th>
-										<th style={{ padding: "0.75rem" }}>Acceptance Rate</th>
-									</tr>
-								</thead>
-								<tbody>
-								{branches.filter((b) =>
-									scopedConsultations.some((c) => c.branch === b) ||
-									scopedApplications.some((a) => a.branch === b),
-								).map((b) => {
-									const bCons = scopedConsultations.filter((c) => c.branch === b).length;
-									const bApps = scopedApplications.filter((a) => a.branch === b);
-									const bAccepted = bApps.filter((a) => a.status === "Accepted").length;
-									const bRate = bApps.length > 0 ? Math.round((bAccepted / bApps.length) * 100) : 0;
-									return (
-										<tr key={b} style={{ borderBottom: "1px solid var(--border-light)" }}>
-											<td style={{ padding: "0.75rem", fontWeight: 500 }}>{branchName(b)}</td>
-												<td style={{ padding: "0.75rem" }}>{bCons}</td>
-												<td style={{ padding: "0.75rem" }}>{bApps.length}</td>
-												<td style={{ padding: "0.75rem" }}>{bAccepted}</td>
-												<td style={{ padding: "0.75rem" }}><span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{bRate}%</span></td>
+									</thead>
+									<tbody>
+										{team.map((t) => (
+											<tr key={t.name}>
+												<td>{t.name}</td>
+												<td className="ops-ledger__r cn-money">{t.held}</td>
+												<td className="ops-ledger__r cn-money">{t.moved}</td>
+												<td className="ops-ledger__r cn-money">{t.carried}</td>
+												<td className="ops-ledger__r cn-money">{t.leads > 0 ? `${Math.round((t.enrolled / t.leads) * 100)}% · ${t.leads}` : "—"}</td>
 											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
-					</div>
+										))}
+									</tbody>
+								</table>
+							</div>
+						)}
+						<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>
+							{docsReviewed} document{docsReviewed === 1 ? "" : "s"} reviewed in the period
+						</p>
+					</section>
 				)}
-			</>)}
-
-			{/* ─── Team Performance (manager only) ─── */}
-			{showTeam && (<>
-				<div className="card" style={{ marginBottom: "2rem" }}>
-					<h2 className="section-title mb-3">Team Performance</h2>
-					{teamPerformance.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)" }}>No assigned work yet.</p>
+				<section className="dash-panel">
+					<header className="dash-panel__head">
+						<h2 className="dash-panel__title">Where leads come from</h2>
+						<Link to="/marketing" className="dash-link">
+							Marketing →
+						</Link>
+					</header>
+					{sources.length === 0 ? (
+						<p className="dash-empty">No leads landed in this period.</p>
 					) : (
-						<div className="ops-table-wrap">
-							<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-								<thead>
-									<tr style={{ borderBottom: "2px solid var(--border)" }}>
-										<th style={{ padding: "0.75rem" }}>Consultant</th>
-										<th style={{ padding: "0.75rem" }}>Consultations</th>
-										<th style={{ padding: "0.75rem" }}>Completed</th>
-										<th style={{ padding: "0.75rem" }}>Applications</th>
-										<th style={{ padding: "0.75rem" }}>Accepted</th>
-										<th style={{ padding: "0.75rem" }}>Completion</th>
-									</tr>
-								</thead>
-								<tbody>
-									{teamPerformance.map(([name, d]) => {
-										const rate = d.consultations > 0 ? Math.round((d.completedConsults / d.consultations) * 100) : 0;
-										return (
-											<tr key={name} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "0.75rem", fontWeight: 500 }}>{name}</td>
-												<td style={{ padding: "0.75rem" }}>{d.consultations}</td>
-												<td style={{ padding: "0.75rem" }}>{d.completedConsults}</td>
-												<td style={{ padding: "0.75rem" }}>{d.applications}</td>
-												<td style={{ padding: "0.75rem" }}>{d.acceptedApps}</td>
-												<td style={{ padding: "0.75rem" }}>
-													<span className="portal-pill" style={{ fontSize: "var(--text-xs)" }}>{rate}%</span>
-												</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
+						sources.map((s) => (
+							<div key={s.label} className="ops-hbar">
+								<span>{s.label}</span>
+								<span className="ops-hbar__t">
+									<span style={{ width: `${Math.round((s.landed / srcMax) * 100)}%` }} />
+								</span>
+								<span className="ops-hbar__v">
+									{s.landed} · {s.enrolled} enrolled
+								</span>
+							</div>
+						))
 					)}
-				</div>
-			</>)}
-
-			{/* ─── No Access fallback ─── */}
-			{!showFinancial && !showOperational && !showTeam && (
-				<div className="card">
-					<p className="muted">No reports available for your role.</p>
-				</div>
-			)}
+					{destinations.length > 0 && (
+						<p className="cn-detailhead__meta" style={{ marginTop: "0.5rem" }}>Destinations asked for: {destinations.map(([c, n]) => `${c} ${n}`).join(" · ")}</p>
+					)}
+				</section>
+			</div>
+			<p className="cn-detailhead__meta" style={{ marginTop: "1rem" }}>
+				Stages: {JOURNEY_STAGES.map((s) => JOURNEY_STAGE_LABELS[s as JourneyStage]).join(" → ")}
+			</p>
 		</div>
 	);
 }

@@ -655,6 +655,11 @@ export const calendarApi = {
 	 * Feed status plus working hours, merged for the Calendar page. The secret
 	 * iCal URL is never returned — the server only says *whether* a feed exists.
 	 */
+	/** Every staff member's hours — the scheduling page's "who can take these slots". */
+	staffWorkingHours(): Promise<{ staff: { opsUserId: string; name: string; email: string; branch: string | null; hours: CalendarStatus["workingHours"] }[] }> {
+		return request(`${API_PREFIX}/calendar/working-hours/staff`);
+	},
+
 	status(): Promise<CalendarStatus> {
 		return Promise.all([
 			request<Omit<CalendarStatus, "workingHours" | "branchSlots">>(`${API_PREFIX}/calendar/feeds/me`),

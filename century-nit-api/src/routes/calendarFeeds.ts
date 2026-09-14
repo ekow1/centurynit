@@ -15,6 +15,7 @@ import {
 import { HttpError } from "../middleware/error.js";
 import {
 	ensureDefaultWorkingHours,
+	listStaffWorkingHours,
 	listWorkingHours,
 	setWorkingHours,
 } from "../services/availability.js";
@@ -339,6 +340,41 @@ calendarFeedsRouter.openapi(
 	async (c) => {
 		const staff = c.get("staff")!;
 		return c.json({ workingHours: await listWorkingHours(staff.opsUserId) }, 200);
+	},
+);
+
+/* ── GET /api/v1/calendar/working-hours/staff ──────────────────────────────── */
+
+calendarFeedsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/working-hours/staff",
+		tags: ["Calendar"],
+		summary: "Every staff member's weekly hours — for the scheduling page",
+		middleware: [requireAuth, requireMfa, requireModule("scheduling")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							staff: z.array(
+								z.object({
+									opsUserId: z.string(),
+									name: z.string(),
+									email: z.string(),
+									branch: z.string().nullable(),
+									hours: workingHoursResponseSchema.shape.workingHours,
+								}),
+							),
+						}),
+					},
+				},
+				description: "Staff hours",
+			},
+		},
+	}),
+	async (c) => {
+		return c.json({ staff: await listStaffWorkingHours() }, 200);
 	},
 );
 

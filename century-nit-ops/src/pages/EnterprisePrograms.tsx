@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useCases } from "../hooks/useCases";
 import { useOpsAuth } from "./OpsAuthContext";
 import {
 	API_PREFIX,
@@ -149,127 +151,208 @@ export function EnterprisePrograms() {
 	function uniName(uniId: string | null | undefined): string {
 		return universities.find((u) => u.id === uniId)?.name ?? uniId ?? "—";
 	}
+	const { applications } = useCases();
+	const [uniCut, setUniCut] = useState<string>("all");
+	/** Clients applying to each programme, from the cases' school lines. */
+	const applying = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const a of applications) for (const sa of a.schoolApplications ?? []) if (sa.programId) m.set(sa.programId, (m.get(sa.programId) ?? 0) + 1);
+		return m;
+	}, [applications]);
+	const levels = useMemo(() => [...new Set(programs.map((p) => p.level).filter((l): l is string => Boolean(l)))].sort(), [programs]);
+	const [levelCut, setLevelCut] = useState<string>("all");
+	const bands = useMemo(() => {
+		const list = filteredPrograms
+			.filter((pr) => (uniCut === "all" || pr.universityId === uniCut) && (levelCut === "all" || pr.level === levelCut))
+			.sort((a, b) => (applying.get(b.id) ?? 0) - (applying.get(a.id) ?? 0) || a.name.localeCompare(b.name));
+		const by = new Map<string, typeof list>();
+		for (const pr of list) by.set(pr.universityId ?? "", [...(by.get(pr.universityId ?? "") ?? []), pr]);
+		return [...by.entries()]
+			.map(([uniId, progs]) => ({ uniId, uni: universities.find((u) => u.id === uniId) ?? null, progs }))
+			.sort((a, b) => b.progs.reduce((n, pr) => n + (applying.get(pr.id) ?? 0), 0) - a.progs.reduce((n, pr) => n + (applying.get(pr.id) ?? 0), 0) || (a.uni?.name ?? "").localeCompare(b.uni?.name ?? ""));
+	}, [filteredPrograms, uniCut, levelCut, applying, universities]);
 
 	return (
 		<div className="admin-page fade-in">
-			<div className="admin-section-head" style={{ marginBottom: "2rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
-					<h2 className="section-title">Programs & Scholarships</h2>
-					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Manage study programs and available scholarships.
-					</p>
+					<h2 className="section-title">{tab === "scholarships" ? "Scholarships" : "Programmes"}</h2>
+					<p className="muted" style={{ marginTop: "0.25rem" }}>{tab === "scholarships" ? "The scholarships Century tracks — by university, with the amount and the deadline." : "What clients can study, by university — level, tuition, intake, and who is applying."}</p>
 				</div>
-				<div>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<div className="cn-scaffold__chips" role="tablist" aria-label="View">
+						{([["programs", "Programmes"], ["scholarships", "Scholarships"]] as const).map(([key, label]) => (
+							<button key={key} type="button" role="tab" aria-selected={tab === key} className={`btn btn--sm ${tab === key ? "btn--primary" : "btn--ghost"}`} onClick={() => { setTab(key); setSearch(""); }}>
+								{label}
+							</button>
+						))}
+					</div>
 					{tab === "programs" && canEditPrograms && (
-						<button className="btn btn--primary" onClick={() => setEditingProg({ name: "" })}>+ Add Program</button>
+						<button className="btn btn--primary btn--sm" onClick={() => setEditingProg({ name: "" })}>+ Add programme</button>
 					)}
 					{tab === "scholarships" && canEditPrograms && (
-						<button className="btn btn--primary" onClick={() => setEditingSchol({ name: "" })}>+ Add Scholarship</button>
+						<button className="btn btn--primary btn--sm" onClick={() => setEditingSchol({ name: "" })}>+ Add scholarship</button>
 					)}
 				</div>
 			</div>
 
-			{/* Tabs */}
-			<div style={{ display: "flex", gap: "1rem", marginBottom: "2rem", borderBottom: "1px solid var(--border-light)", overflowX: "auto", whiteSpace: "nowrap", paddingBottom: "2px" }}>
-				{([["programs", "Programs"], ["scholarships", "Scholarships"]] as const).map(([key, label]) => (
-					<button
-						key={key}
-						onClick={() => { setTab(key); setSearch(""); }}
-						className={`btn btn--ghost ${tab === key ? '' : 'muted'}`}
-						style={{ borderBottom: tab === key ? "2px solid var(--foreground)" : "2px solid transparent", borderRadius: 0, paddingBottom: "0.5rem" }}
-					>
-						{label}
-					</button>
-				))}
-			</div>
-
-			{/* Filters */}
-			<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-				<input
-					type="search"
-					placeholder={tab === "programs" ? "Search programs, fields..." : "Search scholarships..."}
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					style={{ maxWidth: "400px" }}
-				/>
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{programs.length}</strong> <span className="dash-day__date">programmes</span>
+				</span>
+				<span>
+					<strong>{new Set(programs.map((pr) => pr.universityId)).size}</strong> <span className="dash-day__date">universities</span>
+				</span>
+				<span>
+					<strong>{scholarships.length}</strong> <span className="dash-day__date">scholarships</span>
+				</span>
+				<span>
+					<strong>{[...applying.values()].reduce((n, x) => n + x, 0)}</strong> <span className="dash-day__date">applications in flight</span>
+				</span>
+				<span className="dash-day__sep" aria-hidden>
+					|
+				</span>
+				<Link to="/universities" className="dash-link">
+					Universities →
+				</Link>
 			</div>
 
 			{loading ? (
 				<p className="muted">Loading catalog...</p>
 			) : (
 				<>
-					{/* Programs Tab */}
 					{tab === "programs" && (
-						<div className="card">
-							<div className="ops-table-wrap">
-								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-									<thead>
-										<tr style={{ borderBottom: "2px solid var(--border)" }}>
-											<th style={{ padding: "1rem" }}>Program</th>
-											<th style={{ padding: "1rem" }}>University</th>
-											<th style={{ padding: "1rem" }}>Level</th>
-											<th style={{ padding: "1rem" }}>Tuition</th>
-											{canEditPrograms && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
-										</tr>
-									</thead>
-									<tbody>
-										{filteredPrograms.length === 0 ? (
-											<tr><td colSpan={5} style={{ padding: "2rem", textAlign: "center" }} className="muted">No programs found.</td></tr>
-										) : filteredPrograms.map((prog) => (
-											<tr key={prog.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{prog.name}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uniName(prog.universityId)}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{prog.level}</td>
-												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{prog.tuition}</td>
-												{canEditPrograms && (
-													<td style={{ padding: "1rem", textAlign: "right" }}>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingProg(prog)}>Edit</button>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteProgram(prog.id)}>Del</button>
-													</td>
-												)}
-											</tr>
-										))}
-									</tbody>
-								</table>
+						<>
+							<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)", marginBottom: "0.5rem" }}>
+								<div className="cn-scaffold__chips" role="tablist" aria-label="Level">
+									{[{ id: "all", label: "All levels", n: programs.length }, ...levels.map((l) => ({ id: l, label: l, n: programs.filter((pr) => pr.level === l).length }))].map((c) => {
+										const on = levelCut === c.id;
+										return (
+											<button key={c.id} type="button" role="tab" aria-selected={on} className="ops-pill" onClick={() => setLevelCut(c.id)} style={{ cursor: "pointer", marginLeft: 0, border: "1px solid var(--border)", background: on ? "var(--foreground)" : "transparent", color: on ? "var(--background)" : "var(--foreground)" }}>
+												{c.label}
+												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+													{c.n}
+												</span>
+											</button>
+										);
+									})}
+								</div>
+								<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+									<input type="search" className="cn-search" placeholder="Search programme, field…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search programmes" style={{ flex: "1 1 14rem", width: "auto" }} />
+									<label className="cn-filter">
+										<span className="cn-filter__label">University</span>
+										<select className="cn-filter__select" value={uniCut} onChange={(e) => setUniCut(e.target.value)}>
+											<option value="all">All universities</option>
+											{universities.map((u) => (
+												<option key={u.id} value={u.id}>
+													{u.name}
+												</option>
+											))}
+										</select>
+									</label>
+								</div>
 							</div>
-						</div>
+							{bands.length === 0 ? (
+								<p className="ops-people__empty">No programmes match.</p>
+							) : (
+								<div className="ops-bands" style={{ padding: 0 }}>
+									{bands.map(({ uniId, uni, progs }) => (
+										<div key={uniId || "none"}>
+											<div className="ops-band">
+												<span className="ops-band__name">
+													{uni?.name ?? "No university"} · {progs.length}
+												</span>
+												<span className="ops-band__note">{uni ? [uni.city, uni.type].filter(Boolean).join(" · ") : ""}</span>
+											</div>
+											<div className="ops-people ops-people--three">
+												{progs.map((pr) => {
+													const n = applying.get(pr.id) ?? 0;
+													return (
+														<div key={pr.id} className={`ops-uni${pr.isActive === false ? " ops-uni--off" : ""}`}>
+															<div className="ops-uni__h">
+																<span className="ops-uni__n" title={pr.name}>
+																	{pr.name}
+																</span>
+																<span className="ops-uni__k">{pr.level ?? ""}</span>
+															</div>
+															<div className="ops-uni__k">{[pr.field, pr.duration, pr.tuition ? `tuition ${pr.tuition}` : null].filter(Boolean).join(" · ") || "—"}</div>
+															<div className="ops-uni__s">
+																{pr.intake && pr.intake.length > 0 ? `intake ${pr.intake.join(", ")}` : "intake —"}
+																{pr.applicationDeadline ? ` · deadline ${pr.applicationDeadline}` : ""}
+																{pr.isActive === false ? " · inactive" : ""}
+															</div>
+															<div className="ops-uni__foot">
+																<span>
+																	{n} client{n === 1 ? "" : "s"} applying
+																</span>
+																{canEditPrograms && (
+																	<span style={{ display: "flex", gap: "0.6rem" }}>
+																		<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setEditingProg(pr)}>
+																			edit
+																		</button>
+																		<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => deleteProgram(pr.id)}>
+																			delete
+																		</button>
+																	</span>
+																)}
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										</div>
+									))}
+								</div>
+							)}
+						</>
 					)}
-
-					{/* Scholarships Tab */}
 					{tab === "scholarships" && (
-						<div className="card">
-							<div className="ops-table-wrap">
-								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-									<thead>
-										<tr style={{ borderBottom: "2px solid var(--border)" }}>
-											<th style={{ padding: "1rem" }}>Scholarship</th>
-											<th style={{ padding: "1rem" }}>University</th>
-											<th style={{ padding: "1rem" }}>Amount</th>
-											<th style={{ padding: "1rem" }}>Deadline</th>
-											{canEditPrograms && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
-										</tr>
-									</thead>
-									<tbody>
-										{filteredScholarships.length === 0 ? (
-											<tr><td colSpan={5} style={{ padding: "2rem", textAlign: "center" }} className="muted">No scholarships found.</td></tr>
-										) : filteredScholarships.map((s) => (
-											<tr key={s.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{s.name}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uniName(s.universityId)}</td>
-												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{s.amount}</td>
-												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{s.deadline}</td>
-												{canEditPrograms && (
-													<td style={{ padding: "1rem", textAlign: "right" }}>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingSchol(s)}>Edit</button>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteScholarship(s.id)}>Del</button>
-													</td>
-												)}
-											</tr>
-										))}
-									</tbody>
-								</table>
+						<>
+							<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)", marginBottom: "0.75rem" }}>
+								<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+									<input type="search" className="cn-search" placeholder="Search scholarships…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search scholarships" style={{ flex: "1 1 14rem", width: "auto" }} />
+								</div>
 							</div>
-						</div>
+							{filteredScholarships.length === 0 ? (
+								<p className="ops-people__empty">No scholarships match.</p>
+							) : (
+								<div className="ops-people ops-people--three">
+									{filteredScholarships.map((sc) => (
+										<div key={sc.id} className={`ops-uni${sc.isActive === false ? " ops-uni--off" : ""}`}>
+											<div className="ops-uni__h">
+												<span className="ops-uni__n" title={sc.name}>
+													{sc.name}
+												</span>
+												<span className="cn-money" style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>
+													{sc.amount ?? "—"}
+												</span>
+											</div>
+											<div className="ops-uni__k">
+												{uniName(sc.universityId)}
+												{sc.type ? ` · ${sc.type}` : ""}
+											</div>
+											<div className="ops-uni__s">
+												{sc.deadline ? `deadline ${sc.deadline}` : "no deadline"}
+												{sc.eligibility ? ` · ${sc.eligibility}` : ""}
+											</div>
+											{canEditPrograms && (
+												<div className="ops-uni__foot">
+													<span />
+													<span style={{ display: "flex", gap: "0.6rem" }}>
+														<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setEditingSchol(sc)}>
+															edit
+														</button>
+														<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => deleteScholarship(sc.id)}>
+															delete
+														</button>
+													</span>
+												</div>
+											)}
+										</div>
+									))}
+								</div>
+							)}
+						</>
 					)}
 				</>
 			)}

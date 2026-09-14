@@ -1,4 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { useCases } from "../hooks/useCases";
+import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
 import { useOpsAuth } from "./OpsAuthContext";
 import {
 	API_PREFIX,
@@ -25,6 +28,16 @@ export function EnterpriseUniversities() {
 	
 	const [universities, setUniversities] = useState<CatalogUniversity[]>([]);
 	const [destinations, setDestinations] = useState<CatalogDestination[]>([]);
+	const [programs, setPrograms] = useState<{ id: string; universityId?: string | null }[]>([]);
+	const [countryCut, setCountryCut] = useState<string>("all");
+	const [sort, setSort] = useState<"applied" | "name" | "fee">("applied");
+	const { applications } = useCases();
+	const { catalogue } = useFeeCatalogue();
+	useEffect(() => {
+		apiFetch<{ programs: { id: string; universityId?: string | null }[] }>(`${API_PREFIX}/catalog/programs`)
+			.then((res) => setPrograms(res.programs ?? []))
+			.catch(() => setPrograms([]));
+	}, []);
 	const [loading, setLoading] = useState(true);
 
 	const [editingUni, setEditingUni] = useState<UniversityFormInput | null>(null);
@@ -146,143 +159,258 @@ export function EnterpriseUniversities() {
 		return true;
 	});
 
-	function destName(destId: string | null | undefined): string {
-		return destinations.find((d) => d.id === destId)?.name ?? destId ?? "—";
-	}
+	const rate = catalogue?.exchangeRate ?? 0;
+	const ghs = (cents: number) => (rate > 0 ? `GH₵ ${((cents / 100) * rate).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `$${(cents / 100).toFixed(2)}`);
+	const tariffOf = (destId: string) => catalogue?.destinations.find((d) => d.id === destId) ?? null;
+	/** Clients with a school application at each university, and programmes per university. */
+	const applying = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const a of applications) for (const sa of a.schoolApplications ?? []) if (sa.universityId) m.set(sa.universityId, (m.get(sa.universityId) ?? 0) + 1);
+		return m;
+	}, [applications]);
+	const programCount = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const pr of programs) if (pr.universityId) m.set(pr.universityId, (m.get(pr.universityId) ?? 0) + 1);
+		return m;
+	}, [programs]);
+	const missingFee = universities.filter((u) => !u.applicationFeeCents);
+	/** Universities by country, in the cut, sorted. */
+	const bands = useMemo(() => {
+		const list = filteredUnis
+			.filter((u) => countryCut === "all" || (countryCut === "missing" ? !u.applicationFeeCents : u.destinationId === countryCut))
+			.sort((a, b) => (sort === "name" ? a.name.localeCompare(b.name) : sort === "fee" ? (b.applicationFeeCents ?? -1) - (a.applicationFeeCents ?? -1) : (applying.get(b.id) ?? 0) - (applying.get(a.id) ?? 0) || a.name.localeCompare(b.name)));
+		const by = new Map<string, CatalogUniversity[]>();
+		for (const u of list) by.set(u.destinationId ?? "", [...(by.get(u.destinationId ?? "") ?? []), u]);
+		return [...by.entries()]
+			.map(([destId, unis]) => ({ destId, dest: destinations.find((d) => d.id === destId) ?? null, unis }))
+			.sort((a, b) => b.unis.reduce((n, u) => n + (applying.get(u.id) ?? 0), 0) - a.unis.reduce((n, u) => n + (applying.get(u.id) ?? 0), 0) || (a.dest?.name ?? "").localeCompare(b.dest?.name ?? ""));
+	}, [filteredUnis, countryCut, sort, applying, destinations]);
 
 	return (
 		<div className="admin-page fade-in">
-			<div className="admin-section-head" style={{ marginBottom: "2rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
-					<h2 className="section-title">Universities & Countries</h2>
+					<h2 className="section-title">{tab === "countries" ? "Countries" : tab === "form-dropdowns" ? "Form dropdowns" : "Universities"}</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Manage the academic catalog schools and destinations.
+						{tab === "countries" ? "Where Century places clients — each with the visa costs paid on their behalf." : tab === "form-dropdowns" ? "The options the portal's forms offer." : "The schools Century places clients at, by country — with the fee each charges to apply."}
 					</p>
 				</div>
-				<div>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<div className="cn-scaffold__chips" role="tablist" aria-label="View">
+						{([["universities", "Universities"], ["countries", "Countries"], ["form-dropdowns", "Form dropdowns"]] as const)
+							.filter(([key]) => key !== "form-dropdowns" || canSeeLookups)
+							.map(([key, label]) => (
+								<button key={key} type="button" role="tab" aria-selected={tab === key} className={`btn btn--sm ${tab === key ? "btn--primary" : "btn--ghost"}`} onClick={() => { setTab(key); setSearch(""); }}>
+									{label}
+								</button>
+							))}
+					</div>
 					{tab === "universities" && canEditUniversities && (
-						<button className="btn btn--primary" onClick={() => setEditingUni({ name: "" })}>+ Add University</button>
+						<button className="btn btn--primary btn--sm" onClick={() => setEditingUni({ name: "" })}>+ Add university</button>
 					)}
 					{tab === "countries" && canEditUniversities && (
-						<button className="btn btn--primary" onClick={() => setEditingDest({ name: "", region: "" })}>+ Add Country</button>
+						<button className="btn btn--primary btn--sm" onClick={() => setEditingDest({ name: "", region: "" })}>+ Add country</button>
 					)}
 				</div>
 			</div>
 
-			{/* Tabs */}
-			<div style={{ display: "flex", gap: "1rem", marginBottom: "2rem", borderBottom: "1px solid var(--border-light)", overflowX: "auto", whiteSpace: "nowrap", paddingBottom: "2px" }}>
-				{([["universities", "Universities"], ["countries", "Countries"], ["form-dropdowns", "Form Dropdowns"]] as const)
-					.filter(([key]) => key !== "form-dropdowns" || canSeeLookups)
-					.map(([key, label]) => (
-					<button
-						key={key}
-						onClick={() => { setTab(key); setSearch(""); }}
-						className={`btn btn--ghost ${tab === key ? '' : 'muted'}`}
-						style={{ borderBottom: tab === key ? "2px solid var(--foreground)" : "2px solid transparent", borderRadius: 0, paddingBottom: "0.5rem" }}
-					>
-						{label}
-					</button>
-				))}
-			</div>
-
-			{/* Filters */}
 			{tab !== "form-dropdowns" && (
-			<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-				<input
-					type="search"
-					placeholder={tab === "countries" ? "Search countries, regions..." : "Search universities, cities..."}
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					style={{ maxWidth: "400px" }}
-				/>
-			</div>
+				<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+					<span>
+						<strong>{universities.length}</strong> <span className="dash-day__date">universities</span>
+					</span>
+					<span>
+						<strong>{destinations.length}</strong> <span className="dash-day__date">countries</span>
+					</span>
+					<span>
+						<strong>{programs.length}</strong> <span className="dash-day__date">programmes</span>
+					</span>
+					<span>
+						<strong>{universities.length - missingFee.length}</strong> <span className="dash-day__date">with a fee set</span>
+					</span>
+					{missingFee.length > 0 && (
+						<span>
+							<strong>{missingFee.length}</strong> <span className="dash-day__date">missing a fee</span>
+						</span>
+					)}
+					<span className="dash-day__sep" aria-hidden>
+						|
+					</span>
+					<Link to="/fee-schedule" className="dash-link">
+						Fee schedule →
+					</Link>
+				</div>
 			)}
 
 			{loading ? (
 				<p className="muted">Loading catalog...</p>
 			) : (
 				<>
-					{/* Universities Tab */}
 					{tab === "universities" && (
-						<div className="card">
-							<div className="ops-table-wrap">
-								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-									<thead>
-										<tr style={{ borderBottom: "2px solid var(--border)" }}>
-											<th style={{ padding: "1rem" }}>University</th>
-											<th style={{ padding: "1rem" }}>Country</th>
-											<th style={{ padding: "1rem" }}>City</th>
-											<th style={{ padding: "1rem" }}>Type</th>
-											<th style={{ padding: "1rem" }}>Acceptance</th>
-											<th style={{ padding: "1rem" }} title="The university's own fee — paid on the client's behalf, at cost">Application fee</th>
-											{canEditUniversities && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
-										</tr>
-									</thead>
-									<tbody>
-										{filteredUnis.length === 0 ? (
-											<tr><td colSpan={7} style={{ padding: "2rem", textAlign: "center" }} className="muted">No universities found.</td></tr>
-										) : filteredUnis.map((uni) => (
-											<tr key={uni.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "1rem" }}>
-													<div style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{uni.name}</div>
-													{uni.ranking && <div className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.25rem" }}>Ranking: {uni.ranking}</div>}
-												</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{destName(uni.destinationId)}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.city}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{uni.type}</td>
-												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{uni.acceptance}</td>
-												<td style={{ padding: "1rem", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>
-													{uni.applicationFeeCents ? `$${(uni.applicationFeeCents / 100).toLocaleString("en-US")}` : <span className="muted">not set</span>}
-												</td>
-												{canEditUniversities && (
-													<td style={{ padding: "1rem", textAlign: "right" }}>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingUni(uni)}>Edit</button>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteUniversity(uni.id)}>Del</button>
-													</td>
-												)}
-											</tr>
-										))}
-									</tbody>
-								</table>
+						<>
+							<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)", marginBottom: "0.5rem" }}>
+								<div className="cn-scaffold__chips" role="tablist" aria-label="Country">
+									{[{ id: "all", label: "All", n: universities.length }, ...destinations.map((d) => ({ id: d.id, label: d.name, n: universities.filter((u) => u.destinationId === d.id).length })).filter((c) => c.n > 0), { id: "missing", label: "Missing a fee", n: missingFee.length }].map((c) => {
+										const on = countryCut === c.id;
+										return (
+											<button
+												key={c.id}
+												type="button"
+												role="tab"
+												aria-selected={on}
+												className="ops-pill"
+												onClick={() => setCountryCut(c.id)}
+												style={{
+													cursor: "pointer",
+													marginLeft: 0,
+													border: "1px solid var(--border)",
+													background: on ? "var(--foreground)" : "transparent",
+													color: on ? "var(--background)" : c.n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
+													fontWeight: c.id === "missing" && c.n > 0 && !on ? 700 : 500,
+												}}
+											>
+												{c.label}
+												<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+													{c.n}
+												</span>
+											</button>
+										);
+									})}
+								</div>
+								<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+									<input type="search" className="cn-search" placeholder="Search university, city…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search universities" style={{ flex: "1 1 14rem", width: "auto" }} />
+									<label className="cn-filter">
+										<span className="cn-filter__label">Sort</span>
+										<select className="cn-filter__select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+											<option value="applied">Most applied to</option>
+											<option value="name">By name</option>
+											<option value="fee">Highest fee first</option>
+										</select>
+									</label>
+								</div>
 							</div>
-						</div>
+							{bands.length === 0 ? (
+								<p className="ops-people__empty">No universities match.</p>
+							) : (
+								<div className="ops-bands" style={{ padding: 0 }}>
+									{bands.map(({ destId, dest, unis }) => {
+										const t = destId ? tariffOf(destId) : null;
+										return (
+											<div key={destId || "none"}>
+												<div className="ops-band">
+													<span className="ops-band__name">
+														{dest?.name ?? "No country"} · {unis.length}
+													</span>
+													<span className="ops-band__note">
+														{t ? `visa ${ghs(t.visaFeeCents)} · biometrics ${ghs(t.biometricsFeeCents)}` : dest ? "no visa costs set" : ""}
+														{dest && canEditUniversities && (
+															<>
+																{" · "}
+																<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setEditingDest(dest)}>
+																	edit country
+																</button>
+															</>
+														)}
+													</span>
+												</div>
+												<div className="ops-people ops-people--three">
+													{unis.map((uni) => {
+														const n = applying.get(uni.id) ?? 0;
+														const pc = programCount.get(uni.id) ?? 0;
+														return (
+															<div key={uni.id} className={`ops-uni${uni.isActive === false ? " ops-uni--off" : ""}`}>
+																<div className="ops-uni__h">
+																	<span className="ops-uni__n" title={uni.name}>
+																		{uni.name}
+																	</span>
+																	<span className="cn-money" style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: uni.applicationFeeCents ? "inherit" : "var(--muted-foreground)" }}>
+																		{uni.applicationFeeCents ? ghs(uni.applicationFeeCents) : "no fee set"}
+																	</span>
+																</div>
+																<div className="ops-uni__k">
+																	{[uni.city, uni.type, uni.acceptance ? `acceptance ${uni.acceptance}` : null, uni.ranking ? `rank ${uni.ranking}` : null].filter(Boolean).join(" · ") || "—"}
+																</div>
+																<div className="ops-uni__s">
+																	{pc} programme{pc === 1 ? "" : "s"} · {n} client{n === 1 ? "" : "s"} applying
+																	{uni.isActive === false ? " · inactive" : ""}
+																</div>
+																<div className="ops-uni__foot">
+																	<span>application fee · at cost</span>
+																	<span style={{ display: "flex", gap: "0.6rem" }}>
+																		<Link to="/programs" className="dash-link">
+																			programmes
+																		</Link>
+																		{canEditUniversities && (
+																			<>
+																				<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setEditingUni(uni)}>
+																					edit
+																				</button>
+																				<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => deleteUniversity(uni.id)}>
+																					delete
+																				</button>
+																			</>
+																		)}
+																	</span>
+																</div>
+															</div>
+														);
+													})}
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</>
 					)}
-
-					{/* Countries Tab */}
 					{tab === "countries" && (
-						<div className="card">
-							<div className="ops-table-wrap">
-								<table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-									<thead>
-										<tr style={{ borderBottom: "2px solid var(--border)" }}>
-											<th style={{ padding: "1rem" }}>Country</th>
-											<th style={{ padding: "1rem" }}>Region</th>
-											<th style={{ padding: "1rem" }}>Tagline</th>
-											{canEditUniversities && <th style={{ padding: "1rem", textAlign: "right" }}>Actions</th>}
-										</tr>
-									</thead>
-									<tbody>
-										{filteredDestinations.length === 0 ? (
-											<tr><td colSpan={4} style={{ padding: "2rem", textAlign: "center" }} className="muted">No destinations found.</td></tr>
-										) : filteredDestinations.map((dest) => (
-											<tr key={dest.id} style={{ borderBottom: "1px solid var(--border-light)" }}>
-												<td style={{ padding: "1rem", fontWeight: 600, fontSize: "var(--text-sm)" }}>{dest.name}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)" }}>{dest.region}</td>
-												<td style={{ padding: "1rem", fontSize: "var(--text-sm)", fontStyle: "italic" }}>{dest.tagline}</td>
-												{canEditUniversities && (
-													<td style={{ padding: "1rem", textAlign: "right" }}>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem" }} onClick={() => setEditingDest(dest)}>Edit</button>
-														<button className="btn btn--ghost" style={{ padding: "0.25rem 0.5rem", color: "var(--danger)" }} onClick={() => deleteDestination(dest.id)}>Del</button>
-													</td>
-												)}
-											</tr>
-										))}
-									</tbody>
-								</table>
+						<>
+							<div className="cn-scaffold__filters" style={{ border: "1px solid var(--border-light)", marginBottom: "0.75rem" }}>
+								<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
+									<input type="search" className="cn-search" placeholder="Search countries, regions…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search countries" style={{ flex: "1 1 14rem", width: "auto" }} />
+								</div>
 							</div>
-						</div>
+							{filteredDestinations.length === 0 ? (
+								<p className="ops-people__empty">No countries match.</p>
+							) : (
+								<div className="ops-people ops-people--three">
+									{filteredDestinations.map((dest) => {
+										const t = tariffOf(dest.id);
+										const unis = universities.filter((u) => u.destinationId === dest.id);
+										const n = unis.reduce((sum, u) => sum + (applying.get(u.id) ?? 0), 0);
+										return (
+											<div key={dest.id} className="ops-uni">
+												<div className="ops-uni__h">
+													<span className="ops-uni__n">{dest.name}</span>
+													<span className="ops-uni__k">{dest.region}</span>
+												</div>
+												<div className="ops-uni__k">{t ? `visa ${ghs(t.visaFeeCents)} · biometrics ${ghs(t.biometricsFeeCents)}` : "no visa costs set"}</div>
+												<div className="ops-uni__s">
+													{unis.length} universit{unis.length === 1 ? "y" : "ies"} · {n} client{n === 1 ? "" : "s"} applying
+												</div>
+												{dest.tagline && <div className="ops-uni__s" style={{ fontStyle: "italic" }}>{dest.tagline}</div>}
+												<div className="ops-uni__foot">
+													<Link to="/fee-schedule" className="dash-link">
+														visa costs
+													</Link>
+													{canEditUniversities && (
+														<span style={{ display: "flex", gap: "0.6rem" }}>
+															<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => setEditingDest(dest)}>
+																edit
+															</button>
+															<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => deleteDestination(dest.id)}>
+																delete
+															</button>
+														</span>
+													)}
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</>
 					)}
-
 					{/* Form Dropdowns Tab */}
 					{tab === "form-dropdowns" && (
 						<EnterpriseLookups />

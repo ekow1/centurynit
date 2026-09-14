@@ -4,6 +4,8 @@ import { apiFetch } from "../lib/api";
 import { DOCUMENT_TYPES, DEFAULT_REQUIRED_DOCUMENT_IDS, documentCategory } from "century-nit-core";
 import { Sheet } from "century-nit-core/ui";
 import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
+import { useCases } from "../hooks/useCases";
+import { Link } from "react-router-dom";
 import { ghsPerUsd } from "./currency";
 
 function formatCents(cents: number, currency = "USD") {
@@ -232,62 +234,212 @@ export function EnterprisePackages() {
 	}
 
 	const sorted = useMemo(() => [...packages].sort((a, b) => a.sortOrder - b.sortOrder), [packages]);
+	// Who chose what — the case records the package's name as its funding track.
+	const { applications } = useCases();
+	const onPackage = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const a of applications) if (a.fundingTrack) m.set(a.fundingTrack, (m.get(a.fundingTrack) ?? 0) + 1);
+		return m;
+	}, [applications]);
+	const clientsOn = (pkg: ServicePackage) => onPackage.get(pkg.name) ?? onPackage.get(pkg.code) ?? 0;
+	const [showOff, setShowOff] = useState(false);
+	const split = catalogue?.serviceFeeSplit;
+	const ghsOf = (cents: number) => `GH₵ ${((cents / 100) * ghsPerUsd()).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+	const active = sorted.filter((p) => p.active);
+	const inactive = sorted.filter((p) => !p.active);
+	const mostChosen = [...active].sort((a, b) => clientsOn(b) - clientsOn(a))[0] ?? null;
+	const chosenMax = Math.max(1, ...sorted.map(clientsOn));
+	const includedNames = (pkg: ServicePackage) => pkg.includedFeeKeys.map((k) => (catalogue?.items ?? []).find((i) => i.key === k)?.name ?? k);
 
 	return (
 		<div className="page-content fade-in">
-			<div style={{ marginBottom: "2rem", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
 				<div>
-					<h1 className="page-title">Service Packages</h1>
-					<p className="lead mt-2">Manage the bundles applicants choose after consultation.</p>
+					<h1 className="page-title">Packages</h1>
+					<p className="lead mt-2">The bundles a client chooses after consultation — the service fee lives here.</p>
 				</div>
-				{availableCodes.length > 0 && (
-					<button type="button" className="btn btn--primary" onClick={() => { setError(null); setForm(emptyForm(availableCodes[0])); }}>
-						New package
-					</button>
+				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+					<Link to="/fee-schedule" className="btn btn--ghost btn--sm">
+						Fee schedule →
+					</Link>
+					{availableCodes.length > 0 && (
+						<button type="button" className="btn btn--primary btn--sm" onClick={() => { setError(null); setForm(emptyForm(availableCodes[0])); }}>
+							+ New package
+						</button>
+					)}
+				</div>
+			</div>
+
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span>
+					<strong>{active.length}</strong> <span className="dash-day__date">active</span>
+				</span>
+				{inactive.length > 0 && (
+					<span>
+						<strong>{inactive.length}</strong> <span className="dash-day__date">deactivated</span>
+					</span>
+				)}
+				<span>
+					<strong>{[...onPackage.values()].reduce((n, x) => n + x, 0)}</strong> <span className="dash-day__date">clients on a package</span>
+				</span>
+				{mostChosen && (
+					<span>
+						<strong>{ghsOf(mostChosen.priceCents)}</strong> <span className="dash-day__date">most chosen · {mostChosen.name}</span>
+					</span>
 				)}
 			</div>
 
-			{error && !form && (
-				<div className="card" style={{ border: "1px solid #000", padding: "1rem", marginBottom: "1.5rem" }}>
-					{error}
-				</div>
-			)}
-
+			{error && !form && <p className="ops-modal__error">{error}</p>}
 			{loading ? (
 				<p className="muted">Loading packages…</p>
+			) : sorted.length === 0 ? (
+				<p className="ops-people__empty">No packages yet — add the first one.</p>
 			) : (
-				<table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
-					<thead>
-						<tr style={{ borderBottom: "1px solid #000" }}>
-							<th style={{ textAlign: "left", padding: "0.5rem" }}>Code</th>
-							<th style={{ textAlign: "left", padding: "0.5rem" }}>Name</th>
-							<th style={{ textAlign: "right", padding: "0.5rem" }}>Price</th>
-							<th style={{ textAlign: "center", padding: "0.5rem" }}>Active</th>
-							<th style={{ textAlign: "right", padding: "0.5rem" }} />
-						</tr>
-					</thead>
-					<tbody>
-						{sorted.map((p) => (
-							<tr key={p.code} style={{ borderBottom: "1px solid #e5e5e5", opacity: p.active ? 1 : 0.5 }}>
-								<td style={{ padding: "0.5rem" }}>{PACKAGE_CODE_LABELS[p.code]}</td>
-								<td style={{ padding: "0.5rem" }}>{p.name}{!p.active && <span className="muted"> (deactivated)</span>}</td>
-								<td style={{ textAlign: "right", padding: "0.5rem" }}>
-									{formatCents(p.priceCents, p.currency)}
-								</td>
-								<td style={{ textAlign: "center", padding: "0.5rem" }}>{p.active ? "Yes" : "No"}</td>
-								<td style={{ textAlign: "right", padding: "0.5rem" }}>
-									<button type="button" onClick={() => { setError(null); setForm(formFromPackage(p)); }} style={{ border: "1px solid #000", background: "transparent", padding: "0.25rem 0.5rem", marginRight: "0.5rem", cursor: "pointer" }}>Edit</button>
-									{p.active ? (
-										<button type="button" onClick={() => deactivate(p.code)} style={{ border: "1px solid #000", background: "transparent", padding: "0.25rem 0.5rem", cursor: "pointer" }}>Deactivate</button>
-									) : (
-										<button type="button" onClick={() => reactivate(p.code)} style={{ border: "1px solid #000", background: "transparent", padding: "0.25rem 0.5rem", cursor: "pointer" }}>Reactivate</button>
-									)}
-								</td>
-							</tr>
-						))}
-						</tbody>
-					</table>
-				)}
+				<>
+					<div className="ops-plans">
+						{active.map((p) => {
+							const n = clientsOn(p);
+							const inc = includedNames(p);
+							return (
+								<section key={p.code} className={`ops-plan${mostChosen?.code === p.code ? " ops-plan--on" : ""}`}>
+									<div className="ops-plan__head">
+										<span className="ops-plan__name">{p.name}</span>
+										<span className="ops-plan__n">{PACKAGE_CODE_LABELS[p.code]}</span>
+									</div>
+									<span className="ops-pkg__price">
+										{ghsOf(p.priceCents)}
+										<small>{formatCents(p.priceCents, p.currency)}</small>
+									</span>
+									{p.tagline && <p className="cn-detailhead__sub" style={{ margin: 0 }}>{p.tagline}</p>}
+									<div className="cn-detail__rows">
+										<div className="cn-detail__row">
+											<span>Target schools</span>
+											<span className="cn-detail__row-note">{p.maxSchools > 0 ? p.maxSchools : "no cap"}</span>
+										</div>
+										{p.features.slice(0, 5).map((f) => (
+											<div key={f} className="cn-detail__row">
+												<span>{f}</span>
+												<span className="cn-detail__row-note">included</span>
+											</div>
+										))}
+										{inc.map((f) => (
+											<div key={f} className="cn-detail__row">
+												<span>{f}</span>
+												<span className="cn-detail__row-note">in the fee</span>
+											</div>
+										))}
+										{p.exclusions.slice(0, 3).map((f) => (
+											<div key={f} className="cn-detail__row">
+												<span>{f}</span>
+												<span className="cn-detail__row-note">not included</span>
+											</div>
+										))}
+									</div>
+									<div className="ops-uni__foot" style={{ borderTop: "none", paddingTop: "0.25rem" }}>
+										<span>
+											{n} client{n === 1 ? "" : "s"} on it · {p.requiredDocuments.length} document{p.requiredDocuments.length === 1 ? "" : "s"} required
+										</span>
+										<span style={{ display: "flex", gap: "0.6rem" }}>
+											<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => { setError(null); setForm(formFromPackage(p)); }}>
+												edit
+											</button>
+											<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => deactivate(p.code)}>
+												deactivate
+											</button>
+										</span>
+									</div>
+								</section>
+							);
+						})}
+					</div>
+
+					{inactive.length > 0 && (
+						<div style={{ marginTop: "1rem" }}>
+							<div className="ops-band ops-band--toggle" role="button" tabIndex={0} onClick={() => setShowOff((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowOff((v) => !v); } }}>
+								<span className="ops-band__name">Deactivated · {inactive.length}</span>
+								<span className="ops-band__note">{showOff ? "hide" : "show ▸"}</span>
+							</div>
+							{showOff && (
+								<div className="ops-plans" style={{ marginTop: "0.75rem" }}>
+									{inactive.map((p) => (
+										<section key={p.code} className="ops-plan" style={{ opacity: 0.6, borderStyle: "dashed" }}>
+											<div className="ops-plan__head">
+												<span className="ops-plan__name">{p.name}</span>
+												<span className="ops-plan__n">{PACKAGE_CODE_LABELS[p.code]} · deactivated</span>
+											</div>
+											<span className="ops-pkg__price">
+												{ghsOf(p.priceCents)}
+												<small>{formatCents(p.priceCents, p.currency)}</small>
+											</span>
+											<div className="ops-uni__foot" style={{ borderTop: "none", paddingTop: "0.25rem" }}>
+												<span>{clientsOn(p)} client{clientsOn(p) === 1 ? "" : "s"} still on it</span>
+												<span style={{ display: "flex", gap: "0.6rem" }}>
+													<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => { setError(null); setForm(formFromPackage(p)); }}>
+														edit
+													</button>
+													<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => reactivate(p.code)}>
+														reactivate
+													</button>
+												</span>
+											</div>
+										</section>
+									))}
+								</div>
+							)}
+						</div>
+					)}
+
+					<div className="dash-grid" style={{ gridTemplateColumns: "1fr 1fr", marginTop: "1rem" }}>
+						<section className="dash-panel">
+							<header className="dash-panel__head">
+								<h2 className="dash-panel__title">Collected, in milestones</h2>
+								<Link to="/payment-config" className="dash-link">
+									Payment plans →
+								</Link>
+							</header>
+							{split && mostChosen ? (
+								<div className="ops-msteps">
+									<div className="ops-mstep">
+										<span className="ops-mstep__l">Deposit · {split.depositPercent}%</span>
+										<span className="ops-mstep__v">{ghsOf((mostChosen.priceCents * split.depositPercent) / 100)}</span>
+										<span className="ops-mstep__s">at enrolment</span>
+									</div>
+									<div className="ops-mstep">
+										<span className="ops-mstep__l">Pre-departure · {split.preDeparturePercent}%</span>
+										<span className="ops-mstep__v">{ghsOf((mostChosen.priceCents * split.preDeparturePercent) / 100)}</span>
+										<span className="ops-mstep__s">after the visa</span>
+									</div>
+									<div className="ops-mstep">
+										<span className="ops-mstep__l">Post-arrival · {split.postArrivalPercent}%</span>
+										<span className="ops-mstep__v">{ghsOf((mostChosen.priceCents * split.postArrivalPercent) / 100)}</span>
+										<span className="ops-mstep__s">instalment plan</span>
+									</div>
+								</div>
+							) : (
+								<p className="dash-empty">The split is set under Payment plans.</p>
+							)}
+							<p className="cn-detailhead__meta">{mostChosen ? `On ${mostChosen.name} at ${ghsOf(mostChosen.priceCents)}` : ""}</p>
+						</section>
+						<section className="dash-panel">
+							<header className="dash-panel__head">
+								<h2 className="dash-panel__title">Who chose what</h2>
+								<Link to="/reports" className="dash-link">
+									Reports →
+								</Link>
+							</header>
+							{sorted.map((p) => (
+								<div key={p.code} className="ops-hbar">
+									<span>{p.name}</span>
+									<span className="ops-hbar__t">
+										<span style={{ width: `${Math.round((clientsOn(p) / chosenMax) * 100)}%` }} />
+									</span>
+									<span className="ops-hbar__v">{clientsOn(p)}</span>
+								</div>
+							))}
+						</section>
+					</div>
+				</>
+			)}
 
 			<Sheet open={form !== null} onClose={() => setForm(null)} title={form?.editing ? `Edit ${form.name || PACKAGE_CODE_LABELS[form.editing]}` : "New package"} size="tall">
 				{form && (

@@ -4,7 +4,9 @@ import { useOpsAuth } from "../../OpsAuthContext";
 import { useCases } from "../../../hooks/useCases";
 import { InvoiceCard, Sheet, StatusPill } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
-import { getApplicationActivity, type ApiInvoice } from "../../../lib/api";
+import { getApplicationActivity, raiseVisaInvoice, visaInvoicePreview, type ApiInvoice } from "../../../lib/api";
+import { RaiseLinesSheet } from "../RaiseLinesSheet";
+import { fmtBoth } from "../../currency";
 import type { Flash, Fail, TabId } from "./types";
 import { VISA_STAGE_LABELS, type ApplicationActivityEvent, type StageHandoff, type VisaDetails, type VisaStage } from "century-nit-shared";
 import { ArtifactCard } from "../ArtifactCard";
@@ -251,6 +253,29 @@ export function VisaTab({
 
 	const pendingHandoff = handoffs.find((h) => h.applicationId === app.id && h.status === "pending" && h.stage === "visa_processing");
 	const work = canWork && open;
+
+	// Raising the visa invoice — the auto-raise covers the usual path (stage
+	// entry with an officer); this is the fallback: the invoice was declined,
+	// or the chapter was entered another way. One live visa invoice per case.
+	const [raising, setRaising] = useState(false);
+	const [raisePreview, setRaisePreview] = useState<{ lines: { label: string; detail: string; amountCents: number }[] } | null>(null);
+
+	function openRaise() {
+		setRaising(true);
+		setRaisePreview(null);
+		visaInvoicePreview(app.id)
+			.then(setRaisePreview)
+			.catch((e) => {
+				setRaising(false);
+				fail(e, "Could not read the visa tariff");
+			});
+	}
+
+	async function submitRaise(input: { lines: { label: string; detail?: string; amountCents: number }[]; note?: string }) {
+		const invoice = await raiseVisaInvoice(app.id, input);
+		onInvoicesChanged();
+		flash(`${invoice.invoiceNumber} raised — awaiting approval.`);
+	}
 	const stateOf = (step: VisaStage): "done" | "current" | "todo" | "blocked" => {
 		const s = VISA_ORDER.indexOf(step);
 		if (step === "decision" && refused) return "blocked";
@@ -291,6 +316,13 @@ export function VisaTab({
 								? "Nothing due — no visa costs are recorded for this destination, or they were settled before invoicing moved here."
 								: "The destination's visa and biometrics fees, at cost — raised automatically when the client confirms the chapter and an officer is assigned."}
 						</p>
+						{!app.visaInvoicePaid && work && (
+							<div className="mt-2">
+								<button type="button" className="btn btn--sm btn--primary" onClick={openRaise}>
+									Raise for approval →
+								</button>
+							</div>
+						)}
 					</>
 				)}
 			</div>
@@ -562,6 +594,16 @@ export function VisaTab({
 			</div>
 
 			{/* ── Sheets ──────────────────────────────────────────────────────── */}
+
+			<RaiseLinesSheet
+				open={raising}
+				title="Raise the visa invoice"
+				intro={`For ${app.applicantName} · ${app.appId}. The lines are the destination's tariff — the visa and biometrics fees at cost — editable before anything goes to approval. Raised awaiting approval; the client sees it once it is issued.`}
+				suggested={raisePreview?.lines ?? null}
+				sees={(totalCents) => `"Visa costs" on their Money page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
+				onRaise={submitRaise}
+				onClose={() => setRaising(false)}
+			/>
 
 			<ApproveInvoiceSheet
 				invoice={approving}

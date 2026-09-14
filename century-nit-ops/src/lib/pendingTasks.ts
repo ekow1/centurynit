@@ -76,7 +76,7 @@ export type BaseTask =
 			id: string;
 			category: string;
 			kind: "visa";
-			action: "advance" | "issue" | "chase";
+			action: "advance" | "issue" | "chase" | "invoice";
 			record: MockApplication;
 			title: string;
 			subtitle: string;
@@ -341,7 +341,7 @@ export function taskActionLabel(task: PendingTask): string {
 	if (task.action === "checklist") return "Checklist";
 	if (task.action === "advance") return "Advance visa";
 	if (task.action === "docs") return "Documents";
-	if (task.action === "invoice") return task.kind === "travel" ? "Raise ticket invoice" : "Invoice";
+	if (task.action === "invoice") return task.kind === "travel" ? "Raise ticket invoice" : task.kind === "visa" ? "Raise visa invoice" : "Invoice";
 	if (task.action === "issue") return "Issue invoice";
 	if (task.action === "book") return "Record booking";
 	if (task.action === "chase") return "Chase payment";
@@ -640,6 +640,27 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 	for (const a of applications) {
 		const visaInv = visaInvoiceFor(invoices, a);
 		const stage = a.visaStage ?? "locked";
+		// The chapter is open but no live visa invoice exists — the auto-raise
+		// missed it, or it was declined. Someone has to raise it before the
+		// embassy work can be paid for.
+		const liveVisaInv = visaInv && visaInv.status !== "void" ? visaInv : undefined;
+		if (stage !== "locked" && stage !== "complete" && !a.visaInvoicePaid && !liveVisaInv && !handoffAppIds.has(a.id)) {
+			q.push({
+				id: `visa-raise-${a.id}`,
+				category: "needs_invoice",
+				kind: "visa",
+				action: "invoice",
+				record: a,
+				title: a.applicantName,
+				subtitle: `Visa invoice to raise · the destination's fees at cost · ${a.university || a.country || "—"}`,
+				meta: `App ${a.appId}`,
+				branch: a.branch,
+				owner: caseHandlerName(a) || "—",
+				linkTo: `/applications?chapter=visa&id=${a.id}`,
+				at: a.updatedAt,
+				priority: PRIORITY.issue,
+			});
+		}
 		if (stage === "decision" && a.visaOutcome === "refused") {
 			q.push({
 				id: `v-refused-${a.id}`,

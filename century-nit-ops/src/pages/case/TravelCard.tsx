@@ -6,6 +6,7 @@ import type { TravelAssistanceRequest, TravelFlight } from "century-nit-shared";
 import type { ApiInvoice } from "../../lib/api";
 import { ArtifactCard } from "./ArtifactCard";
 import { ApproveInvoiceSheet } from "./ApproveInvoiceSheet";
+import { centsFromGhs } from "../currency";
 
 /**
  * One travel request as ops works it — the same shape as every other
@@ -104,7 +105,8 @@ export function FlightSheet({
 	const [fare, setFare] = useState("");
 	const [pnr, setPnr] = useState("");
 
-	const fareCents = Math.round(Number(fare.replace(/[^0-9.]/g, "")) * 100);
+	// The fare is entered in cedis — what the client pays — and stored as USD cents.
+	const fareCents = centsFromGhs(Number(fare.replace(/[^0-9.]/g, "")) || 0);
 	const ready = mode === "raise" ? fareCents > 0 : pnr.trim().length > 0;
 	const preview = flightLine({ carrier, flightNumber, from, to, departAt: fromLocalInput(departAt) });
 

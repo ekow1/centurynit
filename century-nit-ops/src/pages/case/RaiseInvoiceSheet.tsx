@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Sheet } from "century-nit-core/ui";
+import { Sheet, formatMoney } from "century-nit-core/ui";
 import type { MockApplication } from "century-nit-core/ops";
 import { createInvoice, type ApiInvoice } from "../../lib/api";
 import { FEE_KIND_LABELS } from "century-nit-shared";
 import { useFeeCatalogue } from "../../hooks/useFeeCatalogue";
+import { centsFromGhs, ghsOfCents } from "../currency";
 
 /**
  * Anything the journey does not raise on its own — a courier fee, a
@@ -16,7 +17,7 @@ type Line = { key: string; label: string; detail: string; amount: string };
 
 function cents(v: string): number {
 	const n = Number(v.replace(/[^0-9.]/g, ""));
-	return Number.isNaN(n) ? 0 : Math.round(n * 100);
+	return Number.isNaN(n) ? 0 : centsFromGhs(n);
 }
 
 export function RaiseInvoiceSheet({
@@ -72,11 +73,17 @@ export function RaiseInvoiceSheet({
 					For {app.applicantName} · {app.appId}. Raised awaiting approval — the client sees it once it is issued.
 				</p>
 				<div className="cn-stack" style={{ gap: "0.4rem" }}>
+					<div className="rl-head">
+						<span>Line</span>
+						<span>Detail the client reads</span>
+						<span style={{ textAlign: "right" }}>GH₵</span>
+						<span />
+					</div>
 					{lines.map((l, idx) => (
-						<div key={l.key} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px 32px", gap: "0.4rem", alignItems: "center" }}>
+						<div key={l.key} className="rl-row">
 							<input className="input input--sm" value={l.label} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))} placeholder="What for — e.g. Courier to embassy" />
 							<input className="input input--sm" value={l.detail} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, detail: e.target.value } : x)))} placeholder="Detail (optional)" />
-							<input className="input input--sm" inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))} placeholder="USD" />
+							<input className="input input--sm su-mono" inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))} placeholder="0.00" style={{ textAlign: "right" }} />
 							<button type="button" className="btn btn--ghost btn--sm" style={{ padding: "0.2rem 0.4rem" }} onClick={() => setLines(lines.filter((_, i) => i !== idx))} disabled={lines.length === 1} title="Remove line">
 								✕
 							</button>
@@ -95,7 +102,7 @@ export function RaiseInvoiceSheet({
 									const item = fromCatalogue.find((i) => i.key === e.target.value);
 									if (!item) return;
 									const blank = lines.length === 1 && !lines[0].label && !lines[0].amount;
-									const next = { key: `fee-${item.key}-${Date.now()}`, label: item.clientLabel, detail: item.description ?? "", amount: (item.amountCents / 100).toFixed(2) };
+									const next = { key: `fee-${item.key}-${Date.now()}`, label: item.clientLabel, detail: item.description ?? "", amount: ghsOfCents(item.amountCents).toFixed(2) };
 									setLines(blank ? [next] : [...lines, next]);
 								}}
 								aria-label="Add a catalogue item"
@@ -103,7 +110,7 @@ export function RaiseInvoiceSheet({
 								<option value="">+ From the fee schedule…</option>
 								{fromCatalogue.map((i) => (
 									<option key={i.key} value={i.key}>
-										{FEE_KIND_LABELS[i.kind]} · {i.name} · ${(i.amountCents / 100).toFixed(2)}
+										{FEE_KIND_LABELS[i.kind]} · {i.name} · GH₵{ghsOfCents(i.amountCents).toLocaleString()}
 									</option>
 								))}
 							</select>
@@ -114,9 +121,10 @@ export function RaiseInvoiceSheet({
 					<span className="muted text-xs">Note the client reads (optional)</span>
 					<input className="input input--sm" value={note} onChange={(e) => setNote(e.target.value)} />
 				</label>
-				<p className="text-sm--strong" style={{ textAlign: "right" }}>
-					Total ${(total / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-				</p>
+				<div className="rl-total">
+					<span className="su-k">Total · {lines.length} line{lines.length === 1 ? "" : "s"}</span>
+					<b>{formatMoney(total, "both")}</b>
+				</div>
 				<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
 					<button type="button" className="btn btn--sm btn--ghost" onClick={onClose} disabled={busy}>
 						Cancel

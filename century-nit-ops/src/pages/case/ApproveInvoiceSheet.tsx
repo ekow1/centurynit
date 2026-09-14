@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Sheet } from "century-nit-core/ui";
+import { Sheet, formatMoney } from "century-nit-core/ui";
 import { INVOICE_TYPE_LABELS } from "century-nit-shared";
 import { issueInvoice, voidInvoice, type ApiInvoice } from "../../lib/api";
 import { optionalItemsFor, useFeeCatalogue } from "../../hooks/useFeeCatalogue";
+import { centsFromGhs, ghsOfCents } from "../currency";
 
 /**
  * Approval happens in the case, on the invoice card: the reviewer sees the
@@ -19,14 +20,14 @@ function fromInvoice(inv: ApiInvoice): Line[] {
 		key: l.id,
 		label: l.label,
 		detail: l.detail ?? "",
-		amount: (l.amountCents / 100).toFixed(2),
+		amount: ghsOfCents(l.amountCents).toFixed(2),
 		schoolApplicationId: l.schoolApplicationId ?? null,
 	}));
 }
 
 function cents(v: string): number {
 	const n = Number(v.replace(/[^0-9.]/g, ""));
-	return Number.isNaN(n) ? 0 : Math.round(n * 100);
+	return Number.isNaN(n) ? 0 : centsFromGhs(n);
 }
 
 export function ApproveInvoiceSheet({
@@ -114,11 +115,17 @@ export function ApproveInvoiceSheet({
 					</p>
 
 					<div className="cn-stack" style={{ gap: "0.4rem" }}>
+						<div className="rl-head">
+							<span>Line</span>
+							<span>Detail the client reads</span>
+							<span style={{ textAlign: "right" }}>GH₵</span>
+							<span />
+						</div>
 						{lines.map((l, idx) => (
-							<div key={l.key} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 110px 32px", gap: "0.4rem", alignItems: "center" }}>
+							<div key={l.key} className="rl-row">
 								<input className="input input--sm" value={l.label} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))} placeholder="Line" />
 								<input className="input input--sm" value={l.detail} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, detail: e.target.value } : x)))} placeholder="Detail" />
-								<input className="input input--sm" inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))} placeholder="USD" />
+								<input className="input input--sm su-mono" inputMode="decimal" value={l.amount} onChange={(e) => setLines(lines.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))} placeholder="0.00" style={{ textAlign: "right" }} />
 								<button type="button" className="btn btn--ghost btn--sm" style={{ padding: "0.2rem 0.4rem" }} onClick={() => setLines(lines.filter((_, i) => i !== idx))} title="Remove line">
 									✕
 								</button>
@@ -147,7 +154,7 @@ export function ApproveInvoiceSheet({
 									<option value="">+ From the fee schedule…</option>
 									{optional.map((i) => (
 										<option key={i.key} value={i.key}>
-											{i.name} · ${(i.amountCents / 100).toFixed(2)}
+											{i.name} · GH₵{ghsOfCents(i.amountCents).toLocaleString()}
 										</option>
 									))}
 								</select>
@@ -166,9 +173,10 @@ export function ApproveInvoiceSheet({
 						</label>
 					</div>
 
-					<p className="text-sm--strong" style={{ textAlign: "right" }}>
-						Total ${(total / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-					</p>
+					<div className="rl-total">
+						<span className="su-k">Total · {lines.length} line{lines.length === 1 ? "" : "s"}</span>
+						<b>{formatMoney(total, "both")}</b>
+					</div>
 
 					{declining ? (
 						<div style={{ border: "1px solid var(--danger, #b91c1c)", padding: "0.6rem 0.75rem" }}>

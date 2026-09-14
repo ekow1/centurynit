@@ -20,7 +20,9 @@ import {
 	type SchoolOutcome,
 	type SchoolTrackStatus,
 } from "century-nit-shared";
-import { raiseApplicationInvoice } from "../../../lib/api";
+import { raiseApplicationInvoice, applicationInvoicePreview } from "../../../lib/api";
+import { RaiseLinesSheet } from "../RaiseLinesSheet";
+import { fmtBoth } from "../../currency";
 import { AddSchoolApplicationModal } from "../../AddSchoolApplicationModal";
 import { useFeeCatalogue } from "../../../hooks/useFeeCatalogue";
 import { ApproveInvoiceSheet } from "../ApproveInvoiceSheet";
@@ -618,7 +620,6 @@ export function ApplicationsTab({
 	flash: Flash;
 	fail: Fail;
 }) {
-	const [issuing, setIssuing] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const [approving, setApproving] = useState<ApiInvoice | null>(null);
 	const { addApplication, refresh } = useCases();
@@ -655,21 +656,32 @@ export function ApplicationsTab({
 	})();
 
 	// Raising and approving are two steps for everyone — a manager does both,
-	// as two clicks and two history lines.
-	function handleInvoice() {
-		setIssuing(true);
-		raiseApplicationInvoice(app.id)
-			.then(({ invoice, nothingDue }) => {
-				if (nothingDue || !invoice) {
-					flash("No university application fees are due for these schools — submissions can start.");
-					void refresh();
-					return;
-				}
-				onInvoiceChanged(invoice);
-				flash(canIssueInvoices ? `${invoice.invoiceNumber} raised — approve it to issue.` : `${invoice.invoiceNumber} raised — awaiting approval.`);
-			})
-			.catch((e) => fail(e, "Could not raise the invoice"))
-			.finally(() => setIssuing(false));
+	// as two clicks and two history lines. The sheet opens on the preview's
+	// suggested lines — the school list and the catalogue — editable before
+	// anything is raised.
+	const [raising, setRaising] = useState(false);
+	const [raisePreview, setRaisePreview] = useState<{ lines: { label: string; detail: string; amountCents: number; schoolApplicationId: string | null }[]; outstandingDocuments: string[] } | null>(null);
+
+	function openRaise() {
+		setRaising(true);
+		setRaisePreview(null);
+		applicationInvoicePreview(app.id)
+			.then(setRaisePreview)
+			.catch((e) => {
+				setRaising(false);
+				fail(e, "Could not read the invoice preview");
+			});
+	}
+
+	async function submitRaise(input: { lines: { label: string; detail?: string; amountCents: number; schoolApplicationId?: string | null }[]; note?: string }) {
+		const { invoice, nothingDue } = await raiseApplicationInvoice(app.id, input);
+		if (nothingDue || !invoice) {
+			flash("No university application fees are due for these schools — submissions can start.");
+			void refresh();
+			return;
+		}
+		onInvoiceChanged(invoice);
+		flash(canIssueInvoices ? `${invoice.invoiceNumber} raised — approve it to issue.` : `${invoice.invoiceNumber} raised — awaiting approval.`);
 	}
 
 	return (
@@ -727,11 +739,11 @@ export function ApplicationsTab({
 								<button
 									type="button"
 									className="btn btn--sm btn--primary"
-									onClick={handleInvoice}
-									disabled={issuing || outstandingDocs.length > 0}
+									onClick={openRaise}
+									disabled={outstandingDocs.length > 0}
 									title={outstandingDocs.length > 0 ? `Verify first: ${outstandingDocs.join(", ")}` : undefined}
 								>
-									{issuing ? "Raising…" : "Raise application invoice"}
+									Raise application invoice
 								</button>
 								{outstandingDocs.length > 0 && (
 									<button type="button" className="btn btn--sm btn--ghost" onClick={() => setTab("documents")}>
@@ -801,6 +813,16 @@ export function ApplicationsTab({
 					<p className="muted text-sm">No schools chosen yet.</p>
 				)}
 			</div>
+
+			<RaiseLinesSheet
+				open={raising}
+				title="Raise the application invoice"
+				intro={`For ${app.applicantName} · ${app.appId}. The lines are the schools' own fees at cost — edit them before anything goes to approval. Raised awaiting approval; the client sees it once it is issued.`}
+				suggested={raisePreview?.lines ?? null}
+				sees={(totalCents) => `"University application fees" on their Money page — ${fmtBoth(totalCents / 100)}, payable once issued.`}
+				onRaise={submitRaise}
+				onClose={() => setRaising(false)}
+			/>
 
 			<ApproveInvoiceSheet
 				invoice={approving}

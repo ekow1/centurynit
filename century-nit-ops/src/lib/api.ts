@@ -337,14 +337,47 @@ export function issueInvoice(
 	});
 }
 
+export type RaiseLineInput = { label: string; detail?: string; amountCents: number; schoolApplicationId?: string | null };
+
 /**
  * Ops: raise the application invoice — the universities' own fees, paid on
  * the client's behalf, plus any extra-school add-on. `nothingDue` when no
  * school charges anything: the case records it and submissions can start.
+ * When the raise sheet sends its edited lines they are billed as sent;
+ * without a body the catalogue's lines are used.
  */
-export function raiseApplicationInvoice(applicationId: string): Promise<{ invoice: ApiInvoice | null; nothingDue: boolean }> {
+export function raiseApplicationInvoice(
+	applicationId: string,
+	body?: { lines: RaiseLineInput[]; note?: string },
+): Promise<{ invoice: ApiInvoice | null; nothingDue: boolean }> {
 	return apiFetch<{ invoice: ApiInvoice | null; nothingDue: boolean }>(`${API_PREFIX}/applications/${applicationId}/raise-application-invoice`, {
 		method: "POST",
+		body: body ? JSON.stringify(body) : undefined,
+	});
+}
+
+/** The lines the raise sheet starts from — the school list and the catalogue — and what still gates the raise. */
+export function applicationInvoicePreview(
+	applicationId: string,
+): Promise<{ lines: { label: string; detail: string; amountCents: number; schoolApplicationId: string | null }[]; outstandingDocuments: string[] }> {
+	return apiFetch(`${API_PREFIX}/applications/${applicationId}/application-invoice-preview`);
+}
+
+/** The visa invoice's suggested lines — the destination's tariff. */
+export function visaInvoicePreview(
+	applicationId: string,
+): Promise<{ lines: { label: string; detail: string; amountCents: number }[] }> {
+	return apiFetch(`${API_PREFIX}/applications/${applicationId}/visa-invoice-preview`);
+}
+
+/** Ops: the visa officer raises the visa invoice — the tariff's lines as edited. */
+export function raiseVisaInvoice(
+	applicationId: string,
+	body: { lines: RaiseLineInput[]; note?: string },
+): Promise<ApiInvoice> {
+	return apiFetch<ApiInvoice>(`${API_PREFIX}/applications/${applicationId}/raise-visa-invoice`, {
+		method: "POST",
+		body: JSON.stringify(body),
 	});
 }
 

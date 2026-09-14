@@ -15,6 +15,16 @@ export function toGhs(usd: number): number {
 	return Math.round(usd * getGhsPerUsd());
 }
 
+/** USD cents → the cedi figure an officer reads/edits (2dp — pesewas). */
+export function ghsOfCents(cents: number): number {
+	return Math.round(((cents / 100) * getGhsPerUsd()) * 100) / 100;
+}
+
+/** A cedi amount as typed in a sheet → the ledger's USD cents. */
+export function centsFromGhs(ghs: number): number {
+	return Math.round((ghs / getGhsPerUsd()) * 100);
+}
+
 export function fmtUsd(usd: number): string {
 	return `$${usd.toLocaleString()}`;
 }

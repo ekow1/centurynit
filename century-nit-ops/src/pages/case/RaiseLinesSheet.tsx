@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sheet, formatMoney } from "century-nit-core/ui";
+import { centsFromGhs, ghsOfCents } from "../currency";
 
 /**
  * The officer raises an invoice with the lines in front of them — the
@@ -7,15 +8,15 @@ import { Sheet, formatMoney } from "century-nit-core/ui";
  * invoice from the destination's tariff. The suggested lines only pre-fill:
  * change an amount, zero one, add a line, remove one, write the note. It
  * is raised awaiting approval; finance approves and issues it; the client
- * sees it once issued. Amounts are USD, as the ledger is; the cedi figure
- * beside the total is the display rate.
+ * sees it once issued. Amounts are entered in cedis — what the client
+ * pays — and written to the ledger as USD cents at the same rate.
  */
 
 export type RaiseLine = { key: string; label: string; detail: string; amount: string; schoolApplicationId: string | null };
 
 function cents(v: string): number {
 	const n = Number(v.replace(/[^0-9.]/g, ""));
-	return Number.isNaN(n) ? 0 : Math.round(n * 100);
+	return Number.isNaN(n) ? 0 : centsFromGhs(n);
 }
 
 export function RaiseLinesSheet({
@@ -51,7 +52,7 @@ export function RaiseLinesSheet({
 				key: `s${i}`,
 				label: l.label,
 				detail: l.detail ?? "",
-				amount: (l.amountCents / 100).toFixed(2),
+				amount: ghsOfCents(l.amountCents).toFixed(2),
 				schoolApplicationId: l.schoolApplicationId ?? null,
 			})),
 		);
@@ -89,7 +90,7 @@ export function RaiseLinesSheet({
 						<div className="rl-head">
 							<span>Line</span>
 							<span>Detail the client reads</span>
-							<span style={{ textAlign: "right" }}>USD</span>
+							<span style={{ textAlign: "right" }}>GH₵</span>
 							<span />
 						</div>
 						{lines.map((l, idx) => (

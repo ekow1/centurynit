@@ -207,9 +207,9 @@
 }
 
 .resched__day--on {
-	background: var(--text);
+	background: var(--foreground);
 	color: var(--background);
-	border-color: var(--text);
+	border-color: var(--foreground);
 }
 
 .resched__day-wd {
@@ -267,9 +267,9 @@
 }
 
 .resched__slot--on {
-	background: var(--text);
+	background: var(--foreground);
 	color: var(--background);
-	border-color: var(--text);
+	border-color: var(--foreground);
 }
 
 .resched__slot:disabled {

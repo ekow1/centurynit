@@ -55,6 +55,7 @@ import {
 	CONSULTATION_DURATIONS,
 	getBranchName,
 	branches,
+	AGENCY_DEPOSIT_PORTION,
 } from "century-nit-core";
 import { meApi, bookingsApi, schoolsApi, documentsApi, feesApi, packagesApi, ApiError, visaCostsCentsFor } from "century-nit-core/api";
 import type { ApiInvoice, ApplicantDocument, AvailabilitySlot, ApiConsultation, ApiApplication, ServicePackage, SchoolFileKind } from "century-nit-shared";
@@ -80,8 +81,9 @@ export function PortalJourney() {
 /* ========== Awaiting handler assignment (after 10% deposit) ========== */
 
 export function PortalAwaitingHandler() {
-	const { application, journeyPhase, syncFromServer } = useAppState();
+	const { application, booking, journeyPhase, syncFromServer, syncTick } = useAppState();
 	const navigate = useNavigate();
+	const [docList, setDocList] = useState<{ name: string; status: string }[]>([]);
 
 	const hasHandler = Boolean(application.assignedStaffId);
 	const stageAdvanced =
@@ -91,6 +93,23 @@ export function PortalAwaitingHandler() {
 		journeyPhase.stage !== "consultation" &&
 		journeyPhase.stage !== "eligibility") ||
 		(!application.pendingHandoff && application.agencyDepositPaid);
+
+	// The checklist fills the wait usefully — a complete file lets the handler
+	// start on school selection the day they land.
+	useEffect(() => {
+		let active = true;
+		meApi
+			.application()
+			.then((me) => {
+				if (!active) return;
+				const list = me.application?.documentChecklist ?? me.consultation?.documentChecklist ?? [];
+				setDocList(list.map((d) => ({ name: d.name, status: d.status })));
+			})
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, [syncTick]);
 
 	// The assignment arrives over SSE (`stage.changed` /
 	// `assignment.handoff_resolved`), which AppState turns into a sync. A
@@ -107,70 +126,192 @@ export function PortalAwaitingHandler() {
 		}
 	}, [hasHandler, stageAdvanced, navigate]);
 
-	if (hasHandler || stageAdvanced) {
-		return (
-			<div className="portal-page">
-				<header className="portal-page__header">
-					<p className="eyebrow">Dashboard · Application</p>
-					<h1 className="page-title mt-1">Handler Assigned</h1>
-				</header>
-				<div className="sharp-card">
-					<p className="display" style={{ fontSize: "1.2rem" }}>
-						Your consultant has been assigned
+	const fundMeta = SCHOOL_FUNDING_TRACKS.find((t) => t.id === application.schoolFundingTrack);
+	const levelMeta = SCHOOL_DEGREE_LEVELS.find((d) => d.id === normaliseDegreeLevel(application.schoolDegreeLevel));
+	const packageLabel = [fundMeta?.name, levelMeta?.short].filter(Boolean).join(" × ") || "—";
+	const planLabel = application.paymentPlanId ? (PAYMENT_PLAN_LABELS[application.paymentPlanId] ?? "—") : "—";
+	const branchName = getBranchName(booking.branchId || null);
+	const depositUsd = application.agencyTotal > 0 ? Math.round(application.agencyTotal * AGENCY_DEPOSIT_PORTION) : null;
+	const docsDue = docList.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
+
+	const seqRows = (
+		<div className="seq">
+			<div className="seq__row seq__row--done">
+				<span className="seq__no">✓</span>
+				<div>
+					<p className="seq__name">Enrolment deposit received</p>
+					<p className="seq__meta">
+						AGENCY DEPOSIT · PAID{depositUsd ? <> · <MoneyInline usd={depositUsd} /></> : null}
 					</p>
-					<p className="muted mt-2">
-						{application.assignedStaffName
-							? `${application.assignedStaffName} has been assigned to your case.`
-							: "Your consultant has been assigned."}{" "}
-						You can now proceed to select your preferred schools and programmes.
-					</p>
-					<div className="mt-4">
-						<Link to="/portal/application" className="btn btn--primary">
-							Continue to School Selection →
-						</Link>
-					</div>
 				</div>
+				<span className="seq__st">Done</span>
 			</div>
-		);
-	}
+			<div className={`seq__row${hasHandler ? " seq__row--done" : " seq__row--now"}`}>
+				<span className="seq__no">{hasHandler ? "✓" : "2"}</span>
+				<div>
+					<p className="seq__name">
+						{hasHandler && application.assignedStaffName
+							? `${application.assignedStaffName} assigned`
+							: "Handler being assigned"}
+					</p>
+					<p className="seq__meta">
+						{branchName.toUpperCase()} DESK
+						{hasHandler ? "" : " · USUALLY 1–2 BUSINESS DAYS"}
+					</p>
+				</div>
+				<span className="seq__st">
+					{hasHandler ? "Done" : (
+						<>
+							<span className="pulse-dot" /> In motion
+						</>
+					)}
+				</span>
+			</div>
+			<div className={`seq__row${hasHandler ? " seq__row--now" : " seq__row--later"}`}>
+				<span className="seq__no">3</span>
+				<div>
+					<p className="seq__name">School selection opens</p>
+					<p className="seq__meta">CHAPTER III · APPLICATIONS{hasHandler ? " · OPEN NOW" : " · UNLOCKS ON ASSIGNMENT"}</p>
+				</div>
+				<span className="seq__st">{hasHandler ? "Open" : "Queued"}</span>
+			</div>
+		</div>
+	);
 
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
-				<p className="eyebrow">Dashboard · Application</p>
-				<h1 className="page-title mt-1">Your consultant is being assigned</h1>
+				<p className="eyebrow">Chapter II · Enrolment → III · Applications</p>
+				<h1 className="page-title mt-1">
+					{hasHandler ? "Your consultant is assigned" : "Your consultant is being assigned"}
+				</h1>
+				<p className="lead" style={{ fontSize: "var(--text-sm)" }}>
+					{hasHandler
+						? "Your handler has landed — school selection is open."
+						: "Deposit received — the office is assigning your handler. School selection opens the moment they land."}
+				</p>
 			</header>
-			<div className="sharp-card">
-				<p className="display" style={{ fontSize: "1.2rem" }}>
-					Your 10% deposit has been received
-				</p>
-				<p className="muted mt-2">
-					A handler is being assigned to your case. Once assigned, you'll be able to
-					select schools and programmes. This usually happens within 1–2 business days.
-				</p>
-				<p className="muted mt-2" style={{ fontSize: "var(--text-sm)" }}>
-					You don't need to do anything right now — checking status automatically in the background.
-				</p>
-				<div className="mt-4 row" style={{ gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-					<span
-						className="portal-pill portal-pill--draft"
-						style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
-					>
-						<span
-							style={{
-								width: "8px",
-								height: "8px",
-								borderRadius: "50%",
-								background: "var(--foreground)",
-								display: "inline-block",
-								animation: "pulse 1.5s infinite ease-in-out",
-							}}
-						/>
-						Checking assignment behind the scenes…
-					</span>
-					<Link to="/portal/journey" className="btn btn--ghost">
-						View Application Journey
-					</Link>
+
+			<div className="psplit" style={{ marginTop: "1.5rem" }}>
+				<div>
+					<section className="sec" style={{ marginBottom: "1.75rem" }}>
+						<p className="eyebrow" style={{ marginBottom: "0.6rem" }}>Where your case sits</p>
+						{seqRows}
+					</section>
+
+					{hasHandler ? (
+						<section className="sec" style={{ marginBottom: "1.75rem" }}>
+							<div className="sharp-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+								<p className="muted" style={{ fontSize: "var(--text-sm)" }}>
+									{application.assignedStaffName
+										? `${application.assignedStaffName} is on your file — pick your schools and programmes.`
+										: "Your consultant is on your file — pick your schools and programmes."}
+								</p>
+								<Link to="/portal/application" className="btn btn--primary">
+									Continue to school selection →
+								</Link>
+							</div>
+						</section>
+					) : docList.length > 0 ? (
+						<section className="sec" style={{ marginBottom: "1.75rem" }}>
+							<p className="eyebrow" style={{ marginBottom: "0.6rem" }}>While you wait</p>
+							<div className="sharp-card">
+								{docsDue.length > 0 ? (
+									<p className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "0.9rem" }}>
+										Your handler starts faster when your file is complete —{" "}
+										<strong style={{ color: "var(--foreground)" }}>
+											{docsDue.length} document{docsDue.length === 1 ? "" : "s"}
+										</strong>{" "}
+										still outstanding.
+									</p>
+								) : (
+									<p className="muted" style={{ fontSize: "var(--text-sm)", marginBottom: "0.9rem" }}>
+										Your file is complete — every document verified.
+									</p>
+								)}
+								<div>
+									{docList.map((d) => {
+										const ok = d.status === "VERIFIED";
+										const due = d.status === "PENDING_UPLOAD" || d.status === "REJECTED";
+										return (
+											<div key={d.name} className={`drow${ok ? " drow--ok" : due ? " drow--now" : ""}`}>
+												<span className="drow__mark">{ok ? "✓" : due ? "!" : "…"}</span>
+												<div>
+													<p className="drow__name">{d.name}</p>
+												</div>
+												<span className="portal-pill portal-pill--hollow">
+													{ok ? "Verified" : due ? "Upload needed" : "In review"}
+												</span>
+											</div>
+										);
+									})}
+								</div>
+								{docsDue.length > 0 ? (
+									<div style={{ marginTop: "0.9rem" }}>
+										<Link to="/portal/documents" className="btn btn--primary">
+											Finish your file →
+										</Link>
+									</div>
+								) : null}
+							</div>
+						</section>
+					) : null}
+
+					{!hasHandler && (
+						<section className="sec">
+							<div className="sharp-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+								<p className="muted" style={{ fontSize: "var(--text-xs)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+									<span className="pulse-dot" />
+									This page advances itself — checking the assignment every 20 seconds. No need to refresh or call.
+								</p>
+								<Link to="/portal/journey" className="btn btn--ghost">
+									View full journey
+								</Link>
+							</div>
+						</section>
+					)}
+				</div>
+
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">Your case</p>
+						<p className="prail__title">{application.appNumber ?? "—"}</p>
+						<div className="pkv"><span className="pkv__k">Package</span><span className="pkv__v">{packageLabel}</span></div>
+						<div className="pkv"><span className="pkv__k">Schools</span><span className="pkv__v">{application.targetSchoolCount ? `${application.targetSchoolCount} targets` : "—"}</span></div>
+						<div className="pkv"><span className="pkv__k">Plan</span><span className="pkv__v">{planLabel}</span></div>
+						<div className="pkv"><span className="pkv__k">Deposit</span><span className="pkv__v">{depositUsd ? <MoneyInline usd={depositUsd} /> : "Paid"}</span></div>
+						<div className="pkv"><span className="pkv__k">Handling branch</span><span className="pkv__v">{branchName}</span></div>
+						<div className="pkv"><span className="pkv__k">Consultant</span><span className="pkv__v">{application.assignedStaffName ?? <span className="muted">— assigning</span>}</span></div>
+						<div style={{ marginTop: "0.9rem" }}>
+							<Link to="/portal/money" className="btn btn--ghost" style={{ width: "100%", textAlign: "center" }}>
+								Deposit receipt
+							</Link>
+						</div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">When your handler lands</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.65 }}>
+							They introduce themselves by email and in-app message, school selection opens in{" "}
+							<strong style={{ color: "var(--foreground)" }}>Chapter III</strong>, and this page moves you
+							forward automatically — you will not miss it.
+						</p>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">Questions meanwhile</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.65 }}>
+							Anything about your package, deposit or timeline — message the desk.
+						</p>
+						<button
+							type="button"
+							className="btn"
+							style={{ width: "100%", textAlign: "center", marginTop: "0.7rem" }}
+							onClick={() => window.dispatchEvent(new CustomEvent("century:open-chat"))}
+						>
+							Message us
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

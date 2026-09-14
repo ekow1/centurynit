@@ -59,6 +59,14 @@ function officerCard(ctx: CommunicationContext | null): OfficerCard | null {
 export function CommunicationCenter() {
 	const [open, setOpen] = useState(false);
 	const [expanded, setExpanded] = useState(false);
+
+	// Pages can open the chat from in-content actions (e.g. "Message us" on the
+	// waiting screens) — the widget owns the launcher, they just signal intent.
+	useEffect(() => {
+		const openChat = () => setOpen(true);
+		window.addEventListener("century:open-chat", openChat);
+		return () => window.removeEventListener("century:open-chat", openChat);
+	}, []);
 	const [activeChannel, setActiveChannel] = useState<ActiveChannel>("support");
 	const [context, setContext] = useState<CommunicationContext | null>(null);
 	const [error, setError] = useState<string | null>(null);

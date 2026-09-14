@@ -6889,6 +6889,127 @@ img.profile-monogram {
 	}
 }
 
+/* checkpoint ledger — done/current/queued rows for waiting-state pages */
+
+.seq {
+	display: flex;
+	flex-direction: column;
+}
+
+.seq__row {
+	display: grid;
+	grid-template-columns: 2.2rem 1fr auto;
+	gap: 1rem;
+	align-items: center;
+	border: 1px solid var(--border-light);
+	border-top: none;
+	padding: 0.9rem 1.1rem;
+	background: var(--background);
+}
+
+.seq__row:first-child {
+	border-top: 1px solid var(--border-light);
+}
+
+.seq__no {
+	width: 1.6rem;
+	height: 1.6rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border);
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+
+.seq__name {
+	font-weight: 700;
+}
+
+.seq__meta {
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	color: var(--muted-foreground);
+	margin-top: 0.15rem;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+
+.seq__meta .money-inline {
+	font: inherit;
+	color: inherit;
+}
+
+.seq__st {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	border: 1px solid currentColor;
+	padding: 0.14rem 0.45rem;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	white-space: nowrap;
+}
+
+.seq__row--done .seq__no {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.seq__row--done .seq__st {
+	color: var(--muted-foreground);
+}
+
+.seq__row--now {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+
+.seq__row--now .seq__no {
+	border-color: var(--background);
+	background: var(--background);
+	color: var(--foreground);
+}
+
+.seq__row--now .seq__meta {
+	color: rgba(255, 255, 255, 0.65);
+}
+
+.seq__row--later {
+	color: var(--muted-foreground);
+}
+
+.seq__row--later .seq__no {
+	border-color: var(--border-light);
+	border-style: dashed;
+}
+
+/* the live "checking" dot — existing inline usages referenced a `pulse`
+   keyframe that was never defined, so nothing actually pulsed */
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.25;
+	}
+}
+
+.pulse-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: currentColor;
+	display: inline-block;
+	animation: pulse 1.5s infinite ease-in-out;
+	flex-shrink: 0;
+}
+
 /* step pill row — wizard sub-steps with done/current/later states */
 
 .psteps {

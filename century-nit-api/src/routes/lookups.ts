@@ -5,9 +5,9 @@ import { db } from "../db/index.js";
 import { lookupValues } from "../db/schema.js";
 import { lookupUpsertSchema } from "century-nit-shared";
 import { requireModule } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 
-const router = new OpenAPIHono();
+const router = new OpenAPIHono({ defaultHook: validationHook });
 
 /**
  * [Public] GET /api/v1/lookups
@@ -43,7 +43,7 @@ router.get("/all", requireModule("lookups"), async (c) => {
 router.post(
 	"/",
 	requireModule("lookups"),
-	zValidator("json", lookupUpsertSchema),
+	zValidator("json", lookupUpsertSchema, (r, c) => validationHook(r, c)),
 	async (c) => {
 		const payload = c.req.valid("json");
 
@@ -69,7 +69,7 @@ router.post(
 router.put(
 	"/:id",
 	requireModule("lookups"),
-	zValidator("json", lookupUpsertSchema),
+	zValidator("json", lookupUpsertSchema, (r, c) => validationHook(r, c)),
 	async (c) => {
 		const id = c.req.param("id");
 		const payload = c.req.valid("json");

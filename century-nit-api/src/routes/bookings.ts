@@ -3,7 +3,7 @@ import { eq, inArray, and } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db/index.js";
 import { opsUsers } from "../db/schema.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	canModifyBooking,
 	canSeeAllBookings,
@@ -60,7 +60,7 @@ import { branches, consultationTypes, servicePackages } from "century-nit-core/c
 import { createPaystackCheckout, verifyPaystackTransaction } from "../services/paystack.js";
 import { consultations, bookings as bookingsTable, paymentTransactions } from "../db/schema.js";
 
-const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const idParams = z.object({
 	id: z.string().uuid(),

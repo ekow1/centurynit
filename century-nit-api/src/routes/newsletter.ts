@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -43,7 +44,7 @@ const subscribeBody = z.object({
 	name: z.string().max(255).optional(),
 });
 
-export const newsletterRouter = new OpenAPIHono();
+export const newsletterRouter = new OpenAPIHono({ defaultHook: validationHook });
 
 /* Public, unauthenticated, and it writes rows + queues an email — throttle it. */
 newsletterRouter.use("/subscribe", newsletterSubscribeRateLimit);

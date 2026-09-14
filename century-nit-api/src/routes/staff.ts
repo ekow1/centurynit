@@ -17,7 +17,7 @@ import {
 import { db } from "../db/index.js";
 import { opsUsers, users, sessions, accounts } from "../db/schema.js";
 import { env } from "../env.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -48,7 +48,7 @@ import { ensureDefaultWorkingHours } from "../services/availability.js";
  * there are no staff at all.
  */
 
-const staffRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const staffRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 function toInvitationResponse(row: InvitationRow) {
 	return {

@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import { paystackWebhookSchema } from "century-nit-shared";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { verifyPaystackSignature } from "../services/paystack.js";
 import {
 	getInvoice,
@@ -18,7 +18,7 @@ import { getExchangeRate, settleInvoicePayment } from "../services/paymentSettle
  * own shape does. The secret-key signature check is the authentication — there
  * is deliberately no session middleware here.
  */
-export const webhooksRouter = new OpenAPIHono();
+export const webhooksRouter = new OpenAPIHono({ defaultHook: validationHook });
 
 const webhookBodySchema = z.unknown();
 

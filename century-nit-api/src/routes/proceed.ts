@@ -13,7 +13,7 @@ import {
 	requireModule,
 	type AuthVariables,
 } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	getApplicantByUserId,
 	latestApplicationForApplicant,
@@ -33,8 +33,8 @@ import {
  *   - self-service  at /api/v1/me/application
  *   - ops overrides at /api/v1/cases
  */
-export const meProceedRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-export const opsProceedRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const meProceedRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
+export const opsProceedRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const applicationParams = z.object({ id: z.string().uuid() });
 

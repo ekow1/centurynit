@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
 import { getTeamAssignments } from "../services/team.js";
@@ -23,7 +24,7 @@ const teamAssignmentsSchema = z.object({
 	items: z.array(teamAssignmentSchema),
 });
 
-export const teamRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const teamRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/team/assignments ────────────────────────────────────────── */
 

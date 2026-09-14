@@ -4,7 +4,7 @@ import {
 	enrollMfaSchema,
 } from "century-nit-shared";
 import { requireAuth, requireModule, requireStaff } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { db } from "../db/index.js";
 import { accounts, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
@@ -16,7 +16,7 @@ import {
 import { sendEmail } from "../lib/resend.js";
 import { renderOtpEmail } from "../lib/email-templates.js";
 
-const authSettings = new OpenAPIHono();
+const authSettings = new OpenAPIHono({ defaultHook: validationHook });
 
 /* ── GET /auth-settings/portal — PUBLIC portal-facing auth settings ────────
  * The login screen needs to know which sign-in methods an admin has enabled

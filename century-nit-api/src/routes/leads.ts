@@ -6,7 +6,7 @@ import {
 	leadStageSchema,
 } from "century-nit-shared";
 import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	createManualLead,
 	deleteLead,
@@ -61,7 +61,7 @@ const leadEventSchema = z.object({
 	createdAt: z.string(),
 });
 
-export const leadsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const leadsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/leads ──────────────────────────────────────────────────────── */
 

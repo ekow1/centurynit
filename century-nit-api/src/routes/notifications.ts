@@ -1,11 +1,12 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import { desc, count, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { notificationLog } from "../db/schema.js";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
 
-export const notificationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const notificationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const notificationLogItemSchema = z.object({
 	id: z.string().uuid(),

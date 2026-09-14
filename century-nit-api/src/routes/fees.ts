@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import {
 	destinationTariffSchema,
@@ -10,7 +11,7 @@ import {
 import { requireAuth, requireCapability, requireMfa, type AuthVariables } from "../middleware/auth.js";
 import { feeCatalogue, listFeeItems, updateDestinationTariff, updateFeeItem } from "../services/fees.js";
 
-const router = new OpenAPIHono<{ Variables: AuthVariables }>();
+const router = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/fees — public: what the client will be charged ──────────── */
 

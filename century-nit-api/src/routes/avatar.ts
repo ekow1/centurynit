@@ -10,7 +10,7 @@ import {
 } from "century-nit-shared";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { requireAuth, type AuthVariables } from "../middleware/auth.js";
 import { getDocumentStorage } from "../services/storage/index.js";
 
@@ -29,7 +29,7 @@ import { getDocumentStorage } from "../services/storage/index.js";
  * which is the point of the button.
  */
 
-const avatarRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const avatarRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /** Storage keys live in `${userId}/avatar/` — nothing else may be claimed. */
 function isOwnAvatarKey(userId: string, key: string): boolean {

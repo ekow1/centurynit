@@ -5,7 +5,7 @@ import {
 	updateRole,
 	deleteRole,
 } from "../services/roles.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -16,7 +16,7 @@ import {
 import { permissionSchema, DEFAULT_CUSTOM_ROLE_RANK } from "century-nit-shared";
 import { rankOfRole } from "../services/roles.js";
 
-export const rolesRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const rolesRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const roleSchema = z.object({
 	id: z.string(),

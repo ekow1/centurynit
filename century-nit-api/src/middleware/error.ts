@@ -1,5 +1,6 @@
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
+import type { Hook } from "@hono/zod-openapi";
 import { ZodError } from "zod";
 import { env } from "../env.js";
 
@@ -39,6 +40,40 @@ function body(
 		timestamp: new Date().toISOString(),
 	};
 }
+
+/**
+ * `defaultHook` for every `OpenAPIHono` router and bare `zValidator` call.
+ *
+ * Without it the validator answers `c.json(result, 400)` — the failed parse
+ * result serialised wholesale, `{ issues, name: "ZodError" }` — which never
+ * reaches `errorHandler` and leaks Zod internals to the client. Returning the
+ * standard envelope here keeps validation failures on the same contract as
+ * `HttpError`, with the first issue as the message so toasts read like a
+ * sentence instead of a stack trace.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const validationHook: Hook<any, any, any, any> = (result, c) => {
+	if (result.success) return;
+	const details = result.error.issues.map((i) => ({
+		path: i.path.join("."),
+		message: i.message,
+	}));
+	const first = details[0];
+	const message = !first
+		? "Request validation failed"
+		: first.path
+			? `${first.path}: ${first.message}`
+			: first.message;
+	return c.json(
+		body(
+			"VALIDATION_ERROR",
+			message,
+			(c.get("requestId") as string | undefined) ?? "",
+			details,
+		),
+		400,
+	);
+};
 
 export const errorHandler: ErrorHandler<{ Variables: { requestId: string } }> = (err, c) => {
 	const requestId = c.get("requestId");

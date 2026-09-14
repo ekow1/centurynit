@@ -8,7 +8,7 @@ import {
 	type SettingKey,
 } from "../services/settings.js";
 import { getAuthInstance } from "./auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -63,7 +63,7 @@ export function verifyStepUpToken(token: string, expectedOpsUserId: string): boo
 	}
 }
 
-const settingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const settingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const settingKeySchema = z.enum(
 	Object.keys(SETTING_DEFS) as [SettingKey, ...SettingKey[]],

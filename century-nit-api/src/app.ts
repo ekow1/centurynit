@@ -6,7 +6,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { API_PREFIX, API_VERSION } from "century-nit-shared";
 import { isAllowedOrigin } from "./lib/origins.js";
 import { requestId } from "./middleware/requestId.js";
-import { errorHandler } from "./middleware/error.js";
+import { errorHandler, validationHook } from "./middleware/error.js";
 import { health } from "./routes/health.js";
 import { auth, getAuthInstance } from "./routes/auth.js";
 import { bookingsRouter } from "./routes/bookings.js";
@@ -60,7 +60,7 @@ type OpenApiish = {
 };
 
 export function createApp() {
-	const app = new OpenAPIHono<{ Variables: { requestId: string } }>();
+	const app = new OpenAPIHono<{ Variables: { requestId: string } }>({ defaultHook: validationHook });
 
 	app.use(requestId);
 	app.use(logger());

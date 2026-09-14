@@ -130,7 +130,7 @@ import {
 
 
 
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 
 
 import {
@@ -160,7 +160,7 @@ import { idParams, actorFrom } from "./caseShared.js";
 
 /* ── Consultations ───────────────────────────────────────────────────────── */
 
-export const consultationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const consultationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 consultationsRouter.openapi(
 	createRoute({

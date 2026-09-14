@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import { preDepartureTemplateSchema } from "century-nit-shared";
 import { requireAuth, requireCapability, requireMfa, type AuthVariables } from "../middleware/auth.js";
@@ -15,7 +16,7 @@ import {
  * seeded with, and each destination's own items. Read by any staff; edited
  * with manage_settings.
  */
-const router = new OpenAPIHono<{ Variables: AuthVariables }>();
+const router = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 router.openapi(
 	createRoute({

@@ -103,6 +103,20 @@ export class ApiError extends Error {
 	get isForbidden(): boolean {
 		return this.status === 403;
 	}
+
+	/**
+	 * Field-level validation issues as `{ "name": "String must contain…" }`,
+	 * for forms that want to pin the message on the input rather than toast it.
+	 * Empty for anything that isn't a VALIDATION_ERROR.
+	 */
+	get fieldErrors(): Record<string, string> {
+		if (this.code !== "VALIDATION_ERROR" || !Array.isArray(this.details)) return {};
+		const out: Record<string, string> = {};
+		for (const d of this.details as { path?: string; message?: string }[]) {
+			if (d?.path && d?.message) out[d.path] = d.message;
+		}
+		return out;
+	}
 }
 
 type ErrorBody = {

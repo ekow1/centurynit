@@ -12,7 +12,7 @@ import {
 	type AuthVariables,
 	requireModule,
 } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	ensureDefaultWorkingHours,
 	listStaffWorkingHours,
@@ -45,7 +45,7 @@ import {
  * subtracts them, so an external meeting blocks the portal slot.
  */
 
-export const calendarFeedsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const calendarFeedsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const feedResponseSchema = z.object({
 	hasFeed: z.boolean(),

@@ -159,7 +159,7 @@ import {
 
 
 
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 
 import { documentChecklistForApplication, outstandingDocuments } from "../services/documentChecklist.js";
 import {
@@ -191,7 +191,7 @@ import { registerTravelQueueRoute, registerTravelRoutes } from "./travelAssistan
 
 /* ── Applications ────────────────────────────────────────────────────────── */
 
-export const applicationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const applicationsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 applicationsRouter.openapi(
 	createRoute({

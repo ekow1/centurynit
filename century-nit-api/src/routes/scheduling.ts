@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	type WeeklySlotSchedule,
 	type WeeklySlotScheduleDay,
@@ -17,7 +17,7 @@ import { validateScheduleConfig, generateSlots } from "century-nit-shared";
  * only super admins. Consultants/coordinators do not reach this route.
  */
 
-const schedulingRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const schedulingRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM");
 

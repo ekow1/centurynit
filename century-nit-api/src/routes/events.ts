@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import { streamSSE } from "hono/streaming";
 import { Redis } from "ioredis";
@@ -28,7 +29,7 @@ import { requireAuth, type AuthVariables } from "../middleware/auth.js";
  * in routes/push.ts, not here.
  */
 
-export const eventsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const eventsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── SSE stream ──────────────────────────────────────────────────────────── */
 

@@ -23,7 +23,7 @@ import {
 	opsUsers,
 	users,
 } from "../db/schema.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { assertReleasedForOwner } from "../services/release.js";
 import {
 	requireAuth,
@@ -52,7 +52,7 @@ import { checkAndAdvanceDocumentStage } from "../services/cases.js";
  * document this is, and who may read it — before issuing any URL.
  */
 
-const documentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const documentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /** How long rejected/superseded documents are retained before hard deletion. */
 const REJECTED_DOC_TTL_MS = env.REJECTED_DOCUMENT_TTL_DAYS * 24 * 60 * 60 * 1000;

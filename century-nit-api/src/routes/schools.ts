@@ -15,7 +15,7 @@ import {
 } from "century-nit-shared";
 import { ALLOWED_DOCUMENT_TYPES } from "century-nit-shared";
 import { requireAuth, requireMfa, requireModule, type AuthVariables } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { getApplicantByUserId } from "../services/cases.js";
 import { assertOfferLetterReleased } from "../services/release.js";
 import {
@@ -37,8 +37,8 @@ import {
 
 const idParams = z.object({ id: z.string().uuid() });
 
-export const meSchoolsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
-export const opsSchoolsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const meSchoolsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
+export const opsSchoolsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/me/schools ─────────────────────────────────────────────────── */
 

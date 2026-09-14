@@ -11,7 +11,7 @@ import {
 	leads,
 } from "../db/schema.js";
 import { requireAuth, requireStaff, type AuthVariables } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { env } from "../env.js";
 import { NEWSLETTER_LIST_NAME, sendConfirmationEmail } from "./newsletter.js";
 import {
@@ -157,7 +157,7 @@ const updateTemplateBodySchema = z.object({
 
 /* ── Router ──────────────────────────────────────────────────────────────── */
 
-export const marketingRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const marketingRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ══════════════════════════════════════════════════════════════════════════
  * Campaigns

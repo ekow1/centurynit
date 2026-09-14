@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
 import { requireAuth, requireRole, type AuthVariables, requireCapability } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	banClientUser,
 	deleteClientUser,
@@ -47,7 +47,7 @@ const idParamSchema = z.object({
 	id: z.string(),
 });
 
-export const clientUsersRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const clientUsersRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/client-users ────────────────────────────────────────────────── */
 

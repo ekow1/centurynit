@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import {
 	chatConversationSchema,
@@ -46,7 +47,7 @@ const messageIdParams = z.object({ messageId: z.string().uuid() });
  */
 const MODERATOR_ROLES = new Set(["super_admin", "manager"]);
 
-export const chatRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const chatRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── GET /api/v1/chat/conversations ─────────────────────────────────────── */
 

@@ -128,7 +128,7 @@ import {
 	getApplicationForClientUser,
 } from "../services/stageConsents.js";
 import { randomUUID } from "node:crypto";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 
 
 import {
@@ -158,7 +158,7 @@ import { STAFF_ONLY_NOTIFICATION_TYPES, idParams } from "./caseShared.js";
 
 /* ── /me ─────────────────────────────────────────────────────────────────── */
 
-export const meRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const meRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const identitySchema = z.object({
 	isStaff: z.boolean(),

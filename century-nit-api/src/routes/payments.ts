@@ -8,7 +8,7 @@ import {
 } from "century-nit-shared";
 import { env } from "../env.js";
 import { requireAuth, requireModule, type AuthVariables } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { db } from "../db/index.js";
 import { paymentTransactions, bookings as bookingsTable, users, invoices } from "../db/schema.js";
 import {
@@ -30,7 +30,7 @@ import { postPaymentSettlement, settleInvoicePayment } from "../services/payment
 const verifyParams = z.object({ reference: z.string().min(1) });
 const verifyQuery = z.object({ gateway: z.enum(["paystack", "stripe"]).default("paystack") });
 
-export const paymentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const paymentsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* ── POST /api/v1/payments/initialize ───────────────────────────────────────── */
 

@@ -7,7 +7,7 @@ import {
 	type AuthVariables,
 	requireCapability,
 } from "../middleware/auth.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import { env } from "../env.js";
 import { getSetting, writeSettingSystem } from "../services/settings.js";
 import {
@@ -36,7 +36,7 @@ import {
  * flow, so a forged callback cannot install arbitrary Google tokens.
  */
 
-export const calendarCompanyRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const calendarCompanyRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 

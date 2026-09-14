@@ -10,7 +10,7 @@ import {
 	recordPaymentSchema,
 	voidInvoiceSchema,
 } from "century-nit-shared";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireMfa,
@@ -43,7 +43,7 @@ import { postPaymentSettlement } from "../services/paymentSettlement.js";
  * and view their own invoices (matched by `clientUserId`), nothing else.
  */
 
-const invoicesRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const invoicesRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const idParams = z.object({
 	id: z.string().uuid(),

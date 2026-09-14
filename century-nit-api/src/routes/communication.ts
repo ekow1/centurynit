@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { z } from "zod";
 import {
 	chatConversationSchema,
@@ -36,7 +37,7 @@ const idParams = z.object({ id: z.string().uuid() });
  * only. Internal/escalation conversations never appear here — the service
  * filters by customer-visible types at the SQL layer (§14, §29).
  * ══════════════════════════════════════════════════════════════════════════ */
-export const meCommunicationRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const meCommunicationRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* GET /me/communication/context — the single payload the portal's
  * Communication Center renders: current contact, previous contacts,
@@ -207,7 +208,7 @@ meCommunicationRouter.openapi(
  * All staff endpoints require MFA + the `chat` module. Stage-assignment
  * writes additionally require a manager/coordinator/super_admin role.
  * ══════════════════════════════════════════════════════════════════════════ */
-export const communicationRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+export const communicationRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 /* GET /communication/staff-directory — directory with presence + load. */
 communicationRouter.openapi(

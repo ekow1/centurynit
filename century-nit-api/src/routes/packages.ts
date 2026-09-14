@@ -2,7 +2,7 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { servicePackages } from "../db/schema.js";
-import { HttpError } from "../middleware/error.js";
+import { HttpError, validationHook } from "../middleware/error.js";
 import {
 	requireAuth,
 	requireModule,
@@ -15,7 +15,7 @@ import {
 	packageCodeSchema,
 } from "century-nit-shared";
 
-const packagesRouter = new OpenAPIHono<{ Variables: AuthVariables }>();
+const packagesRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
 const packageListResponseSchema = z.object({
 	packages: z.array(servicePackageSchema),

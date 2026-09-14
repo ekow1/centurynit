@@ -1,9 +1,10 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { validationHook } from "../middleware/error.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { healthResponseSchema } from "century-nit-shared";
 
-const health = new OpenAPIHono();
+const health = new OpenAPIHono({ defaultHook: validationHook });
 
 /**
  * Readiness, not just liveness.

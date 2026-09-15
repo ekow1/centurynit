@@ -8,7 +8,7 @@ import {
   type RescheduleBooking,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { bookingEvents, bookings, opsUsers, staffCalendarFeeds } from "../db/schema.js";
+import { bookingEvents, bookings, consultations, opsUsers, staffCalendarFeeds } from "../db/schema.js";
 import { HttpError } from "../middleware/error.js";
 import { isConflictError } from "../lib/db-errors.js";
 import { addMinutes, isValidTimeZone, zonedTimeToUtc } from "../lib/time.js";
@@ -145,6 +145,7 @@ export async function notificationContext(
     employeeName: employee?.name ?? null,
     employeeEmail: employee?.email ?? null,
     meetingUrl: booking.meetingUrl,
+    meetingProvider: booking.meetingProvider,
     calendarSubscriptionUrl,
   };
 }
@@ -629,8 +630,19 @@ export async function generateMeetingForBooking(
 	}
 }
 
-/** The appointment window a room/token binds to: opens 15 min early, dies 2h after the end. */
+/**
+ * The appointment window a room or host token binds to: opens 30 min early so
+ * the host can get in and prep before the client can, dies 2h after the end.
+ */
 function meetingWindow(booking: BookingRow): { notBefore: Date; expiresAt: Date } {
+	return {
+		notBefore: new Date(booking.startsAt.getTime() - 30 * 60 * 1000),
+		expiresAt: new Date(booking.endsAt.getTime() + 2 * 60 * 60 * 1000),
+	};
+}
+
+/** The client's tighter window — the 15-min early join the portal advertises. */
+function clientJoinWindow(booking: BookingRow): { notBefore: Date; expiresAt: Date } {
 	return {
 		notBefore: new Date(booking.startsAt.getTime() - 15 * 60 * 1000),
 		expiresAt: new Date(booking.endsAt.getTime() + 2 * 60 * 60 * 1000),
@@ -661,15 +673,30 @@ export async function joinBookingMeeting(
 		throw new HttpError(409, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "This booking was cancelled — the meeting is gone");
 	}
 
-	// ── Authorization: the client who owns it, or staff who may host it ──
+	// ── Authorization: the client who owns it, or staff who may join it ──
+	let isHost = false;
 	if (caller.staff) {
 		const isAssignee = booking.employeeId === caller.staff.opsUserId;
-		if (!isAssignee) {
+		// The case's coordinator hosts too — they steer the consultation.
+		const [linkedCase] = caller.staff
+			? await db
+					.select({ coordinatorId: consultations.coordinatorId })
+					.from(consultations)
+					.where(eq(consultations.bookingId, booking.id))
+					.limit(1)
+			: [null];
+		const isCoordinator = linkedCase?.coordinatorId === caller.staff.opsUserId;
+		if (!isAssignee && !isCoordinator) {
 			const perms = await permissionsOfRole(caller.staff.role);
 			if (!permissionsGrant(caller.staff.role, perms, "see_all_cases")) {
-				throw new HttpError(403, "FORBIDDEN", "Only the assigned consultant or case oversight can join as host");
+				throw new HttpError(403, "FORBIDDEN", "Only the assigned consultant or case oversight can join");
 			}
 		}
+		// The handler is the host. A coordinator covering the case hosts too, and
+		// an unassigned booking is hosted by whichever oversight joins. Anyone
+		// else watching gets a participant token — no end-for-all on someone
+		// else's consultation.
+		isHost = isAssignee || isCoordinator || !booking.employeeId;
 	} else if (booking.clientUserId !== caller.userId) {
 		throw new HttpError(403, "FORBIDDEN", "This is not your booking");
 	}
@@ -685,10 +712,12 @@ export async function joinBookingMeeting(
 	}
 
 	const { createMeetingToken } = await import("./meet/index.js");
-	const window_ = meetingWindow(booking);
+	// Hosts get the wider window (in 30 min early to prep); the client gets the
+	// 15-min early join the portal advertises.
+	const window_ = caller.staff ? meetingWindow(booking) : clientJoinWindow(booking);
 	const token = await createMeetingToken({
 		roomName: booking.meetingSpace,
-		isOwner: Boolean(caller.staff),
+		isOwner: isHost,
 		userName: caller.name,
 		userId: caller.userId,
 		notBefore: window_.notBefore,
@@ -722,7 +751,9 @@ export async function resendMeetingLinkForBooking(
 			recipientUserId: booking.clientUserId,
 			type: "booking.meeting_link",
 			title: "Meeting link reminder",
-			body: `Your consultation video meeting link: ${booking.meetingUrl}. Ref: ${booking.reference}`,
+			body: booking.meetingProvider === "daily"
+				? `Your consultation video meeting is ready — open your consultation page and press Join. Ref: ${booking.reference}`
+				: `Your consultation video meeting link: ${booking.meetingUrl}. Ref: ${booking.reference}`,
 			link: "/portal/consultation",
 		}).catch(() => {});
 	}

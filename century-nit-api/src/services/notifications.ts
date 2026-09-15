@@ -1,4 +1,5 @@
 import { formatInZone } from "../lib/time.js";
+import { env } from "../env.js";
 import {
 	renderBookingEmail,
 	renderConsultantAssignedEmail,
@@ -39,6 +40,8 @@ export type BookingNotificationContext = {
 	employeeName?: string | null;
 	employeeEmail?: string | null;
 	meetingUrl?: string | null;
+	/** "daily" | "google_meet" | null — decides what the email's join button points at. */
+	meetingProvider?: string | null;
 	branchName?: string;
 	reason?: string | null;
 	/** iCal feed URL for the employee's personal calendar subscription (optional). */
@@ -66,6 +69,35 @@ export type QueuedEmail = {
 
 function formatEmail(title: string, lines: string[], meetingUrl?: string | null, reference?: string): { html: string; text: string } {
 	return renderBookingEmail({ title, lines, meetingUrl, reference });
+}
+
+/**
+ * Where an email's "Join" button should send this recipient.
+ *
+ * Daily rooms are private — the bare room URL opens "This meeting is not
+ * available yet" for everyone, because entry needs a token minted by
+ * /bookings/:id/join. Putting a token in an email would be worse (a forwarded
+ * email is a forwarded identity). So for Daily bookings the button goes to
+ * the portal/console page whose Join button mints a fresh token for the
+ * signed-in person — always works, never leaks.
+ *
+ * Google Meet and manual links work directly, so they pass through unchanged.
+ */
+function joinCtaUrl(ctx: BookingNotificationContext, recipient: "client" | "employee"): string | null {
+	if (!ctx.meetingUrl) return null;
+	if (ctx.meetingProvider === "daily") {
+		return recipient === "client"
+			? `${env.FRONTEND_URL}/portal/consultation`
+			: `${env.CONSOLE_URL}/consultations`;
+	}
+	return ctx.meetingUrl;
+}
+
+/** The join instruction line that matches the CTA above. */
+function joinHint(ctx: BookingNotificationContext): string {
+	return ctx.meetingProvider === "daily"
+		? "Open the link below and press Join — the meeting room opens 15 minutes before your slot."
+		: "Please use the link below to join the video session at your scheduled time.";
 }
 
 /* ── Message builders ────────────────────────────────────────────────────── */
@@ -131,7 +163,7 @@ export function bookingAssignedForClient(ctx: BookingNotificationContext): Queue
 		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
-	const { html, text } = formatEmail("Your appointment is confirmed", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("Your appointment is confirmed", lines, joinCtaUrl(ctx, "client"), ctx.reference);
 	return {
 		to: ctx.clientEmail,
 		subject: `Appointment confirmed · ${ctx.reference}`,
@@ -153,9 +185,9 @@ export function bookingMeetingUrlSetForClient(ctx: BookingNotificationContext): 
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
-		`Please use the link below to join the video session at your scheduled time.`,
+		joinHint(ctx),
 	];
-	const { html, text } = formatEmail("Your consultation meeting link is ready", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("Your consultation meeting link is ready", lines, joinCtaUrl(ctx, "client"), ctx.reference);
 	return {
 		to: ctx.clientEmail,
 		subject: `Meeting link ready · ${ctx.reference}`,
@@ -178,10 +210,10 @@ export function bookingSlotConfirmedForClient(ctx: BookingNotificationContext): 
 		`<strong>With:</strong> ${ctx.employeeName ?? "your consultant"}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 		...(ctx.meetingUrl
-			? [`Use the link below to join the video session at your scheduled time.`]
+			? [joinHint(ctx)]
 			: ["We will share the meeting link closer to the time."]),
 	];
-	const { html, text } = formatEmail("Consultation slot confirmed", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("Consultation slot confirmed", lines, joinCtaUrl(ctx, "client"), ctx.reference);
 	return {
 		to: ctx.clientEmail,
 		subject: `Consultation slot confirmed · ${ctx.reference}`,
@@ -203,7 +235,7 @@ export function bookingAssignedForEmployee(ctx: BookingNotificationContext): Que
 		`<strong>When:</strong> ${when} (${ctx.durationMinutes} minutes)`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
-	const { html, text } = formatEmail("A consultation has been assigned to you", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("A consultation has been assigned to you", lines, joinCtaUrl(ctx, "employee"), ctx.reference);
 	return {
 		to: ctx.employeeEmail ?? "",
 		subject: `New consultation assigned · ${ctx.reference}`,
@@ -260,7 +292,7 @@ export function bookingRescheduled(
 		`<strong>Reference:</strong> ${ctx.reference}`,
 		"The meeting link below is unchanged.",
 	];
-	const { html, text } = formatEmail("Your appointment has moved", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("Your appointment has moved", lines, joinCtaUrl(ctx, isClient ? "client" : "employee"), ctx.reference);
 	return {
 		to,
 		subject: `Appointment rescheduled · ${ctx.reference}`,
@@ -340,7 +372,7 @@ export function bookingReminder(
 		`<strong>Service:</strong> ${ctx.serviceName}`,
 		`<strong>Reference:</strong> ${ctx.reference}`,
 	];
-	const { html, text } = formatEmail("Your appointment is tomorrow", lines, ctx.meetingUrl, ctx.reference);
+	const { html, text } = formatEmail("Your appointment is tomorrow", lines, joinCtaUrl(ctx, isClient ? "client" : "employee"), ctx.reference);
 	return {
 		to,
 		subject: `Reminder · ${ctx.serviceName} tomorrow`,

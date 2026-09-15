@@ -11,14 +11,15 @@ import {
 import { formatMoney } from "century-nit-core/ui";
 import { meApi, ApiError } from "century-nit-core/api";
 import { Button } from "../../components/ui/Button";
-import { useAppState } from "../../context/AppState";
+import { useAppState, milestoneLockReasonFor, milestoneUnlockedFor } from "../../context/AppState";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { ChapterGate } from "./PortalLayout";
 
 /**
  * Chapter V · Fees before you go. The service fee as the ledger carries it:
- * the deposit (paid at enrolment), the pre-departure milestone — due once
- * the visa is approved, it releases the travel documents — and the
+ * the deposit (paid at enrolment), the pre-departure milestone — unlocked
+ * once the flight is booked (or the client books their own), it releases
+ * the travel documents — and the
  * post-arrival remainder, spread over a duration and frequency the client
  * picks here and paid as dated instalments. The flight never waits on any
  * of it.
@@ -98,6 +99,9 @@ function FeesChapterInner() {
 	const postPaid = postRows.filter((r) => r.covered).length;
 	const scheduleLocked = postRows.some((r) => r.covered || (invoice ? invoice.paidCents > (deposit?.l.amountCents ?? 0) + (milestone?.l.amountCents ?? 0) : false));
 	const milestoneDone = Boolean(milestone?.covered);
+	// The flight first: the milestone stays locked until travel is settled.
+	const unlocked = milestoneUnlockedFor(application);
+	const lockReason = milestoneLockReasonFor(application);
 	const dueNow = rows.find((r) => r.isNext) ?? null;
 	const total = invoice?.subtotalCents ?? 0;
 	const paidPct = total > 0 && invoice ? Math.round((invoice.paidCents / total) * 100) : 0;
@@ -145,14 +149,16 @@ function FeesChapterInner() {
 						: "choose how to spread the rest"
 				: "your service fee is settled"
 			: milestone
-				? `pay the pre-departure milestone · ${ghs(milestone.remaining)}`
+				? unlocked
+					? `pay the pre-departure milestone · ${ghs(milestone.remaining)}`
+					: "milestone unlocks once your flight is booked"
 				: "your service-fee invoice is being raised";
 
 	const stepState = (k: 0 | 1 | 2) => {
 		const r = k === 2 ? (postRows.length > 0 ? { covered: postPaid === postRows.length } : null) : rows[k] ?? null;
 		if (!r) return "later";
 		if (r.covered) return "done";
-		return k === 0 || (k === 1 && deposit?.covered) || (k === 2 && milestoneDone) ? "on" : "later";
+		return k === 0 || (k === 1 && deposit?.covered && unlocked) || (k === 2 && milestoneDone) ? "on" : "later";
 	};
 
 	return (
@@ -164,7 +170,7 @@ function FeesChapterInner() {
 					<p className="lead mt-2">
 						{milestoneDone
 							? "Your pre-departure milestone is paid and your travel documents are released. What remains follows the schedule you chose."
-							: "Your visa is approved. The pre-departure milestone releases your admission letter, your visa documents and your e-ticket. Your flight is being booked meanwhile — it does not wait on this."}
+							: "Your visa is approved. Your flight is booked first; then this milestone releases your admission letter, your visa documents and your e-ticket."}
 					</p>
 				</div>
 				{reference || handler ? (
@@ -184,7 +190,7 @@ function FeesChapterInner() {
 				{isInstalments ? (
 					<>
 						<span>
-							<strong>{split.preDeparturePercent}%</strong> {milestoneDone ? "paid" : "after your visa"}
+							<strong>{split.preDeparturePercent}%</strong> {milestoneDone ? "paid" : "after your flight"}
 						</span>
 						<span>
 							<strong>{split.postArrivalPercent}%</strong> after arrival
@@ -192,7 +198,7 @@ function FeesChapterInner() {
 					</>
 				) : plan === "full" ? (
 					<span>
-						<strong>{100 - split.depositPercent}%</strong> {milestoneDone ? "paid" : "after your visa"}
+						<strong>{100 - split.depositPercent}%</strong> {milestoneDone ? "paid" : "after your flight"}
 					</span>
 				) : null}
 				{plan ? <span>{isInstalments ? "instalment plan" : "full payment"}</span> : null}
@@ -245,6 +251,35 @@ function FeesChapterInner() {
 							<p className="psec__later">
 								Paid{milestone.paidAt ? ` ${day(milestone.paidAt)}` : ""} — your admission letter, visa documents and e-ticket are released. <Link to="/portal/documents" className="plnk">Documents →</Link>
 							</p>
+						) : !unlocked ? (
+							<div className="sharp-card">
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem", flexWrap: "wrap" }}>
+									<span className="amt">
+										{ghs(milestone.remaining)}
+										{milestone.remaining !== milestone.l.amountCents ? <small>of {ghs(milestone.l.amountCents)}</small> : null}
+									</span>
+									<span className="psec__hint" style={{ margin: 0 }}>unlocks once your flight is booked</span>
+								</div>
+								<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
+									{lockReason}
+								</p>
+								<div className="rel">
+									<div>
+										<b>Releases</b>Admission letter
+									</div>
+									<div>
+										<b>Releases</b>Visa documents
+									</div>
+									<div>
+										<b>Releases</b>E-ticket handover
+									</div>
+								</div>
+								<div className="pfoot" style={{ marginTop: "0.8rem" }}>
+									<Button to="/portal/pre-departure" variant="ghost">
+										Go to your flight
+									</Button>
+								</div>
+							</div>
 						) : (
 							<div className="sharp-card sharp-card--key">
 								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem", flexWrap: "wrap" }}>
@@ -252,10 +287,10 @@ function FeesChapterInner() {
 										{ghs(milestone.remaining)}
 										{milestone.remaining !== milestone.l.amountCents ? <small>of {ghs(milestone.l.amountCents)}</small> : null}
 									</span>
-									<span className="psec__hint" style={{ margin: 0 }}>due before your documents are released</span>
+									<span className="psec__hint" style={{ margin: 0 }}>due now · releases your documents</span>
 								</div>
 								<p className="pfoot__note mt-2">
-									Paying this releases everything you need to travel. Your flight is booked by your departure officer whichever comes first.
+									Your flight is booked. Paying this releases everything you need to travel.
 								</p>
 								<div className="rel">
 									<div>
@@ -379,12 +414,23 @@ function FeesChapterInner() {
 					</div>
 					{dueNow && deposit?.covered && (
 						<div className="sharp-card">
-							<Button type="button" onClick={() => void pay()} disabled={paying} arrow>
-								{paying ? "Connecting…" : `Pay ${ghs(dueNow.remaining)}`}
-							</Button>
-							<p className="prail__note">
-								{dueNow.i === 1 ? "Releases your admission letter, visa documents and e-ticket. Your flight is booked meanwhile." : dueNow.l.dueAt ? `Instalment ${dueNow.i - 1} of ${postRows.length} · due ${day(dueNow.l.dueAt)}.` : "Your next instalment — dated once you arrive."}
-							</p>
+							{dueNow.i === 1 && !unlocked ? (
+								<>
+									<Button to="/portal/pre-departure" variant="ghost">
+										Go to your flight
+									</Button>
+									<p className="prail__note">{lockReason}</p>
+								</>
+							) : (
+								<>
+									<Button type="button" onClick={() => void pay()} disabled={paying} arrow>
+										{paying ? "Connecting…" : `Pay ${ghs(dueNow.remaining)}`}
+									</Button>
+									<p className="prail__note">
+										{dueNow.i === 1 ? "Releases your admission letter, visa documents and e-ticket." : dueNow.l.dueAt ? `Instalment ${dueNow.i - 1} of ${postRows.length} · due ${day(dueNow.l.dueAt)}.` : "Your next instalment — dated once you arrive."}
+									</p>
+								</>
+							)}
 						</div>
 					)}
 					{invoice && (
@@ -424,7 +470,7 @@ function FeesChapterInner() {
 					<div className="sharp-card sharp-card--soft">
 						<p className="eyebrow">Meanwhile</p>
 						<p className="prail__note" style={{ marginTop: "0.3rem" }}>
-							Your departure officer is booking your flight — the ticket invoice lands in Money when it is ready, whether or not this milestone is paid. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
+							Your departure officer is booking your flight — the ticket invoice lands in Money when it is ready, before this milestone. <Link to="/portal/pre-departure" className="plnk">Departure →</Link>
 						</p>
 					</div>
 				</div>

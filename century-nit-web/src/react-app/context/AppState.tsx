@@ -800,12 +800,30 @@ export function isAgencySettled(app: ApplicationData) {
  * The pre-departure service fee milestone — the same rule as the server's
  * `preDepartureFeePaid`: on a full plan the balance is settled; on
  * instalments the second milestone (the deposit was the first) is paid. Due
- * once the visa is approved and before the ticket is issued. The
- * post-arrival remainder is aftercare and never gates anything.
+ * once the flight is booked (or the client books their own); releases the
+ * papers. The post-arrival remainder is aftercare and never gates anything.
  */
 export function hasSettledPlan(app: ApplicationData) {
 	if (!hasPaymentPlan(app)) return false;
 	return app.paymentPlanId === "full" ? isAgencySettled(app) : app.agencyStageIndex >= 2;
+}
+
+/**
+ * The flight comes first: the fee milestone stays locked until travel is
+ * settled — the flight booked, or the client booking their own. On hold
+ * keeps it locked too. Portal-side only; the server gates nothing on it.
+ */
+export function milestoneUnlockedFor(app: ApplicationData): boolean {
+	const s = app.travelAssistance?.status;
+	return s === "booked" || s === "declined";
+}
+
+/** Why the fee milestone is still locked, or null once travel is settled. */
+export function milestoneLockReasonFor(app: ApplicationData): string | null {
+	if (milestoneUnlockedFor(app)) return null;
+	return app.travelAssistance?.status === "on_hold"
+		? "Travel assistance is on hold. Resume it, or choose to book your own flight, to unlock this milestone."
+		: "Unlocks once your flight is booked — or once you've told us you're booking your own.";
 }
 
 /** The travel documents — admission letter, visa papers, e-ticket — open once the milestone is paid, or a manager released them early. The flight is booked regardless. */
@@ -813,10 +831,10 @@ export function documentsReleasedFor(app: ApplicationData): boolean {
 	return hasSettledPlan(app) || Boolean(app.departureDetails?.releaseOverrideAt);
 }
 export function documentHoldReasonFor(app: ApplicationData): string {
-	if (!hasPaymentPlan(app)) return "Your admission letter, visa documents and e-ticket are released once your pre-departure fee milestone is paid — choose a plan and settle it. Your flight is booked meanwhile.";
+	if (!hasPaymentPlan(app)) return "Your admission letter, visa documents and e-ticket are released once your pre-departure fee milestone is paid — choose a plan and settle it. Your flight is booked first; this milestone follows it.";
 	return app.paymentPlanId === "installment"
-		? "Your admission letter, visa documents and e-ticket are released once the pre-departure instalment of your service fee is paid. Your flight is booked meanwhile."
-		: "Your admission letter, visa documents and e-ticket are released once your service fee balance is paid. Your flight is booked meanwhile.";
+		? "Your admission letter, visa documents and e-ticket are released once the pre-departure instalment of your service fee is paid. Your flight is booked first; this milestone follows it."
+		: "Your admission letter, visa documents and e-ticket are released once your service fee balance is paid. Your flight is booked first; this milestone follows it.";
 }
 
 export type PendingAction = {
@@ -1003,58 +1021,102 @@ export function getPendingAction(
 		};
 	}
 
-	// Departure · Fees — the pre-departure milestone releases the travel
-	// documents; the flight is booked regardless.
-	if (stage === "payment_execution") {
-		const hasPlan = hasPaymentPlan(app);
-		return {
-			kind: "payment_execution",
-			label: hasPlan ? "Pay fee milestone" : "Choose plan",
-			title: hasPlan ? "Pay your pre-departure fee milestone" : "Choose your payment plan",
-			detail: hasPlan
-				? "Your visa is approved. This milestone releases your admission letter, visa documents and e-ticket — your flight is booked meanwhile."
-				: "Choose a plan, then settle the pre-departure milestone so your travel documents can be released.",
-			to: "/portal/payment-execution",
-		};
-	}
-
-	// Departure · Flight — decide, pay the ticket, see the booking, finish
-	// the checklist, then complete the journey.
-	if (stage === "travel_assistance") {
-		const hasPlan = hasPaymentPlan(app);
-		const planDue = !hasSettledPlan(app);
-		const travelLeft = !app.preDepartureCompletedAt;
-		const ready = hasPlan && !planDue && !travelLeft;
-		return {
-			kind: "travel",
-			label: !hasPlan
-				? "Choose plan"
-				: planDue
-					? "Settle fees"
-					: travelLeft
-						? "Finish checklist"
-						: "Complete journey",
-			title: !hasPlan
-				? "Confirm your payment plan"
-				: planDue
-					? "Settle your service fees"
-					: travelLeft
-						? "Finish your pre-departure checklist"
-						: "Complete your journey",
-			detail: !hasPlan
-				? "Choose your payment plan — pay the full agency service fee, or settle it in installments — to complete your journey."
-				: planDue
-					? "Your plan is confirmed. Settle the pre-departure milestone — your admission letter, visa documents and e-ticket are released after it; your flight is booked meanwhile."
-					: travelLeft
-						? "Your plan is settled. Finish your pre-departure checklist and travel clearance, then complete your journey."
-						: ready
-							? "Everything is settled. Complete your journey and hand over to your consultant for post-arrival support."
-							: "Continue your payment plan to complete your journey.",
-			to: "/portal/payment-execution",
-		};
+	// Departure — one order for both Departure pages: the flight first, the
+	// fee milestone after it (it releases the papers), then the checklist
+	// and completion.
+	if (stage === "payment_execution" || stage === "travel_assistance") {
+		return departurePendingAction(app);
 	}
 
 	return null;
+}
+
+/**
+ * The Departure next action — shared by the `payment_execution` and
+ * `travel_assistance` stages so the band never disagrees with the page it
+ * points into. The flight comes first; the milestone unlocks once travel
+ * is settled (booked or own booking).
+ */
+function departurePendingAction(app: ApplicationData): PendingAction {
+	const ta = app.travelAssistance;
+	const status = ta?.status ?? "decision_pending";
+
+	if (!ta?.decision || status === "decision_pending") {
+		return {
+			kind: "travel",
+			label: "Choose how you fly",
+			title: "Tell us how you'd like to fly",
+			detail: "Book with us, book your own, or hold — your flight comes before the fee milestone.",
+			to: "/portal/pre-departure",
+		};
+	}
+	if (status === "review") {
+		return {
+			kind: "travel",
+			label: "See your flight",
+			title: "Your travel officer is finding your flight",
+			detail: "Your flight is being found and the ticket invoice prepared — you pay it on your departure page.",
+			to: "/portal/pre-departure",
+		};
+	}
+	if (status === "invoiced" || status === "ticket_paid") {
+		return {
+			kind: "travel",
+			label: status === "invoiced" ? "Pay the ticket invoice" : "See your flight",
+			title: status === "invoiced" ? "Pay the ticket invoice" : "Your flight is being booked",
+			detail:
+				status === "invoiced"
+					? "The airline fare, at cost. Your officer books the seat as soon as it's paid."
+					: "Paid — your travel officer is booking the flight and will post the confirmation on your departure page.",
+			to: "/portal/pre-departure",
+		};
+	}
+	if (status === "on_hold") {
+		return {
+			kind: "travel",
+			label: "Resume travel",
+			title: "Travel assistance is on hold",
+			detail: "Travel assistance is on hold. Resume it, or choose to book your own flight, to unlock this milestone.",
+			to: "/portal/pre-departure",
+		};
+	}
+	if (!hasPaymentPlan(app)) {
+		return {
+			kind: "payment_execution",
+			label: "Choose plan",
+			title: "Choose your payment plan",
+			detail: "Your travel is settled. Choose a plan, then settle the pre-departure milestone — it releases your documents once paid.",
+			to: "/portal/payment-execution",
+		};
+	}
+	if (!hasSettledPlan(app)) {
+		return {
+			kind: "payment_execution",
+			label: "Pay fee milestone",
+			title: "Pay your pre-departure fee milestone",
+			detail:
+				status === "declined"
+					? "You're booking your own flight. This milestone releases your admission letter, visa documents and e-ticket."
+					: "Your flight is booked. This milestone releases your admission letter, visa documents and e-ticket.",
+			to: "/portal/payment-execution",
+		};
+	}
+	if (!app.preDepartureCompletedAt) {
+		return {
+			kind: "travel",
+			label: "Finish checklist",
+			title: "Finish your pre-departure checklist",
+			detail: "Your plan is settled. Finish your pre-departure checklist and travel clearance, then complete your journey.",
+			to: "/portal/pre-departure",
+		};
+	}
+	return {
+		kind: "travel",
+		label: "Complete journey",
+		title: "Complete your journey",
+		detail: "Everything is settled. Complete your journey and hand over to your consultant for post-arrival support.",
+		to: "/portal/pre-departure",
+	};
 }
 
 type AppStateContextValue = {
@@ -1745,7 +1807,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 				counselorNote:
 					planId === "full"
 						? "Full payment plan selected. Settle the remaining balance when ready — can continue after departure."
-						: "Installment plan selected. Pay the pre-departure milestone after your visa, then spread the rest after you arrive.",
+						: "Installment plan selected. Pay the pre-departure milestone once your flight is booked, then spread the rest after you arrive.",
 			};
 		});
 	}, []);

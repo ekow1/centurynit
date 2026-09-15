@@ -118,9 +118,10 @@ export type DerivedJourney = {
  * First portal step of each coarse stage. The coarse stage never pushes the
  * applicant past this step; the signals do the rest.
  *
- * `payment_execution` floors at `travel_assistance` on purpose: the plan
- * chapter opens only once the travel-assistance request is resolved, and that
- * is a signal (`travelAssistanceStatus`), not something the coarse stage can
+ * `travel_assistance` floors at `travel_assistance` on purpose: Departure
+ * opens on the visa and the flight is booked first — the fee milestone
+ * unlocks only once travel is settled (booked or own booking), which is a
+ * signal (`travelAssistanceStatus`), not something the coarse stage can
  * assert on its own.
  */
 export const JOURNEY_STAGE_FLOOR: Record<JourneyStage, JourneyPortalStage> = {
@@ -128,8 +129,9 @@ export const JOURNEY_STAGE_FLOOR: Record<JourneyStage, JourneyPortalStage> = {
 	school_submission: "awaiting_handler",
 	offer_letter_review: "school_tracking",
 	visa_processing: "visa_invoice",
-	// Departure opens on the fee milestone; the flight follows it.
-	travel_assistance: "payment_execution",
+	// Departure opens on the visa; the flight is booked first; the fee
+	// milestone unlocks once travel is settled and releases the papers.
+	travel_assistance: "travel_assistance",
 	payment_execution: "payment_execution",
 	completed: "completed",
 };
@@ -147,8 +149,8 @@ const LADDER: JourneyPortalStage[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"payment_execution",
 	"travel_assistance",
+	"payment_execution",
 ];
 
 type Facts = JourneySignals & {
@@ -231,8 +233,9 @@ export function deriveJourney(signals: JourneySignals): DerivedJourney {
 		application: f.isEligible && f.hasPackage,
 		tracking: f.appInvoicePaid && f.hasSelection,
 		visa: f.hasAdmitted,
-		// Both Departure pages open with the visa; the fee milestone gates the
-		// ticket, not the page.
+		// Both Departure pages open with the visa; the flight is booked first
+		// and the fee milestone unlocks once travel is settled — it releases
+		// the papers, never the page.
 		payment_execution: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
 		travel_assistance: f.hasAdmitted && f.visaInvoicePaid && f.visaDone,
 		complete: f.isCompleted,

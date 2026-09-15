@@ -874,14 +874,14 @@ function SchoolPackageInner() {
 								</div>
 								<div className="pkv">
 									<span className="pkv__k">— due</span>
-									<span className="pkv__v muted">after your visa is approved</span>
+									<span className="pkv__v muted">once your flight is booked</span>
 								</div>
 								<p
 									className="muted"
 									style={{ fontSize: "0.68rem", lineHeight: 1.5, margin: "0.8rem 0" }}
 								>
 									By paying the deposit you agree: your admission letter, visa documents and e-ticket
-									are released after the pre-departure milestone — your flight is booked meanwhile.
+									are released after the pre-departure milestone — which unlocks once your flight is booked.
 									School application fees and tuition are the institutions', not ours.
 								</p>
 								{isDepositPaid ? (
@@ -4569,8 +4569,8 @@ function VisaHubInner() {
 						<p className="eyebrow">After the visa</p>
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 							Once approved, <strong style={{ color: "var(--foreground)" }}>Chapter V · Departure</strong>{" "}
-							opens: the pre-departure milestone, then your ticket. Your letter and visa documents
-							release with the milestone.
+							opens: your flight first, then the pre-departure milestone. Your letter and visa
+							documents release with the milestone.
 						</p>
 					</div>
 				</div>
@@ -4886,10 +4886,10 @@ function VisaTrackingInner() {
 						<p className="eyebrow">After the visa</p>
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 							{application.visaStatus === "complete"
-								? "Chapter V · Departure is open — the pre-departure milestone, then your ticket."
+								? "Chapter V · Departure is open — your flight first, then the pre-departure milestone."
 								: refused
 									? "Departure stays closed while the refusal is reviewed. Your consultant will let you know the next step."
-									: "Once approved, Chapter V · Departure opens: the pre-departure milestone, then your ticket. Your letter and visa documents release with the milestone."}
+									: "Once approved, Chapter V · Departure opens: your flight first, then the pre-departure milestone. Your letter and visa documents release with the milestone."}
 						</p>
 					</div>
 				</div>

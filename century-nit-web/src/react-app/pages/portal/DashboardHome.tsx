@@ -73,7 +73,7 @@ const STAGE_META: Record<ProcessStageId, { title: string; desc: string }> = {
 	school_tracking: { title: "Application tracking", desc: "Follow each school application through the process." },
 	visa_invoice: { title: "Pay the visa fee", desc: "On admission, settle the visa fee to open your visa case." },
 	visa: { title: "Visa tracking", desc: "Your consultant processes your visa after you settle the invoice." },
-	payment_execution: { title: "Pre-departure fee milestone", desc: "Due once your visa is approved — your ticket is issued after it." },
+	payment_execution: { title: "Pre-departure fee milestone", desc: "Unlocks once your flight is booked — it releases your documents." },
 	travel_assistance: { title: "Departure", desc: "Choose how to book your flight, pay the ticket, and work through the pre-departure checklist." },
 	completed: { title: "Journey complete", desc: "Everything is settled - thank you for using Century NIT." },
 };

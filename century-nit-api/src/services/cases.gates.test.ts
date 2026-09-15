@@ -153,17 +153,17 @@ describe("JOURNEY_STAGE_FLOOR (server journey routing)", () => {
 	it("maps the coarse stages onto portal steps", () => {
 		expect(JOURNEY_STAGE_FLOOR.visa_processing).toBe("visa_invoice");
 		expect(JOURNEY_STAGE_FLOOR.payment_execution).toBe("payment_execution");
-		expect(JOURNEY_STAGE_FLOOR.travel_assistance).toBe("payment_execution");
+		expect(JOURNEY_STAGE_FLOOR.travel_assistance).toBe("travel_assistance");
 		expect(JOURNEY_STAGE_FLOOR.completed).toBe("completed");
 	});
 
-	it("orders the portal stages chronologically — the fee milestone before the flight", () => {
+	it("orders the portal stages chronologically — the flight before the fee milestone", () => {
 		const order = PORTAL_STAGE_ORDER;
 		for (const later of ["travel_assistance", "payment_execution", "completed"] as const) {
 			expect(order.indexOf(later), later).toBeGreaterThan(order.indexOf("visa"));
 		}
-		expect(order.indexOf("travel_assistance")).toBeGreaterThan(
-			order.indexOf("payment_execution"),
+		expect(order.indexOf("payment_execution")).toBeGreaterThan(
+			order.indexOf("travel_assistance"),
 		);
 	});
 

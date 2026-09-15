@@ -9,6 +9,8 @@ import {
 	isAgencySettled,
 	isAgencyDepositPaid,
 	isVisaInvoicePaid,
+	milestoneLockReasonFor,
+	milestoneUnlockedFor,
 	useAppState,
 	type AssessmentData,
 } from "../../context/AppState";
@@ -997,7 +999,7 @@ const JMAP_HINT: Record<ChapterId, string> = {
 	enrol: "Opens once your assessment says you can proceed.",
 	apply: "Opens once your enrolment is confirmed and the deposit is paid.",
 	visa: "Opens when a school admits you. The visa fee is paid here, then your file goes to the visa officer.",
-	depart: "The pre-departure milestone is due once your visa is approved — your ticket is issued after it, never before.",
+	depart: "Your flight is booked first — the pre-departure milestone follows it and releases your documents.",
 	done: "The last chapter — reached when the flight is booked and the checklist is done.",
 };
 
@@ -1469,7 +1471,7 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 					</h1>
 					<p className="lead mt-2">
 						{planView
-							? "Your visa is approved. This milestone is due before your ticket is issued — the balance on a full plan, the pre-departure instalment otherwise. Your admission letter and visa documents are released, and your ticket is issued, after it. Any post-arrival remainder follows on your schedule."
+							? "Your visa is approved. Your flight is booked first; then this milestone releases your admission letter and visa documents — the balance on a full plan, the pre-departure instalment otherwise. Any post-arrival remainder follows on your schedule."
 							: "Every fee, invoice, and balance - what's paid and what's outstanding."}
 					</p>
 				</div>
@@ -1971,8 +1973,8 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 							<p className="eyebrow">The order is fixed</p>
 							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
 								Deposit at enrolment · application fee at submissions · visa fee after an offer · the
-								milestone after your visa — your letter, visa documents and e-ticket are released
-								with it; your flight is booked regardless.
+								milestone once your flight is booked — your letter, visa documents and e-ticket
+								are released with it.
 							</p>
 						</div>
 					</div>
@@ -2139,11 +2141,14 @@ export function PortalFinancial({ view = "ledger" }: { view?: "ledger" | "plan" 
 																	{preDepCovered ? "Paid" : preDepCurrent ? "Due now" : "Upcoming"}
 																</span>
 																<span className="ledger-item__detail muted">{preDep.detail}</span>
-															{preDepCurrent && (
-																<Button size="sm" variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying}>
-																	{agencyPaying ? "Processing…" : "Pay pre-departure"}
-																</Button>
-															)}
+															{preDepCurrent &&
+																(milestoneUnlockedFor(a) ? (
+																	<Button size="sm" variant="primary" onClick={() => void handlePayAgency()} disabled={agencyPaying}>
+																		{agencyPaying ? "Processing…" : "Pay pre-departure"}
+																	</Button>
+																) : (
+																	<span className="ledger-item__detail muted">{milestoneLockReasonFor(a)}</span>
+																))}
 															</div>
 														</div>
 

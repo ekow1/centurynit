@@ -44,10 +44,10 @@ const milestones = {
 	visaConsented: { hasVisaConsent: true, coarseStage: "visa_processing" as const },
 	visaPaid: { visaInvoicePaid: true },
 	visaDone: { visaDone: true, coarseStage: "travel_assistance" as const },
-	// The plan was chosen at enrolment; the pre-departure instalment is the
-	// second milestone (the deposit was the first) and comes before the flight.
-	feePaid: { paymentPlanId: "installment", agencyStageIndex: 2 },
+	// The flight is booked first; the fee milestone (the pre-departure
+	// instalment, the deposit being the first) follows it and releases the papers.
 	booked: { travelAssistanceStatus: "booked" },
+	feePaid: { paymentPlanId: "installment", agencyStageIndex: 2 },
 	cleared: { preDepartureDone: true },
 } satisfies Record<string, Partial<JourneySignals>>;
 
@@ -77,9 +77,9 @@ describe("deriveJourney — the happy path, one milestone at a time", () => {
 		["admitted", "school_tracking"],
 		["visaConsented", "visa_invoice"],
 		["visaPaid", "visa"],
-		["visaDone", "payment_execution"],
-		["feePaid", "travel_assistance"],
-		["booked", "travel_assistance"],
+		["visaDone", "travel_assistance"],
+		["booked", "payment_execution"],
+		["feePaid", "payment_execution"],
 		["cleared", "completed"],
 	];
 
@@ -135,7 +135,7 @@ describe("deriveJourney — gates", () => {
 
 	it("opens both Departure pages with the visa; the fee milestone is a step, not a lock", () => {
 		const j = deriveJourney(upTo("visaDone"));
-		expect(j.portalStage).toBe("payment_execution");
+		expect(j.portalStage).toBe("travel_assistance");
 		expect(j.chapterUnlocks.payment_execution).toBe(true);
 		expect(j.chapterUnlocks.travel_assistance).toBe(true);
 	});
@@ -173,7 +173,7 @@ describe("deriveJourney — the coarse stage is a floor, signals are the truth",
 
 	it("lets later evidence count without an earlier tick, and calls the earlier step skipped", () => {
 		const j = deriveJourney({ ...upTo("visaDone"), appInvoicePaid: false });
-		expect(j.portalStage).toBe("payment_execution");
+		expect(j.portalStage).toBe("travel_assistance");
 		expect(j.stageStatuses.application_invoice).toBe("skipped");
 		expect(j.stageStatuses.visa).toBe("done");
 	});

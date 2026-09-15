@@ -230,8 +230,9 @@ export function canAdvanceToStage(
 // apps read — and is re-exported from the package index.
 
 /** Canonical portal stage order — matches PROCESS_STAGES[].index. */
-// The fee milestone comes before the flight: it is due once the visa is
-// approved and the ticket is not issued until it is paid.
+// The flight comes before the fee milestone: Departure opens on the visa,
+// the flight is booked first, and the milestone unlocks once travel is
+// settled (booked or own booking) — it releases the papers, not the seat.
 export const PORTAL_STAGE_ORDER: string[] = [
 	"new",
 	"consultation",
@@ -245,8 +246,8 @@ export const PORTAL_STAGE_ORDER: string[] = [
 	"school_tracking",
 	"visa_invoice",
 	"visa",
-	"payment_execution",
 	"travel_assistance",
+	"payment_execution",
 	"completed",
 ];
 

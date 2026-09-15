@@ -101,6 +101,26 @@ export async function deleteDailyRoom(roomName: string): Promise<void> {
 	await dailyFetch(`/rooms/${encodeURIComponent(roomName)}`, { method: "DELETE" });
 }
 
+/**
+ * Re-bind a room's join window after a reschedule. The room's own nbf/exp are
+ * baked at creation; without this a moved meeting keeps a room that opens (or
+ * expires) against the old slot.
+ */
+export async function updateDailyRoomWindow(
+	roomName: string,
+	window: { notBefore?: Date; expiresAt: Date },
+): Promise<void> {
+	await dailyFetch(`/rooms/${encodeURIComponent(roomName)}`, {
+		method: "POST",
+		body: {
+			properties: {
+				exp: Math.floor(window.expiresAt.getTime() / 1000),
+				...(window.notBefore ? { nbf: Math.floor(window.notBefore.getTime() / 1000) } : {}),
+			},
+		},
+	});
+}
+
 /** Live presence for the status poller — a real participant count. */
 export async function getDailyPresence(roomName: string): Promise<MeetingStatus> {
 	const presence = (await dailyFetch(`/rooms/${encodeURIComponent(roomName)}/presence`)) as {

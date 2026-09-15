@@ -876,6 +876,18 @@ export async function rescheduleBooking(input: {
 		updated = await updateCalendarForBooking(updated.id);
 	}
 
+	// A Daily room's nbf/exp were baked to the old slot — re-bind them or the
+	// room opens (or worse, expires) against a time that no longer exists.
+	// Best-effort: a failed patch must not roll back a committed reschedule.
+	if (updated.meetingProvider === "daily" && updated.meetingSpace) {
+		try {
+			const { updateMeetingWindow } = await import("./meet/index.js");
+			await updateMeetingWindow(updated.meetingSpace, "daily", meetingWindow(updated));
+		} catch (err) {
+			console.error("[booking] could not update Daily room window after reschedule:", err);
+		}
+	}
+
 	const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
 	const ctx = { ...(await notificationContext(updated, employee)), reason: input.reason ?? null };
 

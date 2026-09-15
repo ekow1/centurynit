@@ -6,6 +6,7 @@ import {
 	dailyConnected,
 	deleteDailyRoom,
 	getDailyPresence,
+	updateDailyRoomWindow,
 } from "./daily.js";
 import {
 	MeetAuthError,
@@ -215,6 +216,20 @@ export async function endMeeting(spaceId: string, provider?: string | null): Pro
 			throw err;
 		}
 		classify(err);
+	}
+}
+
+/**
+ * Re-bind a provider room's join window after a reschedule. Daily rooms get
+ * their nbf/exp patched; Google Meet spaces have no window, so it's a no-op.
+ */
+export async function updateMeetingWindow(
+	spaceId: string,
+	provider: string | null | undefined,
+	window: { notBefore?: Date; expiresAt: Date },
+): Promise<void> {
+	if (provider === "daily") {
+		await updateDailyRoomWindow(spaceId, window);
 	}
 }
 

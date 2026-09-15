@@ -2589,13 +2589,10 @@ function ApplicationHubInner() {
 		removeSchoolApplication,
 		lockSchoolSelection,
 		setSchoolApplications,
-		payAgencyInstallment,
 		syncFromServer,
 		syncTick,
 		journeyPhase,
-		booking,
 	} = useAppState();
-	const [depositPaying, setDepositPaying] = useState(false);
 	const [serverInvoice, setServerInvoice] = useState<ApiInvoice | null>(null);
 	// Schools added after the first invoice went out are billed on a
 	// supplementary one — every application invoice past the first.
@@ -2756,9 +2753,6 @@ function ApplicationHubInner() {
 		: packagePrograms;
 	const program = getProgram(progId);
 	const intakes = program?.intake ?? ["September 2026", "January 2027"];
-	// The universities' own fees are only known once the invoice is raised; the
-	// preview is what the ledger says, never a guess.
-	const previewAmount = 0;
 
 	// If the applicant already locked their school selection (or has a server
 	// invoice), they are past the package/deposit gate — show the invoice
@@ -2860,7 +2854,7 @@ function ApplicationHubInner() {
 			<div className="loading-overlay">
 				<div className="spinner" aria-hidden />
 				<p className="mono">Contacting payment provider…</p>
-				<p className="muted">Charging {formatDualCurrency(inv.amount || previewAmount)}</p>
+				<p className="muted">Charging {formatDualCurrency(inv.amount)}</p>
 			</div>
 		);
 	}
@@ -2872,31 +2866,14 @@ function ApplicationHubInner() {
 	const handlerFirst = handler
 		? handler.split(" ")[0].charAt(0).toUpperCase() + handler.split(" ")[0].slice(1).toLowerCase()
 		: "your consultant";
-	const reference = application.appNumber ?? booking.confirmationId ?? null;
 	const n = schoolApplications.length;
 	const filedCount = schoolApplications.filter((r) => r.status !== "Preparing Application").length;
-	const admitted = schoolApplications.filter((r) => r.outcome === "Admitted");
 	const acceptedRow = schoolApplications.find((r) => r.id === application.acceptedSchoolId) ?? null;
+	const acceptedName = acceptedRow ? (getUniversity(acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? null) : null;
+	const visaConsent = application.visaConsent?.decision ?? null;
 	const invoiceDue = effectiveInv.status === "raised" && (serverInvoice?.balanceCents ?? 0) > 0;
 	const dueLabel = invoiceDue ? formatMoney(serverInvoice?.balanceCents ?? 0, "ghs") : null;
 	const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
-	// The one line under the title — what to do now, then the chapter's facts.
-	const now = !selectionDone
-		? "choose your target schools"
-		: paid && application.acceptedSchoolId && application.visaConsent?.decision === "continue"
-			? "offer accepted — your visa chapter is open"
-			: paid && application.acceptedSchoolId
-				? "offer accepted — decide on visa processing"
-			: paid && offersCount > 0
-				? `${plural(offersCount, "offer")} in — accept one to open the visa chapter`
-				: paid
-					? "applications under review"
-					: invoiceDue
-						? `pay the application invoice · ${dueLabel}`
-						: "your invoice is being prepared";
-
-	const invoiceFact = paid ? "invoice paid" : invoiceDue ? `${dueLabel} due` : selectionDone ? "invoice being prepared" : "invoice not raised";
 
 	const stepState = (k: 1 | 2 | 3 | 4): "done" | "on" | "later" =>
 		k === 1 ? (selectionDone ? "done" : "on")
@@ -2909,7 +2886,7 @@ function ApplicationHubInner() {
 		paid ? `${decidedCount} of ${n}` : "",
 		application.acceptedSchoolId ? "accepted" : offersCount > 0 ? plural(offersCount, "offer") : "",
 	];
-	const STEP_LABELS = ["Target schools", "Invoice", "Submission & decisions", "Accept an offer"];
+	const STEP_LABELS = ["Target schools", "Invoice", "Decisions", "Accept an offer"];
 
 	const openChat = () => window.dispatchEvent(new CustomEvent("open-chat", { detail: { channel: "support" } }));
 
@@ -2918,45 +2895,68 @@ function ApplicationHubInner() {
 		await syncFromServer();
 	};
 
-	// The rail's primary — the same action the day line names.
-	const railAction: ReactNode = !selectionDone ? (
-		<Button type="button" onClick={handleLockSelection} disabled={n === 0} arrow>
-			Confirm list &amp; send to {handlerFirst}
-		</Button>
-	) : invoiceDue ? (
-		<Button type="button" onClick={payInvoice} arrow>
-			Pay {dueLabel}
-		</Button>
-	) : application.acceptedSchoolId ? (
-		<Button to="/portal/visa" arrow>
-			Next · Visa
-		</Button>
-	) : offersCount === 1 ? (
-		<Button type="button" onClick={() => void acceptOffer(admitted[0])} arrow>
-			Accept {getUniversity(admitted[0].universityId)?.name ?? admitted[0].universityName ?? "the offer"}
-		</Button>
-	) : offersCount > 1 ? (
-		<Button to="#accept-offer" arrow>
-			Choose your school
-		</Button>
-	) : null;
-	const railNote = !selectionDone
-		? `${handlerFirst} prices the application fees from this list. You can add schools later — they go on a supplementary invoice.`
+	// The band — the one thing this chapter needs right now.
+	const band: { title: string; detail: string; cta: ReactNode } = !selectionDone
+		? {
+				title: `Choose your target schools — ${n} of ${MAX_TARGET_SCHOOLS} picked`,
+				detail: `Add up to five; the catalogue filters to your package. When the list is right, send it — ${handlerFirst} raises one invoice for all of them.`,
+				cta: (
+					<a className="btn btn--inverted" href="#target-list">
+						Review your list ↓
+					</a>
+				),
+			}
 		: invoiceDue
-			? "Paid on your behalf to each university, at cost. Files are lodged within two business days of payment."
-			: application.acceptedSchoolId
-				? "Your destination is confirmed. Visa processing is the next chapter."
-				: offersCount > 0
-					? "Your visa chapter opens the moment you accept. The university's own deposit is paid to the school directly."
-					: paid
-						? `${handlerFirst} has lodged every file and chases replies weekly. Universities reply in 2–6 weeks.`
-						: `Your school list is with ${handlerFirst}. You'll be notified the moment the invoice is ready to pay.`;
-
-	const nextStates: ("done" | "on" | "")[] = [
-		selectionDone ? "done" : "on",
-		paid ? "done" : selectionDone ? "on" : "",
-		offersCount > 0 || decidedCount > 0 ? "done" : paid ? "on" : "",
-	];
+			? {
+					title: `Pay the application invoice · ${dueLabel}`,
+					detail: "Each university's own application fee, passed on at cost. Files are lodged within two business days of payment.",
+					cta: (
+						<a className="btn btn--inverted" href="#invoice">
+							Pay {dueLabel} ↓
+						</a>
+					),
+				}
+			: !paid
+				? {
+						title: `Your school list is with ${handlerFirst}`,
+						detail: "The invoice is being prepared — you'll be notified the moment it is ready to pay.",
+						cta: null,
+					}
+				: application.acceptedSchoolId && visaConsent === "continue"
+					? {
+							title: "Visa processing requested",
+							detail: "Your visa specialist is being assigned and the invoice prepared — follow it on the visa hub.",
+							cta: (
+								<Button to="/portal/visa" variant="inverted" arrow>
+									Next · Visa &amp; travel
+								</Button>
+							),
+						}
+					: application.acceptedSchoolId
+						? {
+								title: "Offer accepted — decide on visa processing",
+								detail: "Your destination is confirmed. The visa decision below opens Chapter IV.",
+								cta: (
+									<a className="btn btn--inverted" href="#decision">
+										Decide ↓
+									</a>
+								),
+							}
+						: offersCount > 0
+							? {
+									title: `${plural(offersCount, "offer")} in — pick your school`,
+									detail: "Accepting one confirms your destination; the visa file and departure are prepared for that school.",
+									cta: (
+										<a className="btn btn--inverted" href="#decision">
+											Choose your school ↓
+										</a>
+									),
+								}
+							: {
+									title: `${plural(filedCount, "file")} lodged — universities reply in 2–6 weeks`,
+									detail: `Nothing to do. ${handlerFirst} chases replies weekly; a decision lands on the school's card the moment it arrives.`,
+									cta: null,
+								};
 
 	return (
 		<div className="portal-page">
@@ -2965,17 +2965,9 @@ function ApplicationHubInner() {
 					<p className="eyebrow">Chapter III · Applications</p>
 					<h1 className="page-title mt-1">Applications</h1>
 					<p className="lead mt-2">
-						Target your schools, settle the application invoice, then watch each file move.
-						Your consultant submits — you watch.
+						Pick up to five schools. {handlerFirst} prices their application fees, you settle one invoice, and every file is lodged and chased for you.
 					</p>
 				</div>
-				{reference || handler ? (
-					<p className="pref">
-						{reference}
-						{reference && handler ? <br /> : null}
-						{handler ? `Handler ${handler}` : null}
-					</p>
-				) : null}
 			</header>
 
 			{application.proceedStatus === "declined" ? (
@@ -2993,26 +2985,18 @@ function ApplicationHubInner() {
 						</Button>
 					</div>
 				</section>
-			) : null}
-
-			<div className="pday">
-				<span className="pday__now">Now · {now}</span>
-				<span>
-					<strong>{selectionDone ? n : `${n} of ${MAX_TARGET_SCHOOLS}`}</strong> {selectionDone ? (paid ? "filed" : "confirmed") : "targeted"}
-				</span>
-				{paid ? (
-					<span>
-						<strong>{decidedCount}</strong> decided
-					</span>
-				) : null}
-				{offersCount > 0 ? (
-					<span>
-						<strong>{offersCount}</strong> admitted
-					</span>
-				) : null}
-				<span>{invoiceFact}</span>
-				{handler ? <span>handler {handler}</span> : null}
-			</div>
+			) : (
+				<div className="journey-now mt-4">
+					<div>
+						<p className="eyebrow">You are here</p>
+						<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>
+							{band.title}
+						</p>
+						<p className="journey-now__detail">{band.detail}</p>
+					</div>
+					{band.cta}
+				</div>
+			)}
 
 			<div className="psteps4">
 				{STEP_LABELS.map((label, i) => {
@@ -3042,49 +3026,6 @@ function ApplicationHubInner() {
 									{fund ? ` · ${fund.name}` : ""}
 								</span>
 							</div>
-							{!hasPkg ? (
-								<div className="sharp-card mb-4">
-									<p className="eyebrow">Academic Package Required</p>
-									<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Please Select Your School Package First</h3>
-									<p className="muted mt-2" style={{ maxWidth: "42rem" }}>
-										Your study level (BSc, Master&apos;s, PhD) and funding track (Scholarship, Hybrid, Non-Scholarship) filter the institutions and courses available for targeting.
-									</p>
-									<div className="row mt-3">
-										<Button to="/portal/package" arrow>
-											Choose School Package
-										</Button>
-									</div>
-								</div>
-							) : !depositPaid ? (
-								<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--foreground)" }}>
-									<p className="eyebrow">10% Commitment Deposit Required</p>
-									<h3 className="display mt-1" style={{ fontSize: "1.25rem" }}>Activate Your File to Unlock School Selection</h3>
-									<p className="muted mt-2" style={{ maxWidth: "44rem", lineHeight: 1.6 }}>
-										A 10% commitment deposit is required to begin preparing and submitting your university applications. This covers your comprehensive credential review, document verification, and portal account setup.
-									</p>
-									<div className="row mt-3" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-										<Button
-											type="button"
-											onClick={async () => {
-												setDepositPaying(true);
-												try {
-													await payAgencyInstallment();
-												} catch (err) {
-													toast.error(err instanceof Error ? err.message : "Could not initiate deposit payment");
-													setDepositPaying(false);
-												}
-											}}
-											disabled={depositPaying}
-											arrow
-										>
-											{depositPaying ? "Connecting to Paystack…" : "Pay 10% Deposit via Paystack"}
-										</Button>
-										<Button to="/portal/package" variant="ghost">
-											Review Package Details
-										</Button>
-									</div>
-								</div>
-							) : null}
 
 							<div className="schools">
 								{schoolApplications.map((row) => (
@@ -3095,7 +3036,6 @@ function ApplicationHubInner() {
 										type="button"
 										className="sch sch--add"
 										onClick={() => document.getElementById("s-dest")?.focus()}
-										disabled={!hasPkg || !depositPaid}
 									>
 										<span className="sch__plus">+</span>
 										<span className="sch__addt">Add a school</span>
@@ -3110,7 +3050,7 @@ function ApplicationHubInner() {
 
 							{n < MAX_TARGET_SCHOOLS ? (
 								<form className="picker" onSubmit={addSchool}>
-									<fieldset disabled={!hasPkg || !depositPaid} className="picker__row">
+									<fieldset className="picker__row">
 										<Field label="Destination" htmlFor="s-dest">
 											<Select
 												id="s-dest"
@@ -3239,7 +3179,7 @@ function ApplicationHubInner() {
 					)}
 
 					{/* 2 · Invoice — the real invoice once issued, an awaiting line while proforma */}
-					<section className={`psec${!selectionDone ? " psec--later" : ""}`}>
+					<section className={`psec${!selectionDone ? " psec--later" : ""}`} id="invoice">
 						<div className="psec__h">
 							<span className={`psec__no${paid ? " psec__no--done" : !selectionDone ? " psec__no--later" : ""}`}>{paid ? "✓" : "2"}</span>
 							<span className="psec__title">Application invoice</span>
@@ -3250,6 +3190,10 @@ function ApplicationHubInner() {
 						{!selectionDone ? (
 							<p className="psec__later">
 								Raised by {handlerFirst} once your list is confirmed — each university's own application fee, paid on your behalf at cost.
+							</p>
+						) : paid && extraInvoices.every((x) => x.status === "paid" || x.balanceCents <= 0) ? (
+							<p className="psec__later">
+								{serverInvoice ? formatMoney(serverInvoice.subtotalCents, "ghs") : formatDualCurrency(inv.amount)} settled in full — receipt in your Money ledger.
 							</p>
 						) : effectiveInv.status === "estimated" || !serverInvoice ? (
 							<p className="psec__later">
@@ -3302,91 +3246,54 @@ function ApplicationHubInner() {
 						)}
 					</section>
 
-					{/* 3 · Submission & decisions — what Century does; the cards above carry each file */}
-					<section className={`psec${!paid ? " psec--later" : ""}`}>
-						<div className="psec__h">
-							<span className={`psec__no${offersCount > 0 || application.acceptedSchoolId ? " psec__no--done" : !paid ? " psec__no--later" : ""}`}>
-								{offersCount > 0 || application.acceptedSchoolId ? "✓" : "3"}
-							</span>
-							<span className="psec__title">Submission &amp; decisions</span>
-							<span className="psec__hint">{paid ? `${decidedCount} of ${n} decided` : "opens after payment"}</span>
-						</div>
-						{!paid ? (
-							<p className="psec__later">
-								Every file is lodged by {handlerFirst} once the invoice is paid; each school's reply lands on its card the moment it arrives.
-							</p>
-						) : (
-							<>
-								{application.pendingHandoff && (
-									<div className="sharp-card mb-4" style={{ borderLeft: "4px solid var(--foreground)" }}>
-										<p className="eyebrow">Assigning your visa officer</p>
-										<p className="muted" style={{ fontSize: "0.95rem", lineHeight: 1.6, marginTop: "0.4rem" }}>
-											We're assigning your{" "}
-											{JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ?? application.pendingHandoff.stage}{" "}
-											specialist — you'll be notified once your consultant is confirmed.
-										</p>
-									</div>
-								)}
-								<ConsultantUpdates comments={application.comments} title={`Updates from ${handlerFirst}`} filter={(c) => !isVisaUpdate(c)} className="mb-3" />
-								{offersCount === 0 ? (
-									<p className="psec__later">
-										{handlerFirst} has lodged every file and chases replies weekly. A school reaching <strong>Decided</strong> shows on its card first — an offer opens the visa chapter.
-									</p>
-								) : null}
-							</>
-						)}
-					</section>
-
-					{/* 4 · Accept an offer — one offer is the one you go with */}
-					<section className={`psec${offersCount === 0 && !application.acceptedSchoolId ? " psec--later" : ""}`} id="accept-offer">
-						<div className="psec__h">
-							<span className={`psec__no${application.acceptedSchoolId ? " psec__no--done" : offersCount === 0 ? " psec__no--later" : ""}`}>
-								{application.acceptedSchoolId ? "✓" : "4"}
-							</span>
-							<span className="psec__title">{application.acceptedSchoolId ? "Your decision" : "Accept an offer"}</span>
-							<span className="psec__hint">
-								{application.acceptedSchoolId
-									? application.visaConsent?.decision === "continue"
-										? "visa processing"
-										: `${acceptedRow ? (getUniversity(acceptedRow.universityId)?.name ?? acceptedRow.universityName ?? "accepted") : "accepted"} · visa pending`
-									: offersCount > 0
-										? `${plural(offersCount, "offer")} in`
-										: ""}
-							</span>
-						</div>
-						{offersCount === 0 && !application.acceptedSchoolId ? (
-							<p className="psec__later">One offer is the one you go with — accepting it opens Chapter IV · Visa.</p>
-						) : (
-							<>
-								{offersCount > 1 && !application.acceptedSchoolId ? (
-									<div className="sharp-card sharp-card--key mb-3">
-										<p className="eyebrow">Choose your school</p>
-										<p className="display mt-1" style={{ fontSize: "1.2rem" }}>
-											You hold {offersCount} offers — which one are you going with?
-										</p>
-										<p className="muted mt-2">
-											Use “Accept this offer” on the school's card. Your visa application and departure are prepared for that school.
-										</p>
-									</div>
-								) : null}
-								{application.visaConsent?.decision === "continue" ? (
-									<div className="sharp-card sharp-card--key next-action">
-										<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-											<div>
-												<p className="eyebrow">Admitted · {plural(offersCount, "school")}</p>
-												<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
-													Visa processing requested
-												</p>
-												<p className="muted mt-2">
-													You have consented to proceed to the visa stage. Continue to your visa hub to monitor specialist assignment and invoice status.
-												</p>
-											</div>
-											<Button to="/portal/visa" arrow>
-												Next · Visa &amp; travel
-											</Button>
+					{/* 3 · Your decision — the prompt and the visa consent in one card */}
+					{offersCount > 0 || application.acceptedSchoolId ? (
+						<section className="psec" id="decision">
+							<div className="psec__h">
+								<span className={`psec__no${application.acceptedSchoolId ? " psec__no--done" : ""}`}>
+									{application.acceptedSchoolId ? "✓" : "3"}
+								</span>
+								<span className="psec__title">Your decision</span>
+								<span className="psec__hint">
+									{application.acceptedSchoolId
+										? visaConsent === "continue"
+											? "visa processing"
+											: `${acceptedName ?? "accepted"} · visa pending`
+										: `${plural(offersCount, "offer")} in`}
+								</span>
+							</div>
+							{visaConsent === "continue" ? (
+								<div className="sharp-card sharp-card--key">
+									<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+										<div>
+											<p className="eyebrow">{acceptedName ?? `Admitted · ${plural(offersCount, "school")}`}</p>
+											<p className="display mt-1" style={{ fontSize: "1.35rem" }}>
+												Visa processing requested
+											</p>
+											<p className="muted mt-2">
+												{application.pendingHandoff
+													? `We're assigning your ${JOURNEY_STAGE_LABELS[application.pendingHandoff.stage as JourneyStage] ?? application.pendingHandoff.stage} specialist and preparing the visa invoice — you'll be notified once your consultant is confirmed.`
+													: "Your visa specialist is being assigned and the invoice prepared — follow it on the visa hub."}
+											</p>
 										</div>
+										<Button to="/portal/visa" arrow>
+											Next · Visa &amp; travel
+										</Button>
 									</div>
-								) : application.acceptedSchoolId || offersCount === 1 ? (
+								</div>
+							) : (
+								<>
+									{offersCount > 1 && !application.acceptedSchoolId ? (
+										<div className="sharp-card sharp-card--key mb-3">
+											<p className="eyebrow">Admitted · {plural(offersCount, "school")}</p>
+											<p className="display mt-1" style={{ fontSize: "1.2rem" }}>
+												You hold {offersCount} offers — which one are you going with?
+											</p>
+											<p className="muted mt-2">
+												Use “Accept this offer” on the school's card above, then decide below.
+											</p>
+										</div>
+									) : null}
 									<StageConsentCard
 										stage="visa"
 										currentDecision={application.visaConsent?.decision ?? null}
@@ -3399,13 +3306,27 @@ function ApplicationHubInner() {
 											void syncFromServer();
 										}}
 									/>
-								) : null}
-							</>
-						)}
-					</section>
+								</>
+							)}
+						</section>
+					) : null}
+
+					{/* Updates — only when the consultant has written on this chapter */}
+					{application.comments.some((c) => !isVisaUpdate(c)) ? (
+						<section className="psec">
+							<div className="psec__h">
+								<span className="psec__no">{offersCount > 0 || application.acceptedSchoolId ? "4" : "3"}</span>
+								<span className="psec__title">Updates</span>
+								<span className="psec__hint">from {handlerFirst}</span>
+							</div>
+							<div className="sharp-card">
+								<ConsultantUpdates comments={application.comments} title={`Updates from ${handlerFirst}`} filter={(c) => !isVisaUpdate(c)} className="mb-3" />
+							</div>
+						</section>
+					) : null}
 				</div>
 
-				{/* the rail — position, the action, the chapter's facts, what happens next */}
+				{/* the rail — position, the chapter's facts, one explainer for the state */}
 				<div className="prail">
 					<div className="prail__ink">
 						<p className="prail__ink-k">Your position</p>
@@ -3418,27 +3339,12 @@ function ApplicationHubInner() {
 						</p>
 					</div>
 
-					{railAction ? (
-						<div className="sharp-card">
-							{railAction}
-							<p className="prail__note">{railNote}</p>
-						</div>
-					) : (
-						<div className="sharp-card">
-							<p className="prail__note" style={{ marginTop: 0 }}>{railNote}</p>
-						</div>
-					)}
-
 					<div className="sharp-card">
 						<p className="eyebrow">This chapter</p>
 						<div style={{ marginTop: "0.4rem" }}>
 							<div className="pkv">
 								<span className="pkv__k">Package</span>
 								<span className="pkv__v">{[fund?.name, deg?.short].filter(Boolean).join(" · ") || "—"}</span>
-							</div>
-							<div className="pkv">
-								<span className="pkv__k">Schools</span>
-								<span className="pkv__v">{selectionDone ? `${n} · confirmed` : `${n} of ${MAX_TARGET_SCHOOLS}`}</span>
 							</div>
 							<div className={`pkv${invoiceDue ? " pkv--due" : ""}`}>
 								<span className="pkv__k">Invoice</span>
@@ -3450,36 +3356,38 @@ function ApplicationHubInner() {
 							</div>
 							<div className={`pkv${offersCount > 0 && !application.acceptedSchoolId ? " pkv--due" : ""}`}>
 								<span className="pkv__k">Next unlock</span>
-								<span className="pkv__v">IV · Visa — {application.acceptedSchoolId ? (application.visaConsent?.decision === "continue" ? "chapter opens" : "your visa decision") : offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
+								<span className="pkv__v">IV · Visa — {application.acceptedSchoolId ? (visaConsent === "continue" ? "chapter opens" : "your visa decision") : offersCount > 0 ? "accept an offer" : "when you're admitted"}</span>
 							</div>
 						</div>
 					</div>
 
-					{offersCount > 0 || application.acceptedSchoolId ? (
+					{!selectionDone ? (
 						<div className="sharp-card">
-							<p className="eyebrow">Accepting an offer</p>
-							<p className="prail__note">
+							<p className="eyebrow">How the list works</p>
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
+								Up to five schools within your package. Confirming sends the list to {handlerFirst}, who prices each university's application fee and raises one invoice. Late additions go on a supplementary invoice.
+							</p>
+						</div>
+					) : invoiceDue ? (
+						<div className="sharp-card">
+							<p className="eyebrow">What you're paying for</p>
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
+								Each university's own application fee, passed on at cost — Century NIT adds nothing to it. Payment lodges every file within two business days.
+							</p>
+						</div>
+					) : offersCount > 0 || application.acceptedSchoolId ? (
+						<div className="sharp-card">
+							<p className="eyebrow">How accepting works</p>
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
 								Accepting confirms your destination — the visa file and departure are prepared for that school. The university's own deposit is paid to the school directly; {handlerFirst} walks you through it.
 							</p>
 						</div>
 					) : (
 						<div className="sharp-card">
-							<p className="eyebrow">What happens next</p>
-							<div className="pnx">
-								{[
-									["You confirm the list", `${n === 0 ? "Up to five schools" : plural(n, "school")} now; more can be added later on a supplementary invoice.`],
-									[`${handlerFirst} raises the invoice`, "Each university's own application fee, at cost — usually within 1–2 business days."],
-									["Files are lodged", "Universities reply in 2–6 weeks. An offer here opens Chapter IV · Visa."],
-								].map(([t, d], i) => (
-									<div key={t} className="pnx__r">
-										<span className={`pnx__n${nextStates[i] ? ` pnx__n--${nextStates[i]}` : ""}`}>{nextStates[i] === "done" ? "✓" : i + 1}</span>
-										<div>
-											<strong>{t}</strong>
-											<div className="pnx__d">{d}</div>
-										</div>
-									</div>
-								))}
-							</div>
+							<p className="eyebrow">While you wait</p>
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
+								{handlerFirst} chases every school weekly. A decision shows on its card first — an offer opens Chapter IV · Visa. Nothing is asked of you here.
+							</p>
 						</div>
 					)}
 				</div>

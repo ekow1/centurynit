@@ -1076,6 +1076,15 @@ export async function cancelBooking(input: {
 	}
 	// Cancelling twice is not an error — the caller wanted it cancelled, and it is.
 	if (booking.status === "CANCELLED") return booking;
+	// A terminal booking (COMPLETED, NO_SHOW, …) has nothing left to release —
+	// same guard reschedule already uses.
+	if (!occupiesSlot(booking.status)) {
+		throw new HttpError(
+			409,
+			SCHEDULING_ERROR_CODES.BOOKING_CANCELLED,
+			`Cannot cancel a booking that is ${booking.status}`,
+		);
+	}
 
 	const [updated] = await db
 		.update(bookings)

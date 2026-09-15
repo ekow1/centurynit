@@ -68,13 +68,10 @@ function statusPill(status: string): string {
 	return "portal-pill";
 }
 
-/** A booking's effective display state — a COMPLETED in the future is still confirmed. */
+/** A booking's effective display state — COMPLETED is done even if the slot date is still ahead. */
 function displayState(booking: Booking): { displayStatus: string; isOver: boolean } {
-	const isFutureCompleted =
-		booking.status === "COMPLETED" && new Date(booking.startsAt).getTime() > Date.now();
-	const displayStatus = isFutureCompleted ? "CONFIRMED" : booking.status;
-	const isOver = (displayStatus === "CANCELLED" || displayStatus === "COMPLETED") && !isFutureCompleted;
-	return { displayStatus, isOver };
+	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED";
+	return { displayStatus: booking.status, isOver };
 }
 
 /* ── Slot picker, shared by booking and rescheduling ─────────────────────── */
@@ -416,8 +413,7 @@ export function PortalAppointments() {
 
 	const buckets = useMemo(() => {
 		const list = bookings ?? [];
-		const isPast = (b: Booking) =>
-			b.status === "COMPLETED" && new Date(b.startsAt).getTime() <= now;
+		const isPast = (b: Booking) => b.status === "COMPLETED";
 		return {
 			All: list,
 			Upcoming: list.filter((b) => b.status !== "CANCELLED" && !isPast(b)),

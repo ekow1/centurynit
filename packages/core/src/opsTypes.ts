@@ -180,6 +180,12 @@ export interface MockConsultation {
 	applicationId?: string | null;
 	applicationNumber?: string | null;
 	applicationStage?: string | null;
+	/** Cancellation stamp — when, who, why (from the linked booking). */
+	cancelledAt?: string | null;
+	cancelledBy?: string | null;
+	cancellationReason?: string | null;
+	/** The client holds a free-rebooking credit — next checkout skips payment. */
+	freeRebooking?: boolean;
 }
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";

@@ -18,6 +18,7 @@ import {
 	useAppState,
 	type AssessmentData,
 	type AssessmentDoc,
+	type ConsultationType,
 	type InvoiceLine,
 	type SchoolApplicationTrack,
 	type StageInvoice,
@@ -1678,7 +1679,14 @@ const BOOKABLE_BRANCHES = branches.filter((b) => b.id === "accra-hq" || b.id ===
 // The branch is the office that handles your file — its slots, its
 // consultants — so it is picked for online meetings too, not just in-person.
 
-export function PortalConsultationBookingFlow() {
+export function PortalConsultationBookingFlow({ embedded = false, freeRebooking = false, prefill }: {
+	/** Render only the two-column flow — no page chrome (used inside the cancelled-case layout). */
+	embedded?: boolean;
+	/** A free-rebooking credit covers the fee — no Paystack hop, no fee line. */
+	freeRebooking?: boolean;
+	/** Carry branch/type over from the cancelled case — never clobbers a choice already made. */
+	prefill?: { branchId?: string; consultationType?: string };
+} = {}) {
 	const {
 		booking,
 		updateBooking,
@@ -1687,6 +1695,17 @@ export function PortalConsultationBookingFlow() {
 	} = useAppState();
 	const { toast } = useNotifier();
 	const catalog = useAssessmentCatalog();
+
+	// Rebook prefill — the cancelled case's branch/type, applied only to
+	// fields the client hasn't already picked.
+	useEffect(() => {
+		const patch: { branchId?: string; consultationType?: ConsultationType } = {};
+		if (prefill?.branchId && !booking.branchId) patch.branchId = prefill.branchId;
+		if (prefill?.consultationType && !booking.consultationType) {
+			patch.consultationType = prefill.consultationType as ConsultationType;
+		}
+		if (Object.keys(patch).length > 0) updateBooking(patch);
+	}, [prefill?.branchId, prefill?.consultationType, booking.branchId, booking.consultationType, updateBooking]);
 
 	// Live consultation fee (USD) from platform_settings — what ops configured,
 	// not the hardcoded default. Falls back to FALLBACK_FEE_SCHEDULE on error.
@@ -1795,27 +1814,27 @@ export function PortalConsultationBookingFlow() {
 				},
 			});
 
-			window.location.href = res.authorizationUrl;
+			if (res.authorizationUrl) {
+				window.location.href = res.authorizationUrl;
+				return;
+			}
+			if (res.booking) {
+				// Free rebooking — the credit covered the fee; the booking is
+				// already made, no Paystack hop.
+				updateBooking({ confirmationId: res.booking.reference });
+				setPayState("paid");
+				toast.success("Booked — your slot is confirmed. No payment was needed.");
+				return;
+			}
+			throw new Error("Checkout returned neither a payment link nor a booking");
 		} catch (err) {
 			setPayState("method");
 			toast.error("Error creating booking: " + String(err));
 		}
 	}
 
-	return (
-		<div className="portal-page">
-			<header className="portal-page__header">
-				<div>
-					<p className="eyebrow">Chapter I · Consultation</p>
-					<h1 className="page-title mt-1">Book your consultation</h1>
-					<p className="lead mt-2">
-						One session — video or at a branch — 45 minutes, {formatDualCurrency(consultationFeeUsd)}. Your consultant reviews your
-						background, tells you if the route is viable, and hands you a document checklist and a named consultant for the rest of the journey.
-					</p>
-				</div>
-			</header>
-
-			<div className="psplit">
+	const flow = (
+		<div className="psplit">
 				<div>
 					{/* 1 · how you meet */}
 					<section className="psec">
@@ -1928,14 +1947,16 @@ export function PortalConsultationBookingFlow() {
 								<div className="order">
 									<div className="order__row">
 										<span>
-											{booking.consultationType === "online" ? "Online consultation" : "In-person consultation"} — 45 min
+											{freeRebooking
+												? "Consultation — free rebooking"
+												: `${booking.consultationType === "online" ? "Online consultation" : "In-person consultation"} — 45 min`}
 											<small>
 												{[booking.date, booking.time, booking.branchId ? `${getBranchName(booking.branchId)} handles the file` : null]
 													.filter(Boolean)
 													.join(" · ") || "Details in the rail"}
 											</small>
 										</span>
-										<span className="order__amt">{formatDualCurrency(consultationFeeUsd)}</span>
+										<span className="order__amt">{freeRebooking ? "Covered" : formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
 									<div className="order__row">
 										<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
@@ -1945,7 +1966,7 @@ export function PortalConsultationBookingFlow() {
 									</div>
 									<div className="order__total">
 										<span>Due now</span>
-										<span className="order__amt">{formatDualCurrency(consultationFeeUsd)}</span>
+										<span className="order__amt">{freeRebooking ? "GH₵ 0" : formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
 								</div>
 								<p className="muted mt-3" style={{ fontSize: "var(--text-xs)", lineHeight: 1.6, maxWidth: "30rem" }}>
@@ -1953,13 +1974,15 @@ export function PortalConsultationBookingFlow() {
 								</p>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
-										Pay with Paystack · {formatDualCurrency(consultationFeeUsd)}
+										{freeRebooking ? "Book the slot" : `Pay with Paystack · ${formatDualCurrency(consultationFeeUsd)}`}
 									</Button>
 									<a className="btn btn--ghost" href="#pick-a-time">Change slot</a>
 								</div>
-								<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>
-									Card · MTN MoMo · Vodafone Cash — processed by Paystack
-								</p>
+								{!freeRebooking ? (
+									<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>
+										Card · MTN MoMo · Vodafone Cash — processed by Paystack
+									</p>
+								) : null}
 							</>
 						) : null}
 
@@ -2033,10 +2056,10 @@ export function PortalConsultationBookingFlow() {
 									{booking.time ? `${booking.time} · 45 min` : "Not picked"}
 								</span>
 							</div>
-							<div className="pkv pkv--due">
+							<div className={`pkv${freeRebooking ? "" : " pkv--due"}`}>
 								<span className="pkv__k">Fee</span>
 								<span className="pkv__v">
-									{payState === "paid" ? "Paid ✓" : formatDualCurrency(consultationFeeUsd)}
+									{freeRebooking ? "Covered ✓" : payState === "paid" ? "Paid ✓" : formatDualCurrency(consultationFeeUsd)}
 								</span>
 							</div>
 						</div>
@@ -2059,6 +2082,23 @@ export function PortalConsultationBookingFlow() {
 					</div>
 				</div>
 			</div>
+	);
+
+	if (embedded) return flow;
+
+	return (
+		<div className="portal-page">
+			<header className="portal-page__header">
+				<div>
+					<p className="eyebrow">Chapter I · Consultation</p>
+					<h1 className="page-title mt-1">Book your consultation</h1>
+					<p className="lead mt-2">
+						One session — video or at a branch — 45 minutes, {formatDualCurrency(consultationFeeUsd)}. Your consultant reviews your
+						background, tells you if the route is viable, and hands you a document checklist and a named consultant for the rest of the journey.
+					</p>
+				</div>
+			</header>
+			{flow}
 		</div>
 	);
 }
@@ -2127,16 +2167,80 @@ export function PortalConsultation() {
 	}
 
 	if (!hasActiveCase) {
-		return (
-			<>
-				{closedCase ? (
-					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "1rem" }}>
-						Your previous consultation was cancelled — book a new slot below.
-					</p>
-				) : null}
-				<PortalConsultationBookingFlow />
-			</>
-		);
+		if (closedCase) {
+			// Cancelled case — state the money plainly and offer the free
+			// rebooking when ops issued one. The booking sheet sits in the
+			// same page, prefilled from the cancelled case.
+			const isFree = liveConsultation?.freeRebooking ?? false;
+			const cancelledFeeUsd = usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents);
+			return (
+				<div className="portal-page">
+					<header className="portal-page__header">
+						<div>
+							<p className="eyebrow">Chapter I · Consultation</p>
+							<h1 className="page-title mt-1">Consultation · cancelled</h1>
+							<p className="lead mt-2">
+								This consultation was cancelled and the slot released back to the branch.
+							</p>
+						</div>
+					</header>
+
+					<div className="journey-now mt-4">
+						<div>
+							<p className="eyebrow">You are here</p>
+							<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>
+								{isFree
+									? "Book a new slot — the fee is covered"
+									: "Book a new slot — or move, don't cancel, next time"}
+							</p>
+							<p className="journey-now__detail">
+								{isFree
+									? "A free rebooking was issued on your case. Your assessment and documents carry over — only the appointment is new."
+									: `A new booking carries the consultation fee again (${formatDualCurrency(cancelledFeeUsd)}). If we cancelled on you, message us first — you shouldn't pay twice. Your assessment and documents carry over; only the appointment is new.`}
+							</p>
+						</div>
+						<a className="btn btn--inverted" href="#rebook">Book a new slot ↓</a>
+					</div>
+
+					<div className="sharp-card mt-4" style={{ maxWidth: "44rem" }}>
+						<p className="eyebrow">What carries over</p>
+						<div className="pkv">
+							<span className="pkv__k">Assessment</span>
+							<span className="pkv__v">Kept — no need to refill</span>
+						</div>
+						<div className="pkv">
+							<span className="pkv__k">Documents</span>
+							<span className="pkv__v">Kept in your vault</span>
+						</div>
+						<div className="pkv">
+							<span className="pkv__k">Consultant</span>
+							<span className="pkv__v">Assigned within a day, as before</span>
+						</div>
+						<div className="pkv">
+							<span className="pkv__k">Fee</span>
+							<span className="pkv__v">
+								{isFree ? "Covered — free rebooking" : `${formatDualCurrency(cancelledFeeUsd)} again`}
+							</span>
+						</div>
+					</div>
+
+					<section className="psec" id="rebook" style={{ marginTop: "2rem" }}>
+						<div className="psec__h">
+							<span className="psec__title">Your new booking</span>
+						</div>
+						<PortalConsultationBookingFlow
+							embedded
+							freeRebooking={isFree}
+							prefill={{
+								branchId: liveConsultation?.branch,
+								consultationType: liveConsultation?.type,
+							}}
+						/>
+					</section>
+				</div>
+			);
+		}
+		return <PortalConsultationBookingFlow />;
 	}
 
 	// The standard documents are collected here, in this chapter, so

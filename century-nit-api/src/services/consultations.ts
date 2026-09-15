@@ -181,6 +181,15 @@ export async function ensureCaseForBooking(booking: {
 		return created;
 	});
 
+	// Link the new case to the applicant's most recent cancelled consultation
+	// (if any) so ops sees one client story, not two orphan rows.
+	const [cancelledBefore] = await db
+		.select({ id: consultations.id })
+		.from(consultations)
+		.where(and(eq(consultations.applicantId, applicant.id), eq(consultations.status, "CANCELLED")))
+		.orderBy(desc(consultations.createdAt))
+		.limit(1);
+
 	const [created] = await db
 		.insert(consultations)
 		.values({
@@ -190,6 +199,7 @@ export async function ensureCaseForBooking(booking: {
 			branch: booking.branchId,
 			type: booking.type,
 			status: "UNDER_REVIEW",
+			rebookedFromId: cancelledBefore?.id ?? null,
 		})
 		.onConflictDoNothing({ target: consultations.bookingId })
 		.returning();
@@ -253,7 +263,12 @@ export async function syncConsultationAssignment(
  * clears the applicant's denormalized officer reference so the portal no
  * longer shows a counselor for a cancelled appointment.
  */
-export async function syncConsultationCancelled(bookingId: string): Promise<void> {
+export async function syncConsultationCancelled(
+	bookingId: string,
+	actor?: { name: string; email: string; opsUserId?: string | null },
+	reason?: string,
+	skipComment?: boolean,
+): Promise<void> {
 	// Look up the consultation linked to this booking.
 	const [row] = await db
 		.select({ id: consultations.id, applicantId: consultations.applicantId, assignedOfficerId: consultations.assignedOfficerId, status: consultations.status })
@@ -274,6 +289,19 @@ export async function syncConsultationCancelled(bookingId: string): Promise<void
 			updatedAt: new Date(),
 		})
 		.where(eq(consultations.id, row.id));
+
+	// Audit trail — who cancelled the appointment and why. The ops path
+	// (cancelConsultation) writes its own line first, so it asks us to skip.
+	if (!skipComment) {
+		await db.insert(caseComments).values({
+			targetType: "consultation",
+			targetId: row.id,
+			kind: "status",
+			text: `Appointment cancelled by ${actor?.name ?? "system"}${reason ? `: ${reason}` : "."}`,
+			authorName: actor?.name ?? "System",
+			authorOpsUserId: actor?.opsUserId ?? "",
+		});
+	}
 
 	// End the assignment history row.
 	const { endAssignment: endConsultAssignmentCancel } = await import("./caseAssignments.js");
@@ -366,12 +394,71 @@ export async function cancelConsultation(
 				bookingId: row.bookingId,
 				reason: reason ?? "Consultation cancelled by operations",
 				actor,
+				skipConsultationComment: true,
 			});
 		} catch {
 			// The booking may already be cancelled or in a terminal state.
 			// The consultation itself is already cancelled, which is what matters.
 		}
 	}
+}
+
+/**
+ * Reopen a cancelled consultation — puts the case back to UNDER_REVIEW with
+ * no slot; ops assigns a new time after. Only valid from CANCELLED.
+ */
+export async function reopenConsultation(
+	id: string,
+	actor: { opsUserId: string; name: string; email: string },
+): Promise<void> {
+	const row = await getConsultation(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status !== "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Only a cancelled consultation can be reopened");
+	}
+
+	await db
+		.update(consultations)
+		.set({ status: "UNDER_REVIEW", updatedAt: new Date() })
+		.where(eq(consultations.id, id));
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "status",
+		text: `Consultation reopened by ${actor.name} — awaiting a new slot`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+}
+
+/**
+ * Issue a free-rebooking credit — the client's next consultation checkout
+ * skips payment entirely. Only valid on a cancelled case.
+ */
+export async function issueRebookingCredit(
+	id: string,
+	actor: { opsUserId: string; name: string; email: string },
+): Promise<void> {
+	const row = await getConsultation(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status !== "CANCELLED") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Only a cancelled consultation can take a rebooking credit");
+	}
+
+	await db
+		.update(applicants)
+		.set({ freeRebooking: true, updatedAt: new Date() })
+		.where(eq(applicants.id, row.applicantId));
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "status",
+		text: `Free rebooking issued by ${actor.name} — the client picks a new slot without paying`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
 }
 
 export async function serializeConsultation(row: ConsultationRow, forApplicant = false): Promise<ApiConsultation> {
@@ -470,6 +557,11 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 		applicationId: linkedApplication?.id ?? null,
 		applicationNumber: linkedApplication?.appNumber ?? null,
 		applicationStage: linkedApplication?.stage ?? null,
+		cancelledAt: booking?.cancelledAt?.toISOString() ?? null,
+		cancelledBy: booking?.cancelledBy ?? null,
+		cancellationReason: booking?.cancellationReason ?? null,
+		freeRebooking: applicant?.freeRebooking ?? false,
+		rebookedFromId: row.rebookedFromId ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};

@@ -126,6 +126,10 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		applicationId: row.applicationId ?? null,
 		applicationNumber: row.applicationNumber ?? null,
 		applicationStage: row.applicationStage ?? null,
+		cancelledAt: row.cancelledAt ?? null,
+		cancelledBy: row.cancelledBy ?? null,
+		cancellationReason: row.cancellationReason ?? null,
+		freeRebooking: row.freeRebooking ?? false,
 	};
 }
 
@@ -560,6 +564,12 @@ export function useCasesApi() {
 			replaceConsultation(await consultationsApi.requestDocuments(id, documents)),
 		cancelConsultation: async (id: string, reason?: string) =>
 			replaceConsultation(await consultationsApi.cancel(id, reason)),
+		/** Reopen a cancelled case — back to Under Review, awaiting a new slot. */
+		reopenConsultation: async (id: string) =>
+			replaceConsultation(await consultationsApi.reopen(id)),
+		/** Issue a free rebooking — the client's next checkout skips payment. */
+		issueRebookingCredit: async (id: string) =>
+			replaceConsultation(await consultationsApi.rebookCredit(id)),
 		rescheduleConsultation,
 		decideReschedule,
 		listScholarships: (applicantId: string) => 

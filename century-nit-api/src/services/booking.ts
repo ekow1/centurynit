@@ -1067,6 +1067,8 @@ export async function cancelBooking(input: {
 	bookingId: string;
 	reason?: string;
 	actor: { name: string; email: string };
+	/** The caller already logged the cancellation on the case timeline. */
+	skipConsultationComment?: boolean;
 }): Promise<BookingRow> {
 	const booking = await getBooking(input.bookingId);
 	if (!booking) {
@@ -1102,7 +1104,12 @@ export async function cancelBooking(input: {
 	});
 
 	const { syncConsultationCancelled } = await import("./consultations.js");
-	await syncConsultationCancelled(booking.id);
+	await syncConsultationCancelled(
+		booking.id,
+		{ name: input.actor.name, email: input.actor.email },
+		input.reason,
+		input.skipConsultationComment,
+	);
 
 	if (booking.meetingSpace) {
 		try {
@@ -1130,7 +1137,7 @@ export async function cancelBooking(input: {
 		type: "booking.cancelled",
 		title: "Your appointment has been cancelled",
 		body: `Your consultation on ${updated.reference} has been cancelled.`,
-		link: "/portal/tracking",
+		link: "/portal/consultation",
 	}).catch(() => {});
 	if (employee?.email) {
 		getStaffUserIdByEmail(employee.email)

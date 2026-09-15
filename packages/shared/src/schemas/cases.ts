@@ -614,6 +614,14 @@ export const consultationSchema = z.object({
 	applicationId: z.string().uuid().nullable().optional(),
 	applicationNumber: z.string().nullable().optional(),
 	applicationStage: z.string().nullable().optional(),
+	/** Cancellation stamp — set when the booking behind this case is cancelled. */
+	cancelledAt: z.string().datetime().nullable().optional(),
+	cancelledBy: z.string().nullable().optional(),
+	cancellationReason: z.string().nullable().optional(),
+	/** Whether the client holds a free-rebooking credit (set on the applicant). */
+	freeRebooking: z.boolean().optional(),
+	/** The cancelled consultation this one rebooks from, if any. */
+	rebookedFromId: z.string().uuid().nullable().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 });

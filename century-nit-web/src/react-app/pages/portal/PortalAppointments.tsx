@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, bookingsApi } from "century-nit-core/api";
+import { formatDualCurrency } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Button } from "../../components/ui/Button";
+import { FALLBACK_FEE_SCHEDULE, useAppState } from "../../context/AppState";
+import { usdFromCents } from "century-nit-shared";
 import type { AvailabilitySlot, Booking } from "century-nit-shared";
 
 /**
@@ -273,13 +276,18 @@ function useCancelBooking(onChanged: () => void) {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const { confirm, toast } = useNotifier();
+	const { fees } = useAppState();
+	// Stated up front — a new booking means a new fee, so say the figure.
+	const feeLabel = formatDualCurrency(
+		usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents),
+	);
 
 	async function cancel(id: string) {
 		const ok = await confirm({
-			title: "Cancel this consultation?",
+			title: "Can't make it?",
 			message:
-				"If you cancel this consultation appointment, your entire consultation process will be cancelled. You will need to start over and pay again. The selected time will also be released back to other applicants.",
-			confirmText: "Yes, Cancel",
+				`Moving is free — use "Move" on this row and your slot holds until your consultant confirms. Cancelling releases the slot and ends the consultation; a new booking means a new fee — ${feeLabel}.`,
+			confirmText: "Cancel & release the slot",
 			tone: "danger",
 		});
 		if (!ok) return;

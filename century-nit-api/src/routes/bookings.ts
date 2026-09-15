@@ -58,7 +58,7 @@ import {
 import type { Booking, CreateBooking } from "century-nit-shared";
 import { branches, consultationTypes, servicePackages } from "century-nit-core/content";
 import { createPaystackCheckout, verifyPaystackTransaction } from "../services/paystack.js";
-import { consultations, bookings as bookingsTable, paymentTransactions } from "../db/schema.js";
+import { applicants, consultations, bookings as bookingsTable, paymentTransactions } from "../db/schema.js";
 
 const bookingsRouter = new OpenAPIHono<{ Variables: AuthVariables }>({ defaultHook: validationHook });
 
@@ -251,8 +251,16 @@ bookingsRouter.openapi(
 		},
 		responses: {
 			200: {
-				description: "Checkout URL",
-				content: { "application/json": { schema: z.object({ authorizationUrl: z.string() }) } },
+				description: "Checkout URL — or the booking itself when a free-rebooking credit covers the fee",
+				content: {
+					"application/json": {
+						schema: z.object({
+							authorizationUrl: z.string().nullable(),
+							freeRebook: z.boolean().optional(),
+							booking: bookingSchema.optional(),
+						}),
+					},
+				},
 			},
 		},
 	}),
@@ -260,6 +268,59 @@ bookingsRouter.openapi(
 		const user = c.get("user");
 		const body = c.req.valid("json");
 		const origin = c.req.header("origin") || c.req.header("referer")?.split("/").slice(0, 3).join("/") || "https://centurynit.softclicksolutions.com";
+
+		// Free rebooking: ops issued a credit on a cancelled consultation, so
+		// this checkout skips Paystack entirely — the booking, case and a
+		// GH₵0 receipt are created directly and the credit is consumed.
+		if (body.serviceId === "consultation") {
+			const [applicant] = await db
+				.select()
+				.from(applicants)
+				.where(eq(applicants.userId, user.id))
+				.limit(1);
+			if (applicant?.freeRebooking) {
+				const booking = await createBooking({
+					data: body,
+					client: {
+						id: user.id,
+						name: user.name ?? user.email,
+						email: user.email,
+					},
+					serviceName: resolveServiceName(body.serviceId),
+					paidUpfront: true,
+				});
+
+				// Consume the credit — one free rebook per issue.
+				await db
+					.update(applicants)
+					.set({ freeRebooking: false, updatedAt: new Date() })
+					.where(eq(applicants.id, applicant.id));
+
+				// A GH₵0 paid invoice keeps the money trail honest. Payment ledger
+				// and receipt mail are skipped — a GH₵0 receipt email is noise.
+				try {
+					await createConsultationInvoice({
+						clientUserId: user.id,
+						applicantName: user.name ?? user.email,
+						applicantEmail: user.email,
+						bookingId: booking.id,
+						reference: booking.reference,
+						amountCents: 0,
+						issuedBy: "System",
+						paid: {
+							amountCents: 0,
+							method: "Free rebooking",
+							gateway: "credit",
+							reference: booking.reference,
+						},
+					});
+				} catch {
+					// Non-fatal — booking still succeeds; ops can still find the booking
+				}
+
+				return c.json({ authorizationUrl: null, freeRebook: true, booking: toBookingResponse(booking, null) }, 200);
+			}
+		}
 
 		// The consultation fee from the fee catalogue,
 		// falling back to the shared default when unset. Previously hardcoded at

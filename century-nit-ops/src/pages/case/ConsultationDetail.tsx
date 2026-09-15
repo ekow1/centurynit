@@ -83,6 +83,8 @@ export function ConsultationDetail({
 		rescheduleConsultation,
 		decideReschedule,
 		cancelConsultation,
+		reopenConsultation,
+		issueRebookingCredit,
 		delegateCoordinator,
 		getWorkload,
 		refresh,
@@ -337,6 +339,69 @@ export function ConsultationDetail({
 				waitingOn={waitingOn}
 				blockedBy={consultation.status === "Under Review" ? "The assessment opens once a consultant is assigned." : null}
 			/>
+
+			{/* Cancelled case — who cancelled, why, and the two ways back. */}
+			{consultation.status === "Cancelled" && (
+				<div className="card" style={{ padding: "0.75rem 1rem", marginTop: "0.75rem" }}>
+					<div style={{ fontSize: "var(--text-sm)" }}>
+						{(
+							[
+								["Cancelled", consultation.cancelledAt ? new Date(consultation.cancelledAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"],
+								["By", consultation.cancelledBy ? (consultation.cancelledBy === consultation.email ? "the client" : consultation.cancelledBy) : "—"],
+								["Reason", consultation.cancellationReason ?? "—"],
+							] as const
+						).map(([k, v], i, arr) => (
+							<div key={k} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.4rem 0", borderBottom: i < arr.length - 1 ? "1px solid var(--border-light)" : "none" }}>
+								<span className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>{k}</span>
+								<span style={{ textAlign: "right" }}>{v}</span>
+							</div>
+						))}
+					</div>
+					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.75rem" }}>
+						{canAssignWork && (
+							<button
+								type="button"
+								className="btn btn--sm btn--ghost"
+								onClick={() => {
+									void reopenConsultation(consultation.id)
+										.then(() => {
+											void refresh();
+											onToast("success", "Case reopened — awaiting a new slot.");
+										})
+										.catch((err: unknown) => {
+											onToast("error", err instanceof Error ? err.message : "Could not reopen the case.");
+										});
+								}}
+							>
+								Reopen case
+							</button>
+						)}
+						{consultation.freeRebooking ? (
+							<StatusPill tone="done">Free rebooking issued</StatusPill>
+						) : canAssignWork ? (
+							<button
+								type="button"
+								className="btn btn--sm"
+								onClick={() => {
+									void issueRebookingCredit(consultation.id)
+										.then(() => {
+											void refresh();
+											onToast("success", "Free rebooking issued — the client's next checkout is covered.");
+										})
+										.catch((err: unknown) => {
+											onToast("error", err instanceof Error ? err.message : "Could not issue the rebooking.");
+										});
+								}}
+							>
+								Issue free rebooking
+							</button>
+						) : null}
+						<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+							Reopen restores Under Review without a slot — assign a time after. Free rebooking lets the client pick a slot without paying again.
+						</span>
+					</div>
+				</div>
+			)}
 
 			<AssignSheet
 				open={assignOpen}
@@ -593,6 +658,11 @@ export function ConsultationDetail({
 		{/* --- INLINE FORMS --- */}
 		{showCancelForm && (
 			<div style={{ padding: "0.75rem 1.25rem", background: "var(--card)", borderBottom: "1px solid var(--border-light)" }}>
+				<ul style={{ margin: "0 0 0.6rem", padding: 0, listStyle: "none", fontSize: "var(--text-xs)", color: "var(--muted-foreground)", lineHeight: 1.7 }}>
+					<li>— Releases the slot and ends the meeting link</li>
+					<li>— Releases the consultant and emails both sides</li>
+					<li>— The client pays the fee again to rebook — unless you issue a free rebooking on the cancelled case</li>
+				</ul>
 				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", width: "100%", justifyContent: "flex-end" }}>
 					<input
 						type="text"

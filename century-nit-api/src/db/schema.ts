@@ -896,6 +896,8 @@ export const applicants = pgTable(
 		profile: jsonb("profile").$type<ApplicantProfile>().notNull().default({}),
 		portalState: jsonb("portal_state").$type<Record<string, unknown>>().notNull().default({}),
 		archivedAt: timestamp("archived_at", { withTimezone: true }),
+		/** Ops-issued credit: the client's next consultation checkout skips payment. */
+		freeRebooking: boolean("free_rebooking").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -933,6 +935,8 @@ export const consultations = pgTable(
 		 * empty seat.
 		 */
 		handlerCarriesCase: boolean("handler_carries_case").notNull().default(false),
+		/** The cancelled consultation this one rebooks from, if any. */
+		rebookedFromId: uuid("rebooked_from_id").references((): AnyPgColumn => consultations.id, { onDelete: "set null" }),
 		/** The coordinator who manages this case. Delegated by manager/owner. */
 		coordinatorId: uuid("coordinator_id").references(() => opsUsers.id, {
 			onDelete: "set null",

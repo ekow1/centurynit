@@ -1,4 +1,4 @@
-import { env } from "../../env.js";
+import { getSetting } from "../settings.js";
 import {
 	MeetNotConnectedError,
 	MeetUnavailableError,
@@ -38,11 +38,12 @@ export function setDailyFetchForTests(fetchImpl: DailyFetch | null): void {
 
 async function dailyFetch(path: string, init?: { method?: string; body?: unknown }): Promise<unknown> {
 	if (injectedFetch) return injectedFetch(path, init);
-	if (!env.DAILY_API_KEY) throw new MeetNotConnectedError("Daily is not configured");
+	const apiKey = await getSetting("DAILY_API_KEY");
+	if (!apiKey) throw new MeetNotConnectedError("Daily is not configured");
 	const res = await fetch(`${DAILY_API}${path}`, {
 		method: init?.method ?? "GET",
 		headers: {
-			Authorization: `Bearer ${env.DAILY_API_KEY}`,
+			Authorization: `Bearer ${apiKey}`,
 			"Content-Type": "application/json",
 		},
 		body: init?.body ? JSON.stringify(init.body) : undefined,
@@ -55,9 +56,17 @@ async function dailyFetch(path: string, init?: { method?: string; body?: unknown
 	return res.json();
 }
 
-/** Whether Daily is configured (or a fake is installed). */
-export function dailyConnected(): boolean {
-	return Boolean(injectedFetch || (env.DAILY_API_KEY && env.DAILY_DOMAIN));
+/**
+ * Whether Daily is configured (or a fake is installed). Credentials come from
+ * `platform_settings` via the ops Settings screen, falling back to env vars.
+ */
+export async function dailyConnected(): Promise<boolean> {
+	if (injectedFetch) return true;
+	const [apiKey, domain] = await Promise.all([
+		getSetting("DAILY_API_KEY"),
+		getSetting("DAILY_DOMAIN"),
+	]);
+	return Boolean(apiKey && domain);
 }
 
 /**

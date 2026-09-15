@@ -34,13 +34,13 @@ describe("Daily provider", () => {
 	});
 
 	describe("dailyConnected", () => {
-		it("is false without an API key or a fake", () => {
-			expect(dailyConnected()).toBe(false);
+		it("is false without an API key or a fake", async () => {
+			expect(await dailyConnected()).toBe(false);
 		});
 
-		it("is true while a fake transport is installed", () => {
+		it("is true while a fake transport is installed", async () => {
 			setDailyFetchForTests(async () => ({}));
-			expect(dailyConnected()).toBe(true);
+			expect(await dailyConnected()).toBe(true);
 		});
 	});
 

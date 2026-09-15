@@ -280,6 +280,20 @@ export const SETTING_DEFS: Record<
 		description:
 			"Server-side Stripe key used for international USD/GBP card checkouts. Starts with sk_live_ or sk_test_.",
 	},
+	DAILY_API_KEY: {
+		label: "Daily API Key",
+		group: "Video Meetings",
+		secret: true,
+		description:
+			"Server-side Daily.co API key for private consultation rooms and join tokens. From dashboard.daily.co → Developers → API keys. When set, online consultations use Daily instead of Google Meet.",
+	},
+	DAILY_DOMAIN: {
+		label: "Daily Domain",
+		group: "Video Meetings",
+		secret: false,
+		description:
+			"Your Daily subdomain — the part before .daily.co (e.g. \"centurynit\"). Required together with the API key.",
+	},
 };
 
 
@@ -649,6 +663,13 @@ function validateSettingValue(key: SettingKey, value: string | null): void {
 			weeklySlotScheduleSchema.parse(JSON.parse(value));
 		} catch {
 			throw new Error("Weekly slot schedule is invalid");
+		}
+	}
+
+	if (key === "DAILY_DOMAIN") {
+		const v = value.trim().toLowerCase().replace(/\.daily\.co$/, "");
+		if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(v)) {
+			throw new Error("Enter your Daily subdomain, e.g. \"centurynit\" — the part before .daily.co");
 		}
 	}
 

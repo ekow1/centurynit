@@ -457,7 +457,7 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 			.update(bookings)
 			.set({
 				meetingUrl: space.meetingUri,
-				meetingProvider: activeProvider() ?? "google_meet",
+				meetingProvider: (await activeProvider()) ?? "google_meet",
 				meetingSpace: space.spaceId,
 				calendarSyncStatus: "SYNCED",
 				calendarSyncError: null,
@@ -562,7 +562,7 @@ export async function generateMeetingForBooking(
 		throw new HttpError(
 			400,
 			"MEET_NOT_CONNECTED",
-			"Google Meet is not connected. Please connect the company Google account in Settings, or enter a meeting link manually.",
+			"No meeting provider is connected. Add Daily credentials or connect the company Google account in Settings → Video Meetings, or enter a meeting link manually.",
 		);
 	}
 
@@ -574,7 +574,7 @@ export async function generateMeetingForBooking(
 			.update(bookings)
 			.set({
 				meetingUrl: space.meetingUri,
-				meetingProvider: activeProvider() ?? "google_meet",
+				meetingProvider: (await activeProvider()) ?? "google_meet",
 				meetingSpace: space.spaceId,
 				type: "online",
 				calendarSyncStatus: "SYNCED",

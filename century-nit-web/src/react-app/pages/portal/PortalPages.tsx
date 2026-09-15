@@ -1970,7 +1970,7 @@ export function PortalConsultationBookingFlow({ embedded = false, freeRebooking 
 									</div>
 								</div>
 								<p className="muted mt-3" style={{ fontSize: "var(--text-xs)", lineHeight: 1.6, maxWidth: "30rem" }}>
-									Free reschedule up to 24h before · refunded in full if we can't place you · receipt lands in your Money ledger.
+									Free reschedule up to 24h before · if we cancel on you, the fee carries to a free rebooking — you never pay twice for our cancellation · receipt lands in your Money ledger.
 								</p>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>

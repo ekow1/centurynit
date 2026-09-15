@@ -68,9 +68,9 @@ function statusPill(status: string): string {
 	return "portal-pill";
 }
 
-/** A booking's effective display state — COMPLETED is done even if the slot date is still ahead. */
+/** A booking's effective display state — COMPLETED/NO_SHOW are done even if the slot date is still ahead. */
 function displayState(booking: Booking): { displayStatus: string; isOver: boolean } {
-	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED";
+	const isOver = booking.status === "CANCELLED" || booking.status === "COMPLETED" || booking.status === "NO_SHOW";
 	return { displayStatus: booking.status, isOver };
 }
 
@@ -413,7 +413,7 @@ export function PortalAppointments() {
 
 	const buckets = useMemo(() => {
 		const list = bookings ?? [];
-		const isPast = (b: Booking) => b.status === "COMPLETED";
+		const isPast = (b: Booking) => b.status === "COMPLETED" || b.status === "NO_SHOW";
 		return {
 			All: list,
 			Upcoming: list.filter((b) => b.status !== "CANCELLED" && !isPast(b)),

@@ -19,7 +19,6 @@ import {
 	getConsultation,
 	issueRebookingCredit,
 	listConsultations,
-	reopenConsultation,
 	serializeConsultation,
 	startConsultationAssessment,
 	delegateCoordinator,
@@ -460,35 +459,6 @@ consultationsRouter.openapi(
 			? { opsUserId: staff.opsUserId, name: staff.name, email: staff.email }
 			: { opsUserId: "", name: c.get("user").name ?? c.get("user").email, email: c.get("user").email };
 		await cancelConsultation(id, actor, body?.reason);
-		return c.json(await serializeConsultation((await getConsultation(id))!));
-	},
-);
-
-/* ── POST /consultations/:id/reopen ──────────────────────────────────────── */
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "post",
-		path: "/{id}/reopen",
-		tags: ["Consultations"],
-		summary: "Reopen a cancelled consultation (ops only)",
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: { params: idParams },
-		responses: {
-			200: {
-				content: { "application/json": { schema: consultationSchema } },
-				description: "Consultation reopened — awaiting a new slot",
-			},
-			409: { description: "Consultation is not cancelled" },
-		},
-	}),
-	async (c) => {
-		const { id } = c.req.valid("param");
-		const staff = c.get("staff");
-		const actor = staff
-			? { opsUserId: staff.opsUserId, name: staff.name, email: staff.email }
-			: { opsUserId: "", name: c.get("user").name ?? c.get("user").email, email: c.get("user").email };
-		await reopenConsultation(id, actor);
 		return c.json(await serializeConsultation((await getConsultation(id))!));
 	},
 );

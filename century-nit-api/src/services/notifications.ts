@@ -299,6 +299,33 @@ export function bookingCancelled(
 	};
 }
 
+/** Free rebooking issued — sent to the applicant (client). */
+export function rebookingCreditForClient(ctx: {
+	/** Consultation row id — keys the dedup; references recycle. */
+	entityId?: string;
+	reference: string;
+	clientName: string;
+	clientEmail: string;
+}): QueuedEmail {
+	const lines = [
+		`Hi <strong>${ctx.clientName}</strong>,`,
+		`Your consultation <strong>${ctx.reference}</strong> was cancelled on our side, so we've covered the fee for a new slot.`,
+		`Your assessment and documents carry over — only the appointment is new.`,
+		`Log in to your portal and pick a new slot — no payment is needed.`,
+		`<strong>Reference:</strong> ${ctx.reference}`,
+	];
+	const { html, text } = formatEmail("You can rebook — free", lines, null, ctx.reference);
+	return {
+		to: ctx.clientEmail,
+		subject: `Your rebooking is covered · ${ctx.reference}`,
+		html,
+		text,
+		idempotencyKey: `notify:rebook_credit:${ctx.entityId ?? ctx.reference}`,
+		template: "Free rebooking issued",
+		reference: ctx.reference,
+	};
+}
+
 export function bookingReminder(
 	ctx: BookingNotificationContext,
 	recipient: "client" | "employee",

@@ -186,6 +186,8 @@ export interface MockConsultation {
 	cancellationReason?: string | null;
 	/** The client holds a free-rebooking credit — next checkout skips payment. */
 	freeRebooking?: boolean;
+	/** This case replaced a cancelled one — points back at it. */
+	rebookedFromId?: string | null;
 }
 
 export type ApplicationStatus = "Under Review" | "Accepted" | "Action Required" | "Rejected";

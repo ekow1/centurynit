@@ -899,10 +899,6 @@ export const consultationsApi = {
 			body: JSON.stringify({ reason: reason ?? "" }),
 		});
 	},
-	/** Reopen a cancelled consultation — back to UNDER_REVIEW, no slot. */
-	reopen(id: string): Promise<ApiConsultation> {
-		return request(`${API_PREFIX}/consultations/${id}/reopen`, { method: "POST" });
-	},
 	/** Issue a free rebooking on a cancelled case — next checkout skips payment. */
 	rebookCredit(id: string): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/rebook-credit`, { method: "POST" });

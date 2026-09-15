@@ -2275,7 +2275,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 							assessmentDocs: prev.assessmentDocs,
 							consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
 							branchId: c.branch,
-							consultationPhase: "cancelled",
 						}
 					: {
 						...prev,

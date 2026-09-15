@@ -404,37 +404,9 @@ export async function cancelConsultation(
 }
 
 /**
- * Reopen a cancelled consultation — puts the case back to UNDER_REVIEW with
- * no slot; ops assigns a new time after. Only valid from CANCELLED.
- */
-export async function reopenConsultation(
-	id: string,
-	actor: { opsUserId: string; name: string; email: string },
-): Promise<void> {
-	const row = await getConsultation(id);
-	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
-	if (row.status !== "CANCELLED") {
-		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Only a cancelled consultation can be reopened");
-	}
-
-	await db
-		.update(consultations)
-		.set({ status: "UNDER_REVIEW", updatedAt: new Date() })
-		.where(eq(consultations.id, id));
-
-	await db.insert(caseComments).values({
-		targetType: "consultation",
-		targetId: row.id,
-		kind: "status",
-		text: `Consultation reopened by ${actor.name} — awaiting a new slot`,
-		authorName: actor.name,
-		authorOpsUserId: actor.opsUserId,
-	});
-}
-
-/**
  * Issue a free-rebooking credit — the client's next consultation checkout
- * skips payment entirely. Only valid on a cancelled case.
+ * skips payment entirely. Only valid on a cancelled case. The client is
+ * told in-app and by email; a credit nobody hears about is no credit.
  */
 export async function issueRebookingCredit(
 	id: string,
@@ -459,6 +431,28 @@ export async function issueRebookingCredit(
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
+
+	// Tell the client — in-app and by email (notify queues the email itself).
+	const applicant = await getApplicant(row.applicantId);
+	if (applicant?.userId) {
+		notify({
+			recipientUserId: applicant.userId,
+			type: "consultation.rebook_credit",
+			title: "Your rebooking is covered",
+			body: "We issued a free rebooking for your cancelled consultation — pick a new slot, no payment needed.",
+			link: "/portal/consultation",
+			entityType: "case",
+			entityId: row.id,
+			email: applicant.email
+				? mail.rebookingCreditForClient({
+						entityId: row.id,
+						reference: row.reference,
+						clientName: applicant.name ?? applicant.email,
+						clientEmail: applicant.email,
+					})
+				: undefined,
+		}).catch(() => {});
+	}
 }
 
 export async function serializeConsultation(row: ConsultationRow, forApplicant = false): Promise<ApiConsultation> {

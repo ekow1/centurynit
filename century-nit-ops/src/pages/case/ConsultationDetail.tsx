@@ -72,6 +72,7 @@ export function ConsultationDetail({
 	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
 	const {
 		applications,
+		consultations,
 		assignees,
 		completeConsultationAssessment,
 		assignConsultation,
@@ -83,7 +84,6 @@ export function ConsultationDetail({
 		rescheduleConsultation,
 		decideReschedule,
 		cancelConsultation,
-		reopenConsultation,
 		issueRebookingCredit,
 		delegateCoordinator,
 		getWorkload,
@@ -184,6 +184,15 @@ export function ConsultationDetail({
 	// Where this applicant is on the ladder: the spawned application's derived
 	// journey when there is one, else the two consultation steps.
 	const spawned = consultation.applicationId ? applications.find((a) => a.id === consultation.applicationId) ?? null : null;
+
+	// Rebooking lineage — which cancelled case this one replaced, and which
+	// live case replaced this one once it's cancelled.
+	const rebookedFrom = consultation.rebookedFromId
+		? consultations.find((c) => c.id === consultation.rebookedFromId) ?? null
+		: null;
+	const replacedBy = consultation.status === "Cancelled"
+		? consultations.find((c) => c.rebookedFromId === consultation.id) ?? null
+		: null;
 
 
 	// What this consultation is waiting on from us.
@@ -331,6 +340,14 @@ export function ConsultationDetail({
 							</button>
 						</p>
 					)}
+					{rebookedFrom && (
+						<p className="cn-docs__meta">
+							<button type="button" className="link-arrow" onClick={() => navigate(`/consultations?id=${rebookedFrom.id}`)}>
+								↩ Rebooked from {rebookedFrom.ref}
+								{rebookedFrom.cancelledAt ? ` — cancelled ${new Date(rebookedFrom.cancelledAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}
+							</button>
+						</p>
+					)}
 				</CaseHeader>
 			</div>
 
@@ -340,7 +357,10 @@ export function ConsultationDetail({
 				blockedBy={consultation.status === "Under Review" ? "The assessment opens once a consultant is assigned." : null}
 			/>
 
-			{/* Cancelled case — who cancelled, why, and the two ways back. */}
+			{/* Cancelled case — who cancelled, why, what replaced it, and the
+			    one way back: a free-rebooking credit the client spends on a
+			    new slot. Cancelled is terminal — the replacement is a new
+			    linked case, so the audit trail stays clean. */}
 			{consultation.status === "Cancelled" && (
 				<div className="card" style={{ padding: "0.75rem 1rem", marginTop: "0.75rem" }}>
 					<div style={{ fontSize: "var(--text-sm)" }}>
@@ -356,49 +376,46 @@ export function ConsultationDetail({
 								<span style={{ textAlign: "right" }}>{v}</span>
 							</div>
 						))}
+						<div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.4rem 0" }}>
+							<span className="muted" style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Replaced by</span>
+							{replacedBy ? (
+								<button type="button" className="link-arrow" onClick={() => navigate(`/consultations?id=${replacedBy.id}`)}>
+									{replacedBy.ref} →
+								</button>
+							) : (
+								<span>Not yet — awaiting the client</span>
+							)}
+						</div>
 					</div>
 					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "0.75rem" }}>
-						{canAssignWork && (
-							<button
-								type="button"
-								className="btn btn--sm btn--ghost"
-								onClick={() => {
-									void reopenConsultation(consultation.id)
-										.then(() => {
-											void refresh();
-											onToast("success", "Case reopened — awaiting a new slot.");
-										})
-										.catch((err: unknown) => {
-											onToast("error", err instanceof Error ? err.message : "Could not reopen the case.");
-										});
-								}}
-							>
-								Reopen case
-							</button>
-						)}
 						{consultation.freeRebooking ? (
-							<StatusPill tone="done">Free rebooking issued</StatusPill>
+							<>
+								<StatusPill tone="done">Free rebooking issued</StatusPill>
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>· the client was notified in-app and by email</span>
+							</>
 						) : canAssignWork ? (
-							<button
-								type="button"
-								className="btn btn--sm"
-								onClick={() => {
-									void issueRebookingCredit(consultation.id)
-										.then(() => {
-											void refresh();
-											onToast("success", "Free rebooking issued — the client's next checkout is covered.");
-										})
-										.catch((err: unknown) => {
-											onToast("error", err instanceof Error ? err.message : "Could not issue the rebooking.");
-										});
-								}}
-							>
-								Issue free rebooking
-							</button>
+							<>
+								<button
+									type="button"
+									className="btn btn--sm"
+									onClick={() => {
+										void issueRebookingCredit(consultation.id)
+											.then(() => {
+												void refresh();
+												onToast("success", "Free rebooking issued — the client was notified.");
+											})
+											.catch((err: unknown) => {
+												onToast("error", err instanceof Error ? err.message : "Could not issue the rebooking.");
+											});
+									}}
+								>
+									Issue free rebooking
+								</button>
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+									Covers the fee and tells the client to pick a new slot — their new booking opens a linked case. If the client cancelled, leave it — they rebook and pay.
+								</span>
+							</>
 						) : null}
-						<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-							Reopen restores Under Review without a slot — assign a time after. Free rebooking lets the client pick a slot without paying again.
-						</span>
 					</div>
 				</div>
 			)}
@@ -772,17 +789,12 @@ export function ConsultationDetail({
 				alerts.push(<strong>Assessment completed.</strong>);
 				if (consultation.assessmentResult) alerts.push(`Outcome: ${consultation.assessmentResult.outcome} - ${consultation.assessmentResult.recProgram} at ${consultation.assessmentResult.recUniversity} (${consultation.assessmentResult.recCountry}).`);
 			}
-			if (consultation.workflow?.status === "CLOSED") {
-				alerts.push(<strong style={{ color: "var(--danger)" }}>Cancelled.</strong>);
-			}
 			if (consultation.coordinatorName && !showCoordinatorPicker) {
 				alerts.push(
 					<span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
 						Coordinator: <StaffChatBadge opsUserId={consultation.coordinatorEmail} name={consultation.coordinatorName} email={consultation.coordinatorEmail} />
 					</span>
 				);
-			} else if (!consultation.coordinatorName && canAssignWork && consultation.status !== "Completed" && consultation.status !== "Cancelled") {
-				alerts.push("No coordinator assigned.");
 			}
 
 			if (alerts.length === 0) return null;

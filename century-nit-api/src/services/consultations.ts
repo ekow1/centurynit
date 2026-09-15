@@ -299,7 +299,7 @@ export async function syncConsultationCancelled(
 			kind: "status",
 			text: `Appointment cancelled by ${actor?.name ?? "system"}${reason ? `: ${reason}` : "."}`,
 			authorName: actor?.name ?? "System",
-			authorOpsUserId: actor?.opsUserId ?? "",
+			authorOpsUserId: actor?.opsUserId ?? null,
 		});
 	}
 

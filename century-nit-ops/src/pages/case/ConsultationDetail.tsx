@@ -121,6 +121,7 @@ export function ConsultationDetail({
 	const [savingMeetingUrl, setSavingMeetingUrl] = useState(false);
 	const [generatingMeet, setGeneratingMeet] = useState(false);
 	const [resendingMeetLink, setResendingMeetLink] = useState(false);
+	const [joiningMeet, setJoiningMeet] = useState(false);
 	/** Result recorded this session, shown until the refreshed row carries it. */
 	const [completedResult, setCompletedResult] = useState<MockConsultation["assessmentResult"] | null>(null);
 	const consultation: MockConsultation = completedResult
@@ -548,7 +549,30 @@ export function ConsultationDetail({
 							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
 								{consultation.meetingLink ? (
 									<>
-										<a href={consultation.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											style={{ whiteSpace: "nowrap" }}
+											disabled={joiningMeet}
+											onClick={async () => {
+												// Private rooms need a per-person token — /join mints it
+												// (staff get host controls); other providers return the
+												// stored link untouched.
+												setJoiningMeet(true);
+												try {
+													const url = consultation.bookingId
+														? (await bookingsApi.joinMeeting(consultation.bookingId)).url
+														: consultation.meetingLink;
+													if (url) window.open(url, "_blank", "noopener,noreferrer");
+												} catch (err) {
+													onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
+												} finally {
+													setJoiningMeet(false);
+												}
+											}}
+										>
+											{joiningMeet ? "Joining…" : "Join →"}
+										</button>
 										<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{consultation.meetingLink}</span>
 										{canManageMeeting && (
 											<>

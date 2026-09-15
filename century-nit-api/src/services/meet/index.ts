@@ -2,12 +2,31 @@ import { google } from "googleapis";
 import { createOAuthClient } from "../calendar/google.js";
 import { loadCompanyCredentials } from "../calendar/index.js";
 import {
+	createDailyRoom,
+	dailyConnected,
+	deleteDailyRoom,
+	getDailyPresence,
+} from "./daily.js";
+import {
 	MeetAuthError,
 	MeetNotConnectedError,
 	MeetUnavailableError,
 	type MeetingSpace,
 	type MeetingStatus,
 } from "./types.js";
+
+/**
+ * Meeting providers: Daily rooms when DAILY_API_KEY + DAILY_DOMAIN are set,
+ * else Google Meet through the company account. The booking's
+ * `meetingProvider` column records which created its room so status/end
+ * calls dispatch correctly — old Meet bookings keep working after the switch.
+ */
+export type MeetingProvider = "daily" | "google_meet";
+
+export function activeProvider(): MeetingProvider | null {
+	if (dailyConnected()) return "daily";
+	return null; // Google detection stays async — see meetConnected()
+}
 
 /**
  * Google Meet service.
@@ -98,7 +117,7 @@ async function meetClient(): Promise<MeetSpacesClient> {
  *
  * Caller must ensure no existing space is stored (idempotency is on the caller).
  */
-export async function createMeeting(): Promise<MeetingSpace> {
+async function googleCreateMeeting(): Promise<MeetingSpace> {
 	const client = await meetClient();
 	try {
 		let space;
@@ -139,6 +158,20 @@ export async function createMeeting(): Promise<MeetingSpace> {
 	}
 }
 
+/**
+ * Create a meeting room on whichever provider is active.
+ *
+ * Daily when configured — a private, self-expiring room. Otherwise Google
+ * Meet. `window` is the appointment slot; Daily binds room expiry to it,
+ * Google ignores it (spaces die on their own schedule).
+ */
+export async function createMeeting(window?: { notBefore?: Date; expiresAt?: Date }): Promise<MeetingSpace> {
+	if (dailyConnected()) {
+		return createDailyRoom({ expiresAt: window?.expiresAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000), notBefore: window?.notBefore });
+	}
+	return googleCreateMeeting();
+}
+
 /** Fetch an existing Meet space by its resource name. */
 export async function getMeeting(spaceId: string): Promise<MeetingSpace> {
 	const client = await meetClient();
@@ -168,7 +201,11 @@ export async function getMeeting(spaceId: string): Promise<MeetingSpace> {
  * kicks out anyone currently in the meeting. Called on cancellation if the
  * product requires it; by default the space is left alone.
  */
-export async function endMeeting(spaceId: string): Promise<void> {
+export async function endMeeting(spaceId: string, provider?: string | null): Promise<void> {
+	if (provider === "daily") {
+		await deleteDailyRoom(spaceId);
+		return;
+	}
 	const client = await meetClient();
 	try {
 		await client.spaces.endActiveConference({ name: spaceId, requestBody: {} });
@@ -196,7 +233,10 @@ export async function endMeeting(spaceId: string): Promise<void> {
  * Returns `{ active: false, participantCount: 0, startedAt: null }` when the
  * space exists but no one has joined yet.
  */
-export async function getMeetingStatus(spaceId: string): Promise<MeetingStatus> {
+export async function getMeetingStatus(spaceId: string, provider?: string | null): Promise<MeetingStatus> {
+	if (provider === "daily") {
+		return getDailyPresence(spaceId);
+	}
 	const client = await meetClient();
 	try {
 		const res = await client.spaces.get({ name: spaceId });
@@ -215,9 +255,9 @@ export async function getMeetingStatus(spaceId: string): Promise<MeetingStatus> 
 	}
 }
 
-/** Whether the company Google account is connected for Meet. */
+/** Whether any meeting provider is configured — Daily first, then Google. */
 export async function meetConnected(): Promise<boolean> {
-	if (injectedClient) return true;
+	if (injectedClient || dailyConnected()) return true;
 	const account = await loadCompanyCredentials();
 	return Boolean(account);
 }
@@ -229,3 +269,4 @@ export {
 	type MeetingSpace,
 	type MeetingStatus,
 } from "./types.js";
+export { createMeetingToken, dailyConnected, setDailyFetchForTests, type DailyFetch } from "./daily.js";

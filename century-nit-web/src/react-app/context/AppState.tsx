@@ -422,6 +422,8 @@ export type BookingData = {
 	// Step 8
 	confirmationId: string | null;
 	meetingLink: string | null;
+	/** The server booking row — join calls mint a token'd URL against it. */
+	bookingId: string | null;
 	// Steps 9–10
 	consultationPhase:
 		| "draft"
@@ -659,6 +661,7 @@ const defaultBooking: BookingData = {
 	paidAt: null,
 	confirmationId: null,
 	meetingLink: null,
+	bookingId: null,
 	consultationPhase: "draft",
 	consultantName: null,
 	consultantId: null,
@@ -2295,6 +2298,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						paymentStatus: "success",
 						paidAt: c.createdAt,
 						meetingLink: c.meetingUrl ?? null,
+						bookingId: c.bookingId ?? null,
 						date: c.startsAt
 							? new Intl.DateTimeFormat("en-CA", {
 									timeZone: c.timezone ?? undefined,

@@ -1,5 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { useAppState } from "../../context/AppState";
+import { apiFetch } from "../../lib/api";
+import { API_PREFIX } from "century-nit-shared";
 import {
 	CONSULTATION_DURATIONS,
 	consultationTypes,
@@ -65,10 +67,42 @@ export function ConsultationAppointmentCard() {
 			now <= start.getTime() + (minutes + 60) * MINUTE
 		);
 
+	const [joining, setJoining] = useState(false);
+
+	/**
+	 * The one door in. Private Daily rooms need a per-person token — the join
+	 * endpoint mints it and returns the URL to open; other providers return
+	 * the stored link untouched. Copy takes the same path so a copied link
+	 * actually works on another device (it is the client's own access).
+	 */
+	async function joinUrl(): Promise<string | null> {
+		if (!booking.bookingId) return booking.meetingLink;
+		try {
+			const res = await apiFetch<{ url: string }>(
+				`${API_PREFIX}/bookings/${booking.bookingId}/join`,
+				{ method: "POST" },
+			);
+			return res.url;
+		} catch {
+			return booking.meetingLink;
+		}
+	}
+
+	async function joinMeeting() {
+		setJoining(true);
+		try {
+			const url = await joinUrl();
+			if (url) window.open(url, "_blank", "noopener,noreferrer");
+		} finally {
+			setJoining(false);
+		}
+	}
+
 	async function copyLink() {
 		if (!booking.meetingLink) return;
 		try {
-			await navigator.clipboard.writeText(booking.meetingLink);
+			const url = (await joinUrl()) ?? booking.meetingLink;
+			await navigator.clipboard.writeText(url);
 			setCopied(true);
 			window.setTimeout(() => setCopied(false), 2000);
 		} catch {
@@ -255,18 +289,15 @@ export function ConsultationAppointmentCard() {
 			<div className="appt__actions">
 				{isOnline && booking.meetingLink ? (
 					<>
-						<a
+						<button
+							type="button"
 							className={`btn btn--primary${joinable ? "" : " btn--disabled"}`}
-							href={booking.meetingLink}
-							target="_blank"
-							rel="noreferrer"
+							disabled={!joinable || joining}
 							aria-disabled={!joinable}
-							onClick={(e) => {
-								if (!joinable) e.preventDefault();
-							}}
+							onClick={() => { if (joinable) void joinMeeting(); }}
 						>
-							{joinable ? "Join meeting →" : "Join opens 15 min before"}
-						</a>
+							{joining ? "Joining…" : joinable ? "Join meeting →" : "Join opens 15 min before"}
+						</button>
 						<button type="button" className="btn btn--secondary" onClick={copyLink}>
 							{copied ? "Copied ✓" : "Copy link"}
 						</button>

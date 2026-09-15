@@ -132,6 +132,18 @@ const schema = z.object({
 	GOOGLE_WEBHOOK_TOKEN: z.string().optional(),
 
 	/**
+	 * Daily video rooms — the meeting provider for online consultations.
+	 *
+	 * Optional: when set, new meeting links are created as private Daily rooms
+	 * (token'd joins, slot-bound expiry) instead of Google Meet spaces. Without
+	 * them the Google Meet integration stays the provider. DAILY_DOMAIN is the
+	 * subdomain part of the room URL, e.g. "centurynit" for
+	 * centurynit.daily.co.
+	 */
+	DAILY_API_KEY: z.string().optional(),
+	DAILY_DOMAIN: z.string().optional(),
+
+	/**
 	 * Enables the one-time super-admin bootstrap endpoint.
 	 *
 	 * Optional, and only useful once: the endpoint refuses as soon as any staff

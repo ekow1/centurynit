@@ -25,6 +25,7 @@ export async function pollMeetingStatus(): Promise<void> {
 		.select({
 			id: bookings.id,
 			meetingSpace: bookings.meetingSpace,
+			meetingProvider: bookings.meetingProvider,
 			startsAt: bookings.startsAt,
 		})
 		.from(bookings)
@@ -42,7 +43,7 @@ export async function pollMeetingStatus(): Promise<void> {
 	for (const b of candidates) {
 		if (!b.meetingSpace) continue;
 		try {
-			const status = await getMeetingStatus(b.meetingSpace);
+			const status = await getMeetingStatus(b.meetingSpace, b.meetingProvider);
 			await db
 				.update(bookings)
 				.set({

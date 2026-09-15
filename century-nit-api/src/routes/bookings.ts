@@ -30,6 +30,7 @@ import {
 	decideRescheduleBooking,
 	setBookingMeetingUrl,
 	generateMeetingForBooking,
+	joinBookingMeeting,
 	resendMeetingLinkForBooking,
 	type BookingRow,
 } from "../services/booking.js";
@@ -1056,6 +1057,49 @@ bookingsRouter.openapi(
 		const updated = await generateMeetingForBooking(id, actor);
 		const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
 		return c.json(toBookingResponse(updated, employee), 200);
+	},
+);
+
+/* ── POST /api/v1/bookings/:id/join ────────────────────────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/join",
+		tags: ["Bookings"],
+		summary: "Join the booking's meeting — mints a per-person token",
+		description:
+			"The one door into the meeting. Daily rooms are private: this mints a " +
+			"meeting token bound to the caller (staff get host controls, the client " +
+			"gets a slot-bound token) and returns the URL to open. Non-Daily " +
+			"bookings return the stored meeting URL untouched.",
+		middleware: [requireAuth] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Join URL",
+				content: {
+					"application/json": {
+						schema: z.object({ url: z.string().url(), provider: z.string() }),
+					},
+				},
+			},
+			403: { description: "Not the booking's client or a permitted host" },
+			404: { description: "Booking not found" },
+			409: { description: "Booking cancelled or no meeting room yet" },
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const user = c.get("user");
+		const staff = c.get("staff");
+		if (!user) throw new HttpError(401, "UNAUTHENTICATED", "Sign in required");
+		const result = await joinBookingMeeting(id, {
+			userId: user.id,
+			name: staff?.name ?? user.name ?? "Guest",
+			staff: staff ? { opsUserId: staff.opsUserId, role: staff.role } : null,
+		});
+		return c.json(result, 200);
 	},
 );
 

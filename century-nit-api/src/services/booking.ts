@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import {
   SCHEDULING_ERROR_CODES,
   occupiesSlot,
+  permissionsGrant,
   type BookingStatus,
   type CreateBooking,
   type RescheduleBooking,
@@ -21,6 +22,7 @@ import {
 	CalendarAuthError,
 } from "./calendar/index.js";
 import { createMeeting, meetConnected, MeetAuthError, MeetNotConnectedError } from "./meet/index.js";
+import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserIdByEmail } from "./notify.js";
 import { queueCalendar, queueEmails, queueReminder, cancelQueued, releaseCalendarJob } from "../worker/queues.js";
@@ -448,13 +450,14 @@ export async function syncCalendarForBooking(bookingId: string): Promise<Booking
 	}
 
 	try {
-		const space = await createMeeting();
+		const { activeProvider } = await import("./meet/index.js");
+		const space = await createMeeting(meetingWindow(booking));
 
 		const [updated] = await db
 			.update(bookings)
 			.set({
 				meetingUrl: space.meetingUri,
-				meetingProvider: "google_meet",
+				meetingProvider: activeProvider() ?? "google_meet",
 				meetingSpace: space.spaceId,
 				calendarSyncStatus: "SYNCED",
 				calendarSyncError: null,
@@ -564,13 +567,14 @@ export async function generateMeetingForBooking(
 	}
 
 	try {
-		const space = await createMeeting();
+		const { activeProvider } = await import("./meet/index.js");
+		const space = await createMeeting(meetingWindow(booking));
 
 		const [updated] = await db
 			.update(bookings)
 			.set({
 				meetingUrl: space.meetingUri,
-				meetingProvider: "google_meet",
+				meetingProvider: activeProvider() ?? "google_meet",
 				meetingSpace: space.spaceId,
 				type: "online",
 				calendarSyncStatus: "SYNCED",
@@ -623,6 +627,75 @@ export async function generateMeetingForBooking(
 		const message = err instanceof Error ? err.message : "Google Meet creation failed";
 		throw new HttpError(500, "MEET_CREATION_FAILED", `Failed to generate Google Meet link: ${message}`);
 	}
+}
+
+/** The appointment window a room/token binds to: opens 15 min early, dies 2h after the end. */
+function meetingWindow(booking: BookingRow): { notBefore: Date; expiresAt: Date } {
+	return {
+		notBefore: new Date(booking.startsAt.getTime() - 15 * 60 * 1000),
+		expiresAt: new Date(booking.endsAt.getTime() + 2 * 60 * 60 * 1000),
+	};
+}
+
+/**
+ * The one door into a meeting. Whoever asks, the answer is a URL they may
+ * open — but what the URL carries depends on the provider and who is asking.
+ *
+ * Daily rooms are private: the stored meetingUrl alone opens nothing. Join
+ * mints a per-person meeting token — staff get `is_owner` (host controls),
+ * the client gets a slot-bound, identity-bound token. Anyone else is a 403.
+ *
+ * Non-Daily bookings (Google Meet rows, pasted Zoom/Teams links) have no
+ * token layer — they return the stored URL untouched, so old and manual
+ * meetings keep working through the same endpoint.
+ */
+export async function joinBookingMeeting(
+	bookingId: string,
+	caller: { userId: string; name: string; staff: { opsUserId: string; role: string } | null },
+): Promise<{ url: string; provider: string }> {
+	const booking = await getBooking(bookingId);
+	if (!booking) {
+		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
+	}
+	if (booking.status === "CANCELLED") {
+		throw new HttpError(409, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "This booking was cancelled — the meeting is gone");
+	}
+
+	// ── Authorization: the client who owns it, or staff who may host it ──
+	if (caller.staff) {
+		const isAssignee = booking.employeeId === caller.staff.opsUserId;
+		if (!isAssignee) {
+			const perms = await permissionsOfRole(caller.staff.role);
+			if (!permissionsGrant(caller.staff.role, perms, "see_all_cases")) {
+				throw new HttpError(403, "FORBIDDEN", "Only the assigned consultant or case oversight can join as host");
+			}
+		}
+	} else if (booking.clientUserId !== caller.userId) {
+		throw new HttpError(403, "FORBIDDEN", "This is not your booking");
+	}
+
+	if (booking.meetingProvider !== "daily") {
+		if (!booking.meetingUrl) {
+			throw new HttpError(409, "NO_MEETING_URL", "No meeting link on this booking yet");
+		}
+		return { url: booking.meetingUrl, provider: booking.meetingProvider ?? "manual" };
+	}
+	if (!booking.meetingSpace || !booking.meetingUrl) {
+		throw new HttpError(409, "NO_MEETING_URL", "No meeting room on this booking yet");
+	}
+
+	const { createMeetingToken } = await import("./meet/index.js");
+	const window_ = meetingWindow(booking);
+	const token = await createMeetingToken({
+		roomName: booking.meetingSpace,
+		isOwner: Boolean(caller.staff),
+		userName: caller.name,
+		userId: caller.userId,
+		notBefore: window_.notBefore,
+		expiresAt: window_.expiresAt,
+	});
+	const sep = booking.meetingUrl.includes("?") ? "&" : "?";
+	return { url: `${booking.meetingUrl}${sep}t=${encodeURIComponent(token)}`, provider: "daily" };
 }
 
 /**
@@ -1123,7 +1196,7 @@ export async function cancelBooking(input: {
 	if (booking.meetingSpace) {
 		try {
 			const { endMeeting } = await import("./meet/index.js");
-			await endMeeting(booking.meetingSpace);
+			await endMeeting(booking.meetingSpace, booking.meetingProvider);
 		} catch {
 			// Meeting space might already be expired or inactive
 		}

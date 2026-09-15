@@ -412,6 +412,17 @@ export const bookingsApi = {
 	},
 
 	/**
+	 * Join the booking's meeting. Daily rooms return a token'd URL minted for
+	 * the caller (host token for staff, slot-bound for the client); other
+	 * providers return the stored link.
+	 */
+	joinMeeting(bookingId: string): Promise<{ url: string; provider: string }> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/join`, {
+			method: "POST",
+		});
+	},
+
+	/**
 	 * Live (in-progress) online meetings — bookings where `meetingActive` is
 	 * true, polled by the meeting-status worker. Returns the same shape as
 	 * `list()` so the dashboard widget and dedicated page can reuse the

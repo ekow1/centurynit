@@ -2264,42 +2264,55 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						: c.assessmentResult?.outcome?.toLowerCase().includes("ineligible")
 							? "not_eligible"
 							: "pending";
-				setBooking((prev) => ({
-					...prev,
-					confirmationId: c.reference,
-					consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
-					branchId: c.branch,
-					consultantName: c.assignedOfficerName ?? prev.consultantName,
-					consultantId: c.assignedOfficerId ?? prev.consultantId,
-					consultationPhase: phase,
-					eligibilityOutcome: outcome,
-					eligibilityNote:
-						c.assessmentResult?.notes ||
-						(c.status === "COMPLETED"
-							? "Assessment complete. You are eligible to continue."
-							: "Your consultation case is under review by your advisor."),
-					assessmentResult: c.assessmentResult ?? prev.assessmentResult ?? null,
-					outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
-					paymentStatus: "success",
-					paidAt: c.createdAt,
-					meetingLink: c.meetingUrl ?? null,
-					date: c.startsAt
-						? new Intl.DateTimeFormat("en-CA", {
-								timeZone: c.timezone ?? undefined,
-								year: "numeric",
-								month: "2-digit",
-								day: "2-digit",
-							}).format(new Date(c.startsAt))
-						: prev.date,
-					time: c.startsAt
-						? new Intl.DateTimeFormat("en-GB", {
-								timeZone: c.timezone ?? undefined,
-								hour: "2-digit",
-								minute: "2-digit",
-								hourCycle: "h23",
-							}).format(new Date(c.startsAt))
-						: prev.time,
-				}));
+				setBooking((prev) => c.status === "CANCELLED"
+					? {
+							// Dead case — clear the paid-booking markers so the
+							// consultation page renders the rebook sheet instead of a
+							// closed case view, but keep the filled assessment and the
+							// branch/type for prefill.
+							...defaultBooking,
+							assessment: prev.assessment,
+							assessmentDocs: prev.assessmentDocs,
+							consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
+							branchId: c.branch,
+							consultationPhase: "cancelled",
+						}
+					: {
+						...prev,
+						confirmationId: c.reference,
+						consultationType: (c.type === "in_person" ? "in_person" : "online") as any,
+						branchId: c.branch,
+						consultantName: c.assignedOfficerName ?? prev.consultantName,
+						consultantId: c.assignedOfficerId ?? prev.consultantId,
+						consultationPhase: phase,
+						eligibilityOutcome: outcome,
+						eligibilityNote:
+							c.assessmentResult?.notes ||
+							(c.status === "COMPLETED"
+								? "Assessment complete. You are eligible to continue."
+								: "Your consultation case is under review by your advisor."),
+						assessmentResult: c.assessmentResult ?? prev.assessmentResult ?? null,
+						outcomeAt: c.status === "COMPLETED" ? c.updatedAt : prev.outcomeAt,
+						paymentStatus: "success",
+						paidAt: c.createdAt,
+						meetingLink: c.meetingUrl ?? null,
+						date: c.startsAt
+							? new Intl.DateTimeFormat("en-CA", {
+									timeZone: c.timezone ?? undefined,
+									year: "numeric",
+									month: "2-digit",
+									day: "2-digit",
+								}).format(new Date(c.startsAt))
+							: prev.date,
+						time: c.startsAt
+							? new Intl.DateTimeFormat("en-GB", {
+									timeZone: c.timezone ?? undefined,
+									hour: "2-digit",
+									minute: "2-digit",
+									hourCycle: "h23",
+								}).format(new Date(c.startsAt))
+							: prev.time,
+					});
 			} else if (res.application) {
 			// No consultation row, but an application exists — ops created it
 			// directly (or consultation creation failed silently after payment).

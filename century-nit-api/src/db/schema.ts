@@ -1005,6 +1005,31 @@ export const coordinatorDuty = pgTable(
 	}),
 );
 
+/**
+ * Standing case-oversight grants — the authority layer under coordination.
+ * A manager or admin grants a staff member the right to hold cases until it
+ * is retracted (revoked_at) or lapses (expires_at, null = open-ended). A
+ * grant makes someone delegable at any scope without a coordinator/manager
+ * role; retracting it also pulls their in-flight cases back to the pool.
+ */
+export const coordinationGrants = pgTable(
+	"coordination_grants",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		opsUserId: uuid("ops_user_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		grantedBy: uuid("granted_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		revokedAt: timestamp("revoked_at", { withTimezone: true }),
+		revokedBy: uuid("revoked_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byUser: index("coordination_grants_user_idx").on(t.opsUserId, t.revokedAt),
+	}),
+);
+
 export const packageCodeEnum = pgEnum("package_code", [
 	"non_scholarship",
 	"scholarship",

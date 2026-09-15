@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { eq, sql, count } from "drizzle-orm";
+import { and, eq, isNull, sql, count } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 import {
 	acceptInvitationSchema,
@@ -15,7 +15,7 @@ import {
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { opsUsers, users, sessions, accounts } from "../db/schema.js";
+import { coordinationGrants, opsUsers, users, sessions, accounts } from "../db/schema.js";
 import { env } from "../env.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 import {
@@ -39,6 +39,11 @@ import {
 	type InvitationRow,
 } from "../services/invitations.js";
 import { ensureDefaultWorkingHours } from "../services/availability.js";
+import {
+	getCoordinationGrant,
+	grantCoordination,
+	revokeCoordination,
+} from "../services/consultations.js";
 
 /**
  * Staff identity: invitations, the super-admin bootstrap, and MFA state.
@@ -545,6 +550,8 @@ staffRouter.openapi(
 									active: z.boolean(),
 									hasLogin: z.boolean(),
 									mfaEnabled: z.boolean(),
+									canCoordinate: z.boolean(),
+									grantExpiresAt: z.string().nullable(),
 								}),
 							),
 						}),
@@ -566,9 +573,18 @@ staffRouter.openapi(
 				active: opsUsers.active,
 				userId: opsUsers.userId,
 				twoFactorEnabled: users.twoFactorEnabled,
+				grantId: coordinationGrants.id,
+				grantExpiresAt: coordinationGrants.expiresAt,
 			})
 			.from(opsUsers)
-			.leftJoin(users, eq(users.id, opsUsers.userId));
+			.leftJoin(users, eq(users.id, opsUsers.userId))
+			.leftJoin(
+				coordinationGrants,
+				and(
+					eq(coordinationGrants.opsUserId, opsUsers.id),
+					isNull(coordinationGrants.revokedAt),
+				),
+			);
 
 		// Hide super_admin accounts from non-super_admin users so they
 		// never appear in the directory, the role filter, or the count
@@ -578,18 +594,23 @@ staffRouter.openapi(
 			: rows.filter((r) => r.role !== "super_admin");
 
 		return c.json({
-			staff: visible.map((r) => ({
-				id: r.id,
-				email: r.email,
-				name: r.name,
-				role: roleSchema.parse(r.role),
-				branch: r.branch,
-				active: r.active,
-				// A profile with no linked login cannot sign in — worth surfacing,
-				// since seeded rows can exist without one.
-				hasLogin: Boolean(r.userId),
-				mfaEnabled: r.twoFactorEnabled ?? false,
-			})),
+			staff: visible.map((r) => {
+				const grantActive = Boolean(r.grantId) && (!r.grantExpiresAt || r.grantExpiresAt.getTime() > Date.now());
+				return {
+					id: r.id,
+					email: r.email,
+					name: r.name,
+					role: roleSchema.parse(r.role),
+					branch: r.branch,
+					active: r.active,
+					// A profile with no linked login cannot sign in — worth surfacing,
+					// since seeded rows can exist without one.
+					hasLogin: Boolean(r.userId),
+					mfaEnabled: r.twoFactorEnabled ?? false,
+					canCoordinate: grantActive,
+					grantExpiresAt: grantActive && r.grantExpiresAt ? r.grantExpiresAt.toISOString() : null,
+				};
+			}),
 		});
 	},
 );
@@ -776,6 +797,100 @@ staffRouter.openapi(
 			activeSessions,
 			providers,
 		});
+	},
+);
+
+/* ── Standing coordination grants ──────────────────────────────────────────
+ * The authority layer under case coordination: a manager/admin grants a
+ * staff member the right to hold cases until retracted or lapsed. Granting
+ * makes them delegable at any scope; retracting pulls their in-flight cases
+ * back to the pool.
+ */
+
+const grantSchema = z.object({
+	active: z.boolean(),
+	grantedAt: z.string().nullable(),
+	expiresAt: z.string().nullable(),
+	grantedByName: z.string().nullable(),
+});
+
+staffRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/coordination-grant",
+		tags: ["Staff"],
+		summary: "A staff member's standing coordination grant",
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
+		request: { params: z.object({ id: z.string().uuid() }) },
+		responses: {
+			200: { content: { "application/json": { schema: grantSchema } }, description: "Grant state" },
+		},
+	}),
+	async (c) => c.json(await getCoordinationGrant(c.req.valid("param").id)),
+);
+
+staffRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/{id}/coordination-grant",
+		tags: ["Staff"],
+		summary: "Grant standing case-oversight — until retracted or the expiry lapses",
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
+		request: {
+			params: z.object({ id: z.string().uuid() }),
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ expiresAt: z.string().datetime().nullish() }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: { content: { "application/json": { schema: grantSchema } }, description: "Granted" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const body = c.req.valid("json");
+		return c.json(
+			await grantCoordination({
+				opsUserId: c.req.valid("param").id,
+				expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+				actor: { opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
+			}),
+		);
+	},
+);
+
+staffRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{id}/coordination-grant",
+		tags: ["Staff"],
+		summary: "Retract case-oversight — in-flight cases return to the pool",
+		middleware: [requireAuth, requireMfa, requireCapability("invite_staff")] as const,
+		request: { params: z.object({ id: z.string().uuid() }) },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ reclaimedCases: z.number() }),
+					},
+				},
+				description: "Retracted",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		return c.json(
+			await revokeCoordination({
+				opsUserId: c.req.valid("param").id,
+				actor: { opsUserId: staff.opsUserId, name: staff.name, email: staff.email },
+			}),
+		);
 	},
 );
 

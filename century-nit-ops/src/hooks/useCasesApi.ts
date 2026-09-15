@@ -157,6 +157,8 @@ function toApplication(row: ApiApplication): MockApplication {
 		country: ctryStr,
 		degreeLevel: row.degreeLevel,
 		assignedStaff: row.assignedStaffName ?? "",
+		journeyCoordinatorName: row.journeyCoordinatorName ?? null,
+		journeyCoordinatorEmail: row.journeyCoordinatorEmail ?? null,
 		assignedStaffEmail: row.assignedStaffEmail ?? "",
 		stage: row.stage,
 		status: APPLICATION_STATUS_TO_OPS[row.status] as MockApplication["status"],

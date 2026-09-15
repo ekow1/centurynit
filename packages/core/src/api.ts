@@ -479,9 +479,34 @@ export const staffApi = {
 			active: boolean;
 			hasLogin: boolean;
 			mfaEnabled: boolean;
+			canCoordinate: boolean;
+			grantExpiresAt: string | null;
 		}[];
 	}> {
 		return request(`${API_PREFIX}/staff`);
+	},
+
+	coordinationGrant(id: string): Promise<{
+		active: boolean;
+		grantedAt: string | null;
+		expiresAt: string | null;
+		grantedByName: string | null;
+	}> {
+		return request(`${API_PREFIX}/staff/${id}/coordination-grant`);
+	},
+
+	grantCoordination(
+		id: string,
+		expiresAt?: string | null,
+	): Promise<{ active: boolean; grantedAt: string | null; expiresAt: string | null; grantedByName: string | null }> {
+		return request(`${API_PREFIX}/staff/${id}/coordination-grant`, {
+			method: "PUT",
+			...json({ expiresAt: expiresAt ?? null }),
+		});
+	},
+
+	revokeCoordination(id: string): Promise<{ reclaimedCases: number }> {
+		return request(`${API_PREFIX}/staff/${id}/coordination-grant`, { method: "DELETE" });
 	},
 
 	update(

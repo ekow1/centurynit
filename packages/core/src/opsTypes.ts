@@ -233,6 +233,9 @@ export interface MockApplication {
 	country: string;
 	degreeLevel: string;
 	assignedStaff: string;
+	/** The applicant's journey coordinator — stage-to-finish oversight carried from consultation. */
+	journeyCoordinatorName?: string | null;
+	journeyCoordinatorEmail?: string | null;
 	assignedStaffEmail: string;
 	stage: string;
 	status: ApplicationStatus;

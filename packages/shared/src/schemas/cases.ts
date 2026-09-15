@@ -718,6 +718,9 @@ export const applicationSchema = z.object({
 	assignedStaffId: z.string().uuid().nullable(),
 	assignedStaffName: z.string().nullable(),
 	assignedStaffEmail: z.string().email().nullable(),
+	/** The applicant's journey coordinator — stage-to-finish oversight carried from consultation. */
+	journeyCoordinatorName: z.string().nullable().optional(),
+	journeyCoordinatorEmail: z.string().email().nullable().optional(),
 	stage: journeyStageSchema,
 	status: applicationStatusSchema,
 	proceedStatus: proceedStatusSchema,

@@ -260,6 +260,8 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 	const schoolList = await listSchoolsForApplication(row.id);
 
 	const pendingHandoff = await pendingHandoffForApplication(row.id);
+	// The journey coordinator rides on the applicant, not the case row.
+	const journeyCoordinator = applicant?.coordinatorId ? await loadStaff(applicant.coordinatorId) : null;
 
 	// Load consent status for all three stages so the portal can decide
 	// whether to show the consent card.
@@ -312,6 +314,8 @@ async function serializeApplication(row: ApplicationRow, forApplicant = false): 
 		assignedStaffId: row.assignedStaffId,
 		assignedStaffName: staff?.name ?? null,
 		assignedStaffEmail: staff?.email ?? null,
+		journeyCoordinatorName: journeyCoordinator?.name ?? null,
+		journeyCoordinatorEmail: journeyCoordinator?.email ?? null,
 		stage: row.stage as JourneyStage,
 		status: caseStatusOf(row),
 		proceedStatus: row.proceedStatus,

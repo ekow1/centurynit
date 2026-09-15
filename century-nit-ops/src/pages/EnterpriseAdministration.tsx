@@ -312,6 +312,8 @@ type StaffRow = {
 	active: boolean;
 	hasLogin: boolean;
 	mfaEnabled: boolean;
+	canCoordinate: boolean;
+	grantExpiresAt: string | null;
 };
 
 interface DynamicRole {
@@ -353,6 +355,8 @@ function UsersAndRoles() {
 	} | null>(null);
 	const [copiedInvite, setCopiedInvite] = useState(false);
 	const [editing, setEditing] = useState<StaffRow | null>(null);
+	const [grantInfo, setGrantInfo] = useState<Awaited<ReturnType<typeof staffApi.coordinationGrant>> | null>(null);
+	const [grantExpiry, setGrantExpiry] = useState("");
 	const [creatingRole, setCreatingRole] = useState(false);
 	const [draft, setDraft] = useState({ email: "", role: "consultant" as OpsRole, branch: "accra" });
 
@@ -421,6 +425,12 @@ function UsersAndRoles() {
 	useEffect(() => {
 		void refresh();
 	}, [refresh]);
+
+	// The grant's detail (who granted, when) is fetched when a staff record opens.
+	useEffect(() => {
+		if (!editing) { setGrantInfo(null); setGrantExpiry(""); return; }
+		staffApi.coordinationGrant(editing.id).then(setGrantInfo).catch(() => setGrantInfo(null));
+	}, [editing?.id]);
 
 	const say = (msg: string) => {
 		setFlash(msg);
@@ -1037,6 +1047,69 @@ function UsersAndRoles() {
 										<p className="field__hint">Inactive accounts are blocked from logging into the platform.</p>
 									</div>
 
+									{/* Standing case-oversight: the authority layer under delegation.
+									    Granted staff can hold cases at any scope until retracted. */}
+									<div className="field" style={{ marginTop: "1rem", borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>
+										<label><strong>Case coordination</strong></label>
+										{grantInfo?.active ? (
+											<>
+												<p className="field__hint">
+													Granted{grantInfo.grantedByName ? ` by ${grantInfo.grantedByName}` : ""}
+													{grantInfo.expiresAt ? ` — expires ${grantInfo.expiresAt.slice(0, 10)}` : " — open-ended"}.
+													They can hold delegated cases at any scope.
+												</p>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													style={{ color: "var(--danger)", borderColor: "var(--danger)" }}
+													onClick={() => {
+														void staffApi.revokeCoordination(editing.id)
+															.then((r) => {
+																say(`Access retracted${r.reclaimedCases ? ` — ${r.reclaimedCases} case(s) returned to the pool` : ""}.`);
+																setGrantInfo({ active: false, grantedAt: null, expiresAt: null, grantedByName: null });
+																void refresh();
+															})
+															.catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not retract access"));
+													}}
+												>
+													Retract access — their cases return to the pool
+												</button>
+											</>
+										) : (
+											<>
+												<p className="field__hint">
+													Grant standing case-oversight so they can be delegated cases — until you retract it{grantExpiry ? " or the date lapses" : ""}.
+												</p>
+												<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+													<input
+														type="date"
+														className="input"
+														style={{ maxWidth: "11rem" }}
+														value={grantExpiry}
+														min={new Date().toISOString().slice(0, 10)}
+														onChange={(e) => setGrantExpiry(e.target.value)}
+														aria-label="Grant expiry (optional)"
+													/>
+													<button
+														type="button"
+														className="btn btn--primary btn--sm"
+														onClick={() => {
+															void staffApi.grantCoordination(editing.id, grantExpiry ? `${grantExpiry}T23:59:59Z` : null)
+																.then((g) => {
+																	say(`${editing.name} can now coordinate cases${g.expiresAt ? ` until ${g.expiresAt.slice(0, 10)}` : ""}.`);
+																	setGrantInfo(g);
+																	void refresh();
+																})
+																.catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not grant access"));
+														}}
+													>
+														Grant access{grantExpiry ? "" : " — open-ended"}
+													</button>
+												</div>
+											</>
+										)}
+									</div>
+
 									<div className="cal-actions" style={{ marginTop: "1.5rem" }}>
 										<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditing(null)}>
 											Cancel
@@ -1093,7 +1166,18 @@ function UsersAndRoles() {
 														{u.active ? "Active" : "Inactive"}
 													</span>
 												</td>
-												<td className="muted">{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}</td>
+												<td className="muted">
+												{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}
+												{u.canCoordinate && (
+													<span
+														className="mono"
+														title={u.grantExpiresAt ? `Case oversight granted until ${u.grantExpiresAt.slice(0, 10)}` : "Standing case-oversight grant"}
+														style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}
+													>
+														COORD
+													</span>
+												)}
+											</td>
 											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
 												<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
 												{canDeleteStaff && u.email !== opsUser?.email && (

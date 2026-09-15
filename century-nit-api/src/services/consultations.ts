@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
 	permissionsGrant,
@@ -35,6 +35,7 @@ import {
 	consultationActivities,
 	consultations,
 	coordinatorDuty,
+	coordinationGrants,
 
 
 
@@ -128,12 +129,35 @@ async function assertCanSteer(row: ConsultationRow, actor: Actor): Promise<void>
 	);
 }
 
-/** Coordination needs the see-all capability — only manager/coordinator-tier staff can hold the wheel. */
-async function assertCanCoordinate(opsUser: { role: string; name: string }): Promise<void> {
+/**
+ * Who may hold the wheel: either the see-all capability from their role, or
+ * a standing coordination grant a manager/admin has given them (until it's
+ * retracted or lapses).
+ */
+async function assertCanCoordinate(opsUser: { id: string; role: string; name: string }): Promise<void> {
 	const permissions = await permissionsOfRole(opsUser.role);
-	if (!permissionsGrant(opsUser.role, permissions, "see_all_cases")) {
-		throw new HttpError(400, "NOT_COORDINATOR_CAPABLE", `${opsUser.name} can't coordinate cases — they need case oversight first`);
-	}
+	if (permissionsGrant(opsUser.role, permissions, "see_all_cases")) return;
+	if (await hasActiveCoordinationGrant(opsUser.id)) return;
+	throw new HttpError(
+		400,
+		"NOT_COORDINATOR_CAPABLE",
+		`${opsUser.name} can't coordinate cases — grant them case oversight first`,
+	);
+}
+
+async function hasActiveCoordinationGrant(opsUserId: string): Promise<boolean> {
+	const [grant] = await db
+		.select({ id: coordinationGrants.id })
+		.from(coordinationGrants)
+		.where(
+			and(
+				eq(coordinationGrants.opsUserId, opsUserId),
+				isNull(coordinationGrants.revokedAt),
+				or(isNull(coordinationGrants.expiresAt), gt(coordinationGrants.expiresAt, new Date())),
+			),
+		)
+		.limit(1);
+	return Boolean(grant);
 }
 
 /**
@@ -1509,6 +1533,138 @@ export async function setCoordinatorDuty(input: {
 			set: { coordinatorId: input.coordinatorOpsUserId, setBy: input.actor.opsUserId },
 		});
 	return getCoordinatorDuty(input.branch);
+}
+
+/* ── Standing coordination grants ──────────────────────────────────────────
+ * The authority layer: a manager/admin grants a staff member the right to
+ * hold cases until it is retracted or lapses. Grant/revoke is audited on the
+ * staff record; retracting also pulls their in-flight cases back to the pool
+ * so access never lingers past its welcome.
+ */
+
+export type CoordinationGrantInfo = {
+	active: boolean;
+	grantedAt: string | null;
+	expiresAt: string | null;
+	grantedByName: string | null;
+};
+
+export async function getCoordinationGrant(opsUserId: string): Promise<CoordinationGrantInfo> {
+	const [grant] = await db
+		.select()
+		.from(coordinationGrants)
+		.where(and(eq(coordinationGrants.opsUserId, opsUserId), isNull(coordinationGrants.revokedAt)))
+		.orderBy(desc(coordinationGrants.createdAt))
+		.limit(1);
+	if (!grant || (grant.expiresAt && grant.expiresAt.getTime() <= Date.now())) {
+		return { active: false, grantedAt: null, expiresAt: null, grantedByName: null };
+	}
+	const grantor = grant.grantedBy ? await loadStaff(grant.grantedBy) : null;
+	return {
+		active: true,
+		grantedAt: grant.createdAt.toISOString(),
+		expiresAt: grant.expiresAt?.toISOString() ?? null,
+		grantedByName: grantor?.name ?? null,
+	};
+}
+
+/** Grant standing case-oversight — replaces any live grant. */
+export async function grantCoordination(input: {
+	opsUserId: string;
+	expiresAt?: Date | null;
+	actor: Actor;
+}): Promise<CoordinationGrantInfo> {
+	const grantee = await loadStaff(input.opsUserId);
+	if (!grantee?.active) throw new HttpError(404, "NOT_FOUND", "Staff member not found or inactive");
+
+	const now = new Date();
+	await db
+		.update(coordinationGrants)
+		.set({ revokedAt: now, revokedBy: input.actor.opsUserId })
+		.where(and(eq(coordinationGrants.opsUserId, input.opsUserId), isNull(coordinationGrants.revokedAt)));
+	await db.insert(coordinationGrants).values({
+		opsUserId: input.opsUserId,
+		grantedBy: input.actor.opsUserId,
+		expiresAt: input.expiresAt ?? null,
+	});
+
+	const granteeUserId = await getStaffUserId(input.opsUserId);
+	if (granteeUserId) {
+		await notify({
+			recipientUserId: granteeUserId,
+			type: "staff.coordination_granted",
+			title: "You can now coordinate cases",
+			body: `${input.actor.name} granted you case oversight${input.expiresAt ? ` until ${input.expiresAt.toISOString().slice(0, 10)}` : " until they retract it"}.`,
+			link: "/consultations",
+			eventId: `coordination-grant:${input.opsUserId}:${now.toISOString()}`,
+		});
+	}
+	return getCoordinationGrant(input.opsUserId);
+}
+
+/**
+ * Retract the grant — and pull their in-flight cases back. Retracting access
+ * can't leave cases held by someone who may no longer steer them, so each
+ * active case they coordinate returns to the management pool (reclaimable,
+ * re-delegable, escalatable) with a note on the timeline.
+ */
+export async function revokeCoordination(input: {
+	opsUserId: string;
+	actor: Actor;
+}): Promise<{ reclaimedCases: number }> {
+	const grantee = await loadStaff(input.opsUserId);
+	const now = new Date();
+	const revoked = await db
+		.update(coordinationGrants)
+		.set({ revokedAt: now, revokedBy: input.actor.opsUserId })
+		.where(and(eq(coordinationGrants.opsUserId, input.opsUserId), isNull(coordinationGrants.revokedAt)))
+		.returning({ id: coordinationGrants.id });
+	if (revoked.length === 0) {
+		throw new HttpError(409, "NO_ACTIVE_GRANT", "No active coordination grant to retract");
+	}
+
+	const reclaimed = await db
+		.update(consultations)
+		.set({
+			coordinatorId: null,
+			coordinatorAssignedAt: null,
+			coordinatorAssignedBy: null,
+			coordinatedVia: null,
+			updatedAt: now,
+		})
+		.where(and(eq(consultations.coordinatorId, input.opsUserId), inArray(consultations.status, ACTIVE_CONSULTATION_STATUSES)))
+		.returning({ id: consultations.id });
+
+	for (const c of reclaimed) {
+		await db.insert(caseComments).values({
+			targetType: "consultation",
+			targetId: c.id,
+			kind: "assignment",
+			text: `Coordination retracted from ${grantee?.name ?? "the coordinator"} by ${input.actor.name} — case returns to the management pool`,
+			authorName: input.actor.name,
+			authorOpsUserId: input.actor.opsUserId,
+		});
+		await recordActivity({
+			consultationId: c.id,
+			type: "coordination_reclaimed",
+			actorOpsUserId: input.actor.opsUserId,
+			actorName: input.actor.name,
+			payload: { fromCoordinatorName: grantee?.name ?? null, viaGrantRevocation: true },
+		});
+	}
+
+	const granteeUserId = await getStaffUserId(input.opsUserId);
+	if (granteeUserId) {
+		await notify({
+			recipientUserId: granteeUserId,
+			type: "staff.coordination_revoked",
+			title: "Case oversight retracted",
+			body: `${input.actor.name} retracted your case coordination access${reclaimed.length ? ` — ${reclaimed.length} case(s) returned to the pool` : ""}.`,
+			link: "/consultations",
+			eventId: `coordination-revoked:${input.opsUserId}:${now.toISOString()}`,
+		});
+	}
+	return { reclaimedCases: reclaimed.length };
 }
 
 /**

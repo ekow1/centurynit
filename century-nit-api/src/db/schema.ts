@@ -3,6 +3,7 @@ import {
 	pgTable,
 	text,
 	timestamp,
+	date,
 	uuid,
 	varchar,
 	boolean,
@@ -893,6 +894,14 @@ export const applicants = pgTable(
 		assignedOfficerId: uuid("assigned_officer_id").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
+		/**
+		 * The journey coordinator — every case this applicant opens inherits
+		 * them, so coordination carries from consultation through the
+		 * application. Delegated by a manager, released the same way.
+		 */
+		coordinatorId: uuid("coordinator_id").references(() => opsUsers.id, {
+			onDelete: "set null",
+		}),
 		profile: jsonb("profile").$type<ApplicantProfile>().notNull().default({}),
 		portalState: jsonb("portal_state").$type<Record<string, unknown>>().notNull().default({}),
 		archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -945,6 +954,12 @@ export const consultations = pgTable(
 		coordinatorAssignedBy: uuid("coordinator_assigned_by").references(() => opsUsers.id, {
 			onDelete: "set null",
 		}),
+		/**
+		 * Which scope put the coordinator on this case: "case" (an explicit
+		 * handover), "applicant" (inherited from the journey coordinator), or
+		 * "duty" (the branch's duty coordinator on creation day).
+		 */
+		coordinatedVia: varchar("coordinated_via", { length: 16 }),
 		delegationNote: text("delegation_note"),
 		assessmentResult: jsonb("assessment_result").$type<{
 			outcome: string;
@@ -963,6 +978,30 @@ export const consultations = pgTable(
 		byOfficer: index("consultations_officer_idx").on(t.assignedOfficerId, t.status),
 		byCoordinator: index("consultations_coordinator_idx").on(t.coordinatorId, t.status),
 		byStatus: index("consultations_status_idx").on(t.status),
+	}),
+);
+
+/**
+ * Branch duty roster: who coordinates the day's intake. One row per branch
+ * per day — a new case created at that branch on that date is stamped with
+ * the duty coordinator (coordinated_via = "duty") when the applicant brings
+ * no journey coordinator of their own. Ending a duty only stops routing new
+ * cases; in-flight cases keep whoever holds them.
+ */
+export const coordinatorDuty = pgTable(
+	"coordinator_duty",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		branch: varchar("branch", { length: 64 }).notNull(),
+		dutyDate: date("duty_date").notNull(),
+		coordinatorId: uuid("coordinator_id")
+			.notNull()
+			.references(() => opsUsers.id, { onDelete: "cascade" }),
+		setBy: uuid("set_by").references(() => opsUsers.id, { onDelete: "set null" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byBranchDate: uniqueIndex("coordinator_duty_branch_date_idx").on(t.branch, t.dutyDate),
 	}),
 );
 

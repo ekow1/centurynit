@@ -102,6 +102,7 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		requestedDocuments: row.requestedDocuments,
 		documentChecklist: row.documentChecklist ?? [],
 		meetingLink: row.meetingUrl ?? undefined,
+		startsAt: row.startsAt ?? null,
 		slotDate: row.startsAt ? row.startsAt.slice(0, 10) : undefined,
 		slotTime: row.startsAt
 			? new Date(row.startsAt).toLocaleTimeString("en-GB", {
@@ -116,8 +117,10 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		rescheduleRequestedAt: row.rescheduleRequestedAt,
 		rescheduleRequestedStartsAt: row.rescheduleRequestedStartsAt,
 		rescheduleRequestReason: row.rescheduleRequestReason,
+		coordinatorId: row.coordinatorId ?? null,
 		coordinatorName: row.coordinatorName ?? null,
 		coordinatorEmail: row.coordinatorEmail ?? null,
+		coordinatedVia: row.coordinatedVia ?? null,
 		coordinatorAssignedAt: row.coordinatorAssignedAt,
 		coordinatorAssignedByName: row.coordinatorAssignedByName ?? null,
 		delegationNote: row.delegationNote ?? null,
@@ -600,10 +603,20 @@ export function useCasesApi() {
 			replaceApplication(await applicationsApi.comment(id, { kind, text, visibility })),
 		requestApplicationDocs: async (id: string, documents: string[]) =>
 			replaceApplication(await applicationsApi.requestDocuments(id, documents)),
-		delegateCoordinator: async (id: string, coordinatorOpsUserId: string, note?: string) =>
-			replaceConsultation(await consultationsApi.delegate(id, { coordinatorOpsUserId, delegationNote: note })),
+		delegateCoordinator: async (id: string, coordinatorOpsUserId: string, note?: string, scope?: "case" | "journey") =>
+			replaceConsultation(await consultationsApi.delegate(id, { coordinatorOpsUserId, delegationNote: note, scope })),
 		reassignCoordinator: async (id: string, newCoordinatorOpsUserId: string, reason?: string) =>
 			replaceConsultation(await consultationsApi.reassign(id, { newCoordinatorOpsUserId, reason })),
+		reclaimCoordination: async (id: string) =>
+			replaceConsultation(await consultationsApi.reclaim(id)),
+		returnToConfirmed: async (id: string) =>
+			replaceConsultation(await consultationsApi.backToConfirmed(id)),
+		delegateJourney: (applicantId: string, coordinatorOpsUserId: string) =>
+			applicantsApi.delegateCoordination(applicantId, coordinatorOpsUserId),
+		releaseJourney: (applicantId: string) => applicantsApi.releaseCoordination(applicantId),
+		getDuty: (branch: string) => consultationsApi.duty(branch),
+		setDuty: (branch: string, coordinatorOpsUserId: string | null) =>
+			consultationsApi.setDuty({ branch, coordinatorOpsUserId }),
 		getWorkload: () => consultationsApi.workload(),
 		getActivity: (id: string) => consultationsApi.getActivity(id),
 		resolveHandoff: async (

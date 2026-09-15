@@ -167,9 +167,14 @@ export interface MockConsultation {
 	meetingLink?: string;
 	/** Google Maps URL for in-person consultations */
 	mapsUrl?: string;
+	/** ISO timestamp of the booked slot — parseable, unlike `dateTime`. */
+	startsAt?: string | null;
 	/** The coordinator who manages this case. */
+	coordinatorId?: string | null;
 	coordinatorName?: string | null;
 	coordinatorEmail?: string | null;
+	/** Which scope put them on the case — a handover, the applicant's journey, or the day's duty. */
+	coordinatedVia?: "case" | "applicant" | "duty" | null;
 	coordinatorAssignedAt?: string | null;
 	coordinatorAssignedByName?: string | null;
 	delegationNote?: string | null;

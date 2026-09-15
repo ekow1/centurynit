@@ -18,7 +18,7 @@ import { CaseTodo } from "./CaseTodo";
 
 function isKnown(v: string | undefined | null): v is string {
 	const s = (v ?? "").trim();
-	return s !== "" && s !== "-" && s !== "-";
+	return s !== "" && s !== "-" && s !== "—";
 }
 
 function docSummary(c: MockConsultation, realDocs: ApplicantDocument[]) {
@@ -61,12 +61,11 @@ function activitySummary(e: ConsultationActivityEvent): string {
 export function ConsultationDetail({
 	consultation: record,
 	onToast,
-	onClosed,
 }: {
 	consultation: MockConsultation;
 	onToast: (type: "error" | "success", message: string) => void;
 	/** The detail closed itself (e.g. the case was cancelled). */
-	onClosed: () => void;
+	onClosed?: () => void;
 }) {
 	const navigate = useNavigate();
 	const { opsRole, opsUser, canAssignWork } = useOpsAuth();
@@ -86,6 +85,10 @@ export function ConsultationDetail({
 		cancelConsultation,
 		issueRebookingCredit,
 		delegateCoordinator,
+		reassignCoordinator,
+		reclaimCoordination,
+		returnToConfirmed,
+		releaseJourney,
 		getWorkload,
 		refresh,
 	} = useCases();
@@ -109,6 +112,7 @@ export function ConsultationDetail({
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
 	const [showCoordinatorPicker, setShowCoordinatorPicker] = useState(false);
 	const [coordinatorNote, setCoordinatorNote] = useState("");
+	const [delegateScope, setDelegateScope] = useState<"case" | "journey">("case");
 	const [workloadData, setWorkloadData] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
@@ -181,6 +185,12 @@ export function ConsultationDetail({
 	const isMine = Boolean(consultation.assignedOfficerEmail === opsUser?.email);
 	const canAssess = isMine || opsRole === "manager" || opsRole === "coordinator";
 
+	// The coordinator steers. While one holds the case, managers (and anyone
+	// else) watch — steering verbs are theirs until someone takes it back.
+	const isCoordinator = Boolean(consultation.coordinatorEmail && consultation.coordinatorEmail === opsUser?.email);
+	const isCoordinated = Boolean(consultation.coordinatorId ?? consultation.coordinatorName);
+	const steeringLocked = isCoordinated && !isCoordinator;
+
 	// Where this applicant is on the ladder: the spawned application's derived
 	// journey when there is one, else the two consultation steps.
 	const spawned = consultation.applicationId ? applications.find((a) => a.id === consultation.applicationId) ?? null : null;
@@ -224,52 +234,89 @@ export function ConsultationDetail({
 			),
 		});
 	}
-	if (consultation.status === "Under Review" && !consultation.assignedOfficer && canAssignWork) {
+	if (steeringLocked) {
+		// Watching, not steering: the coordinator's name is the next action.
+		nextActions.push({
+			id: "coordinated",
+			title: `${consultation.coordinatorName ?? "A coordinator"} is steering this case`,
+			detail: "You see progress and history; the steering actions are theirs until you take it back.",
+		});
+	} else if (consultation.status === "Under Review" && !consultation.assignedOfficer && canAssignWork) {
 		nextActions.push({
 			id: "assign",
 			title: "New booking awaiting assignment",
 			detail: "Review the applicant's background, then assign a consultant in the work panel.",
-			action: rescheduleButton,
 		});
 	}
-	if (consultation.status === "Assigned") {
-		nextActions.push({
-			id: "confirm",
-			title: "Confirm the slot",
-			detail: "Accept the booking time, or reschedule if needed.",
-			action: (
-				<>
-					{rescheduleButton}
+	if (consultation.status === "Assigned" && !steeringLocked) {
+		const slotPassed = consultation.startsAt ? new Date(consultation.startsAt).getTime() <= Date.now() : false;
+		const needsLink = consultation.type === "online" && !consultation.meetingLink;
+		if (slotPassed) {
+			// The slot slipped by unconfirmed — the API refuses to confirm it,
+			// so the honest actions are move it or close the case.
+			nextActions.push({
+				id: "slot-passed",
+				title: "The slot has passed unconfirmed",
+				detail: "Confirming is no longer possible — move it or close the case.",
+				tone: "blocked",
+				action: (
+					<>
+						{rescheduleButton}
+						<button type="button" className="btn btn--sm btn--ghost" style={{ color: "var(--danger)" }} onClick={() => setShowCancelForm(true)}>
+							Cancel Case
+						</button>
+					</>
+				),
+			});
+		} else if (needsLink) {
+			// The confirmation email carries the join link — confirm can't fire
+			// until one exists.
+			nextActions.push({
+				id: "confirm",
+				title: "Add a meeting link to confirm",
+				detail: "Online case — the confirmation email carries the join link.",
+				action: (
+					<>
+						{rescheduleButton}
+						<button type="button" className="btn btn--primary btn--sm" onClick={() => setEditingMeetingUrl(true)}>
+							Add meeting link…
+						</button>
+					</>
+				),
+			});
+		} else {
+			nextActions.push({
+				id: "confirm",
+				title: "Confirm the slot",
+				detail: "Accept the booking time, or reschedule if needed.",
+				action: (
 					<button type="button" onClick={() => void confirmConsultationSlot(consultation.id)} className="btn btn--primary btn--sm">
 						Confirm slot
 					</button>
-				</>
-			),
-		});
+				),
+			});
+		}
 	}
-	if (consultation.status === "Confirmed") {
+	if (consultation.status === "Confirmed" && !steeringLocked) {
 		nextActions.push({
 			id: "start",
 			title: "Start the assessment",
 			detail: "Review the documents and background, then start when ready.",
 			action: (
-				<>
-					{rescheduleButton}
-					<button
-						type="button"
-						onClick={() => {
-							void startConsultationAssessment(consultation.id);
-							setDetailTab("assessment");
-						}}
-						className="btn btn--primary btn--sm"
-					>
-						Start assessment →
-					</button>
-				</>
+				<button
+					type="button"
+					onClick={() => {
+						void startConsultationAssessment(consultation.id);
+						setDetailTab("assessment");
+					}}
+					className="btn btn--primary btn--sm"
+				>
+					Start assessment →
+				</button>
 			),
 		});
 	}
-	if (consultation.status === "In Assessment" && canAssess) {
+	if (consultation.status === "In Assessment" && canAssess && !steeringLocked) {
 		nextActions.push({
 			id: "decide",
 			title: "Record the assessment outcome",
@@ -282,8 +329,10 @@ export function ConsultationDetail({
 		});
 	}
 	const waitingOn =
-		consultation.status === "Under Review" && !canAssignWork
-			? "A manager assigns this booking; it appears here once it is yours."
+		steeringLocked
+			? `Coordinated by ${consultation.coordinatorName} — you're watching; take it back to steer.`
+			: consultation.status === "Under Review" && !canAssignWork
+			? "Awaiting assignment — a manager places this with a consultant."
 			: consultation.status === "Completed"
 				? spawned
 					? null
@@ -476,192 +525,192 @@ export function ConsultationDetail({
 				onCancel={() => setShowReschedule(false)}
 			/>
 		)}
-		{(consultation.meetingLink || (consultation.slotConfirmed && consultation.mapsUrl)) && (
-			<div className="card cn-next cn-next--waiting" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-				<div>
-					<p className="cn-next__title">
-						{consultation.type === "online" ? "Video meeting link" : "Office location"}
-					</p>
-					<p className="cn-next__detail">
-						{consultation.type === "online"
-							? consultation.meetingLink
-							: consultation.mapsUrl}
-					</p>
-				</div>
-				{consultation.type === "online" && consultation.meetingLink ? (
-					<a
-						href={consultation.meetingLink}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="btn btn--primary btn--sm"
-						style={{ whiteSpace: "nowrap" }}
-					>
-						Join Meeting →
-					</a>
-				) : consultation.type !== "online" && consultation.mapsUrl ? (
-					<a
-						href={consultation.mapsUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						className="btn btn--secondary btn--sm"
-						style={{ whiteSpace: "nowrap" }}
-					>
-						Get Directions →
-					</a>
-				) : null}
-			</div>
-		)}
-		{consultation.bookingId && (canAssignWork || consultation.assignedOfficerEmail === opsUser?.email) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && (
-			(consultation.type === "online" || consultation.meetingLink || editingMeetingUrl) && (
-				<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
-					<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-						<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
-						{consultation.meetingLink && (
-							<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem" }}>
-								{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : "Video Link"}
-							</span>
-						)}
-					</div>
-					{!editingMeetingUrl ? (
-						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
-							{consultation.meetingLink ? (
-								<>
-									<a href={consultation.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
-									<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{consultation.meetingLink}</span>
+		{/* One block owns the meeting: online cases show the link (with Join /
+		    Resend / Change for whoever manages the case), in-person cases show
+		    the office address + directions. Nothing else renders the link. */}
+		{(() => {
+			const isLive = consultation.status !== "Completed" && consultation.status !== "Cancelled";
+			const canManageMeeting = isLive && Boolean(consultation.bookingId) && (canAssignWork || consultation.assignedOfficerEmail === opsUser?.email);
+			const isOnline = consultation.type === "online";
+			if (isOnline) {
+				if (!consultation.meetingLink && !canManageMeeting && !editingMeetingUrl) return null;
+				return (
+					<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
+							<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
+							{consultation.meetingLink && (
+								<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem" }}>
+									{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : "Video Link"}
+								</span>
+							)}
+						</div>
+						{!editingMeetingUrl ? (
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+								{consultation.meetingLink ? (
+									<>
+										<a href={consultation.meetingLink} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Join →</a>
+										<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{consultation.meetingLink}</span>
+										{canManageMeeting && (
+											<>
+												<button
+													type="button"
+													className="btn btn--ghost btn--sm"
+													disabled={resendingMeetLink}
+													onClick={async () => {
+														if (!consultation.bookingId) return;
+														setResendingMeetLink(true);
+														try {
+															const res = await bookingsApi.resendMeetingLink(consultation.bookingId);
+															onToast("success", `Meeting link emailed to ${res.clientEmail || "client"}.`);
+														} catch (err) {
+															onToast("error", err instanceof Error ? err.message : "Could not resend email.");
+														} finally {
+															setResendingMeetLink(false);
+														}
+													}}
+													title="Re-send email with video meeting link to the client"
+												>
+													{resendingMeetLink ? "Sending email…" : "✉ Resend Link to Client"}
+												</button>
+												<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(consultation.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
+											</>
+										)}
+									</>
+								) : canManageMeeting ? (
+									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+										<button
+											type="button"
+											className="btn btn--primary btn--sm"
+											disabled={generatingMeet}
+											onClick={async () => {
+												if (!consultation.bookingId) return;
+												setGeneratingMeet(true);
+												try {
+													await bookingsApi.generateMeeting(consultation.bookingId);
+													onToast("success", "Google Meet link generated and emailed to client.");
+													void refresh();
+												} catch (err) {
+													onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet. Add a manual link instead.");
+												} finally {
+													setGeneratingMeet(false);
+												}
+											}}
+										>
+											{generatingMeet ? "Generating Meet…" : "⚡ Generate Google Meet"}
+										</button>
+										<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
+											+ Add Custom Link
+										</button>
+									</div>
+								) : null}
+							</div>
+						) : (
+							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+								<input
+									type="url"
+									className="input input--sm"
+									style={{ flex: 1, minWidth: "240px" }}
+									placeholder="https://meet.google.com/… or https://zoom.us/j/…"
+									value={meetingUrlDraft}
+									onChange={(e) => setMeetingUrlDraft(e.target.value)}
+								/>
+								<button
+									type="button"
+									className="btn btn--primary btn--sm"
+									disabled={savingMeetingUrl}
+									onClick={async () => {
+										if (!consultation.bookingId) return;
+										const v = meetingUrlDraft.trim();
+										if (v && !/^https:\/\//i.test(v)) {
+											onToast("error", "Meeting link must start with https://");
+											return;
+										}
+										setSavingMeetingUrl(true);
+										try {
+											await bookingsApi.setMeetingUrl(consultation.bookingId, v || null);
+											setEditingMeetingUrl(false);
+											onToast("success", v ? "Meeting link saved and emailed to client." : "Meeting link cleared.");
+											void refresh();
+										} catch (err) {
+											onToast("error", err instanceof Error ? err.message : "Could not save the meeting link.");
+										} finally {
+											setSavingMeetingUrl(false);
+										}
+									}}
+								>
+									{savingMeetingUrl ? "Saving…" : "Save & Email Client"}
+								</button>
+								{!consultation.meetingLink && (
 									<button
 										type="button"
 										className="btn btn--ghost btn--sm"
-										disabled={resendingMeetLink}
-										onClick={async () => {
-											if (!consultation.bookingId) return;
-											setResendingMeetLink(true);
-											try {
-												const res = await bookingsApi.resendMeetingLink(consultation.bookingId);
-												onToast("success", `Meeting link emailed to ${res.clientEmail || "client"}.`);
-											} catch (err) {
-												onToast("error", err instanceof Error ? err.message : "Could not resend email.");
-											} finally {
-												setResendingMeetLink(false);
-											}
-										}}
-										title="Re-send email with video meeting link to the client"
-									>
-										{resendingMeetLink ? "Sending email…" : "✉ Resend Link to Client"}
-									</button>
-									<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(consultation.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
-								</>
-							) : (
-								<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-									<button
-										type="button"
-										className="btn btn--primary btn--sm"
 										disabled={generatingMeet}
 										onClick={async () => {
 											if (!consultation.bookingId) return;
 											setGeneratingMeet(true);
 											try {
 												await bookingsApi.generateMeeting(consultation.bookingId);
+												setEditingMeetingUrl(false);
 												onToast("success", "Google Meet link generated and emailed to client.");
 												void refresh();
 											} catch (err) {
-												onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet. Add a manual link instead.");
+												onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet link.");
 											} finally {
 												setGeneratingMeet(false);
 											}
 										}}
 									>
-										{generatingMeet ? "Generating Meet…" : "⚡ Generate Google Meet"}
+										{generatingMeet ? "Generating…" : "⚡ Auto-generate Google Meet"}
 									</button>
-									<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
-										+ Add Custom Link
-									</button>
-								</div>
-							)}
-						</div>
-					) : (
-						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
-							<input
-								type="url"
-								className="input input--sm"
-								style={{ flex: 1, minWidth: "240px" }}
-								placeholder="https://meet.google.com/… or https://zoom.us/j/…"
-								value={meetingUrlDraft}
-								onChange={(e) => setMeetingUrlDraft(e.target.value)}
-							/>
-							<button
-								type="button"
-								className="btn btn--primary btn--sm"
-								disabled={savingMeetingUrl}
-								onClick={async () => {
-									if (!consultation.bookingId) return;
-									const v = meetingUrlDraft.trim();
-									if (v && !/^https:\/\//i.test(v)) {
-										onToast("error", "Meeting link must start with https://");
-										return;
-									}
-									setSavingMeetingUrl(true);
-									try {
-										await bookingsApi.setMeetingUrl(consultation.bookingId, v || null);
-										setEditingMeetingUrl(false);
-										onToast("success", v ? "Meeting link saved and emailed to client." : "Meeting link cleared.");
-										void refresh();
-									} catch (err) {
-										onToast("error", err instanceof Error ? err.message : "Could not save the meeting link.");
-									} finally {
-										setSavingMeetingUrl(false);
-									}
-								}}
-							>
-								{savingMeetingUrl ? "Saving…" : "Save & Email Client"}
-							</button>
-							{!consultation.meetingLink && (
-								<button
-									type="button"
-									className="btn btn--ghost btn--sm"
-									disabled={generatingMeet}
-									onClick={async () => {
-										if (!consultation.bookingId) return;
-										setGeneratingMeet(true);
-										try {
-											await bookingsApi.generateMeeting(consultation.bookingId);
-											setEditingMeetingUrl(false);
-											onToast("success", "Google Meet link generated and emailed to client.");
-											void refresh();
-										} catch (err) {
-											onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet link.");
-										} finally {
-											setGeneratingMeet(false);
-										}
-									}}
-								>
-									{generatingMeet ? "Generating…" : "⚡ Auto-generate Google Meet"}
+								)}
+								<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
+									Cancel
 								</button>
-							)}
-							<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
-								Cancel
-							</button>
+							</div>
+						)}
+					</div>
+				);
+			}
+			if (consultation.mapsUrl) {
+				return (
+					<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
+						<p className="eyebrow" style={{ margin: "0 0 0.25rem" }}>Office location</p>
+						<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
+							<a href={consultation.mapsUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>Get Directions →</a>
+							<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{consultation.mapsUrl}</span>
 						</div>
-					)}
-				</div>
-			)
-		)}
+					</div>
+				);
+			}
+			return null;
+		})()}
 
 		{/* --- ACTION TOOLBAR --- */}
-		{(!editingMeetingUrl && !showCancelForm && !showCoordinatorPicker) && (
+		{/* Steering verbs live here — Reschedule, Delegate, Cancel. Hidden while
+		    any inline form or the reschedule panel is open. */}
+		{(!editingMeetingUrl && !showCancelForm && !showCoordinatorPicker && !showReschedule) && (
 			<div style={{ display: "flex", gap: "0.5rem", padding: "0.5rem 1.25rem", borderBottom: "1px solid var(--border-light)", background: "var(--card)", flexWrap: "wrap", alignItems: "center" }}>
-				{!consultation.meetingLink && (
-					<button className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
-						+ Online Meeting
-					</button>
+				{!steeringLocked && (isMine || canAssignWork) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && consultation.bookingId && (
+					rescheduleButton
 				)}
-				{canAssignWork && consultation.status !== "Completed" && consultation.status !== "Cancelled" && (
+				{(canAssignWork || isCoordinator) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && (
 					<button className="btn btn--ghost btn--sm" onClick={async () => {
 						setShowCoordinatorPicker(true);
 						if (!workloadData) {
 							try { setWorkloadData(await getWorkload()); } catch { /* ignore */ }
 						}
 					}}>
-						{consultation.coordinatorName ? "Reassign Coordinator" : "+ Delegate"}
+						{consultation.coordinatorName ? "Reassign coordination" : "+ Delegate"}
+					</button>
+				)}
+				{steeringLocked && canAssignWork && (
+					<button className="btn btn--ghost btn--sm" onClick={() => { void reclaimCoordination(consultation.id).then(() => refresh()); }}>
+						Take back coordination
+					</button>
+				)}
+				{consultation.status === "In Assessment" && (canAssignWork || isCoordinator || isMine) && (
+					<button className="btn btn--ghost btn--sm" onClick={() => { void returnToConfirmed(consultation.id).then(() => refresh()); }}>
+						← Back to confirmed
 					</button>
 				)}
 				{canAssignWork && consultation.status !== "Completed" && consultation.status !== "Cancelled" && (
@@ -697,8 +746,8 @@ export function ConsultationDetail({
 								.then(() => {
 									setShowCancelForm(false);
 									setCancelReason("");
-									onClosed();
 									void refresh();
+									onToast("success", "Case cancelled — the client was emailed. Issue a free rebooking below if we cancelled on them.");
 								})
 								.catch((err: unknown) => {
 									const msg = err instanceof Error ? err.message : "Could not cancel consultation.";
@@ -723,8 +772,20 @@ export function ConsultationDetail({
 			<div style={{ padding: "0.75rem 1.25rem", background: "var(--card)", borderBottom: "1px solid var(--border-light)" }}>
 				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 					<p style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-						Select a coordinator:
+						{consultation.coordinatorId ? "Hand coordination to:" : "Select a coordinator:"}
 					</p>
+					{!consultation.coordinatorId && (
+						<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)" }}>
+							<label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+								<input type="radio" checked={delegateScope === "case"} onChange={() => setDelegateScope("case")} />
+								This case only
+							</label>
+							<label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+								<input type="radio" checked={delegateScope === "journey"} onChange={() => setDelegateScope("journey")} />
+								{consultation.applicantName ? `${consultation.applicantName.split(" ")[0]}'s journey — every case of theirs` : "The applicant's journey — every case of theirs"}
+							</label>
+						</div>
+					)}
 					{workloadData ? (
 						<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
 							{workloadData.coordinators.map((c) => (
@@ -732,9 +793,14 @@ export function ConsultationDetail({
 									key={c.opsUserId}
 									onClick={async () => {
 										try {
-											await delegateCoordinator(consultation.id, c.opsUserId, coordinatorNote || undefined);
+											if (consultation.coordinatorId) {
+												await reassignCoordinator(consultation.id, c.opsUserId, coordinatorNote || undefined);
+											} else {
+												await delegateCoordinator(consultation.id, c.opsUserId, coordinatorNote || undefined, delegateScope);
+											}
 											setShowCoordinatorPicker(false);
 											setCoordinatorNote("");
+											setDelegateScope("case");
 											void refresh();
 										} catch (err: unknown) {
 											onToast("error", err instanceof Error ? err.message : "Failed to delegate");
@@ -790,9 +856,29 @@ export function ConsultationDetail({
 				if (consultation.assessmentResult) alerts.push(`Outcome: ${consultation.assessmentResult.outcome} - ${consultation.assessmentResult.recProgram} at ${consultation.assessmentResult.recUniversity} (${consultation.assessmentResult.recCountry}).`);
 			}
 			if (consultation.coordinatorName && !showCoordinatorPicker) {
+				const via = consultation.coordinatedVia === "applicant"
+					? " · via the applicant's journey"
+					: consultation.coordinatedVia === "duty"
+						? " · via today's duty"
+						: "";
 				alerts.push(
 					<span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
 						Coordinator: <StaffChatBadge opsUserId={consultation.coordinatorEmail} name={consultation.coordinatorName} email={consultation.coordinatorEmail} />
+						{via && <span className="muted">{via}</span>}
+						{consultation.coordinatedVia === "applicant" && canAssignWork && consultation.applicantId && (
+							<button
+								type="button"
+								className="btn btn--ghost btn--sm"
+								style={{ fontSize: "10px", padding: "0.15rem 0.4rem" }}
+								onClick={() => {
+									void releaseJourney(consultation.applicantId)
+										.then(() => { void refresh(); onToast("success", "Journey released — new cases won't route to them."); })
+										.catch((err: unknown) => onToast("error", err instanceof Error ? err.message : "Release failed"));
+								}}
+							>
+								Release journey
+							</button>
+						)}
 					</span>
 				);
 			}
@@ -815,12 +901,22 @@ export function ConsultationDetail({
 			<CaseTabs
 				tabs={[
 					{ id: "profile", label: "Background" },
-					{ id: "documents", label: `Documents${realDocs.length ? ` (${realDocs.length})` : ""}` },
-					{ id: "assessment", label: "Decision", locked: consultation.status === "Under Review", hint: "Unlocks once the consultation is assigned" },
+					{ id: "documents", label: `Documents${docs.pending ? ` · ${docs.pending} to review` : ""}` },
+					{
+						id: "assessment",
+						label: "Decision",
+						locked: consultation.status !== "In Assessment" && consultation.status !== "Completed",
+						hint:
+							consultation.status === "Under Review"
+								? "Unlocks once the consultation is assigned"
+								: consultation.status === "Assigned"
+									? "Unlocks once the slot is confirmed"
+									: "Unlocks when the assessment starts",
+					},
 				]}
 				current={detailTab}
 				onChange={setDetailTab}
-				nowId={consultation.status === "Completed" ? "assessment" : consultation.status === "Under Review" ? "profile" : "assessment"}
+				nowId={consultation.status === "Completed" ? "assessment" : "profile"}
 			/>
 
 			<div>
@@ -828,10 +924,8 @@ export function ConsultationDetail({
 				{detailTab === "profile" && (
 					<div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
 						<div className="card">
-							<p className="eyebrow mb-2">Personal & Contact</p>
+							<p className="eyebrow mb-2">Personal</p>
 							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "var(--text-sm)" }}>
-								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Email</p><p>{consultation.email}</p></div>
-								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Phone</p><p>{consultation.phone}</p></div>
 								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Nationality</p><p>{consultation.personal.nationality}</p></div>
 								<div><p className="muted" style={{ fontSize: "var(--text-xs)" }}>Residence</p><p>{consultation.personal.residence}</p></div>
 							</div>
@@ -934,7 +1028,7 @@ export function ConsultationDetail({
 					</div>
 				)}
 
-			{detailTab === "assessment" && consultation.status !== "Completed" && canAssess && (
+			{detailTab === "assessment" && consultation.status === "In Assessment" && canAssess && (
 			<form onSubmit={handleCompleteAssessment} className="card" style={{ marginTop: "1rem" }}>
 				<h3 className="section-title mb-3">Consultation Assessment Form</h3>
 				{isSubmitted && (

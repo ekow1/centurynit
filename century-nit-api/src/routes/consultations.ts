@@ -21,11 +21,15 @@ import {
 	listConsultations,
 	serializeConsultation,
 	startConsultationAssessment,
+	returnConsultationToConfirmed,
+	reclaimConsultationCoordination,
 	delegateCoordinator,
 	reassignCoordinator,
 	referConsultationBranch,
 	getStaffWorkload,
 	getConsultationActivity,
+	getCoordinatorDuty,
+	setCoordinatorDuty,
 } from "../services/consultations.js";
 
 
@@ -118,6 +122,7 @@ import {
 
 	delegateConsultationSchema,
 	reassignCoordinatorSchema,
+	setCoordinatorDutySchema,
 } from "century-nit-shared";
 
 
@@ -528,6 +533,7 @@ consultationsRouter.openapi(
 			consultationId: id,
 			coordinatorOpsUserId: body.coordinatorOpsUserId,
 			note: body.delegationNote,
+			scope: body.scope,
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeConsultation(updated));
@@ -571,6 +577,125 @@ consultationsRouter.openapi(
 			actor: actorFrom(staff),
 		});
 		return c.json(await serializeConsultation(updated));
+	},
+);
+
+/* ── Return to confirmed · reclaim · duty roster ─────────────────────────── */
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/back-to-confirmed",
+		tags: ["Consultations"],
+		summary: "Roll an in-progress assessment back to confirmed",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Back to confirmed",
+			},
+			409: { description: "Consultation is not in assessment" },
+		},
+	}),
+	async (c) => {
+		const updated = await returnConsultationToConfirmed(
+			c.req.valid("param").id,
+			actorFrom(c.get("staff")!),
+		);
+		return c.json(await serializeConsultation(updated));
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/reclaim",
+		tags: ["Consultations"],
+		summary: "Take back coordination of a delegated case (managers)",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: consultationSchema } },
+				description: "Coordination reclaimed",
+			},
+			409: { description: "Case has no coordinator" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers can take back coordination");
+		}
+		const updated = await reclaimConsultationCoordination(
+			c.req.valid("param").id,
+			actorFrom(staff),
+		);
+		return c.json(await serializeConsultation(updated));
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/duty",
+		tags: ["Consultations"],
+		summary: "Today's duty coordinator for a branch",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			query: z.object({ branch: z.string().min(1) }),
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							branch: z.string(),
+							dutyDate: z.string(),
+							coordinator: z
+								.object({ id: z.string().uuid(), name: z.string(), email: z.string() })
+								.nullable(),
+						}),
+					},
+				},
+				description: "Duty for today",
+			},
+		},
+	}),
+	async (c) => c.json(await getCoordinatorDuty(c.req.valid("query").branch)),
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/duty",
+		tags: ["Consultations"],
+		summary: "Set or end the branch's duty coordinator for today",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			body: { content: { "application/json": { schema: setCoordinatorDutySchema } }, required: true },
+		},
+		responses: {
+			200: { description: "Duty updated" },
+			403: { description: "Managers only" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers set the duty coordinator");
+		}
+		const body = c.req.valid("json");
+		return c.json(
+			await setCoordinatorDuty({
+				branch: body.branch,
+				coordinatorOpsUserId: body.coordinatorOpsUserId,
+				actor: actorFrom(staff),
+			}),
+		);
 	},
 );
 

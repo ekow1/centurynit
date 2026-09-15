@@ -905,12 +905,36 @@ export const consultationsApi = {
 	},
 	delegate(
 		id: string,
-		body: { coordinatorOpsUserId: string; delegationNote?: string },
+		body: { coordinatorOpsUserId: string; delegationNote?: string; scope?: "case" | "journey" },
 	): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/delegate`, {
 			method: "POST",
 			...json(body),
 		});
+	},
+	/** Roll an in-progress assessment back to confirmed — the undo for a misclick. */
+	backToConfirmed(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/back-to-confirmed`, { method: "POST" });
+	},
+	/** Take back coordination of a delegated case — the manager break-glass. */
+	reclaim(id: string): Promise<ApiConsultation> {
+		return request(`${API_PREFIX}/consultations/${id}/reclaim`, { method: "POST" });
+	},
+	/** Today's duty coordinator for a branch. */
+	duty(branch: string): Promise<{
+		branch: string;
+		dutyDate: string;
+		coordinator: { id: string; name: string; email: string } | null;
+	}> {
+		return request(`${API_PREFIX}/consultations/duty?branch=${encodeURIComponent(branch)}`);
+	},
+	/** Set or end (null) the branch's duty coordinator for today. */
+	setDuty(body: { branch: string; coordinatorOpsUserId: string | null }): Promise<{
+		branch: string;
+		dutyDate: string;
+		coordinator: { id: string; name: string; email: string } | null;
+	}> {
+		return request(`${API_PREFIX}/consultations/duty`, { method: "PUT", ...json(body) });
 	},
 	reassign(
 		id: string,
@@ -1095,6 +1119,17 @@ export const applicantsApi = {
 	},
 	get(id: string): Promise<ApiApplicant> {
 		return request(`${API_PREFIX}/applicants/${id}`);
+	},
+	/** Journey scope — every case this applicant opens inherits the coordinator. */
+	delegateCoordination(id: string, coordinatorOpsUserId: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/applicants/${id}/delegate-coordination`, {
+			method: "POST",
+			...json({ coordinatorOpsUserId }),
+		});
+	},
+	/** Release the journey coordinator — in-flight cases keep whoever holds them. */
+	releaseCoordination(id: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/applicants/${id}/release-coordination`, { method: "POST" });
 	},
 };
 

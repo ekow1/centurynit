@@ -1,6 +1,7 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
 	CASE_ERROR_CODES,
+	permissionsGrant,
 
 
 
@@ -33,6 +34,7 @@ import {
 	caseComments,
 	consultationActivities,
 	consultations,
+	coordinatorDuty,
 
 
 
@@ -47,6 +49,7 @@ import {
 
 import { HttpError } from "../middleware/error.js";
 import type { StaffContext } from "../middleware/auth.js";
+import { permissionsOfRole } from "./roles.js";
 import * as mail from "./notifications.js";
 import { queueEmails } from "../worker/queues.js";
 import { notify, notifyMany, getStaffUserId, getManagerAndCoordinatorUserIds } from "./notify.js";
@@ -107,6 +110,30 @@ export function canSeeConsultation(
 	if (canSeeAllCases(staff)) return true;
 	if (staff.role === "consultant") return row.assignedOfficerId === staff.opsUserId;
 	return false;
+}
+
+/**
+ * The coordinator steers. While a case has one, only they may place handlers
+ * or move the file between branches — everyone else, managers included,
+ * watches until they take the case back. Delegation itself stays with
+ * managers; cancel stays a manager break-glass.
+ */
+async function assertCanSteer(row: ConsultationRow, actor: Actor): Promise<void> {
+	if (!row.coordinatorId || row.coordinatorId === actor.opsUserId) return;
+	const coordinator = await loadStaff(row.coordinatorId);
+	throw new HttpError(
+		409,
+		"CASE_COORDINATED",
+		`This case is coordinated by ${coordinator?.name ?? "a coordinator"} — take back coordination to make changes`,
+	);
+}
+
+/** Coordination needs the see-all capability — only manager/coordinator-tier staff can hold the wheel. */
+async function assertCanCoordinate(opsUser: { role: string; name: string }): Promise<void> {
+	const permissions = await permissionsOfRole(opsUser.role);
+	if (!permissionsGrant(opsUser.role, permissions, "see_all_cases")) {
+		throw new HttpError(400, "NOT_COORDINATOR_CAPABLE", `${opsUser.name} can't coordinate cases — they need case oversight first`);
+	}
 }
 
 /**
@@ -190,6 +217,22 @@ export async function ensureCaseForBooking(booking: {
 		.orderBy(desc(consultations.createdAt))
 		.limit(1);
 
+	// Coordination resolution: the applicant's journey coordinator wins, else
+	// the branch's duty coordinator for today. Either is a stamp — a manager
+	// can still delegate the case to someone else, or take it back.
+	let coordination: { coordinatorId: string; coordinatedVia: string } | null = null;
+	if (applicant.coordinatorId) {
+		coordination = { coordinatorId: applicant.coordinatorId, coordinatedVia: "applicant" };
+	} else {
+		const today = new Date().toISOString().slice(0, 10);
+		const [duty] = await db
+			.select({ coordinatorId: coordinatorDuty.coordinatorId })
+			.from(coordinatorDuty)
+			.where(and(eq(coordinatorDuty.branch, booking.branchId), eq(coordinatorDuty.dutyDate, today)))
+			.limit(1);
+		if (duty) coordination = { coordinatorId: duty.coordinatorId, coordinatedVia: "duty" };
+	}
+
 	const [created] = await db
 		.insert(consultations)
 		.values({
@@ -200,6 +243,9 @@ export async function ensureCaseForBooking(booking: {
 			type: booking.type,
 			status: "UNDER_REVIEW",
 			rebookedFromId: cancelledBefore?.id ?? null,
+			coordinatorId: coordination?.coordinatorId ?? null,
+			coordinatorAssignedAt: coordination ? new Date() : null,
+			coordinatedVia: coordination?.coordinatedVia ?? null,
 		})
 		.onConflictDoNothing({ target: consultations.bookingId })
 		.returning();
@@ -532,6 +578,7 @@ export async function serializeConsultation(row: ConsultationRow, forApplicant =
 		coordinatorId: row.coordinatorId,
 		coordinatorName: coordinator?.name ?? null,
 		coordinatorEmail: coordinator?.email ?? null,
+		coordinatedVia: (row.coordinatedVia as ApiConsultation["coordinatedVia"]) ?? null,
 		coordinatorAssignedAt: row.coordinatorAssignedAt?.toISOString() ?? null,
 		coordinatorAssignedByName: coordinatorAssigner?.name ?? null,
 		delegationNote: row.delegationNote ?? null,
@@ -597,6 +644,7 @@ export async function assignConsultation(input: {
 	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
 	}
+	await assertCanSteer(row, input.actor);
 
 	const employee = await loadAssignableStaff(input.employeeId, "consultation");
 
@@ -745,6 +793,15 @@ export async function confirmConsultationSlot(id: string, actor: Actor): Promise
 			if (booking.startsAt.getTime() <= Date.now()) {
 				throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "That slot is already in the past");
 			}
+			// The confirmation email carries the join link — an online case
+			// can't be confirmed with nothing to join.
+			if (row.type === "online" && !booking.meetingUrl) {
+				throw new HttpError(
+					409,
+					CASE_ERROR_CODES.CASE_CLOSED,
+					"Add a meeting link before confirming — the confirmation email carries it",
+				);
+			}
 			await db
 				.update(bookings)
 				.set({ status: "CONFIRMED", updatedAt: new Date() })
@@ -822,6 +879,33 @@ export async function startConsultationAssessment(id: string, actor: Actor): Pro
 		targetId: id,
 		kind: "status",
 		text: "Assessment started",
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+	return updated;
+}
+
+/**
+ * Roll an in-progress assessment back to CONFIRMED — the undo for a "Start
+ * assessment" misclick. Only that one step back exists; completed outcomes
+ * stay locked.
+ */
+export async function returnConsultationToConfirmed(id: string, actor: Actor): Promise<ConsultationRow> {
+	const row = await getConsultation(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (row.status !== "IN_ASSESSMENT") {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "Only an in-progress assessment can return to confirmed");
+	}
+	const [updated] = await db
+		.update(consultations)
+		.set({ status: "CONFIRMED", updatedAt: new Date() })
+		.where(eq(consultations.id, id))
+		.returning();
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: id,
+		kind: "status",
+		text: "Returned to confirmed — the assessment can be started again",
 		authorName: actor.name,
 		authorOpsUserId: actor.opsUserId,
 	});
@@ -1046,6 +1130,7 @@ export async function referConsultationBranch(input: {
 	if (row.status === "COMPLETED" || row.status === "CANCELLED") {
 		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This consultation is closed");
 	}
+	await assertCanSteer(row, input.actor);
 	const branch = canonicalBranchId(input.branch);
 	if (!branch) throw new HttpError(400, "BRANCH_NOT_FOUND", `Unknown branch: ${input.branch}`);
 
@@ -1111,6 +1196,13 @@ export async function delegateCoordinator(input: {
 	consultationId: string;
 	coordinatorOpsUserId: string;
 	note?: string;
+	/**
+	 * "case" hands over this consultation. "journey" also makes them the
+	 * applicant's coordinator — every case the person opens (a rebook, the
+	 * application) inherits them, and their other live consultations are
+	 * stamped too.
+	 */
+	scope?: "case" | "journey";
 	actor: Actor;
 }): Promise<ConsultationRow> {
 	const row = await getConsultation(input.consultationId);
@@ -1121,7 +1213,9 @@ export async function delegateCoordinator(input: {
 
 	const coordinator = await loadStaff(input.coordinatorOpsUserId);
 	if (!coordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+	await assertCanCoordinate(coordinator);
 
+	const scope = input.scope ?? "case";
 	const now = new Date();
 	const [updated] = await db
 		.update(consultations)
@@ -1129,17 +1223,45 @@ export async function delegateCoordinator(input: {
 			coordinatorId: input.coordinatorOpsUserId,
 			coordinatorAssignedAt: now,
 			coordinatorAssignedBy: input.actor.opsUserId,
+			coordinatedVia: scope === "journey" ? "applicant" : "case",
 			delegationNote: input.note ?? row.delegationNote,
 			updatedAt: now,
 		})
 		.where(eq(consultations.id, row.id))
 		.returning();
 
+	if (scope === "journey") {
+		await db
+			.update(applicants)
+			.set({ coordinatorId: input.coordinatorOpsUserId, updatedAt: now })
+			.where(eq(applicants.id, row.applicantId));
+		// "All their cases" is literal — every other live case of theirs
+		// inherits the same coordinator.
+		await db
+			.update(consultations)
+			.set({
+				coordinatorId: input.coordinatorOpsUserId,
+				coordinatorAssignedAt: now,
+				coordinatorAssignedBy: input.actor.opsUserId,
+				coordinatedVia: "applicant",
+				updatedAt: now,
+			})
+			.where(
+				and(
+					eq(consultations.applicantId, row.applicantId),
+					inArray(consultations.status, [...ACTIVE_CONSULTATION_STATUSES]),
+				),
+			);
+	}
+
 	await db.insert(caseComments).values({
 		targetType: "consultation",
 		targetId: row.id,
 		kind: "assignment",
-		text: `Delegated to coordinator ${coordinator.name}${input.note ? `: ${input.note}` : ""}`,
+		text:
+			scope === "journey"
+				? `Journey delegated to coordinator ${coordinator.name} — every case for this applicant inherits${input.note ? `: ${input.note}` : ""}`
+				: `Delegated to coordinator ${coordinator.name}${input.note ? `: ${input.note}` : ""}`,
 		authorName: input.actor.name,
 		authorOpsUserId: input.actor.opsUserId,
 	});
@@ -1202,6 +1324,7 @@ export async function reassignCoordinator(input: {
 
 	const newCoordinator = await loadStaff(input.newCoordinatorOpsUserId);
 	if (!newCoordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+	await assertCanCoordinate(newCoordinator);
 
 	const oldCoordinator = row.coordinatorId ? await loadStaff(row.coordinatorId) : null;
 	const now = new Date();
@@ -1211,6 +1334,7 @@ export async function reassignCoordinator(input: {
 			coordinatorId: input.newCoordinatorOpsUserId,
 			coordinatorAssignedAt: now,
 			coordinatorAssignedBy: input.actor.opsUserId,
+			coordinatedVia: "case",
 			updatedAt: now,
 		})
 		.where(eq(consultations.id, row.id))
@@ -1238,6 +1362,153 @@ export async function reassignCoordinator(input: {
 	});
 
 	return updated;
+}
+
+/**
+ * The take-back: a manager pulls coordination back from whoever holds it.
+ * Always available while a case is coordinated — the built-in break-glass,
+ * so a delegated case can never strand. Clears only this case's stamp; an
+ * applicant-level grant keeps covering their other cases.
+ */
+export async function reclaimConsultationCoordination(id: string, actor: Actor): Promise<ConsultationRow> {
+	const row = await getConsultation(id);
+	if (!row) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+	if (!row.coordinatorId) {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This case isn't coordinated by anyone");
+	}
+	const previous = await loadStaff(row.coordinatorId);
+	const [updated] = await db
+		.update(consultations)
+		.set({
+			coordinatorId: null,
+			coordinatorAssignedAt: null,
+			coordinatorAssignedBy: null,
+			coordinatedVia: null,
+			updatedAt: new Date(),
+		})
+		.where(eq(consultations.id, row.id))
+		.returning();
+
+	await db.insert(caseComments).values({
+		targetType: "consultation",
+		targetId: row.id,
+		kind: "assignment",
+		text: `Coordination taken back by ${actor.name} — was ${previous?.name ?? "unassigned"}`,
+		authorName: actor.name,
+		authorOpsUserId: actor.opsUserId,
+	});
+	await recordActivity({
+		consultationId: row.id,
+		type: "coordination_reclaimed",
+		actorOpsUserId: actor.opsUserId,
+		actorName: actor.name,
+		payload: { fromCoordinatorName: previous?.name ?? null },
+	});
+
+	return updated;
+}
+
+/**
+ * Journey scope: make a coordinator the applicant's — every case they open
+ * inherits it, and their live cases are stamped now. Releasing clears only
+ * the applicant field; in-flight cases keep whoever already holds them.
+ */
+export async function delegateJourneyCoordinator(input: {
+	applicantId: string;
+	coordinatorOpsUserId: string;
+	actor: Actor;
+}): Promise<void> {
+	const applicant = await getApplicant(input.applicantId);
+	if (!applicant) throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "Applicant not found");
+	const coordinator = await loadStaff(input.coordinatorOpsUserId);
+	if (!coordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+	await assertCanCoordinate(coordinator);
+
+	const now = new Date();
+	await db
+		.update(applicants)
+		.set({ coordinatorId: input.coordinatorOpsUserId, updatedAt: now })
+		.where(eq(applicants.id, applicant.id));
+	await db
+		.update(consultations)
+		.set({
+			coordinatorId: input.coordinatorOpsUserId,
+			coordinatorAssignedAt: now,
+			coordinatorAssignedBy: input.actor.opsUserId,
+			coordinatedVia: "applicant",
+			updatedAt: now,
+		})
+		.where(
+			and(
+				eq(consultations.applicantId, applicant.id),
+				inArray(consultations.status, [...ACTIVE_CONSULTATION_STATUSES]),
+			),
+		);
+}
+
+export async function releaseJourneyCoordinator(input: {
+	applicantId: string;
+	actor: Actor;
+}): Promise<void> {
+	const applicant = await getApplicant(input.applicantId);
+	if (!applicant) throw new HttpError(404, CASE_ERROR_CODES.APPLICANT_NOT_FOUND, "Applicant not found");
+	if (!applicant.coordinatorId) {
+		throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "This applicant has no journey coordinator");
+	}
+	await db
+		.update(applicants)
+		.set({ coordinatorId: null, updatedAt: new Date() })
+		.where(eq(applicants.id, applicant.id));
+}
+
+/* ── Duty roster ─────────────────────────────────────────────────────────── */
+
+/** Today's duty coordinator for a branch, with the staff row resolved. */
+export async function getCoordinatorDuty(branch: string) {
+	const today = new Date().toISOString().slice(0, 10);
+	const [row] = await db
+		.select()
+		.from(coordinatorDuty)
+		.where(and(eq(coordinatorDuty.branch, branch), eq(coordinatorDuty.dutyDate, today)))
+		.limit(1);
+	if (!row) return { branch, dutyDate: today, coordinator: null };
+	const coordinator = await loadStaff(row.coordinatorId);
+	return {
+		branch: row.branch,
+		dutyDate: row.dutyDate,
+		coordinator: coordinator ? { id: coordinator.id, name: coordinator.name, email: coordinator.email } : null,
+	};
+}
+
+/** Set (or clear, with null) the branch's duty coordinator for today. */
+export async function setCoordinatorDuty(input: {
+	branch: string;
+	coordinatorOpsUserId: string | null;
+	actor: Actor;
+}) {
+	const today = new Date().toISOString().slice(0, 10);
+	if (input.coordinatorOpsUserId === null) {
+		await db
+			.delete(coordinatorDuty)
+			.where(and(eq(coordinatorDuty.branch, input.branch), eq(coordinatorDuty.dutyDate, today)));
+		return getCoordinatorDuty(input.branch);
+	}
+	const coordinator = await loadStaff(input.coordinatorOpsUserId);
+	if (!coordinator?.active) throw new HttpError(404, "NOT_FOUND", "Coordinator not found or inactive");
+	await assertCanCoordinate(coordinator);
+	await db
+		.insert(coordinatorDuty)
+		.values({
+			branch: input.branch,
+			dutyDate: today,
+			coordinatorId: input.coordinatorOpsUserId,
+			setBy: input.actor.opsUserId,
+		})
+		.onConflictDoUpdate({
+			target: [coordinatorDuty.branch, coordinatorDuty.dutyDate],
+			set: { coordinatorId: input.coordinatorOpsUserId, setBy: input.actor.opsUserId },
+		});
+	return getCoordinatorDuty(input.branch);
 }
 
 /**

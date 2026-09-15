@@ -151,6 +151,12 @@ import {
 
 
 import { HttpError, validationHook } from "../middleware/error.js";
+import { actorFrom } from "./caseShared.js";
+import { z } from "zod";
+import {
+	delegateJourneyCoordinator,
+	releaseJourneyCoordinator,
+} from "../services/consultations.js";
 
 
 import {
@@ -247,5 +253,75 @@ applicantsRouter.openapi(
 	async (c) => {
 		const updated = await patchApplicant(c.req.valid("param").id, c.req.valid("json"));
 		return c.json(await serializeApplicant(updated));
+	},
+);
+
+/* ── Journey coordination ──────────────────────────────────────────────────
+ * The applicant scope: a coordinator who owns this person's whole journey —
+ * every case they open inherits it. Release clears the template; in-flight
+ * cases keep whoever already holds them.
+ */
+
+applicantsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/delegate-coordination",
+		tags: ["Applicants"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ coordinatorOpsUserId: z.string().uuid() }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: { description: "Journey coordination delegated" },
+			403: { description: "Managers only" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers delegate journey coordination");
+		}
+		await delegateJourneyCoordinator({
+			applicantId: c.req.valid("param").id,
+			coordinatorOpsUserId: c.req.valid("json").coordinatorOpsUserId,
+			actor: actorFrom(staff),
+		});
+		return c.json({ ok: true });
+	},
+);
+
+applicantsRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/release-coordination",
+		tags: ["Applicants"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: { params: idParams },
+		responses: {
+			200: { description: "Journey coordination released" },
+			403: { description: "Managers only" },
+			409: { description: "No journey coordinator set" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers release journey coordination");
+		}
+		await releaseJourneyCoordinator({
+			applicantId: c.req.valid("param").id,
+			actor: actorFrom(staff),
+		});
+		return c.json({ ok: true });
 	},
 );

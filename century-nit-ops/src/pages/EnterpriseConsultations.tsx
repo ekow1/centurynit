@@ -19,6 +19,67 @@ function isKnown(v: string | undefined | null): v is string {
 	return s !== "" && s !== "-" && s !== "-";
 }
 
+/** Today's duty coordinator for a branch — routes every new case to them. */
+function DutyToday({ branch, onToast }: { branch: string | null; onToast: (type: "error" | "success", message: string) => void }) {
+	const { getDuty, setDuty, getWorkload } = useCases();
+	const [duty, setDutyState] = useState<Awaited<ReturnType<typeof getDuty>> | null>(null);
+	const [open, setOpen] = useState(false);
+	const [workload, setWorkload] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
+
+	useEffect(() => {
+		let on = true;
+		if (!branch) { setDutyState(null); return; }
+		getDuty(branch).then((d) => { if (on) setDutyState(d); }).catch(() => undefined);
+		return () => { on = false; };
+	}, [branch, getDuty]);
+
+	if (!branch) return null;
+	const coord = duty?.coordinator ?? null;
+
+	return (
+		<div style={{ padding: "0.5rem 1rem", border: "1px solid var(--border-light)", marginBottom: "1rem", display: "flex", flexWrap: "wrap", gap: "0.6rem", alignItems: "center", fontSize: "var(--text-xs)" }}>
+			<span className="eyebrow" style={{ margin: 0 }}>On duty today · {branchName(branch)}</span>
+			{coord ? (
+				<span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+					<StaffChatBadge opsUserId={coord.email} name={coord.name} email={coord.email} />
+					<span className="muted">— new cases today route to them</span>
+					<button type="button" className="btn btn--ghost btn--sm" style={{ fontSize: "10px", padding: "0.15rem 0.4rem" }}
+						onClick={() => {
+							void setDuty(branch, null)
+								.then((d) => { setDutyState(d); onToast("success", "Duty cleared — in-flight cases keep their coordinator."); })
+								.catch((err: unknown) => onToast("error", err instanceof Error ? err.message : "Could not clear duty"));
+						}}>
+						Clear
+					</button>
+				</span>
+			) : (
+				<button type="button" className="btn btn--ghost btn--sm" style={{ fontSize: "10px", padding: "0.15rem 0.4rem" }}
+					onClick={async () => {
+						setOpen((v) => !v);
+						if (!workload) { try { setWorkload(await getWorkload()); } catch { /* ignore */ } }
+					}}>
+					{open ? "Close" : "+ Set duty coverage"}
+				</button>
+			)}
+			{open && workload && (
+				<span style={{ display: "inline-flex", flexWrap: "wrap", gap: "0.35rem" }}>
+					{workload.coordinators.map((c) => (
+						<button key={c.opsUserId} type="button" className="btn btn--sm btn--ghost"
+							style={{ fontSize: "10px", padding: "0.15rem 0.5rem" }}
+							onClick={() => {
+								void setDuty(branch, c.opsUserId)
+									.then((d) => { setDutyState(d); setOpen(false); onToast("success", `${c.name} is on duty — new ${branchName(branch)} cases route to them today.`); })
+									.catch((err: unknown) => onToast("error", err instanceof Error ? err.message : "Could not set duty"));
+							}}>
+							{c.name} · {c.activeCases}/{c.maxCapacity}
+						</button>
+					))}
+				</span>
+			)}
+		</div>
+	);
+}
+
 export function EnterpriseConsultations() {
 	const [searchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
@@ -101,6 +162,13 @@ export function EnterpriseConsultations() {
 			</div>
 
 			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
+
+			{canAssignWork && (
+				<DutyToday
+					branch={branchFilter !== "all" ? branchFilter : (opsUser?.branch ?? null)}
+					onToast={showToast}
+				/>
+			)}
 
 			<div style={{
 				padding: "0.65rem 1rem",

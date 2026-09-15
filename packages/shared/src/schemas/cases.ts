@@ -593,6 +593,8 @@ export const consultationSchema = z.object({
 	coordinatorId: z.string().uuid().nullable(),
 	coordinatorName: z.string().nullable(),
 	coordinatorEmail: z.string().email().nullable(),
+	/** Which scope put the coordinator on the case: an explicit handover, the applicant's journey, or the day's duty. */
+	coordinatedVia: z.enum(["case", "applicant", "duty"]).nullable().optional(),
 	coordinatorAssignedAt: z.string().datetime().nullable(),
 	coordinatorAssignedByName: z.string().nullable(),
 	delegationNote: z.string().nullable(),
@@ -984,8 +986,17 @@ export const CASE_ERROR_CODES = {
 export const delegateConsultationSchema = z.object({
 	coordinatorOpsUserId: z.string().uuid(),
 	delegationNote: z.string().max(2000).optional(),
+	/** "case" coordinates this consultation; "journey" also makes them the applicant's coordinator — future cases inherit. */
+	scope: z.enum(["case", "journey"]).optional(),
 });
 export type DelegateConsultation = z.infer<typeof delegateConsultationSchema>;
+
+export const setCoordinatorDutySchema = z.object({
+	branch: z.string().min(1),
+	/** Null ends today's duty — in-flight cases keep their coordinator. */
+	coordinatorOpsUserId: z.string().uuid().nullable(),
+});
+export type SetCoordinatorDuty = z.infer<typeof setCoordinatorDutySchema>;
 
 export const reassignCoordinatorSchema = z.object({
 	newCoordinatorOpsUserId: z.string().uuid(),

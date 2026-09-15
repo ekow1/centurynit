@@ -5,7 +5,7 @@ import { API_PREFIX, JOURNEY_STAGE_LABELS, INVOICE_TYPE_LABELS, LookupValue, MAX
 import { Button } from "../../components/ui/Button";
 import { Money, MoneyInline } from "../../components/ui/Money";
 import { Field, Select } from "../../components/ui/Field";
-import { InvoiceCard, JourneyStepper, NextActionBand, StatusPill, formatMoney, type NextAction, type Tone } from "century-nit-core/ui";
+import { InvoiceCard, StatusPill, formatMoney } from "century-nit-core/ui";
 import { downloadReceipt } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { EnrolmentDecision } from "../../components/EnrolmentDecision";
@@ -18,8 +18,6 @@ import {
 	useAppState,
 	type AssessmentData,
 	type AssessmentDoc,
-	type BookingData,
-	type EligibilityOutcome,
 	type InvoiceLine,
 	type SchoolApplicationTrack,
 	type StageInvoice,
@@ -66,9 +64,7 @@ import { prepareDocumentForUpload } from "../../lib/upload";
 
 
 
-import { STAGE_SHORT } from "../../data/stageLabels";
 import { ChapterGate } from "./PortalLayout";
-import { ConsultationAppointmentCard } from "./ConsultationAppointmentCard";
 import { ConsultantUpdates, isVisaUpdate } from "./ConsultantUpdates";
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
 
@@ -1676,443 +1672,11 @@ function AssessmentForm({
 	);
 }
 
-/**
- * The flow's steps, by id. Online consultations skip Branch and book at HQ,
- * so the list depends on the type; Review and Outcome are the post-booking
- * chapters and stay in the bar so the story reads in one line.
- */
-type ConsultStepId = "type" | "branch" | "assessment" | "schedule" | "pay" | "review" | "outcome";
-const CONSULT_STEP_LABELS: Record<ConsultStepId, string> = {
-	type: "Type",
-	branch: "Branch",
-	assessment: "Assessment",
-	schedule: "Schedule",
-	pay: "Pay",
-	review: "Review",
-	outcome: "Outcome",
-};
 /** Consultations run at the two Ghana offices — partner desks don't take bookings. */
 const BOOKABLE_BRANCHES = branches.filter((b) => b.id === "accra-hq" || b.id === "kumasi");
 
 // The branch is the office that handles your file — its slots, its
 // consultants — so it is picked for online meetings too, not just in-person.
-function consultSteps(_type: string | null | undefined): ConsultStepId[] {
-	return ["type", "branch", "assessment", "schedule", "pay", "review", "outcome"];
-}
-
-function ConsultationOutcome({
-	booking,
-	onMockOutcome,
-	onRevealOutcome,
-	autopilot,
-}: {
-	booking: BookingData;
-	onMockOutcome: (outcome: EligibilityOutcome, note?: string) => void;
-	onRevealOutcome: () => void;
-	autopilot: boolean;
-}) {
-	const { application, syncFromServer } = useAppState();
-	const outcome = booking.eligibilityOutcome;
-	const isPending =
-		outcome === "pending" ||
-		(booking.consultationPhase !== "outcome" &&
-			booking.consultationPhase !== "assessment_complete" &&
-			booking.consultationPhase !== "cancelled");
-
-	if (!booking.confirmationId) {
-		return (
-			<>
-				<p className="eyebrow">Outcome</p>
-				<p className="muted mt-2">Complete payment in the Pay tab to receive your consultation outcome.</p>
-			</>
-		);
-	}
-
-	if (booking.consultationPhase === "assessment_complete") {
-		return (
-			<>
-				<p className="eyebrow">Outcome</p>
-				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
-					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
-					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
-						Your consultant has finished reviewing your file. Your eligibility outcome is ready to view.
-					</p>
-					<div className="row mt-4" style={{ justifyContent: "center" }}>
-						<Button type="button" onClick={onRevealOutcome} arrow>
-							View your outcome →
-						</Button>
-					</div>
-					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
-						Booking ref: {booking.confirmationId}
-					</p>
-				</div>
-			</>
-		);
-	}
-
-	if (booking.consultationPhase === "cancelled") {
-		return (
-			<>
-				<p className="eyebrow">Outcome</p>
-				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
-					<p className="display" style={{ fontSize: "1.3rem" }}>Consultation cancelled</p>
-					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
-						Your consultation has been cancelled. If you'd like to continue, you can book a new appointment from the Appointments tab.
-					</p>
-					<div className="row mt-4" style={{ justifyContent: "center" }}>
-						<Button to="/portal/appointments" arrow>
-							Book a new appointment →
-						</Button>
-					</div>
-					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
-						Case ref: {booking.confirmationId}
-					</p>
-				</div>
-			</>
-		);
-	}
-
-	if (isPending) {
-		const phaseLabels: Record<string, string> = {
-			awaiting_confirmation: "Awaiting booking confirmation",
-			confirmed: "Booking confirmed - awaiting consultant assignment",
-			awaiting_assignment: "Awaiting consultant assignment",
-			assigned: booking.consultantName ? `Assigned to ${booking.consultantName}` : "Consultant assigned",
-			awaiting_assignment_confirmation: "Awaiting assignment confirmation",
-			assessment: "Assessment in progress",
-			booked: "Booking confirmed",
-			draft: "Awaiting payment",
-		};
-		const phaseLabel = phaseLabels[booking.consultationPhase] ?? "In progress";
-		return (
-			<>
-				<p className="eyebrow">Outcome</p>
-				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "3rem 1.5rem" }}>
-					<div style={{ marginBottom: "1.5rem" }}>
-						<span
-							style={{
-								display: "inline-flex",
-								width: "48px",
-								height: "48px",
-								border: "2px solid var(--border)",
-								borderTopColor: "var(--foreground)",
-								borderRadius: "50%",
-								animation: "spin 1s linear infinite",
-							}}
-						/>
-					</div>
-					<p className="display" style={{ fontSize: "1.2rem" }}>{phaseLabel}</p>
-					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
-						Your consultant is reviewing your assessment details and uploaded documents. This typically takes a few minutes in the prototype. You'll see the outcome here once it's ready.
-					</p>
-					<p className="mono muted mt-4" style={{ fontSize: "0.75rem" }}>
-						Booking ref: {booking.confirmationId}
-					</p>
-				</div>
-				<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-			</>
-		);
-	}
-
-	return (
-		<>
-			<AssessmentOutcomeCard
-				outcome={outcome === "conditional" ? "Conditionally Eligible" : outcome === "eligible" ? "Eligible" : outcome}
-				notes={booking.eligibilityNote}
-				recommendations={{
-					country: booking.assessmentResult?.recCountry,
-					university: booking.assessmentResult?.recUniversity,
-					program: booking.assessmentResult?.recProgram,
-					package: booking.assessmentResult?.recPackage,
-				}}
-				currentDecision={application.applicationConsent?.decision ?? null}
-				onDecided={() => void syncFromServer()}
-			/>
-
-			{import.meta.env.DEV && autopilot ? (
-				<details style={{ marginTop: "1rem" }}>
-					<summary className="mono muted" style={{ fontSize: "0.75rem", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-						Simulate other outcomes
-					</summary>
-					<div className="row mt-2" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-						<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("eligible")}>
-							Eligible
-						</Button>
-						<Button type="button" variant="secondary" size="sm" onClick={() => onMockOutcome("conditional")}>
-							Conditional
-						</Button>
-						<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("needs_info")}>
-							Needs Info
-						</Button>
-						<Button type="button" variant="ghost" size="sm" onClick={() => onMockOutcome("not_eligible")}>
-							Not Eligible
-						</Button>
-					</div>
-				</details>
-			) : null}
-		</>
-	);
-}
-
-/* ========== Consultation review - awaiting approval & assessment ========== */
-
-function ConsultationReview({
-	booking,
-	onProceed,
-	onRevealOutcome,
-}: {
-	booking: BookingData;
-	onProceed: () => void;
-	onRevealOutcome: () => void;
-}) {
-	const phase = booking.consultationPhase;
-
-	if (!booking.confirmationId) {
-		return (
-			<>
-				<p className="eyebrow">Review</p>
-				<p className="muted mt-2">Complete payment in the Pay tab first. Your consultant review begins after confirmation.</p>
-			</>
-		);
-	}
-
-	const isPast = (p: string) => {
-		const order = ["draft", "awaiting_confirmation", "confirmed", "awaiting_assignment", "assigned", "awaiting_assignment_confirmation", "assessment", "assessment_complete", "outcome"];
-		return order.indexOf(phase) > order.indexOf(p);
-	};
-	const isActive = (p: string) => phase === p;
-	const isDone = (p: string) => isPast(p) || phase === "outcome";
-
-	const steps = [
-		{
-			id: "paid",
-			label: "Payment received",
-			detail: `Reference ${booking.confirmationId} · ${formatDualCurrency(75)}`,
-			done: true,
-		},
-		{
-			id: "awaiting_confirmation",
-			label: "Awaiting booking confirmation",
-			detail: "The branch reviews your payment and confirms your consultation slot.",
-			active: isActive("awaiting_confirmation"),
-			done: isDone("awaiting_confirmation"),
-		},
-		{
-			id: "confirmed",
-			label: "Booking confirmed",
-			detail: "Your consultation slot has been confirmed. Waiting for a consultant to be assigned.",
-			active: isActive("confirmed"),
-			done: isDone("confirmed"),
-		},
-		{
-			id: "awaiting_assignment",
-			label: "Awaiting consultant assignment",
-			detail: "The branch is assigning a consultant to your case.",
-			active: isActive("awaiting_assignment"),
-			done: isDone("awaiting_assignment"),
-		},
-		{
-			id: "assigned",
-			label: "Consultant assigned",
-			detail: booking.consultantName
-				? `Your case has been assigned to ${booking.consultantName}. Waiting for the consultant to confirm the assignment.`
-				: "A consultant has been assigned to your case. Waiting for confirmation.",
-			active: isActive("assigned"),
-			done: isDone("assigned"),
-		},
-		{
-			id: "awaiting_assignment_confirmation",
-			label: "Awaiting assignment confirmation",
-			detail: booking.consultantName
-				? `${booking.consultantName} is reviewing and accepting the assignment before assessment begins.`
-				: "The consultant is confirming the assignment before assessment begins.",
-			active: isActive("awaiting_assignment_confirmation"),
-			done: isDone("awaiting_assignment_confirmation"),
-		},
-		{
-			id: "assessment",
-			label: "Assessment in progress",
-			detail: booking.consultantName
-				? `${booking.consultantName} is reviewing your academic background, documents, and study goals.`
-				: "Your consultant evaluates your academic background, documents, and study goals.",
-			active: isActive("assessment"),
-			done: isDone("assessment"),
-		},
-		{
-			id: "assessment_complete",
-			label: "Assessment complete",
-			detail: "Your consultant has finished the assessment. Click to view your eligibility outcome.",
-			active: isActive("assessment_complete"),
-			done: phase === "outcome",
-		},
-		{
-			id: "outcome",
-			label: "Eligibility outcome",
-			detail: "The consultant determines your eligibility and recommends next steps.",
-			active: isActive("outcome"),
-			done: phase === "outcome",
-		},
-	];
-
-	const phaseLabels: Record<string, string> = {
-		awaiting_confirmation: "Awaiting booking confirmation",
-		confirmed: "Booking confirmed",
-		awaiting_assignment: "Awaiting consultant assignment",
-		assigned: booking.consultantName ? `Assigned to ${booking.consultantName}` : "Consultant assigned",
-		awaiting_assignment_confirmation: "Awaiting assignment confirmation",
-		assessment: "Assessment in progress",
-		assessment_complete: "Assessment complete",
-		outcome: "Review complete",
-		draft: "Awaiting payment",
-		booked: "Booking confirmed",
-	};
-
-	return (
-		<>
-			<p className="eyebrow">Consultant review</p>
-			<p className="display mt-2" style={{ fontSize: "1.3rem" }}>
-				{phaseLabels[phase] ?? "In progress"}
-			</p>
-			<p className="muted mt-1" style={{ fontSize: "0.9rem" }}>
-				{booking.eligibilityNote ??
-					"Your file has been submitted. The consultant at your branch will review and assess before producing an outcome."}
-			</p>
-
-			{/* Assessment complete - prominent call to action */}
-			{phase === "assessment_complete" ? (
-				<div className="sharp-card mt-3" style={{ textAlign: "center", padding: "2rem 1.5rem", border: "2px solid var(--foreground)" }}>
-					<p className="display" style={{ fontSize: "1.3rem" }}>Assessment complete</p>
-					<p className="muted mt-2" style={{ maxWidth: "28rem", margin: "0.5rem auto 0" }}>
-						Your consultant has finished reviewing your file. Your eligibility outcome is ready.
-					</p>
-					<div className="row mt-3" style={{ justifyContent: "center" }}>
-						<Button type="button" onClick={onRevealOutcome} arrow>
-							View your outcome →
-						</Button>
-					</div>
-				</div>
-			) : null}
-
-			{/* Appointment - consultant, when, and a mode-aware where + actions */}
-			<ConsultationAppointmentCard />
-
-			{/* The consultant now leads the appointment card above, so no separate tile */}
-
-			<div className="mt-4" style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-				{steps.map((s, i) => (
-					<div
-						key={s.id}
-						style={{
-							display: "flex",
-							gap: "1rem",
-							paddingBottom: i < steps.length - 1 ? "1.5rem" : 0,
-							position: "relative",
-						}}
-					>
-						<div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
-							<span
-								style={{
-									width: "32px",
-									height: "32px",
-									borderRadius: "50%",
-									display: "flex",
-									alignItems: "center",
-									justifyContent: "center",
-									fontSize: "0.75rem",
-									fontWeight: 600,
-									border: s.done
-										? "2px solid var(--foreground)"
-										: s.active
-											? "2px solid var(--foreground)"
-											: "2px solid var(--border)",
-									background: s.done ? "var(--foreground)" : "transparent",
-									color: s.done ? "var(--background)" : s.active ? "var(--foreground)" : "var(--muted-foreground)",
-								}}
-							>
-								{s.done ? "✓" : s.active ? (
-									<span
-										style={{
-											display: "inline-block",
-											width: "14px",
-											height: "14px",
-											border: "2px solid var(--foreground)",
-											borderTopColor: "transparent",
-											borderRadius: "50%",
-											animation: "spin 1s linear infinite",
-										}}
-									/>
-								) : i + 1}
-							</span>
-							{i < steps.length - 1 ? (
-								<span
-									style={{
-										width: "2px",
-										flex: 1,
-										minHeight: "2rem",
-										marginTop: "0.25rem",
-										background: s.done ? "var(--foreground)" : "var(--border)",
-									}}
-								/>
-							) : null}
-						</div>
-						<div style={{ paddingBottom: "0.5rem" }}>
-							<p
-								style={{
-									fontSize: "0.95rem",
-									fontWeight: s.active || s.done ? 600 : 400,
-									color: s.done || s.active ? "var(--foreground)" : "var(--muted-foreground)",
-								}}
-							>
-								{s.label}
-							</p>
-							<p className="muted" style={{ fontSize: "0.85rem", marginTop: "0.2rem" }}>
-								{s.detail}
-							</p>
-							{s.active ? (
-								<p className="mono" style={{ fontSize: "0.7rem", marginTop: "0.4rem", color: "var(--muted-foreground)" }}>
-									In progress…
-								</p>
-							) : null}
-						</div>
-					</div>
-				))}
-			</div>
-
-			<style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-			{phase === "outcome" ? (
-				<div className="row mt-4">
-					<Button type="button" onClick={onProceed} arrow>
-						View outcome →
-					</Button>
-				</div>
-			) : phase === "cancelled" ? (
-				<div className="sharp-card mt-4" style={{ textAlign: "center" }}>
-					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-						Booking ref: {booking.confirmationId}
-					</p>
-					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
-						This consultation was cancelled. Book a new appointment from the Appointments tab to continue.
-					</p>
-					<div className="row mt-3" style={{ justifyContent: "center" }}>
-						<Button to="/portal/appointments" variant="secondary" arrow>
-							Book a new appointment →
-						</Button>
-					</div>
-				</div>
-			) : phase !== "assessment_complete" ? (
-				<div className="sharp-card mt-4" style={{ textAlign: "center" }}>
-					<p className="mono muted" style={{ fontSize: "0.75rem" }}>
-						Booking ref: {booking.confirmationId}
-					</p>
-					<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
-						This typically takes a few minutes in the prototype. The outcome will appear automatically - you can stay on this page or check the Outcome tab.
-					</p>
-				</div>
-			) : null}
-		</>
-	);
-}
 
 export function PortalConsultationBookingFlow() {
 	const {
@@ -2120,14 +1684,8 @@ export function PortalConsultationBookingFlow() {
 		updateBooking,
 		updateAssessment,
 		updateAssessmentDoc,
-
-		setEligibilityOutcome,
-		revealOutcome,
-		journeyPhase,
 	} = useAppState();
 	const { toast } = useNotifier();
-	const [selectedStep, setSelectedStep] = useState<ConsultStepId>("type");
-	const steps = consultSteps(booking.consultationType);
 	const catalog = useAssessmentCatalog();
 
 	// Live consultation fee (USD) from platform_settings — what ops configured,
@@ -2148,15 +1706,7 @@ export function PortalConsultationBookingFlow() {
 		})();
 		return () => { active = false; };
 	}, []);
-	const step: ConsultStepId = useMemo(() => {
-		if (booking.consultationPhase === "outcome" || booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "cancelled") {
-			return "outcome";
-		}
-		return steps.includes(selectedStep) ? selectedStep : "type";
-	}, [booking.consultationPhase, selectedStep, steps]);
-	const stepIndex = steps.indexOf(step);
-	const outcomeUnlocked = booking.consultationPhase === "assessment_complete" || booking.consultationPhase === "outcome";
-	const [payState, setPayState] = useState<"method" | "card" | "momo" | "processing" | "success" | "paid">(
+	const [payState, setPayState] = useState<"method" | "processing" | "success" | "paid">(
 		booking.confirmationId ? "paid" : "method",
 	);
 
@@ -2256,47 +1806,23 @@ export function PortalConsultationBookingFlow() {
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · {STAGE_SHORT[journeyPhase.stage] ?? journeyPhase.label}</p>
-					<h1 className="page-title mt-1">Consultation</h1>
+					<p className="eyebrow">Chapter I · Consultation</p>
+					<h1 className="page-title mt-1">Book your consultation</h1>
 					<p className="lead mt-2">
-						Choose how you'd like to meet, tell us about yourself, pick a time and pay the fee — all here.
+						One session — video or at a branch — 45 minutes, {formatDualCurrency(consultationFeeUsd)}. Your consultant reviews your
+						background, tells you if the route is viable, and hands you a document checklist and a named consultant for the rest of the journey.
 					</p>
 				</div>
 			</header>
 
-			<ol className="psteps" role="tablist">
-				{steps.map((id, i) => {
-					const isLocked = id === "outcome" && !outcomeUnlocked;
-					const done = i < stepIndex && !isLocked;
-					return (
-						<li key={id}>
-							<button
-								type="button"
-								role="tab"
-								aria-selected={step === id}
-								aria-disabled={isLocked}
-								disabled={isLocked}
-								className={`portal-pill${step === id ? " portal-pill--solid" : done ? " portal-pill--done" : " portal-pill--hollow"}`}
-								onClick={() => !isLocked && setSelectedStep(id)}
-							>
-								{i + 1} · {CONSULT_STEP_LABELS[id]}
-								{done ? " ✓" : isLocked ? " —" : ""}
-							</button>
-						</li>
-					);
-				})}
-			</ol>
-
 			<div className="psplit">
-			<div className="sharp-card">
-				{step === "type" && (
-					<>
-						<div className="psec" style={{ marginBottom: "0.9rem" }}>
-							<div>
-								<span className="psec__no">1</span>
-								<span className="psec__title">How do you want to meet?</span>
-							</div>
-							<p className="psec__hint">Same session, same fee — pick what suits you.</p>
+				<div>
+					{/* 1 · how you meet */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className="psec__no">1</span>
+							<span className="psec__title">How you meet</span>
+							<span className="psec__hint">same session, same fee</span>
 						</div>
 						<div className="pcards pcards--pair">
 							{(
@@ -2318,16 +1844,14 @@ export function PortalConsultationBookingFlow() {
 								</button>
 							))}
 						</div>
-					</>
-				)}
-				{step === "branch" && (
-					<>
-						<div className="psec" style={{ marginBottom: "0.9rem" }}>
-							<div>
-								<span className="psec__no">2</span>
-								<span className="psec__title">Which branch handles you?</span>
-							</div>
-							<p className="psec__hint">The office your file sits with — even for a video call. Earliest slot shown; the full grid comes next.</p>
+					</section>
+
+					{/* 2 · which office handles the file */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className="psec__no">2</span>
+							<span className="psec__title">Which office handles you</span>
+							<span className="psec__hint">your file sits with one office — even for a video call</span>
 						</div>
 						<div className="pcards pcards--pair">
 							{BOOKABLE_BRANCHES.map((b) => (
@@ -2349,72 +1873,67 @@ export function PortalConsultationBookingFlow() {
 								</button>
 							))}
 						</div>
-					</>
-				)}
-				{step === "assessment" && (
-					<>
-						<div className="psec" style={{ marginBottom: "0.9rem" }}>
-							<div>
-								<span className="psec__no">3</span>
-								<span className="psec__title">Tell us about yourself</span>
-							</div>
-							<p className="psec__hint">Your consultant reads this before the meeting — required fields are marked.</p>
-						</div>
-						<AssessmentForm
-							assessment={booking.assessment}
-							assessmentDocs={booking.assessmentDocs}
-							catalog={catalog}
-							onUpdate={updateAssessment}
-							onDocUpdate={updateAssessmentDoc}
-						/>
-					</>
-				)}
-				{step === "schedule" && (
-					<>
-						<div className="psec" style={{ marginBottom: "0.9rem" }}>
-							<div>
-								<span className="psec__no">4</span>
-								<span className="psec__title">Pick your slot{booking.branchId ? ` — ${getBranchName(booking.branchId)}` : ""}</span>
-							</div>
-							<p className="psec__hint">Struck-through days are full or closed. Slots are 45 minutes, branch time.</p>
-						</div>
-						<SlotPickerLive
-							branchId={booking.branchId}
-							date={booking.date}
-							onDateChange={(d) => updateBooking({ date: d })}
-							time={booking.time}
-							onTimeChange={(t) => updateBooking({ time: t })}
-							durationMinutes={45}
-						/>
-					</>
-				)}
-				{step === "pay" && (
-					<>
-						<div className="psec" style={{ marginBottom: "0.9rem" }}>
-							<div>
-								<span className="psec__no">5</span>
-								<span className="psec__title">Confirm &amp; pay</span>
-							</div>
-							<p className="psec__hint">Check the order — then Paystack takes card or mobile money.</p>
-						</div>
+					</section>
 
-						{payState === "paid" && booking.confirmationId ? (
-							<div className="sharp-card mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
-								<p className="eyebrow">Booking confirmed</p>
-								<p className="mono mt-2">Ref: {booking.confirmationId}</p>
-								<p className="mt-2" style={{ opacity: 0.85 }}>
-									Your consultation has been booked. A branch coordinator will review and assign your consultant shortly.
-								</p>
-							</div>
-						) : null}
+					{/* 3 · about you */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className="psec__no">3</span>
+							<span className="psec__title">About you</span>
+							<span className="psec__hint">your consultant reads this before you meet</span>
+						</div>
+						<div className="sharp-card">
+							<AssessmentForm
+								assessment={booking.assessment}
+								assessmentDocs={booking.assessmentDocs}
+								catalog={catalog}
+								onUpdate={updateAssessment}
+								onDocUpdate={updateAssessmentDoc}
+							/>
+							<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
+								Passport details, budget and study choices — the same form as your profile. Filled once; it feeds both.
+							</p>
+						</div>
+					</section>
+
+					{/* 4 · pick a time */}
+					<section className="psec" id="pick-a-time">
+						<div className="psec__h">
+							<span className="psec__no">4</span>
+							<span className="psec__title">Pick a time{booking.branchId ? ` — ${getBranchName(booking.branchId)}` : ""}</span>
+							<span className="psec__hint">45 min · branch time · struck days are full</span>
+						</div>
+						<div className="sharp-card">
+							<SlotPickerLive
+								branchId={booking.branchId}
+								date={booking.date}
+								onDateChange={(d) => updateBooking({ date: d })}
+								time={booking.time}
+								onTimeChange={(t) => updateBooking({ time: t })}
+								durationMinutes={45}
+							/>
+						</div>
+					</section>
+
+					{/* 5 · confirm & pay */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className="psec__no">5</span>
+							<span className="psec__title">Confirm &amp; pay</span>
+							<span className="psec__hint">Paystack · card or mobile money</span>
+						</div>
 
 						{payState === "method" ? (
 							<>
-								<div className="order mt-3">
+								<div className="order">
 									<div className="order__row">
 										<span>
 											{booking.consultationType === "online" ? "Online consultation" : "In-person consultation"} — 45 min
-											<small>{[booking.date, booking.time, getBranchName(booking.branchId)].filter(Boolean).join(" · ") || "Details in the rail"}</small>
+											<small>
+												{[booking.date, booking.time, booking.branchId ? `${getBranchName(booking.branchId)} handles the file` : null]
+													.filter(Boolean)
+													.join(" · ") || "Details in the rail"}
+											</small>
 										</span>
 										<span className="order__amt">{formatDualCurrency(consultationFeeUsd)}</span>
 									</div>
@@ -2434,11 +1953,9 @@ export function PortalConsultationBookingFlow() {
 								</p>
 								<div className="row mt-4">
 									<Button type="button" onClick={startPayment} arrow>
-										Pay with Paystack · {formatDualCurrency(consultationFeeUsd)} →
+										Pay with Paystack · {formatDualCurrency(consultationFeeUsd)}
 									</Button>
-									<Button type="button" variant="ghost" onClick={() => setSelectedStep("schedule")}>
-										← Change slot
-									</Button>
+									<a className="btn btn--ghost" href="#pick-a-time">Change slot</a>
 								</div>
 								<p className="mono muted mt-2" style={{ fontSize: "0.62rem" }}>
 									Card · MTN MoMo · Vodafone Cash — processed by Paystack
@@ -2473,120 +1990,74 @@ export function PortalConsultationBookingFlow() {
 							</div>
 						) : null}
 
-						{payState === "success" ? (
-							<div className="sharp-card mt-3" style={{ textAlign: "center", background: "var(--foreground)", color: "var(--accent-foreground)" }}>
+						{payState === "paid" || payState === "success" ? (
+							<div className="sharp-card mt-3" style={{ background: "var(--foreground)", color: "var(--accent-foreground)" }}>
 								<p className="eyebrow">Booking confirmed</p>
-								<p className="display mt-2" style={{ fontSize: "1.35rem" }}>
-									✓ {formatDualCurrency(consultationFeeUsd)} consultation booked
-								</p>
-								<p className="mono mt-2" style={{ opacity: 0.85 }}>
-									Redirecting to booking confirmation…
+								{booking.confirmationId ? <p className="mono mt-2">Ref: {booking.confirmationId}</p> : null}
+								<p className="mt-2" style={{ opacity: 0.85 }}>
+									A branch coordinator will review and assign your consultant shortly.
 								</p>
 							</div>
 						) : null}
-					</>
-				)}
-				{step === "review" && (
-					<ConsultationReview
-						booking={booking}
-						onProceed={() => setSelectedStep("outcome")}
-						onRevealOutcome={revealOutcome}
-					/>
-				)}
-				{step === "outcome" && (
-					<ConsultationOutcome
-						booking={booking}
-						onMockOutcome={setEligibilityOutcome}
-						onRevealOutcome={revealOutcome}
-						autopilot={false}
-					/>
-				)}
-
-				<div className="row mt-4" style={{ borderTop: "1px solid var(--border-light)", paddingTop: "1rem" }}>
-					<Button
-						type="button"
-						variant="ghost"
-						disabled={stepIndex <= 0}
-						onClick={() => setSelectedStep(steps[Math.max(0, stepIndex - 1)])}
-					>
-						← Back
-					</Button>
-					<Button
-						type="button"
-						variant="secondary"
-						disabled={stepIndex >= steps.length - 1 || (steps[stepIndex + 1] === "outcome" && !outcomeUnlocked)}
-						onClick={() => setSelectedStep(steps[Math.min(steps.length - 1, stepIndex + 1)])}
-					>
-						{step === "assessment" ? "Continue to schedule →" : "Next →"}
-					</Button>
+					</section>
 				</div>
-			</div>
 
-			{/* the booking rail — what you're about to pay for, always visible */}
-			<div className="prail">
-				<div className="sharp-card sharp-card--key">
-					<p className="eyebrow">Your booking</p>
-					<div style={{ marginTop: "0.4rem" }}>
-						<div className="pkv">
-							<span className="pkv__k">Type</span>
-							<span className={`pkv__v${booking.consultationType ? "" : " muted"}`}>
-								{booking.consultationType === "online"
-									? "Online"
-									: booking.consultationType === "in_person"
-										? "In person"
-										: "Not chosen"}
-							</span>
+				{/* the booking rail — what you're about to pay for, always visible */}
+				<div className="prail">
+					<div className="sharp-card sharp-card--key">
+						<p className="eyebrow">Your booking</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv">
+								<span className="pkv__k">Type</span>
+								<span className={`pkv__v${booking.consultationType ? "" : " muted"}`}>
+									{booking.consultationType === "online"
+										? "Video call"
+										: booking.consultationType === "in_person"
+											? "At a branch"
+											: "Not chosen"}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Handling branch</span>
+								<span className={`pkv__v${booking.branchId ? "" : " muted"}`}>
+									{booking.branchId ? getBranchName(booking.branchId) : "Not chosen"}
+								</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Date</span>
+								<span className={`pkv__v${booking.date ? "" : " muted"}`}>{booking.date || "Not picked"}</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Time</span>
+								<span className={`pkv__v${booking.time ? "" : " muted"}`}>
+									{booking.time ? `${booking.time} · 45 min` : "Not picked"}
+								</span>
+							</div>
+							<div className="pkv pkv--due">
+								<span className="pkv__k">Fee</span>
+								<span className="pkv__v">
+									{payState === "paid" ? "Paid ✓" : formatDualCurrency(consultationFeeUsd)}
+								</span>
+							</div>
 						</div>
-						<div className="pkv">
-							<span className="pkv__k">Handling branch</span>
-							<span className={`pkv__v${booking.branchId ? "" : " muted"}`}>
-								{booking.branchId ? getBranchName(booking.branchId) : "Not chosen"}
-							</span>
-						</div>
-						<div className="pkv">
-							<span className="pkv__k">About you</span>
-							<span className={`pkv__v${booking.assessment.firstName ? "" : " muted"}`}>
-								{booking.assessment.firstName ? "Complete ✓" : "In progress"}
-							</span>
-						</div>
-						<div className="pkv">
-							<span className="pkv__k">Date</span>
-							<span className={`pkv__v${booking.date ? "" : " muted"}`}>{booking.date || "Not picked"}</span>
-						</div>
-						<div className="pkv">
-							<span className="pkv__k">Time</span>
-							<span className={`pkv__v${booking.time ? "" : " muted"}`}>
-								{booking.time ? `${booking.time} · 45 min` : "Not picked"}
-							</span>
-						</div>
-						<div className="pkv pkv--due">
-							<span className="pkv__k">Consultation fee</span>
-							<span className="pkv__v">
-								{payState === "paid" ? "Paid ✓" : formatDualCurrency(consultationFeeUsd)}
-							</span>
-						</div>
+						<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
+							{payState === "paid"
+								? `Booked · Ref ${booking.confirmationId}`
+								: "Fill each section — the Pay button is on the last one."}
+						</p>
+						<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.7rem", lineHeight: 1.5 }}>
+							The fee confirms the slot. Reschedule free up to 24h before.
+						</p>
 					</div>
-					<p className="mono" style={{ fontSize: "0.68rem", marginTop: "0.8rem" }}>
-						{payState === "paid"
-							? `Booked · Ref ${booking.confirmationId}`
-							: step === "pay"
-								? "The Pay button is on the order."
-								: "Fill each step — the Pay button is on the last one."}
-					</p>
-					<p className="muted" style={{ fontSize: "0.66rem", marginTop: "0.7rem", lineHeight: 1.5 }}>
-						The fee confirms the slot. Reschedule free up to 24h before.
-					</p>
-				</div>
 
-				<div className="sharp-card">
-					<p className="eyebrow">What happens next</p>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-						You get the confirmation and a reminder the day before. Your consultant reads your
-						assessment form first — that's why step {steps.indexOf("assessment") + 1} asked all those
-						questions.
-					</p>
+					<div className="sharp-card">
+						<p className="eyebrow">What happens next</p>
+						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							Payment books the slot. You get a confirmation and a reminder the day before; your consultant reads your "About you"
+							before you meet.
+						</p>
+					</div>
 				</div>
-			</div>
 			</div>
 		</div>
 	);
@@ -2595,7 +2066,7 @@ export function PortalConsultationBookingFlow() {
 
 
 export function PortalConsultation() {
-	const { booking, stageStatuses, journeyPhase, pendingAction } = useAppState();
+	const { booking, fees, revealOutcome } = useAppState();
 
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
@@ -2618,16 +2089,20 @@ export function PortalConsultation() {
 	}, [refreshLiveCase]);
 
 	const applicationConsent = liveApplication?.applicationConsent?.decision ?? null;
+	const workflow = liveConsultation?.workflow;
+	const workflowStatus = workflow?.status ?? "AWAITING_ASSIGNMENT";
 
 	// An active case exists if there's a consultation OR an application. Ops
 	// can create the application directly (bypassing consultation), and a
 	// silent consultation-creation failure after payment shouldn't strand the
 	// applicant on the fee page when their application is already in flight.
-	const hasActiveCase = Boolean(liveConsultation || liveApplication || booking.confirmationId);
+	// A CLOSED workflow with no live application and no paid booking is a dead
+	// case — render the booking sheet again. (The old case view linked out to
+	// Appointments to rebook, whose own Book CTA loops right back here.)
+	const closedCase = workflowStatus === "CLOSED" && !liveApplication && !booking.confirmationId;
+	const hasActiveCase = Boolean(liveConsultation || liveApplication || booking.confirmationId) && !closedCase;
 	const activeRef = liveConsultation?.reference ?? booking.confirmationId;
 	const activeOfficer = liveConsultation?.assignedOfficerName;
-	const workflow = liveConsultation?.workflow;
-	const workflowStatus = workflow?.status ?? "AWAITING_ASSIGNMENT";
 	const activeOutcome =
 		liveConsultation?.assessmentResult?.outcome ||
 		(liveConsultation?.assessmentResult && (liveConsultation.assessmentResult.recCountry || liveConsultation.assessmentResult.recPackage) ? "Eligible" : null) ||
@@ -2635,298 +2110,443 @@ export function PortalConsultation() {
 		(booking.consultationPhase === "outcome" ? "Eligible" : null);
 	const activeNotes = liveConsultation?.assessmentResult?.notes || booking.eligibilityNote || null;
 
+	if (loading) {
+		return (
+			<div className="portal-page">
+				<header className="portal-page__header">
+					<div>
+						<p className="eyebrow">Chapter I · Consultation</p>
+						<h1 className="page-title mt-1">Consultation</h1>
+					</div>
+				</header>
+				<div className="sharp-card text-center">
+					<p className="muted">Loading consultation case details…</p>
+				</div>
+			</div>
+		);
+	}
+
+	if (!hasActiveCase) {
+		return (
+			<>
+				{closedCase ? (
+					<p className="muted" style={{ fontSize: "0.85rem", marginBottom: "1rem" }}>
+						Your previous consultation was cancelled — book a new slot below.
+					</p>
+				) : null}
+				<PortalConsultationBookingFlow />
+			</>
+		);
+	}
+
+	// The standard documents are collected here, in this chapter, so
+	// nothing waits on paperwork later. Not uploaded and rejected are
+	// the client's to act on; uploaded is with the consultant.
+	const checklist = liveApplication?.documentChecklist ?? liveConsultation?.documentChecklist ?? [];
+	const toUpload = checklist.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
+	const verifiedDocs = checklist.filter((d) => d.status === "VERIFIED");
+	const statusLabel =
+		workflowStatus === "CLOSED"
+			? "Appointment closed"
+			: workflowStatus === "COMPLETED"
+				? "Assessment complete"
+				: workflowStatus === "IN_PROGRESS"
+					? "In progress"
+					: "Awaiting your consultant";
+	const startsAt = liveConsultation?.startsAt ? new Date(liveConsultation.startsAt) : null;
+	const startsInFuture = Boolean(startsAt && startsAt.getTime() > Date.now());
+	const daysTo = startsAt ? Math.max(0, Math.ceil((startsAt.getTime() - Date.now()) / 86_400_000)) : null;
+	const when = startsAt
+		? startsAt.toLocaleString(undefined, {
+				weekday: "short",
+				year: "numeric",
+				month: "short",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			})
+		: booking.date
+			? `${booking.date} at ${booking.time}`
+			: "Scheduled";
+	const whenShort = startsAt
+		? startsAt.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+		: booking.date
+			? `${booking.date} ${booking.time}`.trim()
+			: "Scheduled";
+	const whenDay = startsAt
+		? startsAt.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+		: booking.date || null;
+	const bookedDay = startsAt ? startsAt.toLocaleDateString(undefined, { day: "numeric", month: "short" }) : booking.date || null;
+	const branchName = getBranchName(liveConsultation?.branch ?? booking.branchId);
+	const meetingUrl = workflowStatus !== "CLOSED" ? (liveConsultation?.meetingUrl ?? null) : null;
+	const appointmentDone = workflowStatus === "COMPLETED" || workflowStatus === "CLOSED" || Boolean(activeOutcome);
+	const decisionOpen = Boolean(activeOutcome) && (applicationConsent === null || applicationConsent === "pending");
+	const consentDecision = decisionOf(applicationConsent);
+	// The assessment feeds the consultant's preparation. A booking made
+	// in a hurry can skip it, so it stays asked for until the meeting.
+	const profile = liveConsultation?.profile;
+	const assessmentGaps = profile
+		? (["nationality", "dob", "degree", "degreeLevel", "intake"] as const).filter((k) => !profile[k])
+		: [];
+	const consultationFeeUsd = usdFromCents((fees || FALLBACK_FEE_SCHEDULE).consultationCents);
+
+	const steps: { label: string; done: boolean; fact: string }[] = [
+		{ label: "Booked", done: Boolean(activeRef), fact: activeRef ? `${bookedDay ?? "paid"} · paid` : "not booked" },
+		{
+			label: "With your consultant",
+			done: Boolean(activeOfficer) || workflowStatus === "IN_PROGRESS" || workflowStatus === "COMPLETED",
+			fact: activeOfficer ?? (workflowStatus === "IN_PROGRESS" || workflowStatus === "COMPLETED" ? "your consultant" : "assigning"),
+		},
+		{ label: "Outcome", done: Boolean(activeOutcome), fact: activeOutcome ? activeOutcome.toLowerCase() : "after the session" },
+		{ label: "Your call", done: Boolean(consentDecision), fact: consentDecision ?? "proceed or hold" },
+	];
+	const onStep = steps.findIndex((s) => !s.done);
+
+	// The band — the one thing this chapter needs right now.
+	const band: { title: string; detail: string; cta: ReactNode } =
+		workflowStatus === "CLOSED"
+			? {
+					title: "This consultation was cancelled",
+					detail: "Book a new slot to continue — check-ins are free once you're enrolled, the first consultation carries the fee.",
+					cta: (
+						<a className="btn btn--inverted" href="/portal/appointments">
+							Manage appointments →
+						</a>
+					),
+				}
+			: decisionOpen
+				? {
+						title: `${activeOutcome} — decide whether to proceed`,
+						detail: "Proceeding opens Chapter II · Enrolment: the package, your plan, and the deposit that starts your file moving.",
+						cta: (
+							<a className="btn btn--inverted" href="#assessment-outcome">
+								Review the outcome ↓
+							</a>
+						),
+					}
+				: meetingUrl && startsInFuture
+					? {
+							title: `${whenShort} — your link is ready`,
+							detail: "The video link opens in a new tab. Your consultant reads your assessment before you meet.",
+							cta: (
+								<a className="btn btn--inverted" href={meetingUrl} target="_blank" rel="noopener noreferrer">
+									Join video meeting →
+								</a>
+							),
+						}
+					: assessmentGaps.length > 0
+						? {
+								title: "Complete your assessment form",
+								detail: "Your consultant reads this before you meet — your background, passport, education and what you're aiming for.",
+								cta: (
+									<Button to="/portal/profile" variant="inverted" arrow>
+										Complete form
+									</Button>
+								),
+							}
+						: toUpload.length > 0
+							? {
+									title: `Upload your documents — ${toUpload.map((d) => d.name).join(" · ")}`,
+									detail: "The standard set, checked off here so nothing waits on paperwork later.",
+									cta: (
+										<Button to="/portal/documents" variant="inverted" arrow>
+											Open vault
+										</Button>
+									),
+								}
+							: {
+									title:
+										workflowStatus === "AWAITING_ASSIGNMENT"
+											? `${whenShort} — a consultant is being assigned`
+											: workflowStatus === "IN_PROGRESS"
+												? "Session done — your outcome is being prepared"
+												: "Consultation in progress",
+									detail:
+										workflowStatus === "AWAITING_ASSIGNMENT"
+											? `${branchName} assigns your consultant within a day. Upload your standard documents meanwhile so nothing waits on paperwork.`
+											: workflowStatus === "IN_PROGRESS"
+												? "Your consultant writes up the outcome and route recommendation — it lands in Your assessment below."
+												: "Your branch updates this page as the case moves.",
+									cta: null,
+								};
+
 	return (
 		<div className="portal-page">
 			<header className="portal-page__header">
 				<div>
-					<p className="eyebrow">Dashboard · {STAGE_SHORT[journeyPhase.stage] ?? journeyPhase.label}</p>
-					<h1 className="page-title mt-1">Consultation &amp; Assessment</h1>
+					<p className="eyebrow">Chapter I · Consultation</p>
+					<h1 className="page-title mt-1">{activeOutcome ? "Consultation · outcome in" : "Consultation · booked"}</h1>
 					<p className="lead mt-2">
-						{hasActiveCase
-							? "Your consultation appointment and official assessment file with Century NIT."
-							: "Schedule your one-on-one advisory consultation with a licensed study abroad counselor."}
+						{activeOutcome
+							? "Your consultant has reviewed your file. One decision ends this chapter."
+							: "Your session is paid and on the calendar. This page is your case file — the appointment, the outcome, and anything your consultant asks for."}
 					</p>
 				</div>
 			</header>
 
-			{loading ? (
-				<div className="sharp-card text-center py-5">
-					<p className="muted">Loading consultation case details…</p>
+			{/* You are here */}
+			<div className="journey-now mt-4">
+				<div>
+					<p className="eyebrow">You are here</p>
+					<p className="display journey-now__title" style={{ fontSize: "1.3rem" }}>
+						{band.title}
+					</p>
+					<p className="journey-now__detail">{band.detail}</p>
 				</div>
-			) : !hasActiveCase ? (
-				<PortalConsultationBookingFlow />
-			) : (
-				/* ── The case: journey spine, outcome and messages; facts and next steps beside ── */
-				(() => {
-					const consultationDocs = liveConsultation?.requestedDocuments ?? [];
-					const applicationDocs = liveApplication?.requestedDocuments ?? [];
-					const allRequested = Array.from(new Set([...consultationDocs, ...applicationDocs]));
-					// The standard documents are collected here, in this chapter, so
-					// nothing waits on paperwork later. Not uploaded and rejected are
-					// the client's to act on; uploaded is with the consultant.
-					const checklist = liveApplication?.documentChecklist ?? liveConsultation?.documentChecklist ?? [];
-					const toUpload = checklist.filter((d) => d.status === "PENDING_UPLOAD" || d.status === "REJECTED");
-					const toVerify = checklist.filter((d) => d.status === "UPLOADED");
-					const verifiedDocs = checklist.filter((d) => d.status === "VERIFIED");
-					const statusTone: Tone =
-						workflowStatus === "CLOSED" ? "void" : workflowStatus === "COMPLETED" ? "done" : workflowStatus === "IN_PROGRESS" ? "current" : "waiting";
-					const statusLabel =
-						workflowStatus === "CLOSED"
-							? "Appointment closed"
-							: workflowStatus === "COMPLETED"
-								? "Assessment complete"
-								: workflowStatus === "IN_PROGRESS"
-									? "In progress"
-									: "Awaiting your consultant";
-					const when = liveConsultation?.startsAt
-						? new Date(liveConsultation.startsAt).toLocaleString(undefined, {
-								weekday: "short",
-								year: "numeric",
-								month: "short",
-								day: "numeric",
-								hour: "2-digit",
-								minute: "2-digit",
-							})
-						: booking.date
-							? `${booking.date} at ${booking.time}`
-							: "Scheduled";
-					const decisionOpen = Boolean(activeOutcome) && (applicationConsent === null || applicationConsent === "pending");
+				{band.cta}
+			</div>
 
-					// What the applicant has to do now — the same derivation the
-					// dashboard uses, plus the two things only this chapter asks for.
-					const actions: NextAction[] = [];
-					if (decisionOpen) {
-						actions.push({
-							id: "decide",
-							title: "Decide whether to proceed",
-							detail: "Your assessment is ready. Continue to start your application, or put it on hold.",
-							action: (
-								<a href="#assessment-outcome" className="btn btn--primary btn--sm">
-									Review outcome →
-								</a>
-							),
-						});
-					}
-					// The assessment feeds the consultant's preparation. A booking made
-					// in a hurry can skip it, so it stays asked for until the meeting.
-					const profile = liveConsultation?.profile;
-					const assessmentGaps = profile
-						? (["nationality", "dob", "degree", "degreeLevel", "intake"] as const).filter((k) => !profile[k])
-						: [];
-					if (assessmentGaps.length > 0 && workflowStatus !== "COMPLETED" && workflowStatus !== "CLOSED") {
-						actions.push({
-							id: "assessment",
-							title: "Complete your assessment form",
-							detail: "Your consultant reads this before you meet — your background, passport, education and what you're aiming for.",
-							action: (
-								<Button to="/portal/profile" variant="primary">
-									Complete form →
-								</Button>
-							),
-						});
-					}
-					if (toUpload.length > 0) {
-						actions.push({
-							id: "standard-documents",
-							title: `Upload your ${toUpload.length === checklist.length ? "documents" : `${toUpload.length} remaining document${toUpload.length === 1 ? "" : "s"}`}`,
-							detail: toUpload.map((d) => d.name).join(" · "),
-							action: (
-								<Button to="/portal/documents" variant="primary">
-									Open vault →
-								</Button>
-							),
-						});
-					}
-					if (allRequested.length > 0) {
-						actions.push({
-							id: "documents",
-							title: `Upload ${allRequested.length} requested document${allRequested.length === 1 ? "" : "s"}`,
-							detail: allRequested.join(" · "),
-							action: (
-								<Button to="/portal/documents" variant="secondary">
-									Open vault →
-								</Button>
-							),
-						});
-					}
-					if (pendingAction && pendingAction.kind !== "documents") {
-						actions.push({
-							id: pendingAction.kind,
-							title: pendingAction.title,
-							detail: pendingAction.detail,
-							action: (
-								<Button to={pendingAction.to} variant="primary">
-									{pendingAction.label} →
-								</Button>
-							),
-						});
-					}
-					if (workflowStatus === "CLOSED") {
-						actions.push({
-							id: "rebook",
-							title: "Rebook your consultation",
-							detail: "This appointment was cancelled. Book again to continue.",
-							tone: "blocked",
-							action: (
-								<Button to="/portal/appointments" variant="secondary">
-									Rebook →
-								</Button>
-							),
-						});
-					}
-
+			{/* the strip — booked → consultant → outcome → your call */}
+			<div className="psteps4">
+				{steps.map((s, i) => {
+					const st = s.done ? "done" : i === onStep ? "on" : "pending";
 					return (
-						<div className="portal-case">
-							<div className="portal-case__main">
-								{stageStatuses && (
-									<div className="sharp-card">
-										<p className="eyebrow mb-2">Your journey</p>
-										<JourneyStepper stageStatuses={stageStatuses} nextUnlock={journeyPhase.nextUnlock} />
-									</div>
-								)}
-
-								{activeOutcome ? (
-									<div id="assessment-outcome" className="mt-5">
-										<AssessmentOutcomeCard
-											outcome={activeOutcome}
-											notes={activeNotes}
-											recommendations={{
-												country: liveConsultation?.assessmentResult?.recCountry,
-												university: liveConsultation?.assessmentResult?.recUniversity,
-												program: liveConsultation?.assessmentResult?.recProgram,
-												package: liveConsultation?.assessmentResult?.recPackage,
-											}}
-											currentDecision={applicationConsent}
-											onDecided={refreshLiveCase}
-										/>
-									</div>
-								) : (
-									workflowStatus !== "CLOSED" && (
-										<div className="sharp-card mt-5">
-											<p className="eyebrow mb-2">Assessment</p>
-											<p className="muted">
-												{activeOfficer
-													? `${activeOfficer} reviews your background, documents and goals during and after your session. Your outcome and recommendation appear here.`
-													: "Once a consultant is assigned they review your background, documents and goals. Your outcome and recommendation appear here."}
-											</p>
-										</div>
-									)
-								)}
-
-								<div className="sharp-card mt-5">
-									<div className="cn-case__top mb-4">
-										<span className="cn-case__ref" style={{ fontWeight: 600 }}>{activeRef}</span>
-										<StatusPill tone={statusTone} dot>
-											{statusLabel}
-										</StatusPill>
-									</div>
-									<dl className="portal-case__facts dossier-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "1.5rem 1rem" }}>
-										<div className="dossier-field">
-											<dt className="dossier-field__label">Format & Branch</dt>
-											<dd className="dossier-field__value">
-												{(liveConsultation?.type === "in_person" ? "In person" : "Online")} · {getBranchName(liveConsultation?.branch ?? booking.branchId)}
-											</dd>
-										</div>
-										<div className="dossier-field">
-											<dt className="dossier-field__label">Date & Time</dt>
-											<dd className="dossier-field__value">{when}</dd>
-										</div>
-										<div className="dossier-field">
-											<dt className="dossier-field__label">Consultant</dt>
-											<dd className="dossier-field__value">
-												{activeOfficer ? (
-													<span className="portal-case__person" style={{ display: "inline-block" }}>
-														<span>
-															{activeOfficer}
-															{liveConsultation?.assignedOfficerEmail && (
-																<>
-																	<br />
-																	<a href={`mailto:${liveConsultation.assignedOfficerEmail}`} className="muted">
-																		{liveConsultation.assignedOfficerEmail}
-																	</a>
-																</>
-															)}
-														</span>
-													</span>
-												) : (
-													<span className="muted">Being assigned at your branch</span>
-												)}
-											</dd>
-										</div>
-									</dl>
-									{liveConsultation?.meetingUrl && workflowStatus !== "CLOSED" && (
-										<a href={liveConsultation.meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-4">
-											Join video meeting →
-										</a>
-									)}
-								</div>
-
-								{liveConsultation?.comments && liveConsultation.comments.length > 0 && (
-									<div className="sharp-card mt-5">
-										<p className="eyebrow mb-2">Messages from your consultant</p>
-										<ol className="cn-timeline">
-											{[...liveConsultation.comments].reverse().map((cm) => (
-												<li key={cm.id} className="cn-timeline__item">
-													<div className="cn-timeline__head">
-														<span className="cn-timeline__summary">{cm.author}</span>
-														<time className="cn-timeline__when" dateTime={cm.at}>
-															{new Date(cm.at).toLocaleDateString()}
-														</time>
-													</div>
-													<p className="cn-timeline__detail">{cm.text}</p>
-												</li>
-											))}
-										</ol>
-									</div>
-								)}
-							</div>
-
-							<aside className="portal-case__side">
-								<div className="sharp-card">
-									<NextActionBand
-										items={actions}
-										waitingOn={journeyPhase.nextUnlock}
-										title="Your next steps"
-										emptyTitle="Nothing needed from you right now"
-									/>
-
-									{checklist.length > 0 && (
-										<>
-											<div className="sharp-card-divider" />
-											<div className="cn-case__top">
-												<p className="eyebrow" style={{ margin: 0 }}>Your documents</p>
-												<StatusPill tone={verifiedDocs.length === checklist.length ? "done" : toVerify.length > 0 ? "current" : "waiting"} dot>
-													{verifiedDocs.length}/{checklist.length} verified
-												</StatusPill>
-											</div>
-											<p className="muted mt-1" style={{ fontSize: "0.85rem" }}>
-												We collect these now so your applications never wait on paperwork.
-											</p>
-											<ul style={{ listStyle: "none", padding: 0, margin: "1.25rem 0 0", display: "grid", gap: "0.75rem" }}>
-												{checklist.map((d) => (
-													<li key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", fontSize: "0.9rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-light)" }}>
-														<span title={d.hint} style={{ fontWeight: 500 }}>{d.name}</span>
-														<StatusPill tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "current" : d.status === "REJECTED" ? "blocked" : "neutral"}>
-															{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "Being checked" : d.status === "REJECTED" ? "Needs re-upload" : "To upload"}
-														</StatusPill>
-													</li>
-												))}
-											</ul>
-											{toUpload.length > 0 && (
-												<div className="row mt-4">
-													<Button to="/portal/documents" variant="secondary">
-														Upload in the vault →
-													</Button>
-												</div>
-											)}
-										</>
-									)}
-								</div>
-							</aside>
+						<div key={s.label} className={`pstep${st === "done" ? " pstep--done" : st === "on" ? " pstep--on" : ""}`}>
+							<span className="pstep__m">{s.done ? "✓" : i + 1}</span>
+							<span className="pstep__l">{s.label}</span>
+							<span className="pstep__s">{s.fact}</span>
 						</div>
 					);
-				})()
-			)}
+				})}
+			</div>
+
+			<div className="psplit mt-5">
+				<div>
+					{/* 1 · the appointment — open card until it's held, then a mono line */}
+					<section className="psec">
+						<div className="psec__h">
+							<span className={`psec__no${appointmentDone ? " psec__no--done" : ""}`}>{appointmentDone ? "✓" : "1"}</span>
+							<span className="psec__title">Your appointment</span>
+							<span className="psec__hint">
+								{appointmentDone
+									? `held${whenDay ? ` · ${whenDay}` : ""}`
+									: activeRef
+										? `confirmed · ${activeRef}`
+										: "awaiting confirmation"}
+							</span>
+						</div>
+						{appointmentDone ? (
+							<p className="mono muted" style={{ fontSize: "0.75rem" }}>
+								{liveConsultation?.type === "in_person" ? "In person" : "Video call"} · {branchName} · held {whenShort} — ref {activeRef}
+							</p>
+						) : (
+							<div className="sharp-card sharp-card--key">
+								<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
+									<p className="eyebrow">
+										{liveConsultation?.type === "in_person" ? "In person" : "Online"} · {branchName}
+									</p>
+									<span className="portal-pill portal-pill--solid">{statusLabel}</span>
+								</div>
+								<div className="mt-1">
+									<div className="pkv">
+										<span className="pkv__k">When</span>
+										<span className="pkv__v">{when}</span>
+									</div>
+									<div className="pkv">
+										<span className="pkv__k">Consultant</span>
+										<span className="pkv__v">
+											{activeOfficer ? (
+												<>
+													{activeOfficer}
+													{liveConsultation?.assignedOfficerEmail ? (
+														<>
+															<br />
+															<a href={`mailto:${liveConsultation.assignedOfficerEmail}`} className="muted" style={{ fontSize: "0.78rem" }}>
+																{liveConsultation.assignedOfficerEmail}
+															</a>
+														</>
+													) : null}
+												</>
+											) : (
+												<span className="muted">Being assigned at your branch</span>
+											)}
+										</span>
+									</div>
+								</div>
+								{meetingUrl ? (
+									<a href={meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-4">
+										Join video meeting →
+									</a>
+								) : (
+									<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
+										The meeting link appears here once your consultant is seated.
+									</p>
+								)}
+							</div>
+						)}
+					</section>
+
+					{/* 2 · the assessment outcome — the decision lives on the card */}
+					<section className="psec" id="assessment-outcome">
+						<div className="psec__h">
+							<span className={`psec__no${activeOutcome ? " psec__no--done" : ""}`}>{activeOutcome ? "✓" : "2"}</span>
+							<span className="psec__title">Your assessment</span>
+							<span className="psec__hint">{activeOutcome ? "outcome ready" : "after the session"}</span>
+						</div>
+						{activeOutcome ? (
+							<AssessmentOutcomeCard
+								outcome={activeOutcome}
+								notes={activeNotes}
+								recommendations={{
+									country: liveConsultation?.assessmentResult?.recCountry,
+									university: liveConsultation?.assessmentResult?.recUniversity,
+									program: liveConsultation?.assessmentResult?.recProgram,
+									package: liveConsultation?.assessmentResult?.recPackage,
+								}}
+								currentDecision={applicationConsent}
+								onDecided={refreshLiveCase}
+							/>
+						) : (
+							<>
+								<p className="mono muted" style={{ fontSize: "0.75rem" }}>
+									YOUR CONSULTANT REVIEWS YOUR BACKGROUND, DOCUMENTS AND GOALS — THE OUTCOME AND ROUTE RECOMMENDATION APPEAR HERE.
+								</p>
+								{booking.consultationPhase === "assessment_complete" ? (
+									<div className="mt-3">
+										<Button type="button" onClick={() => void revealOutcome()} arrow>
+											View your outcome
+										</Button>
+									</div>
+								) : null}
+							</>
+						)}
+					</section>
+
+					{/* 3 · the standard documents — collected here so nothing waits later */}
+					{checklist.length > 0 ? (
+						<section className="psec">
+							<div className="psec__h">
+								<span className="psec__no">3</span>
+								<span className="psec__title">Your documents</span>
+								<span className="psec__hint">
+									standard set · {verifiedDocs.length}/{checklist.length} verified
+								</span>
+							</div>
+							<div className="sharp-card">
+								<ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "0.75rem" }}>
+									{checklist.map((d) => (
+										<li
+											key={d.id}
+											style={{
+												display: "flex",
+												justifyContent: "space-between",
+												gap: "0.75rem",
+												fontSize: "0.9rem",
+												paddingBottom: "0.75rem",
+												borderBottom: "1px solid var(--border-light)",
+											}}
+										>
+											<span title={d.hint} style={{ fontWeight: 500 }}>
+												{d.name}
+											</span>
+											<StatusPill
+												tone={d.status === "VERIFIED" ? "done" : d.status === "UPLOADED" ? "current" : d.status === "REJECTED" ? "blocked" : "neutral"}
+											>
+												{d.status === "VERIFIED" ? "Verified" : d.status === "UPLOADED" ? "Being checked" : d.status === "REJECTED" ? "Needs re-upload" : "To upload"}
+											</StatusPill>
+										</li>
+									))}
+								</ul>
+								{toUpload.length > 0 ? (
+									<div className="mt-3">
+										<Button to="/portal/documents" variant="ghost" size="sm">
+											Upload in your vault →
+										</Button>
+									</div>
+								) : null}
+							</div>
+						</section>
+					) : null}
+
+					{/* 4 · messages — only when the consultant has written */}
+					{liveConsultation?.comments && liveConsultation.comments.length > 0 ? (
+						<section className="psec">
+							<div className="psec__h">
+								<span className="psec__no">{checklist.length > 0 ? "4" : "3"}</span>
+								<span className="psec__title">Messages</span>
+								<span className="psec__hint">from your consultant</span>
+							</div>
+							<div className="sharp-card">
+								<ol className="cn-timeline">
+									{[...liveConsultation.comments].reverse().map((cm) => (
+										<li key={cm.id} className="cn-timeline__item">
+											<div className="cn-timeline__head">
+												<span className="cn-timeline__summary">{cm.author}</span>
+												<time className="cn-timeline__when" dateTime={cm.at}>
+													{new Date(cm.at).toLocaleDateString()}
+												</time>
+											</div>
+											<p className="cn-timeline__detail">{cm.text}</p>
+										</li>
+									))}
+								</ol>
+							</div>
+						</section>
+					) : null}
+				</div>
+
+				{/* the rail — countdown, money, consultant, next chapter */}
+				<aside className="prail">
+					{startsInFuture && workflowStatus !== "CLOSED" ? (
+						<div className="sharp-card sharp-card--key sharp-card--invert">
+							<p className="eyebrow" style={{ color: "rgba(255,255,255,0.6)" }}>Countdown</p>
+							<p style={{ fontSize: "1.6rem", fontWeight: 700, marginTop: "0.3rem" }}>
+								{daysTo !== null && daysTo > 0 ? `${daysTo} day${daysTo === 1 ? "" : "s"}` : "Today"}
+							</p>
+							<p className="mono" style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.7)", marginTop: "0.15rem" }}>
+								TO {whenShort.toUpperCase()}
+							</p>
+						</div>
+					) : null}
+
+					<div className="sharp-card">
+						<p className="eyebrow">Money · Chapter I</p>
+						<div style={{ marginTop: "0.4rem" }}>
+							<div className="pkv">
+								<span className="pkv__k">Consultation fee</span>
+								<span className="pkv__v">{formatDualCurrency(consultationFeeUsd)} paid ✓</span>
+							</div>
+							<div className="pkv">
+								<span className="pkv__k">Receipt</span>
+								<span className="pkv__v muted">in your Money ledger</span>
+							</div>
+						</div>
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">Your consultant</p>
+						{activeOfficer ? (
+							<>
+								<p style={{ fontWeight: 700, marginTop: "0.5rem" }}>{activeOfficer}</p>
+								<p className="muted" style={{ fontSize: "0.74rem", marginTop: "0.15rem" }}>
+									Consultation · {branchName}
+								</p>
+								<div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+									<Button to="/portal/home" variant="ghost" size="sm">
+										Message
+									</Button>
+									<Button to="/portal/appointments" variant="ghost" size="sm">
+										Book call
+									</Button>
+								</div>
+							</>
+						) : (
+							<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.5rem" }}>
+								Being assigned at {branchName} — usually same day.
+							</p>
+						)}
+					</div>
+
+					<div className="sharp-card">
+						<p className="eyebrow">{activeOutcome ? "Next chapter" : "After the session"}</p>
+						<p className="muted" style={{ fontSize: "0.8rem", marginTop: "0.4rem", lineHeight: 1.6 }}>
+							{activeOutcome
+								? "Proceeding opens Chapter II · Enrolment — the package and plan, then the deposit that starts your file moving."
+								: "Your outcome and recommendation land here, then Chapter II · Enrolment opens — the package and your plan."}
+						</p>
+					</div>
+				</aside>
+			</div>
 		</div>
 	);
 }

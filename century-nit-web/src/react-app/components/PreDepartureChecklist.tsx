@@ -20,7 +20,7 @@ export function PreDepartureChecklist({
 }) {
 	if (tasks.length === 0) {
 		return (
-			<div className="card card--pad">
+			<div className="sharp-card">
 				<p className="eyebrow">Pre-departure checklist</p>
 				<p className="muted mt-2">Your checklist appears here once your visa is approved.</p>
 			</div>
@@ -105,7 +105,7 @@ export function PreDepartureChecklist({
 	};
 
 	return (
-		<div className="card card--pad">
+		<div className="sharp-card">
 			<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
 				<p className="eyebrow">Pre-departure checklist</p>
 				<span className="mono muted" style={{ fontSize: "0.8rem" }}>

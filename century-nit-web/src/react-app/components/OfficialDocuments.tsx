@@ -46,11 +46,14 @@ export function OfficialDocuments({
 	rows,
 	released,
 	holdReason,
+	hidePayCta = false,
 }: {
 	rows: OfficialRow[];
 	/** The pre-departure fee milestone is paid, or a manager released early. */
 	released: boolean;
 	holdReason: string;
+	/** The pay CTA lives elsewhere on the page (the departure chapter keeps one pay button). */
+	hidePayCta?: boolean;
 }) {
 	const [busy, setBusy] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export function OfficialDocuments({
 	}
 
 	return (
-		<section className="card card--pad mt-4">
+		<section className="sharp-card">
 			<div className="between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: "0.5rem" }}>
 				<p className="eyebrow">From Century NIT · official documents</p>
 				<span className="mono muted" style={{ fontSize: "0.8rem" }}>
@@ -90,10 +93,7 @@ export function OfficialDocuments({
 					return (
 						<li key={`${row.kind}-${row.id}`} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
 							<div style={{ minWidth: 0 }}>
-								<p style={{ fontWeight: 600 }}>
-									{locked ? "🔒 " : ""}
-									{row.label}
-								</p>
+								<p style={{ fontWeight: 600 }}>{row.label}</p>
 								{row.detail ? (
 									<p className="muted" style={{ fontSize: "0.85rem" }}>
 										{row.detail}
@@ -101,9 +101,7 @@ export function OfficialDocuments({
 								) : null}
 							</div>
 							{locked ? (
-								<span className="mono muted" style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
-									after the milestone
-								</span>
+								<span className="portal-pill portal-pill--hollow">held</span>
 							) : (
 								<Button variant="secondary" className="btn--sm" onClick={() => void open(row)} disabled={busy === row.id}>
 									{busy === row.id ? "Opening…" : "Open"}
@@ -113,7 +111,7 @@ export function OfficialDocuments({
 					);
 				})}
 			</ul>
-			{held.length > 0 ? (
+			{held.length > 0 && !hidePayCta ? (
 				<div className="row mt-3">
 					<Button to="/portal/payment-execution" arrow>
 						Pay the fee milestone
@@ -121,7 +119,7 @@ export function OfficialDocuments({
 				</div>
 			) : null}
 			{error ? (
-				<p className="mt-2" style={{ fontSize: "0.85rem", color: "var(--danger, #b91c1c)" }}>
+				<p className="muted mt-2" style={{ fontSize: "0.85rem" }}>
 					{error}
 				</p>
 			) : null}

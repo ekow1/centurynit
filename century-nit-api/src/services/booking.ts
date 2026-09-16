@@ -664,7 +664,7 @@ function clientJoinWindow(booking: BookingRow): { notBefore: Date; expiresAt: Da
 export async function joinBookingMeeting(
 	bookingId: string,
 	caller: { userId: string; name: string; staff: { opsUserId: string; role: string } | null },
-): Promise<{ url: string; provider: string }> {
+): Promise<{ url: string; token?: string; provider: string }> {
 	const booking = await getBooking(bookingId);
 	if (!booking) {
 		throw new HttpError(404, SCHEDULING_ERROR_CODES.BOOKING_NOT_FOUND, "Booking not found");
@@ -701,7 +701,7 @@ export async function joinBookingMeeting(
 		throw new HttpError(403, "FORBIDDEN", "This is not your booking");
 	}
 
-	if (booking.meetingProvider !== "daily") {
+	if (booking.meetingProvider !== "daily" && booking.meetingProvider !== "livekit") {
 		if (!booking.meetingUrl) {
 			throw new HttpError(409, "NO_MEETING_URL", "No meeting link on this booking yet");
 		}
@@ -711,10 +711,41 @@ export async function joinBookingMeeting(
 		throw new HttpError(409, "NO_MEETING_URL", "No meeting room on this booking yet");
 	}
 
-	const { createMeetingToken } = await import("./meet/index.js");
-	// Hosts get the wider window (in 30 min early to prep); the client gets the
-	// 15-min early join the portal advertises.
+	// The window is enforced here for every token'd provider — the caller gets a
+	// readable "opens at" instead of the provider's cryptic nbf error. Hosts get
+	// the wider window (in 30 min early to prep); the client gets the 15-min
+	// early join the portal advertises.
 	const window_ = caller.staff ? meetingWindow(booking) : clientJoinWindow(booking);
+	const now = Date.now();
+	if (now < window_.notBefore.getTime()) {
+		throw new HttpError(
+			409,
+			"MEETING_NOT_OPEN",
+			`The meeting room opens at ${window_.notBefore.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: booking.timezone })} — try again then.`,
+		);
+	}
+	if (now > window_.expiresAt.getTime()) {
+		throw new HttpError(409, "MEETING_ENDED", "This meeting window has passed.");
+	}
+
+	if (booking.meetingProvider === "livekit") {
+		// Ephemeral room — no URL to open. The client connects to the project's
+		// ws host with this JWT; roomAdmin marks the host.
+		const { createLivekitToken, livekitWsUrl } = await import("./meet/index.js");
+		const [token, wsUrl] = await Promise.all([
+			createLivekitToken({
+				roomName: booking.meetingSpace,
+				identity: caller.userId,
+				name: caller.name,
+				isHost,
+				ttlSeconds: Math.floor((window_.expiresAt.getTime() - now) / 1000),
+			}),
+			livekitWsUrl(),
+		]);
+		return { url: wsUrl, token, provider: "livekit" };
+	}
+
+	const { createMeetingToken } = await import("./meet/index.js");
 	const token = await createMeetingToken({
 		roomName: booking.meetingSpace,
 		isOwner: isHost,
@@ -751,7 +782,7 @@ export async function resendMeetingLinkForBooking(
 			recipientUserId: booking.clientUserId,
 			type: "booking.meeting_link",
 			title: "Meeting link reminder",
-			body: booking.meetingProvider === "daily"
+			body: booking.meetingProvider === "daily" || booking.meetingProvider === "livekit"
 				? `Your consultation video meeting is ready — open your consultation page and press Join. Ref: ${booking.reference}`
 				: `Your consultation video meeting link: ${booking.meetingUrl}. Ref: ${booking.reference}`,
 			link: "/portal/consultation",

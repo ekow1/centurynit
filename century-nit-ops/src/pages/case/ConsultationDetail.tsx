@@ -14,6 +14,7 @@ import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
+import { ConsultationCall } from "./ConsultationCall";
 
 
 function isKnown(v: string | undefined | null): v is string {
@@ -122,6 +123,7 @@ export function ConsultationDetail({
 	const [generatingMeet, setGeneratingMeet] = useState(false);
 	const [resendingMeetLink, setResendingMeetLink] = useState(false);
 	const [joiningMeet, setJoiningMeet] = useState(false);
+	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
 	/** Result recorded this session, shown until the refreshed row carries it. */
 	const [completedResult, setCompletedResult] = useState<MockConsultation["assessmentResult"] | null>(null);
 	const consultation: MockConsultation = completedResult
@@ -541,7 +543,7 @@ export function ConsultationDetail({
 							<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
 							{consultation.meetingLink && (
 								<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem" }}>
-									{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : "Video Link"}
+									{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : consultation.meetingLink.startsWith("livekit:") ? "LiveKit" : consultation.meetingLink.includes("daily.co") ? "Daily · Private" : "Video Link"}
 								</span>
 							)}
 						</div>
@@ -555,15 +557,19 @@ export function ConsultationDetail({
 											style={{ whiteSpace: "nowrap" }}
 											disabled={joiningMeet}
 											onClick={async () => {
-												// Private rooms need a per-person token — /join mints it
-												// (staff get host controls); other providers return the
-												// stored link untouched.
+												// Token'd providers need a per-person credential — /join
+												// mints it. LiveKit hands back {ws url, token} and joins
+												// in-app; everything else opens externally.
 												setJoiningMeet(true);
 												try {
-													const url = consultation.bookingId
-														? (await bookingsApi.joinMeeting(consultation.bookingId)).url
-														: consultation.meetingLink;
-													if (url) window.open(url, "_blank", "noopener,noreferrer");
+													const res = consultation.bookingId
+														? await bookingsApi.joinMeeting(consultation.bookingId)
+														: { url: consultation.meetingLink ?? "", provider: "manual" };
+													if (res.provider === "livekit" && res.token) {
+														setCall({ url: res.url, token: res.token });
+													} else if (res.url) {
+														window.open(res.url, "_blank", "noopener,noreferrer");
+													}
 												} catch (err) {
 													onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
 												} finally {
@@ -1144,6 +1150,15 @@ export function ConsultationDetail({
 			</form>
 		)}
 			</div>
+			{call ? (
+				<ConsultationCall
+					url={call.url}
+					token={call.token}
+					title={`Consultation · ${consultation.ref}`}
+					waitingFor="the client"
+					onClose={() => setCall(null)}
+				/>
+			) : null}
 		</div>
 	);
 }

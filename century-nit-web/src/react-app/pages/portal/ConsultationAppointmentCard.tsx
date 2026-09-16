@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { useAppState } from "../../context/AppState";
+import { ConsultationCall } from "../../components/ConsultationCall";
 import { apiFetch } from "../../lib/api";
 import { API_PREFIX } from "century-nit-shared";
 import {
@@ -68,31 +69,40 @@ export function ConsultationAppointmentCard() {
 		);
 
 	const [joining, setJoining] = useState(false);
+	const [joinError, setJoinError] = useState<string | null>(null);
+	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
 
 	/**
-	 * The one door in. Private Daily rooms need a per-person token — the join
-	 * endpoint mints it and returns the URL to open; other providers return
-	 * the stored link untouched. Copy takes the same path so a copied link
-	 * actually works on another device (it is the client's own access).
+	 * The one door in. Token'd providers (Daily, LiveKit) need a per-person
+	 * credential — the join endpoint mints it; other providers return the
+	 * stored link untouched. LiveKit hands back {ws url, token} and the call
+	 * happens in-app; everything else opens externally. Copy takes the same
+	 * path so a copied link actually works on another device.
 	 */
-	async function joinUrl(): Promise<string | null> {
-		if (!booking.bookingId) return booking.meetingLink;
-		try {
-			const res = await apiFetch<{ url: string }>(
-				`${API_PREFIX}/bookings/${booking.bookingId}/join`,
-				{ method: "POST" },
-			);
-			return res.url;
-		} catch {
-			return booking.meetingLink;
+	type JoinResult = { url: string; token?: string; provider: string };
+
+	async function joinTicket(): Promise<JoinResult | null> {
+		if (!booking.bookingId) {
+			return booking.meetingLink ? { url: booking.meetingLink, provider: "manual" } : null;
 		}
+		return apiFetch<JoinResult>(
+			`${API_PREFIX}/bookings/${booking.bookingId}/join`,
+			{ method: "POST" },
+		);
 	}
 
 	async function joinMeeting() {
 		setJoining(true);
+		setJoinError(null);
 		try {
-			const url = await joinUrl();
-			if (url) window.open(url, "_blank", "noopener,noreferrer");
+			const res = await joinTicket();
+			if (res?.provider === "livekit" && res.token) {
+				setCall({ url: res.url, token: res.token });
+			} else if (res?.url) {
+				window.open(res.url, "_blank", "noopener,noreferrer");
+			}
+		} catch (err) {
+			setJoinError(err instanceof Error ? err.message : "Could not join the meeting");
 		} finally {
 			setJoining(false);
 		}
@@ -101,7 +111,9 @@ export function ConsultationAppointmentCard() {
 	async function copyLink() {
 		if (!booking.meetingLink) return;
 		try {
-			const url = (await joinUrl()) ?? booking.meetingLink;
+			const res = await joinTicket();
+			const url = res?.provider === "livekit" ? null : (res?.url ?? booking.meetingLink);
+			if (!url) return; // a livekit join can't travel as a link — it needs the in-app call
 			await navigator.clipboard.writeText(url);
 			setCopied(true);
 			window.setTimeout(() => setCopied(false), 2000);
@@ -298,9 +310,14 @@ export function ConsultationAppointmentCard() {
 						>
 							{joining ? "Joining…" : joinable ? "Join meeting →" : "Join opens 15 min before"}
 						</button>
-						<button type="button" className="btn btn--secondary" onClick={copyLink}>
-							{copied ? "Copied ✓" : "Copy link"}
-						</button>
+						{!booking.meetingLink.startsWith("livekit:") && (
+							<button type="button" className="btn btn--secondary" onClick={copyLink}>
+								{copied ? "Copied ✓" : "Copy link"}
+							</button>
+						)}
+						{joinError ? (
+							<span className="mono" style={{ fontSize: "0.75rem", color: "var(--ink-muted, #777)" }}>{joinError}</span>
+						) : null}
 					</>
 				) : null}
 
@@ -321,6 +338,16 @@ export function ConsultationAppointmentCard() {
 					</button>
 				) : null}
 			</div>
+
+			{call ? (
+				<ConsultationCall
+					url={call.url}
+					token={call.token}
+					title={`Consultation · ${booking.confirmationId ?? ""}`}
+					waitingFor="your consultant"
+					onClose={() => setCall(null)}
+				/>
+			) : null}
 		</div>
 	);
 }

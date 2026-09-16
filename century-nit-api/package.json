@@ -37,6 +37,7 @@
 		"hono": "^4.11.0",
 		"ical.js": "^2.2.1",
 		"ioredis": "^5.4.0",
+		"livekit-server-sdk": "^2.13.0",
 		"pdfmake": "^0.3.11",
 		"pg": "^8.13.0",
 		"resend": "^3.2.0",

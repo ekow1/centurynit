@@ -144,6 +144,19 @@ const schema = z.object({
 	DAILY_DOMAIN: z.string().optional(),
 
 	/**
+	 * LiveKit — the custom-UI meeting provider for online consultations.
+	 *
+	 * When all three are set, new meeting links become LiveKit rooms joined
+	 * inside the app's own call UI (no hosted page exists). LIVEKIT_URL is the
+	 * project's WebSocket host, e.g. "wss://centurynit.livekit.cloud". Rooms
+	 * are ephemeral — created on first join — so the slot window is enforced
+	 * by the join endpoint + token claims, not room properties.
+	 */
+	LIVEKIT_URL: z.string().optional(),
+	LIVEKIT_API_KEY: z.string().optional(),
+	LIVEKIT_API_SECRET: z.string().optional(),
+
+	/**
 	 * Enables the one-time super-admin bootstrap endpoint.
 	 *
 	 * Optional, and only useful once: the endpoint refuses as soon as any staff

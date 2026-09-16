@@ -85,7 +85,7 @@ function formatEmail(title: string, lines: string[], meetingUrl?: string | null,
  */
 function joinCtaUrl(ctx: BookingNotificationContext, recipient: "client" | "employee"): string | null {
 	if (!ctx.meetingUrl) return null;
-	if (ctx.meetingProvider === "daily") {
+	if (ctx.meetingProvider === "daily" || ctx.meetingProvider === "livekit") {
 		return recipient === "client"
 			? `${env.FRONTEND_URL}/portal/consultation`
 			: `${env.CONSOLE_URL}/consultations`;
@@ -95,7 +95,7 @@ function joinCtaUrl(ctx: BookingNotificationContext, recipient: "client" | "empl
 
 /** The join instruction line that matches the CTA above. */
 function joinHint(ctx: BookingNotificationContext): string {
-	return ctx.meetingProvider === "daily"
+	return ctx.meetingProvider === "daily" || ctx.meetingProvider === "livekit"
 		? "Open the link below and press Join — the meeting room opens 15 minutes before your slot."
 		: "Please use the link below to join the video session at your scheduled time.";
 }

@@ -294,6 +294,25 @@ export const SETTING_DEFS: Record<
 		description:
 			"Your Daily subdomain — the part before .daily.co (e.g. \"centurynit\"). Required together with the API key.",
 	},
+	LIVEKIT_URL: {
+		label: "LiveKit URL",
+		group: "Video Meetings",
+		secret: false,
+		description:
+			"Your LiveKit project's WebSocket host, e.g. wss://centurynit.livekit.cloud. From cloud.livekit.io → Settings → Keys. When set with the key pair, consultations join inside the app's own call UI.",
+	},
+	LIVEKIT_API_KEY: {
+		label: "LiveKit API Key",
+		group: "Video Meetings",
+		secret: false,
+		description: "LiveKit project API key (starts with API…). Used to sign join tokens server-side.",
+	},
+	LIVEKIT_API_SECRET: {
+		label: "LiveKit API Secret",
+		group: "Video Meetings",
+		secret: true,
+		description: "LiveKit project API secret. Signs every join token — never expose to the browser.",
+	},
 };
 
 
@@ -663,6 +682,13 @@ function validateSettingValue(key: SettingKey, value: string | null): void {
 			weeklySlotScheduleSchema.parse(JSON.parse(value));
 		} catch {
 			throw new Error("Weekly slot schedule is invalid");
+		}
+	}
+
+	if (key === "LIVEKIT_URL") {
+		const v = value.trim();
+		if (!/^wss:\/\/[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(v) && !/^https:\/\/[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(v)) {
+			throw new Error("Enter your LiveKit host, e.g. wss://centurynit.livekit.cloud");
 		}
 	}
 

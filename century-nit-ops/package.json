@@ -18,6 +18,7 @@
 		"century-nit-core": "*",
 		"century-nit-shared": "*",
 		"hono": "4.11.1",
+		"livekit-client": "^2.15.4",
 		"lucide-react": "^1.41.0",
 		"qrcode": "^1.5.4",
 		"react": "19.2.1",

@@ -416,7 +416,7 @@ export const bookingsApi = {
 	 * the caller (host token for staff, slot-bound for the client); other
 	 * providers return the stored link.
 	 */
-	joinMeeting(bookingId: string): Promise<{ url: string; provider: string }> {
+	joinMeeting(bookingId: string): Promise<{ url: string; token?: string; provider: string }> {
 		return request(`${API_PREFIX}/bookings/${bookingId}/join`, {
 			method: "POST",
 		});

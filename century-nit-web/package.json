@@ -14,10 +14,11 @@
 	"dependencies": {
 		"better-auth": "^1.0.0",
 		"browser-image-compression": "^2.0.2",
+		"century-nit-chat-ui": "*",
 		"century-nit-core": "*",
 		"century-nit-shared": "*",
-		"century-nit-chat-ui": "*",
 		"hono": "4.11.1",
+		"livekit-client": "^2.15.4",
 		"qrcode": "^1.5.4",
 		"react": "19.2.1",
 		"react-dom": "19.2.1",

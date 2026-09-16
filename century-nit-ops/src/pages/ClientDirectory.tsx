@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
-import { branchName } from "century-nit-core/ops";
+import { branchName, OPS_BRANCHES } from "century-nit-core/ops";
 import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
+import { useInvoiceApi } from "../hooks/useInvoiceApi";
+import { fmtBoth, fmtGhs } from "./currency";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 export interface ClientUser {
@@ -48,9 +50,11 @@ export function ClientDirectory() {
 	const [flash, setFlash] = useState<string | null>(null);
 	const [search, setSearch] = useState("");
 	const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "banned">("all");
+	const [branchFilter, setBranchFilter] = useState<string | null>(null);
 	// The record pane — a row's actions live on the record, not the row.
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const { applications } = useCases();
+	const { invoices } = useInvoiceApi();
 
 	// Action modals
 	const [banTarget, setBanTarget] = useState<ClientUser | null>(null);
@@ -113,9 +117,25 @@ export function ClientDirectory() {
 
 	useEffect(() => {
 		void fetchClients();
-		const interval = setInterval(fetchClients, 10000);
-		return () => clearInterval(interval);
+		// Refresh on focus instead of polling — the directory doesn't change
+		// under you often enough to justify a 10s loop, and every action below
+		// re-fetches on completion.
+		const onFocus = () => void fetchClients();
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
 	}, [fetchClients]);
+
+	// client id / email → the branch their cases sit in. A client with no case
+	// has no branch, which is honest — the branch belongs to the file.
+	const clientBranch = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const a of applications) {
+			if (!a.branch) continue;
+			if (a.applicantUserId) map.set(a.applicantUserId, a.branch);
+			if (a.email) map.set(a.email, a.branch);
+		}
+		return map;
+	}, [applications]);
 
 	// Integrate active browser portal session if present
 	const displayedClients = useMemo(() => {
@@ -128,6 +148,9 @@ export function ClientDirectory() {
 				(statusFilter === "inactive" && c.status === "inactive") ||
 				(statusFilter === "banned" && c.banned);
 
+			const matchesBranch =
+				!branchFilter || clientBranch.get(c.id) === branchFilter || clientBranch.get(c.email) === branchFilter;
+
 			const q = search.toLowerCase().trim();
 			const matchesSearch =
 				!q ||
@@ -135,9 +158,9 @@ export function ClientDirectory() {
 				c.email.toLowerCase().includes(q) ||
 				(c.phoneNumber && c.phoneNumber.includes(q));
 
-			return matchesStatus && matchesSearch;
+			return matchesStatus && matchesBranch && matchesSearch;
 		});
-	}, [clients, statusFilter, search]);
+	}, [clients, statusFilter, branchFilter, clientBranch, search]);
 
 	const selected = selectedId ? (clients.find((c) => c.id === selectedId) ?? null) : null;
 	// The client's cases — matched on the portal user id first, email as the
@@ -153,6 +176,28 @@ export function ClientDirectory() {
 		const linked = new Set(applications.map((a) => a.applicantUserId ?? a.email));
 		return clients.filter((c) => linked.has(c.id) || linked.has(c.email)).length;
 	}, [applications, clients]);
+
+	// The selected client's money position — summed from the real ledger.
+	const selectedMoney = useMemo(() => {
+		if (!selected) return null;
+		const mine = invoices.filter(
+			(i) => i.applicantId === selected.id || i.applicantId === selected.email,
+		);
+		if (mine.length === 0) return { count: 0, billed: 0, paid: 0, balance: 0 };
+		const billed = mine.reduce((n, i) => n + i.subtotal, 0);
+		const paid = mine.reduce((n, i) => n + (i.payments ?? []).reduce((m, p) => m + p.amount, 0), 0);
+		return { count: mine.length, billed, paid, balance: Math.max(0, billed - paid) };
+	}, [selected, invoices]);
+
+	// Branch chips only for branches that actually hold clients here.
+	const branchCounts = useMemo(() => {
+		const counts = new Map<string, number>();
+		for (const c of clients) {
+			const b = clientBranch.get(c.id) ?? clientBranch.get(c.email);
+			if (b) counts.set(b, (counts.get(b) ?? 0) + 1);
+		}
+		return counts;
+	}, [clients, clientBranch]);
 
 	const handleRevokeSessions = async () => {
 		if (!revokeTarget) return;
@@ -308,6 +353,49 @@ export function ClientDirectory() {
 						);
 					})}
 				</div>
+				{branchCounts.size > 1 && (
+					<div className="cn-scaffold__chips" role="tablist" aria-label="Branch">
+						<button
+							type="button"
+							role="tab"
+							aria-selected={branchFilter === null}
+							className="ops-pill"
+							onClick={() => setBranchFilter(null)}
+							style={{
+								cursor: "pointer",
+								marginLeft: 0,
+								border: "1px solid var(--border)",
+								background: branchFilter === null ? "var(--foreground)" : "transparent",
+								color: branchFilter === null ? "var(--background)" : "var(--foreground)",
+							}}
+						>
+							All branches
+						</button>
+						{OPS_BRANCHES.filter((b) => branchCounts.has(b.id)).map((b) => {
+							const on = branchFilter === b.id;
+							return (
+								<button
+									key={b.id}
+									type="button"
+									role="tab"
+									aria-selected={on}
+									className="ops-pill"
+									onClick={() => setBranchFilter(on ? null : b.id)}
+									style={{
+										cursor: "pointer",
+										marginLeft: 0,
+										border: "1px solid var(--border)",
+										background: on ? "var(--foreground)" : "transparent",
+										color: on ? "var(--background)" : "var(--foreground)",
+									}}
+								>
+									{b.name}
+									<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>{branchCounts.get(b.id)}</span>
+								</button>
+							);
+						})}
+					</div>
+				)}
 			</div>
 
 			<div className="cl-split">
@@ -484,6 +572,40 @@ export function ClientDirectory() {
 						{selectedCases[0]?.assignedStaff && (
 							<div className="cl-kv"><span className="cl-kv__k">Handler</span><span>{selectedCases[0].assignedStaff}</span></div>
 						)}
+
+						<p className="cl-sec">Money</p>
+						{!selectedMoney || selectedMoney.count === 0 ? (
+							<div className="cl-kv"><span className="cl-kv__k">Ledger</span><span className="muted">no invoices</span></div>
+						) : (
+							<>
+								<div className="cl-kv"><span className="cl-kv__k">Billed</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtGhs(selectedMoney.billed)} · {selectedMoney.count} inv</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">Paid</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtGhs(selectedMoney.paid)}</span></div>
+								<div className="cl-kv">
+									<span className="cl-kv__k">Balance</span>
+									<span>
+										<span className="mono" style={{ fontSize: "var(--text-xs)", fontWeight: selectedMoney.balance > 0 ? 700 : 400 }}>
+											{fmtBoth(selectedMoney.balance)}
+										</span>
+										{" · "}
+										<Link to="/invoices" className="dash-link">ledger →</Link>
+									</span>
+								</div>
+							</>
+						)}
+
+						<p className="cl-sec">Contact</p>
+						<div className="cl-kv">
+							<span className="cl-kv__k">Message</span>
+							<span>
+								<Link to={`/helpdesk?client=${selected.id}`} className="dash-link">their threads →</Link>
+							</span>
+						</div>
+						<div className="cl-kv">
+							<span className="cl-kv__k">Portal</span>
+							<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+								last seen {new Date(selected.lastActiveAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+							</span>
+						</div>
 
 						{canManageAccess && (
 							<div className="cl-danger">

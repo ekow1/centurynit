@@ -506,6 +506,11 @@ export function PendingTaskRows({
 												<span className="twhen">{taskWhen(t, now)}</span>
 												<span className={`town${open ? " town--none" : ""}`}>
 													{open ? "— open" : isMe(t) ? <span className="town__you">You</span> : t.owner}
+													{t.kind === "consultation" && t.record.coordinatorName ? (
+														<span className="town__coord" title={`Steered by ${t.record.coordinatorName}`}>
+															→ {t.record.coordinatorName.split(" ")[0]}
+														</span>
+													) : null}
 												</span>
 												{canSeeAllBranches ? (
 													<span className="tbranch">{branchName(t.branch || "") || "—"}</span>

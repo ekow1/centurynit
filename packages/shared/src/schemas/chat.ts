@@ -166,6 +166,8 @@ export const chatConversationSchema = z.object({
 	stageKey: z.string().nullable().optional(),
 	/** Lifecycle: open / closed / archived. */
 	status: conversationStatusSchema.default("open"),
+	/** The portal user a client-facing conversation belongs to (applicant/support/case/stage). */
+	clientUserId: z.string().nullable().optional(),
 	/** Opaque token used for inbound email threading (null for non-email convo). */
 	emailInboxToken: z.string().nullable().optional(),
 	/** For escalations only. */

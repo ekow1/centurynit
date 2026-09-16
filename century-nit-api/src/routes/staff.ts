@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, eq, isNull, sql, count } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, count } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 import {
 	acceptInvitationSchema,
@@ -15,7 +15,8 @@ import {
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { coordinationGrants, opsUsers, users, sessions, accounts } from "../db/schema.js";
+import { coordinationGrants, conversationParticipants, opsUsers, staffPresence, users, sessions, accounts } from "../db/schema.js";
+import { recordAdminEvent, requestIp } from "../services/audit.js";
 import { env } from "../env.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 import {
@@ -103,6 +104,16 @@ staffRouter.openapi(
 		const { invitation, acceptUrl } = await createInvitation({
 			...body,
 			invitedBy: { opsUserId: staff.opsUserId, name: staff.name, role: staff.role },
+		});
+
+		await recordAdminEvent({
+			category: "Staff",
+			action: `Invited ${invitation.email} as ${invitation.role}`,
+			actorId: staff.opsUserId,
+			actorEmail: staff.email,
+			target: invitation.email,
+			ip: requestIp(c),
+			userAgent: c.req.header("user-agent") ?? null,
 		});
 
 		// Only here, and only to the inviter. Never on any subsequent read.
@@ -550,6 +561,8 @@ staffRouter.openapi(
 									active: z.boolean(),
 									hasLogin: z.boolean(),
 									mfaEnabled: z.boolean(),
+									lastSeenAt: z.string().nullable(),
+									ownedConversations: z.number(),
 									canCoordinate: z.boolean(),
 									grantExpiresAt: z.string().nullable(),
 								}),
@@ -575,6 +588,7 @@ staffRouter.openapi(
 				twoFactorEnabled: users.twoFactorEnabled,
 				grantId: coordinationGrants.id,
 				grantExpiresAt: coordinationGrants.expiresAt,
+				lastSeenAt: staffPresence.lastSeenAt,
 			})
 			.from(opsUsers)
 			.leftJoin(users, eq(users.id, opsUsers.userId))
@@ -584,7 +598,20 @@ staffRouter.openapi(
 					eq(coordinationGrants.opsUserId, opsUsers.id),
 					isNull(coordinationGrants.revokedAt),
 				),
-			);
+			)
+			.leftJoin(staffPresence, eq(staffPresence.opsUserId, opsUsers.id));
+
+		// Conversation ownership counts — one participant row per conv with
+		// role "owner"; a single grouped query keeps this O(1) round-trips.
+		const ownerCounts = await db
+			.select({
+				opsUserId: conversationParticipants.opsUserId,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(conversationParticipants)
+			.where(eq(conversationParticipants.role, "owner"))
+			.groupBy(conversationParticipants.opsUserId);
+		const ownedBy = new Map(ownerCounts.map((r) => [r.opsUserId, r.n]));
 
 		// Hide super_admin accounts from non-super_admin users so they
 		// never appear in the directory, the role filter, or the count
@@ -607,6 +634,8 @@ staffRouter.openapi(
 					// since seeded rows can exist without one.
 					hasLogin: Boolean(r.userId),
 					mfaEnabled: r.twoFactorEnabled ?? false,
+					lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+					ownedConversations: ownedBy.get(r.id) ?? 0,
 					canCoordinate: grantActive,
 					grantExpiresAt: grantActive && r.grantExpiresAt ? r.grantExpiresAt.toISOString() : null,
 				};
@@ -752,6 +781,17 @@ staffRouter.openapi(
 									enabled: z.boolean(),
 								}),
 							),
+							mfaRoster: z.array(
+								z.object({
+									id: z.string().uuid(),
+									name: z.string(),
+									email: z.string(),
+									role: z.string(),
+									branch: z.string().nullable(),
+									enrolled: z.boolean(),
+									hasLogin: z.boolean(),
+								}),
+							),
 						}),
 					},
 				},
@@ -789,6 +829,20 @@ staffRouter.openapi(
 			{ id: "google", label: "Google", enabled: knownProviders.has("google") },
 		];
 
+		const rosterRows = await db
+			.select({
+				id: opsUsers.id,
+				name: opsUsers.name,
+				email: opsUsers.email,
+				role: opsUsers.role,
+				branch: opsUsers.branch,
+				userId: opsUsers.userId,
+				enrolled: users.twoFactorEnabled,
+			})
+			.from(opsUsers)
+			.leftJoin(users, eq(users.id, opsUsers.userId))
+			.orderBy(opsUsers.name);
+
 		return c.json({
 			totalStaff: total,
 			mfaEnrolled: enrolled,
@@ -796,6 +850,90 @@ staffRouter.openapi(
 			mfaNotEnrolled: notEnrolled,
 			activeSessions,
 			providers,
+			mfaRoster: rosterRows.map((r) => ({
+				id: r.id,
+				name: r.name,
+				email: r.email,
+				role: r.role,
+				branch: r.branch,
+				enrolled: r.enrolled ?? false,
+				hasLogin: Boolean(r.userId),
+			})),
+		});
+	},
+);
+
+/* ── GET /api/v1/staff/sessions ───────────────────────────────────────────── */
+/* Real session rows for the /auth page — staff-linked sessions only.          */
+
+const staffSessionSchema = z.object({
+	id: z.string(),
+	email: z.string(),
+	name: z.string(),
+	role: z.string(),
+	ip: z.string().nullable(),
+	userAgent: z.string().nullable(),
+	createdAt: z.string(),
+	expiresAt: z.string(),
+	current: z.boolean(),
+});
+
+staffRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/sessions",
+		tags: ["Staff"],
+		summary: "Active staff sessions",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		responses: {
+			200: {
+				description: "Live sessions joined to the staff directory",
+				content: {
+					"application/json": {
+						schema: z.object({ sessions: z.array(staffSessionSchema) }),
+					},
+				},
+			},
+		},
+	}),
+	async (c) => {
+		const rows = await db
+			.select({
+				id: sessions.id,
+				token: sessions.token,
+				ip: sessions.ipAddress,
+				userAgent: sessions.userAgent,
+				createdAt: sessions.createdAt,
+				expiresAt: sessions.expiresAt,
+				email: opsUsers.email,
+				name: opsUsers.name,
+				role: opsUsers.role,
+			})
+			.from(sessions)
+			.innerJoin(users, eq(users.id, sessions.userId))
+			.innerJoin(opsUsers, eq(opsUsers.userId, users.id))
+			.where(sql`${sessions.expiresAt} > now()`)
+			.orderBy(desc(sessions.createdAt))
+			.limit(100);
+
+		// Identify the caller's own session: the cookie carries the raw session
+		// token (optionally with a signature suffix after the first ".").
+		const cookieHeader = c.req.header("cookie") ?? "";
+		const cookieToken = cookieHeader.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? "";
+		const presented = decodeURIComponent(cookieToken).split(".")[0] ?? "";
+
+		return c.json({
+			sessions: rows.map((r) => ({
+				id: r.id,
+				email: r.email,
+				name: r.name,
+				role: r.role,
+				ip: r.ip,
+				userAgent: r.userAgent,
+				createdAt: r.createdAt.toISOString(),
+				expiresAt: r.expiresAt.toISOString(),
+				current: presented.length > 0 && r.token.startsWith(presented),
+			})),
 		});
 	},
 );

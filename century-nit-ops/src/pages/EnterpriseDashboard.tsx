@@ -6,6 +6,7 @@ import { useWorkQueue } from "../hooks/useWorkQueue";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { LEAD_STAGE_LABELS } from "century-nit-core";
 import type { MockApplicant, MockApplication, MockConsultation } from "century-nit-core/ops";
+import { OPS_BRANCHES } from "century-nit-core/ops";
 import { API_PREFIX, JOURNEY_STAGES, type Booking, type JourneyStage } from "century-nit-shared";
 import { fmtFin, fmtGhs, fmtUsd, money } from "./currency";
 import { apiFetch } from "../lib/api";
@@ -646,6 +647,26 @@ function ARowMoney({ label, amount, note, to }: { label: string; amount: string;
 
 /** Open load per officer, with what has stalled — the Caseload in four lines. */
 function TeamLoad({ applications, consultations }: { applications: ViewProps["scoped"]["applications"]; consultations: ViewProps["scoped"]["consultations"] }) {
+	const { canSeeAllBranches, canAssignWork, opsUser } = useOpsAuth();
+	const { getDuty } = useCases();
+	// Duty is reported, not set, here — the page's contract is numbers-only.
+	// An uncovered branch underlines and links to the Workspace, where the
+	// Coverage card is the control.
+	const dutyBranches = canSeeAllBranches ? OPS_BRANCHES : OPS_BRANCHES.filter((b) => b.id === opsUser?.branch);
+	const [duty, setDuty] = useState<Record<string, string | null>>({});
+	useEffect(() => {
+		if (!canAssignWork) return;
+		let on = true;
+		void Promise.all(dutyBranches.map((b) => getDuty(b.id).catch(() => null))).then((rows) => {
+			if (!on) return;
+			const next: Record<string, string | null> = {};
+			rows.forEach((d, i) => { next[dutyBranches[i].id] = d?.coordinator?.name ?? null; });
+			setDuty(next);
+		});
+		return () => { on = false; };
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- dutyBranches is derived from auth scope
+	}, [canAssignWork, canSeeAllBranches, opsUser]);
+
 	const now = new Date().getTime();
 	const map = new Map<string, { open: number; stalled: number }>();
 	const bump = (name: string | undefined, updatedAt: string | undefined, done: boolean) => {
@@ -662,6 +683,24 @@ function TeamLoad({ applications, consultations }: { applications: ViewProps["sc
 	const max = Math.max(1, ...rows.map(([, r]) => r.open));
 	return (
 		<Panel title="Team load" link={{ to: "/workspace?tab=caseload", label: "Caseload →" }}>
+			{canAssignWork && dutyBranches.length > 0 && (
+				<div className="dash-trow" style={{ marginBottom: "0.4rem" }}>
+					<span className="cn-filter__label">Duty · today</span>
+					<span className="dash-trow__n">
+						{dutyBranches.map((b, i) => (
+							<span key={b.id}>
+								{i > 0 && " · "}
+								{b.name}:{" "}
+								{duty[b.id] ? (
+									duty[b.id]
+								) : (
+									<Link to="/workspace" style={{ textDecoration: "underline" }}>nobody →</Link>
+								)}
+							</span>
+						))}
+					</span>
+				</div>
+			)}
 			{rows.length === 0 ? (
 				<p className="dash-empty">No one is carrying anything yet.</p>
 			) : (

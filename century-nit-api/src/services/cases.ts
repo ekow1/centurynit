@@ -152,6 +152,26 @@ export function canSeeAllCases(staff: StaffContext | null): boolean {
 	return Boolean(staff) && permissionsGrant(staff!.role, staff!.permissions, "see_all_cases");
 }
 
+/** Whoever holds the capability sees — and manages — every branch. */
+export function canSeeAllBranches(staff: StaffContext | null): boolean {
+	return Boolean(staff) && permissionsGrant(staff!.role, staff!.permissions, "see_all_branches");
+}
+
+/**
+ * The branch-manager boundary on management writes (duty, delegation):
+ * a see-all-branches actor — the general manager — manages any branch;
+ * anyone else manages only the branch on their own staff record. That's
+ * the whole difference between the two levels — one check.
+ */
+export function assertBranchScope(staff: StaffContext, branch: string | null | undefined): void {
+	if (canSeeAllBranches(staff)) return;
+	const own = staff.branch ? canonicalBranchId(staff.branch) : null;
+	const target = branch ? canonicalBranchId(branch) : null;
+	if (!own || !target || target !== own) {
+		throw new HttpError(403, "FORBIDDEN", "You can only manage your own branch");
+	}
+}
+
 /**
  * Whether the signed-in person may see and work this application.
  *

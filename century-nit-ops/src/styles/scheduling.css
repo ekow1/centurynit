@@ -922,6 +922,18 @@
 .trow--on .town__you {
 	border-color: var(--background);
 }
+/* A coordinator steers the case — the handler still owns the work. */
+.town__coord {
+	display: inline-block;
+	margin-left: 0.4rem;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	border: 1px solid currentColor;
+	padding: 0 0.3rem;
+	opacity: 0.85;
+}
 
 /* ── Dashboard: the day line, four KPIs, hairline panels ── */
 

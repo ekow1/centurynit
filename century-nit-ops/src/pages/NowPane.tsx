@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Booking } from "century-nit-shared";
-import { COMMENT_KIND_LABELS } from "century-nit-core/ops";
+import { COMMENT_KIND_LABELS, OPS_BRANCHES } from "century-nit-core/ops";
 import { useOpsAuth } from "./OpsAuthContext";
+import { useCases } from "../hooks/useCases";
+import { Sheet } from "century-nit-core/ui";
 import { isOverdue, taskActionLabel, whenLabel, type PendingTask } from "../lib/pendingTasks";
 import { useJoinMeeting } from "./case/ConsultationCall";
 
@@ -241,6 +243,7 @@ export function NowPane({
 							<div><b>{health.approval}</b><span>Awaiting approval</span></div>
 						</div>
 					</div>
+					<CoverageCard />
 					{head}
 					{record.length > 0 && (
 						<div className="card cn-now">
@@ -290,6 +293,172 @@ export function NowPane({
 					)}
 				</div>
 			</div>
+		</>
+	);
+}
+
+/**
+ * Who catches today's intake, per branch — the duty roster moved off the
+ * Consultations page to where the unassigned pile it explains already sits.
+ *
+ * The general manager (see_all_branches) sees every branch and can set all of
+ * them in one pass; a branch manager sees only their own row. Anyone who
+ * can't assign work never sees the card — coverage is a manager concern.
+ */
+function CoverageCard() {
+	const { canAssignWork, canSeeAllBranches, opsUser } = useOpsAuth();
+	const { consultations, applications, getDuty, setDuty, getWorkload, refresh } = useCases();
+	const branches = useMemo(
+		() => (canSeeAllBranches ? OPS_BRANCHES : OPS_BRANCHES.filter((b) => b.id === opsUser?.branch)),
+		[canSeeAllBranches, opsUser],
+	);
+	const [duty, setDutyState] = useState<Record<string, { name: string; email: string } | null>>({});
+	const [sheetOpen, setSheetOpen] = useState(false);
+	const [workload, setWorkload] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
+	const [picks, setPicks] = useState<Record<string, string>>({});
+	const [busy, setBusy] = useState(false);
+	const [err, setErr] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!canAssignWork || branches.length === 0) return;
+		let on = true;
+		void Promise.all(branches.map((b) => getDuty(b.id).catch(() => null))).then((rows) => {
+			if (!on) return;
+			const next: Record<string, { name: string; email: string } | null> = {};
+			rows.forEach((d, i) => { next[branches[i].id] = d?.coordinator ?? null; });
+			setDutyState(next);
+		});
+		return () => { on = false; };
+	}, [canAssignWork, branches, getDuty]);
+
+	const delegated = useMemo(() => {
+		const open = (s: string) => s !== "Completed" && s !== "Cancelled";
+		return {
+			cases: consultations.filter((c) => Boolean(c.coordinatorId) && open(c.status)).length,
+			journeys: new Set(applications.filter((a) => a.journeyCoordinatorName).map((a) => a.applicantId)).size,
+		};
+	}, [consultations, applications]);
+
+	if (!canAssignWork || branches.length === 0) return null;
+
+	const openSheet = () => {
+		setErr(null);
+		setPicks({});
+		setSheetOpen(true);
+		if (!workload) getWorkload().then(setWorkload).catch(() => undefined);
+	};
+
+	// The duty record carries name+email, the workload list carries ids —
+	// the email is the join. A duty holder no longer coordinator-capable
+	// falls back to their email as the option value, which round-trips as
+	// "unchanged" on apply.
+	const dutyUserId = (branchId: string): string => {
+		const d = duty[branchId];
+		if (!d) return "";
+		return workload?.coordinators.find((c) => c.email === d.email)?.opsUserId ?? d.email;
+	};
+
+	const apply = async () => {
+		setBusy(true);
+		setErr(null);
+		try {
+			for (const b of branches) {
+				const want = picks[b.id];
+				if (want === undefined) continue;
+				if (want === dutyUserId(b.id)) continue;
+				await setDuty(b.id, want || null);
+			}
+			// Re-read so the card reflects whatever the server kept.
+			const rows = await Promise.all(branches.map((b) => getDuty(b.id).catch(() => null)));
+			const next: Record<string, { name: string; email: string } | null> = {};
+			rows.forEach((d, i) => { next[branches[i].id] = d?.coordinator ?? null; });
+			setDutyState(next);
+			void refresh();
+			setSheetOpen(false);
+		} catch (e: unknown) {
+			setErr(e instanceof Error ? e.message : "Could not set coverage");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const uncovered = branches.filter((b) => !duty[b.id]).length;
+
+	return (
+		<>
+			<div className="card cn-now">
+				<p className="cn-detail__eyebrow">Coverage · today{uncovered > 0 ? ` — ${uncovered} uncovered` : ""}</p>
+				{branches.map((b) => {
+					const on = duty[b.id];
+					return (
+						<div key={b.id} className="cn-detail__row" style={{ cursor: "default" }}>
+							<span>
+								{b.name}
+								<br />
+								<span className="cn-detail__row-note">
+									{on ? `${on.name} — new cases route to them` : "Nobody — new cases land unassigned"}
+								</span>
+							</span>
+							{on ? <span className="portal-pill">on duty</span> : <span className="portal-pill" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>uncovered</span>}
+						</div>
+					);
+				})}
+				{(delegated.cases > 0 || delegated.journeys > 0) && (
+					<div className="cn-detail__row" style={{ cursor: "default" }}>
+						<span>
+							Delegated
+							<br />
+							<span className="cn-detail__row-note">
+								{delegated.cases} case{delegated.cases === 1 ? "" : "s"} · {delegated.journeys} journe{delegated.journeys === 1 ? "y" : "ys"}
+							</span>
+						</span>
+						<Link to="/workspace?filter=coordinated" className="btn btn--ghost btn--sm">Review</Link>
+					</div>
+				)}
+				<button type="button" className="btn btn--primary btn--sm" style={{ marginTop: "0.6rem", width: "100%" }} onClick={openSheet}>
+					Set coverage…
+				</button>
+			</div>
+
+			<Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Coverage · today" size="tall">
+				<p className="lead" style={{ fontSize: "var(--text-sm)", marginTop: 0 }}>
+					Who catches new cases, per branch. Unset branches route new cases to nobody — they pile in Unassigned.
+				</p>
+				{workload ? (
+					branches.map((b) => (
+						<label key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid var(--border-light)" }}>
+							<span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+								{b.name}
+								{!duty[b.id] && <span className="muted" style={{ fontWeight: 400 }}> — uncovered</span>}
+							</span>
+							<select
+								className="cn-filter__select"
+								value={picks[b.id] ?? dutyUserId(b.id)}
+								onChange={(e) => setPicks((p) => ({ ...p, [b.id]: e.target.value }))}
+							>
+								<option value="">— nobody —</option>
+								{workload.coordinators.map((c) => (
+									<option key={c.opsUserId} value={c.opsUserId}>
+										{c.name} · {c.activeCases}/{c.maxCapacity}
+									</option>
+								))}
+								{duty[b.id] && !workload.coordinators.some((c) => c.email === duty[b.id]!.email) && (
+									<option value={duty[b.id]!.email}>{duty[b.id]!.name} · on duty</option>
+								)}
+							</select>
+						</label>
+					))
+				) : (
+					<p className="muted" style={{ fontSize: "var(--text-xs)" }}>Loading coordinators…</p>
+				)}
+				{err && <p className="ops-modal__error" role="alert" style={{ marginTop: "0.6rem" }}>{err}</p>}
+				<div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
+					<button type="button" className="btn btn--primary btn--sm" disabled={busy || !workload} onClick={() => void apply()}>
+						{busy ? "Applying…" : "Apply coverage"}
+					</button>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setSheetOpen(false)}>Cancel</button>
+				</div>
+			</Sheet>
 		</>
 	);
 }

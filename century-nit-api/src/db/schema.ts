@@ -815,10 +815,38 @@ export const settingsAudit = pgTable(
 	 /** Masked representation, e.g. "re_••••••••a8c1" — never the real value. */
 		oldValueMasked: text("old_value_masked"),
 		newValueMasked: text("new_value_masked"),
+		actorIp: text("actor_ip"),
+		/** Human-readable action written at the call site — never derived at render. */
+		action: text("action"),
 		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => ({
 		byKey: index("settings_audit_key_idx").on(t.key, t.at),
+	}),
+);
+
+/**
+ * Administrative events that are not settings changes: staff invites and
+ * revocations, client access control, role grants, sign-ins. The ops audit
+ * page unions this with `settings_audit` into one trail.
+ */
+export const adminAudit = pgTable(
+	"admin_audit",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		category: varchar("category", { length: 32 }).notNull(),
+		action: text("action").notNull(),
+		actorId: uuid("actor_id").references(() => opsUsers.id, { onDelete: "set null" }),
+		actorEmail: varchar("actor_email", { length: 255 }),
+		target: text("target"),
+		detail: text("detail"),
+		ip: text("ip"),
+		userAgent: text("user_agent"),
+		at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => ({
+		byAt: index("admin_audit_at_idx").on(t.at),
+		byCategory: index("admin_audit_category_idx").on(t.category, t.at),
 	}),
 );
 

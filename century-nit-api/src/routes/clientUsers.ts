@@ -9,6 +9,7 @@ import {
 	revokeClientSessions,
 	unbanClientUser,
 } from "../services/clientUsers.js";
+import { recordAdminEvent, requestIp } from "../services/audit.js";
 
 const clientUserSchema = z.object({
 	id: z.string(),
@@ -104,7 +105,16 @@ clientUsersRouter.openapi(
 	}),
 	async (c) => {
 		const { id } = c.req.valid("param");
+		const staff = c.get("staff");
 		const result = await revokeClientSessions(id);
+		await recordAdminEvent({
+			category: "Clients",
+			action: `Revoked ${result.revokedCount} client session${result.revokedCount === 1 ? "" : "s"}`,
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: `client:${id}`,
+			ip: requestIp(c),
+		});
 		return c.json({ success: true, revokedCount: result.revokedCount });
 	},
 );
@@ -148,6 +158,15 @@ clientUsersRouter.openapi(
 		if (!result.success) {
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}
+		await recordAdminEvent({
+			category: "Clients",
+			action: `Suspended client ${result.user?.email ?? id}`,
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: result.user?.email ?? `client:${id}`,
+			detail: reason,
+			ip: requestIp(c),
+		});
 		return c.json(result);
 	},
 );
@@ -186,6 +205,14 @@ clientUsersRouter.openapi(
 		if (!result.success) {
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}
+		await recordAdminEvent({
+			category: "Clients",
+			action: `Restored portal access for ${result.user?.email ?? id}`,
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: result.user?.email ?? `client:${id}`,
+			ip: requestIp(c),
+		});
 		return c.json(result);
 	},
 );
@@ -234,6 +261,14 @@ clientUsersRouter.openapi(
 		if (!result.success) {
 			throw new HttpError(404, "NOT_FOUND", "Client user not found");
 		}
+		await recordAdminEvent({
+			category: "Clients",
+			action: `Deleted client account (${action})`,
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: `client:${id}`,
+			ip: requestIp(c),
+		});
 		return c.json(result);
 	},
 );

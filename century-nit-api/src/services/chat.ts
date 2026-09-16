@@ -162,6 +162,8 @@ function serializeConversation(
 		id: row.id,
 		type: row.type as "applicant" | "direct" | "entity" | "group",
 		status: (row.status ?? "open") as ChatConversation["status"],
+		/** The portal user this conversation belongs to (client-facing threads). */
+		clientUserId: row.userId ?? null,
 		title,
 		linkedEntityType: row.linkedEntityType,
 		linkedEntityId: row.linkedEntityId,

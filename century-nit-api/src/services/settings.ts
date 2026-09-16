@@ -576,7 +576,7 @@ export async function listSettingsForDisplay(
 export async function writeSetting(
 	key: SettingKey,
 	plaintext: string | null,
-	actor: { opsUserId: string; email: string },
+	actor: { opsUserId: string; email: string; ip?: string | null },
 ): Promise<void> {
 	await loadCache();
 	const def = SETTING_DEFS[key];
@@ -605,6 +605,8 @@ export async function writeSetting(
 		key,
 		actorId: actor.opsUserId,
 		actorEmail: actor.email,
+		actorIp: actor.ip ?? null,
+		action: plaintext === null ? `Cleared ${key}` : `Updated ${key}`,
 		oldValueMasked: oldMasked,
 		newValueMasked: newMasked,
 	});
@@ -654,6 +656,7 @@ export async function writeSettingSystem(
 		key,
 		actorId: null,
 		actorEmail: "system",
+		action: plaintext === null ? `Cleared ${key}` : `Updated ${key}`,
 		oldValueMasked: oldMasked,
 		newValueMasked: newMasked,
 	});
@@ -729,6 +732,8 @@ export async function getAuditLog(limit = 50): Promise<
 		actorEmail: string | null;
 		oldValueMasked: string | null;
 		newValueMasked: string | null;
+		action: string | null;
+		actorIp: string | null;
 		at: string;
 	}>
 > {
@@ -744,6 +749,8 @@ export async function getAuditLog(limit = 50): Promise<
 			actorEmail: r.actorEmail,
 			oldValueMasked: r.oldValueMasked,
 			newValueMasked: r.newValueMasked,
+			action: r.action,
+			actorIp: r.actorIp,
 			at: r.at.toISOString(),
 		}));
 }

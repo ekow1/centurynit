@@ -7,6 +7,7 @@ import {
 	mask,
 	type SettingKey,
 } from "../services/settings.js";
+import { getUnifiedAuditLog } from "../services/audit.js";
 import { getAuthInstance } from "./auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 import {
@@ -106,6 +107,8 @@ const auditEntrySchema = z.object({
 	actorEmail: z.string().nullable(),
 	oldValueMasked: z.string().nullable(),
 	newValueMasked: z.string().nullable(),
+	action: z.string().nullable(),
+	actorIp: z.string().nullable(),
 	at: z.string(),
 });
 
@@ -281,6 +284,7 @@ settingsRouter.openapi(
 			await writeSetting(body.key, body.value, {
 				opsUserId: staff.opsUserId,
 				email: staff.email,
+				ip: c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
 			});
 		} catch (err) {
 			if (err instanceof HttpError) throw err;
@@ -334,6 +338,72 @@ settingsRouter.openapi(
 	async (c) => {
 		const entries = await getAuditLog(50);
 		return c.json({ entries });
+	},
+);
+
+/* ── GET /api/v1/settings/admin-audit ──────────────────────────────────────── */
+/* The unified trail the /audit page reads: settings changes + admin events.   */
+
+const unifiedAuditEntrySchema = z.object({
+	id: z.string(),
+	source: z.enum(["settings", "admin"]),
+	category: z.string(),
+	action: z.string(),
+	actorEmail: z.string().nullable(),
+	target: z.string().nullable(),
+	detail: z.string().nullable(),
+	oldValueMasked: z.string().nullable(),
+	newValueMasked: z.string().nullable(),
+	ip: z.string().nullable(),
+	at: z.string(),
+});
+
+settingsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/admin-audit",
+		tags: ["Settings"],
+		summary: "Unified admin audit trail",
+		description:
+			"Settings changes and administrative events (invites, access control, " +
+			"role grants, sign-ins) in one chronological list. Every field is " +
+			"recorded at write time — nothing is synthesized.",
+		middleware: [requireAuth, requireMfa, requireModule("system")] as const,
+		request: {
+			query: z.object({
+				category: z.string().optional(),
+				q: z.string().optional(),
+				from: z.string().optional(),
+				to: z.string().optional(),
+				limit: z.coerce.number().int().min(1).max(200).optional(),
+				offset: z.coerce.number().int().min(0).optional(),
+			}),
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							entries: z.array(unifiedAuditEntrySchema),
+							total: z.number(),
+						}),
+					},
+				},
+				description: "Unified audit entries, newest first",
+			},
+		},
+	}),
+	async (c) => {
+		const q = c.req.valid("query" as never) as {
+			category?: string;
+			q?: string;
+			from?: string;
+			to?: string;
+			limit?: number;
+			offset?: number;
+		};
+		const page = await getUnifiedAuditLog(q);
+		return c.json(page);
 	},
 );
 

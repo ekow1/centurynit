@@ -113,6 +113,9 @@ export function EnterpriseHelpdesk() {
 	// The conversation id is the URL's source of truth, so /helpdesk?id=… deep
 	// links (e.g. from the Team Assignments board) open a thread directly.
 	const activeConvId = searchParams.get("id") || null;
+	// /helpdesk?client=<clientUserId> — deep link from the client directory
+	// record pane; narrows the queue to that account's threads.
+	const clientFilter = searchParams.get("client") || null;
 
 	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
 	const directory = useStaffDirectory();
@@ -155,8 +158,9 @@ export function EnterpriseHelpdesk() {
 		if (!Array.isArray(conversations)) return [];
 		return conversations
 			.filter((c) => c && CLIENT_TYPES.has(c.type))
+			.filter((c) => !clientFilter || c.clientUserId === clientFilter)
 			.sort((a, b) => ((b.lastMessageAt ?? b.updatedAt) || "").localeCompare(a.lastMessageAt ?? a.updatedAt ?? ""));
-	}, [conversations]);
+	}, [conversations, clientFilter]);
 
 	const now = Date.now();
 	const isMine = useCallback((c: ChatConversation) => {
@@ -502,6 +506,11 @@ export function EnterpriseHelpdesk() {
 									aria-label="Search conversations"
 									style={{ marginTop: "0.5rem" }}
 								/>
+								{clientFilter && (
+									<p className="mono muted" style={{ fontSize: "var(--text-xs)", margin: "0.5rem 0 0" }}>
+										Filtered to one client · <Link to="/helpdesk" className="dash-link">clear</Link>
+									</p>
+								)}
 							</div>
 
 							<div className="hd-list__body">

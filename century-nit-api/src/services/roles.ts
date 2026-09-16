@@ -236,6 +236,12 @@ async function auditRole(actor: RoleActor, roleId: string, before: string[] | nu
 		key: `role:${roleId}`.slice(0, 64),
 		actorId: actor.opsUserId,
 		actorEmail: actor.email,
+		action:
+			before === null
+				? `Created role ${roleId}`
+				: after === null
+					? `Deleted role ${roleId}`
+					: `Updated permissions on role ${roleId}`,
 		oldValueMasked: before === null ? null : before.length ? [...before].sort().join(", ") : "(none)",
 		newValueMasked: after === null ? null : after.length ? [...after].sort().join(", ") : "(none)",
 	});

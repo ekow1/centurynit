@@ -1,65 +1,45 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API_PREFIX } from "century-nit-shared";
 import { apiFetch, ApiError } from "../lib/api";
 
+/**
+ * The unified audit trail. Every row is a recorded event — settings writes
+ * (masked values, actor IP) plus admin events (invites, access control, role
+ * grants, sign-ins). Nothing on this page is synthesized: if the API didn't
+ * record it, it doesn't render.
+ */
+
 interface AuditEntry {
 	id: string;
-	key: string;
+	source: "settings" | "admin";
+	category: string;
+	action: string;
 	actorEmail: string | null;
+	target: string | null;
+	detail: string | null;
 	oldValueMasked: string | null;
 	newValueMasked: string | null;
+	ip: string | null;
 	at: string;
-	category?: string;
-	action?: string;
-	ip?: string;
 }
 
-const STATIC_SYSTEM_AUDITS: AuditEntry[] = [
-	{
-		id: "sys-01",
-		key: "MFA_POLICY",
-		actorEmail: "super_admin@century-nit.com",
-		oldValueMasked: "OPTIONAL",
-		newValueMasked: "ENFORCED_FOR_ALL",
-		at: new Date(Date.now() - 3600000 * 2).toISOString(),
-		category: "Security & Auth",
-		action: "Enforced mandatory MFA policy across all operations staff",
-		ip: "192.168.1.10",
-	},
-	{
-		id: "sys-02",
-		key: "ROLE_PERMISSION_UPDATE",
-		actorEmail: "super_admin@century-nit.com",
-		oldValueMasked: "14 modules",
-		newValueMasked: "18 modules",
-		at: new Date(Date.now() - 3600000 * 6).toISOString(),
-		category: "Roles & Access",
-		action: "Granted Financials & Invoicing module scope to Operations Manager",
-		ip: "192.168.1.10",
-	},
-	{
-		id: "sys-03",
-		key: "FEE_SCHEDULE_UPDATE",
-		actorEmail: "super_admin@century-nit.com",
-		oldValueMasked: "$40.00 USD",
-		newValueMasked: "$50.00 USD",
-		at: new Date(Date.now() - 3600000 * 18).toISOString(),
-		category: "Financials",
-		action: "Updated Standard Advisory Consultation fee",
-		ip: "192.168.1.24",
-	},
-	{
-		id: "sys-04",
-		key: "STAFF_INVITATION_SENT",
-		actorEmail: "super_admin@century-nit.com",
-		oldValueMasked: null,
-		newValueMasked: "consultant@century-nit.com",
-		at: new Date(Date.now() - 3600000 * 24).toISOString(),
-		category: "Staff Management",
-		action: "Issued consultant staff onboarding invitation",
-		ip: "192.168.1.10",
-	},
-];
+interface AuditPage {
+	entries: AuditEntry[];
+	total: number;
+}
+
+const CATEGORIES = [
+	"all",
+	"Configuration",
+	"Authentication",
+	"Roles & Access",
+	"Financials",
+	"Staff",
+	"Clients",
+	"System",
+] as const;
+
+const PAGE_SIZE = 50;
 
 function formatDate(iso: string): string {
 	try {
@@ -79,67 +59,81 @@ function formatDate(iso: string): string {
 
 export function EnterpriseAuditLogs() {
 	const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+	const [total, setTotal] = useState(0);
 	const [loading, setLoading] = useState(true);
+	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [selectedCategory, setSelectedCategory] = useState<string>("all");
+	const [fromDate, setFromDate] = useState("");
+	const [toDate, setToDate] = useState("");
 	const [inspectedEntry, setInspectedEntry] = useState<AuditEntry | null>(null);
+
+	// Debounce the search box — the query is server-side now.
+	useEffect(() => {
+		const t = window.setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350);
+		return () => window.clearTimeout(t);
+	}, [searchQuery]);
+
+	const buildQuery = useCallback(
+		(offset: number) => {
+			const qs = new URLSearchParams();
+			if (selectedCategory !== "all") qs.set("category", selectedCategory);
+			if (debouncedQuery) qs.set("q", debouncedQuery);
+			if (fromDate) qs.set("from", fromDate);
+			if (toDate) qs.set("to", toDate);
+			qs.set("limit", String(PAGE_SIZE));
+			qs.set("offset", String(offset));
+			return qs.toString();
+		},
+		[selectedCategory, debouncedQuery, fromDate, toDate],
+	);
 
 	const loadAudit = useCallback(async () => {
 		setLoading(true);
 		setError(null);
 		try {
-			const res = await apiFetch<{ entries: AuditEntry[] }>(`${API_PREFIX}/settings/audit`);
-			const combined = [
-				...res.entries.map((e) => ({
-					...e,
-					category: e.key.includes("FEE") ? "Financials" : e.key.includes("KEY") || e.key.includes("SECRET") ? "Integrations" : "Configuration",
-					action: `Modified platform configuration key: ${e.key}`,
-					ip: "127.0.0.1",
-				})),
-				...STATIC_SYSTEM_AUDITS,
-			].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-
-			setAuditEntries(combined);
+			const res = await apiFetch<AuditPage>(`${API_PREFIX}/settings/admin-audit?${buildQuery(0)}`);
+			setAuditEntries(res.entries);
+			setTotal(res.total);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load audit logs");
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [buildQuery]);
 
 	useEffect(() => {
 		void loadAudit();
 	}, [loadAudit]);
 
-	const categories = ["all", "Configuration", "Security & Auth", "Roles & Access", "Financials", "Integrations", "Staff Management"];
+	const loadMore = useCallback(async () => {
+		setLoadingMore(true);
+		try {
+			const res = await apiFetch<AuditPage>(`${API_PREFIX}/settings/admin-audit?${buildQuery(auditEntries.length)}`);
+			setAuditEntries((prev) => [...prev, ...res.entries]);
+			setTotal(res.total);
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Failed to load more entries");
+		} finally {
+			setLoadingMore(false);
+		}
+	}, [buildQuery, auditEntries.length]);
 
-	const filteredEntries = useMemo(() => {
-		return auditEntries.filter((e) => {
-			if (selectedCategory !== "all" && e.category !== selectedCategory) return false;
-			if (searchQuery.trim()) {
-				const q = searchQuery.toLowerCase();
-				return (
-					e.key.toLowerCase().includes(q) ||
-					(e.actorEmail && e.actorEmail.toLowerCase().includes(q)) ||
-					(e.action && e.action.toLowerCase().includes(q)) ||
-					(e.ip && e.ip.toLowerCase().includes(q))
-				);
-			}
-			return true;
-		});
-	}, [auditEntries, selectedCategory, searchQuery]);
+	const hasMore = auditEntries.length < total;
 
 	function exportCsv() {
-		const headers = ["Timestamp", "Category", "Key", "Action", "Actor", "Old Value", "New Value", "IP"];
-		const rows = filteredEntries.map((e) => [
+		const headers = ["Timestamp", "Category", "Action", "Target", "Actor", "Old Value", "New Value", "Detail", "IP"];
+		const rows = auditEntries.map((e) => [
 			`"${e.at}"`,
-			`"${e.category ?? "System"}"`,
-			`"${e.key}"`,
-			`"${(e.action ?? "").replace(/"/g, '""')}"`,
-			`"${e.actorEmail ?? "System"}"`,
+			`"${e.category}"`,
+			`"${e.action.replace(/"/g, '""')}"`,
+			`"${(e.target ?? "—").replace(/"/g, '""')}"`,
+			`"${e.actorEmail ?? "system"}"`,
 			`"${(e.oldValueMasked ?? "—").replace(/"/g, '""')}"`,
 			`"${(e.newValueMasked ?? "—").replace(/"/g, '""')}"`,
+			`"${(e.detail ?? "—").replace(/"/g, '""')}"`,
 			`"${e.ip ?? "—"}"`,
 		]);
 		const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -157,13 +151,13 @@ export function EnterpriseAuditLogs() {
 			{/* Page Head */}
 			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
 				<div>
-					<h2 className="section-title">Audit Trail & Security Logs</h2>
+					<h2 className="section-title">Audit Trail &amp; Security Logs</h2>
 					<p className="muted" style={{ marginTop: "0.25rem" }}>
-						Immutable chronological record of administrative actions, credential rotations, fee modifications, and authentication events.
+						Every recorded administrative action — settings changes, sign-ins, access control, role grants. If it isn't in the trail, it isn't on this page.
 					</p>
 				</div>
 				<div style={{ display: "flex", gap: "0.5rem" }}>
-					<button type="button" className="btn btn--ghost btn--sm" onClick={exportCsv} disabled={filteredEntries.length === 0}>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={exportCsv} disabled={auditEntries.length === 0}>
 						↓ Export CSV
 					</button>
 					<button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadAudit()} disabled={loading}>
@@ -183,24 +177,41 @@ export function EnterpriseAuditLogs() {
 				<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
 					<input
 						type="search"
-						placeholder="Search audit trail by actor, action, key, or IP..."
+						placeholder="Search actor, action, target, or IP..."
 						className="input input--sm input--full-border"
-						style={{ minWidth: "18rem" }}
+						style={{ minWidth: "16rem" }}
 						value={searchQuery}
 						onChange={(e) => setSearchQuery(e.target.value)}
 					/>
-					<div className="admin-env-tabs">
-						{categories.map((c) => (
-							<button
-								key={c}
-								type="button"
-								onClick={() => setSelectedCategory(c)}
-								className={`admin-env-tab${selectedCategory === c ? " admin-env-tab--active" : ""}`}
-							>
-								{c === "all" ? "All Events" : c}
-							</button>
-						))}
+					<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+						<input
+							type="date"
+							className="input input--sm input--full-border"
+							value={fromDate}
+							onChange={(e) => setFromDate(e.target.value)}
+							aria-label="From date"
+						/>
+						<span className="muted" style={{ fontSize: "var(--text-xs)" }}>→</span>
+						<input
+							type="date"
+							className="input input--sm input--full-border"
+							value={toDate}
+							onChange={(e) => setToDate(e.target.value)}
+							aria-label="To date"
+						/>
 					</div>
+				</div>
+				<div className="admin-env-tabs" style={{ marginTop: "0.75rem" }}>
+					{CATEGORIES.map((c) => (
+						<button
+							key={c}
+							type="button"
+							onClick={() => setSelectedCategory(c)}
+							className={`admin-env-tab${selectedCategory === c ? " admin-env-tab--active" : ""}`}
+						>
+							{c === "all" ? "All Events" : c}
+						</button>
+					))}
 				</div>
 			</div>
 
@@ -212,8 +223,8 @@ export function EnterpriseAuditLogs() {
 							<tr>
 								<th style={{ width: "170px" }}>Timestamp</th>
 								<th style={{ width: "130px" }}>Category</th>
-								<th>Action / Description</th>
-								<th>Target Key</th>
+								<th>Action</th>
+								<th>Target</th>
 								<th>Actor</th>
 								<th>IP Address</th>
 								<th style={{ textAlign: "right" }}>Detail</th>
@@ -226,15 +237,15 @@ export function EnterpriseAuditLogs() {
 										Loading audit log records…
 									</td>
 								</tr>
-							) : filteredEntries.length === 0 ? (
+							) : auditEntries.length === 0 ? (
 								<tr>
 									<td colSpan={7} className="muted" style={{ padding: "3rem", textAlign: "center" }}>
 										No audit log entries match criteria.
 									</td>
 								</tr>
 							) : (
-								filteredEntries.map((entry) => (
-									<tr key={entry.id}>
+								auditEntries.map((entry) => (
+									<tr key={`${entry.source}-${entry.id}`}>
 										<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>
 											{formatDate(entry.at)}
 										</td>
@@ -251,20 +262,20 @@ export function EnterpriseAuditLogs() {
 													borderRadius: "2px",
 												}}
 											>
-												{entry.category ?? "System"}
+												{entry.category}
 											</span>
 										</td>
 										<td style={{ fontWeight: 500, fontSize: "var(--text-sm)" }}>
-											{entry.action ?? entry.key}
+											{entry.action}
 										</td>
 										<td>
 											<code className="mono muted" style={{ fontSize: "0.7rem" }}>
-												{entry.key}
+												{entry.target ?? "—"}
 											</code>
 										</td>
 										<td style={{ fontSize: "var(--text-xs)" }}>
 											<span className="mono" style={{ fontWeight: 500 }}>
-												{entry.actorEmail ?? "System Service"}
+												{entry.actorEmail ?? "system"}
 											</span>
 										</td>
 										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
@@ -285,6 +296,18 @@ export function EnterpriseAuditLogs() {
 						</tbody>
 					</table>
 				</div>
+				{!loading && (
+					<div style={{ padding: "0.75rem 1.25rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+							{auditEntries.length} of {total} entries
+						</span>
+						{hasMore && (
+							<button type="button" className="btn btn--ghost btn--sm" onClick={() => void loadMore()} disabled={loadingMore}>
+								{loadingMore ? "Loading…" : `Load ${Math.min(PAGE_SIZE, total - auditEntries.length)} more`}
+							</button>
+						)}
+					</div>
+				)}
 			</div>
 
 			{/* Detail Inspector Modal */}
@@ -293,7 +316,7 @@ export function EnterpriseAuditLogs() {
 					<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
 						<header className="ops-modal__head">
 							<div>
-								<p className="invite-card__eyebrow" style={{ margin: 0 }}>Security Audit Event</p>
+								<p className="invite-card__eyebrow" style={{ margin: 0 }}>{inspectedEntry.category} event</p>
 								<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Event Details</h2>
 								<p className="ops-modal__sub">{inspectedEntry.id} · {formatDate(inspectedEntry.at)}</p>
 							</div>
@@ -306,7 +329,7 @@ export function EnterpriseAuditLogs() {
 							<div className="field">
 								<label>Action Performed</label>
 								<div style={{ fontWeight: 600, fontSize: "var(--text-sm)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)" }}>
-									{inspectedEntry.action ?? inspectedEntry.key}
+									{inspectedEntry.action}
 								</div>
 							</div>
 
@@ -314,38 +337,51 @@ export function EnterpriseAuditLogs() {
 								<div className="field">
 									<label>Actor</label>
 									<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)" }}>
-										{inspectedEntry.actorEmail ?? "System"}
+										{inspectedEntry.actorEmail ?? "system"}
 									</div>
 								</div>
 								<div className="field">
 									<label>IP Address</label>
 									<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)" }}>
-										{inspectedEntry.ip ?? "—"}
+										{inspectedEntry.ip ?? "not recorded"}
 									</div>
 								</div>
 							</div>
 
-							<div className="field">
-								<label>Target Key</label>
-								<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)" }}>
-									{inspectedEntry.key}
+							{inspectedEntry.target && (
+								<div className="field">
+									<label>Target</label>
+									<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)" }}>
+										{inspectedEntry.target}
+									</div>
 								</div>
-							</div>
+							)}
 
-							<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+							{inspectedEntry.detail && (
 								<div className="field">
-									<label>Previous State</label>
-									<div className="mono muted" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)", wordBreak: "break-all" }}>
-										{inspectedEntry.oldValueMasked ?? "— (unset)"}
+									<label>Detail</label>
+									<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)", wordBreak: "break-all" }}>
+										{inspectedEntry.detail}
 									</div>
 								</div>
-								<div className="field">
-									<label>New State</label>
-									<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)", wordBreak: "break-all", fontWeight: 600 }}>
-										{inspectedEntry.newValueMasked ?? "— (cleared)"}
+							)}
+
+							{(inspectedEntry.oldValueMasked !== null || inspectedEntry.newValueMasked !== null) && (
+								<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+									<div className="field">
+										<label>Previous State</label>
+										<div className="mono muted" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)", wordBreak: "break-all" }}>
+											{inspectedEntry.oldValueMasked ?? "— (unset)"}
+										</div>
+									</div>
+									<div className="field">
+										<label>New State</label>
+										<div className="mono" style={{ fontSize: "var(--text-xs)", padding: "0.5rem", background: "var(--surface-subtle, #fafafa)", border: "var(--thin)", wordBreak: "break-all", fontWeight: 600 }}>
+											{inspectedEntry.newValueMasked ?? "— (cleared)"}
+										</div>
 									</div>
 								</div>
-							</div>
+							)}
 						</div>
 
 						<div className="cal-actions" style={{ marginTop: "1.5rem" }}>

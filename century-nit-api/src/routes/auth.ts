@@ -146,6 +146,24 @@ function createAuth(config: GoogleSocialConfig) {
 								},
 								"Portal Sign-In",
 							);
+
+							// Staff sign-ins go on the admin audit trail; portal sign-ins
+							// are ordinary client activity, not console events.
+							const staffRow = await db.query.opsUsers.findFirst({
+								where: eq(schema.opsUsers.userId, u.id),
+							});
+							if (staffRow) {
+								const { recordAdminEvent } = await import("../services/audit.js");
+								await recordAdminEvent({
+									category: "Authentication",
+									action: `Signed in to the ops console`,
+									actorId: staffRow.id,
+									actorEmail: staffRow.email,
+									target: "ops-console",
+									ip: session.ipAddress ?? null,
+									userAgent: session.userAgent ?? null,
+								});
+							}
 						}
 					} catch (err) {
 						console.error("[CRM] Error in session create hook:", err);

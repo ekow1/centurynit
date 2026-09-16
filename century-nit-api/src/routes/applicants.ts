@@ -11,6 +11,7 @@ import {
 
 
 
+	assertBranchScope,
 	canSeeAllCases,
 
 
@@ -290,6 +291,9 @@ applicantsRouter.openapi(
 		if (!canSeeAllCases(staff)) {
 			throw new HttpError(403, "FORBIDDEN", "Only managers delegate journey coordination");
 		}
+		const applicant = await getApplicant(c.req.valid("param").id);
+		if (!applicant) throw new HttpError(404, "NOT_FOUND", "Applicant not found");
+		assertBranchScope(staff, applicant.branch);
 		await delegateJourneyCoordinator({
 			applicantId: c.req.valid("param").id,
 			coordinatorOpsUserId: c.req.valid("json").coordinatorOpsUserId,
@@ -318,6 +322,9 @@ applicantsRouter.openapi(
 		if (!canSeeAllCases(staff)) {
 			throw new HttpError(403, "FORBIDDEN", "Only managers release journey coordination");
 		}
+		const applicant = await getApplicant(c.req.valid("param").id);
+		if (!applicant) throw new HttpError(404, "NOT_FOUND", "Applicant not found");
+		assertBranchScope(staff, applicant.branch);
 		await releaseJourneyCoordinator({
 			applicantId: c.req.valid("param").id,
 			actor: actorFrom(staff),

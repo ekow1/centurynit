@@ -8,6 +8,8 @@ import { UnassignedQueue } from "./UnassignedBookings";
 import { OPS_BRANCHES } from "century-nit-core/ops";
 import { calendarApi, type CalendarStatus } from "century-nit-core/api";
 import { Sheet } from "century-nit-core/ui";
+import { DelegateSheet } from "./case/DelegateSheet";
+import { Toast } from "./OpsDialogs";
 import { JOURNEY_STAGES, JOURNEY_STAGE_LABELS, type JourneyStage } from "century-nit-shared";
 import type { PendingTask } from "../lib/pendingTasks";
 import { FilterGroup } from "./FilterGroup";
@@ -59,6 +61,10 @@ type Row = {
 	clientName: string;
 	clientEmail: string | null;
 	branch: string;
+	/** The applicant behind the record — journey delegation targets it. */
+	applicantId: string | null;
+	/** Who steers the whole journey, when the applicant has been delegated. */
+	journeyCoordinatorName: string | null;
 	staffId: string | null;
 	staffName: string | null;
 	stageLabel: string;
@@ -138,6 +144,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	const [rowParam, setRowParam] = useUrlParam("row");
 	const showCompleted = doneParam === "1";
 	const [staffHours, setStaffHours] = useState<Record<string, CalendarStatus["workingHours"]>>({});
+	const [delegateFor, setDelegateFor] = useState<{ id: string; name: string; journeyCoordinatorName: string | null } | null>(null);
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 	// Week hours are only needed once an officer's record opens — fetch lazily.
 	const hoursLoaded = useRef(false);
 	useEffect(() => {
@@ -173,6 +181,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				clientName: a.applicantName,
 				clientEmail: a.email,
 				branch: a.branch,
+				applicantId: a.applicantId,
+				journeyCoordinatorName: a.journeyCoordinatorName ?? null,
 				staffId: staffIdByEmail(a.assignedStaffEmail),
 				staffName: a.assignedStaff || null,
 				stageLabel: JOURNEY_STAGE_LABELS[stage] ?? a.stage,
@@ -196,6 +206,8 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 				clientName: c.applicantName,
 				clientEmail: c.email,
 				branch: c.branch,
+				applicantId: c.applicantId,
+				journeyCoordinatorName: c.coordinatedVia === "applicant" ? (c.coordinatorName ?? null) : null,
 				staffId: staffIdByEmail(c.assignedOfficerEmail),
 				staffName: c.assignedOfficer || null,
 				stageLabel: c.status,
@@ -212,6 +224,24 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 	}, [applications, consultations, scopeRecords, assignees]);
 
 	/** Every officer carrying something open: load, stage mix, what has stalled. */
+	/** Cases each officer steers as coordinator — delegated work, not theirs. */
+	const coordinating = useMemo(() => {
+		const m = new Map<string, number>();
+		for (const c of consultations) {
+			if (c.coordinatorId && c.status !== "Completed" && c.status !== "Cancelled") {
+				m.set(c.coordinatorId, (m.get(c.coordinatorId) ?? 0) + 1);
+			}
+		}
+		for (const a of applications) {
+			if (a.journeyCoordinatorEmail && a.stage !== "completed") {
+				const id = staffIdByEmail(a.journeyCoordinatorEmail);
+				if (id) m.set(id, (m.get(id) ?? 0) + 1);
+			}
+		}
+		return m;
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- staffIdByEmail is stable per render
+	}, [consultations, applications, assignees]);
+
 	const officers = useMemo(() => {
 		const map = new Map<string, { id: string; name: string; cases: number; consultations: number; stalled: number; stages: number[] }>();
 		for (const r of rows) {
@@ -376,6 +406,11 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 									{o.cases} case{o.cases === 1 ? "" : "s"} · {o.consultations} consult{o.consultations === 1 ? "" : "s"}
 									{o.stalled > 0 ? <> · <span className="hot">{o.stalled} stalled</span></> : ""}
 								</span>
+								{(coordinating.get(o.id) ?? 0) > 0 && (
+									<span className="ops-ocard__meta" style={{ textDecoration: "underline" }}>
+										Coordinating {coordinating.get(o.id)}
+									</span>
+								)}
 								<StageStrip counts={o.stages} />
 							</button>
 						);
@@ -607,8 +642,9 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 			{/* A client card's preview — the worklist's task pane when the record
 			    has a pending task, the card's facts when it doesn't. */}
 			<Sheet open={!!previewRow} onClose={() => setRowParam(null)} title={previewRow ? `${previewRow.clientName} · ${previewRow.reference}` : "Record"} size="tall">
-				{previewRow &&
-					(previewTask ? (
+				{previewRow && (
+					<>
+						{previewTask ? (
 						<PreviewPane
 							item={previewTask}
 							assignees={assignees}
@@ -636,8 +672,42 @@ export function WorkspaceCaseload({ tasks = [] }: { tasks?: PendingTask[] }) {
 								</Link>
 							</div>
 						</div>
-					))}
+					)}
+						{/* Journey delegation lives on the client, not the case — a
+						    manager hands "everything this client opens" over from here. */}
+						{canAssignWork && previewRow.applicantId && (
+							<div style={{ borderTop: "1px solid var(--border-light)", marginTop: "1rem", paddingTop: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+									{previewRow.journeyCoordinatorName
+										? <>Journey steered by <strong>{previewRow.journeyCoordinatorName}</strong> — every case routes to them</>
+										: "No journey coordinator"}
+								</span>
+								<button
+									type="button"
+									className="btn btn--ghost btn--sm"
+									onClick={() =>
+										setDelegateFor({
+											id: previewRow.applicantId!,
+											name: previewRow.clientName,
+											journeyCoordinatorName: previewRow.journeyCoordinatorName,
+										})
+									}
+								>
+									{previewRow.journeyCoordinatorName ? "Manage journey…" : "Delegate journey…"}
+								</button>
+							</div>
+						)}
+					</>
+				)}
 			</Sheet>
+
+			<DelegateSheet
+				open={!!delegateFor}
+				onClose={() => setDelegateFor(null)}
+				applicant={delegateFor}
+				onToast={(type, message) => setToast({ type, message })}
+			/>
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

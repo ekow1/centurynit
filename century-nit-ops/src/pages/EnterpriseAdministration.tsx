@@ -8,7 +8,6 @@ import { ApiError, staffApi, notificationsApi, type NotificationLogItem } from "
 import { MODULE_GROUPS, API_PREFIX, CAPABILITIES, defaultPermissionsOf, type Capability, type OpsModule, type SystemRole } from "century-nit-shared";
 import { apiFetch, getAuthSettings, updateAuthSettings as updateAuthSettingsApi, type AuthSettingsResponse } from "../lib/api";
 import { PlatformSettings } from "./PlatformSettings";
-import { ClientDirectory } from "./ClientDirectory";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
 
 
@@ -23,11 +22,7 @@ export type AdminSection =
 	| "cms"
 	| "site"
 	| "notifications"
-	| "settings"
-	| "security"
-	| "branches"
-	| "integrations"
-	| "features";
+	| "settings";
 
 const SECTION_META: Record<AdminSection, { title: string; blurb: string }> = {
 	system: {
@@ -58,57 +53,7 @@ const SECTION_META: Record<AdminSection, { title: string; blurb: string }> = {
 		title: "System Configuration",
 		blurb: "Regional defaults, integrations, and platform-wide preferences.",
 	},
-	security: {
-		title: "Security Center",
-		blurb: "Failed login attempts, active sessions, IP allowlist, and audit log.",
-	},
-	branches: {
-		title: "Branch Management",
-		blurb: "Office locations, contact details, and operational status.",
-	},
-	integrations: {
-		title: "API Keys & Webhooks",
-		blurb: "Third-party integrations, API keys, and webhook endpoints.",
-	},
-	features: {
-		title: "Feature Flags",
-		blurb: "Toggle platform features on or off for controlled rollouts.",
-	},
 };
-
-const FAILED_LOGINS = [
-	{ id: "f1", at: "2026-08-06T08:55:00Z", email: "unknown@tempmail.com", ip: "41.215.44.10", attempts: 3, status: "Locked" },
-	{ id: "f2", at: "2026-08-06T07:20:00Z", email: "a.mensah@century-nit.com", ip: "192.168.1.24", attempts: 1, status: "Resolved" },
-	{ id: "f3", at: "2026-08-05T22:10:00Z", email: "admin@century-nit.com", ip: "102.89.22.5", attempts: 5, status: "Blocked" },
-	{ id: "f4", at: "2026-08-05T18:30:00Z", email: "unknown@gmail.com", ip: "197.210.44.12", attempts: 2, status: "Monitoring" },
-];
-
-const ACTIVE_SESSIONS = [
-	{ id: "s1", user: "Adjoa Mensah-Bonsu", role: "manager" as OpsRole, ip: "192.168.1.24", device: "Chrome · macOS", started: "2026-08-06T08:00:00Z", current: true },
-	{ id: "s2", user: "Kojo Asante", role: "coordinator" as OpsRole, ip: "41.215.44.8", device: "Firefox · Windows", started: "2026-08-06T07:45:00Z", current: false },
-	{ id: "s3", user: "Efua Owusu", role: "consultant" as OpsRole, ip: "94.200.22.10", device: "Safari · iPad", started: "2026-08-06T06:30:00Z", current: false },
-	{ id: "s4", user: "Ama Serwaa Boateng", role: "finance" as OpsRole, ip: "192.168.1.31", device: "Chrome · Windows", started: "2026-08-05T14:00:00Z", current: false },
-];
-
-const BRANCHES = [
-	{ id: "accra-hq", name: "Accra Headquarters", country: "Ghana", city: "Accra", address: "Independence Ave, Ridge", phone: "+233 30 555 0100", email: "accra@century-nit.com", status: "Active", staffCount: 4 },
-	{ id: "kumasi", name: "Kumasi Branch", country: "Ghana", city: "Kumasi", address: "Adum High Street", phone: "+233 32 244 0088", email: "kumasi@century-nit.com", status: "Active", staffCount: 2 },
-	{ id: "takoradi", name: "Takoradi Branch", country: "Ghana", city: "Takoradi", address: "Market Circle, Commercial St", phone: "+233 31 299 4455", email: "takoradi@century-nit.com", status: "Active", staffCount: 2 },
-	{ id: "tamale", name: "Tamale Branch", country: "Ghana", city: "Tamale", address: "Kukuo Road, Bolga Rd", phone: "+233 37 222 3311", email: "tamale@century-nit.com", status: "Active", staffCount: 1 },
-	{ id: "cape-coast", name: "Cape Coast Branch", country: "Ghana", city: "Cape Coast", address: "Pedu Road", phone: "+233 33 217 7788", email: "capecoast@century-nit.com", status: "Active", staffCount: 1 },
-	{ id: "tema", name: "Tema Office", country: "Ghana", city: "Tema", address: "Harbour Area, Community 1", phone: "+233 30 299 1122", email: "tema@century-nit.com", status: "Active", staffCount: 2 },
-];
-
-const FEATURE_FLAGS = [
-	{ id: "ff1", name: "Online consultation booking", category: "Client Portal", enabled: true, description: "Allow clients to book and pay for consultations online" },
-	{ id: "ff2", name: "Document vault uploads", category: "Client Portal", enabled: true, description: "Let applicants upload and manage their documents" },
-	{ id: "ff3", name: "Visa stage tracking", category: "Operations", enabled: true, description: "Track visa application progress through stages" },
-	{ id: "ff4", name: "Automated lead scoring", category: "CRM", enabled: false, description: "Score leads automatically based on engagement" },
-	{ id: "ff5", name: "Multi-currency billing", category: "Finance", enabled: false, description: "Bill in GHS, NGN, GBP, and AED alongside USD" },
-	{ id: "ff6", name: "Public programme search", category: "Public Site", enabled: true, description: "Searchable programme catalogue on the website" },
-	{ id: "ff7", name: "Appointment self-reschedule", category: "Client Portal", enabled: false, description: "Let clients reschedule their own appointments" },
-	{ id: "ff8", name: "Bulk email campaigns", category: "CRM", enabled: false, description: "Send marketing emails to lead segments" },
-];
 
 export function EnterpriseAdministration({ section = "system" }: { section?: AdminSection }) {
 	const meta = SECTION_META[section];
@@ -128,29 +73,32 @@ export function EnterpriseAdministration({ section = "system" }: { section?: Adm
 			{section === "site" && <SiteSettings />}
 			{section === "notifications" && <SystemNotifications />}
 			{section === "settings" && <PlatformSettings />}
-			{section === "security" && <SecurityCenter />}
-			{section === "branches" && <BranchManagement />}
-			{section === "integrations" && <IntegrationsManager />}
-			{section === "features" && <FeatureFlagsManager />}
 		</div>
 	);
 }
 
 /* ─── System overview ─── */
 
-const SYSTEM_HEALTH = [
-	{ name: "Web Application", status: "operational", uptime: "99.98%" },
-	{ name: "Database", status: "operational", uptime: "99.99%" },
-	{ name: "Payment Gateway", status: "operational", uptime: "99.95%" },
-	{ name: "Email Delivery", status: "operational", uptime: "99.9%" },
-	{ name: "SMS Gateway", status: "degraded", uptime: "97.2%" },
-];
+interface HealthDetail {
+	status: string;
+	latencyMs: number;
+	components: {
+		database: { ok: boolean; ms: number | null };
+		redis: { ok: boolean; ms: number | null };
+		queues: { name: string; waiting: number; failed: number }[];
+	};
+	uptimeSeconds: number;
+	node: string;
+	timestamp: string;
+}
 
 function SystemOverview() {
 	const { activityLog } = useOpsState();
 	const [staffCount, setStaffCount] = useState<number | null>(null);
 	const [activeStaff, setActiveStaff] = useState<number | null>(null);
 	const [rolesCount, setRolesCount] = useState<number | null>(null);
+	const [health, setHealth] = useState<HealthDetail | null>(null);
+	const [auth, setAuth] = useState<AuthSettingsResponse | null>(null);
 	const [auditEntries, setAuditEntries] = useState<{ id: string; at: string; actor: string; action: string; detail: string; ip: string }[]>([]);
 
 	useEffect(() => {
@@ -169,17 +117,37 @@ function SystemOverview() {
 		})();
 	}, []);
 
+	// Measured, not declared: component state comes from the API's own
+	// readiness checks — Postgres SELECT 1, a Redis ping, BullMQ job counts.
+	useEffect(() => {
+		const load = async () => {
+			try {
+				const res = await apiFetch<HealthDetail>(`/api/health/detail`);
+				setHealth(res);
+			} catch {
+				setHealth(null);
+			}
+		};
+		void load();
+		const interval = window.setInterval(load, 30000);
+		return () => window.clearInterval(interval);
+	}, []);
+
+	useEffect(() => {
+		getAuthSettings().then(setAuth).catch(() => undefined);
+	}, []);
+
 	useEffect(() => {
 		void (async () => {
 			try {
-				const res = await apiFetch<{ entries: { id: string; at: string; actorEmail: string | null; action?: string; key: string; category?: string; ip?: string; newValueMasked?: string | null }[] }>(`${API_PREFIX}/settings/audit`);
+				const res = await apiFetch<{ entries: { id: string; at: string; actorEmail: string | null; action?: string; key: string; category?: string; ip?: string; newValueMasked?: string | null; target?: string | null }[] }>(`${API_PREFIX}/settings/admin-audit?limit=8`);
 				setAuditEntries(
 					res.entries.slice(0, 8).map((e) => ({
 						id: e.id,
 						at: e.at,
 						actor: e.actorEmail ?? "system",
 						action: e.action ?? e.key,
-						detail: e.category ?? e.newValueMasked ?? "",
+						detail: e.category ?? e.target ?? e.newValueMasked ?? "",
 						ip: e.ip ?? "—",
 					})),
 				);
@@ -189,43 +157,97 @@ function SystemOverview() {
 		})();
 	}, []);
 
-	const operationalCount = SYSTEM_HEALTH.filter((s) => s.status === "operational").length;
+	const dbOk = health?.components.database.ok ?? null;
+	const redisOk = health?.components.redis.ok ?? null;
+	const waitingJobs = health?.components.queues.reduce((n, q) => n + q.waiting, 0) ?? null;
+	const failedJobs = health?.components.queues.reduce((n, q) => n + q.failed, 0) ?? null;
+	const allUp = dbOk === true && redisOk === true;
+	const healthNote = health === null ? "Health endpoint unreachable" : allUp ? "All measured components responding" : "A component is down";
+
+	const authRows: [string, string][] = auth
+		? [
+				["Portal sign-in", [auth.portal.email_password && "password", auth.portal.social_google && "Google", auth.portal.email_otp && "email OTP"].filter(Boolean).join(" + ") || "disabled"],
+				["Portal MFA", auth.portal.mfa_required ? "required" : "optional"],
+				["Ops sign-in", [auth.ops.email_password && "password", auth.ops.google_sso && "Google SSO"].filter(Boolean).join(" + ") || "disabled"],
+				["Ops MFA", auth.ops.mfa_required ? "enforced" : "optional"],
+			]
+		: [];
 
 	return (
 		<>
 			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
 				<Stat label="Staff Accounts" value={staffCount === null ? "—" : String(staffCount)} note={activeStaff === null ? "Loading…" : `${activeStaff} active`} />
 				<Stat label="Roles Configured" value={rolesCount === null ? "—" : String(rolesCount)} note="System & custom roles" />
-				<Stat label="System Health" value={`${Math.round((operationalCount / SYSTEM_HEALTH.length) * 100)}%`} note={operationalCount === SYSTEM_HEALTH.length ? "All services operational" : `${operationalCount}/${SYSTEM_HEALTH.length} operational`} inverted />
+				<Stat
+					label="Components"
+					value={health === null ? "—" : allUp ? "OK" : "Down"}
+					note={healthNote}
+					inverted={health !== null && !allUp}
+				/>
+				<Stat
+					label="Queue depth"
+					value={waitingJobs === null ? "—" : String(waitingJobs)}
+					note={failedJobs === null ? "Measuring…" : failedJobs > 0 ? `${failedJobs} failed` : "0 failed"}
+					inverted={Boolean(failedJobs && failedJobs > 0)}
+				/>
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
 				<div className="card">
-					<h2 className="section-title mb-3">Platform Configuration</h2>
-					<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-						<Row label="Authentication" value="Email + SSO (Google, Apple, LinkedIn)" />
-						<Row label="Session policy" value="8 hours, sliding" />
-						<Row label="Multi-factor" value="Optional - enforced for admins" />
-						<Row label="Public site" value="Live · 18 pages" />
-						<Row label="Notification channels" value="Email, SMS" />
-					</ul>
-				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">Service Health</h2>
+					<h2 className="section-title mb-3">Components — measured</h2>
 					<div className="admin-service-status-list">
-						{SYSTEM_HEALTH.map((svc) => (
+						{[
+							{ name: "Postgres", ok: dbOk, ms: health?.components.database.ms ?? null },
+							{ name: "Redis / queues", ok: redisOk, ms: health?.components.redis.ms ?? null },
+						].map((svc) => (
 							<div key={svc.name} className="admin-service-status-row">
 								<div className="admin-service-status-row__indicator">
-									<span className={`admin-status-dot admin-status-dot--${svc.status}`} />
+									<span className={`admin-status-dot admin-status-dot--${svc.ok === null ? "degraded" : svc.ok ? "operational" : "down"}`} />
 								</div>
 								<div className="admin-service-status-row__name">{svc.name}</div>
 								<div className="admin-service-status-row__metrics">
-									<span className="mono muted">{svc.uptime}</span>
+									<span className="mono muted">{svc.ms === null ? "—" : `${svc.ms}ms`}</span>
 								</div>
-								<span className={`admin-status-pill admin-status-pill--${svc.status}`}>{svc.status}</span>
+								<span className={`admin-status-pill admin-status-pill--${svc.ok === null ? "degraded" : svc.ok ? "operational" : "down"}`}>
+									{svc.ok === null ? "unknown" : svc.ok ? "up" : "down"}
+								</span>
+							</div>
+						))}
+						{(health?.components.queues ?? []).map((q) => (
+							<div key={q.name} className="admin-service-status-row">
+								<div className="admin-service-status-row__indicator">
+									<span className={`admin-status-dot admin-status-dot--${q.failed > 0 ? "degraded" : "operational"}`} />
+								</div>
+								<div className="admin-service-status-row__name" style={{ paddingLeft: "1rem" }}>{q.name} queue</div>
+								<div className="admin-service-status-row__metrics">
+									<span className="mono muted">{q.waiting} waiting{q.failed > 0 ? ` · ${q.failed} failed` : ""}</span>
+								</div>
+								<span className={`admin-status-pill admin-status-pill--${q.failed > 0 ? "degraded" : "operational"}`}>
+									{q.failed > 0 ? "failing" : "draining"}
+								</span>
 							</div>
 						))}
 					</div>
+					{health && (
+						<p className="muted mono" style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+							node {health.node} · up {Math.floor(health.uptimeSeconds / 3600)}h{Math.floor((health.uptimeSeconds % 3600) / 60)}m · checked {new Date(health.timestamp).toLocaleTimeString()}
+						</p>
+					)}
+				</div>
+				<div className="card">
+					<h2 className="section-title mb-3">Configured</h2>
+					{authRows.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 0" }}>Loading settings…</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+							{authRows.map(([label, value]) => (
+								<Row key={label} label={label} value={value} />
+							))}
+						</ul>
+					)}
+					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
+						Values come from the settings store — <Link to="/settings" className="dash-link">edit in System config →</Link>
+					</p>
 				</div>
 			</div>
 
@@ -260,12 +282,12 @@ function SystemOverview() {
 				</div>
 			</div>
 
-			{/* Audit Log */}
+			{/* Audit preview — the unified trail, deepest detail on /audit */}
 			<div className="card">
 				<div className="admin-section-head" style={{ marginBottom: "1rem" }}>
 					<div>
-						<h2 className="section-title">Audit Log</h2>
-						<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.25rem" }}>Immutable record of administrative actions across the platform.</p>
+						<h2 className="section-title">Audit trail</h2>
+						<p className="muted" style={{ fontSize: "var(--text-sm)", marginTop: "0.25rem" }}>Latest recorded administrative events — <Link to="/audit" className="dash-link">full trail →</Link></p>
 					</div>
 				</div>
 				<div style={{ overflowX: "auto" }}>
@@ -312,6 +334,8 @@ type StaffRow = {
 	active: boolean;
 	hasLogin: boolean;
 	mfaEnabled: boolean;
+	lastSeenAt: string | null;
+	ownedConversations: number;
 	canCoordinate: boolean;
 	grantExpiresAt: string | null;
 };
@@ -330,7 +354,7 @@ interface DynamicRole {
 
 function UsersAndRoles() {
 	const { opsUser, opsRole, roleCatalog, refreshPermissions, hasCapability } = useOpsAuth();
-	const [activeSubTab, setActiveSubTab] = useState<"staff" | "clients" | "matrix">("staff");
+	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix">("staff");
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
 	const [roleSearch, setRoleSearch] = useState("");
@@ -787,24 +811,6 @@ function UsersAndRoles() {
 				</button>
 				<button
 					type="button"
-					onClick={() => setActiveSubTab("clients")}
-					style={{
-						padding: "0.6rem 1.25rem",
-						fontFamily: "var(--font-mono)",
-						fontSize: "var(--text-sm)",
-						textTransform: "uppercase",
-						letterSpacing: "0.05em",
-						border: "none",
-						borderBottom: activeSubTab === "clients" ? "3px solid var(--foreground)" : "3px solid transparent",
-						background: "transparent",
-						fontWeight: activeSubTab === "clients" ? 700 : 500,
-						cursor: "pointer",
-					}}
-				>
-					Client Accounts & Access
-				</button>
-				<button
-					type="button"
 					onClick={() => setActiveSubTab("matrix")}
 					style={{
 						padding: "0.6rem 1.25rem",
@@ -937,7 +943,7 @@ function UsersAndRoles() {
 							<div className="ops-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "34rem" }}>
 								<header className="ops-modal__head">
 									<div>
-										<p className="invite-card__eyebrow" style={{ margin: 0, color: "var(--success, #059669)" }}>✓ Invitation Created</p>
+										<p className="invite-card__eyebrow" style={{ margin: 0 }}>✓ Invitation Created</p>
 										<h2 className="ops-modal__title" style={{ marginTop: "0.25rem" }}>Staff Invitation Link</h2>
 										<p className="ops-modal__sub">
 											Invitation for <strong>{createdInvite.name}</strong> ({createdInvite.email}) as <strong>{roleLabelMap[createdInvite.role] ?? createdInvite.role}</strong>.
@@ -1133,15 +1139,17 @@ function UsersAndRoles() {
 										<th>Role</th>
 										<th>Branch</th>
 										<th>Status</th>
+										<th>Presence</th>
 										<th>MFA</th>
+										<th>Owns</th>
 										<th style={{ textAlign: "right" }}>Action</th>
 									</tr>
 								</thead>
 								<tbody>
 									{loading ? (
-										<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
+										<tr><td colSpan={9} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
 									) : rows.length === 0 ? (
-										<tr><td colSpan={7} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members match criteria.</td></tr>
+										<tr><td colSpan={9} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members match criteria.</td></tr>
 									) : (
 										rows.map((u) => (
 											<tr key={u.id}>
@@ -1166,6 +1174,9 @@ function UsersAndRoles() {
 														{u.active ? "Active" : "Inactive"}
 													</span>
 												</td>
+												<td className="muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>
+													{u.hasLogin ? formatPresence(u.lastSeenAt) : "no login"}
+												</td>
 												<td className="muted">
 												{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}
 												{u.canCoordinate && (
@@ -1177,6 +1188,9 @@ function UsersAndRoles() {
 														COORD
 													</span>
 												)}
+											</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+												{u.ownedConversations > 0 ? `${u.ownedConversations} convs` : "—"}
 											</td>
 											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
 												<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
@@ -1232,7 +1246,6 @@ function UsersAndRoles() {
 			)}
 
 			{/* ── Sub-tab 2: Client Accounts & Access ── */}
-			{activeSubTab === "clients" && <ClientDirectory />}
 
 			{/* ── Sub-tab 3: Master-Detail Roles & Permissions ── */}
 			{activeSubTab === "matrix" && (
@@ -1807,7 +1820,12 @@ function AuthSettings() {
 		mfaNotEnrolled: number;
 		activeSessions: number;
 		providers: { id: string; label: string; enabled: boolean }[];
+		mfaRoster: { id: string; name: string; email: string; role: string; branch: string | null; enrolled: boolean; hasLogin: boolean }[];
 	} | null>(null);
+	const [sessionRows, setSessionRows] = useState<{
+		id: string; email: string; name: string; role: string; ip: string | null;
+		userAgent: string | null; createdAt: string; expiresAt: string; current: boolean;
+	}[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -1818,11 +1836,13 @@ function AuthSettings() {
 		Promise.all([
 			getAuthSettings(),
 			staffApi.authStats(),
+			staffApi.sessions().catch(() => ({ sessions: [] })),
 		])
-			.then(([s, st]) => {
+			.then(([s, st, se]) => {
 				if (!active) return;
 				setSettings(s);
 				setStats(st);
+				setSessionRows(se.sessions);
 				setError(null);
 			})
 			.catch((e: unknown) => {
@@ -1860,7 +1880,7 @@ function AuthSettings() {
 	if (error && !settings) {
 		return (
 			<div className="card" style={{ textAlign: "center", padding: "3rem" }}>
-				<p style={{ color: "#991b1b" }}>{error}</p>
+				<p className="ops-modal__error" role="alert">{error}</p>
 			</div>
 		);
 	}
@@ -1881,13 +1901,13 @@ function AuthSettings() {
 			)}
 
 			{error && (
-				<div style={{ padding: "0.75rem 1rem", background: "#fee2e2", border: "1px solid #fca5a5", color: "#991b1b", fontSize: "var(--text-sm)", marginBottom: "1.5rem" }}>
+				<div className="admin-flash admin-flash--error" role="alert">
 					{error}
 				</div>
 			)}
 			{saved && (
-				<div style={{ padding: "0.75rem 1rem", background: "#d1fae5", border: "1px solid #a7f3d0", color: "#166534", fontSize: "var(--text-sm)", marginBottom: "1.5rem" }}>
-					Settings saved. Changes take effect on next login.
+				<div className="admin-flash admin-flash--ok" role="status">
+					✓ Settings saved. Changes take effect on next login.
 				</div>
 			)}
 
@@ -2061,6 +2081,94 @@ function AuthSettings() {
 					</div>
 				</div>
 			</div>
+
+			{/* Active sessions — live rows from the sessions table */}
+			<div className="card" style={{ marginBottom: "1.5rem" }}>
+				<h2 className="section-title mb-3">Active Staff Sessions</h2>
+				<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+					Live sessions joined to the staff directory. Revoking an account is handled from the staff directory.
+				</p>
+				{sessionRows.length === 0 ? (
+					<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 0" }}>No active staff sessions.</p>
+				) : (
+					<div className="ops-table-wrap">
+						<table className="admin-table">
+							<thead>
+								<tr>
+									<th>Staff</th>
+									<th>Role</th>
+									<th>IP</th>
+									<th>Device</th>
+									<th>Signed in</th>
+									<th>Expires</th>
+								</tr>
+							</thead>
+							<tbody>
+								{sessionRows.map((r) => (
+									<tr key={r.id}>
+										<td style={{ fontWeight: 500 }}>
+											{r.name}
+											{r.current && (
+												<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}>THIS SESSION</span>
+											)}
+											<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 400 }}>{r.email}</span>
+										</td>
+										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.role}</td>
+										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.ip ?? "—"}</td>
+										<td className="muted" style={{ fontSize: "var(--text-xs)", maxWidth: "16rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.userAgent ?? undefined}>
+											{shortUserAgent(r.userAgent)}
+										</td>
+										<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(r.createdAt).toLocaleString()}</td>
+										<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(r.expiresAt).toLocaleDateString()}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+			</div>
+
+			{/* MFA roster — who is and isn't enrolled */}
+			{stats && stats.mfaRoster.length > 0 && (
+				<div className="card" style={{ marginBottom: "1.5rem" }}>
+					<h2 className="section-title mb-3">MFA Roster</h2>
+					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
+						Per-staff enrollment status. Outstanding staff are the "action required" count above.
+					</p>
+					<div className="ops-table-wrap">
+						<table className="admin-table">
+							<thead>
+								<tr>
+									<th>Staff</th>
+									<th>Role</th>
+									<th>Branch</th>
+									<th>MFA</th>
+								</tr>
+							</thead>
+							<tbody>
+								{stats.mfaRoster.map((r) => (
+									<tr key={r.id}>
+										<td style={{ fontWeight: 500 }}>
+											{r.name}
+											<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 400 }}>{r.email}</span>
+										</td>
+										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.role}</td>
+										<td className="muted">{staffBranchName(r.branch ?? "")}</td>
+										<td>
+											<span
+												className="portal-pill"
+												style={r.enrolled ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
+											>
+												{r.enrolled ? "Enrolled" : r.hasLogin ? "Outstanding" : "No login"}
+											</span>
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			)}
 
 			{/* Session & Password Policy */}
 			<div className="card">
@@ -2279,7 +2387,7 @@ function SystemNotifications() {
 				{loading ? (
 					<p className="muted" style={{ padding: "1.25rem" }}>Loading delivery log…</p>
 				) : error ? (
-					<p style={{ padding: "1.25rem", color: "#991b1b" }}>{error}</p>
+					<p className="ops-modal__error" role="alert" style={{ margin: "1.25rem" }}>{error}</p>
 				) : logs.length === 0 ? (
 					<p className="muted" style={{ padding: "1.25rem" }}>No notifications sent yet. Emails will appear here when bookings are created, assigned, rescheduled, or cancelled.</p>
 				) : (
@@ -2292,6 +2400,7 @@ function SystemNotifications() {
 									<th>Template</th>
 									<th>Status</th>
 									<th>Sent</th>
+									<th>Error</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -2301,16 +2410,18 @@ function SystemNotifications() {
 										<td style={{ fontWeight: 500 }}>{n.subject}</td>
 										<td className="muted">{n.template ?? "—"}</td>
 										<td>
-											<span className="portal-pill" style={{
-												background: n.status === "sent" ? "#d1fae5" : "#fee2e2",
-												color: n.status === "sent" ? "#166534" : "#991b1b",
-												fontSize: "var(--text-xs)",
-											}}>
+											<span
+												className="portal-pill"
+												style={n.status === "sent" ? { background: "var(--foreground)", color: "var(--background)", fontSize: "var(--text-xs)" } : { fontSize: "var(--text-xs)" }}
+											>
 												{n.status === "sent" ? "Delivered" : "Failed"}
 											</span>
 										</td>
 										<td className="muted" style={{ fontSize: "var(--text-xs)" }}>
 											{new Date(n.sentAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
+										</td>
+										<td className="muted" style={{ fontSize: "var(--text-xs)", maxWidth: "18rem" }}>
+											{n.status === "sent" ? "—" : (n.errorMessage ?? "delivery failed")}
 										</td>
 									</tr>
 								))}
@@ -2319,727 +2430,6 @@ function SystemNotifications() {
 					</div>
 				)}
 			</div>
-		</>
-	);
-}
-
-/* ─── Security center ─── */
-function SecurityCenter() {
-	const [ipAllowlist, setIpAllowlist] = useState(["192.168.1.0/24", "41.215.44.0/22"]);
-	const [newIp, setNewIp] = useState("");
-	const [sessions, setSessions] = useState(ACTIVE_SESSIONS);
-
-	function addIp() {
-		if (!newIp.trim()) return;
-		setIpAllowlist((prev) => [...prev, newIp.trim()]);
-		setNewIp("");
-	}
-
-	function removeIp(ip: string) {
-		setIpAllowlist((prev) => prev.filter((i) => i !== ip));
-	}
-
-	function revokeSession(id: string) {
-		setSessions((prev) => prev.filter((s) => s.id !== id));
-	}
-
-	return (
-		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Failed Logins" value={String(FAILED_LOGINS.length)} note={`${FAILED_LOGINS.filter((f) => f.status === "Blocked").length} blocked`} inverted />
-				<Stat label="Active Sessions" value={String(sessions.length)} note={`${sessions.filter((s) => s.current).length} yours`} />
-				<Stat label="IP Rules" value={String(ipAllowlist.length)} note="CIDR ranges" />
-				<Stat label="MFA Coverage" value="60%" note="3 of 5 staff enrolled" />
-			</div>
-
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Failed Login Attempts</h2>
-					<div style={{ overflowX: "auto" }}>
-						<div className="ops-table-wrap">
-							<table className="admin-table">
-								<thead>
-									<tr>
-										<th>Time</th>
-										<th>Email</th>
-										<th>IP</th>
-										<th>Attempts</th>
-										<th>Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{FAILED_LOGINS.map((f) => (
-										<tr key={f.id}>
-											<td className="admin-table__mono">{new Date(f.at).toLocaleTimeString()}</td>
-											<td>{f.email}</td>
-											<td className="admin-table__mono">{f.ip}</td>
-											<td>{f.attempts}</td>
-											<td>
-												<span className="portal-pill" style={{
-													background: f.status === "Blocked" ? "var(--foreground)" : f.status === "Locked" ? "var(--muted)" : undefined,
-													color: f.status === "Blocked" ? "var(--background)" : undefined,
-													fontSize: "var(--text-xs)",
-												}}>
-													{f.status}
-												</span>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					</div>
-				</div>
-
-				<div className="card">
-					<h2 className="section-title mb-3">IP Allowlist</h2>
-					<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
-						Only these CIDR ranges can access the operations console.
-					</p>
-					<ul className="admin-ip-list">
-						{ipAllowlist.map((ip) => (
-							<li key={ip} className="admin-ip-row">
-								<span className="admin-ip-row__value">{ip}</span>
-								<button className="btn btn--ghost btn--sm admin-btn--danger" onClick={() => removeIp(ip)}>Remove</button>
-							</li>
-						))}
-					</ul>
-					<div style={{ display: "flex", gap: "0.5rem" }}>
-						<input
-							className="input input--sm"
-							placeholder="e.g. 10.0.0.0/8"
-							value={newIp}
-							onChange={(e) => setNewIp(e.target.value)}
-							onKeyDown={(e) => e.key === "Enter" && addIp()}
-						/>
-						<button className="btn btn--primary btn--sm" onClick={addIp}>Add</button>
-					</div>
-				</div>
-			</div>
-
-			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
-				<h2 className="section-title" style={{ padding: "1.25rem 1.25rem 0" }}>Active Sessions</h2>
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>User</th>
-								<th>Role</th>
-								<th>IP</th>
-								<th>Device</th>
-								<th>Started</th>
-								<th style={{ textAlign: "right" }}>Action</th>
-							</tr>
-						</thead>
-						<tbody>
-							{sessions.map((s) => (
-								<tr key={s.id}>
-									<td style={{ fontWeight: 500 }}>
-										{s.user}
-										{s.current && <span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.6 }}>YOU</span>}
-									</td>
-									<td>{ROLE_LABELS[s.role]}</td>
-									<td className="admin-table__mono">{s.ip}</td>
-									<td>{s.device}</td>
-									<td className="admin-table__mono">{new Date(s.started).toLocaleString()}</td>
-									<td style={{ textAlign: "right" }}>
-										<button
-											className="btn btn--ghost btn--sm"
-											onClick={() => revokeSession(s.id)}
-											disabled={s.current}
-										>
-											{s.current ? "Current" : "Revoke"}
-										</button>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</div>
-		</>
-	);
-}
-
-/* ─── Branch management ─── */
-
-function BranchManagement() {
-	const [branches, setBranches] = useState(BRANCHES);
-	const [showForm, setShowForm] = useState(false);
-	const [form, setForm] = useState({ name: "", country: "", city: "", address: "", phone: "", email: "" });
-
-	function addBranch() {
-		if (!form.name.trim()) return;
-		const id = form.name.toLowerCase().replace(/\s+/g, "-");
-		setBranches((prev) => [...prev, { ...form, id, status: "Active", staffCount: 0 }]);
-		setForm({ name: "", country: "", city: "", address: "", phone: "", email: "" });
-		setShowForm(false);
-	}
-
-	function toggleStatus(id: string) {
-		setBranches((prev) => prev.map((b) => b.id === id ? { ...b, status: b.status === "Active" ? "Inactive" : "Active" } : b));
-	}
-
-	return (
-		<>
-			<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
-				<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" }}>
-					<Stat label="Total Branches" value={String(branches.length)} note={`${branches.filter((b) => b.status === "Active").length} active`} />
-					<Stat label="Total Staff" value={String(branches.reduce((sum, b) => sum + b.staffCount, 0))} note="Across all branches" />
-				</div>
-				<button className="btn btn--primary btn--sm" onClick={() => setShowForm(!showForm)}>
-					{showForm ? "Cancel" : "+ Add Branch"}
-				</button>
-			</div>
-
-			{showForm && (
-				<div className="card admin-form-card" style={{ marginBottom: "2rem" }}>
-					<h2 className="admin-form-card__title">New Branch</h2>
-					<div className="admin-form-grid" style={{ marginBottom: "1rem" }}>
-						<div className="field">
-							<label>Branch name</label>
-							<input className="input input--full-border" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Cape Town Office" />
-						</div>
-						<div className="field">
-							<label>Country</label>
-							<input className="input input--full-border" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} placeholder="e.g. South Africa" />
-						</div>
-						<div className="field">
-							<label>City</label>
-							<input className="input input--full-border" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="e.g. Cape Town" />
-						</div>
-						<div className="field">
-							<label>Phone</label>
-							<input className="input input--full-border" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+27 21 555 0100" />
-						</div>
-						<div className="field">
-							<label>Address</label>
-							<input className="input input--full-border" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Street address" />
-						</div>
-						<div className="field">
-							<label>Email</label>
-							<input className="input input--full-border" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="branch@century-nit.com" />
-						</div>
-					</div>
-					<div className="admin-form-card__actions">
-						<button className="btn btn--primary btn--sm" onClick={addBranch}>Create branch</button>
-					</div>
-				</div>
-			)}
-
-			<div className="card" style={{ padding: 0, overflow: "hidden" }}>
-				<div className="ops-table-wrap">
-					<table className="admin-table">
-						<thead>
-							<tr>
-								<th>Branch</th>
-								<th>Location</th>
-								<th>Contact</th>
-								<th>Staff</th>
-								<th>Status</th>
-								<th style={{ textAlign: "right" }}>Action</th>
-							</tr>
-						</thead>
-						<tbody>
-							{branches.map((b) => (
-								<tr key={b.id}>
-									<td style={{ fontWeight: 500 }}>{b.name}</td>
-									<td className="muted">{b.city}, {b.country}</td>
-									<td style={{ fontSize: "var(--text-sm)" }}>
-										<div>{b.phone}</div>
-										<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{b.email}</div>
-									</td>
-									<td>{b.staffCount}</td>
-									<td>
-										<span className="portal-pill" style={b.status === "Active" ? { background: "var(--foreground)", color: "var(--background)" } : undefined}>
-											{b.status}
-										</span>
-									</td>
-									<td style={{ textAlign: "right" }}>
-										<button className="btn btn--ghost btn--sm" onClick={() => toggleStatus(b.id)}>
-											{b.status === "Active" ? "Deactivate" : "Activate"}
-										</button>
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</div>
-			</div>
-		</>
-	);
-}
-
-/* ─── Integrations manager ─── */
-
-type ApiKey = {
-	id: string;
-	name: string;
-	key: string;
-	fullKey: string;
-	scope: string;
-	environment: "production" | "test";
-	created: string;
-	lastUsed: string;
-	status: "Active" | "Inactive" | "Expired";
-	expiresAt: string;
-	permissions: string[];
-};
-
-type Webhook = {
-	id: string;
-	name: string;
-	url: string;
-	events: string[];
-	status: "Active" | "Inactive";
-	lastDelivery: string;
-	signingSecret: string;
-	deliveryCount: number;
-	failureCount: number;
-};
-
-const FULL_API_KEYS: ApiKey[] = [
-	{ id: "k1", name: "Paystack Production", key: "sk_live_••••••••4f2a", fullKey: "sk_live_MOCK_KEY_REPLACE_WITH_REAL", scope: "Payments", environment: "production", created: "2026-07-01", lastUsed: "2026-08-06T08:00:00Z", status: "Active", expiresAt: "2027-07-01", permissions: ["charges:write", "charges:read", "refunds:write"] },
-	{ id: "k2", name: "Paystack Test", key: "sk_test_••••••••8b3c", fullKey: "sk_test_MOCK_KEY_REPLACE_WITH_REAL", scope: "Payments", environment: "test", created: "2026-07-01", lastUsed: "2026-08-06T09:15:00Z", status: "Active", expiresAt: "2027-07-01", permissions: ["charges:write", "charges:read"] },
-	{ id: "k3", name: "Resend Email", key: "re_••••••••a8c1", fullKey: "re_MOCK_KEY_REPLACE_WITH_REAL", scope: "Email delivery", environment: "production", created: "2026-06-15", lastUsed: "2026-08-06T07:30:00Z", status: "Active", expiresAt: "2027-06-15", permissions: ["emails:send", "contacts:read"] },
-	{ id: "k4", name: "Twilio SMS", key: "AC••••••••e3b9", fullKey: "ACMOCKKEYREPLACEWITHREAL", scope: "SMS gateway", environment: "production", created: "2026-06-20", lastUsed: "2026-08-05T10:00:00Z", status: "Active", expiresAt: "2027-06-20", permissions: ["sms:send", "sms:read"] },
-	{ id: "k5", name: "Cloudflare R2", key: "••••••••d7f0", fullKey: "MOCKKEYREPLACEWITHREAL", scope: "File storage", environment: "production", created: "2026-05-10", lastUsed: "2026-08-06T09:00:00Z", status: "Active", expiresAt: "2028-05-10", permissions: ["objects:read", "objects:write", "buckets:read"] },
-	{ id: "k6", name: "Google Maps", key: "AIza••••••••2c4d", fullKey: "AIzaMOCKKEYREPLACEWITHREAL", scope: "Maps & geocoding", environment: "production", created: "2026-04-01", lastUsed: "2026-08-04T14:00:00Z", status: "Inactive", expiresAt: "2027-04-01", permissions: ["geocode:read", "maps:embed"] },
-];
-
-const FULL_WEBHOOKS: Webhook[] = [
-	{ id: "w1", name: "Paystack Events", url: "https://hooks.century-nit.com/paystack", events: ["payment.success", "payment.failed"], status: "Active", lastDelivery: "2026-08-06T08:05:00Z", signingSecret: "whsec_MOCK_SECRET_REPLACE", deliveryCount: 1247, failureCount: 2 },
-	{ id: "w2", name: "Resend Events", url: "https://hooks.century-nit.com/resend", events: ["email.delivered", "email.bounced"], status: "Active", lastDelivery: "2026-08-06T07:35:00Z", signingSecret: "whsec_MOCK_SECRET_REPLACE", deliveryCount: 856, failureCount: 0 },
-	{ id: "w3", name: "Lead Capture", url: "https://hooks.century-nit.com/leads", events: ["lead.created", "lead.stage_changed"], status: "Inactive", lastDelivery: "2026-08-01T12:00:00Z", signingSecret: "whsec_MOCK_SECRET_REPLACE", deliveryCount: 34, failureCount: 5 },
-];
-
-const SERVICE_CATALOG = [
-	{ id: "paystack", name: "Paystack", category: "Payments", description: "Payment processing for GHS and USD", connected: true, icon: "₵" },
-	{ id: "resend", name: "Resend", category: "Email", description: "Transactional email delivery", connected: true, icon: "✉" },
-	{ id: "twilio", name: "Twilio", category: "SMS", description: "SMS notifications and alerts", connected: true, icon: "SMS" },
-	{ id: "r2", name: "Cloudflare R2", category: "Storage", description: "S3-compatible object storage", connected: true, icon: "◈" },
-	{ id: "maps", name: "Google Maps", category: "Maps", description: "Geocoding and map embeds", connected: false, icon: "◉" },
-	{ id: "openai", name: "OpenAI", category: "AI", description: "Document summarization and chat", connected: false, icon: "✦" },
-];
-
-function IntegrationsManager() {
-	const [keys, setKeys] = useState<ApiKey[]>(FULL_API_KEYS);
-	const [webhooks, setWebhooks] = useState<Webhook[]>(FULL_WEBHOOKS);
-	const [env, setEnv] = useState<"all" | "production" | "test">("all");
-	const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
-	const [copiedId, setCopiedId] = useState<string | null>(null);
-	const [showKeyForm, setShowKeyForm] = useState(false);
-	const [showWebhookForm, setShowWebhookForm] = useState(false);
-	const [newKey, setNewKey] = useState({ name: "", key: "", scope: "", environment: "production" as "production" | "test" });
-	const [newWebhook, setNewWebhook] = useState({ name: "", url: "", events: "" });
-	const [testResult, setTestResult] = useState<Record<string, "pending" | "success" | "failed">>({});
-
-	function toggleReveal(id: string) {
-		setRevealedKeys((prev) => {
-			const next = new Set(prev);
-			if (next.has(id)) next.delete(id);
-			else next.add(id);
-			return next;
-		});
-	}
-
-	function copyKey(id: string, fullKey: string) {
-		navigator.clipboard?.writeText(fullKey).then(() => {
-			setCopiedId(id);
-			window.setTimeout(() => setCopiedId(null), 2000);
-		});
-	}
-
-	function addKey() {
-		if (!newKey.name.trim() || !newKey.key.trim()) return;
-		const id = `k${keys.length + 1}`;
-		const masked = newKey.key.slice(0, 4) + "••••••••" + newKey.key.slice(-4);
-		setKeys((prev) => [...prev, {
-			id,
-			name: newKey.name,
-			key: masked,
-			fullKey: newKey.key,
-			scope: newKey.scope || "Custom",
-			environment: newKey.environment,
-			created: new Date().toISOString().slice(0, 10),
-			lastUsed: new Date().toISOString(),
-			status: "Active",
-			expiresAt: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
-			permissions: [],
-		}]);
-		setNewKey({ name: "", key: "", scope: "", environment: "production" });
-		setShowKeyForm(false);
-	}
-
-	function rotateKey(id: string) {
-		setKeys((prev) => prev.map((k) => {
-			if (k.id !== id) return k;
-			const newSuffix = Math.random().toString(36).slice(2, 6);
-			const prefix = k.fullKey.split("_")[0] + (k.fullKey.includes("_") ? "_" : "");
-			const newFull = prefix + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10) + newSuffix;
-			return { ...k, key: newFull.slice(0, 4) + "••••••••" + newSuffix, fullKey: newFull, lastUsed: new Date().toISOString() };
-		}));
-	}
-
-	function revokeKey(id: string) {
-		setKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: "Inactive" as const } : k));
-	}
-
-	function addWebhook() {
-		if (!newWebhook.name.trim() || !newWebhook.url.trim()) return;
-		const id = `w${webhooks.length + 1}`;
-		const events = newWebhook.events.split(",").map((e) => e.trim()).filter(Boolean);
-		setWebhooks((prev) => [...prev, {
-			id,
-			name: newWebhook.name,
-			url: newWebhook.url,
-			events: events.length > 0 ? events : ["custom.event"],
-			status: "Active",
-			lastDelivery: new Date().toISOString(),
-			signingSecret: "whsec_" + Math.random().toString(36).slice(2, 20),
-			deliveryCount: 0,
-			failureCount: 0,
-		}]);
-		setNewWebhook({ name: "", url: "", events: "" });
-		setShowWebhookForm(false);
-	}
-
-	function toggleWebhook(id: string) {
-		setWebhooks((prev) => prev.map((w) => w.id === id ? { ...w, status: w.status === "Active" ? "Inactive" : "Active" } : w));
-	}
-
-	function testWebhook(id: string) {
-		setTestResult((prev) => ({ ...prev, [id]: "pending" }));
-		window.setTimeout(() => {
-			setTestResult((prev) => ({ ...prev, [id]: "success" }));
-			window.setTimeout(() => {
-				setTestResult((prev) => {
-					const next = { ...prev };
-					delete next[id];
-					return next;
-				});
-			}, 3000);
-		}, 1200);
-	}
-
-	const filteredKeys = env === "all" ? keys : keys.filter((k) => k.environment === env);
-	const prodCount = keys.filter((k) => k.environment === "production").length;
-	const testCount = keys.filter((k) => k.environment === "test").length;
-	const activeCount = keys.filter((k) => k.status === "Active").length;
-
-	return (
-		<>
-			{/* Stats */}
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="API Keys" value={String(keys.length)} note={`${activeCount} active`} />
-				<Stat label="Production" value={String(prodCount)} note="Live environment" />
-				<Stat label="Test / Sandbox" value={String(testCount)} note="Non-production" />
-				<Stat label="Webhooks" value={String(webhooks.filter((w) => w.status === "Active").length)} note={`${webhooks.length} configured`} inverted />
-			</div>
-
-			{/* Service Catalog */}
-			<div className="card" style={{ marginBottom: "2rem" }}>
-				<h2 className="section-title mb-3">Connected Services</h2>
-				<div className="admin-service-grid">
-					{SERVICE_CATALOG.map((svc) => (
-						<div key={svc.id} className={`admin-service-card${svc.connected ? " admin-service-card--connected" : ""}`}>
-							<div className="admin-service-card__icon">{svc.icon}</div>
-							<div className="admin-service-card__meta">
-								<p className="admin-service-card__name">{svc.name}</p>
-								<p className="admin-service-card__cat">{svc.category}</p>
-							</div>
-							<div className="admin-service-card__body">
-								<p className="admin-service-card__desc">{svc.description}</p>
-							</div>
-							<span className={`admin-service-card__badge${svc.connected ? " admin-service-card__badge--on" : ""}`}>
-								{svc.connected ? "Connected" : "Available"}
-							</span>
-					</div>
-					))}
-				</div>
-			</div>
-
-			{/* API Keys */}
-			<div className="admin-section-head">
-				<h2 className="section-title">API Keys & Credentials</h2>
-				<div className="admin-section-head__actions">
-					<div className="admin-env-tabs">
-						{(["all", "production", "test"] as const).map((e) => (
-							<button
-								key={e}
-								className={`admin-env-tab${env === e ? " admin-env-tab--active" : ""}`}
-								onClick={() => setEnv(e)}
-							>
-								{e === "all" ? "All" : e === "production" ? "Production" : "Test"}
-							</button>
-						))}
-					</div>
-					<button className="btn btn--primary btn--sm" onClick={() => setShowKeyForm(!showKeyForm)}>
-						{showKeyForm ? "Cancel" : "+ Add Key"}
-					</button>
-				</div>
-			</div>
-
-			{showKeyForm && (
-				<div className="card admin-form-card" style={{ marginBottom: "1.5rem" }}>
-					<h3 className="admin-form-card__title">New API Key</h3>
-					<div className="form-grid form-grid--2" style={{ marginBottom: "1rem" }}>
-						<div className="field">
-							<label>Key name</label>
-							<input className="input input--full-border" value={newKey.name} onChange={(e) => setNewKey({ ...newKey, name: e.target.value })} placeholder="e.g. Stripe Production" />
-						</div>
-						<div className="field">
-							<label>Secret key value</label>
-							<input className="input input--full-border" type="password" value={newKey.key} onChange={(e) => setNewKey({ ...newKey, key: e.target.value })} placeholder="sk_live_..." />
-						</div>
-						<div className="field">
-							<label>Scope / Category</label>
-							<input className="input input--full-border" value={newKey.scope} onChange={(e) => setNewKey({ ...newKey, scope: e.target.value })} placeholder="e.g. Payments" />
-						</div>
-						<div className="field">
-							<label>Environment</label>
-							<select className="input input--full-border" value={newKey.environment} onChange={(e) => setNewKey({ ...newKey, environment: e.target.value as "production" | "test" })}>
-								<option value="production">Production</option>
-								<option value="test">Test / Sandbox</option>
-							</select>
-						</div>
-					</div>
-					<div className="admin-form-card__actions">
-						<button className="btn btn--primary btn--sm" onClick={addKey}>Save key</button>
-						<button className="btn btn--ghost btn--sm" onClick={() => setShowKeyForm(false)}>Cancel</button>
-					</div>
-				</div>
-			)}
-
-			<div className="admin-key-list" style={{ marginBottom: "2.5rem" }}>
-				{filteredKeys.map((k) => {
-					const revealed = revealedKeys.has(k.id);
-					const copied = copiedId === k.id;
-					return (
-						<div key={k.id} className={`admin-key-card${k.status === "Inactive" ? " admin-key-card--inactive" : ""}`}>
-							<div className="admin-key-card__header">
-								<div className="admin-key-card__title-row">
-									<span className="admin-key-card__name">{k.name}</span>
-									<span className={`admin-env-tag admin-env-tag--${k.environment}`}>{k.environment}</span>
-									<span className={`admin-key-status admin-key-status--${k.status.toLowerCase()}`}>{k.status}</span>
-								</div>
-								<span className="admin-key-card__scope">{k.scope}</span>
-							</div>
-
-							<div className="admin-key-card__secret">
-								<code className="admin-key-card__value">{revealed ? k.fullKey : k.key}</code>
-								<div className="admin-key-card__secret-actions">
-									<button className="admin-icon-btn" onClick={() => toggleReveal(k.id)} title={revealed ? "Hide" : "Reveal"}>
-										{revealed ? <EyeOffIcon /> : <EyeIcon />}
-									</button>
-									<button className="admin-icon-btn" onClick={() => copyKey(k.id, k.fullKey)} title="Copy">
-										{copied ? <CheckIcon /> : <CopyIcon />}
-									</button>
-								</div>
-							</div>
-
-							{k.permissions.length > 0 && (
-								<div className="admin-key-card__perms">
-									{k.permissions.map((p) => (
-										<span key={p} className="admin-perm-chip">{p}</span>
-									))}
-								</div>
-							)}
-
-							<div className="admin-key-card__footer">
-								<div className="admin-key-card__meta">
-									<span className="mono">Created {k.created}</span>
-									<span className="mono">Expires {k.expiresAt}</span>
-									<span className="mono">Last used {new Date(k.lastUsed).toLocaleDateString()}</span>
-								</div>
-								<div className="admin-key-card__actions">
-									<button className="btn btn--ghost btn--sm" onClick={() => rotateKey(k.id)}>Rotate</button>
-									{k.status === "Active" ? (
-										<button className="btn btn--ghost btn--sm admin-btn--danger" onClick={() => revokeKey(k.id)}>Revoke</button>
-									) : (
-										<span className="muted mono" style={{ fontSize: "var(--text-xs)" }}>Revoked</span>
-									)}
-								</div>
-							</div>
-						</div>
-					);
-				})}
-			</div>
-
-			{/* Webhooks */}
-			<div className="admin-section-head">
-				<h2 className="section-title">Webhook Endpoints</h2>
-				<button className="btn btn--primary btn--sm" onClick={() => setShowWebhookForm(!showWebhookForm)}>
-					{showWebhookForm ? "Cancel" : "+ Add Webhook"}
-				</button>
-			</div>
-
-			{showWebhookForm && (
-				<div className="card admin-form-card" style={{ marginBottom: "1.5rem" }}>
-					<h3 className="admin-form-card__title">New Webhook</h3>
-					<div className="form-grid form-grid--2" style={{ marginBottom: "1rem" }}>
-						<div className="field">
-							<label>Webhook name</label>
-							<input className="input input--full-border" value={newWebhook.name} onChange={(e) => setNewWebhook({ ...newWebhook, name: e.target.value })} placeholder="e.g. Payment Events" />
-						</div>
-						<div className="field">
-							<label>Endpoint URL</label>
-							<input className="input input--full-border" value={newWebhook.url} onChange={(e) => setNewWebhook({ ...newWebhook, url: e.target.value })} placeholder="https://hooks.example.com/endpoint" />
-						</div>
-						<div className="field" style={{ gridColumn: "1 / -1" }}>
-							<label>Events (comma-separated)</label>
-							<input className="input input--full-border" value={newWebhook.events} onChange={(e) => setNewWebhook({ ...newWebhook, events: e.target.value })} placeholder="payment.success, payment.failed" />
-						</div>
-					</div>
-					<div className="admin-form-card__actions">
-						<button className="btn btn--primary btn--sm" onClick={addWebhook}>Create webhook</button>
-						<button className="btn btn--ghost btn--sm" onClick={() => setShowWebhookForm(false)}>Cancel</button>
-					</div>
-				</div>
-			)}
-
-			<div className="admin-webhook-list">
-				{webhooks.map((w) => {
-					const result = testResult[w.id];
-					const successRate = w.deliveryCount > 0 ? Math.round(((w.deliveryCount - w.failureCount) / w.deliveryCount) * 100) : 100;
-					return (
-						<div key={w.id} className={`admin-webhook-card${w.status === "Inactive" ? " admin-webhook-card--inactive" : ""}`}>
-							<div className="admin-webhook-card__header">
-								<div>
-									<span className="admin-webhook-card__name">{w.name}</span>
-									<span className={`admin-key-status admin-key-status--${w.status.toLowerCase()}`}>{w.status}</span>
-								</div>
-								<button className="btn btn--ghost btn--sm" onClick={() => toggleWebhook(w.id)}>
-									{w.status === "Active" ? "Disable" : "Enable"}
-								</button>
-							</div>
-
-							<div className="admin-webhook-card__url">
-								<code>{w.url}</code>
-							</div>
-
-							<div className="admin-webhook-card__events">
-								{w.events.map((ev) => (
-									<span key={ev} className="admin-event-chip">{ev}</span>
-								))}
-							</div>
-
-							<div className="admin-webhook-card__secret">
-								<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>Signing secret</span>
-								<code className="admin-webhook-card__secret-val">{w.signingSecret}</code>
-								<button className="admin-icon-btn" onClick={() => navigator.clipboard?.writeText(w.signingSecret)} title="Copy secret">
-									<CopyIcon />
-								</button>
-							</div>
-
-							<div className="admin-webhook-card__stats">
-								<div className="admin-webhook-stat">
-									<span className="admin-webhook-stat__value">{w.deliveryCount.toLocaleString()}</span>
-									<span className="admin-webhook-stat__label">Deliveries</span>
-								</div>
-								<div className="admin-webhook-stat">
-									<span className="admin-webhook-stat__value">{w.failureCount}</span>
-									<span className="admin-webhook-stat__label">Failures</span>
-								</div>
-								<div className="admin-webhook-stat">
-									<span className={`admin-webhook-stat__value${successRate < 95 ? " admin-webhook-stat__value--warn" : ""}`}>{successRate}%</span>
-									<span className="admin-webhook-stat__label">Success rate</span>
-								</div>
-								<div className="admin-webhook-stat">
-									<span className="admin-webhook-stat__value mono">{new Date(w.lastDelivery).toLocaleDateString()}</span>
-									<span className="admin-webhook-stat__label">Last delivery</span>
-								</div>
-							</div>
-
-							<div className="admin-webhook-card__footer">
-								<button
-									className={`btn btn--sm ${result === "success" ? "btn--primary" : "btn--ghost"}`}
-									onClick={() => testWebhook(w.id)}
-									disabled={result === "pending" || w.status === "Inactive"}
-								>
-									{result === "pending" ? "Sending..." : result === "success" ? "✓ Delivered" : "Send test"}
-								</button>
-							</div>
-						</div>
-					);
-				})}
-			</div>
-		</>
-	);
-}
-
-/* ─── Small icons for integrations ─── */
-
-function EyeIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-			<circle cx="12" cy="12" r="3" />
-		</svg>
-	);
-}
-
-function EyeOffIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-			<line x1="1" y1="1" x2="23" y2="23" />
-		</svg>
-	);
-}
-
-function CopyIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-			<rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-			<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-		</svg>
-	);
-}
-
-function CheckIcon() {
-	return (
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-			<polyline points="20 6 9 17 4 12" />
-		</svg>
-	);
-}
-
-/* ─── Feature flags ─── */
-
-function FeatureFlagsManager() {
-	const [flags, setFlags] = useState(FEATURE_FLAGS);
-
-	function toggle(id: string) {
-		setFlags((prev) => prev.map((f) => f.id === id ? { ...f, enabled: !f.enabled } : f));
-	}
-
-	const categories = [...new Set(flags.map((f) => f.category))];
-
-	return (
-		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Total Flags" value={String(flags.length)} note={`${flags.filter((f) => f.enabled).length} enabled`} />
-				<Stat label="Categories" value={String(categories.length)} note={categories.join(", ")} />
-				<Stat label="Disabled" value={String(flags.filter((f) => !f.enabled).length)} note="Pending rollout" inverted />
-			</div>
-
-			{categories.map((cat) => (
-				<div key={cat} className="card" style={{ marginBottom: "1.5rem" }}>
-					<h2 className="section-title mb-3">{cat}</h2>
-					<div className="admin-toggle-list">
-						{flags.filter((f) => f.category === cat).map((f) => (
-							<label key={f.id} className="admin-toggle-row">
-								<div>
-									<span className="admin-toggle-row__label">{f.name}</span>
-									<span className="admin-toggle-row__desc">{f.description}</span>
-								</div>
-								<input type="checkbox" checked={f.enabled} onChange={() => toggle(f.id)} />
-							</label>
-						))}
-					</div>
-				</div>
-			))}
 		</>
 	);
 }
@@ -3063,4 +2453,22 @@ function Row({ label, value }: { label: string; value: string }) {
 			<span style={{ textAlign: "right" }}>{value}</span>
 		</li>
 	);
+}
+
+function formatPresence(lastSeenAt: string | null): string {
+	if (!lastSeenAt) return "—";
+	const ms = Date.now() - new Date(lastSeenAt).getTime();
+	if (ms < 2 * 60_000) return "● online";
+	if (ms < 60 * 60_000) return `${Math.floor(ms / 60_000)}m ago`;
+	if (ms < 24 * 60 * 60_000) return `${Math.floor(ms / 60 / 60_000)}h ago`;
+	return `${Math.floor(ms / 24 / 60 / 60_000)}d ago`;
+}
+
+function shortUserAgent(ua: string | null): string {
+	if (!ua) return "—";
+	if (/edg/i.test(ua)) return "Edge";
+	if (/chrome/i.test(ua)) return "Chrome";
+	if (/safari/i.test(ua) && !/chrome/i.test(ua)) return "Safari";
+	if (/firefox/i.test(ua)) return "Firefox";
+	return ua.slice(0, 40);
 }

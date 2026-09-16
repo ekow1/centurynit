@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import {
 	addCaseComment,
+	assertBranchScope,
 	canSeeAllCases,
 	requestCaseDocuments,
 	serializeApplication,
@@ -528,6 +529,9 @@ consultationsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may delegate consultations");
 		}
 		const { id } = c.req.valid("param");
+		const target = await getConsultation(id);
+		if (!target) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+		assertBranchScope(staff, target.branch);
 		const body = c.req.valid("json");
 		const updated = await delegateCoordinator({
 			consultationId: id,
@@ -569,6 +573,9 @@ consultationsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Only managers and owners may reassign coordinators");
 		}
 		const { id } = c.req.valid("param");
+		const target = await getConsultation(id);
+		if (!target) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+		assertBranchScope(staff, target.branch);
 		const body = c.req.valid("json");
 		const updated = await reassignCoordinator({
 			consultationId: id,
@@ -629,6 +636,9 @@ consultationsRouter.openapi(
 		if (!canSeeAllCases(staff)) {
 			throw new HttpError(403, "FORBIDDEN", "Only managers can take back coordination");
 		}
+		const target = await getConsultation(c.req.valid("param").id);
+		if (!target) throw new HttpError(404, CASE_ERROR_CODES.CONSULTATION_NOT_FOUND, "Consultation not found");
+		assertBranchScope(staff, target.branch);
 		const updated = await reclaimConsultationCoordination(
 			c.req.valid("param").id,
 			actorFrom(staff),
@@ -689,6 +699,7 @@ consultationsRouter.openapi(
 			throw new HttpError(403, "FORBIDDEN", "Only managers set the duty coordinator");
 		}
 		const body = c.req.valid("json");
+		assertBranchScope(staff, body.branch);
 		return c.json(
 			await setCoordinatorDuty({
 				branch: body.branch,

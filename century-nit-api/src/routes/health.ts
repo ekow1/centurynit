@@ -55,4 +55,73 @@ health.openapi(route, async (c) => {
 	);
 });
 
+/* ── GET /health/detail ──────────────────────────────────────────────────────
+ * The ops System Overview reads this. Unlike `/health` it always answers 200 —
+ * it *reports* component state rather than gating traffic on it. Nothing here
+ * is declared; every number is measured at request time.
+ */
+
+const detailRoute = createRoute({
+	method: "get",
+	path: "/detail",
+	tags: ["Health"],
+	responses: {
+		200: { description: "Component health report" },
+	},
+});
+
+health.openapi(detailRoute, async (c) => {
+	const started = Date.now();
+
+	let dbMs: number | null = null;
+	try {
+		const t0 = Date.now();
+		await db.execute(sql`SELECT 1`);
+		dbMs = Date.now() - t0;
+	} catch {
+		dbMs = null;
+	}
+
+	// Redis + queue depths. BullMQ queues share the one ioredis connection; a
+	// ping failure also means the queues cannot drain.
+	let redisMs: number | null = null;
+	let queues: { name: string; waiting: number; failed: number }[] = [];
+	try {
+		const { connection, emailQueue, calendarQueue, pushQueue, campaignQueue } = await import("../worker/queues.js");
+		const t0 = Date.now();
+		await connection.ping();
+		redisMs = Date.now() - t0;
+		queues = await Promise.all(
+			[
+				["email", emailQueue],
+				["calendar", calendarQueue],
+				["push", pushQueue],
+				["campaign", campaignQueue],
+			] as const,
+		).then(async (list) =>
+			Promise.all(
+				list.map(async ([name, q]) => {
+					const counts = await q.getJobCounts("waiting", "delayed", "failed");
+					return { name, waiting: counts.waiting + (counts.delayed ?? 0), failed: counts.failed ?? 0 };
+				}),
+			),
+		);
+	} catch {
+		redisMs = null;
+	}
+
+	return c.json({
+		status: dbMs !== null ? "ok" : "degraded",
+		latencyMs: Date.now() - started,
+		components: {
+			database: { ok: dbMs !== null, ms: dbMs },
+			redis: { ok: redisMs !== null, ms: redisMs },
+			queues,
+		},
+		uptimeSeconds: Math.floor(process.uptime()),
+		node: process.version,
+		timestamp: new Date().toISOString(),
+	});
+});
+
 export { health };

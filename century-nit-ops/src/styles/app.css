@@ -5869,3 +5869,22 @@ input[type="time"].input {
 		grid-template-columns: 1fr;
 	}
 }
+
+/* ── Admin flash banners — monochrome status, no color semantics ────────── */
+.admin-flash {
+	padding: 0.75rem 1rem;
+	font-size: var(--text-sm);
+	margin-bottom: 1.5rem;
+	border: 1px solid var(--foreground);
+}
+
+.admin-flash--ok {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.admin-flash--error {
+	background: transparent;
+	color: var(--foreground);
+	border-left: 3px solid var(--foreground);
+}

@@ -497,6 +497,8 @@ export const staffApi = {
 			active: boolean;
 			hasLogin: boolean;
 			mfaEnabled: boolean;
+			lastSeenAt: string | null;
+			ownedConversations: number;
 			canCoordinate: boolean;
 			grantExpiresAt: string | null;
 		}[];
@@ -552,8 +554,25 @@ export const staffApi = {
 		mfaNotEnrolled: number;
 		activeSessions: number;
 		providers: { id: string; label: string; enabled: boolean }[];
+		mfaRoster: { id: string; name: string; email: string; role: string; branch: string | null; enrolled: boolean; hasLogin: boolean }[];
 	}> {
 		return request(`${API_PREFIX}/staff/auth-stats`);
+	},
+
+	sessions(): Promise<{
+		sessions: {
+			id: string;
+			email: string;
+			name: string;
+			role: string;
+			ip: string | null;
+			userAgent: string | null;
+			createdAt: string;
+			expiresAt: string;
+			current: boolean;
+		}[];
+	}> {
+		return request(`${API_PREFIX}/staff/sessions`);
 	},
 };
 

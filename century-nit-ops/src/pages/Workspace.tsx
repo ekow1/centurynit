@@ -29,6 +29,8 @@ import { CaseTabs, useCaseTab } from "./case/CaseTabs";
 import { WorkspaceCaseload } from "./WorkspaceCaseload";
 import { FilterGroup } from "./FilterGroup";
 import { PreviewPane } from "./TaskPreview";
+import { DelegateSheet } from "./case/DelegateSheet";
+import { Toast } from "./OpsDialogs";
 
 /**
  * F-shaped workspace / mission control.
@@ -55,6 +57,7 @@ const QUEUE_FILTERS = [
 	{ id: "all", label: "All" },
 	{ id: "mine", label: "Mine" },
 	{ id: "needs_assignment", label: "No handler" },
+	{ id: "coordinated", label: "Coordinated" },
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
 ] as const;
@@ -78,6 +81,10 @@ const passesQueueFilter = (item: PendingTask, filter: QueueFilter, me?: { name?:
 	if (filter === "mine") {
 		const who = [me?.name, me?.email].filter(Boolean);
 		return who.some((w) => item.owner === w);
+	}
+	// Delegated cases — a coordinator steers them; the manager watches here.
+	if (filter === "coordinated") {
+		return item.kind === "consultation" && Boolean(item.record.coordinatorId);
 	}
 	return item.category === filter;
 };
@@ -140,6 +147,8 @@ export function Workspace() {
 	// The open task is `?open=` — a deep link opens it even when the chips
 	// would have filtered it out.
 	const [openId, setOpenId] = useUrlParam("open");
+	const [delegateOpen, setDelegateOpen] = useState(false);
+	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
 	const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
@@ -260,6 +269,7 @@ export function Workspace() {
 		counts.set("overdue", items.filter((i) => isOverdue(i)).length);
 		const me = [opsUser?.name, opsUser?.email].filter(Boolean);
 		counts.set("mine", items.filter((i) => me.some((w) => i.owner === w)).length);
+		counts.set("coordinated", items.filter((i) => i.kind === "consultation" && Boolean(i.record.coordinatorId)).length);
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
 		return { counts, totalOutstanding };
 	}, [items, applicants, opsUser]);
@@ -408,6 +418,17 @@ export function Workspace() {
 									</select>
 								</label>
 							)}
+							{canAssignWork && (
+								<button
+									type="button"
+									className="btn btn--ghost btn--sm"
+									disabled={selected?.kind !== "consultation"}
+									title={selected?.kind === "consultation" ? "Delegate this case or its journey" : "Select a consultation to delegate"}
+									onClick={() => setDelegateOpen(true)}
+								>
+									Delegate…
+								</button>
+							)}
 							{loading && <span className="cn-filter__label" style={{ marginLeft: "auto" }}>Loading…</span>}
 							</div>
 						</div>
@@ -450,6 +471,15 @@ export function Workspace() {
 					) : null
 				}
 			/>}
+			{selected?.kind === "consultation" && (
+				<DelegateSheet
+					open={delegateOpen}
+					onClose={() => setDelegateOpen(false)}
+					consultation={selected.record}
+					onToast={(type, message) => setToast({ type, message })}
+				/>
+			)}
+			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

@@ -17,6 +17,7 @@ import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
+import { useJoinMeeting } from "./case/ConsultationCall";
 import { applicationsApi, bookingsApi } from "century-nit-core/api";
 import { AssignSheet } from "./case/AssignSheet";
 import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest, type WorkspaceTab } from "century-nit-shared";
@@ -688,8 +689,10 @@ function PreviewPane({
 }
 
 function ConsultationDetails({ c }: { c: MockConsultation }) {
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	return (
 		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+			{overlay}
 			<p style={{ margin: 0 }}><strong>Status:</strong> {c.status}</p>
 			<p style={{ margin: 0 }}><strong>Type:</strong> {c.type}</p>
 			<p style={{ margin: 0 }}><strong>When:</strong> {c.dateTime}</p>
@@ -698,9 +701,14 @@ function ConsultationDetails({ c }: { c: MockConsultation }) {
 			{c.meetingLink && (
 				<p style={{ margin: 0 }}>
 					<strong>Meeting:</strong>{" "}
-					<a href={c.meetingLink} target="_blank" rel="noreferrer" className="link" style={{ wordBreak: "break-all" }}>
-						{c.meetingLink}
-					</a>
+					{c.bookingId ? (
+						<button type="button" className="link" disabled={joining} onClick={() => void join(c.bookingId!, `Consultation · ${c.ref}`)}>
+							{joining ? "Joining…" : "Join meeting"}
+						</button>
+					) : (
+						<span className="link" style={{ wordBreak: "break-all" }}>{c.meetingLink}</span>
+					)}
+					{joinError && <span className="muted"> · {joinError}</span>}
 				</p>
 			)}
 		</div>

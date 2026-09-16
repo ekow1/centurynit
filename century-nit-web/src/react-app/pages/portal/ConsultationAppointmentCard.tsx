@@ -83,7 +83,11 @@ export function ConsultationAppointmentCard() {
 
 	async function joinTicket(): Promise<JoinResult | null> {
 		if (!booking.bookingId) {
-			return booking.meetingLink ? { url: booking.meetingLink, provider: "manual" } : null;
+			const link = booking.meetingLink ?? "";
+			// Token'd rooms have no shareable URL — without a booking to mint
+			// through, opening one is a dead end (blank page / "not available").
+			if (link.startsWith("livekit:") || link.includes("daily.co")) return null;
+			return link ? { url: link, provider: "manual" } : null;
 		}
 		return apiFetch<JoinResult>(
 			`${API_PREFIX}/bookings/${booking.bookingId}/join`,
@@ -98,8 +102,10 @@ export function ConsultationAppointmentCard() {
 			const res = await joinTicket();
 			if (res?.provider === "livekit" && res.token) {
 				setCall({ url: res.url, token: res.token });
-			} else if (res?.url) {
+			} else if (res?.url && /^https?:/i.test(res.url)) {
 				window.open(res.url, "_blank", "noopener,noreferrer");
+			} else {
+				setJoinError("No usable meeting link on this booking yet");
 			}
 		} catch (err) {
 			setJoinError(err instanceof Error ? err.message : "Could not join the meeting");
@@ -230,16 +236,24 @@ export function ConsultationAppointmentCard() {
 							<span className="appt__value">
 								Online video call
 								{booking.meetingLink ? (
-									/* Not .mono - that class uppercases, and a mangled URL
-									   is worse than no URL */
-									<a
-										className="appt__link"
-										href={booking.meetingLink}
-										target="_blank"
-										rel="noreferrer"
-									>
-										{booking.meetingLink}
-									</a>
+									booking.meetingLink.startsWith("livekit:") || booking.meetingLink.includes("daily.co") ? (
+										/* Token'd rooms have no shareable URL — Join mints
+										   a per-person credential. Never render the raw value. */
+										<span className="appt__note">
+											Private room — use Join above when it opens
+										</span>
+									) : (
+										/* Not .mono - that class uppercases, and a mangled URL
+										   is worse than no URL */
+										<a
+											className="appt__link"
+											href={booking.meetingLink}
+											target="_blank"
+											rel="noreferrer"
+										>
+											{booking.meetingLink}
+										</a>
+									)
 								) : (
 									<span className="appt__note">
 										Link is sent once the branch confirms

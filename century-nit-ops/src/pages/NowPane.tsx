@@ -4,6 +4,7 @@ import type { Booking } from "century-nit-shared";
 import { COMMENT_KIND_LABELS } from "century-nit-core/ops";
 import { useOpsAuth } from "./OpsAuthContext";
 import { taskActionLabel, whenLabel, type PendingTask } from "../lib/pendingTasks";
+import { useJoinMeeting } from "./case/ConsultationCall";
 
 /**
  * The Workspace rail with nothing selected: what is happening now.
@@ -57,6 +58,7 @@ export function NowPane({
 	onSelect: (task: PendingTask) => void;
 }) {
 	const { opsUser, canAssignWork, canSeeAllBranches } = useOpsAuth();
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	// The clock in the bar, and everything relative to it.
 	const [now, setNow] = useState(() => new Date());
 	useEffect(() => {
@@ -115,9 +117,9 @@ export function NowPane({
 				</p>
 				<div className="cn-now__actions">
 					{live.meetingUrl ? (
-						<a className="btn btn--primary btn--sm" href={live.meetingUrl} target="_blank" rel="noreferrer">
-							Join meeting
-						</a>
+						<button type="button" className="btn btn--primary btn--sm" disabled={joining} onClick={() => void join(live.id, `Consultation · ${live.clientName}`)}>
+							{joining ? "Joining…" : "Join meeting"}
+						</button>
 					) : (
 						<button type="button" className="btn btn--primary btn--sm" disabled>
 							Join meeting
@@ -157,10 +159,10 @@ export function NowPane({
 					{c.rescheduleRequestedAt ? " · reschedule asked" : ""}
 				</p>
 				<div className="cn-now__actions">
-					{c.meetingLink && joinOpen ? (
-						<a className="btn btn--primary btn--sm" href={c.meetingLink} target="_blank" rel="noreferrer">
-							Join meeting
-						</a>
+					{c.meetingLink && joinOpen && c.bookingId ? (
+						<button type="button" className="btn btn--primary btn--sm" disabled={joining} onClick={() => void join(c.bookingId!, `Consultation · ${c.applicantName}`)}>
+							{joining ? "Joining…" : "Join meeting"}
+						</button>
 					) : (
 						<button type="button" className="btn btn--primary btn--sm" disabled>
 							Join meeting
@@ -216,8 +218,10 @@ export function NowPane({
 	return (
 		<>
 			{bar}
+			{overlay}
 			<div className="cn-scaffold__body">
 				<div className="cn-detail">
+					{joinError && <p className="muted" style={{ fontSize: "var(--text-xs)" }}>{joinError}</p>}
 					{head}
 					{record.length > 0 && (
 						<div className="card cn-now">

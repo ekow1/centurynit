@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
+import { bookingsApi } from "century-nit-core/api";
 
 type CallState = "connecting" | "connected" | "ended" | "error";
 
@@ -279,4 +280,48 @@ function CallButton({
 			{children}
 		</button>
 	);
+}
+
+/**
+ * The one join path for every surface — `POST /bookings/:id/join` decides
+ * authz, mints the per-person credential, and returns either a token'd URL
+ * to open (Daily, Google, manual links) or {ws host, token} for the in-app
+ * LiveKit call. The stored meetingUrl is never opened directly — for
+ * token'd providers it isn't a usable link at all.
+ */
+export function useJoinMeeting() {
+	const [call, setCall] = useState<{ url: string; token: string; title: string } | null>(null);
+	const [joining, setJoining] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const join = useCallback(async (bookingId: string, title = "Consultation") => {
+		setJoining(true);
+		setError(null);
+		try {
+			const res = await bookingsApi.joinMeeting(bookingId);
+			if (res?.provider === "livekit" && res.token) {
+				setCall({ url: res.url, token: res.token, title });
+			} else if (res?.url && /^https?:/i.test(res.url)) {
+				window.open(res.url, "_blank", "noopener,noreferrer");
+			} else {
+				setError("No usable meeting link on this booking yet");
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not join the meeting");
+		} finally {
+			setJoining(false);
+		}
+	}, []);
+
+	const overlay = call ? (
+		<ConsultationCall
+			url={call.url}
+			token={call.token}
+			title={call.title}
+			waitingFor="the client"
+			onClose={() => setCall(null)}
+		/>
+	) : null;
+
+	return { join, joining, error, overlay };
 }

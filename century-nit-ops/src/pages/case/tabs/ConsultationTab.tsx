@@ -1,13 +1,16 @@
 import { useNavigate } from "react-router-dom";
 
 import type { MockApplication, MockConsultation } from "century-nit-core/ops";
+import { useJoinMeeting } from "../ConsultationCall";
 
 
 /** Consultation — the summary of the meeting this case was opened from, and the door to it. */
 export function ConsultationTab({ app, consultation }: { app: MockApplication; consultation: MockConsultation }) {
 	const navigate = useNavigate();
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	return (
 		<>
+			{overlay}
 			<div className="card">
 				<p className="eyebrow mb-2">Consultation {consultation.ref}</p>
 				<div className="ops-grid cn-facts">
@@ -21,9 +24,14 @@ export function ConsultationTab({ app, consultation }: { app: MockApplication; c
 						<div>
 							<p className="muted text-xs">Meeting link</p>
 							<p>
-								<a href={consultation.meetingLink} target="_blank" rel="noreferrer" className="link-arrow">
-									Join meeting ↗
-								</a>
+								{consultation.bookingId ? (
+									<button type="button" className="link-arrow" disabled={joining} onClick={() => void join(consultation.bookingId!, `Consultation · ${consultation.ref}`)}>
+										{joining ? "Joining…" : "Join meeting →"}
+									</button>
+								) : (
+									<span className="muted">Saved on the case</span>
+								)}
+								{joinError && <span className="muted" style={{ marginLeft: "0.5rem" }}>{joinError}</span>}
 							</p>
 						</div>
 					)}

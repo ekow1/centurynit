@@ -3,6 +3,7 @@ import { ApiError, bookingsApi } from "century-nit-core/api";
 import { formatDualCurrency } from "century-nit-core";
 import { useNotifier } from "../../components/notifier/Notifier";
 import { Button } from "../../components/ui/Button";
+import { useJoinMeeting } from "../../components/ConsultationCall";
 import { FALLBACK_FEE_SCHEDULE, useAppState } from "../../context/AppState";
 import { usdFromCents } from "century-nit-shared";
 import type { AvailabilitySlot, Booking } from "century-nit-shared";
@@ -310,6 +311,7 @@ function useCancelBooking(onChanged: () => void) {
 function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
 	const [rescheduling, setRescheduling] = useState(false);
 	const { cancel, busy, error } = useCancelBooking(onChanged);
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	const { displayStatus, isOver } = displayState(booking);
 	const copy = STATUS_COPY[displayStatus] ?? { label: displayStatus, note: "" };
 	const d = new Date(booking.startsAt);
@@ -337,13 +339,16 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 						<p className="ptable__sub">Meeting link is being prepared and will be emailed to you.</p>
 					)}
 					{error && <p className="appt-error">{error}</p>}
+					{joinError && <p className="appt-error">{joinError}</p>}
 				</td>
 				<td className="mono" style={{ fontSize: "0.7rem" }}>{booking.employeeName?.toUpperCase() ?? "—"}</td>
 				<td><span className={statusPill(displayStatus)}>{copy.label}</span></td>
 				<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
 					{booking.meetingUrl && !isOver ? (
 						<>
-							<a className="jlink" href={booking.meetingUrl} target="_blank" rel="noreferrer">Join</a>
+							<button type="button" className="jlink" disabled={joining} onClick={() => void join(booking.id, `${cap(booking.serviceName)} · ${booking.reference ?? ""}`)}>
+								{joining ? "Joining…" : "Join"}
+							</button>
 							{" · "}
 						</>
 					) : null}
@@ -374,6 +379,7 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 					</td>
 				</tr>
 			) : null}
+			{overlay}
 		</>
 	);
 }
@@ -385,6 +391,7 @@ export function PortalAppointments() {
 	const [error, setError] = useState<string | null>(null);
 	const [filter, setFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled">("All");
 	const [reschedulingNext, setReschedulingNext] = useState(false);
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 
 	const load = useCallback(() => {
 		bookingsApi
@@ -447,6 +454,7 @@ export function PortalAppointments() {
 
 			{error && <p className="appt-error">{error}</p>}
 			{!bookings && !error && <p className="appt-muted">Loading…</p>}
+			{overlay}
 
 			{/* Next up — lifted out of the book */}
 			{next && nextState ? (
@@ -492,10 +500,11 @@ export function PortalAppointments() {
 					</div>
 					<div className="pnext__acts">
 						{next.meetingUrl ? (
-							<a className="btn btn--primary" href={next.meetingUrl} target="_blank" rel="noreferrer">
-								Join the meeting
-							</a>
+							<button type="button" className="btn btn--primary" disabled={joining} onClick={() => void join(next.id, `${cap(next.serviceName)} · ${next.reference ?? ""}`)}>
+								{joining ? "Joining…" : "Join the meeting"}
+							</button>
 						) : null}
+						{joinError ? <p className="appt-error" style={{ margin: 0 }}>{joinError}</p> : null}
 						{!next.rescheduleRequestedAt ? (
 							<button type="button" className="btn btn--ghost" onClick={() => setReschedulingNext((v) => !v)}>
 								{reschedulingNext ? "Keep current time" : "Reschedule"}

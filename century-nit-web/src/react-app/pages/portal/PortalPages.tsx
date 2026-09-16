@@ -10,6 +10,7 @@ import { downloadReceipt } from "../../lib/receipt";
 import { StageConsentCard } from "../../components/StageConsentCard";
 import { EnrolmentDecision } from "../../components/EnrolmentDecision";
 import { AssessmentOutcomeCard } from "../../components/AssessmentOutcomeCard";
+import { useJoinMeeting } from "../../components/ConsultationCall";
 import {
 	hasAcceptedOffer,
 	hasSchoolPackage,
@@ -2111,6 +2112,7 @@ export function PortalConsultation() {
 	const [liveConsultation, setLiveConsultation] = useState<ApiConsultation | null>(null);
 	const [liveApplication, setLiveApplication] = useState<ApiApplication | null>(null);
 	const [loading, setLoading] = useState(true);
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 
 	const refreshLiveCase = useCallback(async () => {
 		try {
@@ -2283,6 +2285,9 @@ export function PortalConsultation() {
 	const bookedDay = startsAt ? startsAt.toLocaleDateString(undefined, { day: "numeric", month: "short" }) : booking.date || null;
 	const branchName = getBranchName(liveConsultation?.branch ?? booking.branchId);
 	const meetingUrl = workflowStatus !== "CLOSED" ? (liveConsultation?.meetingUrl ?? null) : null;
+	// The stored meetingUrl is never opened raw — for token'd providers it
+	// isn't a usable link. Joins mint a per-person credential through /join.
+	const meetingBookingId = liveConsultation?.bookingId ?? booking.bookingId ?? null;
 	const appointmentDone = workflowStatus === "COMPLETED" || workflowStatus === "CLOSED" || Boolean(activeOutcome);
 	const decisionOpen = Boolean(activeOutcome) && (applicationConsent === null || applicationConsent === "pending");
 	const consentDecision = decisionOf(applicationConsent);
@@ -2331,12 +2336,12 @@ export function PortalConsultation() {
 				: meetingUrl && startsInFuture
 					? {
 							title: `${whenShort} — your link is ready`,
-							detail: "The video link opens in a new tab. Your consultant reads your assessment before you meet.",
-							cta: (
-								<a className="btn btn--inverted" href={meetingUrl} target="_blank" rel="noopener noreferrer">
-									Join video meeting →
-								</a>
-							),
+							detail: "Join opens the video call right here. Your consultant reads your assessment before you meet.",
+							cta: meetingBookingId ? (
+								<button type="button" className="btn btn--inverted" disabled={joining} onClick={() => void join(meetingBookingId, `Consultation · ${activeRef ?? ""}`)}>
+									{joining ? "Joining…" : "Join video meeting →"}
+								</button>
+							) : null,
 						}
 					: assessmentGaps.length > 0
 						? {
@@ -2376,6 +2381,8 @@ export function PortalConsultation() {
 
 	return (
 		<div className="portal-page">
+			{overlay}
+			{joinError ? <p className="appt-error">{joinError}</p> : null}
 			<header className="portal-page__header">
 				<div>
 					<p className="eyebrow">Chapter I · Consultation</p>
@@ -2467,11 +2474,11 @@ export function PortalConsultation() {
 										</span>
 									</div>
 								</div>
-								{meetingUrl ? (
-									<a href={meetingUrl} target="_blank" rel="noopener noreferrer" className="btn btn--primary btn--sm mt-4">
-										Join video meeting →
-									</a>
-								) : (
+								{meetingUrl && meetingBookingId ? (
+									<button type="button" onClick={() => void join(meetingBookingId, `Consultation · ${activeRef ?? ""}`)} disabled={joining} className="btn btn--primary btn--sm mt-4">
+										{joining ? "Joining…" : "Join video meeting →"}
+									</button>
+								) : meetingUrl ? null : (
 									<p className="muted mt-3" style={{ fontSize: "0.85rem" }}>
 										The meeting link appears here once your consultant is seated.
 									</p>

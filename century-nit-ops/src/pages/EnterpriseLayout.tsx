@@ -14,6 +14,7 @@ import { OpsNotificationBell } from "./OpsNotificationBell";
 import { OpsAppBar, OpsTabBar, type OpsNavItem } from "./OpsMobileNav";
 import { publicSiteUrl } from "../lib/publicSite";
 import { useFeeCatalogue } from "../hooks/useFeeCatalogue";
+import { useJoinMeeting } from "./case/ConsultationCall";
 import { useWorkQueue } from "../hooks/useWorkQueue";
 import { useChatConversations } from "../hooks/useChatApi";
 import { documentsApi } from "century-nit-core/api";
@@ -308,6 +309,7 @@ function OpsShell() {
 	}, [menuOpen]);
 	const isDev = import.meta.env.DEV;
 	const { openCommandPalette, resetOpsState } = useOpsState();
+	const { join, overlay: callOverlay } = useJoinMeeting();
 	const location = useLocation();
 	const [confirmReset, setConfirmReset] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -374,6 +376,7 @@ function OpsShell() {
 	return (
 		<div className={`portal${sidebarCollapsed ? " portal--collapsed" : ""}`}>
 			<OpsCommandPalette />
+			{callOverlay}
 
 			<aside className="portal__aside">
 				<div className="portal__brand">
@@ -469,10 +472,17 @@ function OpsShell() {
 
 						{/* Now — the live consultation from any page; else the next slot today. */}
 						{signals.live ? (
-							<a className="ops-live" href={signals.live.meetingUrl ?? "/live-meetings"} target={signals.live.meetingUrl ? "_blank" : undefined} rel={signals.live.meetingUrl ? "noreferrer" : undefined} title="Join the live meeting">
-								<span className="cn-now__dot" style={{ background: "currentColor" }} aria-hidden />
-								Live · {signals.live.clientName} · {signals.liveMinutes} min{signals.live.meetingUrl ? " · join" : ""}
-							</a>
+							signals.live.meetingUrl ? (
+								<button type="button" className="ops-live" onClick={() => void join(signals.live!.id, `Consultation · ${signals.live!.clientName}`)} title="Join the live meeting">
+									<span className="cn-now__dot" style={{ background: "currentColor" }} aria-hidden />
+									Live · {signals.live.clientName} · {signals.liveMinutes} min · join
+								</button>
+							) : (
+								<Link className="ops-live" to="/live-meetings" title="A consultation is live">
+									<span className="cn-now__dot" style={{ background: "currentColor" }} aria-hidden />
+									Live · {signals.live.clientName} · {signals.liveMinutes} min
+								</Link>
+							)
 						) : signals.next ? (
 							<Link className="ops-live ops-live--next" to={signals.next.linkTo} title="Your next consultation today">
 								<span className="cn-now__dot cn-now__dot--hollow" aria-hidden />

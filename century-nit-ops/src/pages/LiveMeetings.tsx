@@ -4,6 +4,7 @@ import { ApiError, bookingsApi } from "century-nit-core/api";
 import type { Booking } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
+import { useJoinMeeting } from "./case/ConsultationCall";
 
 /**
  * Live meetings widget — shows online consultations currently in progress.
@@ -118,6 +119,7 @@ export function LiveMeetings({ compact = false }: { compact?: boolean }) {
 }
 
 function LiveMeetingRow({ booking }: { booking: Booking }) {
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	const start = new Date(booking.startsAt);
 	const elapsed = Date.now() - start.getTime();
 	return (
@@ -149,16 +151,18 @@ function LiveMeetingRow({ booking }: { booking: Booking }) {
 				</span>
 			</div>
 			{booking.meetingUrl && (
-				<a
-					href={booking.meetingUrl}
-					target="_blank"
-					rel="noopener noreferrer"
+				<button
+					type="button"
+					disabled={joining}
+					onClick={() => void join(booking.id, `Consultation · ${booking.reference ?? booking.clientName}`)}
 					className="btn btn--primary btn--sm"
 					style={{ whiteSpace: "nowrap", flexShrink: 0 }}
 				>
-					Join →
-				</a>
+					{joining ? "Joining…" : "Join →"}
+				</button>
 			)}
+			{joinError && <span className="muted" style={{ fontSize: "var(--text-xs)" }}>{joinError}</span>}
+			{overlay}
 		</li>
 	);
 }

@@ -562,13 +562,21 @@ export function ConsultationDetail({
 												// in-app; everything else opens externally.
 												setJoiningMeet(true);
 												try {
+													// A token'd-provider link without a booking can't be
+													// opened raw — there's no URL that admits anyone.
+													const stored = consultation.meetingLink ?? "";
+													if (!consultation.bookingId && (stored.startsWith("livekit:") || stored.includes("daily.co"))) {
+														throw new Error("This is a private room — it needs a booking on the case to join through.");
+													}
 													const res = consultation.bookingId
 														? await bookingsApi.joinMeeting(consultation.bookingId)
-														: { url: consultation.meetingLink ?? "", provider: "manual" };
+														: { url: stored, provider: "manual" };
 													if (res.provider === "livekit" && res.token) {
 														setCall({ url: res.url, token: res.token });
-													} else if (res.url) {
+													} else if (res.url && /^https?:/i.test(res.url)) {
 														window.open(res.url, "_blank", "noopener,noreferrer");
+													} else {
+														throw new Error("No usable meeting link came back — try again in a moment.");
 													}
 												} catch (err) {
 													onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
@@ -579,7 +587,13 @@ export function ConsultationDetail({
 										>
 											{joiningMeet ? "Joining…" : "Join →"}
 										</button>
-										<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>{consultation.meetingLink}</span>
+										<span className="mono muted" style={{ fontSize: "var(--text-xs)", wordBreak: "break-all" }}>
+											{consultation.meetingLink.startsWith("livekit:")
+												? "In-app call — joined here, nothing to copy or forward"
+												: consultation.meetingLink.includes("daily.co")
+													? "Private room — join via the button, a bare link won't open"
+													: consultation.meetingLink}
+										</span>
 										{canManageMeeting && (
 											<>
 												<button

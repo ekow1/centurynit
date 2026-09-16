@@ -7,6 +7,7 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { AssignDialog } from "./UnassignedBookings";
+import { useJoinMeeting } from "./case/ConsultationCall";
 
 /**
  * Appointments — the week's consultations: who, with whom, and where.
@@ -451,6 +452,7 @@ function BookingSheet({
 	const [moving, setMoving] = useState(false);
 	const [date, setDate] = useState(() => dateToStr(new Date(b.startsAt)));
 	const [time, setTime] = useState(() => hm(b.startsAt));
+	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 
 	async function run(kind: string, fn: () => Promise<Booking>) {
 		setBusy(kind);
@@ -493,16 +495,18 @@ function BookingSheet({
 				</p>
 				<div className="cn-now__actions">
 					{b.meetingUrl && !past && (
-						<a className="btn btn--primary btn--sm" href={b.meetingUrl} target="_blank" rel="noreferrer">
-							Join meeting
-						</a>
+						<button type="button" className="btn btn--primary btn--sm" disabled={joining} onClick={() => void join(b.id, `Consultation · ${b.reference ?? b.clientName}`)}>
+							{joining ? "Joining…" : "Join meeting"}
+						</button>
 					)}
+					{joinError && <span className="cn-detailhead__meta">{joinError}</span>}
 					{consultationId && (
 						<Link to={`/consultations?id=${consultationId}`} className={`btn btn--sm ${b.meetingUrl && !past ? "btn--ghost" : "btn--primary"}`}>
 							Open consultation
 						</Link>
 					)}
 				</div>
+				{overlay}
 			</div>
 
 			<div className="card cn-now">

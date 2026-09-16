@@ -4,6 +4,7 @@ import { useOpsAuth, type OpsRole } from "./OpsAuthContext";
 import {
 	useChatConversations,
 	useChatMessages,
+	useStaffDirectory,
 } from "../hooks/useChatApi";
 import { roleCanAccess, type ChatConversation, type ChatMessage, type QuotedMessage } from "century-nit-shared";
 import {
@@ -12,6 +13,14 @@ import {
 	Composer,
 	type MessageActionsConfig,
 } from "century-nit-chat-ui";
+import {
+	setChatConversationStatus,
+	setChatConversationOwner,
+	getChatConversationContext,
+	stageChatAttachment,
+	uploadStagedAttachment,
+	type ChatConversationContext,
+} from "../lib/api";
 
 /**
  * Helpdesk — client conversation queue.
@@ -22,11 +31,10 @@ import {
  * store. This page is the triage surface: every client-facing conversation,
  * unread-first, with inline replying via the shared MessageList + Composer.
  *
- * Evolution note: the previous helpdesk ran on a dedicated `tickets` table
- * with its own lifecycle (status, priority, assignment). Those concepts are
- * gone — the conversation itself is the request, its read state is the
- * triage signal, and the portal's communication context is the customer's
- * view. Staff-to-staff chatter lives in the OPS Chat hub, not here.
+ * Lifecycle: conversations carry `status` (open / closed / archived) and an
+ * `owner` participant role. Resolve writes a system divider into the thread;
+ * a client reply auto-reopens. `visibility: "internal"` posts a staff-only
+ * note that never reaches the portal.
  */
 
 const CLIENT_TYPES = new Set(["applicant", "support", "case", "stage", "entity"]);
@@ -39,21 +47,37 @@ const TYPE_LABELS: Record<string, string> = {
 	entity: "Conversation",
 };
 
-type Filter = "all" | "awaiting" | "unread" | "mine" | "support" | "case" | "stage" | "applicant";
+type Filter = "all" | "awaiting" | "unread" | "mine" | "unclaimed" | "support" | "case" | "stage" | "applicant";
 const CHIPS: { id: Filter; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "awaiting", label: "Awaiting reply" },
 	{ id: "unread", label: "Unread" },
+	{ id: "unclaimed", label: "Unclaimed" },
+	{ id: "mine", label: "Mine" },
 	{ id: "support", label: "Support" },
 	{ id: "case", label: "Case" },
 	{ id: "stage", label: "Stage" },
 	{ id: "applicant", label: "Applicant" },
-	{ id: "mine", label: "Mine" },
+];
+
+const SNIPPETS: { id: string; label: string; body: string }[] = [
+	{ id: "ack", label: "Acknowledge", body: "Thanks for reaching out — I'm looking into this now and will come back to you shortly." },
+	{ id: "docs", label: "Request documents", body: "Could you upload the requested document here? A clear photo or PDF works — I'll confirm receipt as soon as it lands." },
+	{ id: "payment", label: "Payment received", body: "Your payment has been received and allocated to your invoice. The updated receipt is in your portal under Money." },
+	{ id: "visa", label: "Visa update", body: "Your application is with the visa team. We'll message you the moment there's a decision or if anything further is needed." },
+	{ id: "close", label: "Resolve + close", body: "Glad we could get this sorted. I'll mark this request resolved — reply here any time and it reopens automatically." },
 ];
 
 /** The client wrote last and nobody has answered. */
 const awaitingReply = (c: ChatConversation) => Boolean(c.lastMessage?.senderUserId) || (c.unreadCount || 0) > 0;
 const isClosed = (c: ChatConversation) => c.status === "closed" || c.status === "archived";
+
+/** The owner participant, when one has claimed/been assigned the thread. */
+function ownerOf(c: ChatConversation): { opsUserId: string; name: string } | null {
+	const p = c.participants.find((x) => x.role === "owner");
+	return p ? { opsUserId: p.opsUserId, name: p.name } : null;
+}
+
 /** How long the client has been waiting, in hours; 0 when not waiting. */
 function waitingHours(c: ChatConversation, now: number): number {
 	if (!awaitingReply(c) || isClosed(c)) return 0;
@@ -91,13 +115,22 @@ export function EnterpriseHelpdesk() {
 	const activeConvId = searchParams.get("id") || null;
 
 	const { conversations, loading: convsLoading, refresh: refreshConvs } = useChatConversations(canChat);
+	const directory = useStaffDirectory();
 	const [filter, setFilter] = useState<Filter>("all");
 	const [showClosed, setShowClosed] = useState(false);
 	const [search, setSearch] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
+	const [noteMode, setNoteMode] = useState(false);
+	const [showSnippets, setShowSnippets] = useState(false);
+	const [showReassign, setShowReassign] = useState(false);
+	const [pendingFiles, setPendingFiles] = useState<{ name: string; attachmentId: string }[]>([]);
+	const [uploading, setUploading] = useState(false);
+	const [context, setContext] = useState<ChatConversationContext | null>(null);
+	const [statusBusy, setStatusBusy] = useState(false);
 	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
 	const [editingId, setEditingId] = useState<string | null>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const isTypingRef = useRef(false);
 
@@ -122,11 +155,15 @@ export function EnterpriseHelpdesk() {
 		if (!Array.isArray(conversations)) return [];
 		return conversations
 			.filter((c) => c && CLIENT_TYPES.has(c.type))
-			.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+			.sort((a, b) => ((b.lastMessageAt ?? b.updatedAt) || "").localeCompare(a.lastMessageAt ?? a.updatedAt ?? ""));
 	}, [conversations]);
 
 	const now = Date.now();
-	const isMine = useCallback((c: ChatConversation) => Boolean(opsUser) && c.participants.some((p) => p.opsUserId === opsUser!.opsUserId), [opsUser]);
+	const isMine = useCallback((c: ChatConversation) => {
+		const owner = ownerOf(c);
+		return Boolean(opsUser) && owner?.opsUserId === opsUser!.opsUserId;
+	}, [opsUser]);
+	const isUnclaimed = useCallback((c: ChatConversation) => !ownerOf(c), []);
 
 	const stats = useMemo(() => {
 		const open = queue.filter((c) => !isClosed(c));
@@ -136,6 +173,7 @@ export function EnterpriseHelpdesk() {
 			open: open.length,
 			unread: queue.reduce((sum, c) => sum + (c.unreadCount || 0), 0),
 			awaiting: waiting.length,
+			unclaimed: open.filter(isUnclaimed).length,
 			longest,
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
@@ -147,19 +185,21 @@ export function EnterpriseHelpdesk() {
 			all: open.length,
 			awaiting: open.filter(awaitingReply).length,
 			unread: open.filter((c) => (c.unreadCount || 0) > 0).length,
+			unclaimed: open.filter(isUnclaimed).length,
 			mine: open.filter(isMine).length,
 			support: open.filter((c) => c.type === "support").length,
 			case: open.filter((c) => c.type === "case").length,
 			stage: open.filter((c) => c.type === "stage").length,
 			applicant: open.filter((c) => c.type === "applicant").length,
 		};
-	}, [queue, isMine]);
+	}, [queue, isMine, isUnclaimed]);
 
 	const filtered = useMemo(() => {
 		let list = queue;
 		if (filter === "unread") list = list.filter((c) => (c.unreadCount || 0) > 0);
 		else if (filter === "awaiting") list = list.filter(awaitingReply);
 		else if (filter === "mine") list = list.filter(isMine);
+		else if (filter === "unclaimed") list = list.filter(isUnclaimed);
 		else if (filter !== "all") list = list.filter((c) => c.type === filter);
 		if (search.trim()) {
 			const q = search.toLowerCase();
@@ -172,23 +212,24 @@ export function EnterpriseHelpdesk() {
 			);
 		}
 		return list;
-	}, [queue, filter, search, isMine]);
+	}, [queue, filter, search, isMine, isUnclaimed]);
 
-	/** Bands by who owes the next word: waiting on you (longest first), in conversation, closed (folded). */
+	/** Bands by who owes the next word: waiting on you (longest first), in conversation, resolved (folded). */
 	const bands = useMemo(() => {
 		const waiting = filtered.filter((c) => !isClosed(c) && awaitingReply(c)).sort((a, b) => waitingHours(b, now) - waitingHours(a, now));
 		const talking = filtered.filter((c) => !isClosed(c) && !awaitingReply(c));
 		const closed = filtered.filter(isClosed);
 		return [
-			{ id: "waiting", label: "Awaiting your reply", note: "longest wait first", rows: waiting },
+			{ id: "waiting", label: "Awaiting reply", note: "longest wait first", rows: waiting },
 			{ id: "talking", label: "In conversation", note: "you replied last", rows: talking },
-			{ id: "closed", label: "Closed", note: showClosed ? "hide" : "show ▸", rows: closed },
+			{ id: "closed", label: "Resolved", note: showClosed ? "hide" : "show ▸", rows: closed },
 		].filter((b) => b.rows.length > 0);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- `now` is this render's clock
 	}, [filtered, showClosed]);
 
 	const activeConv = conversations.find((c) => c.id === activeConvId) ?? null;
 	const activeInQueue = activeConv && CLIENT_TYPES.has(activeConv.type);
+	const activeOwner = activeConv ? ownerOf(activeConv) : null;
 
 	const isOwn = useCallback(
 		(m: ChatMessage) => m.senderOpsUserId != null && m.senderOpsUserId === opsUser?.opsUserId,
@@ -234,6 +275,10 @@ export function EnterpriseHelpdesk() {
 		setReplyTo(null);
 		setEditingId(null);
 		setDraft("");
+		setNoteMode(false);
+		setPendingFiles([]);
+		setShowSnippets(false);
+		setShowReassign(false);
 		window.history.replaceState(null, "", `/helpdesk?id=${conv.id}`);
 	}, []);
 
@@ -244,6 +289,19 @@ export function EnterpriseHelpdesk() {
 		}
 	}, [activeConvId, load, markRead, refreshConvs]);
 
+	/* Context rail — one round trip per open thread. */
+	useEffect(() => {
+		if (!activeConvId || !activeInQueue) {
+			setContext(null);
+			return;
+		}
+		let cancelled = false;
+		getChatConversationContext(activeConvId)
+			.then((ctx) => { if (!cancelled) setContext(ctx); })
+			.catch(() => { if (!cancelled) setContext(null); });
+		return () => { cancelled = true; };
+	}, [activeConvId, activeInQueue]);
+
 	// Keep the badge clear on the thread the user is actively reading.
 	const messageCount = messages.length;
 	useEffect(() => {
@@ -252,17 +310,85 @@ export function EnterpriseHelpdesk() {
 		void markRead().then(() => refreshConvs());
 	}, [activeConvId, activeInQueue, messageCount, markRead, refreshConvs]);
 
+	/* ── Resolve / reopen / reassign ── */
+	const setStatus = useCallback(
+		async (status: "open" | "closed" | "archived") => {
+			if (!activeConvId) return;
+			setStatusBusy(true);
+			try {
+				await setChatConversationStatus(activeConvId, status);
+				await refreshConvs();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Failed to update conversation");
+			} finally {
+				setStatusBusy(false);
+			}
+		},
+		[activeConvId, refreshConvs],
+	);
+
+	const assignOwner = useCallback(
+		async (targetOpsUserId: string | null) => {
+			if (!activeConvId) return;
+			setStatusBusy(true);
+			setShowReassign(false);
+			try {
+				await setChatConversationOwner(activeConvId, targetOpsUserId);
+				await refreshConvs();
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Failed to reassign");
+			} finally {
+				setStatusBusy(false);
+			}
+		},
+		[activeConvId, refreshConvs],
+	);
+
+	/* ── Attachments: stage → upload → bind on send ── */
+	const handleAttach = useCallback(() => {
+		fileInputRef.current?.click();
+	}, []);
+
+	const onFilesPicked = useCallback(
+		async (files: FileList | null) => {
+			if (!files || !activeConvId) return;
+			setUploading(true);
+			try {
+				for (const file of Array.from(files)) {
+					const staged = await stageChatAttachment(activeConvId, {
+						fileName: file.name,
+						contentType: file.type || "application/octet-stream",
+						sizeBytes: file.size,
+					});
+					const attachmentId = await uploadStagedAttachment(staged, file);
+					setPendingFiles((prev) => [...prev, { name: file.name, attachmentId }]);
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Upload failed");
+			} finally {
+				setUploading(false);
+				if (fileInputRef.current) fileInputRef.current.value = "";
+			}
+		},
+		[activeConvId],
+	);
+
 	/* ── Send / edit / typing ── */
 	const handleSend = useCallback(
 		async (text: string) => {
-			if (!activeConvId || !text.trim()) return;
+			if (!activeConvId || (!text.trim() && pendingFiles.length === 0)) return;
 			try {
 				if (editingId) {
 					await edit(editingId, text);
 					setEditingId(null);
 				} else {
-					await send(text, { replyToId: replyTo?.id });
+					await send(text.trim() || "📎 Attachment", {
+						replyToId: replyTo?.id,
+						attachmentIds: pendingFiles.map((f) => f.attachmentId),
+						visibility: noteMode ? "internal" : "public",
+					});
 					setReplyTo(null);
+					setPendingFiles([]);
 				}
 				setDraft("");
 				void refreshConvs();
@@ -274,7 +400,7 @@ export function EnterpriseHelpdesk() {
 				setError(err instanceof Error ? err.message : "Failed to send message");
 			}
 		},
-		[activeConvId, editingId, replyTo, send, edit, refreshConvs, signalTyping],
+		[activeConvId, editingId, replyTo, pendingFiles, noteMode, send, edit, refreshConvs, signalTyping],
 	);
 
 	const handleTyping = useCallback(() => {
@@ -314,7 +440,10 @@ export function EnterpriseHelpdesk() {
 							<strong>{stats.open}</strong> <span className="dash-day__date">open</span>
 						</span>
 						<span>
-							<strong>{stats.awaiting}</strong> <span className="dash-day__date">awaiting your reply</span>
+							<strong>{stats.awaiting}</strong> <span className="dash-day__date">awaiting reply</span>
+						</span>
+						<span>
+							<strong>{stats.unclaimed}</strong> <span className="dash-day__date">unclaimed</span>
 						</span>
 						<span>
 							<strong>{stats.unread}</strong> <span className="dash-day__date">unread</span>
@@ -338,7 +467,7 @@ export function EnterpriseHelpdesk() {
 									{CHIPS.map((f) => {
 										const n = counts[f.id];
 										const on = filter === f.id;
-										if (n === 0 && f.id !== "all" && f.id !== "awaiting" && f.id !== "unread" && f.id !== "mine") return null;
+										if (n === 0 && !["all", "awaiting", "unread", "mine", "unclaimed"].includes(f.id)) return null;
 										return (
 											<button
 												key={f.id}
@@ -408,6 +537,7 @@ export function EnterpriseHelpdesk() {
 												band.rows.map((c) => {
 													const hours = waitingHours(c, now);
 													const link = entityLink(c);
+													const owner = ownerOf(c);
 													return (
 														<button
 															key={c.id}
@@ -429,11 +559,17 @@ export function EnterpriseHelpdesk() {
 																</span>
 																<span className="hd-row__side">
 																	<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-																		{convTime(c.lastMessage?.createdAt ?? c.updatedAt)}
+																		{convTime(c.lastMessage?.createdAt ?? c.lastMessageAt ?? c.updatedAt)}
 																	</span>
 																	{c.unreadCount > 0 ? <span className="hd-row__unread mono">{c.unreadCount}</span> : null}
 																	{hours > 0 && band.id === "waiting" ? <span className={`hd-row__wait mono${hours >= 24 ? " hd-row__wait--long" : ""}`}>waiting {waitLabel(hours)}</span> : null}
-																	{isClosed(c) ? <span className="hd-row__owner mono">{c.status}</span> : null}
+																	{isClosed(c) ? (
+																		<span className="hd-row__owner mono">{c.status}</span>
+																	) : (
+																		<span className="hd-row__owner mono">
+																			{owner ? (owner.opsUserId === opsUser?.opsUserId ? "you" : owner.name) : "unclaimed"}
+																		</span>
+																	)}
 																</span>
 															</span>
 														</button>
@@ -445,43 +581,162 @@ export function EnterpriseHelpdesk() {
 							</div>
 						</div>
 
-						{/* Thread */}
+						{/* Thread + context rail */}
 						<div className="ops-split__detail hd-detail">
 							{!activeConv || !activeInQueue ? (
 								<div className="hd-placeholder">
 									<p className="muted">Select a client request to read the thread and reply.</p>
 								</div>
 							) : (
-								<ConversationThread
-									conversation={activeConv}
-									messages={messages}
-									hasMore={hasMore}
-									msgsLoading={msgsLoading}
-									sending={sending}
-									typing={typing}
-									draft={draft}
-									replyTo={replyTo}
-									editingId={editingId}
-									isOwn={isOwn}
-									bubbleCallbacks={bubbleCallbacks}
-									onDraftChange={setDraft}
-									onSend={handleSend}
-									onTyping={handleTyping}
-									onCancelReply={() => setReplyTo(null)}
-									onCancelEdit={() => setEditingId(null)}
-									onLoadMore={loadMore}
-									onBack={() => {
-										window.history.replaceState(null, "", "/helpdesk");
-									}}
-									onReact={(messageId, emoji) => void react(messageId, emoji)}
-									onQuoteClick={() => {/* quote reaction handled by chat-ui */}}
-								/>
+								<div className="hd-thread-wrap">
+									<ConversationThread
+										conversation={activeConv}
+										messages={messages}
+										hasMore={hasMore}
+										msgsLoading={msgsLoading}
+										sending={sending}
+										typing={typing}
+										draft={draft}
+										noteMode={noteMode}
+										replyTo={replyTo}
+										editingId={editingId}
+										pendingFiles={pendingFiles}
+										uploading={uploading}
+										showSnippets={showSnippets}
+										showReassign={showReassign}
+										directory={directory}
+										owner={activeOwner}
+										isOwner={activeOwner?.opsUserId === opsUser?.opsUserId}
+										statusBusy={statusBusy}
+										isOwn={isOwn}
+										bubbleCallbacks={bubbleCallbacks}
+										onDraftChange={setDraft}
+										onSend={handleSend}
+										onTyping={handleTyping}
+										onCancelReply={() => setReplyTo(null)}
+										onCancelEdit={() => setEditingId(null)}
+										onToggleNote={() => setNoteMode((v) => !v)}
+										onToggleSnippets={() => setShowSnippets((v) => !v)}
+										onToggleReassign={() => setShowReassign((v) => !v)}
+										onSnippet={(body) => { setDraft(body); setShowSnippets(false); }}
+										onAttach={handleAttach}
+										onRemoveFile={(id) => setPendingFiles((prev) => prev.filter((f) => f.attachmentId !== id))}
+										onResolve={() => void setStatus("closed")}
+										onReopen={() => void setStatus("open")}
+										onReassign={(id) => void assignOwner(id)}
+										onClaim={() => opsUser && void assignOwner(opsUser.opsUserId)}
+										onLoadMore={loadMore}
+										onBack={() => {
+											window.history.replaceState(null, "", "/helpdesk");
+										}}
+										onReact={(messageId, emoji) => void react(messageId, emoji)}
+										onQuoteClick={(messageId) => {
+											const el = document.getElementById(`msg-${messageId}`);
+											if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+										}}
+									/>
+									<ContextRail context={context} conversation={activeConv} />
+								</div>
 							)}
 						</div>
 					</div>
+
+					<input
+						ref={fileInputRef}
+						type="file"
+						multiple
+						style={{ display: "none" }}
+						onChange={(e) => void onFilesPicked(e.target.files)}
+					/>
 				</>
 			)}
 		</div>
+	);
+}
+
+/* ── Context rail ───────────────────────────────────────────────────────── */
+
+function ContextRail({
+	context,
+	conversation,
+}: {
+	context: ChatConversationContext | null;
+	conversation: ChatConversation;
+}) {
+	return (
+		<aside className="hd-rail">
+			<div className="hd-rail__block">
+				<div className="hd-rail__label">Client</div>
+				{context?.client ? (
+					<>
+						<div className="hd-rail__title">{context.client.name}</div>
+						<div className="hd-rail__line">{context.client.email ?? "—"}</div>
+						<div className="hd-rail__line">
+							{[context.client.branch, context.client.targetCountry].filter(Boolean).join(" · ") || "—"}
+						</div>
+						{context.client.memberSince && (
+							<div className="hd-rail__line">Client since {new Date(context.client.memberSince).toLocaleDateString()}</div>
+						)}
+					</>
+				) : (
+					<div className="hd-rail__line">No applicant record linked.</div>
+				)}
+			</div>
+
+			<div className="hd-rail__block">
+				<div className="hd-rail__label">Journey</div>
+				{context && context.cases.length > 0 ? (
+					context.cases.map((c) => (
+						<Link key={c.id} to={`/applications?id=${c.id}`} className="hd-rail__link">
+							<span className="mono">{c.appNumber}</span>
+							<span className="hd-rail__line">{c.stageLabel} · {c.status}</span>
+						</Link>
+					))
+				) : (
+					<div className="hd-rail__line">No open cases.</div>
+				)}
+			</div>
+
+			<div className="hd-rail__block">
+				<div className="hd-rail__label">Money</div>
+				{context && context.money.length > 0 ? (
+					context.money.map((m, i) => (
+						<div key={i} className="hd-rail__line">
+							<span className="mono">{m.invoiceNumber}</span> — {m.type} · {m.status}
+						</div>
+					))
+				) : (
+					<div className="hd-rail__line">No invoices.</div>
+				)}
+			</div>
+
+			<div className="hd-rail__block">
+				<div className="hd-rail__label">Next appointment</div>
+				{context?.nextAppointment ? (
+					<div className="hd-rail__line">
+						{context.nextAppointment.serviceName} —{" "}
+						{new Date(context.nextAppointment.startsAt).toLocaleString([], {
+							weekday: "short",
+							month: "short",
+							day: "numeric",
+							hour: "numeric",
+							minute: "2-digit",
+						})}
+					</div>
+				) : (
+					<div className="hd-rail__line">None booked.</div>
+				)}
+			</div>
+
+			<div className="hd-rail__block">
+				<div className="hd-rail__label">Thread</div>
+				<div className="hd-rail__line">
+					{context?.owner ? `Owner: ${context.owner.name}` : "Unclaimed"}
+				</div>
+				<div className="hd-rail__line">{context?.messageCount ?? conversation.participants.length ? `${context?.messageCount ?? 0} messages` : ""}</div>
+				<div className="hd-rail__line">{conversation.status}</div>
+			</div>
+		</aside>
 	);
 }
 
@@ -495,8 +750,17 @@ interface ConversationThreadProps {
 	sending: boolean;
 	typing: { name?: string } | null;
 	draft: string;
+	noteMode: boolean;
 	replyTo: QuotedMessage | null;
 	editingId: string | null;
+	pendingFiles: { name: string; attachmentId: string }[];
+	uploading: boolean;
+	showSnippets: boolean;
+	showReassign: boolean;
+	directory: { opsUserId: string; name: string; role: string }[];
+	owner: { opsUserId: string; name: string } | null;
+	isOwner: boolean;
+	statusBusy: boolean;
 	isOwn: (m: ChatMessage) => boolean;
 	bubbleCallbacks: {
 		actions: MessageActionsConfig;
@@ -509,6 +773,16 @@ interface ConversationThreadProps {
 	onTyping: () => void;
 	onCancelReply: () => void;
 	onCancelEdit: () => void;
+	onToggleNote: () => void;
+	onToggleSnippets: () => void;
+	onToggleReassign: () => void;
+	onSnippet: (body: string) => void;
+	onAttach: () => void;
+	onRemoveFile: (attachmentId: string) => void;
+	onResolve: () => void;
+	onReopen: () => void;
+	onReassign: (opsUserId: string | null) => void;
+	onClaim: () => void;
 	onLoadMore: () => void;
 	onBack: () => void;
 	onReact: (messageId: string, emoji: string) => void;
@@ -523,8 +797,17 @@ function ConversationThread({
 	sending,
 	typing,
 	draft,
+	noteMode,
 	replyTo,
 	editingId,
+	pendingFiles,
+	uploading,
+	showSnippets,
+	showReassign,
+	directory,
+	owner,
+	isOwner,
+	statusBusy,
 	isOwn,
 	bubbleCallbacks,
 	onDraftChange,
@@ -532,12 +815,24 @@ function ConversationThread({
 	onTyping,
 	onCancelReply,
 	onCancelEdit,
+	onToggleNote,
+	onToggleSnippets,
+	onToggleReassign,
+	onSnippet,
+	onAttach,
+	onRemoveFile,
+	onResolve,
+	onReopen,
+	onReassign,
+	onClaim,
 	onLoadMore,
 	onBack,
 	onReact,
 	onQuoteClick,
 }: ConversationThreadProps) {
 	ensureChatUiStyles();
+
+	const closed = isClosed(conversation);
 
 	const showAuthor = useCallback(
 		(m: ChatMessage) => {
@@ -573,6 +868,7 @@ function ConversationThread({
 					<div style={{ fontSize: 10, color: "#52525b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>
 						{conversation.participants.length > 0 ? `with ${conversation.participants.map((p) => p.name).join(", ")}` : ""}
 						{conversation.status !== "open" ? ` · ${conversation.status}` : ""}
+						{owner ? ` · ${isOwner ? "you" : owner.name}` : " · unclaimed"}
 					</div>
 				</div>
 				{(() => {
@@ -585,6 +881,45 @@ function ConversationThread({
 						<span style={stagePillMiniStyle}>{conversation.linkedEntityType.toUpperCase()}</span>
 					) : null;
 				})()}
+				{/* Lifecycle + ownership controls */}
+				{closed ? (
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onReopen} disabled={statusBusy}>
+						Reopen
+					</button>
+				) : (
+					<button type="button" className="btn btn--primary btn--sm" onClick={onResolve} disabled={statusBusy}>
+						Resolve ✓
+					</button>
+				)}
+				{!owner && !closed && (
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onClaim} disabled={statusBusy}>
+						Claim
+					</button>
+				)}
+				<div style={{ position: "relative" }}>
+					<button type="button" className="btn btn--ghost btn--sm" onClick={onToggleReassign} disabled={statusBusy}>
+						Reassign
+					</button>
+					{showReassign && (
+						<div className="hd-pop">
+							{owner && (
+								<button type="button" className="hd-pop__row" onClick={() => onReassign(null)}>
+									— Release (unclaim)
+								</button>
+							)}
+							{directory.map((s) => (
+								<button
+									key={s.opsUserId}
+									type="button"
+									className="hd-pop__row"
+									onClick={() => onReassign(s.opsUserId)}
+								>
+									{s.name} <span className="muted mono" style={{ fontSize: 10 }}>{s.role.toUpperCase()}</span>
+								</button>
+							))}
+						</div>
+					)}
+				</div>
 			</div>
 
 			<MessageList
@@ -622,6 +957,64 @@ function ConversationThread({
 				}
 			/>
 
+			{/* Staged attachments */}
+			{pendingFiles.length > 0 && (
+				<div className="hd-attach-tray">
+					{pendingFiles.map((f) => (
+						<span key={f.attachmentId} className="hd-attach">
+							📎 {f.name}
+							<button type="button" onClick={() => onRemoveFile(f.attachmentId)} aria-label={`Remove ${f.name}`}>×</button>
+						</span>
+					))}
+				</div>
+			)}
+
+			{/* Reply ⇄ Note toggle + tools */}
+			<div className="hd-composer-bar">
+				<div className="hd-composer-bar__mode" role="tablist" aria-label="Message mode">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={!noteMode}
+						className={`hd-mode${noteMode ? "" : " hd-mode--on"}`}
+						onClick={() => noteMode && onToggleNote()}
+					>
+						Reply
+					</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={noteMode}
+						className={`hd-mode${noteMode ? " hd-mode--on" : ""}`}
+						onClick={() => !noteMode && onToggleNote()}
+						title="Staff-only note — the client never sees it"
+					>
+						Note
+					</button>
+				</div>
+				<button type="button" className="hd-tool" onClick={onToggleSnippets} title="Canned replies">
+					Snippets
+				</button>
+				<button type="button" className="hd-tool" onClick={onAttach} disabled={uploading} title="Attach a file">
+					{uploading ? "Uploading…" : "📎"}
+				</button>
+			</div>
+			{showSnippets && (
+				<div className="hd-snips">
+					{SNIPPETS.map((s) => (
+						<button key={s.id} type="button" className="hd-snips__row" onClick={() => onSnippet(s.body)}>
+							<strong>{s.label}</strong>
+							<span className="muted">{s.body.slice(0, 72)}…</span>
+						</button>
+					))}
+				</div>
+			)}
+			{noteMode && (
+				<div className="hd-note-hint mono">
+					NOTE — visible to staff only. The client never sees this.
+				</div>
+			)}
+
 			<Composer
 				value={draft}
 				onChange={onDraftChange}
@@ -632,7 +1025,17 @@ function ConversationThread({
 				editing={!!editingId}
 				onCancelEdit={onCancelEdit}
 				onTyping={onTyping}
-				placeholder={editingId ? "Edit message…" : replyTo ? `Reply to ${replyTo.senderName}…` : "Reply to the client…"}
+				placeholder={
+					editingId
+						? "Edit message…"
+						: replyTo
+							? `Reply to ${replyTo.senderName}…`
+							: noteMode
+								? "Write a staff-only note…"
+								: closed
+									? "Replying reopens this thread…"
+									: "Reply to the client…"
+				}
 			/>
 		</div>
 	);

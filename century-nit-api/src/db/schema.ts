@@ -1497,6 +1497,15 @@ export const messageTypeEnum = pgEnum("message_type", [
 	"action",
 ]);
 
+/**
+ * `internal` = staff-only note. Filtered out of every client-facing read
+ * (portal transcript, applicant message list) — ops threads see it dashed.
+ */
+export const messageVisibilityEnum = pgEnum("message_visibility", [
+	"public",
+	"internal",
+]);
+
 export const conversations = pgTable(
 	"conversations",
 	{
@@ -1577,6 +1586,7 @@ export const messages = pgTable(
 		 */
 		deletedAt: timestamp("deleted_at", { withTimezone: true }),
 		deletedByOpsUserId: uuid("deleted_by_ops_user_id"),
+		visibility: messageVisibilityEnum("visibility").notNull().default("public"),
 		createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -2073,10 +2083,17 @@ export const campaignRecipients = pgTable("campaign_recipients", {
 	status: varchar("status", { length: 16 }).notNull().default("pending"),
 	sentAt: timestamp("sent_at", { withTimezone: true }),
 	error: text("error"),
+	/** Resend email id captured at send — the webhook joins on this. */
+	providerMessageId: varchar("provider_message_id", { length: 128 }),
+	/** Set by the Resend webhook when the recipient opened the email. */
+	openedAt: timestamp("opened_at", { withTimezone: true }),
+	/** Set by the Resend webhook on a hard bounce. */
+	bouncedAt: timestamp("bounced_at", { withTimezone: true }),
 	createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
 	byCampaign: index("campaign_recipients_campaign_idx").on(t.campaignId),
 	byStatus: index("campaign_recipients_status_idx").on(t.campaignId, t.status),
+	byProviderId: index("campaign_recipients_provider_idx").on(t.providerMessageId),
 }));
 
 export const mailingLists = pgTable("mailing_lists", {

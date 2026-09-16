@@ -95,9 +95,25 @@ export function MessageBubble({
 		);
 	}
 
-	const bubbleBg = isOwn ? "var(--cn-chat-bubble-mine-bg)" : "var(--cn-chat-bubble-theirs-bg)";
-	const bubbleFg = isOwn ? "var(--cn-chat-bubble-mine-fg)" : "var(--cn-chat-bubble-theirs-fg)";
-	const subtleFg = isOwn ? "rgba(255,255,255,0.7)" : "var(--cn-chat-muted-fg)";
+	// Internal notes are staff-only — they render with a dashed frame and a
+	// NOTE marker so they can never be mistaken for a client-facing reply.
+	const isNote = message.visibility === "internal";
+
+	const bubbleBg = isNote
+		? "var(--cn-chat-muted)"
+		: isOwn
+			? "var(--cn-chat-bubble-mine-bg)"
+			: "var(--cn-chat-bubble-theirs-bg)";
+	const bubbleFg = isNote
+		? "var(--cn-chat-fg)"
+		: isOwn
+			? "var(--cn-chat-bubble-mine-fg)"
+			: "var(--cn-chat-bubble-theirs-fg)";
+	const subtleFg = isNote
+		? "var(--cn-chat-muted-fg)"
+		: isOwn
+			? "rgba(255,255,255,0.7)"
+			: "var(--cn-chat-muted-fg)";
 
 	const handleCopy = () => {
 		if (deleted) return;
@@ -274,9 +290,28 @@ export function MessageBubble({
 						wordBreak: "break-word",
 						opacity: deleted ? 0.6 : 1,
 						boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-						border: isOwn ? "none" : "1px solid var(--cn-chat-border)",
+						border: isNote
+							? "1px dashed var(--cn-chat-muted-fg)"
+							: isOwn
+								? "none"
+								: "1px solid var(--cn-chat-border)",
 					}}
 				>
+					{/* Staff-only marker */}
+					{isNote && !deleted && (
+						<div
+							style={{
+								fontSize: 9,
+								fontWeight: 800,
+								letterSpacing: "0.08em",
+								color: subtleFg,
+								fontFamily: "var(--cn-chat-font-mono)",
+								marginBottom: 4,
+							}}
+						>
+							NOTE · STAFF ONLY
+						</div>
+					)}
 					{/* Forwarded indicator */}
 					{message.forwardedFrom && !deleted && (
 						<div
@@ -482,10 +517,10 @@ function DeliveryTicks({ status }: { status?: ChatMessage["deliveryStatus"] }) {
 		return <CheckCheckIcon size={12} style={{ opacity: 0.6 }} />;
 	}
 	if (status === "read") {
-		return <CheckCheckIcon size={12} style={{ color: "#10b981" }} />;
+		return <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", opacity: 0.85 }}>SEEN</span>;
 	}
 	if (status === "failed") {
-		return <span style={{ color: "#dc2626", fontSize: 10, fontWeight: 800 }}>!</span>;
+		return <span style={{ fontSize: 10, fontWeight: 800 }}>!</span>;
 	}
 	return null;
 }

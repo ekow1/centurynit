@@ -16,18 +16,20 @@ import { useChatStream } from "./useChatStream";
 
 interface CommunicationChatState {
 	conversationId: string | null;
+	conversationStatus: string | null;
 	messages: ChatMessage[];
 	loading: boolean;
 	sending: boolean;
 	typing: { name?: string } | null;
 	route: (opts?: { caseId?: string; stageKey?: string }) => Promise<string | null>;
-	send: (content: string) => Promise<void>;
+	send: (content: string, opts?: { attachmentIds?: string[] }) => Promise<void>;
 	markRead: () => Promise<void>;
 	reset: () => void;
 }
 
 export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	const [conversationId, setConversationId] = useState<string | null>(null);
+	const [conversationStatus, setConversationStatus] = useState<string | null>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [sending, setSending] = useState(false);
@@ -46,6 +48,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 			const conv = await meApi.routeCommunication(opts);
 			conversationIdRef.current = conv.id;
 			setConversationId(conv.id);
+			setConversationStatus(conv.status ?? "open");
 			const res = await meApi.getCommunicationMessages(conv.id, { limit: 50 });
 			setMessages(res.messages);
 			void meApi.markCommunicationRead(conv.id).catch(() => {});
@@ -60,18 +63,19 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 	const reset = useCallback(() => {
 		conversationIdRef.current = null;
 		setConversationId(null);
+		setConversationStatus(null);
 		setMessages([]);
 		setTyping(null);
 	}, []);
 
 	// Send a message. The server returns the created message; we append it
 	// locally so the bubble appears instantly without waiting for SSE.
-	const send = useCallback(async (content: string) => {
+	const send = useCallback(async (content: string, opts?: { attachmentIds?: string[] }) => {
 		const convId = conversationIdRef.current;
-		if (!convId || !content.trim()) return;
+		if (!convId || (!content.trim() && !opts?.attachmentIds?.length)) return;
 		setSending(true);
 		try {
-			const msg = await meApi.sendCommunicationMessage(convId, content);
+			const msg = await meApi.sendCommunicationMessage(convId, content, { attachmentIds: opts?.attachmentIds });
 			setMessages((prev) => {
 				if (prev.some((m) => m.id === msg.id)) return prev;
 				return [...prev, msg];
@@ -137,6 +141,11 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 				}
 				break;
 			}
+			case "chat.conversation.updated": {
+				if (ev.conversationId !== conversationId) return;
+				if (ev.status) setConversationStatus(ev.status);
+				break;
+			}
 			default:
 				break;
 		}
@@ -148,6 +157,7 @@ export function useCommunicationChat(enabled: boolean): CommunicationChatState {
 
 	return {
 		conversationId,
+		conversationStatus,
 		messages,
 		loading,
 		sending,

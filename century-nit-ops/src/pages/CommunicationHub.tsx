@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useNavigate } from "react-router-dom";
 import {
 	useChatConversations,
 	useChatMessages,
@@ -41,6 +42,7 @@ type Mode = "internal" | "external";
 
 export function CommunicationHub() {
 	const { opsRole, opsUser } = useOpsAuth();
+	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
 	const [expanded, setExpanded] = useState(false);
 	const [mode, setMode] = useState<Mode>("internal");
@@ -407,6 +409,17 @@ export function CommunicationHub() {
 								title={expanded ? "Restore" : "Expand"}
 							>
 								{expanded ? "⤡" : "⤢"}
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									setOpen(false);
+									navigate(activeConvId ? `/chat?conversation=${activeConvId}` : "/chat");
+								}}
+								style={controlBtnStyle}
+								title="Open full chat page"
+							>
+								↗
 							</button>
 							<button
 								type="button"

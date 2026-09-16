@@ -42,6 +42,14 @@ export const messageTypeSchema = z.enum(["text", "system", "action"]);
 export type ChatMessageType = z.infer<typeof messageTypeSchema>;
 
 /**
+ * `internal` messages are staff-only notes — they render dashed in the ops
+ * thread and are filtered out of every client-facing read path (portal
+ * transcript, applicant SSE). Server defaults to `public`.
+ */
+export const messageVisibilitySchema = z.enum(["public", "internal"]);
+export type MessageVisibility = z.infer<typeof messageVisibilitySchema>;
+
+/**
  * Per-message delivery state (spec §15).
  *
  * `sending` and `failed` are CLIENT-ONLY: they describe an optimistic bubble
@@ -119,6 +127,8 @@ export const chatMessageSchema = z.object({
 	editedAt: z.string().datetime().nullable().optional(),
 	/** Non-null when soft-deleted; `content` is blanked and a tombstone shown. */
 	deletedAt: z.string().datetime().nullable().optional(),
+	/** `internal` = staff-only note; never sent to client reads or SSE. */
+	visibility: messageVisibilitySchema.default("public"),
 	reactions: z.array(messageReactionSchema).default([]),
 	attachments: z.array(messageAttachmentSchema).default([]),
 	/**
@@ -164,6 +174,8 @@ export const chatConversationSchema = z.object({
 	participants: z.array(chatParticipantSchema),
 	lastMessage: chatMessageSchema.nullable().optional(),
 	unreadCount: z.number().int().nonnegative(),
+	/** Denormalised activity timestamp — set by the server on every send. */
+	lastMessageAt: z.string().datetime().nullable().optional(),
 	createdAt: z.string().datetime(),
 	updatedAt: z.string().datetime(),
 });
@@ -228,6 +240,11 @@ export const sendMessageSchema = z.object({
 	 * double-rendering when the SSE echo arrives before the HTTP response.
 	 */
 	clientNonce: z.string().max(64).optional(),
+	/**
+	 * Staff-only: `internal` posts a note visible to ops but filtered from
+	 * every client-facing read. Ignored on the applicant send path.
+	 */
+	visibility: messageVisibilitySchema.optional(),
 });
 export type SendMessage = z.infer<typeof sendMessageSchema>;
 
@@ -286,6 +303,12 @@ export type ChatRealtimeEvent =
 			reactions: MessageReaction[];
 	  }
 	| { type: "chat.conversation.created"; conversationId: string }
+	| {
+			type: "chat.conversation.updated";
+			conversationId: string;
+			/** Set when lifecycle changed — resolve/reopen/archive. */
+			status?: ConversationStatus;
+	  }
 	| { type: "chat.read"; conversationId: string }
 	| {
 			type: "chat.typing";
@@ -527,5 +550,7 @@ export const sendContextMessageSchema = z.object({
 	content: z.string().min(1).max(5000),
 	replyToId: z.string().uuid().optional(),
 	mentions: z.array(z.string().uuid()).optional(),
+	/** Staged upload ids bound to this message on send. */
+	attachmentIds: z.array(z.string().uuid()).max(10).optional(),
 });
 export type SendContextMessage = z.infer<typeof sendContextMessageSchema>;

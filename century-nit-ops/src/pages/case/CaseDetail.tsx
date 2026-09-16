@@ -442,9 +442,6 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 				extra={[
 					{ label: "Country", value: app.country || "—" },
 					{ label: "Programme", value: app.program || "—" },
-					...(app.journeyCoordinatorName
-						? [{ label: "Coordinated by", value: `${app.journeyCoordinatorName} · journey` }]
-						: []),
 				]}
 			/>
 

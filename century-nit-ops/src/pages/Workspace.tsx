@@ -97,6 +97,7 @@ const TYPE_FILTERS = [
 	{ id: "lead", label: "Lead" },
 ] as const;
 const TYPE_IDS = TYPE_FILTERS.map((f) => f.id);
+type TypeFilter = (typeof TYPE_FILTERS)[number]["id"];
 
 const DATE_SORTS = [
 	{ id: "default", label: "Priority" },
@@ -104,6 +105,7 @@ const DATE_SORTS = [
 	{ id: "asc", label: "Oldest first" },
 ] as const;
 const SORT_IDS = DATE_SORTS.map((f) => f.id);
+type SortId = (typeof DATE_SORTS)[number]["id"];
 
 export function Workspace() {
 	const { opsUser, canSeeAllBranches, canAssignWork, scopeRecords } = useOpsAuth();
@@ -131,9 +133,9 @@ export function Workspace() {
 	// back instead of silently emptying the queue.
 	const [filter, setFilter] = useUrlParam<QueueFilter>("filter", { allowed: QUEUE_IDS, fallback: "all" });
 	const [time, setTime] = useUrlParam<TimeFilter>("time", { allowed: TIME_IDS, fallback: "all" });
-	const [typeFilter, setTypeFilter] = useUrlParam("type", { allowed: TYPE_IDS, fallback: "all" });
-	const [branchFilter, setBranchFilter] = useUrlParam("branch", { fallback: "all" });
-	const [dateSort, setDateSort] = useUrlParam("sort", { allowed: SORT_IDS, fallback: "default" });
+	const [typeFilter, setTypeFilter] = useUrlParam<TypeFilter>("type", { allowed: TYPE_IDS, fallback: "all" });
+	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
+	const [dateSort, setDateSort] = useUrlParam<SortId>("sort", { allowed: SORT_IDS, fallback: "default" });
 	const [search, setSearch] = useUrlParam("q");
 	// The open task is `?open=` — a deep link opens it even when the chips
 	// would have filtered it out.
@@ -339,6 +341,7 @@ export function Workspace() {
 									value={filter}
 									onChange={setFilter}
 								/>
+								<div style={{ marginLeft: "auto" }}>
 								<FilterGroup
 									label="When"
 									options={TIME_FILTERS.map((f) => ({
@@ -350,6 +353,7 @@ export function Workspace() {
 									value={time}
 									onChange={setTime}
 								/>
+								</div>
 							</div>
 							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
 							<input
@@ -366,7 +370,7 @@ export function Workspace() {
 								<select
 									className="cn-filter__select"
 									value={typeFilter}
-									onChange={(e) => setTypeFilter(e.target.value)}
+									onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
 								>
 									{TYPE_FILTERS.map((f) => (
 										<option key={f.id} value={f.id}>
@@ -380,7 +384,7 @@ export function Workspace() {
 								<select
 									className="cn-filter__select"
 									value={dateSort}
-									onChange={(e) => setDateSort(e.target.value)}
+									onChange={(e) => setDateSort(e.target.value as SortId)}
 								>
 									{DATE_SORTS.map((f) => (
 										<option key={f.id} value={f.id}>

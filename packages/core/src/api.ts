@@ -1536,10 +1536,25 @@ export const meApi = {
 	},
 
 	/** Send a customer message. */
-	sendCommunicationMessage(conversationId: string, content: string): Promise<ApiChatMessage> {
+	sendCommunicationMessage(
+		conversationId: string,
+		content: string,
+		opts?: { attachmentIds?: string[] },
+	): Promise<ApiChatMessage> {
 		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/messages`, {
 			method: "POST",
-			...json({ content }),
+			...json({ content, attachmentIds: opts?.attachmentIds }),
+		});
+	},
+
+	/** Stage an attachment upload against a conversation — returns a presigned PUT URL. */
+	stageCommunicationAttachment(
+		conversationId: string,
+		meta: { fileName: string; contentType: string; sizeBytes: number },
+	): Promise<{ attachmentId: string; uploadUrl: string; headers: Record<string, string>; expiresAt: string }> {
+		return request(`${API_PREFIX}/me/communication/conversations/${conversationId}/attachments`, {
+			method: "POST",
+			...json(meta),
 		});
 	},
 

@@ -764,6 +764,14 @@
 	background: var(--foreground);
 }
 
+/* The step count in words — the dots alone don't say "4 of 7". */
+.ops-steps__n {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+}
+
 .ops-client__sub {
 	font-size: var(--text-xs);
 	color: var(--muted-foreground);
@@ -883,6 +891,36 @@
 }
 .ops-ocard .ops-strip {
 	margin-top: 0.4rem;
+}
+
+/* Queue health — the four numbers above the Now card. */
+.ops-health {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0.65rem 0.75rem;
+}
+.ops-health > div {
+	display: flex;
+	flex-direction: column;
+}
+.ops-health b {
+	font-size: 1.2rem;
+	font-weight: 800;
+	line-height: 1;
+}
+.ops-health span {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	margin-top: 0.2rem;
+}
+
+/* "You" in the handler column — a marker, not a string match. */
+.town__you {
+	font-weight: 700;
+	border-bottom: 2px solid currentColor;
+}
+.trow--on .town__you {
+	border-color: var(--background);
 }
 
 /* ── Dashboard: the day line, four KPIs, hairline panels ── */
@@ -4735,4 +4773,220 @@ a.dash-kpi--on:hover {
 	text-decoration: underline;
 	text-decoration-thickness: 2px;
 	text-underline-offset: 2px;
+}
+
+/* ── Helpdesk: context rail, note mode, attachments, popovers ── */
+
+.hd-thread-wrap {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.hd-rail {
+	flex: 0 0 220px;
+	border-left: 1px solid var(--border-light);
+	background: var(--muted);
+	overflow-y: auto;
+	padding: 0.9rem;
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
+.hd-rail__label {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	margin-bottom: 0.35rem;
+}
+
+.hd-rail__title {
+	font-size: 0.85rem;
+	font-weight: 700;
+}
+
+.hd-rail__line {
+	font-size: 0.72rem;
+	color: var(--muted-foreground);
+	line-height: 1.5;
+}
+
+.hd-rail__link {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	padding: 0.4rem 0;
+	border-bottom: 1px solid var(--border-light);
+	color: inherit;
+	text-decoration: none;
+	font-size: 0.75rem;
+}
+
+.hd-rail__link:hover {
+	color: var(--foreground);
+	text-decoration: underline;
+}
+
+.hd-composer-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.4rem 0.75rem 0;
+	border-top: 1px solid var(--border-light);
+}
+
+.hd-composer-bar__mode {
+	display: inline-flex;
+	border: 1px solid var(--border);
+}
+
+.hd-mode {
+	border: none;
+	background: var(--background);
+	color: var(--muted-foreground);
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0.3rem 0.7rem;
+	cursor: pointer;
+}
+
+.hd-mode--on {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.hd-tool {
+	border: 1px solid var(--border);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	padding: 0.3rem 0.6rem;
+	cursor: pointer;
+	color: var(--foreground);
+}
+
+.hd-tool:hover {
+	background: var(--muted);
+}
+
+.hd-note-hint {
+	padding: 0.25rem 0.75rem;
+	font-size: 0.6rem;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+	border-top: 1px dashed var(--border-light);
+}
+
+.hd-attach-tray {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	padding: 0.4rem 0.75rem;
+	border-top: 1px solid var(--border-light);
+}
+
+.hd-attach {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	border: 1px solid var(--border);
+	background: var(--muted);
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	padding: 0.2rem 0.5rem;
+}
+
+.hd-attach button {
+	border: none;
+	background: none;
+	cursor: pointer;
+	font-size: 0.75rem;
+	line-height: 1;
+	padding: 0;
+}
+
+.hd-snips {
+	border-top: 1px solid var(--border-light);
+	max-height: 180px;
+	overflow-y: auto;
+}
+
+.hd-snips__row {
+	display: flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	width: 100%;
+	padding: 0.5rem 0.75rem;
+	border: none;
+	border-bottom: 1px solid var(--border-light);
+	background: var(--background);
+	text-align: left;
+	cursor: pointer;
+	font-size: 0.72rem;
+}
+
+.hd-snips__row:hover {
+	background: var(--muted);
+}
+
+.hd-pop {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 4px);
+	z-index: 30;
+	min-width: 200px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: var(--background);
+	border: 1px solid var(--border);
+	box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.15);
+}
+
+.hd-pop__row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.45rem 0.7rem;
+	border: none;
+	border-bottom: 1px solid var(--border-light);
+	background: var(--background);
+	text-align: left;
+	cursor: pointer;
+	font-size: 0.72rem;
+}
+
+.hd-pop__row:hover {
+	background: var(--muted);
+}
+
+/* ── /chat page extras ── */
+
+.chat-page__section {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	padding: 0.6rem 0.9rem 0.25rem;
+	border-bottom: 1px solid var(--border-light);
+}
+
+.chat-page__presence {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	margin-right: 0.35rem;
+	vertical-align: middle;
 }

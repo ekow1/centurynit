@@ -32,6 +32,7 @@ const EnterprisePaymentConfig = lazyNamed(() => import("./pages/EnterprisePaymen
 const EnterpriseLedger = lazyNamed(() => import("./pages/EnterpriseLedger"), "EnterpriseLedger");
 const EnterprisePaymentsLog = lazyNamed(() => import("./pages/EnterprisePaymentsLog"), "EnterprisePaymentsLog");
 const EnterpriseHelpdesk = lazyNamed(() => import("./pages/EnterpriseHelpdesk"), "EnterpriseHelpdesk");
+const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
 const EnterpriseCampaigns = lazyNamed(() => import("./pages/EnterpriseCampaigns"), "EnterpriseCampaigns");
 const EnterpriseAdministration = lazyNamed<{ section: string }>(() => import("./pages/EnterpriseAdministration"), "EnterpriseAdministration");
 const EnterpriseConsultations = lazyNamed(() => import("./pages/EnterpriseConsultations"), "EnterpriseConsultations");
@@ -147,8 +148,9 @@ export default function App() {
 									<Route path="leads" element={<Ops module="leads"><EnterpriseLeads /></Ops>} />
 									<Route path="crm" element={<Ops module="crm"><EnterpriseLeads /></Ops>} />
 									<Route path="helpdesk" element={<Ops module="helpdesk"><EnterpriseHelpdesk /></Ops>} />
+									<Route path="chat" element={<Ops module="chat"><ChatPage /></Ops>} />
 									<Route path="marketing/email" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
-									<Route path="marketing/sms" element={<Ops module="marketing"><EnterpriseCampaigns /></Ops>} />
+									<Route path="marketing/sms" element={<LegacyRedirect to="/marketing/email" />} />
 									{/* The old Board, Visa and Departure queues are views inside Cases; the URLs live on as redirects. */}
 									<Route path="workflow" element={<LegacyRedirect to="/applications?view=board" />} />
 									<Route path="visa" element={<LegacyRedirect to="/applications?chapter=visa" />} />

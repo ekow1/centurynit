@@ -17,6 +17,9 @@ import { NEWSLETTER_LIST_NAME, sendConfirmationEmail } from "./newsletter.js";
 import {
 	enqueueCampaignSend,
 	cancelCampaignSend,
+	sendCampaignTest,
+	renderCampaignPreview,
+	retryFailedRecipients,
 } from "../services/marketing.js";
 import { campaignRecipients } from "../db/schema.js";
 
@@ -322,6 +325,16 @@ marketingRouter.openapi(
 				throw new HttpError(400, "ALREADY_SENT", "Campaign has already been sent");
 			}
 
+			// The worker calls sendEmail unconditionally — an "SMS campaign" would
+			// email people. Refuse rather than silently misdeliver.
+			if (campaign.channel === "sms") {
+				throw new HttpError(
+					422,
+					"SMS_NOT_SUPPORTED",
+					"SMS delivery isn't configured — send this campaign as email or rebuild it on an email channel.",
+				);
+			}
+
 			if (!campaign.mailingListId) {
 				throw new HttpError(
 					400,
@@ -380,6 +393,144 @@ marketingRouter.openapi(
 			console.error("[marketing] POST /campaigns/:id/send error:", err);
 			throw new HttpError(500, "INTERNAL", "Failed to queue campaign send");
 		}
+	},
+);
+
+/* ── POST /campaigns/:id/test — one-address send through the real pipeline ── */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/campaigns/{id}/test",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: {
+			params: campaignIdParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ to: z.string().email() }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: z.object({ sent: z.boolean() }) } },
+				description: "Test email sent",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const { to } = c.req.valid("json");
+		await sendCampaignTest(id, to);
+		return c.json({ sent: true });
+	},
+);
+
+/* ── POST /campaigns/preview — render the real emailLayout ──────────────── */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/campaigns/preview",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							subject: z.string().min(1),
+							body: z.string().min(1),
+							sampleName: z.string().optional(),
+							sampleEmail: z.string().email().optional(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ html: z.string(), subject: z.string() }),
+					},
+				},
+				description: "Rendered email HTML (real emailLayout, sample merge)",
+			},
+		},
+	}),
+	async (c) => {
+		const body = c.req.valid("json");
+		const rendered = await renderCampaignPreview(body);
+		return c.json(rendered);
+	},
+);
+
+/* ── POST /campaigns/:id/cancel — scheduled → draft, job pulled ─────────── */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/campaigns/{id}/cancel",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: campaignIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ cancelled: z.boolean() }),
+					},
+				},
+				description: "Scheduled send cancelled; campaign back to draft",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const [campaign] = await db
+			.select({ status: marketingCampaigns.status })
+			.from(marketingCampaigns)
+			.where(eq(marketingCampaigns.id, id))
+			.limit(1);
+		if (!campaign) throw new HttpError(404, "NOT_FOUND", "Campaign not found");
+		if (campaign.status !== "scheduled") {
+			throw new HttpError(400, "NOT_SCHEDULED", "Only a scheduled campaign can be cancelled");
+		}
+		await cancelCampaignSend(id);
+		return c.json({ cancelled: true });
+	},
+);
+
+/* ── POST /campaigns/:id/retry-failed — re-enqueue only failed rows ──────── */
+
+marketingRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/campaigns/{id}/retry-failed",
+		tags: ["Marketing"],
+		middleware: [requireAuth, requireStaff] as const,
+		request: { params: campaignIdParams },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({ retried: z.number().int() }),
+					},
+				},
+				description: "Failed recipients re-queued",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const retried = await retryFailedRecipients(id);
+		return c.json({ retried });
 	},
 );
 
@@ -543,6 +694,8 @@ const recipientSchema = z.object({
 	status: z.string(),
 	sentAt: z.string().nullable(),
 	error: z.string().nullable(),
+	openedAt: z.string().nullable(),
+	bouncedAt: z.string().nullable(),
 	createdAt: z.string(),
 });
 
@@ -617,6 +770,8 @@ marketingRouter.openapi(
 				status: r.status,
 				sentAt: r.sentAt?.toISOString() ?? null,
 				error: r.error,
+				openedAt: r.openedAt?.toISOString() ?? null,
+				bouncedAt: r.bouncedAt?.toISOString() ?? null,
 				createdAt: r.createdAt.toISOString(),
 			}));
 

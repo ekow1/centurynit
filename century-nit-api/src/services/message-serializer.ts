@@ -71,6 +71,7 @@ export function serializeMessageRow(row: typeof messages.$inferSelect): ChatMess
 		forwardedFrom: null,
 		editedAt: row.editedAt?.toISOString() ?? null,
 		deletedAt: row.deletedAt?.toISOString() ?? null,
+		visibility: (row.visibility ?? "public") as ChatMessage["visibility"],
 		reactions: [],
 		attachments: [],
 		deliveryStatus: null,

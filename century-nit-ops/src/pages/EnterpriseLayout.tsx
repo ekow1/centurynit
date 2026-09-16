@@ -50,6 +50,7 @@ const SECTIONS: NavSection[] = [
 			{ to: "/workspace", module: "dashboard", label: "Workspace", blurb: "Action queue & today's work", icon: "dashboard" },
 			{ to: "/inbox", module: "dashboard", label: "Inbox", blurb: "What happened", icon: "inbox" },
 			{ to: "/helpdesk", module: "helpdesk", label: "Helpdesk", blurb: "Client conversations", icon: "helpdesk" },
+			{ to: "/chat", module: "chat", label: "Chat", blurb: "Team & case messaging", icon: "helpdesk" },
 			{ to: "/documents", module: "documents", label: "Documents", blurb: "Review queue", icon: "documents" },
 		],
 	},
@@ -109,7 +110,7 @@ const SECTIONS: NavSection[] = [
 			},
 			{ to: "/scheduling", module: "scheduling", label: "Scheduling", blurb: "The week the branch offers", icon: "appointments" },
 			{ to: "/my-calendar", module: "dashboard", label: "My availability", blurb: "Working hours & calendar sync", icon: "appointments" },
-			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email & SMS campaigns", icon: "marketing" },
+			{ to: "/marketing", module: "marketing", label: "Marketing", blurb: "Email campaigns, templates & lists", icon: "marketing" },
 		],
 	},
 	{

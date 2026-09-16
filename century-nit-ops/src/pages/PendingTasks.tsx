@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { applicationsApi } from "century-nit-core/api";
 import type { Assignee } from "century-nit-core/ops";
@@ -198,14 +198,26 @@ export function PendingTaskTable({
 								return (
 									<tr
 										key={t.id}
+										className={[
+											onSelect ? "ops-tr--pick" : "",
+											selected ? "ops-tr--sel" : "",
+											overdue && !selected ? "ops-tr--over" : "",
+										]
+											.filter(Boolean)
+											.join(" ") || undefined}
+										tabIndex={onSelect ? 0 : undefined}
+										aria-selected={onSelect ? selected : undefined}
 										onClick={onSelect ? () => onSelect(t) : undefined}
-										style={{
-											...(selected
-												? { background: "var(--foreground)", color: "var(--background)" }
-												: {}),
-											...(onSelect ? { cursor: "pointer" } : {}),
-											...(overdue && !selected ? { boxShadow: "inset 4px 0 0 var(--foreground)" } : {}),
-										}}
+										onKeyDown={
+											onSelect
+												? (e) => {
+														if (e.key === "Enter" || e.key === " ") {
+															e.preventDefault();
+															onSelect(t);
+														}
+													}
+												: undefined
+										}
 									>
 										<td className="mono" title={notches === 3 ? "Urgent — top of the queue" : notches === 2 ? "Soon" : "Routine"} style={{ letterSpacing: "0.05em", whiteSpace: "nowrap", opacity: selected ? 1 : undefined }}>
 											<span>{"●".repeat(notches)}</span>
@@ -411,10 +423,18 @@ export function PendingTaskRows({
 	const [booking, setBooking] = useState<Booking | null>(null);
 	const [task, setTask] = useState<PendingTask | null>(null);
 	const [justAssigned, setJustAssigned] = useState<string | null>(null);
-	const { canSeeAllBranches } = useOpsAuth();
+	const { canSeeAllBranches, opsUser } = useOpsAuth();
+	const isMe = (t: PendingTask) => t.owner === opsUser?.name || t.owner === opsUser?.email;
 	const now = new Date();
 	const sections = taskSections(items, now);
-	let rank = 0;
+	// Row numbers across every section — computed once, not mutated during render.
+	const ranks = useMemo(() => {
+		const m = new Map<string, number>();
+		let r = 0;
+		for (const s of sections) for (const g of clusterRows(s.rows)) for (const t of g.tasks) m.set(t.id, ++r);
+		return m;
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- sections is derived from items
+	}, [items]);
 
 	const isOpen = (t: PendingTask) =>
 		!t.owner || t.owner === "— open" || t.owner === "Unassigned" || t.owner === "—";
@@ -450,7 +470,7 @@ export function PendingTaskRows({
 										</div>
 									)}
 									{group.tasks.map((t) => {
-										rank += 1;
+										const rank = ranks.get(t.id) ?? 0;
 										const selected = selectedId === t.id;
 										const canAssign = isAssignable(t);
 										const open = isOpen(t);
@@ -485,7 +505,7 @@ export function PendingTaskRows({
 												</div>
 												<span className="twhen">{taskWhen(t, now)}</span>
 												<span className={`town${open ? " town--none" : ""}`}>
-													{open ? "— open" : t.owner}
+													{open ? "— open" : isMe(t) ? <span className="town__you">You</span> : t.owner}
 												</span>
 												{canSeeAllBranches ? (
 													<span className="tbranch">{branchName(t.branch || "") || "—"}</span>

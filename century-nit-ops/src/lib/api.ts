@@ -484,11 +484,12 @@ export function getChatConversation(id: string): Promise<ChatConversation> {
 
 export function getChatMessages(
 	conversationId: string,
-	params?: { limit?: number; before?: string },
+	params?: { limit?: number; before?: string; q?: string },
 ): Promise<ChatMessageListResponse> {
 	const qs = new URLSearchParams();
 	if (params?.limit) qs.set("limit", String(params.limit));
 	if (params?.before) qs.set("before", params.before);
+	if (params?.q) qs.set("q", params.q);
 	const query = qs.toString();
 	return apiFetch<ChatMessageListResponse>(
 		`${CHAT}/conversations/${conversationId}/messages${query ? `?${query}` : ""}`,
@@ -503,6 +504,7 @@ export function sendChatMessage(
 		mentions?: string[];
 		attachmentIds?: string[];
 		clientNonce?: string;
+		visibility?: "public" | "internal";
 	},
 ): Promise<ChatMessage> {
 	return apiFetch<ChatMessage>(`${CHAT}/conversations/${conversationId}/messages`, {
@@ -579,6 +581,79 @@ export function addChatParticipant(
 
 export function getStaffDirectory(): Promise<StaffDirectoryResponse> {
 	return apiFetch<StaffDirectoryResponse>(`${CHAT}/staff-directory`);
+}
+
+export function setChatConversationStatus(
+	conversationId: string,
+	status: "open" | "closed" | "archived",
+): Promise<ChatConversation> {
+	return apiFetch<ChatConversation>(`${CHAT}/conversations/${conversationId}/status`, {
+		method: "PATCH",
+		body: JSON.stringify({ status }),
+	});
+}
+
+export function setChatConversationOwner(
+	conversationId: string,
+	opsUserId: string | null,
+): Promise<ChatConversation> {
+	return apiFetch<ChatConversation>(`${CHAT}/conversations/${conversationId}/owner`, {
+		method: "POST",
+		body: JSON.stringify({ opsUserId }),
+	});
+}
+
+export type ChatConversationContext = {
+	client: {
+		userId: string;
+		name: string;
+		email: string | null;
+		branch: string | null;
+		targetCountry: string | null;
+		memberSince: string | null;
+	} | null;
+	cases: { id: string; appNumber: string; stage: string; stageLabel: string; status: string }[];
+	money: { type: string; status: string; invoiceNumber: string }[];
+	nextAppointment: { startsAt: string; serviceName: string; status: string } | null;
+	owner: { opsUserId: string; name: string } | null;
+	messageCount: number;
+};
+
+export function getChatConversationContext(
+	conversationId: string,
+): Promise<ChatConversationContext> {
+	return apiFetch<ChatConversationContext>(`${CHAT}/conversations/${conversationId}/context`);
+}
+
+export type StagedAttachment = {
+	attachmentId: string;
+	uploadUrl: string;
+	headers: Record<string, string>;
+	expiresAt: string;
+};
+
+export function stageChatAttachment(
+	conversationId: string,
+	meta: { fileName: string; contentType: string; sizeBytes: number },
+): Promise<StagedAttachment> {
+	return apiFetch<StagedAttachment>(`${CHAT}/conversations/${conversationId}/attachments`, {
+		method: "POST",
+		body: JSON.stringify(meta),
+	});
+}
+
+/** Upload the staged file's bytes to the presigned URL. Returns the id to bind on send. */
+export async function uploadStagedAttachment(
+	staged: StagedAttachment,
+	file: File,
+): Promise<string> {
+	const res = await fetch(staged.uploadUrl, {
+		method: "PUT",
+		headers: { "Content-Type": file.type || "application/octet-stream", ...staged.headers },
+		body: file,
+	});
+	if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+	return staged.attachmentId;
 }
 
 /* ── Communication (context-aware case chat — /communication) ── */

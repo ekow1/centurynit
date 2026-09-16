@@ -10,7 +10,6 @@ import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
 import { documentsApi, bookingsApi, ApiError } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
-import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
@@ -85,13 +84,9 @@ export function ConsultationDetail({
 		decideReschedule,
 		cancelConsultation,
 		issueRebookingCredit,
-		delegateCoordinator,
-		reassignCoordinator,
-		reclaimCoordination,
 		returnToConfirmed,
-		releaseJourney,
-		getWorkload,
 		refresh,
+		refreshConsultation,
 	} = useCases();
 
 	type Tab = "profile" | "documents" | "assessment";
@@ -111,10 +106,6 @@ export function ConsultationDetail({
 	const [isSubmitted, setIsSubmitted] = useState(false);
 	const [showReschedule, setShowReschedule] = useState(false);
 	const [realDocs, setRealDocs] = useState<ApplicantDocument[]>([]);
-	const [showCoordinatorPicker, setShowCoordinatorPicker] = useState(false);
-	const [coordinatorNote, setCoordinatorNote] = useState("");
-	const [delegateScope, setDelegateScope] = useState<"case" | "journey">("case");
-	const [workloadData, setWorkloadData] = useState<Awaited<ReturnType<typeof getWorkload>> | null>(null);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
 	const [meetingUrlDraft, setMeetingUrlDraft] = useState("");
@@ -164,6 +155,21 @@ export function ConsultationDetail({
 		setCompletedResult(null);
 	}, [consultation.id]);
 
+	// The detail renders from the cached list — pull the fresh row on open so
+	// a link or handler minted since the list loaded (someone else's Confirm)
+	// shows immediately instead of appearing after the first local mutation.
+	useEffect(() => {
+		void refreshConsultation(consultation.id).catch(() => {});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- once per record
+	}, [consultation.id]);
+
+	// The join window ticks — Join enables itself 30 min before the slot.
+	const [nowMs, setNowMs] = useState(() => Date.now());
+	useEffect(() => {
+		const id = setInterval(() => setNowMs(Date.now()), 30_000);
+		return () => clearInterval(id);
+	}, []);
+
 	useEffect(() => {
 		if (!consultation?.applicantUserId) { setRealDocs([]); return; }
 		let cancelled = false;
@@ -188,12 +194,6 @@ export function ConsultationDetail({
 	const docs = docSummary(consultation, realDocs);
 	const isMine = Boolean(consultation.assignedOfficerEmail === opsUser?.email);
 	const canAssess = isMine || opsRole === "manager" || opsRole === "coordinator";
-
-	// The coordinator steers. While one holds the case, managers (and anyone
-	// else) watch — steering verbs are theirs until someone takes it back.
-	const isCoordinator = Boolean(consultation.coordinatorEmail && consultation.coordinatorEmail === opsUser?.email);
-	const isCoordinated = Boolean(consultation.coordinatorId ?? consultation.coordinatorName);
-	const steeringLocked = isCoordinated && !isCoordinator;
 
 	// Where this applicant is on the ladder: the spawned application's derived
 	// journey when there is one, else the two consultation steps.
@@ -238,21 +238,14 @@ export function ConsultationDetail({
 			),
 		});
 	}
-	if (steeringLocked) {
-		// Watching, not steering: the coordinator's name is the next action.
-		nextActions.push({
-			id: "coordinated",
-			title: `${consultation.coordinatorName ?? "A coordinator"} is steering this case`,
-			detail: "You see progress and history; the steering actions are theirs until you take it back.",
-		});
-	} else if (consultation.status === "Under Review" && !consultation.assignedOfficer && canAssignWork) {
+	if (consultation.status === "Under Review" && !consultation.assignedOfficer && canAssignWork) {
 		nextActions.push({
 			id: "assign",
 			title: "New booking awaiting assignment",
 			detail: "Review the applicant's background, then assign a consultant in the work panel.",
 		});
 	}
-	if (consultation.status === "Assigned" && !steeringLocked) {
+	if (consultation.status === "Assigned") {
 		const slotPassed = consultation.startsAt ? new Date(consultation.startsAt).getTime() <= Date.now() : false;
 		const needsLink = consultation.type?.toLowerCase() === "online" && !consultation.meetingLink;
 		if (slotPassed) {
@@ -304,7 +297,7 @@ export function ConsultationDetail({
 			});
 		}
 	}
-	if (consultation.status === "Confirmed" && !steeringLocked) {
+	if (consultation.status === "Confirmed") {
 		nextActions.push({
 			id: "start",
 			title: "Start the assessment",
@@ -312,10 +305,7 @@ export function ConsultationDetail({
 			action: (
 				<button
 					type="button"
-					onClick={() => {
-						void startConsultationAssessment(consultation.id);
-						setDetailTab("assessment");
-					}}
+					onClick={() => void startConsultationAssessment(consultation.id)}
 					className="btn btn--primary btn--sm"
 				>
 					Start assessment →
@@ -323,7 +313,7 @@ export function ConsultationDetail({
 			),
 		});
 	}
-	if (consultation.status === "In Assessment" && canAssess && !steeringLocked) {
+	if (consultation.status === "In Assessment" && canAssess) {
 		nextActions.push({
 			id: "decide",
 			title: "Record the assessment outcome",
@@ -336,9 +326,7 @@ export function ConsultationDetail({
 		});
 	}
 	const waitingOn =
-		steeringLocked
-			? `Coordinated by ${consultation.coordinatorName} — you're watching; take it back to steer.`
-			: consultation.status === "Under Review" && !canAssignWork
+		consultation.status === "Under Review" && !canAssignWork
 			? "Awaiting assignment — a manager places this with a consultant."
 			: consultation.status === "Completed"
 				? spawned
@@ -369,8 +357,7 @@ export function ConsultationDetail({
 							History{(consultation.comments ?? []).length > 0 ? ` · ${(consultation.comments ?? []).length}` : ""}
 						</button>
 					}
-					stageHandlers={consultation.coordinatorName ? [{ stage: "coordinator", name: consultation.coordinatorName }] : undefined}
-					contact={{ email: consultation.email, phone: consultation.phone }}
+						contact={{ email: consultation.email, phone: consultation.phone }}
 					extra={[
 						{ label: "Status", value: <StatusPill tone={consultation.status === "Completed" ? "done" : consultation.status === "Cancelled" ? "void" : consultation.status === "Under Review" ? "waiting" : "current"}>{consultation.status}</StatusPill> },
 						{ label: "When", value: [consultation.dateTime, consultation.type].filter(isKnown).join(" · ") || "—" },
@@ -532,19 +519,24 @@ export function ConsultationDetail({
 				onCancel={() => setShowReschedule(false)}
 			/>
 		)}
-		{/* One block owns the meeting: online cases show the link (with Join /
-		    Resend / Change for whoever manages the case), in-person cases show
-		    the office address + directions. Nothing else renders the link. */}
+		{/* The call block never disappears for an online case — it states what is
+		    true right now: no room yet (minted when the slot is confirmed), the
+		    window not open (staff join from 30 min before), or joinable. In-person
+		    cases show the office address + directions. Nothing else renders the link. */}
 		{(() => {
 			const isLive = consultation.status !== "Completed" && consultation.status !== "Cancelled";
 			const canManageMeeting = isLive && Boolean(consultation.bookingId) && (canAssignWork || consultation.assignedOfficerEmail === opsUser?.email);
 			const isOnline = consultation.type?.toLowerCase() === "online";
 			if (isOnline) {
-				if (!consultation.meetingLink && !canManageMeeting && !editingMeetingUrl) return null;
+				// Staff may join 30 min before the slot (server: meetingWindow()).
+				const opensAt = isLive && consultation.startsAt ? new Date(consultation.startsAt).getTime() - 30 * 60_000 : null;
+				const joinOpen = opensAt === null || nowMs >= opensAt;
 				return (
 					<div style={{ padding: "0.75rem 1.25rem", background: "var(--muted)", borderBottom: "1px solid var(--border-light)", flexShrink: 0 }}>
 						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.25rem" }}>
-							<p className="eyebrow" style={{ margin: 0 }}>Meeting link</p>
+							<p className="eyebrow" style={{ margin: 0 }}>
+								Call{consultation.meetingLink ? (joinOpen ? " · open now" : opensAt ? ` · opens ${new Date(opensAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : "") : " · online"}
+							</p>
 							{consultation.meetingLink && (
 								<span className="mono muted" style={{ fontSize: "var(--text-xs)", background: "var(--border-light)", padding: "0.1rem 0.4rem" }}>
 									{consultation.meetingLink.includes("meet.google.com") ? "Google Meet" : consultation.meetingLink.startsWith("livekit:") ? "LiveKit" : consultation.meetingLink.includes("daily.co") ? "Daily · Private" : "Video Link"}
@@ -559,7 +551,7 @@ export function ConsultationDetail({
 											type="button"
 											className="btn btn--primary btn--sm"
 											style={{ whiteSpace: "nowrap" }}
-											disabled={joiningMeet}
+											disabled={joiningMeet || !joinOpen}
 											onClick={async () => {
 												// Token'd providers need a per-person credential — /join
 												// mints it. LiveKit hands back {ws url, token} and joins
@@ -601,6 +593,9 @@ export function ConsultationDetail({
 												: consultation.meetingLink.includes("daily.co")
 													? "Private room — join via the button, a bare link won't open"
 													: consultation.meetingLink}
+											{!joinOpen && opensAt
+												? ` — opens at ${new Date(opensAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}, 30 min before the slot`
+												: ""}
 										</span>
 										{canManageMeeting && (
 											<>
@@ -628,8 +623,13 @@ export function ConsultationDetail({
 											</>
 										)}
 									</>
-								) : canManageMeeting ? (
+								) : (
 									<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+										<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+											The room is minted when the slot is confirmed — the confirmation email carries it.
+										</span>
+										{canManageMeeting && (
+											<>
 										<button
 											type="button"
 											className="btn btn--primary btn--sm"
@@ -653,8 +653,10 @@ export function ConsultationDetail({
 										<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
 											+ Add Custom Link
 										</button>
+											</>
+										)}
 									</div>
-								) : null}
+								)}
 							</div>
 						) : (
 							<div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.3rem" }}>
@@ -738,29 +740,14 @@ export function ConsultationDetail({
 		})()}
 
 		{/* --- ACTION TOOLBAR --- */}
-		{/* Steering verbs live here — Reschedule, Delegate, Cancel. Hidden while
-		    any inline form or the reschedule panel is open. */}
-		{(!editingMeetingUrl && !showCancelForm && !showCoordinatorPicker && !showReschedule) && (
+		{/* Steering verbs live here — Reschedule, Cancel. Hidden while any
+		    inline form or the reschedule panel is open. */}
+		{(!editingMeetingUrl && !showCancelForm && !showReschedule) && (
 			<div style={{ display: "flex", gap: "0.5rem", padding: "0.5rem 1.25rem", borderBottom: "1px solid var(--border-light)", background: "var(--card)", flexWrap: "wrap", alignItems: "center" }}>
-				{!steeringLocked && (isMine || canAssignWork) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && consultation.bookingId && (
+				{(isMine || canAssignWork) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && consultation.bookingId && (
 					rescheduleButton
 				)}
-				{(canAssignWork || isCoordinator) && consultation.status !== "Completed" && consultation.status !== "Cancelled" && (
-					<button className="btn btn--ghost btn--sm" onClick={async () => {
-						setShowCoordinatorPicker(true);
-						if (!workloadData) {
-							try { setWorkloadData(await getWorkload()); } catch { /* ignore */ }
-						}
-					}}>
-						{consultation.coordinatorName ? "Reassign coordination" : "+ Delegate"}
-					</button>
-				)}
-				{steeringLocked && canAssignWork && (
-					<button className="btn btn--ghost btn--sm" onClick={() => { void reclaimCoordination(consultation.id).then(() => refresh()); }}>
-						Take back coordination
-					</button>
-				)}
-				{consultation.status === "In Assessment" && (canAssignWork || isCoordinator || isMine) && (
+				{consultation.status === "In Assessment" && (canAssignWork || isMine) && (
 					<button className="btn btn--ghost btn--sm" onClick={() => { void returnToConfirmed(consultation.id).then(() => refresh()); }}>
 						← Back to confirmed
 					</button>
@@ -820,82 +807,6 @@ export function ConsultationDetail({
 			</div>
 		)}
 
-		{showCoordinatorPicker && (
-			<div style={{ padding: "0.75rem 1.25rem", background: "var(--card)", borderBottom: "1px solid var(--border-light)" }}>
-				<div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-					<p style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-						{consultation.coordinatorId ? "Hand coordination to:" : "Select a coordinator:"}
-					</p>
-					{!consultation.coordinatorId && (
-						<div style={{ display: "flex", gap: "0.75rem", fontSize: "var(--text-xs)" }}>
-							<label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-								<input type="radio" checked={delegateScope === "case"} onChange={() => setDelegateScope("case")} />
-								This case only
-							</label>
-							<label style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-								<input type="radio" checked={delegateScope === "journey"} onChange={() => setDelegateScope("journey")} />
-								{consultation.applicantName ? `${consultation.applicantName.split(" ")[0]}'s journey — every case of theirs` : "The applicant's journey — every case of theirs"}
-							</label>
-						</div>
-					)}
-					{workloadData ? (
-						<div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-							{workloadData.coordinators.map((c) => (
-								<button
-									key={c.opsUserId}
-									onClick={async () => {
-										try {
-											if (consultation.coordinatorId) {
-												await reassignCoordinator(consultation.id, c.opsUserId, coordinatorNote || undefined);
-											} else {
-												await delegateCoordinator(consultation.id, c.opsUserId, coordinatorNote || undefined, delegateScope);
-											}
-											setShowCoordinatorPicker(false);
-											setCoordinatorNote("");
-											setDelegateScope("case");
-											void refresh();
-										} catch (err: unknown) {
-											onToast("error", err instanceof Error ? err.message : "Failed to delegate");
-										}
-									}}
-									className="btn btn--sm btn--ghost"
-									style={{
-										display: "flex",
-										flexDirection: "column",
-										alignItems: "flex-start",
-										padding: "0.4rem 0.75rem",
-										border: "1px solid var(--border)",
-										borderRadius: "0",
-									}}
-								>
-									<span style={{ fontWeight: 500 }}>{c.name}</span>
-									<span style={{ fontSize: "10px", opacity: 0.7 }}>
-										{c.activeCases}/{c.maxCapacity} cases
-										{c.overdueCases > 0 && <span style={{ color: "var(--danger)" }}> · {c.overdueCases} overdue</span>}
-									</span>
-								</button>
-							))}
-						</div>
-					) : (
-						<p style={{ fontSize: "var(--text-xs)", opacity: 0.6 }}>Loading workload…</p>
-					)}
-					<input
-						value={coordinatorNote}
-						onChange={(e) => setCoordinatorNote(e.target.value)}
-						placeholder="Delegation note (optional)"
-						style={{ fontSize: "var(--text-xs)", padding: "0.3rem 0.5rem", border: "1px solid var(--border)" }}
-					/>
-					<button
-						onClick={() => { setShowCoordinatorPicker(false); setCoordinatorNote(""); }}
-						className="btn btn--sm btn--ghost"
-						style={{ alignSelf: "flex-start" }}
-					>
-						Cancel
-					</button>
-				</div>
-			</div>
-		)}
-
 		{/* --- CONSOLIDATED STATUS STRIP --- */}
 		{(() => {
 			const alerts = [];
@@ -907,34 +818,6 @@ export function ConsultationDetail({
 				alerts.push(<strong>Assessment completed.</strong>);
 				if (consultation.assessmentResult) alerts.push(`Outcome: ${consultation.assessmentResult.outcome} - ${consultation.assessmentResult.recProgram} at ${consultation.assessmentResult.recUniversity} (${consultation.assessmentResult.recCountry}).`);
 			}
-			if (consultation.coordinatorName && !showCoordinatorPicker) {
-				const via = consultation.coordinatedVia === "applicant"
-					? " · via the applicant's journey"
-					: consultation.coordinatedVia === "duty"
-						? " · via today's duty"
-						: "";
-				alerts.push(
-					<span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-						Coordinator: <StaffChatBadge opsUserId={consultation.coordinatorEmail} name={consultation.coordinatorName} email={consultation.coordinatorEmail} />
-						{via && <span className="muted">{via}</span>}
-						{consultation.coordinatedVia === "applicant" && canAssignWork && consultation.applicantId && (
-							<button
-								type="button"
-								className="btn btn--ghost btn--sm"
-								style={{ fontSize: "10px", padding: "0.15rem 0.4rem" }}
-								onClick={() => {
-									void releaseJourney(consultation.applicantId)
-										.then(() => { void refresh(); onToast("success", "Journey released — new cases won't route to them."); })
-										.catch((err: unknown) => onToast("error", err instanceof Error ? err.message : "Release failed"));
-								}}
-							>
-								Release journey
-							</button>
-						)}
-					</span>
-				);
-			}
-
 			if (alerts.length === 0) return null;
 
 			return (

@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db } from "../db/index.js";
 import { marketingCampaigns, mailingListContacts, campaignRecipients } from "../db/schema.js";
 import { sendEmail } from "../lib/resend.js";
 import { env } from "../env.js";
+import { HttpError } from "../middleware/error.js";
 import { queueCampaignSend, cancelQueuedCampaignSend } from "../worker/queues.js";
 
 /**
@@ -219,33 +220,35 @@ export async function runCampaignSend(campaignId: string): Promise<void> {
 	let failed = 0;
 
 	for (const recipient of recipients) {
-		const recipientName = recipient.name ?? "there";
-		const personalizedSubject = campaign.subject
-			.replace(/\{\{name\}\}/g, recipientName)
-			.replace(/\{\{Name\}\}/g, recipientName);
-		const personalizedBody = campaign.body
-			.replace(/\{\{name\}\}/g, recipientName)
-			.replace(/\{\{Name\}\}/g, recipientName);
+		const merged = mergeFields(campaign.subject ?? "", campaign.body, {
+			name: recipient.name,
+			email: recipient.email,
+		});
 
 		const unsubscribeUrl = await buildUnsubscribeUrl(recipient.contactId);
 		const footerNote = `You're receiving this because you subscribed to Century NIT updates. <a href="${escapeHtml(unsubscribeUrl)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`;
 
 		const html = emailLayout({
-			title: personalizedSubject,
-			bodyHtml: personalizedBody,
+			title: merged.subject,
+			bodyHtml: merged.body,
 			footerNote,
 		});
 
 		try {
-			await sendEmail({
+			const result = await sendEmail({
 				to: recipient.email,
-				subject: personalizedSubject,
+				subject: merged.subject,
 				html,
 			});
 			delivered++;
 			await db
 				.update(campaignRecipients)
-				.set({ status: "sent", sentAt: new Date(), error: null })
+				.set({
+					status: "sent",
+					sentAt: new Date(),
+					error: null,
+					providerMessageId: result?.id ?? null,
+				})
 				.where(eq(campaignRecipients.id, recipient.id));
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
@@ -284,4 +287,163 @@ async function buildUnsubscribeUrl(contactId: string | null): Promise<string> {
 		.limit(1);
 	const token = await ensureConfirmToken(contactId, contact?.confirmToken ?? null);
 	return `${env.FRONTEND_URL}/newsletter/unsubscribe?token=${token}`;
+}
+
+/* ── Merge fields ───────────────────────────────────────────────────────── */
+
+/**
+ * The only substitutions the campaign engine performs. Anything else in the
+ * body goes out literally — the compose UI advertises exactly this set so an
+ * operator can never write a placeholder that silently survives to delivery.
+ *
+ * `{{date}}` renders today's date in a reader-friendly long form.
+ */
+export function mergeFields(
+	subject: string,
+	body: string,
+	contact: { name: string | null; email: string },
+): { subject: string; body: string } {
+	const name = contact.name?.trim() || "there";
+	const today = new Date().toLocaleDateString("en-GB", {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	});
+	const apply = (s: string) =>
+		s
+			.replace(/\{\{\s*name\s*\}\}/gi, name)
+			.replace(/\{\{\s*email\s*\}\}/gi, contact.email)
+			.replace(/\{\{\s*date\s*\}\}/gi, today);
+	return { subject: apply(subject), body: apply(body) };
+}
+
+/* ── Preview + test send ────────────────────────────────────────────────── */
+
+/**
+ * Render a campaign's email exactly as the worker would — same layout, same
+ * merge set, same unsubscribe footer — so the preview IS the artifact.
+ * A sample contact is used for the merge when no real one is supplied.
+ */
+export async function renderCampaignPreview(input: {
+	subject: string;
+	body: string;
+	sampleName?: string;
+	sampleEmail?: string;
+}): Promise<{ html: string; subject: string }> {
+	const merged = mergeFields(input.subject, input.body, {
+		name: input.sampleName ?? "Ama Serwaa",
+		email: input.sampleEmail ?? "ama.s@example.com",
+	});
+	const footerNote = `You're receiving this because you subscribed to Century NIT updates. <span style="color:#000000;text-decoration:underline;">Unsubscribe</span>.`;
+	return {
+		subject: merged.subject,
+		html: emailLayout({ title: merged.subject, bodyHtml: merged.body, footerNote }),
+	};
+}
+
+/**
+ * Send a campaign draft to a single address — the same personalize + layout +
+ * footer path the worker runs, addressed to the operator instead of the list.
+ * Does not touch the recipient ledger or the campaign's lifecycle.
+ */
+export async function sendCampaignTest(
+	campaignId: string,
+	to: string,
+): Promise<void> {
+	const [campaign] = await db
+		.select()
+		.from(marketingCampaigns)
+		.where(eq(marketingCampaigns.id, campaignId))
+		.limit(1);
+	if (!campaign) {
+		throw new HttpError(404, "CAMPAIGN_NOT_FOUND", "Campaign not found");
+	}
+	if (campaign.channel === "sms") {
+		throw new HttpError(422, "SMS_NOT_SUPPORTED", "SMS delivery isn't configured — email campaigns only.");
+	}
+	if (!campaign.subject) {
+		throw new HttpError(422, "CAMPAIGN_INCOMPLETE", "The campaign needs a subject before a test can send.");
+	}
+
+	const merged = mergeFields(campaign.subject, campaign.body, {
+		name: "Ama Serwaa",
+		email: to,
+	});
+	const footerNote = `This is a test send of “${escapeHtml(campaign.name)}”. <a href="${escapeHtml(env.FRONTEND_URL)}" style="color:#000000;text-decoration:underline;">Unsubscribe</a>.`;
+	await sendEmail({
+		to,
+		subject: `[TEST] ${merged.subject}`,
+		html: emailLayout({ title: merged.subject, bodyHtml: merged.body, footerNote }),
+		log: { template: `campaign-test:${campaign.name}` },
+	});
+}
+
+/**
+ * Re-enqueue delivery for only the failed rows of a sent campaign. Rows are
+ * flipped back to `pending` and the queue job walks just those — the delivered
+ * half of the ledger is untouched.
+ */
+export async function retryFailedRecipients(campaignId: string): Promise<number> {
+	const [campaign] = await db
+		.select()
+		.from(marketingCampaigns)
+		.where(eq(marketingCampaigns.id, campaignId))
+		.limit(1);
+	if (!campaign) throw new HttpError(404, "CAMPAIGN_NOT_FOUND", "Campaign not found");
+	if (campaign.channel === "sms") {
+		throw new HttpError(422, "SMS_NOT_SUPPORTED", "SMS delivery isn't configured — email campaigns only.");
+	}
+
+	const failed = await db
+		.select({ id: campaignRecipients.id })
+		.from(campaignRecipients)
+		.where(and(eq(campaignRecipients.campaignId, campaignId), eq(campaignRecipients.status, "failed")));
+	if (failed.length === 0) return 0;
+
+	await db
+		.update(campaignRecipients)
+		.set({ status: "pending", error: null })
+		.where(and(eq(campaignRecipients.campaignId, campaignId), eq(campaignRecipients.status, "failed")));
+
+	await db
+		.update(marketingCampaigns)
+		.set({ status: "sending", updatedAt: new Date() })
+		.where(eq(marketingCampaigns.id, campaignId));
+
+	await queueCampaignSend(campaignId);
+	return failed.length;
+}
+
+/* ── Resend delivery webhook ────────────────────────────────────────────── */
+
+/**
+ * Map a Resend webhook event onto the recipient row it belongs to. Resend
+ * identifies the email by the id it returned at send, stored on
+ * `providerMessageId` — we never match by address (a recipient can appear in
+ * many campaigns).
+ */
+export async function applyResendEvent(event: {
+	type: string;
+	data?: { email_id?: string; created_at?: string };
+}): Promise<void> {
+	const providerId = event.data?.email_id;
+	if (!providerId) return;
+
+	const at = event.data?.created_at ? new Date(event.data.created_at) : new Date();
+	const set: Record<string, unknown> = {};
+	if (event.type === "email.opened") {
+		set.openedAt = at;
+	} else if (event.type === "email.bounced" || event.type === "email.complained") {
+		set.bouncedAt = at;
+		set.status = "failed";
+		set.error = event.type === "email.bounced" ? "Bounced (provider report)" : "Spam complaint";
+	} else {
+		return; // delivered/sent/clicked — nothing to record yet
+	}
+
+	await db
+		.update(campaignRecipients)
+		.set(set)
+		.where(eq(campaignRecipients.providerMessageId, providerId));
 }

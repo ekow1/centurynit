@@ -1,4 +1,5 @@
-import { desc, eq, and, sql, gt, ne, inArray, isNull } from "drizzle-orm";
+import { desc, eq, and, sql, gt, ne, inArray, isNull, ilike } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import type {
 	ChatConversation,
 	ChatConversationList,
@@ -13,8 +14,11 @@ import type {
 import { db } from "../db/index.js";
 import {
 	applicants,
+	applications,
+	bookings,
 	conversations,
 	conversationParticipants,
+	invoices,
 	messages,
 	messageMentions,
 	messageReactions,
@@ -30,6 +34,8 @@ import { env } from "../env.js";
 import { notify, notifyMany, getManagerAndCoordinatorUserIds, getStaffUserId, isStaffActive } from "./notify.js";
 import { publishToUser } from "../worker/pubsub.js";
 import { serializeMessageRow, hydrateMessages, getMessageReactions } from "./message-serializer.js";
+import { getDocumentStorage } from "./storage/index.js";
+import { JOURNEY_STAGE_LABELS, type ConversationStatus } from "century-nit-shared";
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
@@ -155,7 +161,7 @@ function serializeConversation(
 	return {
 		id: row.id,
 		type: row.type as "applicant" | "direct" | "entity" | "group",
-		status: (row as any).status ?? "open",
+		status: (row.status ?? "open") as ChatConversation["status"],
 		title,
 		linkedEntityType: row.linkedEntityType,
 		linkedEntityId: row.linkedEntityId,
@@ -172,6 +178,7 @@ function serializeConversation(
 		})),
 		lastMessage: lastMsg ? serializeMessageRow(lastMsg) : null,
 		unreadCount: unread,
+		lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 	};
@@ -202,6 +209,7 @@ export async function listConversations(
 	]);
 	const canSeeSupportQueue = !!staffRole && SUPPORT_QUEUE_ROLES.has(staffRole);
 
+	const activityOrder = desc(sql`COALESCE(${conversations.lastMessageAt}, ${conversations.updatedAt})`);
 	const rows = canSeeSupportQueue
 		? await db
 				.select()
@@ -210,12 +218,12 @@ export async function listConversations(
 				.where(
 					sql`(${membership.conversationId} IS NOT NULL OR ${conversations.type} = 'support')`,
 				)
-				.orderBy(desc(conversations.updatedAt))
+				.orderBy(activityOrder)
 		: await db
 				.select()
 				.from(conversations)
 				.innerJoin(membership, eq(conversations.id, membership.conversationId))
-				.orderBy(desc(conversations.updatedAt));
+				.orderBy(activityOrder);
 
 	const conversationIds = rows.map((r) => r.conversations.id);
 	if (conversationIds.length === 0) {
@@ -519,7 +527,7 @@ async function findDirectConversation(userId1: string, userId2: string) {
 export async function getMessages(
 	conversationId: string,
 	opsUserId: string,
-	opts: { limit?: number; before?: string } = {},
+	opts: { limit?: number; before?: string; q?: string; publicOnly?: boolean } = {},
 	staffRole?: string,
 ): Promise<ChatMessageList> {
 	// Authorization: only participants may read a conversation. Without this
@@ -554,6 +562,14 @@ export async function getMessages(
 	if (opts.before) {
 		conditions.push(sql`${messages.createdAt} < (SELECT created_at FROM ${messages} WHERE id = ${opts.before})`);
 	}
+	// Client-facing reads never see staff-only notes.
+	if (opts.publicOnly) {
+		conditions.push(eq(messages.visibility, "public"));
+	}
+	const q = opts.q?.trim();
+	if (q) {
+		conditions.push(ilike(messages.content, `%${q}%`));
+	}
 
 	const rows = await db
 		.select()
@@ -574,11 +590,15 @@ export async function getMessages(
 
 /* ── Send message (internal) ────────────────────────────────────────────── */
 
+/** Conversation types that face the customer — helpdesk triage targets. */
+const CLIENT_FACING_TYPES = new Set(["applicant", "support", "case", "stage", "entity"]);
+
 async function sendMessageInternal(
 	conversationId: string,
 	sender: { id: string; name: string; email: string },
 	input: SendMessage,
 ): Promise<ChatMessage> {
+	const visibility = input.visibility === "internal" ? "internal" : "public";
 	const [created] = await db
 		.insert(messages)
 		.values({
@@ -588,13 +608,15 @@ async function sendMessageInternal(
 			content: input.content,
 			messageType: "text",
 			replyToId: input.replyToId ?? null,
+			visibility,
 		})
 		.returning();
 
-	// Update conversation timestamp
+	// Update conversation timestamps — `lastMessageAt` is the sort key every
+	// queue/list orders by, so it must move on every send.
 	await db
 		.update(conversations)
-		.set({ updatedAt: new Date() })
+		.set({ updatedAt: new Date(), lastMessageAt: created.createdAt })
 		.where(eq(conversations.id, conversationId));
 
 	// Bind pre-staged uploads to the message now that it exists. Scoped to rows
@@ -622,6 +644,42 @@ async function sendMessageInternal(
 				mentionedOpsUserId,
 			})),
 		);
+	}
+
+	// First reply auto-claims: in a client-facing conversation with no owner,
+	// the staff member who answers becomes the owner so the queue's "Mine" /
+	// "Unclaimed" cuts reflect reality.
+	const [convRow] = await db
+		.select({ type: conversations.type })
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (convRow && CLIENT_FACING_TYPES.has(convRow.type)) {
+		const [owner] = await db
+			.select({ opsUserId: conversationParticipants.opsUserId })
+			.from(conversationParticipants)
+			.where(
+				and(
+					eq(conversationParticipants.conversationId, conversationId),
+					eq(conversationParticipants.role, "owner"),
+				),
+			)
+			.limit(1);
+		if (!owner) {
+			await db
+				.update(conversationParticipants)
+				.set({ role: "owner" })
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conversationId),
+						eq(conversationParticipants.opsUserId, sender.id),
+					),
+				);
+			publishChatEvent(conversationId, {
+				type: "chat.conversation.updated",
+				conversationId,
+			});
+		}
 	}
 
 	// Real-time: push the new message to all online participants via SSE so
@@ -660,6 +718,9 @@ async function sendMessageInternal(
 			const isCustomerFacing =
 				conv?.userId &&
 				conv.userId !== sender.id &&
+				// Internal notes are staff-only — the client must never be
+				// notified that one was posted.
+				visibility !== "internal" &&
 				(conv.type === "applicant" ||
 					conv.type === "support" ||
 					conv.type === "case" ||
@@ -1330,7 +1391,7 @@ export async function getApplicantMessages(
 		.limit(1);
 	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
 
-	return getMessages(conversationId, "", opts);
+	return getMessages(conversationId, "", { ...opts, publicOnly: true });
 }
 
 /**
@@ -1341,14 +1402,35 @@ export async function sendApplicantMessage(
 	userId: string,
 	userName: string,
 	content: string,
+	attachmentIds?: string[],
 ): Promise<ChatMessage> {
 	// Verify the conversation belongs to this user
 	const [conv] = await db
-		.select({ id: conversations.id })
+		.select({ id: conversations.id, status: conversations.status })
 		.from(conversations)
 		.where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId)))
 		.limit(1);
 	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
+
+	// A new client message re-opens a resolved conversation — the thread is
+	// the record, and "resolved" is a state, not a wall.
+	if (conv.status === "closed") {
+		await db
+			.update(conversations)
+			.set({ status: "open", closedAt: null })
+			.where(eq(conversations.id, conversationId));
+		await db.insert(messages).values({
+			conversationId,
+			senderName: "System",
+			content: "Conversation reopened — new message from the client",
+			messageType: "system",
+		});
+		publishChatEvent(conversationId, {
+			type: "chat.conversation.updated",
+			conversationId,
+			status: "open",
+		});
+	}
 
 	const [created] = await db
 		.insert(messages)
@@ -1361,11 +1443,26 @@ export async function sendApplicantMessage(
 		})
 		.returning();
 
-	// Update conversation timestamp
+	// Update conversation timestamps
 	await db
 		.update(conversations)
-		.set({ updatedAt: new Date() })
+		.set({ updatedAt: new Date(), lastMessageAt: created.createdAt })
 		.where(eq(conversations.id, conversationId));
+
+	// Bind pre-staged uploads — scoped to rows this applicant staged and that
+	// aren't already bound, matching the staff path's guard.
+	if (attachmentIds?.length) {
+		await db
+			.update(messageAttachments)
+			.set({ messageId: created.id })
+			.where(
+				and(
+					inArray(messageAttachments.id, attachmentIds),
+					isNull(messageAttachments.messageId),
+					eq(messageAttachments.uploadedByUserId, userId),
+				),
+			);
+	}
 
 	// Real-time: push the applicant's message to all staff participants so
 	// the consultant's chat UI appends it instantly without polling.
@@ -1398,7 +1495,7 @@ export async function sendApplicantMessage(
 						type: "chat.message",
 						title,
 						body: preview,
-						link: "/inbox",
+						link: `/chat?conversation=${conversationId}`,
 					});
 					return;
 				}
@@ -1412,7 +1509,7 @@ export async function sendApplicantMessage(
 					type: "chat.message",
 					title,
 					body: preview,
-					link: "/inbox",
+					link: `/chat?conversation=${conversationId}`,
 				})),
 			);
 		} catch {
@@ -1421,4 +1518,524 @@ export async function sendApplicantMessage(
 	})().catch(() => {});
 
 	return serializeMessage(created);
+}
+
+/* ── Lifecycle: resolve / reopen / archive ────────────────────────────── */
+
+/**
+ * Flip a conversation's lifecycle status. Resolve writes `closed` + `closedAt`
+ * and posts a system divider into the thread so both sides see the boundary.
+ * Reopen clears it. Archived hides the thread from client lists.
+ *
+ * Membership is required — the caller must already participate (support-queue
+ * auto-join runs first so triage roles can resolve threads they just opened).
+ */
+export async function setConversationStatus(
+	conversationId: string,
+	status: ConversationStatus,
+	actor: { id: string; name: string },
+	staffRole?: string,
+): Promise<ChatConversation> {
+	if (staffRole) {
+		await ensureSupportQueueAccess(conversationId, actor.id, staffRole);
+	}
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, actor.id),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	const [conv] = await db
+		.select()
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (!conv) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+	if (conv.status === status) return getConversation(conversationId, actor.id, staffRole);
+
+	const closing = status === "closed" || status === "archived";
+	await db
+		.update(conversations)
+		.set({
+			status,
+			closedAt: closing ? new Date() : null,
+			updatedAt: new Date(),
+		})
+		.where(eq(conversations.id, conversationId));
+
+	const label =
+		status === "closed"
+			? `Resolved by ${actor.name}`
+			: status === "archived"
+				? `Archived by ${actor.name}`
+				: `Reopened by ${actor.name}`;
+	const [sysMsg] = await db
+		.insert(messages)
+		.values({
+			conversationId,
+			senderName: "System",
+			content: label,
+			messageType: "system",
+		})
+		.returning();
+
+	publishChatEvent(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(sysMsg),
+	});
+	publishChatEvent(conversationId, {
+		type: "chat.conversation.updated",
+		conversationId,
+		status,
+	});
+
+	return getConversation(conversationId, actor.id, staffRole);
+}
+
+/* ── Ownership: claim / reassign ──────────────────────────────────────── */
+
+/**
+ * Make `targetOpsUserId` the conversation's owner. Any prior owner is demoted
+ * to `member` — a thread has exactly one owner, which is what the helpdesk's
+ * "Mine"/"Unclaimed" cuts and the row's owner pill read.
+ *
+ * `targetOpsUserId === null` releases ownership (thread goes back to
+ * unclaimed). The actor must participate; queue roles auto-join first.
+ */
+export async function assignConversationOwner(
+	conversationId: string,
+	targetOpsUserId: string | null,
+	actor: { id: string; name: string },
+	staffRole?: string,
+): Promise<ChatConversation> {
+	if (staffRole) {
+		await ensureSupportQueueAccess(conversationId, actor.id, staffRole);
+	}
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, actor.id),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	const [conv] = await db
+		.select({ id: conversations.id, status: conversations.status })
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (!conv) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+
+	// Demote every current owner.
+	await db
+		.update(conversationParticipants)
+		.set({ role: "member" })
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.role, "owner"),
+			),
+		);
+
+	let targetName = "Unclaimed";
+	if (targetOpsUserId) {
+		const [target] = await db
+			.select({ name: opsUsers.name })
+			.from(opsUsers)
+			.where(eq(opsUsers.id, targetOpsUserId))
+			.limit(1);
+		if (!target) throw new HttpError(404, "STAFF_NOT_FOUND", "Staff member not found");
+		targetName = target.name;
+
+		// Promote the target's existing membership, or join them in as owner.
+		const [existing] = await db
+			.select({ conversationId: conversationParticipants.conversationId })
+			.from(conversationParticipants)
+			.where(
+				and(
+					eq(conversationParticipants.conversationId, conversationId),
+					eq(conversationParticipants.opsUserId, targetOpsUserId),
+				),
+			)
+			.limit(1);
+		if (existing) {
+			await db
+				.update(conversationParticipants)
+				.set({ role: "owner" })
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conversationId),
+						eq(conversationParticipants.opsUserId, targetOpsUserId),
+					),
+				);
+		} else {
+			await db
+				.insert(conversationParticipants)
+				.values({ conversationId, opsUserId: targetOpsUserId, role: "owner" })
+				.onConflictDoNothing();
+		}
+	}
+
+	const content =
+		targetOpsUserId === null
+			? `${actor.name} released this conversation`
+			: targetOpsUserId === actor.id
+				? `${actor.name} claimed this conversation`
+				: `${actor.name} assigned this conversation to ${targetName}`;
+	const [sysMsg] = await db
+		.insert(messages)
+		.values({
+			conversationId,
+			senderName: "System",
+			content,
+			messageType: "system",
+		})
+		.returning();
+
+	publishChatEvent(conversationId, {
+		type: "chat.message",
+		conversationId,
+		message: serializeMessage(sysMsg),
+	});
+	publishChatEvent(conversationId, {
+		type: "chat.conversation.updated",
+		conversationId,
+	});
+
+	return getConversation(conversationId, actor.id, staffRole);
+}
+
+/* ── Context aggregate — the helpdesk's right rail ────────────────────── */
+
+export interface ConversationContext {
+	client: {
+		userId: string;
+		name: string;
+		email: string | null;
+		branch: string | null;
+		targetCountry: string | null;
+		memberSince: string | null;
+	} | null;
+	cases: { id: string; appNumber: string; stage: string; stageLabel: string; status: string }[];
+	money: { type: string; status: string; invoiceNumber: string }[];
+	nextAppointment: { startsAt: string; serviceName: string; status: string } | null;
+	owner: { opsUserId: string; name: string } | null;
+	messageCount: number;
+}
+
+/**
+ * Everything the helpdesk's context rail needs in one round trip: who the
+ * client is, where their cases sit, what they owe, and when we next see them.
+ * All blocks are optional — a thread can exist before the applicant record.
+ */
+export async function getConversationContext(
+	conversationId: string,
+	opsUserId: string,
+	staffRole?: string,
+): Promise<ConversationContext> {
+	if (staffRole) {
+		await ensureSupportQueueAccess(conversationId, opsUserId, staffRole);
+	}
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, opsUserId),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	const [conv] = await db
+		.select()
+		.from(conversations)
+		.where(eq(conversations.id, conversationId))
+		.limit(1);
+	if (!conv) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
+
+	const [ownerRow] = await db
+		.select({ opsUserId: conversationParticipants.opsUserId, name: opsUsers.name })
+		.from(conversationParticipants)
+		.innerJoin(opsUsers, eq(conversationParticipants.opsUserId, opsUsers.id))
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.role, "owner"),
+			),
+		)
+		.limit(1);
+
+	const [{ count: messageCount }] = await db
+		.select({ count: sql<number>`count(*)::int` })
+		.from(messages)
+		.where(eq(messages.conversationId, conversationId));
+
+	const clientUserId =
+		conv.userId ??
+		(
+			await db
+				.select({ participantUserId: conversationParticipants.participantUserId })
+				.from(conversationParticipants)
+				.where(
+					and(
+						eq(conversationParticipants.conversationId, conversationId),
+						sql`${conversationParticipants.participantUserId} IS NOT NULL`,
+					),
+				)
+				.limit(1)
+		)[0]?.participantUserId ??
+		null;
+
+	let client: ConversationContext["client"] = null;
+	let cases: ConversationContext["cases"] = [];
+	let money: ConversationContext["money"] = [];
+	let nextAppointment: ConversationContext["nextAppointment"] = null;
+
+	if (clientUserId) {
+		const [applicantRow] = await db
+			.select({
+				id: applicants.id,
+				name: applicants.name,
+				email: applicants.email,
+				branch: applicants.branch,
+				targetCountry: applicants.targetCountry,
+				createdAt: applicants.createdAt,
+			})
+			.from(applicants)
+			.where(eq(applicants.userId, clientUserId))
+			.limit(1);
+
+		const [caseRows, invoiceRows, [booking]] = await Promise.all([
+			applicantRow
+				? db
+						.select({
+							id: applications.id,
+							appNumber: applications.appNumber,
+							stage: applications.stage,
+							status: applications.status,
+						})
+						.from(applications)
+						.where(eq(applications.applicantId, applicantRow.id))
+						.orderBy(desc(applications.createdAt))
+						.limit(3)
+				: Promise.resolve([]),
+			db
+				.select({
+					type: invoices.type,
+					status: invoices.status,
+					invoiceNumber: invoices.invoiceNumber,
+				})
+				.from(invoices)
+				.where(eq(invoices.clientUserId, clientUserId))
+				.orderBy(desc(invoices.createdAt))
+				.limit(4),
+			db
+				.select({
+					startsAt: bookings.startsAt,
+					serviceName: bookings.serviceName,
+					status: bookings.status,
+				})
+				.from(bookings)
+				.where(
+					and(
+						eq(bookings.clientUserId, clientUserId),
+						gt(bookings.startsAt, new Date()),
+						inArray(bookings.status, ["CONFIRMED", "ASSIGNED", "RESCHEDULED", "UNASSIGNED"]),
+					),
+				)
+				.orderBy(bookings.startsAt)
+				.limit(1),
+		]);
+
+		if (applicantRow) {
+			client = {
+				userId: clientUserId,
+				name: applicantRow.name,
+				email: applicantRow.email,
+				branch: applicantRow.branch,
+				targetCountry: applicantRow.targetCountry,
+				memberSince: applicantRow.createdAt?.toISOString() ?? null,
+			};
+		} else {
+			const [u] = await db
+				.select({ name: users.name, email: users.email, createdAt: users.createdAt })
+				.from(users)
+				.where(eq(users.id, clientUserId))
+				.limit(1);
+			if (u) {
+				client = {
+					userId: clientUserId,
+					name: u.name ?? "Client",
+					email: u.email ?? null,
+					branch: null,
+					targetCountry: null,
+					memberSince: u.createdAt?.toISOString() ?? null,
+				};
+			}
+		}
+
+		cases = caseRows.map((r) => ({
+			id: r.id,
+			appNumber: r.appNumber,
+			stage: r.stage,
+			stageLabel:
+				(JOURNEY_STAGE_LABELS as Record<string, string>)[r.stage] ?? r.stage,
+			status: r.status,
+		}));
+		money = invoiceRows.map((r) => ({
+			type: r.type,
+			status: r.status,
+			invoiceNumber: r.invoiceNumber,
+		}));
+		nextAppointment = booking
+			? {
+					startsAt: booking.startsAt.toISOString(),
+					serviceName: booking.serviceName,
+					status: booking.status,
+				}
+			: null;
+	}
+
+	return {
+		client,
+		cases,
+		money,
+		nextAppointment,
+		owner: ownerRow ? { opsUserId: ownerRow.opsUserId!, name: ownerRow.name } : null,
+		messageCount,
+	};
+}
+
+/* ── Attachment staging ───────────────────────────────────────────────── */
+
+/**
+ * Two-phase upload, phase one: mint a private storage key, record a staged
+ * `message_attachments` row owned by the uploader, and return a presigned PUT
+ * the browser uploads straight to storage. Phase two is ordinary sendMessage —
+ * `attachmentIds` binds the staged rows to the new message (scoped to the
+ * sender, so staged rows can't be attached by anyone else).
+ */
+export async function stageChatAttachment(
+	conversationId: string,
+	uploader: { opsUserId: string },
+	meta: { fileName: string; contentType: string; sizeBytes: number },
+): Promise<{ attachmentId: string; uploadUrl: string; headers: Record<string, string>; expiresAt: string }> {
+	if (meta.sizeBytes > 25 * 1024 * 1024) {
+		throw new HttpError(413, "ATTACHMENT_TOO_LARGE", "Attachments are limited to 25 MB");
+	}
+	const [membership] = await db
+		.select({ conversationId: conversationParticipants.conversationId })
+		.from(conversationParticipants)
+		.where(
+			and(
+				eq(conversationParticipants.conversationId, conversationId),
+				eq(conversationParticipants.opsUserId, uploader.opsUserId),
+			),
+		)
+		.limit(1);
+	if (!membership) {
+		throw new HttpError(403, "NOT_PARTICIPANT", "You are not a participant in this conversation");
+	}
+
+	const safeName = meta.fileName.replace(/[^\w.\- ]+/g, "_").slice(-120) || "attachment";
+	const storageKey = `chat/${conversationId}/${randomUUID()}-${safeName}`;
+
+	const storage = await getDocumentStorage();
+	const ticket = await storage.createUploadUrl({
+		key: storageKey,
+		contentType: meta.contentType,
+	});
+
+	const [row] = await db
+		.insert(messageAttachments)
+		.values({
+			uploadedByOpsUserId: uploader.opsUserId,
+			storageKey,
+			fileName: meta.fileName.slice(0, 255),
+			contentType: meta.contentType.slice(0, 128),
+			sizeBytes: meta.sizeBytes,
+		})
+		.returning({ id: messageAttachments.id });
+
+	return {
+		attachmentId: row.id,
+		uploadUrl: ticket.url,
+		headers: ticket.headers ?? {},
+		expiresAt: ticket.expiresAt.toISOString(),
+	};
+}
+
+/**
+ * Client-side counterpart — the applicant stages an upload against their own
+ * conversation. Ownership check is `conversations.userId`, not participants.
+ */
+export async function stageCustomerAttachment(
+	conversationId: string,
+	userId: string,
+	meta: { fileName: string; contentType: string; sizeBytes: number },
+): Promise<{ attachmentId: string; uploadUrl: string; headers: Record<string, string>; expiresAt: string }> {
+	if (meta.sizeBytes > 25 * 1024 * 1024) {
+		throw new HttpError(413, "ATTACHMENT_TOO_LARGE", "Attachments are limited to 25 MB");
+	}
+	const [conv] = await db
+		.select({ id: conversations.id })
+		.from(conversations)
+		.where(
+			and(
+				eq(conversations.id, conversationId),
+				sql`(${conversations.userId} = ${userId} OR EXISTS (
+					SELECT 1 FROM ${conversationParticipants}
+					WHERE ${conversationParticipants.conversationId} = ${conversations.id}
+					AND ${conversationParticipants.participantUserId} = ${userId}
+				))`,
+			),
+		)
+		.limit(1);
+	if (!conv) throw new HttpError(403, "NOT_PARTICIPANT", "This is not your conversation");
+
+	const safeName = meta.fileName.replace(/[^\w.\- ]+/g, "_").slice(-120) || "attachment";
+	const storageKey = `chat/${conversationId}/${randomUUID()}-${safeName}`;
+
+	const storage = await getDocumentStorage();
+	const ticket = await storage.createUploadUrl({
+		key: storageKey,
+		contentType: meta.contentType,
+	});
+
+	const [row] = await db
+		.insert(messageAttachments)
+		.values({
+			uploadedByUserId: userId,
+			storageKey,
+			fileName: meta.fileName.slice(0, 255),
+			contentType: meta.contentType.slice(0, 128),
+			sizeBytes: meta.sizeBytes,
+		})
+		.returning({ id: messageAttachments.id });
+
+	return {
+		attachmentId: row.id,
+		uploadUrl: ticket.url,
+		headers: ticket.headers ?? {},
+		expiresAt: ticket.expiresAt.toISOString(),
+	};
 }

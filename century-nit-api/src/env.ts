@@ -97,6 +97,8 @@ const schema = z.object({
 	// ── Optional integrations — the app degrades gracefully without them ──
 	RESEND_API_KEY: z.string().optional(),
 	RESEND_FROM: z.string().email().default("noreply@centurynit.com"),
+	/** Svix signing secret (whsec_…) for the /api/webhooks/resend endpoint. */
+	RESEND_WEBHOOK_SECRET: z.string().optional(),
 	/*
 	 * Supabase Storage — applicant documents and file uploads.
 	 *

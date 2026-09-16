@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import type { Booking } from "century-nit-shared";
 import { COMMENT_KIND_LABELS } from "century-nit-core/ops";
 import { useOpsAuth } from "./OpsAuthContext";
-import { taskActionLabel, whenLabel, type PendingTask } from "../lib/pendingTasks";
+import { isOverdue, taskActionLabel, whenLabel, type PendingTask } from "../lib/pendingTasks";
 import { useJoinMeeting } from "./case/ConsultationCall";
 
 /**
@@ -87,6 +87,17 @@ export function NowPane({
 	const upNext = (live ? upcomingToday : upcomingToday.slice(1)).slice(0, 3);
 	const later = consultations.find((t) => new Date(t.due!).getTime() > now.getTime() && !sameDay(new Date(t.due!), now)) ?? null;
 	const top = items[0] ?? null;
+
+	// The four numbers a manager checks first — above the fold, before the Now card.
+	const health = useMemo(() => {
+		const me = [opsUser?.name, opsUser?.email].filter(Boolean);
+		return {
+			mine: items.filter((t) => me.some((w) => t.owner === w)).length,
+			overdue: items.filter((t) => isOverdue(t)).length,
+			unassigned: items.filter((t) => t.category === "needs_assignment").length,
+			approval: items.filter((t) => t.action === "issue").length,
+		};
+	}, [items, opsUser]);
 
 	const bar = (
 		<div className="cn-scaffold__bar">
@@ -222,6 +233,14 @@ export function NowPane({
 			<div className="cn-scaffold__body">
 				<div className="cn-detail">
 					{joinError && <p className="muted" style={{ fontSize: "var(--text-xs)" }}>{joinError}</p>}
+					<div className="card cn-now">
+						<div className="ops-health">
+							<div><b>{health.mine}</b><span>Mine open</span></div>
+							<div><b>{health.overdue}</b><span>Overdue</span></div>
+							<div><b>{health.unassigned}</b><span>Unassigned</span></div>
+							<div><b>{health.approval}</b><span>Awaiting approval</span></div>
+						</div>
+					</div>
 					{head}
 					{record.length > 0 && (
 						<div className="card cn-now">

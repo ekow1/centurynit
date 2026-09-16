@@ -27,6 +27,7 @@ import {
 	assignStageOfficer,
 	listStageAssignments,
 } from "../services/communication.js";
+import { stageCustomerAttachment } from "../services/chat.js";
 
 const idParams = z.object({ id: z.string().uuid() });
 
@@ -179,8 +180,57 @@ meCommunicationRouter.openapi(
 		const user = c.get("user");
 		const { id } = c.req.valid("param");
 		const body = c.req.valid("json");
-		const msg = await sendCustomerMessage(id, user, body.content);
+		const msg = await sendCustomerMessage(id, user, body.content, body.attachmentIds);
 		return c.json(msg, 201);
+	},
+);
+
+/* POST /me/communication/conversations/:id/attachments — stage an upload
+ * against this conversation. The widget uploads bytes to the returned
+ * presigned URL, then binds the id on the next send. */
+meCommunicationRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversations/{id}/attachments",
+		tags: ["Communication"],
+		middleware: [requireAuth] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							fileName: z.string().min(1).max(255),
+							contentType: z.string().min(1).max(128),
+							sizeBytes: z.number().int().positive(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							attachmentId: z.string().uuid(),
+							uploadUrl: z.string(),
+							headers: z.record(z.string(), z.string()),
+							expiresAt: z.string(),
+						}),
+					},
+				},
+				description: "Staged attachment + presigned upload URL",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staged = await stageCustomerAttachment(id, user.id, body);
+		return c.json(staged, 201);
 	},
 );
 

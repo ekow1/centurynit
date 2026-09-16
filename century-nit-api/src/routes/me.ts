@@ -59,6 +59,7 @@ import {
 	getOrCreateApplicantConversation,
 	getApplicantMessages,
 	sendApplicantMessage,
+	stageCustomerAttachment,
 } from "../services/chat.js";
 import {
 
@@ -1633,7 +1634,10 @@ meRouter.openapi(
 			body: {
 				content: {
 					"application/json": {
-						schema: z.object({ content: z.string().min(1).max(5000) }),
+						schema: z.object({
+							content: z.string().min(1).max(5000),
+							attachmentIds: z.array(z.string().uuid()).max(10).optional(),
+						}),
 					},
 				},
 				required: true,
@@ -1663,8 +1667,61 @@ meRouter.openapi(
 		const user = c.get("user");
 		const body = c.req.valid("json");
 		const conv = await getOrCreateApplicantConversation(user.id);
-		const msg = await sendApplicantMessage(conv.id, user.id, user.name ?? "Applicant", body.content);
+		const msg = await sendApplicantMessage(
+			conv.id,
+			user.id,
+			user.name ?? "Applicant",
+			body.content,
+			body.attachmentIds,
+		);
 		return c.json(msg);
+	},
+);
+
+/* ── POST /api/v1/me/conversation/attachments — stage an upload ─────────── */
+
+meRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversation/attachments",
+		tags: ["Applicants"],
+		middleware: [requireAuth] as const,
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							fileName: z.string().min(1).max(255),
+							contentType: z.string().min(1).max(128),
+							sizeBytes: z.number().int().positive(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							attachmentId: z.string().uuid(),
+							uploadUrl: z.string(),
+							headers: z.record(z.string(), z.string()),
+							expiresAt: z.string(),
+						}),
+					},
+				},
+				description: "Staged attachment + presigned upload URL",
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const body = c.req.valid("json");
+		const conv = await getOrCreateApplicantConversation(user.id);
+		const staged = await stageCustomerAttachment(conv.id, user.id, body);
+		return c.json(staged, 201);
 	},
 );
 

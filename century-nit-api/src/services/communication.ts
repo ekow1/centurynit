@@ -36,6 +36,7 @@ import {
 	communicationEvents,
 	conversationParticipants,
 	conversations,
+	messageAttachments,
 	messages,
 	opsUsers,
 	stageAssignments,
@@ -272,6 +273,8 @@ async function countUnreadFor(
 		conditions.push(ne(messages.senderOpsUserId, viewer.opsUserId));
 	} else {
 		conditions.push(ne(messages.senderUserId, viewer.userId!));
+		// Staff-only notes never count toward a client's unread badge.
+		conditions.push(eq(messages.visibility, "public"));
 	}
 	if (participant.lastReadAt) {
 		conditions.push(gt(messages.createdAt, participant.lastReadAt));
@@ -291,10 +294,16 @@ async function serializeConversation(
 	const participants = await getParticipants(row.id);
 	const unread = await countUnreadFor(row.id, viewer);
 
+	// The client preview must never surface a staff-only note as the
+	// conversation's last message.
+	const lastMsgConditions = [eq(messages.conversationId, row.id)];
+	if (viewer.userId) {
+		lastMsgConditions.push(eq(messages.visibility, "public"));
+	}
 	const [lastMsg] = await db
 		.select()
 		.from(messages)
-		.where(eq(messages.conversationId, row.id))
+		.where(and(...lastMsgConditions))
 		.orderBy(desc(messages.createdAt))
 		.limit(1);
 
@@ -835,7 +844,11 @@ export async function getCustomerMessages(
 	if (!ok) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
 
 	const limit = Math.min(opts.limit ?? 50, 100);
-	const conditions = [eq(messages.conversationId, conversationId)];
+	const conditions = [
+		eq(messages.conversationId, conversationId),
+		// Staff-only notes are filtered out of every client transcript.
+		eq(messages.visibility, "public"),
+	];
 	if (opts.before) {
 		conditions.push(
 			sql`${messages.createdAt} < (SELECT created_at FROM ${messages} WHERE id = ${opts.before})`,
@@ -861,6 +874,7 @@ export async function sendCustomerMessage(
 	conversationId: string,
 	user: SessionUser,
 	content: string,
+	attachmentIds?: string[],
 ): Promise<ChatMessage> {
 	const ok = await canAccessConversation(user, null, conversationId);
 	if (!ok) throw new HttpError(404, "CONVERSATION_NOT_FOUND", "Conversation not found");
@@ -870,8 +884,23 @@ export async function sendCustomerMessage(
 		.from(conversations)
 		.where(eq(conversations.id, conversationId))
 		.limit(1);
+
+	// A new client message re-opens a resolved conversation — "resolved" is a
+	// state, not a wall. Staff see the divider, the queue surfaces it again.
 	if (conv?.status === "closed") {
-		throw new HttpError(409, "CONVERSATION_CLOSED", "This conversation is closed");
+		await db
+			.update(conversations)
+			.set({ status: "open", closedAt: null })
+			.where(eq(conversations.id, conversationId));
+		await appendSystemMessage(
+			conversationId,
+			"Conversation reopened — new message from the client",
+		);
+		publishChatEvent(conversationId, {
+			type: "chat.conversation.updated",
+			conversationId,
+			status: "open",
+		});
 	}
 
 	const [created] = await db
@@ -889,6 +918,21 @@ export async function sendCustomerMessage(
 		.update(conversations)
 		.set({ updatedAt: new Date(), lastMessageAt: new Date() })
 		.where(eq(conversations.id, conversationId));
+
+	// Bind pre-staged uploads — scoped to this customer's unbound rows so one
+	// client can't attach another's staged file by guessing ids.
+	if (attachmentIds?.length) {
+		await db
+			.update(messageAttachments)
+			.set({ messageId: created.id })
+			.where(
+				and(
+					inArray(messageAttachments.id, attachmentIds),
+					isNull(messageAttachments.messageId),
+					eq(messageAttachments.uploadedByUserId, user.id),
+				),
+			);
+	}
 
 	await recordEvent({
 		action: "message_sent",
@@ -949,7 +993,7 @@ export async function sendCustomerMessage(
 							type: "chat.message",
 							title: `${user.name ?? "A client"} sent a support message`,
 							body: preview,
-							link: "/inbox",
+							link: `/chat?conversation=${conversationId}`,
 						})),
 					);
 				}
@@ -963,7 +1007,7 @@ export async function sendCustomerMessage(
 					type: "chat.message",
 					title: `${user.name ?? "A client"} sent a message`,
 					body: preview,
-					link: "/inbox",
+					link: `/chat?conversation=${conversationId}`,
 				})),
 			);
 

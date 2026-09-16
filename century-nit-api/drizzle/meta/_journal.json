@@ -652,6 +652,13 @@
       "when": 1789610000000,
       "tag": "0094_coordination_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1789610100000,
+      "tag": "0095_chat_notes_campaign_tracking",
+      "breakpoints": true
     }
   ]
 }

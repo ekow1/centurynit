@@ -33,6 +33,10 @@ import {
 	toggleReaction,
 	forwardMessage,
 	setTyping,
+	setConversationStatus,
+	assignConversationOwner,
+	getConversationContext,
+	stageChatAttachment,
 } from "../services/chat.js";
 
 const idParams = z.object({ id: z.string().uuid() });
@@ -137,6 +141,8 @@ chatRouter.openapi(
 			query: z.object({
 				limit: z.coerce.number().int().min(1).max(100).optional(),
 				before: z.string().uuid().optional(),
+				/** Thread-scoped message search (ILIKE on content). */
+				q: z.string().min(1).max(200).optional(),
 			}),
 		},
 		responses: {
@@ -152,6 +158,191 @@ chatRouter.openapi(
 		const query = c.req.valid("query");
 		const list = await getMessages(id, staff.opsUserId, query, staff.role);
 		return c.json(list);
+	},
+);
+
+/* ── PATCH /api/v1/chat/conversations/:id/status ──────────────────────── */
+
+chatRouter.openapi(
+	createRoute({
+		method: "patch",
+		path: "/conversations/{id}/status",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({ status: z.enum(["open", "closed", "archived"]) }),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: chatConversationSchema } },
+				description: "Lifecycle updated — resolve/reopen writes a system divider",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const { status } = c.req.valid("json");
+		const conv = await setConversationStatus(
+			id,
+			status,
+			{ id: staff.opsUserId, name: staff.name },
+			staff.role,
+		);
+		return c.json(conv);
+	},
+);
+
+/* ── POST /api/v1/chat/conversations/:id/owner ────────────────────────── */
+
+chatRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversations/{id}/owner",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							/** Claim: pass your own id. Unclaim: null. Reassign: another staff id. */
+							opsUserId: z.string().uuid().nullable(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			200: {
+				content: { "application/json": { schema: chatConversationSchema } },
+				description: "Ownership updated",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const { opsUserId } = c.req.valid("json");
+		const conv = await assignConversationOwner(
+			id,
+			opsUserId,
+			{ id: staff.opsUserId, name: staff.name },
+			staff.role,
+		);
+		return c.json(conv);
+	},
+);
+
+/* ── GET /api/v1/chat/conversations/:id/context ───────────────────────── */
+
+const conversationContextSchema = z.object({
+	client: z
+		.object({
+			userId: z.string(),
+			name: z.string(),
+			email: z.string().nullable(),
+			branch: z.string().nullable(),
+			targetCountry: z.string().nullable(),
+			memberSince: z.string().nullable(),
+		})
+		.nullable(),
+	cases: z.array(
+		z.object({
+			id: z.string().uuid(),
+			appNumber: z.string(),
+			stage: z.string(),
+			stageLabel: z.string(),
+			status: z.string(),
+		}),
+	),
+	money: z.array(
+		z.object({ type: z.string(), status: z.string(), invoiceNumber: z.string() }),
+	),
+	nextAppointment: z
+		.object({ startsAt: z.string(), serviceName: z.string(), status: z.string() })
+		.nullable(),
+	owner: z.object({ opsUserId: z.string(), name: z.string() }).nullable(),
+	messageCount: z.number().int(),
+});
+
+chatRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/conversations/{id}/context",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		request: { params: idParams },
+		responses: {
+			200: {
+				content: { "application/json": { schema: conversationContextSchema } },
+				description: "Client/case/money/appointment context for the helpdesk rail",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const ctx = await getConversationContext(id, staff.opsUserId, staff.role);
+		return c.json(ctx);
+	},
+);
+
+/* ── POST /api/v1/chat/conversations/:id/attachments ──────────────────── */
+
+chatRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/conversations/{id}/attachments",
+		tags: ["Chat"],
+		middleware: [requireAuth, requireMfa, requireModule("chat")] as const,
+		request: {
+			params: idParams,
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							fileName: z.string().min(1).max(255),
+							contentType: z.string().min(1).max(128),
+							sizeBytes: z.number().int().positive(),
+						}),
+					},
+				},
+				required: true,
+			},
+		},
+		responses: {
+			201: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							attachmentId: z.string().uuid(),
+							uploadUrl: z.string(),
+							headers: z.record(z.string(), z.string()),
+							expiresAt: z.string(),
+						}),
+					},
+				},
+				description: "Staged attachment + presigned upload URL",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff")!;
+		const { id } = c.req.valid("param");
+		const body = c.req.valid("json");
+		const staged = await stageChatAttachment(id, { opsUserId: staff.opsUserId }, body);
+		return c.json(staged, 201);
 	},
 );
 

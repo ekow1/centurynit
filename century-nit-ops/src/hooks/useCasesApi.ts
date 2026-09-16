@@ -554,6 +554,10 @@ export function useCasesApi() {
 		/** Refer the consultation to another handling branch — no handler picked. */
 		referConsultation: async (id: string, branch: string, note?: string) =>
 			replaceConsultation(await consultationsApi.refer(id, { branch, note })),
+		/** Re-fetch one consultation — a detail opened from the cached list can be stale. */
+		refreshConsultation: async (id: string) => {
+			replaceConsultation(await consultationsApi.get(id));
+		},
 		confirmConsultationSlot: async (id: string) =>
 			replaceConsultation(await consultationsApi.confirmSlot(id)),
 		startConsultationAssessment: async (id: string) =>

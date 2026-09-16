@@ -135,7 +135,7 @@ export function useChatMessages(conversationId: string | null) {
 	const send = useCallback(
 		async (
 			content: string,
-			opts?: { replyToId?: string; mentions?: string[]; attachmentIds?: string[] },
+			opts?: { replyToId?: string; mentions?: string[]; attachmentIds?: string[]; visibility?: "public" | "internal" },
 		) => {
 			if (!conversationId || !content.trim()) return;
 			setSending(true);
@@ -145,6 +145,7 @@ export function useChatMessages(conversationId: string | null) {
 					replyToId: opts?.replyToId,
 					mentions: opts?.mentions,
 					attachmentIds: opts?.attachmentIds,
+					visibility: opts?.visibility,
 				});
 				setMessages((prev) => {
 					if (prev.some((m) => m.id === msg.id)) return prev;

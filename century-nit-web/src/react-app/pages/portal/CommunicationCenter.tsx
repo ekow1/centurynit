@@ -79,6 +79,9 @@ export function CommunicationCenter() {
 	const chat = useCommunicationChat(open);
 	const [draft, setDraft] = useState("");
 	const [replyTo, setReplyTo] = useState<QuotedMessage | null>(null);
+	const [pendingFiles, setPendingFiles] = useState<{ name: string; attachmentId: string }[]>([]);
+	const [uploading, setUploading] = useState(false);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// AI chat — streamed from the Workers AI edge endpoint. Context carries the
 	// live journey signals so the assistant answers with the applicant's real
@@ -168,12 +171,43 @@ export function CommunicationCenter() {
 
 	/* ── Send message (support + officer) ── */
 	const handleSend = useCallback(async (text: string) => {
-		if (!text.trim()) return;
-		await chat.send(text);
+		if (!text.trim() && pendingFiles.length === 0) return;
+		await chat.send(text.trim() || "📎 Attachment", { attachmentIds: pendingFiles.map((f) => f.attachmentId) });
 		setDraft("");
 		setReplyTo(null);
+		setPendingFiles([]);
 		void loadContext();
-	}, [chat, loadContext]);
+	}, [chat, loadContext, pendingFiles]);
+
+	/* Attachments: stage → PUT to the presigned URL → the ids bind on send. */
+	const onFilesPicked = useCallback(
+		async (files: FileList | null) => {
+			if (!files || !chat.conversationId) return;
+			setUploading(true);
+			try {
+				for (const file of Array.from(files)) {
+					const staged = await meApi.stageCommunicationAttachment(chat.conversationId, {
+						fileName: file.name,
+						contentType: file.type || "application/octet-stream",
+						sizeBytes: file.size,
+					});
+					const res = await fetch(staged.uploadUrl, {
+						method: "PUT",
+						headers: { "Content-Type": file.type || "application/octet-stream", ...staged.headers },
+						body: file,
+					});
+					if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+					setPendingFiles((prev) => [...prev, { name: file.name, attachmentId: staged.attachmentId }]);
+				}
+			} catch (e) {
+				setError(e instanceof Error ? e.message : "Upload failed");
+			} finally {
+				setUploading(false);
+				if (fileInputRef.current) fileInputRef.current.value = "";
+			}
+		},
+		[chat.conversationId],
+	);
 
 	/* ── AI assistant (streamed from Workers AI edge endpoint) ── */
 	const handleSendAi = useCallback((e?: FormEvent, customQuery?: string) => {
@@ -299,7 +333,7 @@ export function CommunicationCenter() {
 					{/* Header */}
 					<header style={headerStyle}>
 						<div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-							<span style={{ ...indicatorDotStyle, background: "#10b981" }} />
+							<span style={{ ...indicatorDotStyle, background: "#ffffff" }} />
 							<span style={headerTitleStyle}>CHAT</span>
 						</div>
 						<div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -437,6 +471,32 @@ export function CommunicationCenter() {
 										}
 									/>
 
+									{/* Resolved strip — a new message reopens it */}
+									{chat.conversationStatus === "closed" && (
+										<div style={resolvedBarStyle}>
+											Resolved — send a message to reopen
+										</div>
+									)}
+
+									{/* Staged attachments */}
+									{pendingFiles.length > 0 && (
+										<div style={attachTrayStyle}>
+											{pendingFiles.map((f) => (
+												<span key={f.attachmentId} style={attachChipStyle}>
+													📎 {f.name}
+													<button
+														type="button"
+														style={attachRemoveStyle}
+														onClick={() => setPendingFiles((prev) => prev.filter((x) => x.attachmentId !== f.attachmentId))}
+														aria-label={`Remove ${f.name}`}
+													>
+														×
+													</button>
+												</span>
+											))}
+										</div>
+									)}
+
 									{/* Composer — shared */}
 									<Composer
 										value={draft}
@@ -445,7 +505,8 @@ export function CommunicationCenter() {
 										sending={chat.sending}
 										replyTo={replyTo}
 										onCancelReply={() => setReplyTo(null)}
-										placeholder={activeChannel === "support" ? "Type a message…" : `Message ${officerFirstName}…`}
+										onAttach={() => fileInputRef.current?.click()}
+										placeholder={uploading ? "Uploading…" : activeChannel === "support" ? "Type a message…" : `Message ${officerFirstName}…`}
 									/>
 								</div>
 							)
@@ -541,6 +602,14 @@ export function CommunicationCenter() {
 					</div>
 				</div>
 			)}
+
+			<input
+				ref={fileInputRef}
+				type="file"
+				multiple
+				style={{ display: "none" }}
+				onChange={(e) => void onFilesPicked(e.target.files)}
+			/>
 		</>
 	);
 }
@@ -555,31 +624,31 @@ const launcherSquareBtnStyle: CSSProperties = {
 	bottom: "24px",
 	right: "24px",
 	zIndex: 9999,
-	width: "56px",
-	height: "56px",
+	width: "52px",
+	height: "52px",
 	background: "#18181b",
 	color: "#ffffff",
-	border: "none",
-	borderRadius: "50%",
-	boxShadow: "0 10px 25px -5px rgba(0,0,0,0.2)",
+	border: "1px solid #000000",
+	borderRadius: "0px",
+	boxShadow: "4px 4px 0 rgba(0,0,0,0.25)",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",
 	cursor: "pointer",
-	transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+	transition: "transform 0.15s ease",
 };
 
 const unreadSquareBadgeStyle: CSSProperties = {
 	position: "absolute",
 	top: "-6px",
 	right: "-6px",
-	background: "#dc2626",
-	color: "#ffffff",
+	background: "#ffffff",
+	color: "#18181b",
 	fontSize: "10px",
 	fontWeight: 800,
 	fontFamily: "monospace",
 	padding: "1px 5px",
-	border: "1px solid #000000",
+	border: "1px solid #18181b",
 	borderRadius: "0px",
 };
 
@@ -592,9 +661,9 @@ const windowContainerStyle: CSSProperties = {
 	height: "600px",
 	maxHeight: "calc(100vh - 48px)",
 	background: "#ffffff",
-	border: "1px solid #e4e4e7",
-	borderRadius: "16px",
-	boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15), 0 4px 6px -2px rgba(0,0,0,0.05)",
+	border: "1px solid #18181b",
+	borderRadius: "0px",
+	boxShadow: "6px 6px 0 rgba(0,0,0,0.18)",
 	display: "flex",
 	flexDirection: "column",
 	overflow: "hidden",
@@ -620,8 +689,49 @@ const headerStyle: CSSProperties = {
 const indicatorDotStyle: CSSProperties = {
 	width: "6px",
 	height: "6px",
-	background: "#10b981",
+	background: "#18181b",
 	borderRadius: "0px",
+};
+
+const resolvedBarStyle: CSSProperties = {
+	padding: "8px 12px",
+	fontSize: "10px",
+	fontFamily: "monospace",
+	fontWeight: 700,
+	letterSpacing: "0.06em",
+	textTransform: "uppercase",
+	color: "#52525b",
+	background: "#f4f4f5",
+	borderTop: "1px dashed #a1a1aa",
+	textAlign: "center",
+};
+
+const attachTrayStyle: CSSProperties = {
+	display: "flex",
+	flexWrap: "wrap",
+	gap: "4px",
+	padding: "6px 10px",
+	borderTop: "1px solid #e4e4e7",
+};
+
+const attachChipStyle: CSSProperties = {
+	display: "inline-flex",
+	alignItems: "center",
+	gap: "4px",
+	border: "1px solid #18181b",
+	background: "#f4f4f5",
+	fontFamily: "monospace",
+	fontSize: "10px",
+	padding: "2px 6px",
+};
+
+const attachRemoveStyle: CSSProperties = {
+	border: "none",
+	background: "none",
+	cursor: "pointer",
+	fontSize: "12px",
+	lineHeight: 1,
+	padding: 0,
 };
 
 const headerTitleStyle: CSSProperties = {
@@ -637,7 +747,7 @@ const controlBtnStyle: CSSProperties = {
 	color: "#71717a",
 	width: "28px",
 	height: "28px",
-	borderRadius: "50%",
+	borderRadius: "0px",
 	display: "flex",
 	alignItems: "center",
 	justifyContent: "center",

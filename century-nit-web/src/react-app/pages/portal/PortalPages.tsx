@@ -2474,6 +2474,33 @@ export function PortalConsultation() {
 										</span>
 									</div>
 								</div>
+								{liveConsultation?.rescheduleRequestedAt && liveConsultation.rescheduleRequestedStartsAt ? (
+									<div
+										className="mt-3"
+										style={{
+											border: "1.5px dashed var(--ink, #000)",
+											background: "var(--muted-bg, #f5f5f5)",
+											padding: "0.6rem 0.8rem",
+											fontSize: "0.78rem",
+											lineHeight: 1.5,
+										}}
+									>
+										<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", display: "block", marginBottom: "0.15rem" }}>
+											Reschedule requested — awaiting your consultant
+										</span>
+										You asked to move to{" "}
+										<b>
+											{new Date(liveConsultation.rescheduleRequestedStartsAt).toLocaleString(undefined, {
+												weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+												timeZone: liveConsultation.timezone ?? undefined,
+											})}
+										</b>
+										. The slot above holds until they confirm.
+										{liveConsultation.rescheduleRequestReason ? (
+											<span className="muted"> Reason: “{liveConsultation.rescheduleRequestReason}”</span>
+										) : null}
+									</div>
+								) : null}
 								{meetingUrl && meetingBookingId ? (
 									<button type="button" onClick={() => void join(meetingBookingId, `Consultation · ${activeRef ?? ""}`)} disabled={joining} className="btn btn--primary btn--sm mt-4">
 										{joining ? "Joining…" : "Join video meeting →"}
@@ -2637,7 +2664,7 @@ export function PortalConsultation() {
 										Message
 									</Button>
 									<Button to="/portal/appointments" variant="ghost" size="sm">
-										Book call
+										{startsInFuture && workflowStatus !== "CLOSED" ? "Appointments →" : "Book call"}
 									</Button>
 								</div>
 							</>

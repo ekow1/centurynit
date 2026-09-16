@@ -8,13 +8,13 @@ import { AssignSheet } from "./AssignSheet";
 import { HistorySheet, type HistoryEvent } from "./HistorySheet";
 import { CaseTabs, useCaseTab } from "./CaseTabs";
 import type { MockConsultation } from "century-nit-core/ops";
-import { documentsApi, bookingsApi } from "century-nit-core/api";
+import { documentsApi, bookingsApi, ApiError } from "century-nit-core/api";
 import type { ApplicantDocument } from "century-nit-shared";
 import { StaffChatBadge } from "../StaffChatBadge";
 import { getConsultationActivity, type ConsultationActivityEvent } from "../../lib/api";
 import { CaseHeader, StatusPill, type NextAction } from "century-nit-core/ui";
 import { CaseTodo } from "./CaseTodo";
-import { ConsultationCall } from "./ConsultationCall";
+import { ConsultationCall, MeetingWindowModal, type MeetingWindowInfo } from "./ConsultationCall";
 
 
 function isKnown(v: string | undefined | null): v is string {
@@ -96,7 +96,7 @@ export function ConsultationDetail({
 
 	type Tab = "profile" | "documents" | "assessment";
 	const TABS: readonly Tab[] = ["profile", "documents", "assessment"];
-	const [detailTab, setDetailTab] = useCaseTab<Tab>(TABS, () => "profile", record.id);
+	const [detailTab, setDetailTab] = useCaseTab<Tab>(TABS, () => "profile");
 	// The two case-level sheets, the same as on an application: assignment
 	// (the one place a consultant is set) and history (notes read and written).
 	const [assignOpen, setAssignOpen] = useState(false);
@@ -124,6 +124,7 @@ export function ConsultationDetail({
 	const [resendingMeetLink, setResendingMeetLink] = useState(false);
 	const [joiningMeet, setJoiningMeet] = useState(false);
 	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
+	const [meetNotOpen, setMeetNotOpen] = useState<MeetingWindowInfo | null>(null);
 	/** Result recorded this session, shown until the refreshed row carries it. */
 	const [completedResult, setCompletedResult] = useState<MockConsultation["assessmentResult"] | null>(null);
 	const consultation: MockConsultation = completedResult
@@ -253,7 +254,7 @@ export function ConsultationDetail({
 	}
 	if (consultation.status === "Assigned" && !steeringLocked) {
 		const slotPassed = consultation.startsAt ? new Date(consultation.startsAt).getTime() <= Date.now() : false;
-		const needsLink = consultation.type === "online" && !consultation.meetingLink;
+		const needsLink = consultation.type?.toLowerCase() === "online" && !consultation.meetingLink;
 		if (slotPassed) {
 			// The slot slipped by unconfirmed — the API refuses to confirm it,
 			// so the honest actions are move it or close the case.
@@ -272,17 +273,20 @@ export function ConsultationDetail({
 				),
 			});
 		} else if (needsLink) {
-			// The confirmation email carries the join link — confirm can't fire
-			// until one exists.
+			// No link yet — confirming mints the room when a provider is
+			// connected; pasting a Zoom/Meet link first works too.
 			nextActions.push({
 				id: "confirm",
-				title: "Add a meeting link to confirm",
-				detail: "Online case — the confirmation email carries the join link.",
+				title: "No meeting link yet",
+				detail: "Confirming will generate one if a video provider is connected — or add your own first.",
 				action: (
 					<>
 						{rescheduleButton}
-						<button type="button" className="btn btn--primary btn--sm" onClick={() => setEditingMeetingUrl(true)}>
-							Add meeting link…
+						<button type="button" onClick={() => void confirmConsultationSlot(consultation.id)} className="btn btn--primary btn--sm">
+							Confirm slot
+						</button>
+						<button type="button" className="btn btn--ghost btn--sm" onClick={() => setEditingMeetingUrl(true)}>
+							Add link manually…
 						</button>
 					</>
 				),
@@ -534,7 +538,7 @@ export function ConsultationDetail({
 		{(() => {
 			const isLive = consultation.status !== "Completed" && consultation.status !== "Cancelled";
 			const canManageMeeting = isLive && Boolean(consultation.bookingId) && (canAssignWork || consultation.assignedOfficerEmail === opsUser?.email);
-			const isOnline = consultation.type === "online";
+			const isOnline = consultation.type?.toLowerCase() === "online";
 			if (isOnline) {
 				if (!consultation.meetingLink && !canManageMeeting && !editingMeetingUrl) return null;
 				return (
@@ -579,7 +583,11 @@ export function ConsultationDetail({
 														throw new Error("No usable meeting link came back — try again in a moment.");
 													}
 												} catch (err) {
-													onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
+													if (err instanceof ApiError && err.code === "MEETING_NOT_OPEN" && typeof err.details === "object" && err.details !== null && "opensAt" in err.details) {
+														setMeetNotOpen({ ...(err.details as Omit<MeetingWindowInfo, "title">), title: `Consultation · ${consultation.ref}` });
+													} else {
+														onToast("error", err instanceof Error ? err.message : "Could not join the meeting.");
+													}
 												} finally {
 													setJoiningMeet(false);
 												}
@@ -616,7 +624,7 @@ export function ConsultationDetail({
 												>
 													{resendingMeetLink ? "Sending email…" : "✉ Resend Link to Client"}
 												</button>
-												<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(consultation.meetingLink ?? ""); setEditingMeetingUrl(true); }}>Change</button>
+												<button type="button" className="btn btn--ghost btn--sm" onClick={() => { const cur = consultation.meetingLink ?? ""; setMeetingUrlDraft(cur.startsWith("https://") ? cur : ""); setEditingMeetingUrl(true); }}>Change</button>
 											</>
 										)}
 									</>
@@ -631,16 +639,16 @@ export function ConsultationDetail({
 												setGeneratingMeet(true);
 												try {
 													await bookingsApi.generateMeeting(consultation.bookingId);
-													onToast("success", "Google Meet link generated and emailed to client.");
+													onToast("success", "Meeting link generated and emailed to client.");
 													void refresh();
 												} catch (err) {
-													onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet. Add a manual link instead.");
+													onToast("error", err instanceof Error ? err.message : "Could not generate a meeting link. Add a manual link instead.");
 												} finally {
 													setGeneratingMeet(false);
 												}
 											}}
 										>
-											{generatingMeet ? "Generating Meet…" : "⚡ Generate Google Meet"}
+											{generatingMeet ? "Generating…" : "⚡ Generate meeting link"}
 										</button>
 										<button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMeetingUrlDraft(""); setEditingMeetingUrl(true); }}>
 											+ Add Custom Link
@@ -695,16 +703,16 @@ export function ConsultationDetail({
 											try {
 												await bookingsApi.generateMeeting(consultation.bookingId);
 												setEditingMeetingUrl(false);
-												onToast("success", "Google Meet link generated and emailed to client.");
+												onToast("success", "Meeting link generated and emailed to client.");
 												void refresh();
 											} catch (err) {
-												onToast("error", err instanceof Error ? err.message : "Could not auto-generate Google Meet link.");
+												onToast("error", err instanceof Error ? err.message : "Could not generate a meeting link.");
 											} finally {
 												setGeneratingMeet(false);
 											}
 										}}
 									>
-										{generatingMeet ? "Generating…" : "⚡ Auto-generate Google Meet"}
+										{generatingMeet ? "Generating…" : "⚡ Auto-generate meeting link"}
 									</button>
 								)}
 								<button type="button" className="btn btn--ghost btn--sm" disabled={savingMeetingUrl} onClick={() => setEditingMeetingUrl(false)}>
@@ -1172,6 +1180,9 @@ export function ConsultationDetail({
 					waitingFor="the client"
 					onClose={() => setCall(null)}
 				/>
+			) : null}
+			{meetNotOpen ? (
+				<MeetingWindowModal info={meetNotOpen} onClose={() => setMeetNotOpen(null)} />
 			) : null}
 		</div>
 	);

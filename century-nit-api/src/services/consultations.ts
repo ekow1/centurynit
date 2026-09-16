@@ -818,13 +818,20 @@ export async function confirmConsultationSlot(id: string, actor: Actor): Promise
 				throw new HttpError(409, CASE_ERROR_CODES.CASE_CLOSED, "That slot is already in the past");
 			}
 			// The confirmation email carries the join link — an online case
-			// can't be confirmed with nothing to join.
+			// can't be confirmed with nothing to join. The confirm click is the
+			// guaranteed checkpoint: mint the room now if assignment didn't (or
+			// couldn't). Only when no provider can produce a link do we still
+			// ask staff to paste one.
 			if (row.type === "online" && !booking.meetingUrl) {
-				throw new HttpError(
-					409,
-					CASE_ERROR_CODES.CASE_CLOSED,
-					"Add a meeting link before confirming — the confirmation email carries it",
-				);
+				const { syncCalendarForBooking } = await import("./booking.js");
+				const ensured = await syncCalendarForBooking(booking.id);
+				if (!ensured.meetingUrl) {
+					throw new HttpError(
+						409,
+						CASE_ERROR_CODES.CASE_CLOSED,
+						"Add a meeting link before confirming — the confirmation email carries it",
+					);
+				}
 			}
 			await db
 				.update(bookings)

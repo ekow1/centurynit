@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 /**
@@ -20,26 +19,20 @@ export type CaseTab<T extends string> = {
 };
 
 /**
- * Tab state mirrored to `?tab=`. Precedence: the URL, then the host's
- * preset, then the record's own chapter. Re-derived when the record changes.
+ * Tab state that IS the URL — `?tab=` is read at render, not copied into
+ * state, so a deep link that lands while the page is mounted (a
+ * notification, a handoff, browser back) always takes effect. Precedence:
+ * the URL, then the host's preset, then the record's own chapter.
  */
 export function useCaseTab<T extends string>(
 	ids: readonly T[],
 	fallback: () => T,
-	recordKey: string,
 	preset?: T,
 ): [T, (next: T) => void] {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const isId = (v: string | null): v is T => v !== null && (ids as readonly string[]).includes(v);
 	const urlTab = searchParams.get("tab");
-	const derive = () => (isId(urlTab) ? urlTab : (preset ?? fallback()));
-	const [tab, setTabState] = useState<T>(derive);
-	useEffect(() => {
-		setTabState(derive());
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive only when the record or host changes
-	}, [recordKey, preset]);
+	const tab: T = urlTab !== null && (ids as readonly string[]).includes(urlTab) ? (urlTab as T) : (preset ?? fallback());
 	const setTab = (next: T) => {
-		setTabState(next);
 		setSearchParams(
 			(prev) => {
 				const p = new URLSearchParams(prev);

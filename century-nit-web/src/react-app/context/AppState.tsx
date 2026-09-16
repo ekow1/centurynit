@@ -424,6 +424,11 @@ export type BookingData = {
 	meetingLink: string | null;
 	/** The server booking row — join calls mint a token'd URL against it. */
 	bookingId: string | null;
+	/** A client-asked reschedule awaiting the consultant's decision. The held
+	 *  slot stays live until ops approves — the card shows both times. */
+	rescheduleRequestedAt: string | null;
+	rescheduleRequestedStartsAt: string | null;
+	rescheduleRequestReason: string | null;
 	// Steps 9–10
 	consultationPhase:
 		| "draft"
@@ -662,6 +667,9 @@ const defaultBooking: BookingData = {
 	confirmationId: null,
 	meetingLink: null,
 	bookingId: null,
+	rescheduleRequestedAt: null,
+	rescheduleRequestedStartsAt: null,
+	rescheduleRequestReason: null,
 	consultationPhase: "draft",
 	consultantName: null,
 	consultantId: null,
@@ -2299,6 +2307,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 						paidAt: c.createdAt,
 						meetingLink: c.meetingUrl ?? null,
 						bookingId: c.bookingId ?? null,
+						rescheduleRequestedAt: c.rescheduleRequestedAt ?? null,
+						rescheduleRequestedStartsAt: c.rescheduleRequestedStartsAt ?? null,
+						rescheduleRequestReason: c.rescheduleRequestReason ?? null,
 						date: c.startsAt
 							? new Intl.DateTimeFormat("en-CA", {
 									timeZone: c.timezone ?? undefined,

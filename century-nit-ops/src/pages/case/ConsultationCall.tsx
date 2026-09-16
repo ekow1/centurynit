@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track } from "livekit-client";
-import { bookingsApi } from "century-nit-core/api";
+import { ApiError, bookingsApi } from "century-nit-core/api";
 
 type CallState = "connecting" | "connected" | "ended" | "error";
 
@@ -289,14 +289,134 @@ function CallButton({
  * LiveKit call. The stored meetingUrl is never opened directly — for
  * token'd providers it isn't a usable link at all.
  */
+/* ── "Opens at" modal — the friendly face of the 409 MEETING_NOT_OPEN ────── */
+
+export type MeetingWindowInfo = {
+	opensAt: string;
+	startsAt: string;
+	endsAt: string;
+	timezone: string | null;
+	earlyMinutes: number;
+	reference?: string;
+	title: string;
+};
+
+function isWindowDetails(d: unknown): d is Omit<MeetingWindowInfo, "title"> {
+	return (
+		typeof d === "object" && d !== null &&
+		typeof (d as Record<string, unknown>).opensAt === "string" &&
+		typeof (d as Record<string, unknown>).startsAt === "string"
+	);
+}
+
+function useMinuteClock() {
+	const [now, setNow] = useState(() => Date.now());
+	useEffect(() => {
+		const id = window.setInterval(() => setNow(Date.now()), 15_000);
+		return () => window.clearInterval(id);
+	}, []);
+	return now;
+}
+
+function countdownLabel(now: number, opensAt: number) {
+	const ms = opensAt - now;
+	if (ms <= 0) return "open now — press Join again";
+	const min = Math.ceil(ms / 60_000);
+	if (min < 60) return `opens in ${min} min`;
+	const h = Math.floor(min / 60);
+	if (h < 48) return `opens in ${h}h ${min % 60 ? `${min % 60}m` : ""}`.trim();
+	const d = Math.floor(h / 24);
+	return `opens in ${d} day${d === 1 ? "" : "s"}`;
+}
+
+/**
+ * The modal that answers "The meeting room opens at 08:45" properly —
+ * the exact time in the booking's timezone, a live countdown, who gets in
+ * when, and a calendar escape. Rendered by useJoinMeeting's overlay slot so
+ * every Join surface gets it with no per-page wiring.
+ */
+export function MeetingWindowModal({ info, onClose }: { info: MeetingWindowInfo; onClose: () => void }) {
+	const now = useMinuteClock();
+	const opens = new Date(info.opensAt);
+	const tz = info.timezone ?? undefined;
+	const openTime = opens.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: tz });
+	const openDay = opens.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", timeZone: tz });
+	const start = new Date(info.startsAt);
+	const startLabel = start.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: tz });
+
+	function addToCalendar() {
+		const ics = [
+			"BEGIN:VCALENDAR",
+			"VERSION:2.0",
+			"PRODID:-//Century NIT//Consultation//EN",
+			"BEGIN:VEVENT",
+			`UID:${info.reference ?? "century-nit"}@centurynit.com`,
+			`DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+			`DTSTART:${start.toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+			`DTEND:${new Date(info.endsAt).toISOString().replace(/[-:]/g, "").split(".")[0]}Z`,
+			`SUMMARY:${info.title}`,
+			"END:VEVENT",
+			"END:VCALENDAR",
+		].join("\r\n");
+		const url = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "century-nit-appointment.ics";
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
+	return (
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-label="Meeting room not open yet"
+			onClick={onClose}
+			style={{
+				position: "fixed", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.45)",
+				display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem",
+			}}
+		>
+			<div
+				onClick={(e) => e.stopPropagation()}
+				style={{
+					background: "#fff", border: "1.5px solid #000", maxWidth: "26rem", width: "100%",
+					boxShadow: "6px 6px 0 rgba(0,0,0,0.25)", fontFamily: "inherit",
+				}}
+			>
+				<div style={{ borderBottom: "1.5px solid #000", padding: "0.7rem 1.1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+					<span className="eyebrow" style={{ margin: 0 }}>Meeting scheduled</span>
+					<button type="button" onClick={onClose} aria-label="Close" style={{ background: "none", border: 0, fontSize: "1.1rem", cursor: "pointer", lineHeight: 1 }}>×</button>
+				</div>
+				<div style={{ padding: "1.1rem", textAlign: "center" }}>
+					<p style={{ fontFamily: "ui-monospace, monospace", fontSize: "2.4rem", letterSpacing: "-0.02em", margin: "0.3rem 0 0.1rem" }}>{openTime}</p>
+					<p style={{ fontSize: "0.8rem", color: "#52525b" }}>{openDay}{tz ? ` · ${tz}` : ""}</p>
+					<p style={{ display: "inline-block", fontFamily: "ui-monospace, monospace", fontSize: "0.62rem", letterSpacing: "0.1em", textTransform: "uppercase", border: "1px solid #000", padding: "0.25rem 0.55rem", marginTop: "0.55rem" }}>
+						{countdownLabel(now, opens.getTime())}
+					</p>
+					<p style={{ fontSize: "0.78rem", color: "#52525b", lineHeight: 1.55, marginTop: "0.9rem" }}>
+						{info.title} starts {startLabel}. The room opens {info.earlyMinutes} minutes early — you can join from {openTime}.
+					</p>
+				</div>
+				<div style={{ borderTop: "1px solid #d4d4d8", padding: "0.8rem 1.1rem", display: "flex", gap: "0.5rem", justifyContent: "center", flexWrap: "wrap" }}>
+					<button type="button" onClick={addToCalendar} className="btn btn--ghost btn--sm">Add to calendar</button>
+					<button type="button" onClick={onClose} className="btn btn--primary btn--sm">Got it</button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function useJoinMeeting() {
 	const [call, setCall] = useState<{ url: string; token: string; title: string } | null>(null);
+	const [notOpen, setNotOpen] = useState<MeetingWindowInfo | null>(null);
 	const [joining, setJoining] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const join = useCallback(async (bookingId: string, title = "Consultation") => {
 		setJoining(true);
 		setError(null);
+		setNotOpen(null);
 		try {
 			const res = await bookingsApi.joinMeeting(bookingId);
 			if (res?.provider === "livekit" && res.token) {
@@ -307,7 +427,11 @@ export function useJoinMeeting() {
 				setError("No usable meeting link on this booking yet");
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not join the meeting");
+			if (err instanceof ApiError && err.code === "MEETING_NOT_OPEN" && isWindowDetails(err.details)) {
+				setNotOpen({ ...err.details, title });
+			} else {
+				setError(err instanceof Error ? err.message : "Could not join the meeting");
+			}
 		} finally {
 			setJoining(false);
 		}
@@ -321,6 +445,8 @@ export function useJoinMeeting() {
 			waitingFor="the client"
 			onClose={() => setCall(null)}
 		/>
+	) : notOpen ? (
+		<MeetingWindowModal info={notOpen} onClose={() => setNotOpen(null)} />
 	) : null;
 
 	return { join, joining, error, overlay };

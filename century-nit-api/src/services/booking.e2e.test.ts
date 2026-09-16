@@ -15,15 +15,20 @@ import { addMinutes, dateKeyInZone, zonedTimeToUtc } from "../lib/time.js";
 import { FakeCalendarClient } from "./calendar/fake.js";
 import { setCalendarClient } from "./calendar/index.js";
 import { setMeetClientForTests, type MeetSpacesClient } from "./meet/index.js";
+import { setDailyFetchForTests } from "./meet/daily.js";
 import { getSetting, writeSettingSystem } from "./settings.js";
 import {
 	assignBooking,
 	cancelBooking,
 	createBooking,
+	decideRescheduleBooking,
 	getBooking,
 	queuePendingCalendarSyncs,
+	requestRescheduleBooking,
 	rescheduleBooking,
+	setBookingMeetingUrl,
 	syncCalendarForBooking,
+	withdrawRescheduleRequest,
 } from "./booking.js";
 import {
 	assignableEmployees,
@@ -338,6 +343,170 @@ describe("required end-to-end scenario", () => {
 				{ timezone: TZ },
 			);
 			expect(employeeFree.available).toBe(true);
+		},
+	);
+});
+
+describe("reschedule request lifecycle", () => {
+	maybe()(
+		"an approved client request moves the slot and rebinds the Daily room window",
+		async () => {
+			const date = futureWeekday();
+			const newDate = futureWeekday(9);
+
+			const created = await createBooking({
+				data: {
+					serviceId: "consultation",
+					branchId: BRANCH,
+					type: "online",
+					date,
+					time: "10:00",
+					durationMinutes: 45,
+					timezone: TZ,
+				},
+				client: { id: CLIENT_ID, name: "John Doe", email: "e2e-client@example.com" },
+				serviceName: "Website Consultation",
+			});
+			const assigned = await assignBooking({
+				bookingId: created.id,
+				employeeId: employeeA,
+				actor: { opsUserId: employeeA, name: "Manager", email: "manager@century-nit.com" },
+			});
+
+			// The Meet fake produced a google_meet space — stand the booking on
+			// Daily instead so the room-window rebind is observable.
+			await db
+				.update(bookings)
+				.set({
+					meetingProvider: "daily",
+					meetingSpace: "e2e-room-approve",
+					meetingUrl: "https://centurynit.daily.co/e2e-room-approve",
+				})
+				.where(eq(bookings.id, assigned.id));
+
+			const calls: { path: string; init?: RequestInit }[] = [];
+			setDailyFetchForTests(async (path, init) => {
+				calls.push({ path, init: init as RequestInit });
+				return {};
+			});
+			try {
+				await requestRescheduleBooking(assigned.id, {
+					date: newDate,
+					time: "11:00",
+					timezone: TZ,
+					reason: "work shift changed",
+					actor: { id: CLIENT_ID, email: "e2e-client@example.com" },
+				});
+
+				const decided = await decideRescheduleBooking(assigned.id, "approve", {
+					id: employeeA,
+					email: "e2e-enoch@century-nit.com",
+				});
+
+				expect(decided.startsAt.getTime()).toBe(zonedTimeToUtc(newDate, "11:00", TZ).getTime());
+				expect(decided.rescheduleRequestedAt).toBeNull();
+				expect(decided.rescheduleRequestedStartsAt).toBeNull();
+
+				// The room's baked window followed the new slot — nbf is slot −30m.
+				const patch = calls.find((c) => c.path === "/rooms/e2e-room-approve" && (c.init as { method?: string })?.method === "POST");
+				expect(patch).toBeTruthy();
+				const props = (patch!.init as { body: { properties: { nbf: number; exp: number } } }).body.properties;
+				const expectedNbf = Math.floor((zonedTimeToUtc(newDate, "11:00", TZ).getTime() - 30 * 60_000) / 1000);
+				expect(props.nbf).toBe(expectedNbf);
+				expect(props.exp).toBeGreaterThan(expectedNbf);
+			} finally {
+				setDailyFetchForTests(null);
+			}
+		},
+	);
+
+	maybe()("a client withdraw clears the pending request and keeps the held slot", async () => {
+		const date = futureWeekday();
+		const created = await createBooking({
+			data: {
+				serviceId: "consultation",
+				branchId: BRANCH,
+				type: "online",
+				date,
+				time: "10:00",
+				durationMinutes: 45,
+				timezone: TZ,
+			},
+			client: { id: CLIENT_ID, name: "John Doe", email: "e2e-client@example.com" },
+			serviceName: "Website Consultation",
+		});
+
+		await requestRescheduleBooking(created.id, {
+			date: futureWeekday(9),
+			time: "11:00",
+			timezone: TZ,
+			actor: { id: CLIENT_ID, email: "e2e-client@example.com" },
+		});
+
+		const cleared = await withdrawRescheduleRequest(created.id, {
+			id: CLIENT_ID,
+			email: "e2e-client@example.com",
+		});
+		expect(cleared.rescheduleRequestedAt).toBeNull();
+		expect(cleared.rescheduleRequestedStartsAt).toBeNull();
+		expect(cleared.rescheduleRequestReason).toBeNull();
+		// The original slot is untouched.
+		expect(cleared.startsAt.getTime()).toBe(zonedTimeToUtc(date, "10:00", TZ).getTime());
+
+		// Withdrawing nothing is an error, not a silent no-op.
+		await expect(
+			withdrawRescheduleRequest(created.id, { id: CLIENT_ID, email: "e2e-client@example.com" }),
+		).rejects.toThrow(/No pending reschedule request/);
+	});
+
+	maybe()(
+		"pasting a link replaces the provider room — provider flips to manual and the room is deleted",
+		async () => {
+			const created = await createBooking({
+				data: {
+					serviceId: "consultation",
+					branchId: BRANCH,
+					type: "online",
+					date: futureWeekday(),
+					time: "10:00",
+					durationMinutes: 45,
+					timezone: TZ,
+				},
+				client: { id: CLIENT_ID, name: "John Doe", email: "e2e-client@example.com" },
+				serviceName: "Website Consultation",
+			});
+			await assignBooking({
+				bookingId: created.id,
+				employeeId: employeeA,
+				actor: { opsUserId: employeeA, name: "Manager", email: "manager@century-nit.com" },
+			});
+			await db
+				.update(bookings)
+				.set({
+					meetingProvider: "daily",
+					meetingSpace: "e2e-room-replace",
+					meetingUrl: "https://centurynit.daily.co/e2e-room-replace",
+				})
+				.where(eq(bookings.id, created.id));
+
+			const calls: { path: string; init?: RequestInit }[] = [];
+			setDailyFetchForTests(async (path, init) => {
+				calls.push({ path, init: init as RequestInit });
+				return {};
+			});
+			try {
+				const updated = await setBookingMeetingUrl(created.id, "https://zoom.us/j/123456789");
+
+				expect(updated.meetingUrl).toBe("https://zoom.us/j/123456789");
+				expect(updated.meetingProvider).toBe("manual");
+				expect(updated.meetingSpace).toBeNull();
+				// The orphaned Daily room was torn down.
+				expect(
+					calls.find((c) => c.path === "/rooms/e2e-room-replace" && (c.init as { method?: string })?.method === "DELETE"),
+				).toBeTruthy();
+			} finally {
+				setDailyFetchForTests(null);
+			}
 		},
 	);
 });

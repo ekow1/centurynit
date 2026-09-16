@@ -310,6 +310,7 @@ function useCancelBooking(onChanged: () => void) {
 
 function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () => void }) {
 	const [rescheduling, setRescheduling] = useState(false);
+	const [withdrawing, setWithdrawing] = useState(false);
 	const { cancel, busy, error } = useCancelBooking(onChanged);
 	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 	const { displayStatus, isOver } = displayState(booking);
@@ -363,6 +364,24 @@ function BookingRow({ booking, onChanged }: { booking: Booking; onChanged: () =>
 							</button>
 						</>
 					) : null}
+					{!isOver && booking.rescheduleRequestedAt ? (
+						<button
+							type="button"
+							className="jlink"
+							disabled={withdrawing}
+							onClick={async () => {
+								setWithdrawing(true);
+								try {
+									await bookingsApi.withdrawRescheduleRequest(booking.id);
+									onChanged();
+								} finally {
+									setWithdrawing(false);
+								}
+							}}
+						>
+							{withdrawing ? "Withdrawing…" : "Withdraw request"}
+						</button>
+					) : null}
 				</td>
 			</tr>
 			{rescheduling ? (
@@ -391,6 +410,7 @@ export function PortalAppointments() {
 	const [error, setError] = useState<string | null>(null);
 	const [filter, setFilter] = useState<"All" | "Upcoming" | "Past" | "Cancelled">("All");
 	const [reschedulingNext, setReschedulingNext] = useState(false);
+	const [withdrawingNext, setWithdrawingNext] = useState(false);
 	const { join, joining, error: joinError, overlay } = useJoinMeeting();
 
 	const load = useCallback(() => {
@@ -447,9 +467,17 @@ export function PortalAppointments() {
 						Consultations and check-ins with your Century NIT team. Reschedules are requests — your consultant confirms them.
 					</p>
 				</div>
-				<Button to="/portal/consultation" variant="primary">
-					+ Book appointment
-				</Button>
+				{next ? (
+					// A live booking exists — the primary action is managing it, not
+					// booking again. Check-ins stay reachable via the rail card.
+					<a className="btn btn--primary" href="#next">
+						Manage appointment
+					</a>
+				) : (
+					<Button to="/portal/consultation" variant="primary">
+						+ Book appointment
+					</Button>
+				)}
 			</header>
 
 			{error && <p className="appt-error">{error}</p>}
@@ -458,7 +486,7 @@ export function PortalAppointments() {
 
 			{/* Next up — lifted out of the book */}
 			{next && nextState ? (
-				<div className="pnext mt-4">
+				<div className="pnext mt-4" id="next">
 					<div className="pnext__date">
 						<b>{new Date(next.startsAt).getDate()}</b>
 						<span>{new Date(next.startsAt).toLocaleDateString(undefined, { month: "short" })}</span>
@@ -479,7 +507,23 @@ export function PortalAppointments() {
 						{next.rescheduleRequestedAt ? (
 							<div className="preq">
 								<b>Reschedule requested</b>
-								You asked to move to {new Date(next.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for your consultant to confirm. The original time holds until they do.
+								You asked to move to {new Date(next.rescheduleRequestedStartsAt!).toLocaleString()} — waiting for your consultant to confirm. The original time holds until they do.{" "}
+								<button
+									type="button"
+									className="jlink"
+									disabled={withdrawingNext}
+									onClick={async () => {
+										setWithdrawingNext(true);
+										try {
+											await bookingsApi.withdrawRescheduleRequest(next.id);
+											load();
+										} finally {
+											setWithdrawingNext(false);
+										}
+									}}
+								>
+									{withdrawingNext ? "Withdrawing…" : "Withdraw request"}
+								</button>
 							</div>
 						) : null}
 						{!next.meetingUrl && next.type === "online" && next.employeeId ? (
@@ -572,7 +616,7 @@ export function PortalAppointments() {
 								Check-ins are free once you're enrolled. Pick a day and a time — we confirm by email.
 							</p>
 							<Button to="/portal/consultation" variant="inverted" style={{ width: "100%", marginTop: "0.9rem", textAlign: "center" }}>
-								Book appointment →
+								{next ? "Book another →" : "Book appointment →"}
 							</Button>
 						</div>
 

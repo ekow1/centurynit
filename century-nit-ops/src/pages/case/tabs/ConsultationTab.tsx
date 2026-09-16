@@ -15,7 +15,17 @@ export function ConsultationTab({ app, consultation }: { app: MockApplication; c
 				<p className="eyebrow mb-2">Consultation {consultation.ref}</p>
 				<div className="ops-grid cn-facts">
 					<div><p className="muted text-xs">Officer</p><p>{consultation.assignedOfficer || "—"}</p></div>
-					<div><p className="muted text-xs">When</p><p>{consultation.dateTime}</p></div>
+					<div>
+						<p className="muted text-xs">When</p>
+						<p>
+							{consultation.dateTime}
+							{consultation.rescheduleRequestedAt && consultation.rescheduleRequestedStartsAt ? (
+								<span className="muted">
+									{" "}→ asked: {new Date(consultation.rescheduleRequestedStartsAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+								</span>
+							) : null}
+						</p>
+					</div>
 					<div><p className="muted text-xs">Type</p><p>{consultation.type}</p></div>
 					<div><p className="muted text-xs">Status</p><p>{consultation.status}</p></div>
 					<div><p className="muted text-xs">Target country</p><p>{consultation.targetCountry || "—"}</p></div>

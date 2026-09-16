@@ -116,7 +116,7 @@ export function DashboardHome() {
 	} = useAppState();
 	const { syncFromServer } = useAppState();
 	const current = journeyPhase.stage;
-	const cta = currentStageCta(current, application.proceedStatus);
+	const stageCta = currentStageCta(current, application.proceedStatus);
 	const meta = STAGE_META[current];
 	const stageMeta = PROCESS_STAGES.find((s) => s.id === current);
 
@@ -132,6 +132,12 @@ export function DashboardHome() {
 	const [money, setMoney] = useState<{ paid: number; due: number; next: string | null } | null>(null);
 	const [nextAppt, setNextAppt] = useState<Booking | null>(null);
 	const [docsOnFile, setDocsOnFile] = useState<number | null>(null);
+
+	// A live booking turns "Book consultation" into "your appointment" — the
+	// stage hasn't moved on, but the thing to do with it has.
+	const cta = nextAppt && (current === "new" || current === "consultation")
+		? { to: "/portal/appointments", label: "Your appointment" }
+		: stageCta;
 
 	useEffect(() => {
 		let alive = true;
@@ -358,6 +364,7 @@ export function DashboardHome() {
 												{new Date(nextAppt.startsAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
 												{" · "}{nextAppt.type === "online" ? "Online" : "In person"}
 												{nextAppt.employeeName ? ` · ${nextAppt.employeeName}` : ""}
+												{nextAppt.rescheduleRequestedAt ? " · reschedule asked" : ""}
 											</p>
 										</div>
 									</div>

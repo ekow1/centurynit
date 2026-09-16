@@ -115,11 +115,11 @@ export function EnterpriseConsultations() {
 	);
 
 	const STATUS_TABS = canAssignWork
-		? ["All", "Under Review", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"]
-		: ["All", "Assigned", "Confirmed", "In Assessment", "Completed", "Cancelled"];
+		? ["All", "Under Review", "Assigned", "Confirmed", "Reschedule asked", "In Assessment", "Completed", "Cancelled"]
+		: ["All", "Assigned", "Confirmed", "Reschedule asked", "In Assessment", "Completed", "Cancelled"];
 
 	const matchesStatus = (c: (typeof roleScopedConsultations)[number], s: string) =>
-		s === "All" ? true : s === "Unassigned" ? !c.assignedOfficer : c.status === s;
+		s === "All" ? true : s === "Unassigned" ? !c.assignedOfficer : s === "Reschedule asked" ? Boolean(c.rescheduleRequestedAt) : c.status === s;
 
 	// Search and branch apply before the status facet so each option's count
 	// says how much choosing it would show.
@@ -247,12 +247,20 @@ export function EnterpriseConsultations() {
 											<div className="cn-row__main">
 												<div className="cn-row__top">
 													<span className="cn-row__ref">{c.ref}</span>
+													{c.rescheduleRequestedAt && (
+														<StatusPill tone="waiting">Reschedule asked</StatusPill>
+													)}
 													<StatusPill tone={c.status === "Completed" ? "done" : c.status === "Cancelled" ? "void" : c.status === "Under Review" ? "waiting" : "current"}>
 														{c.status}
 													</StatusPill>
 												</div>
 												<p className="cn-row__name">{c.applicantName}</p>
-												<p className="cn-row__sub">{[c.dateTime, c.targetCountry, c.type].filter(isKnown).join(" · ")}</p>
+												<p className="cn-row__sub">
+													{c.rescheduleRequestedAt && c.rescheduleRequestedStartsAt
+														? `${c.dateTime} → ${new Date(c.rescheduleRequestedStartsAt).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}`
+														: c.dateTime}
+													{[c.targetCountry, c.type].filter(isKnown).length ? ` · ${[c.targetCountry, c.type].filter(isKnown).join(" · ")}` : ""}
+												</p>
 												<div className="cn-row__meta">
 													{c.assignedOfficer ? (
 														<StaffChatBadge opsUserId={opsUserIdByEmail(c.assignedOfficerEmail)} name={c.assignedOfficer} email={c.assignedOfficerEmail} />

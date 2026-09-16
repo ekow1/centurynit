@@ -47,6 +47,53 @@
 	vertical-align: middle;
 }
 
+/* ── FilterGroup: one-select filter chips ──
+   A radiogroup, not a tablist — the chips narrow a list, they don't switch
+   panels. Checked is inked; --hot marks a count worth noticing; --zero is
+   muted when empty. */
+.ops-fgroup {
+	display: flex;
+	gap: 0.35rem;
+	flex-wrap: wrap;
+	align-items: center;
+}
+.ops-pill--chip {
+	cursor: pointer;
+	margin-left: 0;
+	padding: 0.3rem 0.6rem;
+	background: var(--background);
+	color: var(--foreground);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	font-size: 0.66rem;
+}
+.ops-pill--chip:hover:not(.ops-pill--on) {
+	box-shadow: inset 0 0 0 1px var(--foreground);
+}
+.ops-pill--chip:focus-visible {
+	outline: 2px solid var(--foreground);
+	outline-offset: 2px;
+}
+.ops-pill--on,
+.ops-pill--on:hover {
+	background: var(--foreground);
+	color: var(--background);
+	border-color: var(--foreground);
+}
+.ops-pill--hot {
+	font-weight: 700;
+}
+.ops-pill--zero {
+	color: var(--muted-foreground);
+}
+.ops-pill__n {
+	margin-left: 0.4rem;
+	opacity: 0.6;
+}
+.ops-pill--on .ops-pill__n {
+	opacity: 0.85;
+}
+
 /* ── Workspace queue: the day as people ──
    One card per client per band. Hairline card, square; a 4px inked edge
    marks an overdue thing, a 1px black frame a live one; a selected thing
@@ -750,6 +797,92 @@
 	text-decoration: underline;
 	text-underline-offset: 3px;
 	cursor: pointer;
+}
+
+/* A client card that opens a preview — same select affordance as the
+   worklist rows. */
+.ops-client--pick {
+	cursor: pointer;
+}
+.ops-client--pick:hover {
+	background: var(--muted);
+}
+.ops-client--pick:focus-visible {
+	outline: 2px solid var(--foreground);
+	outline-offset: -2px;
+}
+
+/* ── Caseload: the officers as a strip ──
+   One card per officer — load count, name, role, the stage-mix strip —
+   scrolling sideways instead of a pane squeezing the records. The record
+   itself opens in a Sheet. */
+.ops-ostrip {
+	display: flex;
+	gap: 0.5rem;
+	overflow-x: auto;
+	scroll-snap-type: x proximity;
+	padding-bottom: 0.4rem;
+	scrollbar-width: thin;
+}
+.ops-ocard {
+	min-width: 10.5rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	padding: 0.6rem 0.75rem;
+	text-align: left;
+	cursor: pointer;
+	font: inherit;
+	scroll-snap-align: start;
+	display: flex;
+	flex-direction: column;
+	gap: 0.15rem;
+}
+.ops-ocard:hover {
+	box-shadow: inset 0 0 0 1px var(--foreground);
+}
+.ops-ocard:focus-visible {
+	outline: 2px solid var(--foreground);
+	outline-offset: 2px;
+}
+.ops-ocard--on,
+.ops-ocard--on:hover {
+	border-color: var(--foreground);
+	box-shadow: inset 0 0 0 1px var(--foreground);
+}
+.ops-ocard__top {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 0.5rem;
+}
+.ops-ocard__load {
+	font-weight: 800;
+	font-size: 1.05rem;
+	line-height: 1;
+}
+.ops-ocard__who {
+	font-weight: 650;
+	font-size: var(--text-sm);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ops-ocard__meta {
+	font-family: var(--font-mono);
+	font-size: 0.55rem;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	color: var(--muted-foreground);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ops-ocard__meta .hot {
+	color: var(--foreground);
+	font-weight: 700;
+}
+.ops-ocard .ops-strip {
+	margin-top: 0.4rem;
 }
 
 /* ── Dashboard: the day line, four KPIs, hairline panels ── */
@@ -2762,6 +2895,28 @@ a.dash-kpi--on:hover {
 .ops-table__sub {
 	color: var(--text-muted, #666);
 	font-size: var(--text-xs);
+}
+
+/* Selectable queue rows — keyboard can reach the preview, and the states
+   are classes so theming and :focus-visible work. Selected reads as an
+   inset ink bar over muted fill; overdue keeps its own left bar. */
+.ops-table tbody tr.ops-tr--pick {
+	cursor: pointer;
+}
+.ops-table tbody tr.ops-tr--pick:hover {
+	background: var(--muted);
+}
+.ops-table tbody tr.ops-tr--pick:focus-visible {
+	outline: 2px solid var(--foreground);
+	outline-offset: -2px;
+}
+.ops-table tbody tr.ops-tr--over {
+	box-shadow: inset 4px 0 0 var(--foreground);
+}
+.ops-table tbody tr.ops-tr--sel,
+.ops-table tbody tr.ops-tr--sel:hover {
+	background: var(--muted);
+	box-shadow: inset 4px 0 0 var(--foreground);
 }
 
 .ops-status {

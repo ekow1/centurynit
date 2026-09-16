@@ -365,6 +365,13 @@ export const bookingsApi = {
 		});
 	},
 
+	/** The client withdraws their own pending reschedule request — the held slot is untouched. */
+	withdrawRescheduleRequest(bookingId: string): Promise<Booking> {
+		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule-request`, {
+			method: "DELETE",
+		});
+	},
+
 	cancel(bookingId: string, reason?: string): Promise<Booking> {
 		return request(`${API_PREFIX}/bookings/${bookingId}/cancel`, {
 			method: "PATCH",

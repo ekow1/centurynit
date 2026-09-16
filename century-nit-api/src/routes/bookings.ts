@@ -31,6 +31,7 @@ import {
 	setBookingMeetingUrl,
 	generateMeetingForBooking,
 	joinBookingMeeting,
+	withdrawRescheduleRequest,
 	resendMeetingLinkForBooking,
 	type BookingRow,
 } from "../services/booking.js";
@@ -1292,6 +1293,37 @@ bookingsRouter.openapi(
 			...body,
 			actor: { id: user.id, email: user.email },
 		});
+		return c.json(toBookingResponse(updated), 200);
+	},
+);
+
+/* ── DELETE /api/v1/bookings/:id/reschedule-request ─────────────────────── */
+
+bookingsRouter.openapi(
+	createRoute({
+		method: "delete",
+		path: "/{id}/reschedule-request",
+		tags: ["Bookings"],
+		middleware: requireAuth,
+		request: { params: idParams },
+		responses: {
+			200: {
+				description: "Reschedule request withdrawn",
+				content: { "application/json": { schema: bookingSchema } },
+			},
+		},
+	}),
+	async (c) => {
+		const user = c.get("user");
+		const { id } = c.req.valid("param");
+
+		const row = await getBooking(id);
+		if (!row) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+		if (row.clientUserId !== user.id) {
+			throw new HttpError(403, "FORBIDDEN", "Not your booking");
+		}
+
+		const updated = await withdrawRescheduleRequest(id, { id: user.id, email: user.email });
 		return c.json(toBookingResponse(updated), 200);
 	},
 );

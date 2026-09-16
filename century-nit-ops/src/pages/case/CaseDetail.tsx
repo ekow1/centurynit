@@ -218,7 +218,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	// Tab state, mirrored to ?tab= so a notification or a handoff can link to
 	// the right chapter and a refresh keeps it. Precedence: the URL, then the
 	// host's chapter, then where the case is.
-	const [tab, setTab] = useCaseTab<TabId>(TAB_IDS, () => currentTabFor(app), app.id, initialTab);
+	const [tab, setTab] = useCaseTab<TabId>(TAB_IDS, () => currentTabFor(app), initialTab);
 
 	// Which stage bodies apply to this case.
 	const stageIdx = (s: string) => (JOURNEY_STAGES as string[]).indexOf(s === "payment_execution" ? "travel_assistance" : s);

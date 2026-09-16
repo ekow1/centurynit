@@ -517,10 +517,33 @@ export async function setBookingMeetingUrl(bookingId: string, meetingUrl: string
 	}
 	const [row] = await db
 		.update(bookings)
-		.set({ meetingUrl, updatedAt: new Date() })
+		.set({
+			meetingUrl,
+			// A pasted https link replaces whatever provider room was there —
+			// join must return this link, not keep minting tokens for the old
+			// room. Clearing drops provider state entirely.
+			meetingProvider: meetingUrl ? "manual" : null,
+			meetingSpace: null,
+			updatedAt: new Date(),
+		})
 		.where(eq(bookings.id, bookingId))
 		.returning();
 	await audit(bookingId, "meeting_url.set", "staff", { meetingUrl });
+
+	// The old provider room is orphaned — tear it down so nobody joins a
+	// stale room, and it stops counting against provider limits.
+	if (
+		meetingUrl !== booking.meetingUrl &&
+		booking.meetingSpace &&
+		(booking.meetingProvider === "daily" || booking.meetingProvider === "livekit")
+	) {
+		try {
+			const { endMeeting } = await import("./meet/index.js");
+			await endMeeting(booking.meetingSpace, booking.meetingProvider);
+		} catch (err) {
+			console.error("[booking] could not tear down replaced meeting room:", err);
+		}
+	}
 
 	// When a meeting URL is set or changed, notify the client immediately so they have the link
 	if (meetingUrl && meetingUrl !== booking.meetingUrl) {
@@ -722,6 +745,16 @@ export async function joinBookingMeeting(
 			409,
 			"MEETING_NOT_OPEN",
 			`The meeting room opens at ${window_.notBefore.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: booking.timezone })} — try again then.`,
+			// The clients render a proper "opens at" modal from this — keep it
+			// machine-readable so the countdown and calendar file are exact.
+			{
+				opensAt: window_.notBefore.toISOString(),
+				startsAt: booking.startsAt.toISOString(),
+				endsAt: booking.endsAt.toISOString(),
+				timezone: booking.timezone,
+				earlyMinutes: caller.staff ? 30 : 15,
+				reference: booking.reference,
+			},
 		);
 	}
 	if (now > window_.expiresAt.getTime()) {
@@ -1100,6 +1133,18 @@ export async function decideRescheduleBooking(
 			updated = await updateCalendarForBooking(updated.id);
 		}
 
+		// Same rule as a staff reschedule: a Daily room's nbf/exp were baked to
+		// the old slot — re-bind them or the approved room opens against a time
+		// that no longer exists. Best-effort; never roll back the decision.
+		if (updated.meetingProvider === "daily" && updated.meetingSpace) {
+			try {
+				const { updateMeetingWindow } = await import("./meet/index.js");
+				await updateMeetingWindow(updated.meetingSpace, "daily", meetingWindow(updated));
+			} catch (err) {
+				console.error("[booking] could not update Daily room window after approved reschedule:", err);
+			}
+		}
+
 		const employee = updated.employeeId ? await loadEmployee(updated.employeeId) : null;
 		const ctx = { ...(await notificationContext(updated, employee)), reason: "Your reschedule request was approved." };
 
@@ -1165,6 +1210,39 @@ export async function decideRescheduleBooking(
 		// Optionally we could send an email about rejection to client
 		return cleared;
 	}
+}
+
+/**
+ * The client takes their reschedule request back. The held slot is untouched —
+ * the request fields simply clear, and the case stops showing "reschedule
+ * asked" everywhere.
+ */
+export async function withdrawRescheduleRequest(
+	id: string,
+	actor: { id: string; email: string },
+): Promise<BookingRow> {
+	const booking = await getBooking(id);
+	if (!booking) throw new HttpError(404, "BOOKING_NOT_FOUND", "Booking not found");
+
+	if (!booking.rescheduleRequestedAt) {
+		throw new HttpError(400, "INVALID_STATE", "No pending reschedule request.");
+	}
+
+	const [updated] = await db
+		.update(bookings)
+		.set({
+			rescheduleRequestedAt: null,
+			rescheduleRequestedStartsAt: null,
+			rescheduleRequestedEndsAt: null,
+			rescheduleRequestedTimezone: null,
+			rescheduleRequestReason: null,
+			updatedAt: new Date(),
+		})
+		.where(eq(bookings.id, booking.id))
+		.returning();
+
+	await audit(booking.id, "reschedule_withdrawn", actor.email);
+	return updated;
 }
 
 export async function updateCalendarForBooking(bookingId: string): Promise<BookingRow> {

@@ -1,36 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
-import { OPS_BRANCHES, branchName } from "century-nit-core/ops";
+import { useUrlParam } from "../hooks/useUrlParam";
+import { OPS_BRANCHES } from "century-nit-core/ops";
 
-import { fmtGhs, fmtUsd, money } from "./currency";
+import { fmtGhs, money } from "./currency";
 import type {
-	MockConsultation,
-	MockApplication,
-	MockApplicant,
-	Invoice,
 	Assignee,
 } from "century-nit-core/ops";
-import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
-import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
-import { apiFetch, ApiError, getInvoice, type ApiInvoice } from "../lib/api";
-import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
-import { useJoinMeeting } from "./case/ConsultationCall";
-import { applicationsApi, bookingsApi } from "century-nit-core/api";
-import { AssignSheet } from "./case/AssignSheet";
-import { API_PREFIX, JOURNEY_STAGE_LABELS, WORKSPACE_TAB_LABELS, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest, type WorkspaceTab } from "century-nit-shared";
+import { type Lead } from "century-nit-core";
+import { apiFetch } from "../lib/api";
+import { bookingsApi } from "century-nit-core/api";
+import { API_PREFIX, WORKSPACE_TAB_LABELS, type Booking, type WorkspaceTab } from "century-nit-shared";
 import {
+	assignPendingTask,
 	buildInvoiceRows,
 	buildPendingTasks,
 	isDueToday,
 	isOverdue,
-	handoffOffersKeep,
-	taskActionLabel,
-	TASK_KIND_LABEL,
-	timeAgo,
-	VISA_STEP_LABELS,
 	type PendingTask,
 } from "../lib/pendingTasks";
 import { PendingTaskRows } from "./PendingTasks";
@@ -39,6 +27,8 @@ import { NowPane } from "./NowPane";
 import { CaseScaffold } from "./case/CaseScaffold";
 import { CaseTabs, useCaseTab } from "./case/CaseTabs";
 import { WorkspaceCaseload } from "./WorkspaceCaseload";
+import { FilterGroup } from "./FilterGroup";
+import { PreviewPane } from "./TaskPreview";
 
 /**
  * F-shaped workspace / mission control.
@@ -47,6 +37,10 @@ import { WorkspaceCaseload } from "./WorkspaceCaseload";
  * work queue presented as a table with inline assignment. The right-hand
  * pane only appears while an item is selected — with nothing selected the
  * queue keeps the page width.
+ *
+ * Every filter and the open task live in the URL (`?tab=&filter=&time=&type=
+ * &branch=&sort=&q=&open=`), so a refresh keeps the view and a notification
+ * can deep-link a task straight into the preview pane.
  */
 
 /** The two views — the queue to clear vs the workload being carried. */
@@ -57,14 +51,28 @@ const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
  * backlog categories from buildPendingTasks. Each chip carries its live
  * count, so the shape of the day reads before anything is clicked.
  */
-const QUEUE_FILTERS: { id: string; label: string }[] = [
+const QUEUE_FILTERS = [
 	{ id: "all", label: "All" },
 	{ id: "mine", label: "Mine" },
 	{ id: "needs_assignment", label: "No handler" },
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
-];
-const passesQueueFilter = (item: PendingTask, filter: string, me?: { name?: string; email?: string }): boolean => {
+] as const;
+type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
+const QUEUE_IDS = QUEUE_FILTERS.map((f) => f.id);
+
+/** The time cut is a second, independent filter — "mine" + "overdue" is a
+ * valid and useful cut, so it gets its own radiogroup rather than chips
+ * that pretend to be alternatives to the category ones. */
+const TIME_FILTERS = [
+	{ id: "all", label: "Any time" },
+	{ id: "today", label: "Today" },
+	{ id: "overdue", label: "Overdue" },
+] as const;
+type TimeFilter = (typeof TIME_FILTERS)[number]["id"];
+const TIME_IDS = TIME_FILTERS.map((f) => f.id);
+
+const passesQueueFilter = (item: PendingTask, filter: QueueFilter, me?: { name?: string; email?: string }): boolean => {
 	if (filter === "all") return true;
 	// "Mine" is a real handler check — the seat is held by this officer.
 	if (filter === "mine") {
@@ -74,20 +82,28 @@ const passesQueueFilter = (item: PendingTask, filter: string, me?: { name?: stri
 	return item.category === filter;
 };
 
-const TYPE_FILTERS: { id: string; label: string }[] = [
+const passesTimeFilter = (item: PendingTask, time: TimeFilter): boolean => {
+	if (time === "today") return isDueToday(item);
+	if (time === "overdue") return isOverdue(item);
+	return true;
+};
+
+const TYPE_FILTERS = [
 	{ id: "all", label: "All Types" },
 	{ id: "consultation", label: "Consultation" },
 	{ id: "application", label: "Application" },
 	{ id: "travel", label: "Travel" },
 	{ id: "invoice", label: "Invoice" },
 	{ id: "lead", label: "Lead" },
-];
+] as const;
+const TYPE_IDS = TYPE_FILTERS.map((f) => f.id);
 
 const DATE_SORTS = [
 	{ id: "default", label: "Priority" },
 	{ id: "desc", label: "Newest first" },
 	{ id: "asc", label: "Oldest first" },
-];
+] as const;
+const SORT_IDS = DATE_SORTS.map((f) => f.id);
 
 export function Workspace() {
 	const { opsUser, canSeeAllBranches, canAssignWork, scopeRecords } = useOpsAuth();
@@ -110,21 +126,18 @@ export function Workspace() {
 	} = useCases();
 	const { invoices, loading: invoicesLoading } = useInvoiceApi();
 
-	const [view, setView] = useCaseTab(WORKSPACE_TABS, () => "worklist", "workspace");
-	const [branchFilter, setBranchFilter] = useState("all");
-	const [search, setSearch] = useState("");
-	const [searchParams, setSearchParams] = useSearchParams();
-	const [filter, setFilterState] = useState<string>(searchParams.get("filter") ?? "all");
-	const [typeFilter, setTypeFilter] = useState("all");
-	const [dateSort, setDateSort] = useState("default");
-	const setFilter = (next: string) => {
-		setFilterState(next);
-		const params = new URLSearchParams(searchParams);
-		if (next === "all") params.delete("filter");
-		else params.set("filter", next);
-		setSearchParams(params, { replace: true });
-	};
-	const [selected, setSelected] = useState<PendingTask | null>(null);
+	const [view, setView] = useCaseTab(WORKSPACE_TABS, () => "worklist");
+	// All filters live in the URL — refresh-safe, and a stale value falls
+	// back instead of silently emptying the queue.
+	const [filter, setFilter] = useUrlParam<QueueFilter>("filter", { allowed: QUEUE_IDS, fallback: "all" });
+	const [time, setTime] = useUrlParam<TimeFilter>("time", { allowed: TIME_IDS, fallback: "all" });
+	const [typeFilter, setTypeFilter] = useUrlParam("type", { allowed: TYPE_IDS, fallback: "all" });
+	const [branchFilter, setBranchFilter] = useUrlParam("branch", { fallback: "all" });
+	const [dateSort, setDateSort] = useUrlParam("sort", { allowed: SORT_IDS, fallback: "default" });
+	const [search, setSearch] = useUrlParam("q");
+	// The open task is `?open=` — a deep link opens it even when the chips
+	// would have filtered it out.
+	const [openId, setOpenId] = useUrlParam("open");
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
 	const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
@@ -211,15 +224,20 @@ export function Workspace() {
 		});
 	}, [scopedConsultations, scopedApplications, scopedApplicants, invoiceRows, invoices, leads, liveBookingIds, handoffs, travelRequests]);
 
-	// Only real task categories are filters — a stale ?filter= (the retired
-	// "overdue"/"outstanding" cards) must not silently empty the queue.
-	const activeFilter = QUEUE_FILTERS.some((f) => f.id === filter) ? filter : "all";
+	// The open task resolves against the unfiltered queue — a deep link
+	// opens it even when the chips would have hidden the row.
+	const selected = useMemo(() => items.find((t) => t.id === openId) ?? null, [items, openId]);
+	const selectTask = useCallback(
+		(t: PendingTask) => setOpenId(openId === t.id ? null : t.id),
+		[openId, setOpenId],
+	);
 
 	const filtered = useMemo(() => {
 		const q = search.toLowerCase().trim();
 		const result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
-			if (!passesQueueFilter(item, activeFilter, opsUser ?? undefined)) return false;
+			if (!passesQueueFilter(item, filter, opsUser ?? undefined)) return false;
+			if (!passesTimeFilter(item, time)) return false;
 			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
@@ -231,7 +249,7 @@ export function Workspace() {
 			result.sort((a, b) => (new Date(a.at || 0).getTime()) - (new Date(b.at || 0).getTime()));
 		}
 		return result;
-	}, [items, branchFilter, activeFilter, typeFilter, dateSort, search]);
+	}, [items, branchFilter, filter, time, typeFilter, dateSort, search]);
 
 	const stats = useMemo(() => {
 		const counts = new Map<string, number>([["all", items.length]]);
@@ -240,37 +258,20 @@ export function Workspace() {
 		counts.set("overdue", items.filter((i) => isOverdue(i)).length);
 		const me = [opsUser?.name, opsUser?.email].filter(Boolean);
 		counts.set("mine", items.filter((i) => me.some((w) => i.owner === w)).length);
-		const overdue = invoiceRows.filter((r) => r.status === "overdue").length;
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
-		return { counts, overdue, totalOutstanding };
-	}, [items, invoiceRows, applicants, opsUser]);
+		return { counts, totalOutstanding };
+	}, [items, applicants, opsUser]);
 
 	const loading = casesLoading || invoicesLoading || leadsLoading;
 
+	const assignActions = useMemo(
+		() => ({ assignConsultation, assignApplication, resolveHandoff }),
+		[assignConsultation, assignApplication, resolveHandoff],
+	);
 	const doAssign = useCallback(
-		async (task: PendingTask, to: Assignee, placement: HandlerPlacement) => {
-			if (task.kind === "consultation") {
-				return assignConsultation(task.record.id, to, { scope: placement.scope, branch: placement.branch });
-			}
-			if (task.kind === "application") {
-				return assignApplication(task.record.id, to, { scope: placement.scope, branch: placement.branch });
-			}
-			if (task.kind === "handoff" && task.action === "resolve") {
-				return resolveHandoff(task.record.id, "assign", {
-					opsUserId: to.opsUserId,
-					reason: placement.reason,
-					scope: placement.scope,
-					branch: placement.branch,
-				});
-			}
-			if (task.kind === "travel" && to.opsUserId) {
-				await applicationsApi.assignTravelHandler(task.record.id, to.opsUserId);
-				await refresh();
-				return;
-			}
-			throw new Error("This task cannot be assigned from here.");
-		},
-		[assignConsultation, assignApplication, resolveHandoff, refresh],
+		(task: PendingTask, to: Assignee, placement: HandlerPlacement) =>
+			assignPendingTask(task, to, placement, assignActions).then(() => refresh()),
+		[assignActions, refresh],
 	);
 
 	const doLeaveOpen = useCallback(
@@ -284,6 +285,9 @@ export function Workspace() {
 		[referConsultation, referApplication],
 	);
 
+	const today = stats.counts.get("today") ?? 0;
+	const overdue = stats.counts.get("overdue") ?? 0;
+
 	return (
 		<div className="page-content fade-in">
 			<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1.25rem", flexWrap: "wrap", gap: "0.75rem" }}>
@@ -294,65 +298,65 @@ export function Workspace() {
 						{view === "worklist" ? "Here is what needs attention." : "Here is what is in flight and who has it."}
 					</p>
 				</div>
-				<div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-					{/* Filters moved to the inline table row */}
-				</div>
+				{/* The day's summary — computed anyway, so put it where a scan starts. */}
+				<p className="cn-filter__label" style={{ textAlign: "right", lineHeight: 1.9 }}>
+					{new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+					<br />
+					<strong style={{ color: "var(--foreground)" }}>{items.length} open</strong> · {today} today · {overdue} overdue
+					{stats.totalOutstanding > 0 ? ` · ${fmtGhs(stats.totalOutstanding)} outstanding` : ""}
+				</p>
 			</div>
 
 			{casesError && view === "worklist" && <p className="ops-modal__error" role="alert">{casesError}</p>}
 
 			<CaseTabs
 				pageLevel
-				tabs={WORKSPACE_TABS.map((id) => ({ id, label: WORKSPACE_TAB_LABELS[id] }))}
+				tabs={WORKSPACE_TABS.map((id) => ({ id, label: id === "worklist" ? `${WORKSPACE_TAB_LABELS[id]} ${items.length}` : WORKSPACE_TAB_LABELS[id] }))}
 				current={view}
 				onChange={setView}
 			/>
 
-			{view === "caseload" && <WorkspaceCaseload />}
+			{view === "caseload" && <WorkspaceCaseload tasks={items} />}
 
 			{view === "worklist" && <CaseScaffold
 				bare
 				collapseDetail
-				onClose={() => setSelected(null)}
+				onClose={() => setOpenId(null)}
 				bar={null}
-				rail={<NowPane items={items} liveBookings={liveBookings} onSelect={setSelected} />}
+				rail={<NowPane items={items} liveBookings={liveBookings} onSelect={(t) => setOpenId(t.id)} />}
 				list={
 					<>
 						<div className="cn-scaffold__filters">
-							<div className="cn-scaffold__chips" role="tablist" aria-label="Queue" style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
-								{QUEUE_FILTERS.map((f) => {
-									const n = stats.counts.get(f.id) ?? 0;
-									const on = activeFilter === f.id;
-									return (
-										<button
-											key={f.id}
-											type="button"
-											role="tab"
-											aria-selected={on}
-											className="ops-pill"
-											onClick={() => setFilter(f.id)}
-											style={{
-												cursor: "pointer",
-												border: "1px solid var(--border)",
-												background: on ? "var(--foreground)" : "transparent",
-												color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-												fontWeight: f.id === "mine" && n > 0 && !on ? 700 : 500,
-											}}
-										>
-											{f.label}
-											<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
-												{n}
-											</span>
-										</button>
-									);
-								})}
+							<div className="cn-scaffold__chips">
+								<FilterGroup
+									label="Queue"
+									options={QUEUE_FILTERS.map((f) => ({
+										id: f.id,
+										label: f.label,
+										count: stats.counts.get(f.id) ?? 0,
+										hot: f.id === "mine" && (stats.counts.get("mine") ?? 0) > 0,
+									}))}
+									value={filter}
+									onChange={setFilter}
+								/>
+								<FilterGroup
+									label="When"
+									options={TIME_FILTERS.map((f) => ({
+										id: f.id,
+										label: f.label,
+										count: f.id === "all" ? undefined : (stats.counts.get(f.id) ?? 0),
+										hot: f.id === "overdue" && overdue > 0,
+									}))}
+									value={time}
+									onChange={setTime}
+								/>
 							</div>
 							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
 							<input
 								type="search"
 								placeholder="Search queue…"
 								value={search}
-								onChange={(e) => setSearch(e.target.value)}
+								onChange={(e) => setSearch(e.target.value || null)}
 								className="cn-search"
 								aria-label="Search queue"
 								style={{ flex: "1 1 14rem", width: "auto" }}
@@ -385,7 +389,7 @@ export function Workspace() {
 									))}
 								</select>
 							</label>
-							{view === "worklist" && canSeeAllBranches && (
+							{canSeeAllBranches && (
 								<label className="cn-filter">
 									<span className="cn-filter__label">Branch</span>
 									<select
@@ -400,13 +404,7 @@ export function Workspace() {
 									</select>
 								</label>
 							)}
-							{loading && <span className="cn-filter__label">Loading…</span>}
-							{stats.overdue > 0 && (
-								<span className="cn-filter__label" style={{ marginLeft: "auto" }}>
-									{stats.overdue} overdue invoice{stats.overdue === 1 ? "" : "s"}
-									{stats.totalOutstanding > 0 ? ` · ${fmtGhs(stats.totalOutstanding)} outstanding` : ""}
-								</span>
-							)}
+							{loading && <span className="cn-filter__label" style={{ marginLeft: "auto" }}>Loading…</span>}
 							</div>
 						</div>
 						<div className="cn-scaffold__rows">
@@ -420,7 +418,7 @@ export function Workspace() {
 									if (t.kind === "handoff") await resolveHandoff(t.record.id, "keep", { reason });
 								}}
 								onAssigned={refresh}
-								onSelect={(t) => setSelected((cur) => (cur?.id === t.id ? null : t))}
+								onSelect={selectTask}
 								selectedId={selected?.id}
 								emptyLabel={
 									loading
@@ -448,398 +446,6 @@ export function Workspace() {
 					) : null
 				}
 			/>}
-		</div>
-	);
-}
-
-/** The one primary action for a task — where it opens. Every case-flavoured
- * task lands on the unified Cases queue; the label names the destination. */
-function openLabel(item: PendingTask): string {
-	if (item.kind === "booking" || item.kind === "consultation") return "Open consultation";
-	if (item.kind === "applicant") return "Open client";
-	if (item.kind === "invoice") return "Open invoice";
-	if (item.kind === "lead") return "Open leads";
-	return "Open case";
-}
-
-function PreviewPane({
-	item,
-	assignees,
-	canAssignWork,
-	onAssigned,
-	onAssignConsultation,
-	onAssignApplication,
-	onReferConsultation,
-	onReferApplication,
-	onResolveHandoff,
-	onDeferHandoff,
-}: {
-	item: PendingTask;
-	assignees: Assignee[];
-	canAssignWork: boolean;
-	onAssigned: () => void | Promise<void>;
-	onAssignConsultation: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
-	onAssignApplication: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
-	onReferConsultation: (id: string, branch: string, note?: string) => Promise<unknown>;
-	onReferApplication: (id: string, branch: string, note?: string) => Promise<unknown>;
-	onResolveHandoff: (handoffId: string, decision: "keep" | "assign", opts?: { opsUserId?: string; reason?: string; scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
-	onDeferHandoff: (handoffId: string, reason?: string) => Promise<unknown>;
-}) {
-	const [deferring, setDeferring] = useState(false);
-	const [deferError, setDeferError] = useState<string | null>(null);
-	// An invoice awaiting approval is approved here, with the sheet the case tabs use.
-	const { canIssueInvoices } = useOpsAuth();
-	const approvable =
-		canIssueInvoices && item.action === "issue"
-			? item.kind === "invoice"
-				? item.record.id
-				: item.kind === "travel"
-					? (item.record.invoiceId ?? null)
-					: null
-			: null;
-	const [approving, setApproving] = useState<ApiInvoice | null>(null);
-	const [loadingInvoice, setLoadingInvoice] = useState(false);
-	const [actionError, setActionError] = useState<string | null>(null);
-	const [actionOk, setActionOk] = useState<string | null>(null);
-
-	// Which stage the picker is staffing — decides which roles are offered.
-	const stageForRoles =
-		item.kind === "handoff"
-			? item.record.stage
-			: item.kind === "travel"
-				? "travel_assistance"
-				: item.kind === "application"
-					? "school_submission"
-					: "consultation";
-
-	const byId = (opsUserId: string) => assignees.find((a) => a.opsUserId === opsUserId);
-	const [handlerSheet, setHandlerSheet] = useState(false);
-
-	async function placeHandler(placement: HandlerPlacement) {
-		const to = byId(placement.opsUserId);
-		if (!to || !item.record) throw new Error("Staff member not found");
-		if (item.kind === "consultation" && item.action === "assign") {
-			await onAssignConsultation(item.record.id, to, { scope: placement.scope, branch: placement.branch });
-		} else if (item.kind === "application" && item.action === "assign") {
-			await onAssignApplication(item.record.id, to, { scope: placement.scope, branch: placement.branch });
-		} else if (item.kind === "handoff" && item.action === "resolve") {
-			await onResolveHandoff(item.record.id, "assign", {
-				opsUserId: placement.opsUserId,
-				reason: placement.reason,
-				scope: placement.scope,
-				branch: placement.branch,
-			});
-		} else if (item.kind === "travel" && item.action === "assign") {
-			await applicationsApi.assignTravelHandler(item.record.id, placement.opsUserId);
-		}
-		await onAssigned();
-	}
-
-	async function leaveOpen(branch: string) {
-		if (item.kind === "consultation") await onReferConsultation(item.record.id, branch);
-		else if (item.kind === "application" || item.kind === "visa") await onReferApplication(item.record.id, branch);
-		else if (item.kind === "handoff" && item.record.applicationId) await onReferApplication(item.record.applicationId, branch);
-		else if (item.kind === "travel") await onReferApplication(item.record.applicationId, branch);
-		await onAssigned();
-	}
-
-	async function keepHandler(reason?: string) {
-		if (item.kind !== "handoff") return;
-		await onResolveHandoff(item.record.id, "keep", { reason });
-		await onAssigned();
-	}
-
-	async function defer() {
-		if (item.kind !== "handoff") return;
-		setDeferring(true);
-		setDeferError(null);
-		try {
-			await onDeferHandoff(item.record.id);
-			await onAssigned();
-		} catch (err) {
-			setDeferError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Could not defer");
-		} finally {
-			setDeferring(false);
-		}
-	}
-
-	return (
-		<div className="cn-detail">
-			{/* The "open" action lives in the scaffold bar beside Close, not here. */}
-			<div className="card" style={{ padding: "1.25rem", borderBottom: "none" }}>
-				<span className="cn-detailhead__kicker">{TASK_KIND_LABEL[item.kind]} · {taskActionLabel(item)}</span>
-				<h3 className="cn-detailhead__title" style={{ fontSize: "1.25rem", margin: "0.25rem 0" }}>{item.title}</h3>
-				<p className="cn-detailhead__sub">{item.subtitle}</p>
-				{/* `meta` is prose or a reference, never shouted; the mono line below is for facts. */}
-				{!item.details && item.meta && <p className="cn-detailhead__sub">{item.meta}</p>}
-				<p className="cn-detailhead__meta">
-					{item.branch ? `${branchName(item.branch)} · ` : ""}Handler: {item.owner}
-				</p>
-			</div>
-
-			{item.details && (
-				<div className="card" style={{ padding: "1.25rem" }}>
-					<p className="cn-detail__eyebrow" style={{ marginBottom: "0.75rem" }}>Needs action</p>
-					<ul style={{ listStyleType: "disc", paddingLeft: "1.25rem", margin: "0" }}>
-						{item.details.map((d) => (
-							<li key={d.label} style={{ marginBottom: "0.5rem" }}>
-								<span className="ops-panel__muted">{d.label}</span>
-								{d.note && <span className="cn-detail__row-note" style={{ marginLeft: "0.75rem", background: "var(--muted)", padding: "0.15rem 0.45rem", color: "var(--foreground)" }}>{d.note}</span>}
-							</li>
-						))}
-					</ul>
-				</div>
-			)}
-
-			<div className="card" style={{ padding: "1.25rem" }}>
-				<p className="cn-detail__eyebrow" style={{ marginBottom: "0.75rem" }}>Record Details</p>
-				<div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-				{item.kind === "consultation" && <ConsultationDetails c={item.record} />}
-				{item.kind === "application" && <ApplicationDetails a={item.record} />}
-				{item.kind === "visa" && <VisaDetails a={item.record} />}
-				{item.kind === "handoff" && <HandoffDetails h={item.record} />}
-				{item.kind === "applicant" && <ApplicantDetails app={item.record} />}
-				{item.kind === "invoice" && <InvoiceDetails inv={item.record} />}
-				{item.kind === "travel" && <TravelDetails ta={item.record} />}
-				{item.kind === "booking" && <BookingDetails b={item.record} />}
-				{item.kind === "lead" && <LeadDetails lead={item.record} />}
-				</div>
-			</div>
-
-			{(item.action === "assign" || item.action === "resolve") && canAssignWork && (
-				<div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)" }}>
-					<p className="muted" style={{ fontSize: "var(--text-xs)", marginBottom: "0.75rem" }}>
-						{item.action === "resolve"
-							? "This stage needs a handler before it can start."
-							: "This seat is open — place a handler."}
-					</p>
-					<div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-						<button type="button" className="btn btn--primary btn--sm" onClick={() => setHandlerSheet(true)}>
-							Handler…
-						</button>
-						{item.kind === "handoff" && handoffOffersKeep(item.record) && (
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => void keepHandler()}>
-								Keep {item.record.fromOpsUserName}
-							</button>
-						)}
-						{item.kind === "handoff" && (
-							<button type="button" className="btn btn--ghost btn--sm" onClick={() => void defer()} disabled={deferring}>
-								{deferring ? "Deferring…" : "Later"}
-							</button>
-						)}
-					</div>
-					{deferError && <p className="ops-modal__error" style={{ marginTop: "0.5rem" }}>{deferError}</p>}
-				</div>
-			)}
-
-			{/* Bottom actions — the thing the task exists for, then the door to the record. */}
-			<div style={{ marginTop: "2rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
-				{approvable && (
-					<button
-						type="button"
-						className="btn btn--primary btn--sm"
-						disabled={loadingInvoice}
-						onClick={() => {
-							setLoadingInvoice(true);
-							getInvoice(approvable)
-								.then(setApproving)
-								.catch((e) => setActionError(e instanceof Error ? e.message : "Could not load the invoice"))
-								.finally(() => setLoadingInvoice(false));
-						}}
-					>
-						{loadingInvoice ? "Loading…" : "Approve & issue"}
-					</button>
-				)}
-				<Link to={item.linkTo} className={`btn btn--sm ${approvable ? "btn--ghost" : "btn--primary"}`}>
-					{openLabel(item)}
-				</Link>
-			</div>
-			{actionError && <p className="cn-assign__error">{actionError}</p>}
-			<ApproveInvoiceSheet
-				invoice={approving}
-				onClose={() => setApproving(null)}
-				onIssued={(updated) => {
-					setActionOk(`${updated.invoiceNumber} issued — the client can now pay.`);
-					void onAssigned();
-				}}
-				onDeclined={(voided) => {
-					setActionOk(`${voided.invoiceNumber} declined and voided.`);
-					void onAssigned();
-				}}
-			/>
-			{actionOk && <p className="ops-panel__ok mt-2">{actionOk}</p>}
-			<AssignSheet
-				open={handlerSheet}
-				onClose={() => setHandlerSheet(false)}
-				title={item.action === "resolve" ? `Handler for ${JOURNEY_STAGE_LABELS[item.record.stage as JourneyStage] ?? item.record.stage}` : `Handler for ${item.title}`}
-				stage={stageForRoles}
-				staff={assignees}
-				branch={item.branch}
-				currentName={item.owner && item.owner !== "— open" ? item.owner : null}
-				keepName={item.kind === "handoff" && handoffOffersKeep(item.record) ? item.record.fromOpsUserName : null}
-				keepOpsUserId={item.kind === "handoff" && handoffOffersKeep(item.record) ? item.record.fromOpsUserId : null}
-				withReason={item.action === "resolve"}
-				coverage
-				coverageDefault={item.action === "resolve" ? "stage" : "all"}
-				onAssign={placeHandler}
-				onLeaveOpen={leaveOpen}
-			/>
-		</div>
-	);
-}
-
-function ConsultationDetails({ c }: { c: MockConsultation }) {
-	const { join, joining, error: joinError, overlay } = useJoinMeeting();
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			{overlay}
-			<p style={{ margin: 0 }}><strong>Status:</strong> {c.status}</p>
-			<p style={{ margin: 0 }}><strong>Type:</strong> {c.type}</p>
-			<p style={{ margin: 0 }}><strong>When:</strong> {c.dateTime}</p>
-			<p style={{ margin: 0 }}><strong>Target country:</strong> {c.targetCountry || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Handler:</strong> {c.assignedOfficer || "— open"}</p>
-			{c.meetingLink && (
-				<p style={{ margin: 0 }}>
-					<strong>Meeting:</strong>{" "}
-					{c.bookingId ? (
-						<button type="button" className="link" disabled={joining} onClick={() => void join(c.bookingId!, `Consultation · ${c.ref}`)}>
-							{joining ? "Joining…" : "Join meeting"}
-						</button>
-					) : (
-						<span className="link" style={{ wordBreak: "break-all" }}>{c.meetingLink}</span>
-					)}
-					{joinError && <span className="muted"> · {joinError}</span>}
-				</p>
-			)}
-		</div>
-	);
-}
-
-function ApplicationDetails({ a }: { a: MockApplication }) {
-	const open = a.checklist.filter((i) => !i.checked).length;
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Application:</strong> {a.appId}</p>
-			<p style={{ margin: 0 }}><strong>Status:</strong> {a.status}</p>
-			<p style={{ margin: 0 }}><strong>Stage:</strong> {JOURNEY_STAGE_LABELS[a.stage as JourneyStage] || a.stage}</p>
-			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Handler:</strong> {a.assignedStaff || "— open"}</p>
-			<p style={{ margin: 0 }}><strong>Application tasks open:</strong> {open}</p>
-		</div>
-	);
-}
-
-function VisaDetails({ a }: { a: MockApplication }) {
-	const step = a.visaStage ? (VISA_STEP_LABELS[a.visaStage] ?? a.visaStage) : "Awaiting payment";
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Application:</strong> {a.appId}</p>
-			<p style={{ margin: 0 }}><strong>Visa stage:</strong> {step}</p>
-			<p style={{ margin: 0 }}><strong>University:</strong> {a.university || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Invoice paid:</strong> {a.visaInvoicePaid ? "Yes" : "No"}</p>
-			<p style={{ margin: 0 }}><strong>Handler:</strong> {a.assignedStaff || "— open"}</p>
-		</div>
-	);
-}
-
-function HandoffDetails({ h }: { h: StageHandoff }) {
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Application:</strong> {h.applicationNumber ?? h.applicationId}</p>
-			<p style={{ margin: 0 }}><strong>Stage:</strong> {h.stage === "visa_processing" ? "Visa processing" : h.stage}</p>
-			<p style={{ margin: 0 }}><strong>Source:</strong> {h.source === "visa_payment" ? "Visa payment received" : h.source === "migration" ? "Existing case setup" : "Stage transition"}</p>
-			<p style={{ margin: 0 }}><strong>Previous handler:</strong> {h.fromOpsUserName ?? "None"}</p>
-			{h.deferCount > 0 && (
-				<p style={{ margin: 0 }}>
-					<strong>Deferred:</strong> {h.deferCount}×{h.deferredAt ? ` · last ${timeAgo(h.deferredAt)}` : ""}
-				</p>
-			)}
-			{h.reason && (
-				<p style={{ margin: 0 }}>
-					<strong>Reason:</strong> {h.reason}
-				</p>
-			)}
-		</div>
-	);
-}
-
-function ApplicantDetails({ app }: { app: MockApplicant }) {
-	const pendingDocs = app.documents.filter((d) => d.status === "Pending Review").length;
-	const outstanding = money(app.financials.outstanding);
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Applicant ID:</strong> {app.applicantId}</p>
-			<p style={{ margin: 0 }}><strong>Stage:</strong> {app.currentStage}</p>
-			<p style={{ margin: 0 }}><strong>Pending documents:</strong> {pendingDocs}</p>
-			<p style={{ margin: 0 }}><strong>Outstanding:</strong> {fmtGhs(outstanding)} · {fmtUsd(outstanding)}</p>
-			<p style={{ margin: 0 }}><strong>Plan:</strong> {app.financials.plan || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Assigned:</strong> {app.assignedOfficer || "—"}</p>
-		</div>
-	);
-}
-
-function InvoiceDetails({ inv }: { inv: Invoice }) {
-	const balance = invoiceBalance(inv);
-	const age = invoiceAgeDays(inv);
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Invoice:</strong> {inv.invoiceNumber}</p>
-			<p style={{ margin: 0 }}><strong>Type:</strong> {inv.type}</p>
-			<p style={{ margin: 0 }}><strong>Total:</strong> {fmtGhs(inv.subtotal)}</p>
-			<p style={{ margin: 0 }}><strong>Balance:</strong> {fmtGhs(balance)}</p>
-			<p style={{ margin: 0 }}><strong>Status:</strong> {inv.status}</p>
-			{age !== null && <p style={{ margin: 0 }}><strong>Age:</strong> {age} day{age === 1 ? "" : "s"}</p>}
-		</div>
-	);
-}
-
-function BookingDetails({ b }: { b: Booking }) {
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Reference:</strong> {b.reference}</p>
-			<p style={{ margin: 0 }}><strong>Service:</strong> {b.serviceName}</p>
-			<p style={{ margin: 0 }}>
-				<strong>When:</strong> {new Date(b.startsAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-				{" · "}{b.durationMinutes} min · {b.type === "online" ? "Online" : "In person"}
-			</p>
-			<p style={{ margin: 0 }}><strong>With:</strong> {b.employeeName ?? "—"}</p>
-			<p style={{ margin: 0 }}><strong>Status:</strong> {b.status}</p>
-		</div>
-	);
-}
-
-function TravelDetails({ ta }: { ta: TravelAssistanceRequest }) {
-	const flight = ta.flight;
-	const route = flight ? [flight.from, flight.to].filter(Boolean).join(" → ") : "";
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Case:</strong> {ta.applicationReference ?? ta.applicationId}</p>
-			<p style={{ margin: 0 }}><strong>Status:</strong> {ta.status}</p>
-			<p style={{ margin: 0 }}><strong>Handler:</strong> {ta.assignedOpsUserName ?? "— open"}</p>
-			{ta.university ? <p style={{ margin: 0 }}><strong>University:</strong> {ta.university}</p> : null}
-			{flight ? (
-				<p style={{ margin: 0 }}>
-					<strong>Flight:</strong> {[flight.carrier, flight.flightNumber].filter(Boolean).join(" ") || "—"}
-					{route ? ` · ${route}` : ""}
-					{flight.departAt ? ` · departs ${new Date(flight.departAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : ""}
-				</p>
-			) : null}
-			{ta.booking?.confirmationCode ? <p style={{ margin: 0 }}><strong>PNR:</strong> {ta.booking.confirmationCode}</p> : null}
-			{ta.applicantNote ? <p style={{ margin: 0, fontStyle: "italic" }}>{ta.applicantNote}</p> : null}
-		</div>
-	);
-}
-
-function LeadDetails({ lead }: { lead: Lead }) {
-	return (
-		<div style={{ fontSize: "var(--text-sm)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-			<p style={{ margin: 0 }}><strong>Email:</strong> {lead.email}</p>
-			<p style={{ margin: 0 }}><strong>Phone:</strong> {lead.phone || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Stage:</strong> {LEAD_STAGE_LABELS[lead.stage as LeadStage] ?? lead.stage}</p>
-			<p style={{ margin: 0 }}><strong>Source:</strong> {lead.source || "—"}</p>
-			<p style={{ margin: 0 }}><strong>Handler:</strong> {lead.assignedTo || "— open"}</p>
-			<p style={{ margin: 0 }}><strong>Last contact:</strong> {timeAgo(lead.lastContactAt)}</p>
-			{lead.notes && <p style={{ margin: 0, fontStyle: "italic" }}>{lead.notes}</p>}
 		</div>
 	);
 }

@@ -1,11 +1,14 @@
 import { LEAD_STAGE_LABELS, type Lead } from "century-nit-core";
+import { applicationsApi } from "century-nit-core/api";
 import type {
 	MockConsultation,
 	MockApplication,
 	MockApplicant,
 	Invoice,
 	InvoiceStatus,
+	Assignee,
 } from "century-nit-core/ops";
+import type { HandlerPlacement } from "../pages/case/AssignSheet";
 import { invoiceBalance, invoiceAgeDays } from "century-nit-core/ops";
 import {
 	JOURNEY_STAGE_LABELS,
@@ -1013,4 +1016,47 @@ export function tasksForApplication(
 				return false;
 		}
 	});
+}
+
+/** What placing a handler can call — the useCases() verbs. The queue row,
+ * the preview pane and the caseload card all dispatch through this so the
+ * kind-switch can't drift between copies. */
+export type AssignActions = {
+	assignConsultation: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
+	assignApplication: (id: string, to: Assignee, opts?: { scope?: "stage" | "all"; branch?: string }) => Promise<unknown>;
+	resolveHandoff: (
+		handoffId: string,
+		decision: "keep" | "assign",
+		opts?: { opsUserId?: string; reason?: string; scope?: "stage" | "all"; branch?: string },
+	) => Promise<unknown>;
+};
+
+export async function assignPendingTask(
+	task: PendingTask,
+	to: Assignee,
+	placement: HandlerPlacement,
+	actions: AssignActions,
+): Promise<void> {
+	if (task.kind === "consultation") {
+		await actions.assignConsultation(task.record.id, to, { scope: placement.scope, branch: placement.branch });
+		return;
+	}
+	if (task.kind === "application") {
+		await actions.assignApplication(task.record.id, to, { scope: placement.scope, branch: placement.branch });
+		return;
+	}
+	if (task.kind === "handoff" && task.action === "resolve") {
+		await actions.resolveHandoff(task.record.id, "assign", {
+			opsUserId: to.opsUserId,
+			reason: placement.reason,
+			scope: placement.scope,
+			branch: placement.branch,
+		});
+		return;
+	}
+	if (task.kind === "travel" && to.opsUserId) {
+		await applicationsApi.assignTravelHandler(task.record.id, to.opsUserId);
+		return;
+	}
+	throw new Error("This task cannot be assigned from here.");
 }

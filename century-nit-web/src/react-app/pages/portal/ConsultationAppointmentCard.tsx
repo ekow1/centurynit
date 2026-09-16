@@ -1,8 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { useAppState } from "../../context/AppState";
-import { ConsultationCall } from "../../components/ConsultationCall";
-import { apiFetch } from "../../lib/api";
-import { API_PREFIX } from "century-nit-shared";
+import { ConsultationCall, MeetingWindowModal, type MeetingWindowInfo } from "../../components/ConsultationCall";
+import { ApiError, bookingsApi } from "century-nit-core/api";
 import {
 	CONSULTATION_DURATIONS,
 	consultationTypes,
@@ -42,7 +41,7 @@ function useNow() {
  *    so a pending state doesn't read as a broken one.
  */
 export function ConsultationAppointmentCard() {
-	const { booking } = useAppState();
+	const { booking, updateBooking } = useAppState();
 	const [copied, setCopied] = useState(false);
 
 	const isOnline = booking.consultationType === "online";
@@ -70,7 +69,9 @@ export function ConsultationAppointmentCard() {
 
 	const [joining, setJoining] = useState(false);
 	const [joinError, setJoinError] = useState<string | null>(null);
+	const [notOpen, setNotOpen] = useState<MeetingWindowInfo | null>(null);
 	const [call, setCall] = useState<{ url: string; token: string } | null>(null);
+	const [withdrawing, setWithdrawing] = useState(false);
 
 	/**
 	 * The one door in. Token'd providers (Daily, LiveKit) need a per-person
@@ -89,15 +90,13 @@ export function ConsultationAppointmentCard() {
 			if (link.startsWith("livekit:") || link.includes("daily.co")) return null;
 			return link ? { url: link, provider: "manual" } : null;
 		}
-		return apiFetch<JoinResult>(
-			`${API_PREFIX}/bookings/${booking.bookingId}/join`,
-			{ method: "POST" },
-		);
+		return bookingsApi.joinMeeting(booking.bookingId);
 	}
 
 	async function joinMeeting() {
 		setJoining(true);
 		setJoinError(null);
+		setNotOpen(null);
 		try {
 			const res = await joinTicket();
 			if (res?.provider === "livekit" && res.token) {
@@ -108,9 +107,36 @@ export function ConsultationAppointmentCard() {
 				setJoinError("No usable meeting link on this booking yet");
 			}
 		} catch (err) {
-			setJoinError(err instanceof Error ? err.message : "Could not join the meeting");
+			if (
+				err instanceof ApiError && err.code === "MEETING_NOT_OPEN" &&
+				typeof err.details === "object" && err.details !== null && "opensAt" in err.details
+			) {
+				setNotOpen({
+					...(err.details as Omit<MeetingWindowInfo, "title">),
+					title: `Consultation · ${booking.confirmationId ?? ""}`,
+				});
+			} else {
+				setJoinError(err instanceof Error ? err.message : "Could not join the meeting");
+			}
 		} finally {
 			setJoining(false);
+		}
+	}
+
+	async function withdrawReschedule() {
+		if (!booking.bookingId) return;
+		setWithdrawing(true);
+		try {
+			await bookingsApi.withdrawRescheduleRequest(booking.bookingId);
+			updateBooking({
+				rescheduleRequestedAt: null,
+				rescheduleRequestedStartsAt: null,
+				rescheduleRequestReason: null,
+			});
+		} catch (err) {
+			setJoinError(err instanceof Error ? err.message : "Could not withdraw the request");
+		} finally {
+			setWithdrawing(false);
 		}
 	}
 
@@ -311,6 +337,49 @@ export function ConsultationAppointmentCard() {
 				</div>
 			</div>
 
+			{/* Pending reschedule — the held slot stays live until ops decides,
+			    so it sits between the facts and the actions, not in place of them */}
+			{booking.rescheduleRequestedAt && booking.rescheduleRequestedStartsAt ? (
+				<div
+					style={{
+						border: "1.5px dashed var(--ink, #000)",
+						background: "var(--muted-bg, #f5f5f5)",
+						padding: "0.6rem 0.8rem",
+						fontSize: "0.78rem",
+						lineHeight: 1.5,
+						margin: "0 1.25rem 0.9rem",
+					}}
+				>
+					<span className="mono" style={{ fontSize: "0.62rem", letterSpacing: "0.12em", textTransform: "uppercase", display: "block", marginBottom: "0.15rem" }}>
+						Reschedule requested — awaiting your consultant
+					</span>
+					You asked to move to{" "}
+					<b>
+						{new Date(booking.rescheduleRequestedStartsAt).toLocaleString(undefined, {
+							weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+						})}
+					</b>
+					. The slot above holds until they confirm — the join details stay valid for it.
+					{booking.rescheduleRequestReason ? (
+						<span className="muted"> Reason: “{booking.rescheduleRequestReason}”</span>
+					) : null}
+					{booking.bookingId ? (
+						<>
+							{" "}
+							<button
+								type="button"
+								className="appt__link"
+								style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", textDecoration: "underline" }}
+								disabled={withdrawing}
+								onClick={() => void withdrawReschedule()}
+							>
+								{withdrawing ? "Withdrawing…" : "Withdraw request"}
+							</button>
+						</>
+					) : null}
+				</div>
+			) : null}
+
 			{/* Actions - the point of the card */}
 			<div className="appt__actions">
 				{isOnline && booking.meetingLink ? (
@@ -361,6 +430,9 @@ export function ConsultationAppointmentCard() {
 					waitingFor="your consultant"
 					onClose={() => setCall(null)}
 				/>
+			) : null}
+			{notOpen ? (
+				<MeetingWindowModal info={notOpen} onClose={() => setNotOpen(null)} />
 			) : null}
 		</div>
 	);

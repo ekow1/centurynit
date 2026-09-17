@@ -1,5 +1,5 @@
 import { Navigate, useNavigate, Link, useSearchParams } from "react-router-dom";
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent, type KeyboardEvent, type ClipboardEvent } from "react";
 import { Button } from "../components/ui/Button";
 import { Field, Input } from "../components/ui/Field";
 import { useAppState, type AuthMethod } from "../context/AppState";
@@ -18,36 +18,123 @@ import {
 	completeEmailSignup,
 } from "../context/authStore";
 import { getAuthSettings, type AuthSettingsResponse } from "../lib/api";
+import { CHAPTERS } from "century-nit-shared";
 
-function GoogleIcon() {
+/** Monochrome "G" — the four-color logo was the only color on the page. */
+function GoogleMark() {
 	return (
-		<svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-			<path
-				d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1Z"
-				fill="#4285F4"
-			/>
-			<path
-				d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z"
-				fill="#34A853"
-			/>
-			<path
-				d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84Z"
-				fill="#FBBC05"
-			/>
-			<path
-				d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38Z"
-				fill="#EA4335"
-			/>
-		</svg>
+		<span className="auth-social__mark" aria-hidden>
+			G
+		</span>
 	);
 }
 
-const FEATURES = [
-	"Consultation booking",
-	"University & program tracking",
-	"Document vault",
-	"Visa & payment timeline",
-];
+/**
+ * Six boxed cells — typing auto-advances, paste splits across boxes, the
+ * caller's auto-submit effect fires when the string reaches six digits.
+ */
+function OtpInput({
+	id,
+	value,
+	onChange,
+	disabled,
+}: {
+	id: string;
+	value: string;
+	onChange: (v: string) => void;
+	disabled?: boolean;
+}) {
+	const refs = useRef<(HTMLInputElement | null)[]>([]);
+	const cells = value.padEnd(6).slice(0, 6).split("");
+
+	const setDigit = (i: number, d: string) => {
+		const digits = d.replace(/\D/g, "");
+		if (!digits) return;
+		const next = (value.slice(0, i) + digits + value.slice(i + digits.length)).slice(0, 6);
+		onChange(next);
+		refs.current[Math.min(i + digits.length, 5)]?.focus();
+	};
+
+	const onKey = (i: number, e: KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Backspace") {
+			e.preventDefault();
+			if (cells[i] !== " ") {
+				onChange(value.slice(0, i) + value.slice(i + 1));
+			} else if (i > 0) {
+				onChange(value.slice(0, i - 1) + value.slice(i));
+				refs.current[i - 1]?.focus();
+			}
+		} else if (e.key === "ArrowLeft" && i > 0) {
+			refs.current[i - 1]?.focus();
+		} else if (e.key === "ArrowRight" && i < 5) {
+			refs.current[i + 1]?.focus();
+		}
+	};
+
+	const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+		e.preventDefault();
+		const digits = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+		if (!digits) return;
+		onChange(digits);
+		refs.current[Math.min(digits.length, 5)]?.focus();
+	};
+
+	return (
+		<div className="otp-input" role="group" aria-labelledby={`${id}-label`}>
+			{cells.map((c, i) => (
+				<input
+					key={i}
+					ref={(el) => {
+						refs.current[i] = el;
+					}}
+					id={i === 0 ? id : undefined}
+					type="text"
+					inputMode="numeric"
+					autoComplete={i === 0 ? "one-time-code" : "off"}
+					maxLength={6}
+					className={`otp-input__cell${c !== " " ? " otp-input__cell--filled" : ""}`}
+					value={c === " " ? "" : c}
+					disabled={disabled}
+					aria-label={`Digit ${i + 1} of 6`}
+					onChange={(e) => setDigit(i, e.target.value)}
+					onKeyDown={(e) => onKey(i, e)}
+					onPaste={onPaste}
+					onFocus={(e) => e.target.select()}
+				/>
+			))}
+		</div>
+	);
+}
+
+/**
+ * The password checklist — appears only where a password is CHOSEN (signup,
+ * reset), never on sign-in. Only length is enforced server-side
+ * (`minPasswordLength: 12`); the other rows are suggestions that fill when
+ * met but never block submit.
+ */
+function PwChecklist({ password, email, name }: { password: string; email: string; name: string }) {
+	const pw = password.toLowerCase();
+	const first = (name.trim().split(/\s+/)[0] ?? "").toLowerCase();
+	const local = email.split("@")[0]?.toLowerCase() ?? "";
+	const personal = pw.length > 0 && ((first.length >= 3 && pw.includes(first)) || (local.length >= 3 && pw.includes(local)));
+	const words = password.trim().split(/\s+/).filter(Boolean).length;
+	const rows: { met: boolean; label: string; required?: boolean }[] = [
+		{ met: password.length >= 12, label: "12+ characters", required: true },
+		{ met: password.length > 0 && !personal, label: "Not your name or email" },
+		{ met: words >= 3, label: "A passphrase — 3+ words beats symbols" },
+	];
+	return (
+		<div className="pwcheck">
+			{rows.map((r) => (
+				<div key={r.label} className={`pwcheck__row${r.met ? " pwcheck__row--met" : ""}`}>
+					<span className="pwcheck__box" aria-hidden />
+					{r.label}
+					{r.required ? <span className="pwcheck__req">required</span> : null}
+				</div>
+			))}
+		</div>
+	);
+}
 
 type AuthStep = "signin" | "forgot" | "verify" | "set" | "done" | "mfa_otp" | "verify_email";
 
@@ -61,7 +148,6 @@ export function StartJourney() {
 	const [email, setEmail] = useState("");
 	const [emailExists, setEmailExists] = useState<boolean | null>(null);
 	const [password, setPassword] = useState("");
-	const [passwordTouched, setPasswordTouched] = useState(false);
 	const [codeSentTo, setCodeSentTo] = useState<string | null>(null);
 	const [otpCode, setOtpCode] = useState("");
 	const [name, setName] = useState("");
@@ -79,8 +165,15 @@ export function StartJourney() {
 	const [mfaMode, setMfaMode] = useState<"totp" | "email" | "backup">("totp");
 	const [mfaEmailSent, setMfaEmailSent] = useState(false);
 	const [mfaBackupCode, setMfaBackupCode] = useState("");
+	/*
+	 * "password" | "code" — the email-code sign-in is an inline alternative on
+	 * the same panel, not a tab. Code mode only exists for sign-in; signup
+	 * always needs a password (the OTP verifies the email afterwards).
+	 */
+	const [emailMode, setEmailMode] = useState<"password" | "code">("password");
 
-	// Debounced real-time email existence check for both password and code tabs.
+	// Debounced real-time email existence check — shown on signup only; an
+	// existing account is exactly who signs in, so sign-in paths don't flag it.
 	useEffect(() => {
 		const mail = email.trim().toLowerCase();
 		if (!mail.includes("@")) {
@@ -119,28 +212,11 @@ export function StartJourney() {
 	};
 	const s = authSettings ?? defaults;
 
-	// Which tabs to show
 	const showSocial = s.portal.social_google;
 	const showEmail = s.portal.email_password;
 	const showOtp = s.portal.email_otp;
-
-	// Build tab list
-	type TabId = "social" | "email" | "otp";
-	const tabs: [TabId, string][] = [];
-	if (showSocial) tabs.push(["social", "Social"]);
-	if (showEmail) tabs.push(["email", "Email & Password"]);
-	if (showOtp) tabs.push(["otp", "Email Code"]);
-
-	const [tab, setTab] = useState<TabId>("social");
-
-	// Set initial tab to first available
-	useEffect(() => {
-		if (!authSettings) return;
-		const first = tabs[0];
-		if (first && !tabs.find(([id]) => id === tab)) {
-			setTab(first[0]);
-		}
-	}, [authSettings]);
+	// If passwords are disabled, code is the only email path left.
+	const codeMode = authMode === "signin" && (emailMode === "code" || !showEmail);
 
 	// Fetch auth settings
 	useEffect(() => {
@@ -152,14 +228,23 @@ export function StartJourney() {
 		return () => { active = false; };
 	}, []);
 
-	// Detect the redirect back from Better Auth's email verification endpoint.
-	// On success it redirects to callbackURL with ?verified=true; on failure
-	// it adds ?error=... . Show a banner and clear the param so a refresh
-	// doesn't re-show it.
+	/*
+	 * Deep-link params on /start:
+	 *   ?verified=true / ?error=… — the email-verification redirect.
+	 *   ?token=…                  — the password-reset LINK carries the token;
+	 *                               land straight on "choose a new password"
+	 *                               instead of asking the user to paste a token
+	 *                               the email never shows them.
+	 */
 	useEffect(() => {
 		const verified = searchParams.get("verified");
 		const verifyError = searchParams.get("error");
-		if (verified === "true") {
+		const token = searchParams.get("token");
+		if (token) {
+			setResetCode(token);
+			setStep("set");
+			setSearchParams({}, { replace: true });
+		} else if (verified === "true") {
 			setVerificationBanner("verified");
 			setSearchParams({}, { replace: true });
 		} else if (verifyError) {
@@ -302,6 +387,7 @@ export function StartJourney() {
 		try {
 			const target = await sendEmailCode(email);
 			setCodeSentTo(target);
+			setResendCooldown(30);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Could not send the code");
 		} finally {
@@ -334,6 +420,14 @@ export function StartJourney() {
 		setCodeSentTo(null);
 		setOtpCode("");
 		setError("");
+	}
+
+	function switchEmailMode(mode: "password" | "code") {
+		setEmailMode(mode);
+		setCodeSentTo(null);
+		setOtpCode("");
+		setError("");
+		clearSessionError();
 	}
 
 	/** Resend the email OTP code to the same address, with a cooldown. */
@@ -474,8 +568,8 @@ export function StartJourney() {
 	async function onSetPassword(e: FormEvent) {
 		e.preventDefault();
 		setError("");
-		if (newPassword.length < 8) {
-			setError("New password must be at least 8 characters");
+		if (newPassword.length < 12) {
+			setError("New password must be at least 12 characters");
 			return;
 		}
 		if (newPassword !== confirmPassword) {
@@ -508,19 +602,11 @@ export function StartJourney() {
 		setStep(step === "verify" ? "forgot" : step === "set" ? "verify" : "signin");
 	}
 
-	if (loading) {
-		const loadingText =
-			step === "forgot" ? "Sending reset code..."
-				: step === "mfa_otp" ? "Verifying code..."
-				: authMode === "signup" ? "Creating your account..."
-				: "Opening your dashboard...";
-		return (
-			<div className="loading-overlay">
-				<div className="spinner" aria-hidden />
-				<p className="mono">{loadingText}</p>
-			</div>
-		);
-	}
+	const stepEyebrow =
+		step === "signin" ? "Client portal"
+			: step === "verify_email" ? "Check your inbox"
+			: step === "mfa_otp" ? "Two-factor verification"
+			: "Password reset";
 
 	const stepTitle =
 		step === "forgot"
@@ -532,16 +618,12 @@ export function StartJourney() {
 					: step === "done"
 						? "Password updated"
 						: step === "verify_email"
-							? "Check your email"
+							? "Enter the code"
 							: step === "mfa_otp"
-								? "Enter your security code"
-								: "Start your journey";
-
-	const stepEyebrow =
-		step === "signin" ? (authMode === "signin" ? "Welcome back" : "Create an account")
-			: step === "verify_email" ? "Account created"
-			: step === "mfa_otp" ? "Two-factor verification"
-			: "Password reset";
+								? "Your second factor"
+								: authMode === "signin"
+									? "Welcome back"
+									: "Create your account";
 
 	return (
 		<div className="start-journey">
@@ -551,30 +633,23 @@ export function StartJourney() {
 				</Link>
 				<div className="start-journey__brand-content">
 					<h2 className="start-journey__brand-title">
-						Your entire application journey - <em>in one place.</em>
+						Your entire application journey — <em>in one place.</em>
 					</h2>
 					<p className="start-journey__brand-lead">
-						Consultation, school packages, admissions tracking, visa processing, and payments -
-						unified in a single dashboard.
+						One account tracks you from first consultation to departure. This is what the portal holds:
 					</p>
-					<ul className="start-journey__features">
-						{FEATURES.map((f) => (
-							<li key={f}>
-								<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-									<path
-										d="M3 8.5l3.5 3.5L13 4.5"
-										stroke="currentColor"
-										strokeWidth="2"
-										strokeLinecap="square"
-									/>
-								</svg>
-								{f}
-							</li>
+					<div className="start-journey__chapters">
+						{CHAPTERS.map((ch) => (
+							<div key={ch.id} className="start-journey__chapter">
+								<span className="n">{ch.numeral}</span>
+								<span>{ch.label}</span>
+								<span className="d">{ch.blurb}</span>
+							</div>
 						))}
-					</ul>
+					</div>
 				</div>
 				<p className="start-journey__brand-footer mono">
-					Licensed consultancy - Accra & Kumasi
+					Licensed consultancy — Accra · Kumasi · Takoradi · Tamale · Tema
 				</p>
 			</div>
 
@@ -585,33 +660,41 @@ export function StartJourney() {
 						<h1 className="start-journey__title">{stepTitle}</h1>
 						{step === "signin" ? (
 							<p className="start-journey__sub">
-								{authMode === "signin" ? "Sign in to access your dashboard." : "Create your account to start your application journey."}
+								{authMode === "signin" ? "Sign in to pick up where you left off." : "One account for the whole journey — consultation to departure."}
 							</p>
 						) : step === "forgot" ? (
 							<p className="start-journey__sub">
-								We'll send a one-time reset code to the email on your account.
+								We'll email a reset link to the address on your account.
 							</p>
 						) : step === "verify" ? (
 							<p className="start-journey__sub">
-								Enter the 6-digit code we sent to <strong>{resetEmail}</strong>.
+								We emailed <strong>{resetEmail}</strong> a reset link — it opens this page ready for a new password. No link? Paste the token manually below.
 							</p>
 						) : step === "set" ? (
 							<p className="start-journey__sub">
-								Pick a new password for <strong>{resetEmail}</strong>.
+								The link in your email carried the token — you're straight to the step that matters{resetEmail ? <>, for <strong>{resetEmail}</strong></> : null}.
 							</p>
 						) : step === "verify_email" ? (
 							<p className="start-journey__sub">
-								We sent a verification link to <strong>{resetEmail}</strong>. Click it to activate your account, then sign in below.
+								We sent a 6-digit code to <strong>{signupEmail}</strong>. It expires shortly — the account only exists once the code checks out.
+							</p>
+						) : step === "mfa_otp" ? (
+							<p className="start-journey__sub">
+								{mfaMode === "backup"
+									? "Enter one of the single-use recovery codes you saved."
+									: mfaMode === "email"
+										? "Enter the code we emailed you — it expires in a few minutes."
+										: "Enter the code from your authenticator app."}
 							</p>
 						) : (
 							<p className="start-journey__sub">
-								You're all set - sign back in with your new password.
+								You're all set — sign back in with your new password.
 							</p>
 						)}
 					</div>
 
 					{verificationBanner === "verified" ? (
-						<div className="auth-error" role="status" style={{ color: "var(--foreground)", borderColor: "var(--foreground)" }}>
+						<div className="auth-note" role="status">
 							Your email is verified. You can sign in now.
 						</div>
 					) : null}
@@ -629,173 +712,87 @@ export function StartJourney() {
 
 					{step === "signin" ? (
 						<>
-							<div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", borderBottom: "1px solid var(--border-light)" }}>
+							<div className="auth-tabs" role="tablist">
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signin"); setError(""); clearSessionError(); setPasswordTouched(false); setEmailExists(null); }}
-									style={{
-										padding: "0.5rem 1rem",
-										borderBottom: authMode === "signin" ? "2px solid var(--primary)" : "2px solid transparent",
-										color: authMode === "signin" ? "var(--primary)" : "var(--muted-foreground)",
-										fontWeight: authMode === "signin" ? 600 : 400,
-									}}
+									role="tab"
+									aria-selected={authMode === "signin"}
+									className={`auth-tab${authMode === "signin" ? " auth-tab--active" : ""}`}
+									onClick={() => { setAuthMode("signin"); setError(""); clearSessionError(); setEmailExists(null); }}
 								>
-									Log In
+									Sign in
 								</button>
 								<button
 									type="button"
-									onClick={() => { setAuthMode("signup"); setError(""); clearSessionError(); setPasswordTouched(false); setEmailExists(null); }}
-									style={{
-										padding: "0.5rem 1rem",
-										borderBottom: authMode === "signup" ? "2px solid var(--primary)" : "2px solid transparent",
-										color: authMode === "signup" ? "var(--primary)" : "var(--muted-foreground)",
-										fontWeight: authMode === "signup" ? 600 : 400,
-									}}
+									role="tab"
+									aria-selected={authMode === "signup"}
+									className={`auth-tab${authMode === "signup" ? " auth-tab--active" : ""}`}
+									onClick={() => { setAuthMode("signup"); setError(""); clearSessionError(); setEmailExists(null); switchEmailMode("password"); }}
 								>
-									Sign Up
+									Create account
 								</button>
 							</div>
 
-							{tabs.length > 1 && (
-								<div className="auth-tabs" role="tablist">
-									{tabs.map(([id, label]) => (
-										<button
-											key={id}
-											type="button"
-											role="tab"
-											aria-selected={tab === id}
-											className={`auth-tab${tab === id ? " auth-tab--active" : ""}`}
-											onClick={() => {
-												setTab(id);
-												setCodeSentTo(null);
-												setOtpCode("");
-												setError("");
-												clearSessionError();
-												setEmailExists(null);
-											}}
-										>
-											{label}
-										</button>
-									))}
-								</div>
-							)}
-
-							{tab === "social" && showSocial ? (
+							{showSocial ? (
 								<div className="auth-social">
 									<button
 										type="button"
 										className="auth-social__btn"
 										onClick={() => social("google")}
+										disabled={loading}
 									>
-										<span className="auth-social__icon" aria-hidden>
-											<GoogleIcon />
-										</span>
-										Continue with Google
+										<GoogleMark />
+										{authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
+										<span className="auth-social__arrow" aria-hidden>→</span>
 									</button>
 								</div>
-							) : tab === "email" && showEmail ? (
-								<form className="auth-form" onSubmit={onEmail} noValidate>
-									{authMode === "signup" && (
-										<Field label="Full Name" htmlFor="sj-name">
-											<Input
-												id="sj-name"
-												type="text"
-												value={name}
-												onChange={(e) => setName(e.target.value)}
-												placeholder="John Doe"
-												fullBorder
-											/>
-										</Field>
-									)}
-									<Field label="Email" htmlFor="sj-email" error={authMode === "signup" && emailExists ? "This email is already registered. Please log in." : undefined}>
-										<Input
-											id="sj-email"
-											type="email"
-											value={email}
-											onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
-											placeholder="you@example.com"
-											fullBorder
-										/>
-									</Field>
-									<Field
-										label="Password"
-										htmlFor="sj-pass"
-										error={authMode === "signup" && passwordTouched && password.length < 12 ? "Password must be at least 12 characters" : undefined}
-									>
-										<Input
-											id="sj-pass"
-											type="password"
-											value={password}
-											onChange={(e) => setPassword(e.target.value)}
-											onBlur={() => setPasswordTouched(true)}
-											placeholder="••••••••"
-											fullBorder
-										/>
-									</Field>
-									<div className="auth-form__row">
-										<Button type="submit" block arrow disabled={loading || (authMode === "signup" && (password.length < 12 || emailExists === true))}>
-											{authMode === "signin" ? "Log in" : "Create account"}
-										</Button>
-										{authMode === "signin" && (
-											<button
-												type="button"
-												className="auth-forgot"
-												onClick={() => {
-													setResetEmail(email);
-													setError("");
-													setStep("forgot");
-												}}
-											>
-												Forgot password?
-											</button>
-										)}
-									</div>
-								</form>
-							) : tab === "otp" && showOtp ? (
+							) : null}
+
+							{showSocial && (showEmail || (showOtp && authMode === "signin")) ? (
+								<div className="auth-divider"><span>or with email</span></div>
+							) : null}
+
+							{codeMode ? (
 								codeSentTo ? (
 									<form className="auth-form" onSubmit={onCodeSubmit} noValidate>
-										<Field
-											label="Enter the 6-digit code"
-											htmlFor="sj-code"
-											hint={`Sent to ${codeSentTo}. It expires shortly.`}
-										>
-											<Input
+										<div className="field">
+											<label id="sj-code-label" htmlFor="sj-code">Enter the 6-digit code</label>
+											<OtpInput
 												id="sj-code"
-												type="text"
-												inputMode="numeric"
-												autoComplete="one-time-code"
-												maxLength={6}
 												value={otpCode}
-												onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-												placeholder="000000"
-												fullBorder
+												onChange={setOtpCode}
+												disabled={loading}
 											/>
-										</Field>
+											<span className="hint">Sent to {codeSentTo}. It expires shortly.</span>
+										</div>
 										<Button type="submit" block arrow disabled={loading || otpCode.length !== 6}>
-											{loading ? "Checking..." : "Continue"}
+											{loading ? "Checking…" : "Continue"}
 										</Button>
-										<div className="auth-form__row" style={{ flexDirection: "column", gap: "0.75rem" }}>
-										<button
-											type="button"
-											className="start-journey__guest"
-											onClick={resendCode}
-											disabled={resendCooldown > 0 || loading}
-											style={{ opacity: resendCooldown > 0 ? 0.6 : 1 }}
-										>
-											{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
-										</button>
-										<button type="button" className="start-journey__guest" onClick={restartCode}>
-											Use a different address
-										</button>
-									</div>
-								</form>
+										<div className="auth-alt">
+											<button
+												type="button"
+												className="auth-alt__link"
+												onClick={resendCode}
+												disabled={resendCooldown > 0 || loading}
+											>
+												{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+											</button>
+											<button type="button" className="auth-alt__link" onClick={restartCode}>
+												Use a different address
+											</button>
+											{showEmail ? (
+												<button type="button" className="auth-alt__link" onClick={() => switchEmailMode("password")}>
+													Use password instead
+												</button>
+											) : null}
+										</div>
+									</form>
 								) : (
 									<form className="auth-form" onSubmit={onOtp} noValidate>
 										<Field
-											label="Email Address"
+											label="Email"
 											htmlFor="sj-otp-email"
-											hint="We will email you a one-time code - no password needed."
-											error={emailExists ? "This email is already registered. Please log in using a password." : undefined}
+											hint="We'll email you a one-time code — no password needed."
 										>
 											<Input
 												id="sj-otp-email"
@@ -807,14 +804,89 @@ export function StartJourney() {
 												fullBorder
 											/>
 										</Field>
-										<Button type="submit" block arrow disabled={loading || !email.trim() || emailExists === true}>
-											{loading ? "Sending..." : "Email me a code"}
+										<Button type="submit" block arrow disabled={loading || !email.trim()}>
+											{loading ? "Sending…" : "Email me a code"}
 										</Button>
+										{showEmail ? (
+											<div className="auth-alt">
+												<button type="button" className="auth-alt__link" onClick={() => switchEmailMode("password")}>
+													Use password instead
+												</button>
+											</div>
+										) : null}
 									</form>
 								)
+							) : showEmail ? (
+								<form className="auth-form" onSubmit={onEmail} noValidate>
+									{authMode === "signup" && (
+										<Field label="Full name" htmlFor="sj-name">
+											<Input
+												id="sj-name"
+												type="text"
+												autoComplete="name"
+												value={name}
+												onChange={(e) => setName(e.target.value)}
+												placeholder="Enoch Yaw Enu"
+												fullBorder
+											/>
+										</Field>
+									)}
+									<Field label="Email" htmlFor="sj-email" error={authMode === "signup" && emailExists ? "This email is already registered — switch to Sign in." : undefined}>
+										<Input
+											id="sj-email"
+											type="email"
+											autoComplete="email"
+											value={email}
+											onChange={(e) => { setEmail(e.target.value); setEmailExists(null); }}
+											placeholder="you@example.com"
+											fullBorder
+										/>
+									</Field>
+									<Field label="Password" htmlFor="sj-pass">
+										<Input
+											id="sj-pass"
+											type="password"
+											autoComplete={authMode === "signin" ? "current-password" : "new-password"}
+											value={password}
+											onChange={(e) => setPassword(e.target.value)}
+											placeholder={authMode === "signup" ? "12+ characters" : "Your password"}
+											fullBorder
+										/>
+										{authMode === "signup" ? (
+											<>
+												<PwChecklist password={password} email={email} name={name} />
+												<span className="hint" style={{ display: "block", marginTop: "0.4rem" }}>
+													A passphrase is easiest — "lamp boat cedar nine" beats "P@ssw0rd1".
+												</span>
+											</>
+										) : null}
+									</Field>
+									<Button type="submit" block arrow disabled={loading || (authMode === "signup" && (password.length < 12 || emailExists === true))}>
+										{loading ? (authMode === "signin" ? "Signing in…" : "Creating account…") : authMode === "signin" ? "Sign in" : "Create account"}
+									</Button>
+									{authMode === "signin" ? (
+										<div className="auth-alt">
+											{showOtp ? (
+												<button type="button" className="auth-alt__link" onClick={() => switchEmailMode("code")}>
+													Email me a code instead
+												</button>
+											) : <span />}
+											<button
+												type="button"
+												className="auth-alt__link"
+												onClick={() => {
+													setResetEmail(email);
+													setError("");
+													setStep("forgot");
+												}}
+											>
+												Forgot password?
+											</button>
+										</div>
+									) : null}
+								</form>
 							) : null}
-
-							</>
+						</>
 					) : null}
 
 					{step === "forgot" ? (
@@ -823,14 +895,15 @@ export function StartJourney() {
 								<Input
 									id="sj-reset-email"
 									type="email"
+									autoComplete="email"
 									value={resetEmail}
 									onChange={(e) => setResetEmail(e.target.value)}
 									placeholder="you@example.com"
 									fullBorder
 								/>
 							</Field>
-							<Button type="submit" block arrow>
-								Send reset code
+							<Button type="submit" block arrow disabled={loading}>
+								{loading ? "Sending…" : "Send reset link"}
 							</Button>
 							<button type="button" className="auth-back" onClick={backToSignIn}>
 								← Back to sign in
@@ -841,22 +914,21 @@ export function StartJourney() {
 					{step === "verify" ? (
 						<form className="auth-form" onSubmit={onVerifySubmit} noValidate>
 							<Field
-								label="Reset token"
+								label="Reset token — manual entry"
 								htmlFor="sj-reset-code"
-								hint="Paste the reset token from your email"
+								hint="Only needed if the email link didn't open this page for you."
 							>
 								<Input
 									id="sj-reset-code"
 									type="text"
-									inputMode="numeric"
 									value={resetCode}
 									onChange={(e) => setResetCode(e.target.value)}
-									placeholder="123456"
+									placeholder="Paste the token from the link"
 									fullBorder
 								/>
 							</Field>
-							<Button type="submit" block arrow>
-								Verify code
+							<Button type="submit" block arrow disabled={loading}>
+								Continue
 							</Button>
 							<button type="button" className="auth-back" onClick={back}>
 								← Back
@@ -866,28 +938,38 @@ export function StartJourney() {
 
 					{step === "set" ? (
 						<form className="auth-form" onSubmit={onSetPassword} noValidate>
-							<Field label="New password" htmlFor="sj-new-pass" hint="At least 8 characters">
+							<Field label="New password" htmlFor="sj-new-pass">
 								<Input
 									id="sj-new-pass"
 									type="password"
+									autoComplete="new-password"
 									value={newPassword}
 									onChange={(e) => setNewPassword(e.target.value)}
-									placeholder="••••••••"
+									placeholder="12+ characters"
 									fullBorder
 								/>
+								<PwChecklist password={newPassword} email={resetEmail} name="" />
+								<span className="hint" style={{ display: "block", marginTop: "0.4rem" }}>
+									Same bar as signup — 12 characters minimum.
+								</span>
 							</Field>
-							<Field label="Confirm password" htmlFor="sj-confirm-pass">
+							<Field
+								label="Confirm password"
+								htmlFor="sj-confirm-pass"
+								error={confirmPassword.length > 0 && newPassword !== confirmPassword ? "Passwords don't match yet" : undefined}
+							>
 								<Input
 									id="sj-confirm-pass"
 									type="password"
+									autoComplete="new-password"
 									value={confirmPassword}
 									onChange={(e) => setConfirmPassword(e.target.value)}
-									placeholder="••••••••"
+									placeholder="Again"
 									fullBorder
 								/>
 							</Field>
-							<Button type="submit" block arrow>
-								Update password
+							<Button type="submit" block arrow disabled={loading || newPassword.length < 12 || newPassword !== confirmPassword}>
+								{loading ? "Updating…" : "Update password"}
 							</Button>
 							<button type="button" className="auth-back" onClick={back}>
 								← Back
@@ -898,7 +980,7 @@ export function StartJourney() {
 					{step === "done" ? (
 						<div className="auth-done">
 							<p className="auth-done__mark" aria-hidden>
-								Done
+								✓
 							</p>
 							<p className="auth-done__text">
 								Your password has been updated. Sign in with your new password to continue.
@@ -909,47 +991,71 @@ export function StartJourney() {
 						</div>
 					) : null}
 
-				{step === "verify_email" ? (
-					<form className="auth-form" onSubmit={onSignupOtpSubmit} noValidate>
-						<Field
-							label="Enter the 6-digit verification code"
-							htmlFor="sj-verify-otp"
-							hint={`Sent to ${signupEmail}. It expires shortly.`}
-						>
-							<Input
-								id="sj-verify-otp"
-								type="text"
-								inputMode="numeric"
-								autoComplete="one-time-code"
-								maxLength={6}
-								value={signupOtp}
-								onChange={(e) => setSignupOtp(e.target.value.replace(/\D/g, ""))}
-								placeholder="000000"
-								fullBorder
-							/>
-						</Field>
-						<Button type="submit" block arrow disabled={loading || signupOtp.length !== 6}>
-							{loading ? "Verifying..." : "Verify email"}
-						</Button>
-						<div className="auth-form__row" style={{ flexDirection: "column", gap: "0.75rem" }}>
-							<button
-								type="button"
-								className="start-journey__guest"
-								onClick={resendSignupOtp}
-								disabled={resendCooldown > 0 || loading}
-								style={{ opacity: resendCooldown > 0 ? 0.6 : 1 }}
-							>
-								{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
-							</button>
-							<button type="button" className="start-journey__guest" onClick={backToSignIn}>
-								Back to sign in
-							</button>
-						</div>
-					</form>
-				) : null}
+					{step === "verify_email" ? (
+						<form className="auth-form" onSubmit={onSignupOtpSubmit} noValidate>
+							<div className="field">
+								<label id="sj-verify-otp-label" htmlFor="sj-verify-otp">Enter the 6-digit verification code</label>
+								<OtpInput
+									id="sj-verify-otp"
+									value={signupOtp}
+									onChange={setSignupOtp}
+									disabled={loading}
+								/>
+								<span className="hint">Sent to {signupEmail}. It expires shortly.</span>
+							</div>
+							<Button type="submit" block arrow disabled={loading || signupOtp.length !== 6}>
+								{loading ? "Verifying…" : "Verify email"}
+							</Button>
+							<div className="auth-alt">
+								<button
+									type="button"
+									className="auth-alt__link"
+									onClick={resendSignupOtp}
+									disabled={resendCooldown > 0 || loading}
+								>
+									{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
+								</button>
+								<button type="button" className="auth-alt__link" onClick={backToSignIn}>
+									Back to sign in
+								</button>
+							</div>
+						</form>
+					) : null}
 
 					{step === "mfa_otp" ? (
 						<form className="auth-form" onSubmit={onMfaSubmit} noValidate>
+							{/*
+							 * Every enrolled user needs a route in even when the thing they
+							 * enrolled with is unavailable, so all three methods stay on
+							 * screen as a strip rather than hiding behind links.
+							 */}
+							<div className="auth-methods" role="tablist" aria-label="Verification method">
+								<button
+									type="button"
+									className={mfaMode === "totp" ? "on" : ""}
+									onClick={() => { setMfaMode("totp"); setError(""); setMfaBackupCode(""); }}
+									disabled={loading}
+								>
+									Authenticator
+								</button>
+								<button
+									type="button"
+									className={mfaMode === "email" ? "on" : ""}
+									onClick={() => void (mfaEmailSent ? (setMfaMode("email"), setMfaCode("")) : switchToEmailedCode())}
+									disabled={loading}
+								>
+									Email me a code
+								</button>
+								<button
+									type="button"
+									className={mfaMode === "backup" ? "on" : ""}
+									onClick={() => { setMfaMode("backup"); setError(""); setMfaCode(""); }}
+									disabled={loading}
+								>
+									Recovery code
+								</button>
+							</div>
+
 							{mfaMode === "backup" ? (
 								<Field
 									label="Recovery code"
@@ -967,29 +1073,15 @@ export function StartJourney() {
 									/>
 								</Field>
 							) : (
-								<Field
-									label="6-digit security code"
-									htmlFor="sj-mfa"
-									hint={
-										mfaMode === "email"
-											? mfaEmailSent
-												? "We emailed you a code. It expires in a few minutes."
-												: "Enter the code we emailed you."
-											: "Enter the code from your authenticator app."
-									}
-								>
-									<Input
+								<div className="field">
+									<label id="sj-mfa-label" htmlFor="sj-mfa">6-digit security code</label>
+									<OtpInput
 										id="sj-mfa"
-										type="text"
-										inputMode="numeric"
-										autoComplete="one-time-code"
-										maxLength={6}
 										value={mfaCode}
-										onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-										placeholder="000000"
-										fullBorder
+										onChange={setMfaCode}
+										disabled={loading}
 									/>
-								</Field>
+								</div>
 							)}
 
 							<Button
@@ -1001,25 +1093,11 @@ export function StartJourney() {
 									(mfaMode === "backup" ? !mfaBackupCode.trim() : mfaCode.length !== 6)
 								}
 							>
-								{loading ? "Verifying..." : "Verify"}
+								{loading ? "Verifying…" : "Verify"}
 							</Button>
 
-							{/*
-							 * Every enrolled user needs a route in even when the thing they
-							 * enrolled with is unavailable, so both alternatives stay on
-							 * screen rather than hiding behind the method we assumed.
-							 */}
 							<div className="auth-alt">
-								{mfaMode !== "email" ? (
-									<button
-										type="button"
-										className="auth-alt__link"
-										onClick={switchToEmailedCode}
-										disabled={loading}
-									>
-										Email me a code instead
-									</button>
-								) : (
+								{mfaMode === "email" ? (
 									<button
 										type="button"
 										className="auth-alt__link"
@@ -1028,45 +1106,17 @@ export function StartJourney() {
 									>
 										{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
 									</button>
-								)}
-								{mfaMode !== "backup" ? (
-									<button
-										type="button"
-										className="auth-alt__link"
-										onClick={() => {
-											setMfaMode("backup");
-											setError("");
-											setMfaCode("");
-										}}
-										disabled={loading}
-									>
-										Use a recovery code
-									</button>
-								) : (
-									<button
-										type="button"
-										className="auth-alt__link"
-										onClick={() => {
-											setMfaMode("totp");
-											setError("");
-											setMfaBackupCode("");
-										}}
-										disabled={loading}
-									>
-										Back to security code
-									</button>
-								)}
+								) : null}
+								<button type="button" className="auth-alt__link" onClick={backToSignIn}>
+									← Back to sign in
+								</button>
 							</div>
-
-							<button type="button" className="auth-back" onClick={backToSignIn}>
-								← Back to sign in
-							</button>
 						</form>
 					) : null}
 
 					{step === "signin" ? (
 						<p className="start-journey__legal mono">
-							By continuing you agree to our terms.
+							By continuing you agree to our terms. Protected by two-factor authentication.
 						</p>
 					) : null}
 				</div>

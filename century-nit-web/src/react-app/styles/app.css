@@ -3599,27 +3599,35 @@ img.profile-monogram {
 	max-width: 28rem;
 }
 
-.start-journey__features {
-	list-style: none;
-	margin-top: 2.25rem;
-	display: flex;
-	flex-direction: column;
-	gap: 0.85rem;
+/* Brand-panel chapter preview — the six chapters the account unlocks,
+   in the portal's real vocabulary. */
+.start-journey__chapters {
+	margin-top: 2rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.start-journey__features li {
-	display: flex;
-	align-items: center;
-	gap: 0.75rem;
+.start-journey__chapter {
+	display: grid;
+	grid-template-columns: 2rem 1fr auto;
+	gap: 0.8rem;
+	align-items: baseline;
+	padding: 0.5rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 	font-family: var(--font-mono);
-	font-size: 0.8rem;
-	letter-spacing: 0.04em;
-	color: #ffffff;
+	font-size: 0.62rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
 }
 
-.start-journey__features svg {
-	color: #ffffff;
-	flex-shrink: 0;
+.start-journey__chapter .n,
+.start-journey__chapter .d {
+	opacity: 0.55;
+}
+
+.start-journey__chapter .d {
+	letter-spacing: 0.04em;
+	text-transform: none;
+	font-size: 0.6rem;
 }
 
 .start-journey__brand-footer {
@@ -3719,12 +3727,36 @@ img.profile-monogram {
 	padding: 0.9rem 1.15rem;
 	font-family: var(--font-body);
 	font-size: 0.95rem;
+	font-weight: 600;
 	background: var(--background);
-	border: 1px solid var(--border-light);
+	border: 1.5px solid var(--foreground);
 	cursor: pointer;
 	color: var(--foreground);
 	transition: border-color 100ms, background 100ms, transform 100ms;
 	text-align: left;
+}
+
+.auth-social__btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+/* The monochrome provider mark — a bordered square holding the letter. */
+.auth-social__mark {
+	display: grid;
+	place-items: center;
+	width: 1.4rem;
+	height: 1.4rem;
+	border: 1.5px solid var(--foreground);
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 0.85rem;
+	flex-shrink: 0;
+}
+
+.auth-social__arrow {
+	margin-left: auto;
+	font-family: var(--font-mono);
 }
 
 .auth-social__btn:hover {
@@ -3739,23 +3771,6 @@ img.profile-monogram {
 .auth-social__btn:focus-visible {
 	outline: 3px solid var(--ring);
 	outline-offset: 2px;
-}
-
-.auth-social__icon {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 24px;
-	height: 24px;
-	flex-shrink: 0;
-}
-
-.auth-social__note {
-	margin-top: 0.75rem;
-	font-size: 0.7rem;
-	letter-spacing: 0.06em;
-	color: var(--muted-foreground);
-	text-align: center;
 }
 
 /* Auth form */
@@ -3781,29 +3796,155 @@ img.profile-monogram {
 	margin-top: 1.25rem;
 }
 
-.auth-form__row {
-	display: flex;
-	flex-direction: column;
-	gap: 0.85rem;
-}
-
-.auth-forgot {
-	background: none;
-	border: none;
-	padding: 0;
-	cursor: pointer;
+/* A status note (e.g. "email verified") — bordered, not the error block. */
+.auth-note {
 	font-family: var(--font-mono);
 	font-size: 0.72rem;
-	letter-spacing: 0.06em;
+	letter-spacing: 0.05em;
+	line-height: 1.6;
 	text-transform: uppercase;
-	text-decoration: underline;
-	text-underline-offset: 3px;
-	color: var(--muted-foreground);
-	text-align: center;
+	color: var(--foreground);
+	border: 1.5px solid var(--foreground);
+	padding: 0.75rem 1rem;
+	margin-top: 1.25rem;
 }
 
-.auth-forgot:hover {
+/* "or with email" — hairlines flanking a mono label. */
+.auth-divider {
+	display: flex;
+	align-items: center;
+	gap: 0.8rem;
+	margin: 1.3rem 0 0;
+	font-family: var(--font-mono);
+	font-size: 0.56rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--border-light);
+}
+
+/* Six boxed OTP cells — typing auto-advances, a filled cell inverts. */
+.otp-input {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.4rem;
+}
+
+.otp-input__cell {
+	width: 2.6rem;
+	height: 3rem;
+	border: 1.5px solid var(--border);
+	background: var(--background);
+	font-family: var(--font-mono);
+	font-size: 1.2rem;
+	font-weight: 700;
+	text-align: center;
 	color: var(--foreground);
+}
+
+.otp-input__cell:focus {
+	outline: none;
+	border-color: var(--foreground);
+	box-shadow: inset 0 -3px 0 var(--foreground);
+}
+
+.otp-input__cell--filled {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+	border-color: var(--foreground);
+}
+
+/* Password checklist — only where a password is chosen. The required row
+   inks its box when met; suggestions stay hollow and never block. */
+.pwcheck {
+	border: 1px solid var(--border);
+	margin-top: 0.5rem;
+}
+
+.pwcheck__row {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	padding: 0.4rem 0.6rem;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	border-bottom: 1px dotted var(--border-light);
+}
+
+.pwcheck__row:last-child {
+	border-bottom: none;
+}
+
+.pwcheck__box {
+	width: 0.62rem;
+	height: 0.62rem;
+	border: 1.5px solid var(--muted-foreground);
+	flex-shrink: 0;
+}
+
+.pwcheck__row--met {
+	color: var(--foreground);
+	font-weight: 700;
+}
+
+.pwcheck__row--met .pwcheck__box {
+	background: var(--foreground);
+	border-color: var(--foreground);
+}
+
+.pwcheck__req {
+	margin-left: auto;
+	font-size: 0.5rem;
+	letter-spacing: 0.1em;
+	color: var(--muted-foreground);
+	border: 1px dashed var(--border);
+	padding: 0.1rem 0.3rem;
+}
+
+.pwcheck__row--met .pwcheck__req {
+	color: var(--foreground);
+	border-color: var(--foreground);
+	border-style: solid;
+}
+
+/* MFA method strip — all three routes visible, the active one inverts. */
+.auth-methods {
+	display: flex;
+	gap: 0.4rem;
+	flex-wrap: wrap;
+	margin-bottom: 0.25rem;
+}
+
+.auth-methods button {
+	font-family: var(--font-mono);
+	font-size: 0.56rem;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	padding: 0.35rem 0.65rem;
+	border: 1px solid var(--foreground);
+	background: var(--background);
+	color: var(--foreground);
+	cursor: pointer;
+}
+
+.auth-methods button.on {
+	background: var(--foreground);
+	color: var(--accent-foreground);
+}
+
+.auth-methods button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .auth-back {
@@ -3829,7 +3970,7 @@ img.profile-monogram {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	justify-content: center;
+	justify-content: space-between;
 	gap: 0.5rem 1.25rem;
 	margin-top: 1.25rem;
 }
@@ -3878,7 +4019,6 @@ img.profile-monogram {
 	place-items: center;
 	width: 3.25rem;
 	height: 3.25rem;
-	border-radius: 50%;
 	background: var(--foreground);
 	color: var(--accent-foreground);
 	font-size: 1.4rem;
@@ -3891,41 +4031,6 @@ img.profile-monogram {
 	color: var(--muted-foreground);
 	max-width: 26rem;
 	margin: 0;
-}
-
-/* Divider */
-
-.start-journey__divider {
-	height: 1px;
-	background: var(--border-light);
-	margin: 1.75rem 0;
-}
-
-/* Guest link */
-
-.start-journey__guest {
-	display: block;
-	width: 100%;
-	background: none;
-	border: none;
-	cursor: pointer;
-	padding: 0;
-	font-family: var(--font-mono);
-	font-size: 0.75rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--muted-foreground);
-	text-align: center;
-	transition: color 100ms;
-}
-
-.start-journey__guest:hover {
-	color: var(--foreground);
-}
-
-.start-journey__guest:focus-visible {
-	outline: 3px solid var(--ring);
-	outline-offset: 4px;
 }
 
 /* Legal text */

@@ -58,8 +58,10 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 					dateStyle: "medium",
 					timeStyle: "short",
 					timeZone: row.timezone ?? undefined,
+					timeZoneName: "short",
 				})
 			: "Unscheduled",
+		timezone: row.timezone ?? null,
 		type: row.type === "in_person" ? "In-Person" : "Online",
 		assignedOfficer: row.assignedOfficerName ?? "",
 		assignedOfficerEmail: row.assignedOfficerEmail ?? "",

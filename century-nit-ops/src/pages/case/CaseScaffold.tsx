@@ -106,7 +106,7 @@ export function CaseScaffold({
 	return (
 		<div
 			className={`ops-split cn-scaffold${collapseDetail ? " cn-scaffold--collapse" : ""}${
-				collapseDetail && open ? " cn-scaffold--open" : ""
+				open ? " cn-scaffold--open" : ""
 			}${bare ? " cn-scaffold--bare" : ""}${rail ? " cn-scaffold--rail" : ""}`}
 		>
 			<div className="ops-split__list cn-scaffold__list">{list}</div>

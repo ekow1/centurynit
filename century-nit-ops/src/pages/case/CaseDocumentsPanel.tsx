@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { documentsApi } from "century-nit-core/api";
+import { REQUIRED_DOCUMENTS } from "century-nit-core";
 import type { ApplicantDocument, DocumentChecklistItem } from "century-nit-shared";
 import { StatusPill, type Tone } from "century-nit-core/ui";
 import { DocPreviewInline, type DocPreviewData } from "../DocPreviewInline";
@@ -17,6 +18,28 @@ const DOC_STATUS_TONE: Record<string, Tone> = {
 	REJECTED: "blocked",
 	PENDING_UPLOAD: "neutral",
 };
+
+/** Words in a filename that say what the file probably is — checked against the declared type. */
+const FILE_TELLS: [RegExp, string][] = [
+	[/invoice|receipt|payment/i, "an invoice or receipt"],
+	[/passport/i, "a passport"],
+	[/transcript/i, "a transcript"],
+	[/bank|statement/i, "a bank statement"],
+	[/ielts|toefl|english/i, "an english test"],
+	[/\bcv\b|resume/i, "a cv"],
+	[/recommend|reference.?letter/i, "a letter"],
+	[/diploma|degree|certificat/i, "a certificate"],
+	[/photo|headshot/i, "a photo"],
+];
+/** The telltale a filename carries when it disagrees with the declared type; null when they agree or nothing is told. */
+function filenameTell(fileName: string, declaredType: string): string | null {
+	const tell = FILE_TELLS.find(([re]) => re.test(fileName));
+	if (!tell) return null;
+	const declared = declaredType.toLowerCase();
+	// The declared type containing a telltale word is agreement, not mismatch.
+	if (tell[1].split(" ").some((w) => w.length > 2 && declared.includes(w))) return null;
+	return tell[1];
+}
 
 /**
  * The applicant's documents on a case — what was asked for, what arrived,
@@ -51,16 +74,22 @@ export function CaseDocumentsPanel({
 	onRequest?: (documents: string[]) => Promise<unknown>;
 }) {
 	const [requestDraft, setRequestDraft] = useState("");
+	const [picked, setPicked] = useState<string[]>([]);
 	const [requesting, setRequesting] = useState(false);
 	const [requestError, setRequestError] = useState<string | null>(null);
+	// The client sees these exact names — offer the canonical list first,
+	// free text for anything outside it.
+	const asked = new Set([...requestedDocuments, ...(checklist?.map((d) => d.name) ?? [])]);
+	const suggested = REQUIRED_DOCUMENTS.filter((d) => !asked.has(d.name)).map((d) => d.name);
 	async function sendRequest() {
-		const list = requestDraft.split(",").map((d) => d.trim()).filter(Boolean);
+		const list = [...picked, ...requestDraft.split(",").map((d) => d.trim()).filter(Boolean)];
 		if (!onRequest || list.length === 0) return;
 		setRequesting(true);
 		setRequestError(null);
 		try {
 			await onRequest(list);
 			setRequestDraft("");
+			setPicked([]);
 		} catch (e) {
 			setRequestError(e instanceof Error ? e.message : "Could not send the request");
 		} finally {
@@ -182,17 +211,35 @@ export function CaseDocumentsPanel({
 							void sendRequest();
 						}}
 					>
+						{suggested.length > 0 && (
+							<div className="cn-scaffold__chips" role="group" aria-label="Standard documents">
+								{suggested.map((name) => {
+									const on = picked.includes(name);
+									return (
+										<button
+											key={name}
+											type="button"
+											className={`ops-pill ops-pill--chip${on ? " ops-pill--on" : ""}`}
+											aria-pressed={on}
+											onClick={() => setPicked((prev) => (on ? prev.filter((p) => p !== name) : [...prev, name]))}
+										>
+											{name}
+										</button>
+									);
+								})}
+							</div>
+						)}
 						<div className="cn-assign__row">
 							<input
 								className="input input--sm"
-								placeholder="Documents needed, comma separated — e.g. Bank statement, Sponsor letter"
+								placeholder="Other — one document name, or comma separated"
 								value={requestDraft}
 								onChange={(e) => setRequestDraft(e.target.value)}
 								disabled={requesting}
-								aria-label="Documents to request"
+								aria-label="Other documents to request"
 							/>
-							<button type="submit" className="btn btn--sm btn--primary" disabled={requesting || !requestDraft.trim()}>
-								{requesting ? "Sending…" : "Request documents"}
+							<button type="submit" className="btn btn--sm btn--primary" disabled={requesting || (picked.length === 0 && !requestDraft.trim())}>
+								{requesting ? "Sending…" : `Request ${picked.length > 0 ? `selected (${picked.length})` : "documents"}`}
 							</button>
 						</div>
 						{requestError && <p className="cn-assign__error">{requestError}</p>}
@@ -237,7 +284,11 @@ export function CaseDocumentsPanel({
 									>
 										<span className="cn-docs__name">{doc.fileName}</span>
 										<span className="cn-docs__meta">
-											{doc.documentType}
+											declared as {doc.documentType}
+											{(() => {
+												const tell = filenameTell(doc.fileName, doc.documentType);
+												return tell ? ` — filename suggests ${tell}, check before verifying` : "";
+											})()}
 											{doc.sizeBytes ? ` · ${(doc.sizeBytes / 1024).toFixed(0)} KB` : ""}
 											{doc.uploadedAt ? ` · ${new Date(doc.uploadedAt).toLocaleDateString()}` : ""} · Inspect →
 										</span>

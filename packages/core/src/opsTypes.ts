@@ -169,6 +169,8 @@ export interface MockConsultation {
 	mapsUrl?: string;
 	/** ISO timestamp of the booked slot — parseable, unlike `dateTime`. */
 	startsAt?: string | null;
+	/** IANA zone the slot was booked in (the branch's) — `startsAt` is UTC; this is what `dateTime` renders in. */
+	timezone?: string | null;
 	/** The coordinator who manages this case. */
 	coordinatorId?: string | null;
 	coordinatorName?: string | null;

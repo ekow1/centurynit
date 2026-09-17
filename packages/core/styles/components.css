@@ -198,6 +198,12 @@
 .cn-scaffold--rail.cn-scaffold--open > .cn-scaffold__list { flex: 1 1 auto; min-width: 0; }
 .cn-scaffold--rail > .cn-scaffold__detail,
 .cn-scaffold--rail.cn-scaffold--open > .cn-scaffold__detail { flex: 0 0 min(23rem, 38%); }
+/* On a rail page without collapseDetail a selected record is work, not a
+   summary — the detail takes the flex width and the queue narrows to its
+   own rail. Collapse pages (Workspace) keep the narrow preview: their list
+   is a data table that needs the room back. */
+.cn-scaffold--rail.cn-scaffold--open:not(.cn-scaffold--collapse) > .cn-scaffold__list { flex: 0 0 min(32rem, 42%); }
+.cn-scaffold--rail.cn-scaffold--open:not(.cn-scaffold--collapse) > .cn-scaffold__detail { flex: 1 1 auto; min-width: 0; }
 @media (max-width: 959.98px) {
 	/* Stacked on a phone: the now surface leads; a selected record sits under the thing that was tapped. */
 	.cn-scaffold--rail:not(.cn-scaffold--open) > .cn-scaffold__detail { order: -1; min-height: 0 !important; }

@@ -23,7 +23,12 @@ function isKnown(v: string | undefined | null): v is string {
 }
 
 const STATUS_IDS = ["All", "Under Review", "Assigned", "Confirmed", "Reschedule asked", "In Assessment", "Completed", "Cancelled"] as const;
-type StatusFilter = (typeof STATUS_IDS)[number];
+/** First-scan cuts that live on the main row; the seven real statuses sit one click deep in the Filters drawer. */
+const PSEUDO_CUTS = ["Needs action", "Today"] as const;
+const STATUS_PARAM_IDS = [...STATUS_IDS, ...PSEUDO_CUTS] as const;
+type StatusFilter = (typeof STATUS_PARAM_IDS)[number];
+/** Cuts whose selection opens the drawer automatically. */
+const MAIN_CUT_IDS: readonly StatusFilter[] = ["All", "Needs action", "Today"];
 
 const isOnline = (c: MockConsultation) => c.type?.toLowerCase() === "online";
 /** YYYY-MM-DD in local time — what the diary bands compare against. */
@@ -43,6 +48,22 @@ const bandOf = (c: MockConsultation, today: string): Band => {
 	if (c.status === "Completed" || c.status === "Cancelled") return "done";
 	if (c.status === "Under Review" || c.rescheduleRequestedAt) return "action";
 	return dayOf(c) === today ? "today" : "upcoming";
+};
+
+/** The slot's hour in the booked zone — off-hours slots get flagged, not hidden. */
+function slotHour(c: MockConsultation): number | null {
+	if (!c.startsAt) return null;
+	try {
+		return Number(
+			new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: c.timezone ?? undefined }).format(new Date(c.startsAt)),
+		);
+	} catch {
+		return null;
+	}
+}
+const isOffHours = (c: MockConsultation) => {
+	const h = slotHour(c);
+	return h !== null && (h < 7 || h >= 19);
 };
 
 /** The call's state words for a row — same vocabulary the detail strip uses. */
@@ -65,11 +86,17 @@ export function EnterpriseConsultations() {
 	const [selectedConsultation, setSelectedConsultation] = useState<MockConsultation | null>(null);
 
 	// Every control is a URL param — a filtered diary is a shareable link.
-	const [statusFilter, setStatusFilter] = useUrlParam<StatusFilter>("status", { allowed: STATUS_IDS, fallback: "All" });
+	const [statusFilter, setStatusFilter] = useUrlParam<StatusFilter>("status", { allowed: STATUS_PARAM_IDS, fallback: "All" });
 	const [ownerFilter, setOwnerFilter] = useUrlParam<"all" | "mine">("owner", { allowed: ["all", "mine"], fallback: "all" });
 	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
 	const [searchQuery, setSearchQuery] = useUrlParam("q");
 	const now = useNow();
+	// The drawer auto-opens while one of its facets is set, so a deep link
+	// like ?status=Under%20Review shows where the cut came from.
+	const drawerActive = !MAIN_CUT_IDS.includes(statusFilter);
+	const [drawerToggled, setDrawerToggled] = useState<boolean | null>(null);
+	const drawerOpen = drawerToggled ?? drawerActive;
+	const setDrawerOpen = () => setDrawerToggled(!drawerOpen);
 
 	const queryId = searchParams.get("id");
 	// Closing also clears ?id= so the deep link doesn't reopen the detail.
@@ -96,8 +123,18 @@ export function EnterpriseConsultations() {
 	);
 	const roleScopedConsultations = useMemo(() => scopeRecords(consultations, isMine), [scopeRecords, consultations, isMine]);
 
+	const today = localDay(new Date());
 	const matchesStatus = (c: MockConsultation, s: StatusFilter) =>
-		s === "All" ? true : s === "Reschedule asked" ? Boolean(c.rescheduleRequestedAt) : c.status === s;
+		s === "All"
+			? true
+			: s === "Needs action"
+				? // Under Review is a manager's queue — for a consultant the cut is just reschedule asks.
+					(canAssignWork && c.status === "Under Review") || Boolean(c.rescheduleRequestedAt)
+				: s === "Today"
+					? bandOf(c, today) === "today"
+					: s === "Reschedule asked"
+						? Boolean(c.rescheduleRequestedAt)
+						: c.status === s;
 
 	// Search and branch apply before the status facet so each option's count
 	// says how much choosing it would show.
@@ -111,10 +148,9 @@ export function EnterpriseConsultations() {
 			c.assignedOfficer.toLowerCase().includes(q)
 		);
 	});
-	const statusCounts = new Map(STATUS_IDS.map((s) => [s, searchScoped.filter((c) => matchesStatus(c, s)).length]));
+	const statusCounts = new Map(STATUS_PARAM_IDS.map((s) => [s, searchScoped.filter((c) => matchesStatus(c, s)).length]));
 	const filteredConsultations = searchScoped.filter((c) => (ownerFilter === "mine" ? isMine(c) : true) && matchesStatus(c, statusFilter));
 
-	const today = localDay(new Date());
 	const bands = BAND_ORDER.map((band) => ({
 		band,
 		rows: filteredConsultations.filter((c) => bandOf(c, today) === band).sort((a, b) => startMs(a) - startMs(b)),
@@ -171,6 +207,13 @@ export function EnterpriseConsultations() {
 			<CaseScaffold
 				onClose={closeDetail}
 				emptyHint="Select a consultation from the list to view the full assessment workflow."
+				bar={
+					liveSelected ? (
+						<span className="cn-filter__label">
+							{liveSelected.ref} · {liveSelected.status}
+						</span>
+					) : null
+				}
 				rail={
 					<div style={{ padding: "0.75rem 0.9rem" }}>
 						<p className="ops-dsec">Today — nothing selected</p>
@@ -184,14 +227,16 @@ export function EnterpriseConsultations() {
 				list={
 					<>
 						<div className="cn-scaffold__filters">
+							{/* One row: the triage cuts, Mine, the drawer toggle, search.
+							    The seven real statuses sit one click deep. */}
 							<div className="cn-scaffold__chips">
 								<FilterGroup
-									label="Status"
-									options={STATUS_IDS.filter((s) => canAssignWork || s !== "Under Review").map((s) => ({
+									label="Queue"
+									options={MAIN_CUT_IDS.map((s) => ({
 										id: s,
 										label: s,
 										count: statusCounts.get(s) ?? 0,
-										hot: (s === "Under Review" || s === "Reschedule asked") && (statusCounts.get(s) ?? 0) > 0,
+										hot: s === "Needs action" && (statusCounts.get(s) ?? 0) > 0,
 									}))}
 									value={statusFilter}
 									onChange={setStatusFilter}
@@ -207,15 +252,47 @@ export function EnterpriseConsultations() {
 										onChange={setOwnerFilter}
 									/>
 								)}
+								<button
+									type="button"
+									className={`ops-pill ops-pill--chip${drawerActive ? " ops-pill--hot" : ""}`}
+									style={{ borderStyle: "dashed" }}
+									aria-expanded={drawerOpen}
+									aria-controls="consultation-filter-drawer"
+									onClick={setDrawerOpen}
+								>
+									Filters {drawerOpen ? "▴" : "▾"}
+								</button>
+								<input
+									type="search"
+									placeholder="Search applicant, ref, country…"
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value || null)}
+									className="cn-search"
+									aria-label="Search consultations"
+									style={{ flex: "1 1 12rem", width: "auto", marginLeft: "auto" }}
+								/>
 							</div>
-							<input
-								type="search"
-								placeholder="Search applicant, ref, country..."
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value || null)}
-								className="cn-search"
-								aria-label="Search consultations"
-							/>
+							{drawerOpen && (
+								<div
+									id="consultation-filter-drawer"
+									className="cn-scaffold__filter-row"
+									style={{ flexWrap: "wrap", gap: "0.5rem", background: "var(--muted)" }}
+								>
+									<span style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+										<span className="cn-filter__label">Status</span>
+										<FilterGroup
+											label="Status"
+											options={STATUS_IDS.filter((s) => s !== "All" && (canAssignWork || s !== "Under Review")).map((s) => ({
+												id: s,
+												label: s,
+												count: statusCounts.get(s) ?? 0,
+											}))}
+											value={statusFilter}
+											onChange={setStatusFilter}
+										/>
+									</span>
+								</div>
+							)}
 						</div>
 						<div className="cn-scaffold__rows">
 							{bands.length === 0 ? (
@@ -230,6 +307,7 @@ export function EnterpriseConsultations() {
 										{rows.map((c) => {
 											const isSelected = liveSelected?.id === c.id;
 											const requested = c.requestedDocuments?.length ?? 0;
+											const docsToReview = c.documentChecklist?.filter((d) => d.status === "UPLOADED").length ?? 0;
 											const call = callState(c, today, now);
 											return (
 												<div
@@ -251,6 +329,7 @@ export function EnterpriseConsultations() {
 															<StatusPill tone={c.status === "Completed" ? "done" : c.status === "Cancelled" ? "void" : c.status === "Under Review" ? "waiting" : "current"}>
 																{c.status}
 															</StatusPill>
+															{isOffHours(c) && <StatusPill tone="waiting">off-hours — verify</StatusPill>}
 															<span className="cn-row__chan">
 																{isOnline(c) ? `◉ ${call ?? "online"}` : "◎ in person"}
 															</span>
@@ -273,6 +352,7 @@ export function EnterpriseConsultations() {
 															)}
 															{c.coordinatorName && <span> · → {c.coordinatorName}</span>}
 															{requested > 0 && <span> · {requested} document{requested === 1 ? "" : "s"} requested</span>}
+															{docsToReview > 0 && <span> · {docsToReview} to review</span>}
 														</div>
 													</div>
 													<span className="cn-row__arrow" aria-hidden>→</span>

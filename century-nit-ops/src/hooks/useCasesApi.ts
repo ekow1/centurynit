@@ -55,8 +55,11 @@ function toConsultation(row: ApiConsultation): MockConsultation {
 		branch: row.branch,
 		dateTime: row.startsAt
 			? new Date(row.startsAt).toLocaleString(undefined, {
-					dateStyle: "medium",
-					timeStyle: "short",
+					month: "short",
+					day: "numeric",
+					year: "numeric",
+					hour: "numeric",
+					minute: "2-digit",
 					timeZone: row.timezone ?? undefined,
 					timeZoneName: "short",
 				})

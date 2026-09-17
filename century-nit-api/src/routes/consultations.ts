@@ -195,6 +195,107 @@ consultationsRouter.openapi(
 consultationsRouter.openapi(
 	createRoute({
 		method: "get",
+		path: "/duty",
+		tags: ["Consultations"],
+		summary: "Today's duty coordinator for a branch",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			query: z.object({ branch: z.string().min(1) }),
+		},
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							branch: z.string(),
+							dutyDate: z.string(),
+							coordinator: z
+								.object({ id: z.string().uuid(), name: z.string(), email: z.string() })
+								.nullable(),
+						}),
+					},
+				},
+				description: "Duty for today",
+			},
+		},
+	}),
+	async (c) => c.json(await getCoordinatorDuty(c.req.valid("query").branch)),
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "put",
+		path: "/duty",
+		tags: ["Consultations"],
+		summary: "Set or end the branch's duty coordinator for today",
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		request: {
+			body: { content: { "application/json": { schema: setCoordinatorDutySchema } }, required: true },
+		},
+		responses: {
+			200: { description: "Duty updated" },
+			403: { description: "Managers only" },
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		if (!canSeeAllCases(staff)) {
+			throw new HttpError(403, "FORBIDDEN", "Only managers set the duty coordinator");
+		}
+		const body = c.req.valid("json");
+		assertBranchScope(staff, body.branch);
+		return c.json(
+			await setCoordinatorDuty({
+				branch: body.branch,
+				coordinatorOpsUserId: body.coordinatorOpsUserId,
+				actor: actorFrom(staff),
+			}),
+		);
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/workload",
+		tags: ["Consultations"],
+		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							coordinators: z.array(
+								z.object({
+									opsUserId: z.string().uuid(),
+									name: z.string(),
+									email: z.string(),
+									role: z.string(),
+									activeCases: z.number().int(),
+									overdueCases: z.number().int(),
+									maxCapacity: z.number().int(),
+									capacityPercent: z.number(),
+								}),
+							),
+							maxCapacityPerCoordinator: z.number().int(),
+						}),
+					},
+				},
+				description: "Workload per coordinator",
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
+		return c.json(await getStaffWorkload(staff.branch ?? undefined));
+	},
+);
+
+consultationsRouter.openapi(
+	createRoute({
+		method: "get",
 		path: "/{id}",
 		tags: ["Consultations"],
 		middleware: [requireAuth, requireMfa] as const,
@@ -644,107 +745,6 @@ consultationsRouter.openapi(
 			actorFrom(staff),
 		);
 		return c.json(await serializeConsultation(updated));
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/duty",
-		tags: ["Consultations"],
-		summary: "Today's duty coordinator for a branch",
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			query: z.object({ branch: z.string().min(1) }),
-		},
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							branch: z.string(),
-							dutyDate: z.string(),
-							coordinator: z
-								.object({ id: z.string().uuid(), name: z.string(), email: z.string() })
-								.nullable(),
-						}),
-					},
-				},
-				description: "Duty for today",
-			},
-		},
-	}),
-	async (c) => c.json(await getCoordinatorDuty(c.req.valid("query").branch)),
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "put",
-		path: "/duty",
-		tags: ["Consultations"],
-		summary: "Set or end the branch's duty coordinator for today",
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		request: {
-			body: { content: { "application/json": { schema: setCoordinatorDutySchema } }, required: true },
-		},
-		responses: {
-			200: { description: "Duty updated" },
-			403: { description: "Managers only" },
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		if (!canSeeAllCases(staff)) {
-			throw new HttpError(403, "FORBIDDEN", "Only managers set the duty coordinator");
-		}
-		const body = c.req.valid("json");
-		assertBranchScope(staff, body.branch);
-		return c.json(
-			await setCoordinatorDuty({
-				branch: body.branch,
-				coordinatorOpsUserId: body.coordinatorOpsUserId,
-				actor: actorFrom(staff),
-			}),
-		);
-	},
-);
-
-consultationsRouter.openapi(
-	createRoute({
-		method: "get",
-		path: "/workload",
-		tags: ["Consultations"],
-		middleware: [requireAuth, requireMfa, requireModule("consultations")] as const,
-		responses: {
-			200: {
-				content: {
-					"application/json": {
-						schema: z.object({
-							coordinators: z.array(
-								z.object({
-									opsUserId: z.string().uuid(),
-									name: z.string(),
-									email: z.string(),
-									role: z.string(),
-									activeCases: z.number().int(),
-									overdueCases: z.number().int(),
-									maxCapacity: z.number().int(),
-									capacityPercent: z.number(),
-								}),
-							),
-							maxCapacityPerCoordinator: z.number().int(),
-						}),
-					},
-				},
-				description: "Workload per coordinator",
-			},
-		},
-	}),
-	async (c) => {
-		const staff = c.get("staff");
-		if (!staff) throw new HttpError(401, "UNAUTHORIZED", "Not signed in");
-		return c.json(await getStaffWorkload(staff.branch ?? undefined));
 	},
 );
 

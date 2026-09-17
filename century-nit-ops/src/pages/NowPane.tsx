@@ -195,22 +195,23 @@ export function NowPane({
 	} else if (top) {
 		head = (
 			<div className="card cn-now">
-				<span className="cn-detailhead__kicker">
-					<span className="cn-now__dot cn-now__dot--hollow" aria-hidden />
-					No consultations today
-				</span>
-				<h3 className="cn-detailhead__title">Top of your queue</h3>
-				<p className="cn-detailhead__sub">
-					{top.title} · {taskActionLabel(top)}
-				</p>
-				<p className="cn-detailhead__meta">{top.subtitle}</p>
-				<div className="cn-now__actions">
-					<Link to={top.linkTo} className="btn btn--primary btn--sm">
-						Open
-					</Link>
-					<button type="button" className="btn btn--ghost btn--sm" onClick={() => onSelect(top)}>
-						Show in queue
-					</button>
+				<p className="cn-detail__eyebrow">No consultations today · top of your queue</p>
+				<div className="cn-detail__row" style={{ cursor: "default" }}>
+					<span>
+						{top.title}
+						<br />
+						<span className="cn-detail__row-note" style={{ whiteSpace: "normal" }}>
+							{taskActionLabel(top)} · {top.subtitle}
+						</span>
+					</span>
+					<span style={{ display: "flex", gap: "0.9rem", alignItems: "baseline", whiteSpace: "nowrap" }}>
+						<Link to={top.linkTo} className="link">
+							open →
+						</Link>
+						<button type="button" className="link" onClick={() => onSelect(top)}>
+							queue ↓
+						</button>
+					</span>
 				</div>
 			</div>
 		);
@@ -409,7 +410,7 @@ function CoverageCard() {
 						<br />
 						<span className="cn-detail__row-note">
 							{covered.length} of {branches.length} covered
-							{uncovered > 0 ? " — uncovered branches route to unassigned" : ""}
+							{uncovered > 0 ? " · rest → unassigned" : ""}
 						</span>
 					</span>
 					<button type="button" className="link" onClick={openSheet}>

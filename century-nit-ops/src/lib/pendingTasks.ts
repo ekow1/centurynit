@@ -944,8 +944,10 @@ export function buildPendingTasks(inputs: PendingTaskInputs): PendingTask[] {
 				action: "chase",
 				record: r.inv,
 				title: r.inv.applicantName,
-				subtitle: `${dueLabel(r.inv.dueAt ?? null)} · balance ${fmtGhs(r.balance)}`,
-				meta: r.inv.dueAt ? dueLabel(r.inv.dueAt) : "no due date",
+				subtitle: `Balance ${fmtGhs(r.balance)}`,
+				meta: r.inv.dueAt
+					? `due ${new Date(r.inv.dueAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
+					: "no due date",
 				branch: "",
 				owner: r.inv.issuedBy || "—",
 				linkTo: `/invoices`,

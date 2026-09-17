@@ -198,9 +198,50 @@ export function needsSecondFactor(data: unknown): boolean {
 	return Boolean((data as { twoFactorRedirect?: boolean } | null)?.twoFactorRedirect);
 }
 
-export async function verifyTotp(code: string) {
-	const { data, error } = await authClient.twoFactor.verifyTotp({ code });
-	if (error) throw new Error(formatError(error, "That code was not accepted"));
+/**
+ * The enrolled MFA method while sign-in waits on the second factor.
+ *
+ * Between the password step and verification there is no session — only the
+ * signed two-factor cookie Better Auth set. `GET /api/auth/mfa/method` reads
+ * that cookie server-side and answers which challenge to render. Returns
+ * null when there is no pending challenge (or it expired); callers then fall
+ * back to the TOTP input.
+ */
+export async function fetchMfaMethod(): Promise<{
+	method: "totp" | "email_otp" | null;
+	email: string | null;
+} | null> {
+	const baseURL = typeof window === "undefined" ? "" : window.location.origin;
+	const res = await fetch(`${baseURL}/api/auth/mfa/method`, { credentials: "include" });
+	if (!res.ok) return null;
+	return (await res.json().catch(() => null)) as {
+		method: "totp" | "email_otp" | null;
+		email: string | null;
+	} | null;
+}
+
+/** Plain-language mapping for the two-factor plugin's error codes. */
+function mfaErrorMessage(
+	error: { code?: string; message?: string; status?: number } | null | undefined,
+	fallback: string,
+): string {
+	switch (error?.code) {
+		case "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE":
+			return "Too many attempts — sign in again to restart verification.";
+		case "ACCOUNT_TEMPORARILY_LOCKED":
+			return "Too many failed attempts — this account is temporarily locked. Try again later.";
+		case "INVALID_TWO_FACTOR_COOKIE":
+			return "This verification expired — sign in again.";
+		case "OTP_HAS_EXPIRED":
+			return "That code expired — request a new one.";
+		default:
+			return formatError(error, fallback);
+	}
+}
+
+export async function verifyTotp(code: string, trustDevice?: boolean) {
+	const { data, error } = await authClient.twoFactor.verifyTotp({ code, trustDevice });
+	if (error) throw new Error(mfaErrorMessage(error, "That code was not accepted"));
 	return data;
 }
 
@@ -216,9 +257,9 @@ export async function sendMfaEmailCode() {
 	if (error) throw new Error(formatError(error, "Could not send the code"));
 }
 
-export async function verifyMfaEmailCode(code: string) {
-	const { data, error } = await authClient.twoFactor.verifyOtp({ code });
-	if (error) throw new Error(formatError(error, "That code was not accepted"));
+export async function verifyMfaEmailCode(code: string, trustDevice?: boolean) {
+	const { data, error } = await authClient.twoFactor.verifyOtp({ code, trustDevice });
+	if (error) throw new Error(mfaErrorMessage(error, "That code was not accepted"));
 	return data;
 }
 
@@ -226,9 +267,9 @@ export async function verifyMfaEmailCode(code: string) {
  * Redeem one of the single-use recovery codes issued at enrolment — the way
  * back in when the authenticator app or the inbox is gone.
  */
-export async function verifyMfaBackupCode(code: string) {
-	const { data, error } = await authClient.twoFactor.verifyBackupCode({ code });
-	if (error) throw new Error(formatError(error, "That recovery code was not accepted"));
+export async function verifyMfaBackupCode(code: string, trustDevice?: boolean) {
+	const { data, error } = await authClient.twoFactor.verifyBackupCode({ code, trustDevice });
+	if (error) throw new Error(mfaErrorMessage(error, "That recovery code was not accepted"));
 	return data;
 }
 

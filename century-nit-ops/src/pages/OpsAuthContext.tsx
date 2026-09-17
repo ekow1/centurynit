@@ -17,9 +17,9 @@ import {
 	verifyTotp as apiVerifyTotp,
 	verifyBackupCode as apiVerifyBackupCode,
 	apiFetch,
-	sendMfaOtp,
-	verifyMfaOtp,
-	getMfaEnrollment,
+	sendTwoFactorOtp,
+	verifyTwoFactorOtp,
+	getPendingMfaMethod,
 	type SessionResponse,
 } from "../lib/api";
 import { useOpsSSE } from "../hooks/useChatStream";
@@ -137,9 +137,9 @@ interface OpsAuthContextValue {
 		mfaMethod?: string | null;
 	}>;
 	/** Complete sign in via 2FA TOTP or backup recovery code. */
-	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean) => Promise<OpsUser>;
+	opsVerifyTwoFactor: (code: string, isBackupCode?: boolean, trustDevice?: boolean) => Promise<OpsUser>;
 	/** Complete sign in via email OTP MFA. */
-	opsVerifyEmailOtp: (code: string) => Promise<OpsUser>;
+	opsVerifyEmailOtp: (code: string, trustDevice?: boolean) => Promise<OpsUser>;
 	/** Send email OTP for MFA verification. */
 	opsSendMfaOtp: () => Promise<void>;
 	opsSignOut: () => void;
@@ -282,34 +282,31 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	const opsSignInWithCredentials = useCallback(async (email: string, password: string) => {
 		const res = await apiSignIn(email, password);
 		if (res?.twoFactorRedirect) {
-			// Check which MFA method the user has enrolled
-			let mfaMethod: string | null = null;
+			/*
+			 * Resolve which MFA method was enrolled. There is no session yet —
+			 * getMfaEnrollment requires one and silently 401s here — so this
+			 * reads the pending two-factor cookie via /api/auth/mfa/method.
+			 */
+			let mfaMethod: string | null = "totp";
 			try {
-				const enrollment = await getMfaEnrollment();
-				mfaMethod = enrollment.method;
+				const pending = await getPendingMfaMethod();
+				mfaMethod = pending.method ?? "totp";
 			} catch {
-				// Fallback: assume TOTP
-				mfaMethod = "totp";
+				/*
+				 * Endpoint unreachable — the sign-in response still advertises
+				 * the working verify routes: an email-OTP enrollee gets ["otp"]
+				 * only, since their armed TOTP secret was never verified.
+				 */
+				const routes = res.twoFactorMethods ?? [];
+				if (routes.includes("otp") && !routes.includes("totp")) {
+					mfaMethod = "email_otp";
+				}
 			}
 			return { twoFactorRequired: true, mfaMethod };
 		}
 
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
-
-		// Email OTP is a custom second factor not handled by Better Auth's
-		// twoFactor plugin (which only supports TOTP). If this staff member is
-		// enrolled for email OTP, return a two-factor challenge so the login
-		// screen sends the code and asks them to verify it.
-		let mfaEnrollment: Awaited<ReturnType<typeof getMfaEnrollment>> | null = null;
-		try {
-			mfaEnrollment = await getMfaEnrollment();
-		} catch {
-			// If we can't read MFA status, fall through to a normal sign-in.
-		}
-		if (mfaEnrollment?.required && mfaEnrollment?.enrolled && mfaEnrollment.method === "email_otp") {
-			return { twoFactorRequired: true, mfaMethod: "email_otp" };
-		}
 
 		const user = staffToOpsUser(staff);
 		setOpsUser(user);
@@ -318,12 +315,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		return { user };
 	}, [refreshPermissions]);
 
-	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean) => {
+	const opsVerifyTwoFactor = useCallback(async (code: string, isBackupCode?: boolean, trustDevice?: boolean) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
 		if (isBackupCode) {
-			await apiVerifyBackupCode(cleanCode);
+			await apiVerifyBackupCode(cleanCode, trustDevice);
 		} else {
-			await apiVerifyTotp(cleanCode.replace(/\D/g, ""));
+			await apiVerifyTotp(cleanCode.replace(/\D/g, ""), trustDevice);
 		}
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
@@ -334,9 +331,12 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		return user;
 	}, [refreshPermissions]);
 
-	const opsVerifyEmailOtp = useCallback(async (code: string) => {
+	const opsVerifyEmailOtp = useCallback(async (code: string, trustDevice?: boolean) => {
 		const cleanCode = code.trim().replace(/\s+/g, "");
-		await verifyMfaOtp(cleanCode);
+		// Better Auth's verify-otp — works in the pending window and issues the
+		// session on success. The custom /auth-settings/mfa/verify-otp needs a
+		// session already, so it could never serve this flow.
+		await verifyTwoFactorOtp(cleanCode, trustDevice);
 		const { staff } = await getSession();
 		if (!staff) throw new Error("No staff profile linked to this account.");
 		const user = staffToOpsUser(staff);
@@ -347,7 +347,7 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 	}, [refreshPermissions]);
 
 	const opsSendMfaOtp = useCallback(async () => {
-		await sendMfaOtp();
+		await sendTwoFactorOtp();
 	}, []);
 
 	const opsSignOut = useCallback(() => {

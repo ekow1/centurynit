@@ -86,17 +86,57 @@ export function signIn(email: string, password: string): Promise<SignInResponse>
 	});
 }
 
-export function verifyTotp(code: string): Promise<unknown> {
+export function verifyTotp(code: string, trustDevice?: boolean): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-totp", {
 		method: "POST",
-		body: JSON.stringify({ code }),
+		body: JSON.stringify({ code, trustDevice }),
 	});
 }
 
-export function verifyBackupCode(code: string): Promise<unknown> {
+export function verifyBackupCode(code: string, trustDevice?: boolean): Promise<unknown> {
 	return apiFetch("/api/auth/two-factor/verify-backup-code", {
 		method: "POST",
-		body: JSON.stringify({ code }),
+		body: JSON.stringify({ code, trustDevice }),
+	});
+}
+
+/**
+ * The enrolled MFA method while sign-in waits on the second factor.
+ *
+ * Between the password step and verification there is no session — only the
+ * signed two-factor cookie Better Auth set. `/api/auth/mfa/method` reads it
+ * server-side and answers which challenge to render; `getMfaEnrollment`
+ * cannot do this job because it requires an established session. Throws
+ * (401) when there is no pending challenge — callers fall back to TOTP.
+ */
+export type PendingMfaMethod = {
+	method: "totp" | "email_otp" | null;
+	email: string | null;
+};
+
+export function getPendingMfaMethod(): Promise<PendingMfaMethod> {
+	return apiFetch<PendingMfaMethod>("/api/auth/mfa/method");
+}
+
+/**
+ * Send the second-factor email code during the sign-in challenge.
+ *
+ * This is Better Auth's own `/two-factor/send-otp`, which works in the
+ * pending two-factor window via the two_factor cookie. The custom
+ * `/auth-settings/mfa/send-otp` endpoint cannot serve this flow — it sits
+ * behind requireAuth and there is no session yet.
+ */
+export function sendTwoFactorOtp(): Promise<{ status?: boolean }> {
+	return apiFetch<{ status?: boolean }>("/api/auth/two-factor/send-otp", {
+		method: "POST",
+	});
+}
+
+/** Verify the emailed second-factor code; on success the session is issued. */
+export function verifyTwoFactorOtp(code: string, trustDevice?: boolean): Promise<unknown> {
+	return apiFetch("/api/auth/two-factor/verify-otp", {
+		method: "POST",
+		body: JSON.stringify({ code, trustDevice }),
 	});
 }
 

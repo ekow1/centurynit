@@ -627,6 +627,101 @@ auth.post("/complete-email-signup", async (c) => {
 	});
 });
 
+function readCookie(headers: Headers, name: string): string | null {
+	const header = headers.get("cookie");
+	if (!header) return null;
+	for (const part of header.split(";")) {
+		const eqIdx = part.indexOf("=");
+		if (eqIdx < 0) continue;
+		if (part.slice(0, eqIdx).trim() === name) return part.slice(eqIdx + 1).trim();
+	}
+	return null;
+}
+
+/**
+ * Resolve the enrolled MFA method during the pending two-factor window.
+ *
+ * Password sign-in with a second factor armed defers the session behind a
+ * signed `two_factor` cookie: its value is a verification identifier, and the
+ * row's `value` is the user id — the same lookup `verify-totp` performs on
+ * the same credential. That cookie is already proof the password passed, so
+ * this route needs no session. It verifies the signature exactly as the
+ * plugin does, then returns the enrolled method and a masked address so the
+ * challenge screen can render the right input instead of guessing.
+ *
+ * 401 when the cookie is missing, forged or expired — callers fall back to
+ * the TOTP challenge.
+ */
+auth.get("/mfa/method", async (c) => {
+	const noPending = () => c.json({ error: "No pending two-factor sign-in" }, 401);
+
+	const raw =
+		readCookie(c.req.raw.headers, "better-auth.two_factor") ??
+		readCookie(c.req.raw.headers, "__Secure-better-auth.two_factor");
+	if (!raw) return noPending();
+
+	// Cookie is `identifier.base64signature`, URL-encoded as a whole.
+	const decoded = decodeURIComponent(raw);
+	const sep = decoded.lastIndexOf(".");
+	if (sep < 1) return noPending();
+	const identifier = decoded.slice(0, sep);
+	const signature = decoded.slice(sep + 1);
+
+	// The same check better-call performs in getSignedCookie: HMAC-SHA256 of
+	// the unsigned value, keyed on the auth secret, base64 signature.
+	let signatureBytes: Uint8Array<ArrayBuffer>;
+	try {
+		const bin = atob(signature);
+		signatureBytes = new Uint8Array(bin.length);
+		for (let i = 0; i < bin.length; i++) signatureBytes[i] = bin.charCodeAt(i);
+	} catch {
+		return noPending();
+	}
+	const key = await crypto.subtle.importKey(
+		"raw",
+		new TextEncoder().encode(env.BETTER_AUTH_SECRET),
+		{ name: "HMAC", hash: "SHA-256" },
+		false,
+		["verify"],
+	);
+	const valid = await crypto.subtle.verify(
+		"HMAC",
+		key,
+		signatureBytes,
+		new TextEncoder().encode(identifier),
+	);
+	if (!valid) return noPending();
+
+	const [record] = await db
+		.select()
+		.from(schema.verifications)
+		.where(eq(schema.verifications.identifier, identifier))
+		.limit(1);
+	if (!record || record.expiresAt < new Date()) return noPending();
+
+	const [user] = await db
+		.select({
+			email: schema.users.email,
+			mfaMethod: schema.users.mfaMethod,
+			twoFactorEnabled: schema.users.twoFactorEnabled,
+		})
+		.from(schema.users)
+		.where(eq(schema.users.id, record.value))
+		.limit(1);
+	if (!user?.email) return noPending();
+
+	const at = user.email.indexOf("@");
+	const maskedEmail =
+		at > 0
+			? `${user.email.slice(0, Math.min(2, at))}***@${user.email.slice(at + 1)}`
+			: user.email;
+
+	return c.json({
+		method: user.mfaMethod ?? (user.twoFactorEnabled ? "totp" : null),
+		email: maskedEmail,
+	});
+});
+
 auth.all("/*", async (c) => {
 	return (await getAuthInstance()).handler(c.req.raw);
 });

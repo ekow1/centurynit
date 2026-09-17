@@ -24,6 +24,7 @@ export function OpsLogin() {
 	const [mfaMethod, setMfaMethod] = useState<string | null>(null);
 	const [twoFactorCode, setTwoFactorCode] = useState("");
 	const [useBackupCode, setUseBackupCode] = useState(false);
+	const [trustDevice, setTrustDevice] = useState(false);
 	const [otpSent, setOtpSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -126,9 +127,9 @@ export function OpsLogin() {
 		try {
 			let user;
 			if (mfaMethod === "email_otp") {
-				user = await opsVerifyEmailOtp(twoFactorCode);
+				user = await opsVerifyEmailOtp(twoFactorCode, trustDevice);
 			} else {
-				user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode);
+				user = await opsVerifyTwoFactor(twoFactorCode, useBackupCode, trustDevice);
 			}
 			navigate(ROLE_HOME[user.role] ?? ROLE_HOME.manager);
 		} catch (err) {
@@ -242,6 +243,26 @@ export function OpsLogin() {
 								<span>{loading ? "Verifying..." : "Verify & Sign In"}</span>
 								{loading ? null : <span dangerouslySetInnerHTML={{ __html: ARROW_SVG }} />}
 							</button>
+
+							<label
+								style={{
+									display: "flex",
+									alignItems: "center",
+									gap: "0.5rem",
+									marginTop: "0.85rem",
+									fontSize: "var(--text-xs)",
+									color: "var(--fg-muted)",
+									cursor: "pointer",
+								}}
+							>
+								<input
+									type="checkbox"
+									checked={trustDevice}
+									onChange={(e) => setTrustDevice(e.target.checked)}
+									disabled={loading}
+								/>
+								Trust this device for 30 days
+							</label>
 
 							<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1rem", fontSize: "var(--text-xs)" }}>
 								{mfaMethod !== "email_otp" && (

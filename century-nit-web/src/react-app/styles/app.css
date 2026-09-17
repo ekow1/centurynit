@@ -3917,34 +3917,95 @@ img.profile-monogram {
 	border-style: solid;
 }
 
-/* MFA method strip — all three routes visible, the active one inverts. */
-.auth-methods {
+/* MFA identity strip — who is being verified and where in the flow. */
+.mfa-ident {
 	display: flex;
-	gap: 0.4rem;
-	flex-wrap: wrap;
-	margin-bottom: 0.25rem;
+	align-items: center;
+	gap: 0.55rem;
+	border: 1px solid var(--border);
+	padding: 0.45rem 0.7rem;
+	margin-bottom: 1.25rem;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.05em;
 }
 
-.auth-methods button {
-	font-family: var(--font-mono);
-	font-size: 0.56rem;
-	letter-spacing: 0.08em;
+.mfa-ident__dot {
+	width: 0.5rem;
+	height: 0.5rem;
+	background: var(--foreground);
+	flex-shrink: 0;
+}
+
+.mfa-ident__mail {
+	font-weight: 700;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mfa-ident__step {
+	margin-left: auto;
+	color: var(--muted-foreground);
+	font-size: 0.55rem;
+	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	padding: 0.35rem 0.65rem;
-	border: 1px solid var(--foreground);
-	background: var(--background);
-	color: var(--foreground);
+	white-space: nowrap;
+}
+
+/* Trust-device checkbox — subordinate to the verify action. */
+.mfa-trust {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	margin-top: 0.85rem;
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.05em;
+	color: var(--muted-foreground);
 	cursor: pointer;
 }
 
-.auth-methods button.on {
-	background: var(--foreground);
-	color: var(--accent-foreground);
+.mfa-trust input {
+	appearance: none;
+	width: 0.65rem;
+	height: 0.65rem;
+	border: 1.5px solid var(--muted-foreground);
+	background: var(--background);
+	margin: 0;
+	flex-shrink: 0;
+	cursor: pointer;
 }
 
-.auth-methods button:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
+.mfa-trust input:checked {
+	background: var(--foreground);
+	border-color: var(--foreground);
+}
+
+.mfa-trust input:focus-visible {
+	outline: 3px solid var(--ring);
+	outline-offset: 2px;
+}
+
+/* Escape-route divider — labels the alternatives as recovery routes. */
+.mfa-escrow {
+	display: flex;
+	align-items: center;
+	gap: 0.8rem;
+	margin: 1.3rem 0 0.2rem;
+	font-family: var(--font-mono);
+	font-size: 0.56rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+}
+
+.mfa-escrow::before,
+.mfa-escrow::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: var(--border);
 }
 
 .auth-back {
@@ -3973,6 +4034,11 @@ img.profile-monogram {
 	justify-content: space-between;
 	gap: 0.5rem 1.25rem;
 	margin-top: 1.25rem;
+}
+
+.auth-alt--center {
+	justify-content: center;
+	margin-top: 0.6rem;
 }
 
 .auth-alt__link {

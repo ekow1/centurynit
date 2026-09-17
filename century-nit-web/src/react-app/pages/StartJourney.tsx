@@ -12,6 +12,7 @@ import {
 	sendMfaEmailCode,
 	verifyMfaEmailCode,
 	verifyMfaBackupCode,
+	fetchMfaMethod,
 	requestPasswordReset,
 	resetPassword,
 	checkEmailExists,
@@ -155,16 +156,21 @@ export function StartJourney() {
 	const [resendCooldown, setResendCooldown] = useState(0);
 	const [mfaCode, setMfaCode] = useState("");
 	/*
-	 * Which second factor the user is answering with.
+	 * Which second factor the user is answering with, and which they enrolled.
 	 *
-	 * The challenge arrives with no session, so the server cannot tell us whether
-	 * they enrolled with an authenticator or email — and a recovery code has to
-	 * be available whichever they chose. The screen therefore offers all three
-	 * and lets the user say, rather than guessing and stranding them.
+	 * The challenge window has no session, but the server can still read the
+	 * signed two-factor cookie and report the enrolled method (mfaMethod) —
+	 * null when the lookup fails, in which case every route stays reachable.
+	 * mfaMode is the input currently on screen; it starts on the enrolled
+	 * method and moves only through the escape links.
 	 */
 	const [mfaMode, setMfaMode] = useState<"totp" | "email" | "backup">("totp");
-	const [mfaEmailSent, setMfaEmailSent] = useState(false);
+	const [mfaMethod, setMfaMethod] = useState<"totp" | "email_otp" | null>(null);
+	/* Verify routes the sign-in response advertised (["totp","otp"] / ["otp"]). */
+	const [mfaRoutes, setMfaRoutes] = useState<string[]>([]);
+	const [mfaMaskedEmail, setMfaMaskedEmail] = useState<string | null>(null);
 	const [mfaBackupCode, setMfaBackupCode] = useState("");
+	const [trustDevice, setTrustDevice] = useState(false);
 	/*
 	 * "password" | "code" — the email-code sign-in is an inline alternative on
 	 * the same panel, not a tab. Code mode only exists for sign-in; signup
@@ -342,8 +348,16 @@ export function StartJourney() {
 				if ((data as Record<string, unknown>)?.twoFactorRedirect) {
 					setLoading(false);
 					setMfaCode("");
+					setMfaBackupCode("");
+					setMfaMode("totp");
+					setMfaMethod(null);
+					setMfaMaskedEmail(null);
+					setTrustDevice(false);
 					setError("");
 					setStep("mfa_otp");
+					void resolveMfaChallenge(
+						(data as { twoFactorMethods?: string[] }).twoFactorMethods ?? [],
+					);
 					return;
 				}
 
@@ -494,6 +508,55 @@ export function StartJourney() {
 		}
 	}
 
+	/**
+	 * Ask the server which second factor this sign-in enrolled.
+	 *
+	 * There is no session yet — the signed two-factor cookie is the only proof
+	 * the password passed — so this reads the method from `/api/auth/mfa/method`
+	 * rather than an authenticated settings endpoint. An email-OTP enrollee then
+	 * lands straight on the email challenge with the code already sent; anything
+	 * unresolved keeps the authenticator input with every escape route intact.
+	 */
+	async function resolveMfaChallenge(availableRoutes: string[]) {
+		setMfaRoutes(availableRoutes);
+		let enrolled: "totp" | "email_otp" | null = null;
+		try {
+			const info = await fetchMfaMethod();
+			if (info?.method) {
+				enrolled = info.method;
+				setMfaMethod(info.method);
+				setMfaMaskedEmail(info.email ?? null);
+			}
+		} catch {
+			// Endpoint unreachable — fall back to the advertised routes below.
+		}
+		/*
+		 * When the endpoint can't say, the sign-in response still tells us
+		 * which verify routes exist: an email-OTP enrollee gets ["otp"] only —
+		 * their TOTP secret was armed but never verified — while a TOTP
+		 * enrollee gets ["totp","otp"].
+		 */
+		if (!enrolled) {
+			enrolled = !availableRoutes.includes("totp") && availableRoutes.includes("otp")
+				? "email_otp"
+				: null;
+		}
+		if (enrolled === "email_otp") {
+			setMfaMode("email");
+			try {
+				await sendMfaEmailCode();
+				setResendCooldown(30);
+			} catch {
+				// Delivery failed — the resend link below stays available.
+			}
+		}
+	}
+
+	/** Whether an authenticator exists to answer with — gates that escape link. */
+	const mfaCanTotp = mfaMethod
+		? mfaMethod === "totp"
+		: mfaRoutes.length === 0 || mfaRoutes.includes("totp");
+
 	/** Verify the second factor — authenticator, emailed code, or recovery code. */
 	async function onMfaSubmit(e: FormEvent) {
 		e.preventDefault();
@@ -505,9 +568,9 @@ export function StartJourney() {
 		setError("");
 		setLoading(true);
 		try {
-			if (mfaMode === "backup") await verifyMfaBackupCode(mfaBackupCode.trim());
-			else if (mfaMode === "email") await verifyMfaEmailCode(mfaCode);
-			else await verifyTotp(mfaCode);
+			if (mfaMode === "backup") await verifyMfaBackupCode(mfaBackupCode.trim(), trustDevice);
+			else if (mfaMode === "email") await verifyMfaEmailCode(mfaCode, trustDevice);
+			else await verifyTotp(mfaCode, trustDevice);
 			// After MFA verification the session is established — reload so
 			// probeSession() picks up the cookie and RequireAuth admits us.
 			window.location.href = "/portal";
@@ -526,7 +589,6 @@ export function StartJourney() {
 		try {
 			await sendMfaEmailCode();
 			setMfaMode("email");
-			setMfaEmailSent(true);
 			setMfaCode("");
 			setResendCooldown(30);
 		} catch (err) {
@@ -605,7 +667,7 @@ export function StartJourney() {
 	const stepEyebrow =
 		step === "signin" ? "Client portal"
 			: step === "verify_email" ? "Check your inbox"
-			: step === "mfa_otp" ? "Two-factor verification"
+			: step === "mfa_otp" ? "Security check"
 			: "Password reset";
 
 	const stepTitle =
@@ -620,7 +682,7 @@ export function StartJourney() {
 						: step === "verify_email"
 							? "Enter the code"
 							: step === "mfa_otp"
-								? "Your second factor"
+								? "Verify it's you"
 								: authMode === "signin"
 									? "Welcome back"
 									: "Create your account";
@@ -678,15 +740,7 @@ export function StartJourney() {
 							<p className="start-journey__sub">
 								We sent a 6-digit code to <strong>{signupEmail}</strong>. It expires shortly — the account only exists once the code checks out.
 							</p>
-						) : step === "mfa_otp" ? (
-							<p className="start-journey__sub">
-								{mfaMode === "backup"
-									? "Enter one of the single-use recovery codes you saved."
-									: mfaMode === "email"
-										? "Enter the code we emailed you — it expires in a few minutes."
-										: "Enter the code from your authenticator app."}
-							</p>
-						) : (
+						) : step === "mfa_otp" ? null : (
 							<p className="start-journey__sub">
 								You're all set — sign back in with your new password.
 							</p>
@@ -1024,36 +1078,11 @@ export function StartJourney() {
 
 					{step === "mfa_otp" ? (
 						<form className="auth-form" onSubmit={onMfaSubmit} noValidate>
-							{/*
-							 * Every enrolled user needs a route in even when the thing they
-							 * enrolled with is unavailable, so all three methods stay on
-							 * screen as a strip rather than hiding behind links.
-							 */}
-							<div className="auth-methods" role="tablist" aria-label="Verification method">
-								<button
-									type="button"
-									className={mfaMode === "totp" ? "on" : ""}
-									onClick={() => { setMfaMode("totp"); setError(""); setMfaBackupCode(""); }}
-									disabled={loading}
-								>
-									Authenticator
-								</button>
-								<button
-									type="button"
-									className={mfaMode === "email" ? "on" : ""}
-									onClick={() => void (mfaEmailSent ? (setMfaMode("email"), setMfaCode("")) : switchToEmailedCode())}
-									disabled={loading}
-								>
-									Email me a code
-								</button>
-								<button
-									type="button"
-									className={mfaMode === "backup" ? "on" : ""}
-									onClick={() => { setMfaMode("backup"); setError(""); setMfaCode(""); }}
-									disabled={loading}
-								>
-									Recovery code
-								</button>
+							{/* Who is being verified, and where they are in the flow. */}
+							<div className="mfa-ident">
+								<span className="mfa-ident__dot" aria-hidden />
+								<span className="mfa-ident__mail">{email}</span>
+								<span className="mfa-ident__step">Step 2 of 2</span>
 							</div>
 
 							{mfaMode === "backup" ? (
@@ -1074,13 +1103,26 @@ export function StartJourney() {
 								</Field>
 							) : (
 								<div className="field">
-									<label id="sj-mfa-label" htmlFor="sj-mfa">6-digit security code</label>
+									<label id="sj-mfa-label" htmlFor="sj-mfa">
+										{mfaMode === "email" ? "Email code" : "Authenticator app code"}
+									</label>
 									<OtpInput
 										id="sj-mfa"
 										value={mfaCode}
 										onChange={setMfaCode}
 										disabled={loading}
 									/>
+									<span className="hint">
+										{mfaMode === "email" ? (
+											<>
+												Code sent the moment you signed in — check{" "}
+												<strong>{mfaMaskedEmail ?? "your inbox"}</strong>. It expires in a
+												few minutes.
+											</>
+										) : (
+											"Open your authenticator app — the code refreshes every 30 seconds."
+										)}
+									</span>
 								</div>
 							)}
 
@@ -1096,7 +1138,29 @@ export function StartJourney() {
 								{loading ? "Verifying…" : "Verify"}
 							</Button>
 
-							<div className="auth-alt">
+							<label className="mfa-trust">
+								<input
+									type="checkbox"
+									checked={trustDevice}
+									onChange={(e) => setTrustDevice(e.target.checked)}
+									disabled={loading}
+								/>
+								Trust this device for 30 days
+							</label>
+
+							{/*
+							 * Escape routes sit below the action — the methods you're NOT
+							 * answering with, framed as recovery. "Use authenticator" only
+							 * appears when an authenticator exists to use.
+							 */}
+							<div className="mfa-escrow">
+								{mfaMode === "totp"
+									? "Can't get to your authenticator?"
+									: mfaMode === "email"
+										? "Wrong inbox, or nothing arrived?"
+										: "Recovery code not working?"}
+							</div>
+							<div className="auth-alt auth-alt--center">
 								{mfaMode === "email" ? (
 									<button
 										type="button"
@@ -1106,7 +1170,38 @@ export function StartJourney() {
 									>
 										{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
 									</button>
+								) : (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={switchToEmailedCode}
+										disabled={loading}
+									>
+										Email me a code
+									</button>
+								)}
+								{mfaMode !== "backup" ? (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={() => { setMfaMode("backup"); setError(""); setMfaCode(""); }}
+										disabled={loading}
+									>
+										Use a recovery code
+									</button>
 								) : null}
+								{mfaMode !== "totp" && mfaCanTotp ? (
+									<button
+										type="button"
+										className="auth-alt__link"
+										onClick={() => { setMfaMode("totp"); setError(""); setMfaBackupCode(""); }}
+										disabled={loading}
+									>
+										Use authenticator
+									</button>
+								) : null}
+							</div>
+							<div className="auth-alt auth-alt--center" style={{ marginTop: "0.6rem" }}>
 								<button type="button" className="auth-alt__link" onClick={backToSignIn}>
 									← Back to sign in
 								</button>

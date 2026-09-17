@@ -105,6 +105,8 @@ function entityLink(c: ChatConversation): { to: string; label: string } | null {
 	return null;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function EnterpriseHelpdesk() {
 	const { opsUser, opsRole } = useOpsAuth();
 	const [searchParams] = useSearchParams();
@@ -112,7 +114,11 @@ export function EnterpriseHelpdesk() {
 
 	// The conversation id is the URL's source of truth, so /helpdesk?id=… deep
 	// links (e.g. from the Team Assignments board) open a thread directly.
-	const activeConvId = searchParams.get("id") || null;
+	// Anything that isn't a UUID (stale /chat?id=<ref> links, case refs pasted
+	// into the bar) must not reach the API — it validates the path as uuid and
+	// would 400 every messages/context/read call against it.
+	const rawConvId = searchParams.get("id") || null;
+	const activeConvId = rawConvId && UUID_RE.test(rawConvId) ? rawConvId : null;
 	// /helpdesk?client=<clientUserId> — deep link from the client directory
 	// record pane; narrows the queue to that account's threads.
 	const clientFilter = searchParams.get("client") || null;

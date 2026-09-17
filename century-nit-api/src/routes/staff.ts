@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
-import { and, desc, eq, isNull, sql, count } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql, count } from "drizzle-orm";
 import { timingSafeEqual } from "node:crypto";
 import {
 	acceptInvitationSchema,
@@ -15,7 +15,7 @@ import {
 	AUTH_ERROR_CODES,
 } from "century-nit-shared";
 import { db } from "../db/index.js";
-import { coordinationGrants, conversationParticipants, opsUsers, staffPresence, users, sessions, accounts } from "../db/schema.js";
+import { applications, bookings, conversations, coordinationGrants, conversationParticipants, opsUsers, staffPresence, users, sessions, accounts } from "../db/schema.js";
 import { recordAdminEvent, requestIp } from "../services/audit.js";
 import { env } from "../env.js";
 import { HttpError, validationHook } from "../middleware/error.js";
@@ -563,10 +563,13 @@ staffRouter.openapi(
 									mfaEnabled: z.boolean(),
 									lastSeenAt: z.string().nullable(),
 									ownedConversations: z.number(),
+									ownedCases: z.number(),
+									bookingsThisWeek: z.number(),
 									canCoordinate: z.boolean(),
 									grantExpiresAt: z.string().nullable(),
 								}),
 							),
+							unownedConversations: z.number(),
 						}),
 					},
 				},
@@ -613,6 +616,53 @@ staffRouter.openapi(
 			.groupBy(conversationParticipants.opsUserId);
 		const ownedBy = new Map(ownerCounts.map((r) => [r.opsUserId, r.n]));
 
+		// Case ownership — applications where this staff row is the whole-case
+		// owner. Same grouped-query pattern as conversation ownership.
+		const caseCounts = await db
+			.select({
+				assignedStaffId: applications.assignedStaffId,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(applications)
+			.where(sql`${applications.assignedStaffId} IS NOT NULL`)
+			.groupBy(applications.assignedStaffId);
+		const casesBy = new Map(caseCounts.map((r) => [r.assignedStaffId, r.n]));
+
+		// Consultation bookings this week per handler — the rail's workload line.
+		const weekEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+		const bookingCounts = await db
+			.select({
+				employeeId: bookings.employeeId,
+				n: sql<number>`count(*)::int`,
+			})
+			.from(bookings)
+			.where(
+				and(
+					sql`${bookings.employeeId} IS NOT NULL`,
+					gte(bookings.startsAt, new Date()),
+					lte(bookings.startsAt, weekEnd),
+					inArray(bookings.status, ["CONFIRMED", "ASSIGNED", "RESCHEDULED", "UNASSIGNED"]),
+				),
+			)
+			.groupBy(bookings.employeeId);
+		const bookingsBy = new Map(bookingCounts.map((r) => [r.employeeId, r.n]));
+
+		// Client-facing conversations with no owner — the queue's unclaimed pile,
+		// surfaced on the directory header so coverage gaps are visible.
+		const [unowned] = await db
+			.select({ n: sql<number>`count(*)::int` })
+			.from(conversations)
+			.where(
+				and(
+					inArray(conversations.type, ["support", "applicant", "case", "stage"]),
+					eq(conversations.status, "open"),
+					sql`NOT EXISTS (
+						SELECT 1 FROM ${conversationParticipants} cp
+						WHERE cp.conversation_id = ${conversations.id} AND cp.role = 'owner'
+					)`,
+				),
+			);
+
 		// Hide super_admin accounts from non-super_admin users so they
 		// never appear in the directory, the role filter, or the count
 		// badges. A super_admin sees everyone.
@@ -636,10 +686,13 @@ staffRouter.openapi(
 					mfaEnabled: r.twoFactorEnabled ?? false,
 					lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
 					ownedConversations: ownedBy.get(r.id) ?? 0,
+					ownedCases: casesBy.get(r.id) ?? 0,
+					bookingsThisWeek: bookingsBy.get(r.id) ?? 0,
 					canCoordinate: grantActive,
 					grantExpiresAt: grantActive && r.grantExpiresAt ? r.grantExpiresAt.toISOString() : null,
 				};
 			}),
+			unownedConversations: unowned?.n ?? 0,
 		});
 	},
 );
@@ -935,6 +988,107 @@ staffRouter.openapi(
 				current: presented.length > 0 && r.token.startsWith(presented),
 			})),
 		});
+	},
+);
+
+/* ── POST /api/v1/staff/sessions/:sessionId/revoke ───────────────────────────
+ * Kill one staff session row — the per-row action on the /auth sessions table.
+ * Refuses to revoke the caller's own current session (use sign-out instead).
+ */
+
+staffRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/sessions/{sessionId}/revoke",
+		tags: ["Staff"],
+		summary: "Revoke one staff session",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		request: { params: z.object({ sessionId: z.string() }) },
+		responses: {
+			200: {
+				description: "Session revoked",
+				content: { "application/json": { schema: z.object({ success: z.boolean() }) } },
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		const { sessionId } = c.req.valid("param");
+
+		const [row] = await db
+			.select({ id: sessions.id, token: sessions.token, userId: sessions.userId })
+			.from(sessions)
+			.where(eq(sessions.id, sessionId))
+			.limit(1);
+		if (!row) throw new HttpError(404, "NOT_FOUND", "Session not found");
+
+		const cookieHeader = c.req.header("cookie") ?? "";
+		const presented = decodeURIComponent(
+			cookieHeader.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? "",
+		).split(".")[0];
+		if (presented && row.token.startsWith(presented)) {
+			throw new HttpError(400, "SELF_SESSION", "Sign out to end your own session");
+		}
+
+		await db.delete(sessions).where(eq(sessions.id, sessionId));
+		await recordAdminEvent({
+			category: "Authentication",
+			action: "Revoked staff session",
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: `session:${sessionId.slice(0, 8)}`,
+			ip: requestIp(c),
+			userAgent: c.req.header("user-agent") ?? null,
+		});
+		return c.json({ success: true });
+	},
+);
+
+/* ── POST /api/v1/staff/:id/revoke-sessions ─────────────────────────────────
+ * Every session a staff member holds — the "revoke all" on their record rail.
+ */
+
+staffRouter.openapi(
+	createRoute({
+		method: "post",
+		path: "/{id}/revoke-sessions",
+		tags: ["Staff"],
+		summary: "Revoke all sessions for a staff member",
+		middleware: [requireAuth, requireMfa, requireModule("auth")] as const,
+		request: { params: z.object({ id: z.string().uuid() }) },
+		responses: {
+			200: {
+				description: "Sessions revoked",
+				content: {
+					"application/json": {
+						schema: z.object({ success: z.boolean(), revokedCount: z.number() }),
+					},
+				},
+			},
+		},
+	}),
+	async (c) => {
+		const staff = c.get("staff");
+		const { id } = c.req.valid("param");
+		const [target] = await db
+			.select({ id: opsUsers.id, userId: opsUsers.userId, email: opsUsers.email })
+			.from(opsUsers)
+			.where(eq(opsUsers.id, id))
+			.limit(1);
+		if (!target?.userId) throw new HttpError(404, "NOT_FOUND", "Staff member not found or has no login");
+
+		const removed = await db.delete(sessions).where(eq(sessions.userId, target.userId)).returning({ id: sessions.id });
+		await recordAdminEvent({
+			category: "Authentication",
+			action: "Revoked all staff sessions",
+			actorId: staff?.opsUserId,
+			actorEmail: staff?.email,
+			target: `staff:${target.email}`,
+			detail: `${removed.length} session(s)`,
+			ip: requestIp(c),
+			userAgent: c.req.header("user-agent") ?? null,
+		});
+		return c.json({ success: true, revokedCount: removed.length });
 	},
 );
 

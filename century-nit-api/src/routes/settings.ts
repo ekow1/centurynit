@@ -386,6 +386,7 @@ settingsRouter.openapi(
 						schema: z.object({
 							entries: z.array(unifiedAuditEntrySchema),
 							total: z.number(),
+							facets: z.record(z.string(), z.number()),
 						}),
 					},
 				},

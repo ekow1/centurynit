@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useOpsAuth } from "../OpsAuthContext";
 import { useCases } from "../../hooks/useCases";
@@ -120,6 +120,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 		commentOnApplication,
 		requestApplicationDocs,
+		refreshApplication,
+		refreshConsultation,
 		recordProceed,
 		reinviteProceed,
 		declineProceed,
@@ -133,8 +135,31 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	} = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 
-	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-	const [actionError, setActionError] = useState<string | null>(null);
+	// Flashes carry the record they belong to — a success from case A must
+	// never render on case B when the pane switches inside the 4s window.
+	const [actionSuccess, setActionSuccess] = useState<{ forId: string; msg: string } | null>(null);
+	const [actionError, setActionError] = useState<{ forId: string; msg: string } | null>(null);
+
+	// A detail opened from the cached list can be stale — another tab's
+	// advance, a webhook'd payment, a coordinator's reassignment. Re-fetch
+	// the record itself on open; the shared store swaps in the fresh row.
+	useEffect(() => {
+		void refreshApplication(app.id).catch(() => {});
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- refreshApplication is a fresh closure per store render; app.id is the real key.
+	}, [app.id]);
+
+	// The Consultation chapter locks while its record is absent from the
+	// cached list — which can also mean "not fetched yet" rather than "not
+	// part of this case". Fetch by id when the case points at one; tried ids
+	// are remembered so a missing record doesn't retry on every poll.
+	const consultFetchTried = useRef(new Set<string>());
+	const consultationListed = consultations.some((c) => c.id === app.consultationId);
+	useEffect(() => {
+		const id = app.consultationId;
+		if (!id || consultationListed || consultFetchTried.current.has(id)) return;
+		consultFetchTried.current.add(id);
+		void refreshConsultation(id).catch(() => {});
+	}, [app.consultationId, consultationListed, refreshConsultation]);
 	const [appInvoice, setAppInvoice] = useState<ApiInvoice | null>(null);
 	const [appInvoiceLoading, setAppInvoiceLoading] = useState(false);
 
@@ -161,12 +186,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 	const flash = (msg: string) => {
 		setActionError(null);
-		setActionSuccess(msg);
+		setActionSuccess({ forId: app.id, msg });
 		window.setTimeout(() => setActionSuccess(null), 4000);
 	};
 	const fail = (err: unknown, fallback: string) => {
 		setActionSuccess(null);
-		setActionError(err instanceof Error ? err.message : fallback);
+		setActionError({ forId: app.id, msg: err instanceof Error ? err.message : fallback });
 	};
 
 	// Consent override and decline both need a reason; a sheet asks for it
@@ -254,7 +279,7 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 	const travelOpen = unlocks ? unlocks.travel_assistance : showTravel || app.visaStage === "complete";
 	const tabs: { id: TabId; label: string; locked: boolean; hint?: string }[] = [
 		{ id: "overview", label: "Overview", locked: false },
-		{ id: "consultation", label: "Consultation", locked: !consultation, hint: "Opened from a consultation" },
+		{ id: "consultation", label: "Consultation", locked: !consultation && !app.consultationId, hint: "Opened from a consultation" },
 		{ id: "enrolment", label: "Enrolment", locked: !enrolOpen, hint: "Unlocks after the assessment" },
 		{ id: "application", label: "Applications", locked: !applicationOpen, hint: "Unlocks once the deposit is paid" },
 		{ id: "visa", label: "Visa", locked: !visaOpen, hint: "Unlocks on the first admission" },
@@ -412,8 +437,8 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 	return (
 		<div className="cn-detail">
-			{actionSuccess && <p className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess}</p>}
-			{actionError && <p className="ops-modal__error" style={{ margin: 0 }}>{actionError}</p>}
+			{actionSuccess?.forId === app.id && <p role="status" className="ops-modal__foot" style={{ margin: 0 }}>{actionSuccess.msg}</p>}
+			{actionError?.forId === app.id && <p role="alert" className="ops-modal__error" style={{ margin: 0 }}>{actionError.msg}</p>}
 			<CaseHeader
 				name={app.applicantName}
 				reference={app.appId}
@@ -435,9 +460,13 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 						History{noteCount > 0 ? ` · ${noteCount}` : ""}
 					</button>
 				}
-				stageHandlers={(app.stageHandlers ?? [])
-					.filter((h) => h.opsUserName !== app.assignedStaff)
-					.map((h) => ({ stage: h.stage, name: h.opsUserName }))}
+				stageHandlers={[
+					...(app.stageHandlers ?? [])
+						.filter((h) => h.opsUserName !== app.assignedStaff)
+						.map((h) => ({ stage: h.stage, name: h.opsUserName })),
+					// Who steers the journey — read-only here; delegation lives in the Workspace.
+					...(app.journeyCoordinatorName ? [{ stage: "Journey", name: `→ ${app.journeyCoordinatorName}` }] : []),
+				]}
 				contact={{ email: app.email, phone: app.phone }}
 				extra={[
 					{ label: "Country", value: app.country || "—" },
@@ -522,7 +551,12 @@ export function CaseDetail({ app, initialTab }: { app: MockApplication; initialT
 
 			{current === "overview" && <OverviewTab app={app} consultation={consultation} canWork={canWork} flash={flash} fail={fail} />}
 
-			{current === "consultation" && consultation && <ConsultationTab app={app} consultation={consultation} />}
+			{current === "consultation" &&
+				(consultation ? (
+					<ConsultationTab app={app} consultation={consultation} />
+				) : (
+					<p className="muted" style={{ padding: "1rem 0" }}>Loading the consultation record…</p>
+				))}
 
 			{current === "enrolment" && <EnrolmentTab app={app} caseInvoices={caseInvoices} canIssueInvoices={canIssueInvoices} canWork={canWork} flash={flash} fail={fail} />}
 
@@ -621,10 +655,10 @@ function CaseStateLine({ app, closed }: { app: MockApplication; closed: boolean 
 		pill = { label: "Needs attention", tone: "line" };
 		facts.push(app.proceedStatus === "accepted" ? `client confirmed ${day(app.proceededAt) ?? ""}`.trim() : "awaiting the client's confirmation");
 	} else if (app.proceedStatus === "paused") {
-		pill = { label: "New", tone: "hollow" };
+		pill = { label: "On hold", tone: "hollow" };
 		facts.push("on hold by the client" + (app.declinedReason ? ` · "${app.declinedReason}"` : ""));
 	} else if (app.proceedStatus === "declined") {
-		pill = { label: "New", tone: "hollow" };
+		pill = { label: "Declined", tone: "hollow" };
 		facts.push("declined to enrol" + (app.declinedReason ? ` · "${app.declinedReason}"` : ""));
 	} else if (app.proceedStatus && app.proceedStatus !== "accepted") {
 		pill = { label: "New", tone: "hollow" };

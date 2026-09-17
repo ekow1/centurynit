@@ -4722,6 +4722,12 @@ a.dash-kpi--on:hover {
 .cn-chip--on { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
 .cn-chip--on .cn-chip__n { color: rgba(255, 255, 255, 0.7); }
 .cn-chip--locked { border-style: dashed; border-color: var(--border-light); color: var(--muted-foreground); opacity: 0.75; cursor: default; }
+/* The journey track — chapter nodes joined by a connector that fills as
+   the case passes them. */
+.cn-track__node { display: inline-flex; align-items: center; }
+.cn-track__link { width: 0.85rem; height: 1px; background: var(--border-light); margin: 0 0.1rem; }
+.cn-track__link--done { background: var(--foreground); }
+.cn-chip--end { cursor: default; }
 
 /* What the case needs from us — a numbered list on hairlines under the state line. */
 .cn-todo { display: flex; flex-direction: column; }
@@ -4772,6 +4778,43 @@ a.dash-kpi--on:hover {
 	color: var(--muted-foreground);
 }
 .cn-todo__block { font-size: 0.78rem; color: var(--muted-foreground); padding: 0.5rem 0 0; line-height: 1.45; margin: 0; }
+/* The headline task — the one thing to do, before the list of things. */
+.cn-todo__next {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 0.75rem;
+	align-items: center;
+	padding: 0.7rem 0;
+	border-top: 1px solid var(--foreground);
+	border-bottom: 1px solid var(--border-light);
+}
+.cn-todo__next-k {
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	background: var(--foreground);
+	color: var(--background);
+	padding: 0.2rem 0.5rem;
+}
+.cn-todo__more {
+	align-self: flex-start;
+	background: none;
+	border: 0;
+	padding: 0.45rem 0;
+	font-family: var(--font-mono, ui-monospace, monospace);
+	font-size: 0.62rem;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--muted-foreground);
+	cursor: pointer;
+}
+.cn-todo__more:hover { color: var(--foreground); }
+@media (max-width: 720px) {
+	.cn-todo__next { grid-template-columns: minmax(0, 1fr); }
+	.cn-todo__next .cn-todo__a { justify-content: flex-start; }
+}
 @media (max-width: 720px) {
 	.cn-todo__row { grid-template-columns: 1.6rem minmax(0, 1fr); }
 	.cn-todo__a { grid-column: 2; justify-content: flex-start; }

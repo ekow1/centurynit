@@ -313,6 +313,11 @@
 .cn-row__assign { margin-left: 0.5rem; padding: 0.1rem 0.5rem; font-size: var(--text-xs); font-weight: 600; border: 1px solid currentColor; background: transparent; color: inherit; cursor: pointer; }
 .cn-row__assign:hover { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
 .cn-row__needs { margin-left: 0.5rem; font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 700; color: inherit; }
+/* A band header inside a rows list — day or priority grouping. */
+.cn-band { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; padding: 0.45rem 1rem; border-bottom: 1px solid var(--border-light); background: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-foreground); }
+/* The channel marker on a consultation row — online call vs in-person. */
+.cn-row__chan { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted-foreground); }
+.cn-row--selected .cn-row__chan { color: inherit; }
 
 /* ── Work panel (collapsible, above the tabs) ───────────────────────────── */
 .cn-work { border: 1px solid var(--border-light); background: var(--background); }

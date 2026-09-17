@@ -99,6 +99,7 @@ function SystemOverview() {
 	const [rolesCount, setRolesCount] = useState<number | null>(null);
 	const [health, setHealth] = useState<HealthDetail | null>(null);
 	const [auth, setAuth] = useState<AuthSettingsResponse | null>(null);
+	const [deliveryLog, setDeliveryLog] = useState<NotificationLogItem[]>([]);
 	const [auditEntries, setAuditEntries] = useState<{ id: string; at: string; actor: string; action: string; detail: string; ip: string }[]>([]);
 
 	useEffect(() => {
@@ -135,6 +136,7 @@ function SystemOverview() {
 
 	useEffect(() => {
 		getAuthSettings().then(setAuth).catch(() => undefined);
+		notificationsApi.log(8).then((r) => setDeliveryLog(r.notifications)).catch(() => undefined);
 	}, []);
 
 	useEffect(() => {
@@ -159,10 +161,10 @@ function SystemOverview() {
 
 	const dbOk = health?.components.database.ok ?? null;
 	const redisOk = health?.components.redis.ok ?? null;
-	const waitingJobs = health?.components.queues.reduce((n, q) => n + q.waiting, 0) ?? null;
-	const failedJobs = health?.components.queues.reduce((n, q) => n + q.failed, 0) ?? null;
-	const allUp = dbOk === true && redisOk === true;
-	const healthNote = health === null ? "Health endpoint unreachable" : allUp ? "All measured components responding" : "A component is down";
+	const queues = health?.components.queues ?? [];
+	const waitingJobs = health ? queues.reduce((n, q) => n + q.waiting, 0) : null;
+	const emailQueue = queues.find((q) => q.name === "email") ?? null;
+	const apiOk = health !== null && health.status === "ok";
 
 	const authRows: [string, string][] = auth
 		? [
@@ -170,88 +172,124 @@ function SystemOverview() {
 				["Portal MFA", auth.portal.mfa_required ? "required" : "optional"],
 				["Ops sign-in", [auth.ops.email_password && "password", auth.ops.google_sso && "Google SSO"].filter(Boolean).join(" + ") || "disabled"],
 				["Ops MFA", auth.ops.mfa_required ? "enforced" : "optional"],
+				["Staff", staffCount === null ? "—" : `${activeStaff ?? "—"} active of ${staffCount} · ${rolesCount ?? "—"} roles`],
 			]
 		: [];
 
 	return (
 		<>
-			<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-				<Stat label="Staff Accounts" value={staffCount === null ? "—" : String(staffCount)} note={activeStaff === null ? "Loading…" : `${activeStaff} active`} />
-				<Stat label="Roles Configured" value={rolesCount === null ? "—" : String(rolesCount)} note="System & custom roles" />
-				<Stat
-					label="Components"
-					value={health === null ? "—" : allUp ? "OK" : "Down"}
-					note={healthNote}
-					inverted={health !== null && !allUp}
+			{/* Measured component cards — every number comes from /health/detail */}
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
+				<HealthCard
+					name="API"
+					pill={health === null ? "unreachable" : apiOk ? "Up" : "Degraded"}
+					pillFilled={health !== null && apiOk}
+					big={health === null ? "no response" : `${health.latencyMs}ms`}
+					sub="/health/detail · just now"
+					foot={health ? `node ${health.node} · up ${Math.floor(health.uptimeSeconds / 3600)}h${Math.floor((health.uptimeSeconds % 3600) / 60)}m` : "health endpoint did not answer"}
 				/>
-				<Stat
-					label="Queue depth"
-					value={waitingJobs === null ? "—" : String(waitingJobs)}
-					note={failedJobs === null ? "Measuring…" : failedJobs > 0 ? `${failedJobs} failed` : "0 failed"}
-					inverted={Boolean(failedJobs && failedJobs > 0)}
+				<HealthCard
+					name="Postgres"
+					pill={dbOk === null ? "unknown" : dbOk ? "Connected" : "Down"}
+					pillFilled={dbOk === true}
+					big={dbOk === null ? "—" : dbOk ? `SELECT 1 · ${health?.components.database.ms ?? "?"}ms` : "no connection"}
+					sub="readiness probe"
+					foot="Neon Postgres"
+				/>
+				<HealthCard
+					name="Redis / queues"
+					pill={redisOk === null ? "unknown" : redisOk ? "Up" : "Down"}
+					pillFilled={redisOk === true}
+					big={redisOk === null ? "—" : `${queues.length} queues · ${waitingJobs ?? 0} waiting`}
+					sub={queues.length > 0 ? queues.map((q) => q.name).join(" · ") : "queue depth unmeasured"}
+					foot={redisOk === null ? "ping failed" : `BullMQ · ping ${health?.components.redis.ms ?? "?"}ms`}
+				/>
+				<HealthCard
+					name="Email worker"
+					pill={emailQueue === null ? "Unmeasured" : emailQueue.failed > 0 ? "Failing" : emailQueue.waiting > 0 ? "Working" : "Idle"}
+					pillFilled={emailQueue !== null && emailQueue.failed === 0}
+					big={emailQueue === null ? "—" : `${emailQueue.waiting} waiting`}
+					sub={emailQueue === null ? "email queue not reporting" : `${emailQueue.failed} failed`}
+					foot="via Resend"
 				/>
 			</div>
 
-			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
-				<div className="card">
-					<h2 className="section-title mb-3">Components — measured</h2>
-					<div className="admin-service-status-list">
-						{[
-							{ name: "Postgres", ok: dbOk, ms: health?.components.database.ms ?? null },
-							{ name: "Redis / queues", ok: redisOk, ms: health?.components.redis.ms ?? null },
-						].map((svc) => (
-							<div key={svc.name} className="admin-service-status-row">
-								<div className="admin-service-status-row__indicator">
-									<span className={`admin-status-dot admin-status-dot--${svc.ok === null ? "degraded" : svc.ok ? "operational" : "down"}`} />
-								</div>
-								<div className="admin-service-status-row__name">{svc.name}</div>
-								<div className="admin-service-status-row__metrics">
-									<span className="mono muted">{svc.ms === null ? "—" : `${svc.ms}ms`}</span>
-								</div>
-								<span className={`admin-status-pill admin-status-pill--${svc.ok === null ? "degraded" : svc.ok ? "operational" : "down"}`}>
-									{svc.ok === null ? "unknown" : svc.ok ? "up" : "down"}
-								</span>
-							</div>
-						))}
-						{(health?.components.queues ?? []).map((q) => (
-							<div key={q.name} className="admin-service-status-row">
-								<div className="admin-service-status-row__indicator">
-									<span className={`admin-status-dot admin-status-dot--${q.failed > 0 ? "degraded" : "operational"}`} />
-								</div>
-								<div className="admin-service-status-row__name" style={{ paddingLeft: "1rem" }}>{q.name} queue</div>
-								<div className="admin-service-status-row__metrics">
-									<span className="mono muted">{q.waiting} waiting{q.failed > 0 ? ` · ${q.failed} failed` : ""}</span>
-								</div>
-								<span className={`admin-status-pill admin-status-pill--${q.failed > 0 ? "degraded" : "operational"}`}>
-									{q.failed > 0 ? "failing" : "draining"}
-								</span>
-							</div>
-						))}
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1rem", marginBottom: "2rem", alignItems: "start" }}>
+				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Notifications — delivery log</h2>
+						<Link to="/notifications" className="dash-link">full log →</Link>
 					</div>
-					{health && (
-						<p className="muted mono" style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
-							node {health.node} · up {Math.floor(health.uptimeSeconds / 3600)}h{Math.floor((health.uptimeSeconds % 3600) / 60)}m · checked {new Date(health.timestamp).toLocaleTimeString()}
-						</p>
+					{deliveryLog.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No deliveries recorded yet.</p>
+					) : (
+						<div className="ops-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th>Recipient</th>
+										<th>Template</th>
+										<th>Status</th>
+										<th>Sent</th>
+									</tr>
+								</thead>
+								<tbody>
+									{deliveryLog.slice(0, 8).map((n) => (
+										<tr key={n.id}>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{n.recipient}</td>
+											<td className="mono" style={{ fontSize: "var(--text-xs)" }}>{n.template ?? "—"}</td>
+											<td>
+												{n.status === "sent" ? (
+													<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)" }}>Delivered</span>
+												) : (
+													<>
+														<span className="portal-pill portal-pill--hollow" style={{ textDecoration: "underline", textDecorationStyle: "wavy" }}>Failed</span>
+														{n.errorMessage && <div className="muted" style={{ fontSize: "0.65rem" }}>{n.errorMessage}</div>}
+													</>
+												)}
+											</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(n.sentAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
 					)}
 				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">Configured</h2>
+				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
+						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Configured — from the settings store</h2>
+					</div>
 					{authRows.length === 0 ? (
-						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 0" }}>Loading settings…</p>
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>Loading settings…</p>
 					) : (
-						<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+						<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0 }}>
 							{authRows.map(([label, value]) => (
-								<Row key={label} label={label} value={value} />
+								<li key={label} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)" }}>
+									<span className="cl-kv__k">{label}</span>
+									<span style={{ fontSize: "var(--text-xs)" }}>{value}</span>
+								</li>
 							))}
 						</ul>
 					)}
-					<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.75rem" }}>
-						Values come from the settings store — <Link to="/settings" className="dash-link">edit in System config →</Link>
-					</p>
+					<div style={{ borderTop: "1px solid var(--border-light)", padding: "0.5rem 1.25rem" }}>
+						<Link to="/settings" className="dash-link">edit → /settings</Link>
+					</div>
 				</div>
 			</div>
 
 			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2rem" }}>
+				<div className="card">
+					<h2 className="section-title mb-3">Quick Actions</h2>
+					<div className="admin-quick-actions">
+						<Link to="/users" className="admin-quick-action">Manage users</Link>
+						<Link to="/cms" className="admin-quick-action">Edit site content</Link>
+						<Link to="/auth" className="admin-quick-action">Configure auth</Link>
+						<Link to="/audit" className="admin-quick-action">View audit log</Link>
+						<Link to="/settings" className="admin-quick-action">System config</Link>
+						<Link to="/notifications" className="admin-quick-action">Notifications</Link>
+					</div>
+				</div>
 				<div className="card">
 					<h2 className="section-title mb-3">Recent Activity</h2>
 					{activityLog.length === 0 ? (
@@ -268,17 +306,6 @@ function SystemOverview() {
 							))}
 						</ul>
 					)}
-				</div>
-				<div className="card">
-					<h2 className="section-title mb-3">Quick Actions</h2>
-					<div className="admin-quick-actions">
-						<Link to="/users" className="admin-quick-action">Manage users</Link>
-						<Link to="/cms" className="admin-quick-action">Edit site content</Link>
-						<Link to="/auth" className="admin-quick-action">Configure auth</Link>
-						<Link to="/audit" className="admin-quick-action">View audit log</Link>
-						<Link to="/settings" className="admin-quick-action">System config</Link>
-						<Link to="/notifications" className="admin-quick-action">Notifications</Link>
-					</div>
 				</div>
 			</div>
 
@@ -336,6 +363,8 @@ type StaffRow = {
 	mfaEnabled: boolean;
 	lastSeenAt: string | null;
 	ownedConversations: number;
+	ownedCases: number;
+	bookingsThisWeek?: number;
 	canCoordinate: boolean;
 	grantExpiresAt: string | null;
 };
@@ -354,7 +383,10 @@ interface DynamicRole {
 
 function UsersAndRoles() {
 	const { opsUser, opsRole, roleCatalog, refreshPermissions, hasCapability } = useOpsAuth();
-	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix">("staff");
+	const [activeSubTab, setActiveSubTab] = useState<"staff" | "matrix" | "invites">("staff");
+	const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+	const [unownedConvs, setUnownedConvs] = useState(0);
+	const [revokingSessions, setRevokingSessions] = useState(false);
 	const [roleFilter, setRoleFilter] = useState<string>("all");
 	const [search, setSearch] = useState("");
 	const [roleSearch, setRoleSearch] = useState("");
@@ -435,6 +467,7 @@ function UsersAndRoles() {
 					role: s.role as OpsRole,
 				})),
 			);
+			setUnownedConvs(staffRes.unownedConversations ?? 0);
 			setInvitations(inviteRes.invitations);
 			if (rolesRes.roles && rolesRes.roles.length > 0) {
 				setRoles(rolesRes.roles);
@@ -473,25 +506,6 @@ function UsersAndRoles() {
 		setConfirmAction(() => action);
 		setConfirmOpen(true);
 	}
-
-	const canDeleteStaff = opsRole === "super_admin";
-
-	const handleDeleteStaff = (u: typeof staff[number]) => {
-		confirm(
-			"Delete Staff Permanently",
-			`This will permanently delete ${u.name} (${u.email}) and their login. This action cannot be undone.`,
-			async () => {
-				try {
-					await staffApi.deleteStaff(u.id);
-					say(`${u.name} has been permanently deleted.`);
-					await refresh();
-				} catch (err) {
-					setError(err instanceof Error ? err.message : "Failed to delete staff member");
-				}
-			},
-			true,
-		);
-	};
 
 	async function submitInvite(e: React.FormEvent) {
 		e.preventDefault();
@@ -784,81 +798,153 @@ function UsersAndRoles() {
 		return invitations.filter((i) => i.status === "PENDING");
 	}, [invitations]);
 
+	// Pending invites render as table rows too — the directory is everyone who
+	// could hold a login, not just everyone who has used one.
+	const pendingRows = useMemo(() => {
+		const q = search.toLowerCase().trim();
+		return pending.filter(
+			(i) =>
+				(roleFilter === "all" || i.role === roleFilter) &&
+				(!q || (i.name ?? "").toLowerCase().includes(q) || i.email.toLowerCase().includes(q)),
+		);
+	}, [pending, roleFilter, search]);
+
+	const activeThisWeek = useMemo(() => {
+		const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		return staff.filter((s) => s.lastSeenAt && new Date(s.lastSeenAt).getTime() > cutoff).length;
+	}, [staff]);
+
+	const branchesCovered = useMemo(
+		() => new Set(staff.map((s) => s.branch).filter(Boolean)).size,
+		[staff],
+	);
+
+	const selectedStaff = useMemo(
+		() => (selectedStaffId ? (staff.find((s) => s.id === selectedStaffId) ?? null) : null),
+		[staff, selectedStaffId],
+	);
+
+	const moduleCountFor = useCallback(
+		(roleId: string) => {
+			if (roleId === "super_admin") return allModuleIds.length;
+			return roles.find((r) => r.id === roleId)?.permissions.length ?? 0;
+		},
+		[roles, allModuleIds],
+	);
+
+	async function revokeAllSessions(u: StaffRow) {
+		setRevokingSessions(true);
+		try {
+			const r = await staffApi.revokeAllSessions(u.id);
+			say(`Signed ${u.name} out everywhere — ${r.revokedCount} session(s) revoked.`);
+			await refresh();
+		} catch (err) {
+			setError(err instanceof ApiError ? err.message : "Could not revoke sessions");
+		} finally {
+			setRevokingSessions(false);
+		}
+	}
+
 	return (
 		<>
-			{flash ? <div className="inv-flash" style={{ marginBottom: "1rem" }}>✓ {flash}</div> : null}
+			{flash ? <div className="admin-flash admin-flash--ok" role="status">✓ {flash}</div> : null}
 			{error ? <p className="ops-modal__error" role="alert">{error}</p> : null}
 
-			{/* Sub Tabs: Staff Directory vs Client Accounts vs Roles & Permissions */}
-			<div style={{ display: "flex", gap: "0.5rem", borderBottom: "var(--medium)", marginBottom: "1.5rem" }}>
-				<button
-					type="button"
-					onClick={() => setActiveSubTab("staff")}
-					style={{
-						padding: "0.6rem 1.25rem",
-						fontFamily: "var(--font-mono)",
-						fontSize: "var(--text-sm)",
-						textTransform: "uppercase",
-						letterSpacing: "0.05em",
-						border: "none",
-						borderBottom: activeSubTab === "staff" ? "3px solid var(--foreground)" : "3px solid transparent",
-						background: "transparent",
-						fontWeight: activeSubTab === "staff" ? 700 : 500,
-						cursor: "pointer",
-					}}
-				>
-					Staff Directory ({staff.length})
-				</button>
-				<button
-					type="button"
-					onClick={() => setActiveSubTab("matrix")}
-					style={{
-						padding: "0.6rem 1.25rem",
-						fontFamily: "var(--font-mono)",
-						fontSize: "var(--text-sm)",
-						textTransform: "uppercase",
-						letterSpacing: "0.05em",
-						border: "none",
-						borderBottom: activeSubTab === "matrix" ? "3px solid var(--foreground)" : "3px solid transparent",
-						background: "transparent",
-						fontWeight: activeSubTab === "matrix" ? 700 : 500,
-						cursor: "pointer",
-					}}
-				>
-					Roles & Permissions ({roles.length})
-				</button>
+			{/* Statstrip — who can sign in, who holds the work, what's uncovered */}
+			<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+				<span className="dash-day__cut"><strong>{staff.length}</strong> staff</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{activeThisWeek}</strong> active this week</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{roles.length}</strong> roles</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{branchesCovered}</strong> branches covered</span>
+				<span className="dash-day__sep">·</span>
+				<span className="dash-day__cut"><strong>{unownedConvs}</strong> conversations unowned</span>
+				<Link to="/clients" className="dash-link" style={{ marginLeft: "auto" }}>clients → /clients</Link>
+			</div>
+
+			{/* Chip sub-tabs */}
+			<div className="cn-scaffold__filters cn-scaffold__filters--row" style={{ border: "1px solid var(--border-light)", marginBottom: "1.5rem" }}>
+				<div className="cn-scaffold__chips" role="tablist" aria-label="Staff sections">
+					{([
+						["staff", "Directory", staff.length],
+						["matrix", "Role matrix", null],
+						["invites", `Invites`, pending.length],
+					] as const).map(([id, label, n]) => {
+						const on = activeSubTab === id;
+						return (
+							<button
+								key={id}
+								type="button"
+								role="tab"
+								aria-selected={on}
+								className="ops-pill"
+								onClick={() => setActiveSubTab(id)}
+								style={{
+									cursor: "pointer",
+									marginLeft: 0,
+									border: "1px solid var(--border)",
+									background: on ? "var(--foreground)" : "transparent",
+									color: on ? "var(--background)" : "var(--foreground)",
+								}}
+							>
+								{label}
+								{n !== null && n !== undefined ? (
+									<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
+										{id === "invites" ? `${n} pending` : n}
+									</span>
+								) : null}
+							</button>
+						);
+					})}
+					<Link
+						to="/clients"
+						className="ops-pill"
+						style={{
+							marginLeft: 0,
+							border: "1px dashed var(--border)",
+							color: "var(--muted-foreground)",
+							textDecoration: "none",
+						}}
+					>
+						Clients → moved to /clients
+					</Link>
+				</div>
+				{activeSubTab === "staff" && (
+					<input
+						type="search"
+						placeholder="Search staff…"
+						className="cn-search"
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						style={{ marginLeft: "auto" }}
+					/>
+				)}
 			</div>
 
 			{/* ── Sub-tab 1: Staff Directory ── */}
 			{activeSubTab === "staff" && (
 				<>
 					<div className="admin-section-head" style={{ marginBottom: "1.5rem" }}>
-						<input
-							type="search"
-							placeholder="Search staff..."
-							className="input input--sm input--full-border"
-							style={{ maxWidth: "260px" }}
-							value={search}
-							onChange={(e) => setSearch(e.target.value)}
-						/>
-						<div className="admin-section-head__actions">
-							<div className="admin-env-tabs">
+						<div className="admin-env-tabs">
+							<button
+								onClick={() => setRoleFilter("all")}
+								className={`admin-env-tab${roleFilter === "all" ? " admin-env-tab--active" : ""}`}
+							>
+								All roles
+							</button>
+							{roles.map((r) => (
 								<button
-									onClick={() => setRoleFilter("all")}
-									className={`admin-env-tab${roleFilter === "all" ? " admin-env-tab--active" : ""}`}
+									key={r.id}
+									onClick={() => setRoleFilter(r.id)}
+									className={`admin-env-tab${roleFilter === r.id ? " admin-env-tab--active" : ""}`}
 								>
-									All
+									{r.name}
 								</button>
-								{roles.map((r) => (
-									<button
-										key={r.id}
-										onClick={() => setRoleFilter(r.id)}
-										className={`admin-env-tab${roleFilter === r.id ? " admin-env-tab--active" : ""}`}
-									>
-										{r.name}
-									</button>
-								))}
-							</div>
+							))}
+						</div>
+						<div className="admin-section-head__actions">
 							{inviteable.length > 0 ? (
 								<button className="btn btn--primary btn--sm" onClick={() => setInviting(true)}>+ Invite Staff</button>
 							) : null}
@@ -1134,85 +1220,229 @@ function UsersAndRoles() {
 							<table className="admin-table">
 								<thead>
 									<tr>
-										<th>Name</th>
-										<th>Email</th>
+										<th>Staff</th>
 										<th>Role</th>
 										<th>Branch</th>
-										<th>Status</th>
 										<th>Presence</th>
 										<th>MFA</th>
 										<th>Owns</th>
-										<th style={{ textAlign: "right" }}>Action</th>
+										<th>Modules</th>
+										<th style={{ textAlign: "right" }}></th>
 									</tr>
 								</thead>
 								<tbody>
 									{loading ? (
-										<tr><td colSpan={9} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
-									) : rows.length === 0 ? (
-										<tr><td colSpan={9} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members match criteria.</td></tr>
+										<tr><td colSpan={8} className="muted" style={{ padding: "2rem", textAlign: "center" }}>Loading…</td></tr>
+									) : rows.length === 0 && pendingRows.length === 0 ? (
+										<tr><td colSpan={8} className="muted" style={{ padding: "2rem", textAlign: "center" }}>No staff members match criteria.</td></tr>
 									) : (
-										rows.map((u) => (
-											<tr key={u.id}>
-												<td style={{ fontWeight: 500 }}>
-													{u.name}
-													{u.email === opsUser?.email && (
-														<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", color: "var(--muted-foreground)" }}>YOU</span>
-													)}
-												</td>
-												<td className="muted">{u.email}</td>
-												<td>
-													<span className="mono" style={{ fontSize: "var(--text-xs)" }}>
-														{roleLabelMap[u.role] ?? u.role}
-													</span>
-												</td>
-												<td className="muted">{staffBranchName(u.branch ?? "")}</td>
-												<td>
-													<span
-														className="portal-pill"
-														style={u.active ? { background: "var(--foreground)", color: "var(--background)" } : undefined}
+										<>
+											{rows.map((u) => {
+												const on = selectedStaffId === u.id;
+												return (
+													<tr
+														key={u.id}
+														className={`cl-tr${on ? " cl-tr--on" : ""}`}
+														role="button"
+														tabIndex={0}
+														onClick={() => setSelectedStaffId(on ? null : u.id)}
+														onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedStaffId(on ? null : u.id); }}
 													>
-														{u.active ? "Active" : "Inactive"}
-													</span>
-												</td>
-												<td className="muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>
-													{u.hasLogin ? formatPresence(u.lastSeenAt) : "no login"}
-												</td>
-												<td className="muted">
-												{u.mfaEnabled ? "On" : u.hasLogin ? "Off" : "No login"}
-												{u.canCoordinate && (
-													<span
-														className="mono"
-														title={u.grantExpiresAt ? `Case oversight granted until ${u.grantExpiresAt.slice(0, 10)}` : "Standing case-oversight grant"}
-														style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}
-													>
-														COORD
-													</span>
-												)}
-											</td>
-											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
-												{u.ownedConversations > 0 ? `${u.ownedConversations} convs` : "—"}
-											</td>
-											<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-												<button className="btn btn--ghost btn--sm" onClick={() => setEditing(u)}>Edit</button>
-												{canDeleteStaff && u.email !== opsUser?.email && (
-													<button
-														className="btn btn--danger btn--sm"
-														onClick={() => handleDeleteStaff(u)}
-														style={{ marginLeft: "0.4rem", background: "#7f1d1d", borderColor: "#7f1d1d", color: "#ffffff" }}
-													>
-														Delete
-													</button>
-												)}
-											</td>
-											</tr>
-										))
+														<td>
+															<div style={{ fontWeight: 600 }}>
+																{u.name}
+																{u.email === opsUser?.email && (
+																	<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", color: "var(--muted-foreground)" }}>YOU</span>
+																)}
+															</div>
+															<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{u.email}</div>
+														</td>
+														<td>
+															<span className={`portal-pill${u.active ? "" : " portal-pill--hollow"}`} style={u.active ? { background: "var(--foreground)", color: "var(--background)" } : undefined}>
+																{roleLabelMap[u.role] ?? u.role}
+															</span>
+														</td>
+														<td className="muted" style={{ fontSize: "var(--text-xs)" }}>{staffBranchName(u.branch ?? "")}</td>
+														<td className="muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>
+															{u.hasLogin ? formatPresence(u.lastSeenAt) : "no login"}
+														</td>
+														<td className="muted" style={{ fontSize: "var(--text-xs)" }}>
+															{u.mfaEnabled ? "✓" : u.hasLogin ? "—" : "—"}
+															{u.canCoordinate && (
+																<span
+																	className="mono"
+																	title={u.grantExpiresAt ? `Case oversight granted until ${u.grantExpiresAt.slice(0, 10)}` : "Standing case-oversight grant"}
+																	style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}
+																>
+																	COORD
+																</span>
+															)}
+														</td>
+														<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>
+															{u.ownedConversations + u.ownedCases > 0 ? `${u.ownedConversations} convs · ${u.ownedCases} cases` : "—"}
+														</td>
+														<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>
+															{moduleCountFor(u.role)}/{allModuleIds.length}
+														</td>
+														<td style={{ textAlign: "right" }}>
+															<span className="dash-link">{on ? "close ↑" : "record →"}</span>
+														</td>
+													</tr>
+												);
+											})}
+											{pendingRows.map((i) => (
+												<tr key={`inv-${i.id}`}>
+													<td>
+														<div style={{ fontWeight: 600 }}>{i.name ?? "—"}</div>
+														<div className="muted" style={{ fontSize: "var(--text-xs)" }}>{i.email}</div>
+													</td>
+													<td><span className="portal-pill portal-pill--hollow">Invited</span></td>
+													<td className="muted" style={{ fontSize: "var(--text-xs)" }}>—</td>
+													<td className="muted" style={{ fontSize: "var(--text-xs)" }}>never signed in</td>
+													<td className="muted" style={{ fontSize: "var(--text-xs)" }}>—</td>
+													<td className="muted" style={{ fontSize: "var(--text-xs)" }}>—</td>
+													<td className="muted" style={{ fontSize: "var(--text-xs)" }}>—</td>
+													<td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+														<button className="dash-link" style={{ background: "none", border: 0, cursor: "pointer" }} disabled={resendingId === i.id} onClick={() => void resend(i.id)}>
+															{resendingId === i.id ? "sending…" : "resend"}
+														</button>
+														{" · "}
+														<button className="dash-link" style={{ background: "none", border: 0, cursor: "pointer", textDecorationStyle: "wavy" }} onClick={() => void revoke(i.id)}>
+															revoke
+														</button>
+													</td>
+												</tr>
+											))}
+										</>
 									)}
 								</tbody>
 							</table>
 						</div>
 					</div>
 
-					{pending.length > 0 ? (
+					{/* Selected record — matrix on the left, their rail on the right */}
+					{selectedStaff && (
+						<div className="cl-split" style={{ marginBottom: "2rem" }}>
+							<div className="card" style={{ padding: 0, overflow: "hidden", flex: 1, minWidth: 0 }}>
+								<div style={{ padding: "0.85rem 1.1rem", borderBottom: "var(--hairline)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+									<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Role matrix — {roleLabelMap[selectedStaff.role] ?? selectedStaff.role}</h2>
+									<span className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{moduleCountFor(selectedStaff.role)}/{allModuleIds.length} modules</span>
+								</div>
+								<div className="ops-table-wrap" style={{ maxHeight: "26rem", overflowY: "auto" }}>
+									<table className="admin-table">
+										<thead>
+											<tr>
+												<th>Module</th>
+												{roles.map((r) => (
+													<th key={r.id} style={{ textAlign: "center" }}>{r.name}</th>
+												))}
+											</tr>
+										</thead>
+										<tbody>
+											{MODULE_GROUPS.map((g) => (
+												<>
+													{g.modules.map((m, mi) => (
+														<tr key={m.id}>
+															<td style={{ fontWeight: 500, fontSize: "var(--text-xs)" }}>
+																{mi === 0 && <span className="mono muted" style={{ fontSize: "0.6rem", display: "block" }}>{g.group}</span>}
+																{m.label}
+															</td>
+															{roles.map((r) => {
+																const has = r.id === "super_admin" || (r.permissions ?? []).includes(m.id);
+																return (
+																	<td key={r.id} style={{ textAlign: "center" }}>
+																		<input
+																			type="checkbox"
+																			checked={has}
+																			disabled={r.id === "super_admin" || !hasCapability("manage_roles")}
+																			onChange={(e) => void togglePermission(r.id, m.id, e.target.checked)}
+																			style={r.id === selectedStaff.role ? { outline: "2px solid var(--foreground)", outlineOffset: 1 } : undefined}
+																		/>
+																	</td>
+																);
+															})}
+														</tr>
+													))}
+												</>
+											))}
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							<aside className="cl-record">
+								<div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
+									<div>
+										<p className="eyebrow" style={{ margin: 0 }}>Staff record</p>
+										<h3 style={{ margin: "0.3rem 0 0", fontSize: "1.05rem", fontWeight: 800 }}>{selectedStaff.name}</h3>
+										<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>{selectedStaff.email}</p>
+									</div>
+									<button type="button" className="btn btn--xs btn--ghost" onClick={() => setSelectedStaffId(null)}>✕</button>
+								</div>
+
+								<p className="cl-sec">Account</p>
+								<div className="cl-kv"><span className="cl-kv__k">Role</span><span>{roleLabelMap[selectedStaff.role] ?? selectedStaff.role}{roles.find((r) => r.id === selectedStaff.role)?.rank != null ? ` · rank ${roles.find((r) => r.id === selectedStaff.role)!.rank}` : ""}</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">Branch</span><span>{staffBranchName(selectedStaff.branch ?? "")}</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">MFA</span><span>{selectedStaff.mfaEnabled ? "enrolled" : selectedStaff.hasLogin ? "not enrolled" : "no login"}</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">Last seen</span><span>{selectedStaff.hasLogin ? formatPresence(selectedStaff.lastSeenAt) : "never signed in"}</span></div>
+
+								<p className="cl-sec">Load</p>
+								<div className="cl-kv"><span className="cl-kv__k">Owns</span><span>{selectedStaff.ownedConversations} conversations</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">Cases</span><span>{selectedStaff.ownedCases} assigned</span></div>
+								<div className="cl-kv"><span className="cl-kv__k">Bookings</span><span>{selectedStaff.bookingsThisWeek ?? "—"} this week</span></div>
+
+								<div className="cl-danger">
+									<p className="cl-danger__h">Access</p>
+									<div className="cl-kv">
+										<span className="cl-kv__k">Sessions</span>
+										<span>
+											<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} disabled={revokingSessions || !selectedStaff.hasLogin} onClick={() => void revokeAllSessions(selectedStaff)}>
+												{revokingSessions ? "revoking…" : "revoke all"}
+											</button>
+										</span>
+									</div>
+									<div className="cl-kv">
+										<span className="cl-kv__k">Account</span>
+										<span>
+											<button type="button" className="dash-link" style={{ background: "none", border: 0, padding: 0, cursor: "pointer" }} onClick={() => { setEditing(selectedStaff); }}>
+												edit…
+											</button>
+											{selectedStaff.active && selectedStaff.email !== opsUser?.email && (
+												<>
+													{" · "}
+													<button
+														type="button"
+														className="dash-link"
+														style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textDecorationStyle: "wavy" }}
+														onClick={() =>
+															confirm(
+																`Deactivate ${selectedStaff.name}?`,
+																"They will be blocked from the console until reactivated. Their owned work is not reassigned.",
+																async () => {
+																	await staffApi.update(selectedStaff.id, { active: false });
+																	say(`${selectedStaff.name} deactivated.`);
+																	setSelectedStaffId(null);
+																	await refresh();
+																},
+																true,
+															)
+														}
+													>
+														deactivate
+													</button>
+												</>
+											)}
+										</span>
+									</div>
+								</div>
+							</aside>
+						</div>
+					)}
+				</>
+			)}
+
+			{/* ── Sub-tab 2: Pending invitations ── */}
+			{activeSubTab === "invites" && pending.length > 0 ? (
 						<div className="card" style={{ marginBottom: "2rem" }}>
 							<h2 className="section-title mb-3">Pending invitations</h2>
 							<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -1242,10 +1472,12 @@ function UsersAndRoles() {
 							</ul>
 						</div>
 					) : null}
-				</>
-			)}
 
-			{/* ── Sub-tab 2: Client Accounts & Access ── */}
+			{activeSubTab === "invites" && pending.length === 0 && !loading ? (
+				<div className="card" style={{ marginBottom: "2rem", padding: "2rem", textAlign: "center" }}>
+					<p className="muted" style={{ margin: 0 }}>No pending invitations. Use Invite staff to send one.</p>
+				</div>
+			) : null}
 
 			{/* ── Sub-tab 3: Master-Detail Roles & Permissions ── */}
 			{activeSubTab === "matrix" && (
@@ -1826,6 +2058,10 @@ function AuthSettings() {
 		id: string; email: string; name: string; role: string; ip: string | null;
 		userAgent: string | null; createdAt: string; expiresAt: string; current: boolean;
 	}[]>([]);
+	const [signInEvents, setSignInEvents] = useState<
+		{ id: string; action: string; actorEmail: string | null; ip: string | null; at: string }[]
+	>([]);
+	const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -1837,12 +2073,16 @@ function AuthSettings() {
 			getAuthSettings(),
 			staffApi.authStats(),
 			staffApi.sessions().catch(() => ({ sessions: [] })),
+			apiFetch<{ entries: { id: string; action: string; actorEmail: string | null; ip: string | null; at: string }[] }>(
+				`${API_PREFIX}/settings/admin-audit?category=Authentication&limit=8`,
+			).catch(() => ({ entries: [] })),
 		])
-			.then(([s, st, se]) => {
+			.then(([s, st, se, ev]) => {
 				if (!active) return;
 				setSettings(s);
 				setStats(st);
 				setSessionRows(se.sessions);
+				setSignInEvents(ev.entries);
 				setError(null);
 			})
 			.catch((e: unknown) => {
@@ -1851,6 +2091,18 @@ function AuthSettings() {
 			.finally(() => { if (active) setLoading(false); });
 		return () => { active = false; };
 	}, []);
+
+	async function revokeSession(id: string) {
+		setRevokingSessionId(id);
+		try {
+			await staffApi.revokeSession(id);
+			setSessionRows((prev) => prev.filter((r) => r.id !== id));
+		} catch (e: unknown) {
+			setError(e instanceof Error ? e.message : "Could not revoke session.");
+		} finally {
+			setRevokingSessionId(null);
+		}
+	}
 
 	async function updateSettings(patch: { portal?: Partial<AuthSettingsResponse["portal"]>; ops?: Partial<AuthSettingsResponse["ops"]> }) {
 		if (!settings) return;
@@ -1890,13 +2142,16 @@ function AuthSettings() {
 
 	return (
 		<>
-			{/* Stats row */}
+			{/* Statstrip — who signs in, who's covered, who's live */}
 			{stats && (
-				<div className="ops-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
-					<Stat label="Staff Accounts" value={String(stats.totalStaff)} note={`${stats.mfaEnrolled} with MFA`} />
-					<Stat label="MFA Enrolled" value={`${stats.mfaEnrolled}/${stats.mfaRequired}`} note={`${mfaPct}% coverage`} />
-					<Stat label="MFA Outstanding" value={String(stats.mfaNotEnrolled)} note={stats.mfaNotEnrolled > 0 ? "Action required" : "All enrolled"} inverted={stats.mfaNotEnrolled > 0} />
-					<Stat label="Active Sessions" value={String(stats.activeSessions)} note="Currently signed in" />
+				<div className="dash-day" style={{ margin: "0 0 1rem" }}>
+					<span className="dash-day__cut"><strong>{stats.totalStaff}</strong> staff accounts</span>
+					<span className="dash-day__sep">·</span>
+					<span className="dash-day__cut"><strong>{stats.mfaEnrolled}/{stats.totalStaff}</strong> MFA enrolled · {mfaPct}%</span>
+					<span className="dash-day__sep">·</span>
+					<span className="dash-day__cut"><strong>{stats.mfaNotEnrolled}</strong> MFA outstanding</span>
+					<span className="dash-day__sep">·</span>
+					<span className="dash-day__cut"><strong>{sessionRows.length || stats.activeSessions}</strong> active sessions</span>
 				</div>
 			)}
 
@@ -1908,6 +2163,72 @@ function AuthSettings() {
 			{saved && (
 				<div className="admin-flash admin-flash--ok" role="status">
 					✓ Settings saved. Changes take effect on next login.
+				</div>
+			)}
+
+			{/* Sign-in policy at a glance + who still owes MFA */}
+			{stats && (
+				<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+					<div className="card" style={{ marginBottom: 0 }}>
+						<div className="admin-section-head" style={{ marginBottom: "0.75rem" }}>
+							<h2 className="section-title" style={{ margin: 0 }}>Sign-in policy</h2>
+							<span className="portal-pill" style={{ background: "var(--foreground)", color: "var(--background)" }}>Live</span>
+						</div>
+						<div className="ops-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th>Surface</th>
+										<th style={{ textAlign: "center" }}>Password</th>
+										<th style={{ textAlign: "center" }}>Google</th>
+										<th style={{ textAlign: "center" }}>Magic link</th>
+										<th style={{ textAlign: "center" }}>MFA</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr>
+										<td>Client portal</td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={s.portal.email_password} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={s.portal.social_google} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={s.portal.email_otp} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={s.portal.mfa_required} /></td>
+									</tr>
+									<tr>
+										<td>Ops console</td>
+										<td style={{ textAlign: "center" }}><PolicyBox on /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={s.ops.google_sso} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on={false} /></td>
+										<td style={{ textAlign: "center" }}><PolicyBox on /></td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+						<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "0.75rem", borderTop: "1px solid var(--border-light)", paddingTop: "0.6rem" }}>
+							<span className="dash-link">edit policy ↓ below</span>
+							<span className="mono muted" style={{ fontSize: "0.62rem" }}>changes apply at next login</span>
+						</div>
+					</div>
+
+					<div className="card" style={{ marginBottom: 0 }}>
+						<div className="admin-section-head" style={{ marginBottom: "0.75rem" }}>
+							<h2 className="section-title" style={{ margin: 0 }}>MFA outstanding</h2>
+							<span className="portal-pill portal-pill--hollow">{stats.mfaNotEnrolled}</span>
+						</div>
+						{stats.mfaRoster.filter((r) => !r.enrolled).length === 0 ? (
+							<p className="muted" style={{ margin: 0, fontSize: "var(--text-sm)" }}>Every staff account with a login has MFA enrolled.</p>
+						) : (
+							<ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+								{stats.mfaRoster.filter((r) => !r.enrolled).map((r) => (
+									<li key={r.id} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)" }}>
+										<span className="cl-kv__k" style={{ fontWeight: 600 }}>{r.name}</span>
+										<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+											{r.hasLogin ? `${staffBranchName(r.branch ?? "")} · ${r.role}` : "invited, never signed in"}
+										</span>
+									</li>
+								))}
+							</ul>
+						)}
+					</div>
 				</div>
 			)}
 
@@ -2082,50 +2403,84 @@ function AuthSettings() {
 				</div>
 			</div>
 
-			{/* Active sessions — live rows from the sessions table */}
-			<div className="card" style={{ marginBottom: "1.5rem" }}>
-				<h2 className="section-title mb-3">Active Staff Sessions</h2>
-				<p className="muted mb-3" style={{ fontSize: "var(--text-sm)" }}>
-					Live sessions joined to the staff directory. Revoking an account is handled from the staff directory.
-				</p>
-				{sessionRows.length === 0 ? (
-					<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 0" }}>No active staff sessions.</p>
-				) : (
-					<div className="ops-table-wrap">
-						<table className="admin-table">
-							<thead>
-								<tr>
-									<th>Staff</th>
-									<th>Role</th>
-									<th>IP</th>
-									<th>Device</th>
-									<th>Signed in</th>
-									<th>Expires</th>
-								</tr>
-							</thead>
-							<tbody>
-								{sessionRows.map((r) => (
-									<tr key={r.id}>
-										<td style={{ fontWeight: 500 }}>
-											{r.name}
-											{r.current && (
-												<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}>THIS SESSION</span>
-											)}
-											<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 400 }}>{r.email}</span>
-										</td>
-										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.role}</td>
-										<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.ip ?? "—"}</td>
-										<td className="muted" style={{ fontSize: "var(--text-xs)", maxWidth: "16rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.userAgent ?? undefined}>
-											{shortUserAgent(r.userAgent)}
-										</td>
-										<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(r.createdAt).toLocaleString()}</td>
-										<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(r.expiresAt).toLocaleDateString()}</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
+			{/* Active sessions + sign-in events — both real streams */}
+			<div className="ops-grid" style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1rem", marginBottom: "1.5rem", alignItems: "start" }}>
+				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
+						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Active staff sessions</h2>
 					</div>
-				)}
+					{sessionRows.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No active staff sessions.</p>
+					) : (
+						<div className="ops-table-wrap">
+							<table className="admin-table">
+								<thead>
+									<tr>
+										<th>Staff</th>
+										<th>Device</th>
+										<th>IP</th>
+										<th>Signed in</th>
+										<th style={{ textAlign: "right" }}></th>
+									</tr>
+								</thead>
+								<tbody>
+									{sessionRows.map((r) => (
+										<tr key={r.id}>
+											<td style={{ fontWeight: 500 }}>
+												{r.name}
+												{r.current && (
+													<span className="mono" style={{ fontSize: "0.6rem", marginLeft: "0.4rem", border: "1px solid var(--border)", padding: "0.05rem 0.25rem" }}>YOU</span>
+												)}
+												<span className="muted" style={{ display: "block", fontSize: "var(--text-xs)", fontWeight: 400 }}>{r.email} · {r.role}</span>
+											</td>
+											<td className="muted" style={{ fontSize: "var(--text-xs)", maxWidth: "12rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.userAgent ?? undefined}>
+												{shortUserAgent(r.userAgent)}
+											</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)" }}>{r.ip ?? "—"}</td>
+											<td className="mono muted" style={{ fontSize: "var(--text-xs)", whiteSpace: "nowrap" }}>{new Date(r.createdAt).toLocaleString()}</td>
+											<td style={{ textAlign: "right" }}>
+												{r.current ? (
+													<span className="mono muted" style={{ fontSize: "0.62rem" }}>current</span>
+												) : (
+													<button
+														type="button"
+														className="dash-link"
+														style={{ background: "none", border: 0, cursor: "pointer" }}
+														disabled={revokingSessionId === r.id}
+														onClick={() => void revokeSession(r.id)}
+													>
+														{revokingSessionId === r.id ? "revoking…" : "revoke"}
+													</button>
+												)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+				</div>
+
+				<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
+					<div style={{ padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--border-light)" }}>
+						<h2 className="section-title" style={{ margin: 0, fontSize: "0.95rem" }}>Recent sign-in events</h2>
+					</div>
+					{signInEvents.length === 0 ? (
+						<p className="muted" style={{ fontSize: "var(--text-sm)", padding: "1rem 1.25rem" }}>No sign-in events recorded yet — the stream fills as staff sign in.</p>
+					) : (
+						<ul style={{ listStyle: "none", padding: "0.3rem 0", margin: 0 }}>
+							{signInEvents.map((e) => (
+								<li key={e.id} className="cl-kv" style={{ borderBottom: "1px solid var(--border-light)", fontSize: "var(--text-xs)" }}>
+									<span className="cl-kv__k mono muted">{new Date(e.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+									<span>{e.actorEmail ?? "unknown"} · {e.ip ?? "—"}</span>
+								</li>
+							))}
+						</ul>
+					)}
+					<div style={{ borderTop: "1px solid var(--border-light)", padding: "0.5rem 1.25rem" }}>
+						<Link to="/audit" className="dash-link">full log → /audit</Link>
+					</div>
+				</div>
 			</div>
 
 			{/* MFA roster — who is and isn't enrolled */}
@@ -2411,8 +2766,8 @@ function SystemNotifications() {
 										<td className="muted">{n.template ?? "—"}</td>
 										<td>
 											<span
-												className="portal-pill"
-												style={n.status === "sent" ? { background: "var(--foreground)", color: "var(--background)", fontSize: "var(--text-xs)" } : { fontSize: "var(--text-xs)" }}
+												className={`portal-pill${n.status === "sent" ? "" : " portal-pill--hollow"}`}
+												style={n.status === "sent" ? { background: "var(--foreground)", color: "var(--background)", fontSize: "var(--text-xs)" } : { fontSize: "var(--text-xs)", textDecoration: "underline", textDecorationStyle: "wavy" }}
 											>
 												{n.status === "sent" ? "Delivered" : "Failed"}
 											</span>
@@ -2462,6 +2817,42 @@ function formatPresence(lastSeenAt: string | null): string {
 	if (ms < 60 * 60_000) return `${Math.floor(ms / 60_000)}m ago`;
 	if (ms < 24 * 60 * 60_000) return `${Math.floor(ms / 60 / 60_000)}h ago`;
 	return `${Math.floor(ms / 24 / 60 / 60_000)}d ago`;
+}
+
+/** A measured health component — ink card, hollow pill, no colour semantics. */
+function HealthCard({ name, pill, pillFilled, big, sub, foot }: {
+	name: string; pill: string; pillFilled: boolean; big: string; sub: string; foot: string;
+}) {
+	return (
+		<div className="card" style={{ marginBottom: 0, padding: 0, overflow: "hidden" }}>
+			<div style={{ padding: "0.7rem 1rem", borderBottom: "1px solid var(--border-light)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+				<span style={{ fontWeight: 600, fontSize: "var(--text-sm)" }}>{name}</span>
+				<span className={`portal-pill${pillFilled ? "" : " portal-pill--hollow"}`} style={pillFilled ? { background: "var(--foreground)", color: "var(--background)" } : undefined}>{pill}</span>
+			</div>
+			<div style={{ padding: "0.8rem 1rem" }}>
+				<strong style={{ fontSize: "1.05rem" }}>{big}</strong>
+				<div className="muted" style={{ fontSize: "0.68rem", marginTop: "0.15rem" }}>{sub}</div>
+			</div>
+			<div className="mono muted" style={{ borderTop: "1px solid var(--border-light)", padding: "0.4rem 1rem", fontSize: "0.62rem" }}>{foot}</div>
+		</div>
+	);
+}
+
+/** Monochrome policy-matrix checkbox — ink square when on, hollow when off. */
+function PolicyBox({ on }: { on: boolean }) {
+	return (
+		<span
+			aria-hidden
+			style={{
+				display: "inline-block",
+				width: "0.8rem",
+				height: "0.8rem",
+				border: "1.5px solid var(--foreground)",
+				background: on ? "var(--foreground)" : "transparent",
+				verticalAlign: "middle",
+			}}
+		/>
+	);
 }
 
 function shortUserAgent(ua: string | null): string {

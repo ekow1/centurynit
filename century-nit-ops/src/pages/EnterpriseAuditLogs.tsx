@@ -26,6 +26,7 @@ interface AuditEntry {
 interface AuditPage {
 	entries: AuditEntry[];
 	total: number;
+	facets?: Record<string, number>;
 }
 
 const CATEGORIES = [
@@ -60,6 +61,7 @@ function formatDate(iso: string): string {
 export function EnterpriseAuditLogs() {
 	const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
 	const [total, setTotal] = useState(0);
+	const [facets, setFacets] = useState<Record<string, number>>({});
 	const [loading, setLoading] = useState(true);
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export function EnterpriseAuditLogs() {
 			const res = await apiFetch<AuditPage>(`${API_PREFIX}/settings/admin-audit?${buildQuery(0)}`);
 			setAuditEntries(res.entries);
 			setTotal(res.total);
+			if (res.facets) setFacets(res.facets);
 		} catch (err) {
 			setError(err instanceof ApiError ? err.message : "Failed to load audit logs");
 		} finally {
@@ -202,16 +205,24 @@ export function EnterpriseAuditLogs() {
 					</div>
 				</div>
 				<div className="admin-env-tabs" style={{ marginTop: "0.75rem" }}>
-					{CATEGORIES.map((c) => (
-						<button
-							key={c}
-							type="button"
-							onClick={() => setSelectedCategory(c)}
-							className={`admin-env-tab${selectedCategory === c ? " admin-env-tab--active" : ""}`}
-						>
-							{c === "all" ? "All Events" : c}
-						</button>
-					))}
+					{CATEGORIES.map((c) => {
+						const n = c === "all" ? total : facets[c];
+						return (
+							<button
+								key={c}
+								type="button"
+								onClick={() => setSelectedCategory(c)}
+								className={`admin-env-tab${selectedCategory === c ? " admin-env-tab--active" : ""}`}
+							>
+								{c === "all" ? "All Events" : c}
+								{n != null && (
+									<span className="mono" style={{ marginLeft: "0.35rem", opacity: 0.65, fontSize: "0.62rem" }}>
+										{n}
+									</span>
+								)}
+							</button>
+						);
+					})}
 				</div>
 			</div>
 

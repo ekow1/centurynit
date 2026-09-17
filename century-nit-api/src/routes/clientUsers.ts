@@ -1,7 +1,10 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { z } from "zod";
+import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthVariables, requireCapability } from "../middleware/auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
+import { db } from "../db/index.js";
+import { bookings, conversations, conversationParticipants } from "../db/schema.js";
 import {
 	banClientUser,
 	deleteClientUser,
@@ -75,6 +78,96 @@ clientUsersRouter.openapi(
 		const query = c.req.valid("query");
 		const data = await listClientUsers(query);
 		return c.json(data);
+	},
+);
+
+/* ── GET /api/v1/client-users/:id/context ──────────────────────────────────────
+ * The record pane's live context: their next appointment and how many client
+ * threads sit open. Everything else on the pane is already loaded list-side.
+ */
+
+clientUsersRouter.openapi(
+	createRoute({
+		method: "get",
+		path: "/{id}/context",
+		tags: ["Client Directory & Access Control"],
+		middleware: [requireAuth, requireCapability("see_all_cases")] as const,
+		request: { params: idParamSchema },
+		responses: {
+			200: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							nextAppointment: z
+								.object({ startsAt: z.string(), serviceName: z.string(), status: z.string() })
+								.nullable(),
+							openConversations: z.number(),
+							supportConversationId: z.string().nullable(),
+						}),
+					},
+				},
+				description: "Client context for the record pane",
+			},
+		},
+	}),
+	async (c) => {
+		const { id } = c.req.valid("param");
+		const [[booking], [convCount], [supportConv]] = await Promise.all([
+			db
+				.select({ startsAt: bookings.startsAt, serviceName: bookings.serviceName, status: bookings.status })
+				.from(bookings)
+				.where(
+					and(
+						eq(bookings.clientUserId, id),
+						gt(bookings.startsAt, new Date()),
+						inArray(bookings.status, ["CONFIRMED", "ASSIGNED", "RESCHEDULED", "UNASSIGNED"]),
+					),
+				)
+				.orderBy(bookings.startsAt)
+				.limit(1),
+			db
+				.select({ n: sql<number>`count(*)::int` })
+				.from(conversations)
+				.where(
+					and(
+						inArray(conversations.type, ["support", "applicant", "case", "stage"]),
+						eq(conversations.status, "open"),
+						sql`(
+							${conversations.userId} = ${id}
+							OR EXISTS (
+								SELECT 1 FROM ${conversationParticipants} cp
+								WHERE cp.conversation_id = ${conversations.id}
+								  AND cp.participant_user_id = ${id}
+							)
+						)`,
+					),
+				),
+			db
+				.select({ id: conversations.id })
+				.from(conversations)
+				.where(
+					and(
+						eq(conversations.type, "support"),
+						sql`(
+							${conversations.userId} = ${id}
+							OR EXISTS (
+								SELECT 1 FROM ${conversationParticipants} cp
+								WHERE cp.conversation_id = ${conversations.id}
+								  AND cp.participant_user_id = ${id}
+							)
+						)`,
+					),
+				)
+				.orderBy(desc(conversations.lastMessageAt))
+				.limit(1),
+		]);
+		return c.json({
+			nextAppointment: booking
+				? { startsAt: booking.startsAt.toISOString(), serviceName: booking.serviceName, status: booking.status }
+				: null,
+			openConversations: convCount?.n ?? 0,
+			supportConversationId: supportConv?.id ?? null,
+		});
 	},
 );
 

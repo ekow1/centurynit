@@ -6,8 +6,10 @@ import { apiFetch } from "../lib/api";
 import { useOpsAuth } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
+import { useUrlParam } from "../hooks/useUrlParam";
 import { fmtBoth, fmtGhs } from "./currency";
 import { ConfirmDialog, Toast } from "./OpsDialogs";
+import { FilterGroup } from "./FilterGroup";
 
 export interface ClientUser {
 	id: string;
@@ -48,12 +50,16 @@ export function ClientDirectory() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [flash, setFlash] = useState<string | null>(null);
-	const [search, setSearch] = useState("");
-	const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "banned">("all");
-	const [branchFilter, setBranchFilter] = useState<string | null>(null);
-	// The record pane — a row's actions live on the record, not the row.
-	const [selectedId, setSelectedId] = useState<string | null>(null);
-	const { applications } = useCases();
+	const [search, setSearch] = useUrlParam("q");
+	const [statusFilter, setStatusFilter] = useUrlParam<"all" | "active" | "inactive" | "banned" | "unverified" | "withcase">("status", {
+		allowed: ["all", "active", "inactive", "banned", "unverified", "withcase"],
+		fallback: "all",
+	});
+	const [branchFilter, setBranchFilter] = useUrlParam("branch");
+	// The record pane — a row's actions live on the record, not the row. `?id=`
+	// makes a record a shareable link.
+	const [selectedId, setSelectedId] = useUrlParam("id");
+	const { applications, consultations } = useCases();
 	const { invoices } = useInvoiceApi();
 
 	// Action modals
@@ -137,16 +143,28 @@ export function ClientDirectory() {
 		return map;
 	}, [applications]);
 
-	// Integrate active browser portal session if present
+	// client id / email set — who holds at least one case.
+	const linkedClientIds = useMemo(() => {
+		const s = new Set<string>();
+		for (const a of applications) {
+			if (a.applicantUserId) s.add(a.applicantUserId);
+			if (a.email) s.add(a.email);
+		}
+		return s;
+	}, [applications]);
+
 	const displayedClients = useMemo(() => {
 		const list = [...clients];
 
 		return list.filter((c) => {
+			const hasCase = linkedClientIds.has(c.id) || linkedClientIds.has(c.email);
 			const matchesStatus =
 				statusFilter === "all" ||
 				(statusFilter === "active" && c.status === "active") ||
 				(statusFilter === "inactive" && c.status === "inactive") ||
-				(statusFilter === "banned" && c.banned);
+				(statusFilter === "banned" && c.banned) ||
+				(statusFilter === "unverified" && !c.emailVerified && !c.banned) ||
+				(statusFilter === "withcase" && hasCase);
 
 			const matchesBranch =
 				!branchFilter || clientBranch.get(c.id) === branchFilter || clientBranch.get(c.email) === branchFilter;
@@ -160,7 +178,7 @@ export function ClientDirectory() {
 
 			return matchesStatus && matchesBranch && matchesSearch;
 		});
-	}, [clients, statusFilter, branchFilter, clientBranch, search]);
+	}, [clients, statusFilter, branchFilter, clientBranch, linkedClientIds, search]);
 
 	const selected = selectedId ? (clients.find((c) => c.id === selectedId) ?? null) : null;
 	// The client's cases — matched on the portal user id first, email as the
@@ -172,21 +190,58 @@ export function ClientDirectory() {
 				: [],
 		[applications, selected],
 	);
-	const withCase = useMemo(() => {
-		const linked = new Set(applications.map((a) => a.applicantUserId ?? a.email));
-		return clients.filter((c) => linked.has(c.id) || linked.has(c.email)).length;
-	}, [applications, clients]);
+	const withCase = useMemo(
+		() => clients.filter((c) => linkedClientIds.has(c.id) || linkedClientIds.has(c.email)).length,
+		[clients, linkedClientIds],
+	);
 
-	// The selected client's money position — summed from the real ledger.
+	// Who steers this client's journey — stamped on every case they open.
+	const journeyCoordinator = selectedCases.find((a) => a.journeyCoordinatorName)?.journeyCoordinatorName ?? null;
+
+	// Live context for the open record — next appointment and open thread
+	// count, from the directory's own aggregate endpoint.
+	const [ctx, setCtx] = useState<{
+		nextAppointment: { startsAt: string; serviceName: string; status: string } | null;
+		openConversations: number;
+	} | null>(null);
+	useEffect(() => {
+		setCtx(null);
+		if (!selected) return;
+		let active = true;
+		apiFetch<{
+			nextAppointment: { startsAt: string; serviceName: string; status: string } | null;
+			openConversations: number;
+		}>(`${API_PREFIX}/client-users/${selected.id}/context`)
+			.then((r) => { if (active) setCtx(r); })
+			.catch(() => undefined);
+		return () => { active = false; };
+	}, [selected]);
+
+	// Their next consultation — the earliest one still in play.
+	const nextConsult = useMemo(() => {
+		if (!selected) return null;
+		const live = ["pending_slot", "confirmed", "reschedule_requested", "under_review", "in_progress"];
+		const mine = consultations
+			.filter((c) => (c.applicantUserId === selected.id || c.email === selected.email) && live.includes(c.status))
+			.sort((a, b) => a.dateTime.localeCompare(b.dateTime));
+		return mine[0] ?? null;
+	}, [selected, consultations]);
+
+	// The selected client's money position — summed from the real ledger, plus
+	// the oldest invoice still carrying a balance.
 	const selectedMoney = useMemo(() => {
 		if (!selected) return null;
 		const mine = invoices.filter(
 			(i) => i.applicantId === selected.id || i.applicantId === selected.email,
 		);
-		if (mine.length === 0) return { count: 0, billed: 0, paid: 0, balance: 0 };
+		if (mine.length === 0) return { count: 0, billed: 0, paid: 0, balance: 0, openInvoice: null };
 		const billed = mine.reduce((n, i) => n + i.subtotal, 0);
 		const paid = mine.reduce((n, i) => n + (i.payments ?? []).reduce((m, p) => m + p.amount, 0), 0);
-		return { count: mine.length, billed, paid, balance: Math.max(0, billed - paid) };
+		const openInvoice = mine
+			.map((i) => ({ id: i.id, number: i.invoiceNumber, due: i.subtotal - (i.payments ?? []).reduce((m, p) => m + p.amount, 0) }))
+			.filter((i) => i.due > 0)
+			.sort((a, b) => a.number.localeCompare(b.number))[0] ?? null;
+		return { count: mine.length, billed, paid, balance: Math.max(0, billed - paid), openInvoice };
 	}, [selected, invoices]);
 
 	// Branch chips only for branches that actually hold clients here.
@@ -323,78 +378,33 @@ export function ClientDirectory() {
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
 				/>
-				<div className="cn-scaffold__chips" role="tablist" aria-label="Access status">
-					{([
-						["all", "All", clients.length],
-						["active", "Active", clients.filter((c) => c.status === "active").length],
-						["inactive", "Dormant", clients.filter((c) => c.status === "inactive").length],
-						["banned", "Suspended", clients.filter((c) => c.banned).length],
-					] as const).map(([id, label, n]) => {
-						const on = statusFilter === id;
-						return (
-							<button
-								key={id}
-								type="button"
-								role="tab"
-								aria-selected={on}
-								className="ops-pill"
-								onClick={() => setStatusFilter(id)}
-								style={{
-									cursor: "pointer",
-									marginLeft: 0,
-									border: "1px solid var(--border)",
-									background: on ? "var(--foreground)" : "transparent",
-									color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-								}}
-							>
-								{label}
-								<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>{n}</span>
-							</button>
-						);
-					})}
-				</div>
+				<FilterGroup
+					label="Access status"
+					value={statusFilter}
+					onChange={setStatusFilter}
+					options={[
+						{ id: "all", label: "All", count: clients.length },
+						{ id: "withcase", label: "With a case", count: withCase },
+						{ id: "active", label: "Active", count: clients.filter((c) => c.status === "active").length },
+						{ id: "inactive", label: "Dormant", count: clients.filter((c) => c.status === "inactive").length },
+						{ id: "unverified", label: "Unverified", count: clients.filter((c) => !c.emailVerified && !c.banned).length },
+						{ id: "banned", label: "Suspended", count: clients.filter((c) => c.banned).length },
+					]}
+				/>
 				{branchCounts.size > 1 && (
-					<div className="cn-scaffold__chips" role="tablist" aria-label="Branch">
-						<button
-							type="button"
-							role="tab"
-							aria-selected={branchFilter === null}
-							className="ops-pill"
-							onClick={() => setBranchFilter(null)}
-							style={{
-								cursor: "pointer",
-								marginLeft: 0,
-								border: "1px solid var(--border)",
-								background: branchFilter === null ? "var(--foreground)" : "transparent",
-								color: branchFilter === null ? "var(--background)" : "var(--foreground)",
-							}}
-						>
-							All branches
-						</button>
-						{OPS_BRANCHES.filter((b) => branchCounts.has(b.id)).map((b) => {
-							const on = branchFilter === b.id;
-							return (
-								<button
-									key={b.id}
-									type="button"
-									role="tab"
-									aria-selected={on}
-									className="ops-pill"
-									onClick={() => setBranchFilter(on ? null : b.id)}
-									style={{
-										cursor: "pointer",
-										marginLeft: 0,
-										border: "1px solid var(--border)",
-										background: on ? "var(--foreground)" : "transparent",
-										color: on ? "var(--background)" : "var(--foreground)",
-									}}
-								>
-									{b.name}
-									<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>{branchCounts.get(b.id)}</span>
-								</button>
-							);
-						})}
-					</div>
+					<FilterGroup
+						label="Branch"
+						value={branchFilter || "all"}
+						onChange={(id) => setBranchFilter(id === "all" ? null : id)}
+						options={[
+							{ id: "all", label: "All branches" },
+							...OPS_BRANCHES.filter((b) => branchCounts.has(b.id)).map((b) => ({
+								id: b.id,
+								label: b.name,
+								count: branchCounts.get(b.id),
+							})),
+						]}
+					/>
 				)}
 			</div>
 
@@ -406,23 +416,22 @@ export function ClientDirectory() {
 								<tr>
 									<th>Client</th>
 									<th>Access</th>
-									<th>Sessions</th>
-									<th>Last seen</th>
-									<th>Joined</th>
+									<th>Branch</th>
 									<th>Stage</th>
+									<th>Last seen</th>
 									<th style={{ textAlign: "right" }} />
 								</tr>
 							</thead>
 							<tbody>
 								{loading && clients.length === 0 ? (
 									<tr>
-										<td colSpan={7} style={{ textAlign: "center", padding: "2rem" }} className="muted">
+										<td colSpan={6} style={{ textAlign: "center", padding: "2rem" }} className="muted">
 											Loading client directory…
 										</td>
 									</tr>
 								) : displayedClients.length === 0 ? (
 									<tr>
-										<td colSpan={7} style={{ textAlign: "center", padding: "2.5rem" }} className="muted">
+										<td colSpan={6} style={{ textAlign: "center", padding: "2.5rem" }} className="muted">
 											No clients match the current filters.
 										</td>
 									</tr>
@@ -473,8 +482,13 @@ export function ClientDirectory() {
 														<span className="portal-pill portal-pill--hollow">Registered</span>
 													)}
 												</td>
-												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
-													{c.activeSessionsCount > 0 ? `${c.activeSessionsCount} device${c.activeSessionsCount > 1 ? "s" : ""}` : "—"}
+												<td className="admin-table__mono muted" style={{ fontSize: "var(--text-xs)" }}>
+													{(() => { const b = clientBranch.get(c.id) ?? clientBranch.get(c.email); return b ? branchName(b) : "—"; })()}
+												</td>
+												<td>
+													<span className="portal-pill portal-pill--hollow" style={{ fontSize: "0.7rem" }}>
+														{c.leadStage || c.applicantStatus || "Lead"}
+													</span>
 												</td>
 												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
 													{new Date(c.lastActiveAt).toLocaleString(undefined, {
@@ -483,14 +497,6 @@ export function ClientDirectory() {
 														hour: "2-digit",
 														minute: "2-digit",
 													})}
-												</td>
-												<td className="admin-table__mono" style={{ fontSize: "var(--text-xs)" }}>
-													{new Date(c.createdAt).toLocaleDateString()}
-												</td>
-												<td>
-													<span className="portal-pill portal-pill--hollow" style={{ fontSize: "0.7rem" }}>
-														{c.leadStage || c.applicantStatus || "Lead"}
-													</span>
 												</td>
 												<td style={{ textAlign: "right" }}>
 													<span className="dash-link">{on ? "close ↑" : "record →"}</span>
@@ -513,7 +519,18 @@ export function ClientDirectory() {
 								<h3 style={{ margin: "0.3rem 0 0", fontSize: "1.05rem", fontWeight: 800 }}>{selected.name}</h3>
 								<p className="muted" style={{ margin: "0.25rem 0 0", fontSize: "var(--text-xs)" }}>
 									{selected.email}{selected.phoneNumber ? ` · ${selected.phoneNumber}` : ""}
+									{" · "}{selected.emailVerified ? "verified" : "unverified"} {new Date(selected.createdAt).toLocaleDateString()}
 								</p>
+								<div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+									<Link to={`/helpdesk?client=${selected.id}`} className="btn btn--sm">
+										Message →{ctx && ctx.openConversations > 0 ? ` (${ctx.openConversations})` : ""}
+									</Link>
+									{selectedCases[0] && (
+										<Link to={`/applications?id=${selectedCases[0].id}`} className="btn btn--sm btn--ghost">
+											Case {selectedCases[0].appId} →
+										</Link>
+									)}
+								</div>
 							</div>
 							<button type="button" className="btn btn--xs btn--ghost" onClick={() => setSelectedId(null)}>✕</button>
 						</div>
@@ -553,7 +570,7 @@ export function ClientDirectory() {
 						</div>
 						<div className="cl-kv"><span className="cl-kv__k">Member since</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{new Date(selected.createdAt).toLocaleDateString()}</span></div>
 
-						<p className="cl-sec">File</p>
+						<p className="cl-sec">Relationship</p>
 						{selectedCases.length === 0 ? (
 							<div className="cl-kv"><span className="cl-kv__k">Cases</span><span className="muted">none yet — {selected.leadStage || "lead"}</span></div>
 						) : (
@@ -572,14 +589,58 @@ export function ClientDirectory() {
 						{selectedCases[0]?.assignedStaff && (
 							<div className="cl-kv"><span className="cl-kv__k">Handler</span><span>{selectedCases[0].assignedStaff}</span></div>
 						)}
+						{journeyCoordinator && (
+							<div className="cl-kv">
+								<span className="cl-kv__k">Journey</span>
+								<span title="Every case this client opens routes to them">→ {journeyCoordinator}</span>
+							</div>
+						)}
+						{nextConsult && (
+							<div className="cl-kv">
+								<span className="cl-kv__k">Next consult</span>
+								<span>
+									{new Date(nextConsult.dateTime).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+									{" · "}
+									<Link to={`/consultations?id=${nextConsult.id}`} className="dash-link">open →</Link>
+								</span>
+							</div>
+						)}
+						{ctx?.nextAppointment && (
+							<div className="cl-kv">
+								<span className="cl-kv__k">Next appt</span>
+								<span>
+									{ctx.nextAppointment.serviceName} ·{" "}
+									{new Date(ctx.nextAppointment.startsAt).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}
+								</span>
+							</div>
+						)}
+
+						<p className="cl-sec">Activity</p>
+						<div className="cl-kv"><span className="cl-kv__k">Portal</span><span className="muted" style={{ fontSize: "var(--text-xs)" }}>last seen {new Date(selected.lastActiveAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
+						<div className="cl-kv"><span className="cl-kv__k">Joined</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{new Date(selected.createdAt).toLocaleDateString()}</span></div>
+						{selectedCases.some((a) => a.updatedAt) && (
+							<div className="cl-kv">
+								<span className="cl-kv__k">Case work</span>
+								<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
+									last touched {new Date(Math.max(...selectedCases.map((a) => new Date(a.updatedAt ?? 0).getTime()))).toLocaleString(undefined, { month: "short", day: "numeric" })}
+								</span>
+							</div>
+						)}
 
 						<p className="cl-sec">Money</p>
 						{!selectedMoney || selectedMoney.count === 0 ? (
 							<div className="cl-kv"><span className="cl-kv__k">Ledger</span><span className="muted">no invoices</span></div>
 						) : (
 							<>
-								<div className="cl-kv"><span className="cl-kv__k">Billed</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtGhs(selectedMoney.billed)} · {selectedMoney.count} inv</span></div>
-								<div className="cl-kv"><span className="cl-kv__k">Paid</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtGhs(selectedMoney.paid)}</span></div>
+								{selectedMoney.openInvoice && (
+									<div className="cl-kv">
+										<span className="cl-kv__k">Open invoice</span>
+										<span>
+											{selectedMoney.openInvoice.number} · <span className="mono" style={{ fontWeight: 700 }}>{fmtGhs(selectedMoney.openInvoice.due)} due</span>
+										</span>
+									</div>
+								)}
+								<div className="cl-kv"><span className="cl-kv__k">Paid to date</span><span className="mono" style={{ fontSize: "var(--text-xs)" }}>{fmtGhs(selectedMoney.paid)}</span></div>
 								<div className="cl-kv">
 									<span className="cl-kv__k">Balance</span>
 									<span>
@@ -592,21 +653,6 @@ export function ClientDirectory() {
 								</div>
 							</>
 						)}
-
-						<p className="cl-sec">Contact</p>
-						<div className="cl-kv">
-							<span className="cl-kv__k">Message</span>
-							<span>
-								<Link to={`/helpdesk?client=${selected.id}`} className="dash-link">their threads →</Link>
-							</span>
-						</div>
-						<div className="cl-kv">
-							<span className="cl-kv__k">Portal</span>
-							<span className="muted" style={{ fontSize: "var(--text-xs)" }}>
-								last seen {new Date(selected.lastActiveAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-							</span>
-						</div>
-
 						{canManageAccess && (
 							<div className="cl-danger">
 								<p className="cl-danger__h">Access control</p>

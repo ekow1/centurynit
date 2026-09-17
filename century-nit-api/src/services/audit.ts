@@ -87,6 +87,8 @@ export interface UnifiedAuditEntry {
 export interface UnifiedAuditPage {
 	entries: UnifiedAuditEntry[];
 	total: number;
+	/** Per-category counts over the full filtered set (minus the category filter itself) — feeds the filter chips. */
+	facets: Record<string, number>;
 }
 
 /**
@@ -107,7 +109,17 @@ export async function getUnifiedAuditLog(query: AuditQuery): Promise<UnifiedAudi
 	const to = query.to ? new Date(`${query.to}T23:59:59.999Z`) : null;
 	const q = query.q?.trim();
 
-	const settingsConds = [
+	// The same category rules as settingsCategory(), expressed in SQL so the
+	// category filter, counts, and facet counts are all computed in the
+	// database rather than by loading every row.
+	const settingsCatSql = sql<string>`CASE
+		WHEN ${settingsAudit.key} LIKE 'role:%' THEN 'Roles & Access'
+		WHEN ${settingsAudit.key} ~* 'PAYSTACK|PAYMENT|FEE|PRICE|CURRENCY|RATE' THEN 'Financials'
+		WHEN ${settingsAudit.key} ~* 'AUTH|MFA|SESSION|GOOGLE_(CLIENT|AUTH)|OAUTH|TOTP' THEN 'Authentication'
+		ELSE 'Configuration'
+	END`;
+
+	const baseSettingsConds = [
 		from ? gte(settingsAudit.at, from) : undefined,
 		to ? lte(settingsAudit.at, to) : undefined,
 		q
@@ -117,6 +129,15 @@ export async function getUnifiedAuditLog(query: AuditQuery): Promise<UnifiedAudi
 					ilike(settingsAudit.action, `%${q}%`),
 					ilike(settingsAudit.actorIp, `%${q}%`),
 				)
+			: undefined,
+	].filter(Boolean);
+
+	// Rows/counts honour the category filter; facets deliberately don't (the
+	// chips need counts for every category to switch between).
+	const settingsConds = [
+		...baseSettingsConds,
+		query.category && query.category !== "all"
+			? sql`${settingsCatSql} = ${query.category}`
 			: undefined,
 	].filter(Boolean);
 
@@ -134,42 +155,45 @@ export async function getUnifiedAuditLog(query: AuditQuery): Promise<UnifiedAudi
 			: undefined,
 	].filter(Boolean);
 
-	// Both sources can produce any category (settings rows derive theirs from
-	// the key), so a category filter is applied post-merge, not per-source.
-	const wantSettings = true;
-	const wantAdmin = true;
-
 	// Each side over-fetches so the merged page boundary is correct.
-	const [settingsRows, settingsCount, adminRows, adminCount] = await Promise.all([
-		wantSettings
-			? db
-					.select()
-					.from(settingsAudit)
-					.where(and(...settingsConds))
-					.orderBy(desc(settingsAudit.at))
-					.limit(limit + offset)
-			: Promise.resolve([]),
-		wantSettings
-			? db
-					.select({ n: sql<number>`count(*)::int` })
-					.from(settingsAudit)
-					.where(and(...settingsConds))
-			: Promise.resolve([{ n: 0 }]),
-		wantAdmin
-			? db
-					.select()
-					.from(adminAudit)
-					.where(and(...adminConds))
-					.orderBy(desc(adminAudit.at))
-					.limit(limit + offset)
-			: Promise.resolve([]),
-		wantAdmin
-			? db
-					.select({ n: sql<number>`count(*)::int` })
-					.from(adminAudit)
-					.where(and(...adminConds))
-			: Promise.resolve([{ n: 0 }]),
+	const [settingsRows, settingsCount, adminRows, adminCount, settingsFacets, adminFacets] = await Promise.all([
+		db
+			.select()
+			.from(settingsAudit)
+			.where(and(...settingsConds))
+			.orderBy(desc(settingsAudit.at))
+			.limit(limit + offset),
+		db
+			.select({ n: sql<number>`count(*)::int` })
+			.from(settingsAudit)
+			.where(and(...settingsConds)),
+		db
+			.select()
+			.from(adminAudit)
+			.where(and(...adminConds))
+			.orderBy(desc(adminAudit.at))
+			.limit(limit + offset),
+		db
+			.select({ n: sql<number>`count(*)::int` })
+			.from(adminAudit)
+			.where(and(...adminConds)),
+		// Facets ignore the category filter — the chips need counts to switch on.
+		db
+			.select({ cat: settingsCatSql, n: sql<number>`count(*)::int` })
+			.from(settingsAudit)
+			.where(and(...baseSettingsConds))
+			.groupBy(settingsCatSql),
+		db
+			.select({ cat: adminAudit.category, n: sql<number>`count(*)::int` })
+			.from(adminAudit)
+			.where(and(...adminConds.slice(1)))
+			.groupBy(adminAudit.category),
 	]);
+
+	const facets: Record<string, number> = {};
+	for (const r of [...settingsFacets, ...adminFacets]) {
+		facets[r.cat] = (facets[r.cat] ?? 0) + r.n;
+	}
 
 	const settingsEntries: UnifiedAuditEntry[] = settingsRows.map((r) => ({
 		id: r.id,
@@ -207,10 +231,9 @@ export async function getUnifiedAuditLog(query: AuditQuery): Promise<UnifiedAudi
 		.filter(categoryOk)
 		.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-	// `total` is exact only without a category filter — a filtered count would
-	// need a second pass; the page shows the loaded count plus "load more".
 	return {
 		entries: merged.slice(offset, offset + limit),
 		total: (settingsCount[0]?.n ?? 0) + (adminCount[0]?.n ?? 0),
+		facets,
 	};
 }

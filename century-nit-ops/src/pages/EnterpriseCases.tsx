@@ -8,8 +8,9 @@ import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
 import { StaffChatBadge } from "./StaffChatBadge";
 import { BranchScopeFilter } from "./BranchScopeFilter";
-import { AddSchoolApplicationModal } from "./AddSchoolApplicationModal";
-import { AssignScholarshipModal } from "./AssignScholarshipModal";
+import { FilterGroup } from "./FilterGroup";
+import { useUrlParam } from "../hooks/useUrlParam";
+import { useNow } from "../hooks/useNow";
 import { branchName, invoiceBalance } from "century-nit-core/ops";
 import type { MockApplication, Invoice } from "century-nit-core/ops";
 import {
@@ -21,7 +22,7 @@ import {
 	type ChapterId,
 } from "century-nit-shared";
 import { ApplicationAssignSheet, AssignChip, assignmentNeeded } from "./case/ApplicationAssignSheet";
-import { tasksForApplication } from "../lib/pendingTasks";
+import { tasksForApplication, taskActionLabel } from "../lib/pendingTasks";
 import { useInvoiceApi } from "../hooks/useInvoiceApi";
 import { fmtBoth } from "./currency";
 
@@ -34,6 +35,20 @@ import { fmtBoth } from "./currency";
  */
 
 type View = "list" | "board";
+
+/** "Needs handler" sits beside the real statuses — it is the manager's cut. */
+type StatusFilter = "All" | "needs-handler" | "Under Review" | "Accepted" | "Action Required" | "Rejected";
+const STATUS_IDS = ["All", "needs-handler", "Under Review", "Accepted", "Action Required", "Rejected"] as const;
+
+type SortId = "activity" | "oldest" | "name";
+const SORT_IDS = ["activity", "oldest", "name"] as const;
+const SORT_LABELS: Record<SortId, string> = { activity: "Last activity", oldest: "Oldest first", name: "Client A–Z" };
+
+/** Days since the record last changed — falls back to the open date. */
+function quietDays(app: MockApplication, now: number): number {
+	const t = Date.parse(app.updatedAt ?? app.submittedDate ?? "");
+	return Number.isFinite(t) ? Math.floor((now - t) / 86_400_000) : 0;
+}
 
 const CHAPTER_FILTERS: { id: "all" | ChapterId; label: string }[] = [
 	{ id: "all", label: "All" },
@@ -106,7 +121,7 @@ function RowMeta({
 export function EnterpriseCases() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { opsRole, opsUser, canSeeAllBranches, canAssignWork, scopeRecords, requiresAssignmentScope } = useOpsAuth();
-	const { applications, assignees, handoffs, travelRequests, error: casesError, addApplication } = useCases();
+	const { applications, assignees, handoffs, travelRequests, error: casesError } = useCases();
 	const { invoices: allInvoices } = useInvoiceApi();
 	// Assignment from the list: the card's chip opens the same sheet the detail uses.
 	const [assignFor, setAssignFor] = useState<MockApplication | null>(null);
@@ -126,15 +141,15 @@ export function EnterpriseCases() {
 	const setChapter = (c: "all" | ChapterId) => setParam("chapter", c, "all");
 	const setView = (v: View) => setParam("view", v, "list");
 
-	const [statusFilter, setStatusFilter] = useState<string>("All");
+	// Every filter is a URL param — a filtered list is a shareable link.
+	const [statusFilter, setStatusFilter] = useUrlParam<StatusFilter>("status", { allowed: STATUS_IDS, fallback: "All" });
+	const [ownerFilter, setOwnerFilter] = useUrlParam<"all" | "mine">("owner", { allowed: ["all", "mine"], fallback: "all" });
+	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
+	const [searchQuery, setSearchQuery] = useUrlParam("q");
+	const [sort, setSort] = useUrlParam<SortId>("sort", { allowed: SORT_IDS, fallback: "activity" });
 	const [boardOrder, setBoardOrder] = useState<BoardOrder>("age");
-	const [ownerFilter, setOwnerFilter] = useState<"all" | "mine">("all");
-	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedApp, setSelectedApp] = useState<MockApplication | null>(null);
 	const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-	const [branchFilter, setBranchFilter] = useState("all");
-	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-	const [isScholarshipModalOpen, setIsScholarshipModalOpen] = useState(false);
 
 	// A `?id=` link selects the case directly — derived, not synced through an
 	// effect, so closing the detail also clears the param.
@@ -175,13 +190,10 @@ export function EnterpriseCases() {
 		return inOrPast;
 	};
 
-	const STATUS_FILTERS = ["All", "Under Review", "Accepted", "Action Required", "Rejected"] as const;
-
-	// Search and scope apply before the chapter/status facets, so the select
+	// Search and scope apply before the chapter/status facets, so the chip
 	// counts always say how much a choice would show.
-	const facetApps = roleScopedApps.filter((a) => {
+	const searchScoped = roleScopedApps.filter((a) => {
 		if (branchFilter !== "all" && a.branch !== branchFilter) return false;
-		if (ownerFilter === "mine" && !isMine(a)) return false;
 		const q = searchQuery.toLowerCase();
 		return (
 			a.applicantName.toLowerCase().includes(q) ||
@@ -190,45 +202,65 @@ export function EnterpriseCases() {
 			a.assignedStaff.toLowerCase().includes(q)
 		);
 	});
+	const facetApps = ownerFilter === "mine" ? searchScoped.filter(isMine) : searchScoped;
 	const chapterCounts = new Map(CHAPTER_FILTERS.map((f) => [f.id, facetApps.filter((a) => matchesChapter(a, f.id)).length]));
 	const statusApps = facetApps.filter((a) => matchesChapter(a, chapter));
-	const statusCounts = new Map(STATUS_FILTERS.map((s) => [s, s === "All" ? statusApps.length : statusApps.filter((a) => a.status === s).length]));
+	const needsHandler = (a: MockApplication) => assignmentNeeded(a, handoffs);
+	const statusCounts = new Map(
+		STATUS_IDS.map((s) => [
+			s,
+			s === "All" ? statusApps.length : s === "needs-handler" ? statusApps.filter(needsHandler).length : statusApps.filter((a) => a.status === s).length,
+		]),
+	);
 
-	const filteredApps = statusApps.filter((a) => statusFilter === "All" || a.status === statusFilter);
+	const filteredApps = statusApps.filter((a) =>
+		statusFilter === "All" ? true : statusFilter === "needs-handler" ? needsHandler(a) : a.status === statusFilter,
+	);
+	const now = useNow();
+	const sortedApps = [...filteredApps].sort((a, b) =>
+		sort === "name"
+			? a.applicantName.localeCompare(b.applicantName)
+			: sort === "oldest"
+				? Date.parse(a.submittedDate) - Date.parse(b.submittedDate)
+				: Date.parse(b.updatedAt ?? b.submittedDate) - Date.parse(a.updatedAt ?? a.submittedDate),
+	);
 
 	const unassignedCases = roleScopedApps.filter((a) => assignmentNeeded(a, handoffs)).length;
 	const initialTab = chapter === "visa" ? "visa" : chapter === "depart" ? "travel" : chapter === "done" ? "payments" : undefined;
 
-	// The same chapter pills in list and board — one control, two homes.
-	const chapterPills = (
-		<div className="cn-scaffold__chips" role="tablist" aria-label="Chapter" style={{ flexWrap: "wrap" }}>
-			{CHAPTER_FILTERS.map((c) => {
-				const n = chapterCounts.get(c.id) ?? 0;
-				const on = chapter === c.id;
-				return (
-					<button
-						key={c.id}
-						type="button"
-						role="tab"
-						aria-selected={on}
-						className="ops-pill"
-						onClick={() => setChapter(c.id)}
-						style={{
-							cursor: "pointer",
-							marginLeft: 0,
-							border: "1px solid var(--border)",
-							background: on ? "var(--foreground)" : "transparent",
-							color: on ? "var(--background)" : n === 0 ? "var(--muted-foreground)" : "var(--foreground)",
-						}}
-					>
-						{c.label}
-						<span className="mono" style={{ marginLeft: "0.4rem", opacity: on ? 0.85 : 0.6 }}>
-							{n}
-						</span>
-					</button>
-				);
-			})}
-		</div>
+	// One filter row for both views — chapter, owner and status are all the
+	// shared FilterGroup radiogroups: arrow keys, live counts, URL state.
+	const filterChips = (
+		<>
+			<FilterGroup
+				label="Chapter"
+				options={CHAPTER_FILTERS.map((c) => ({ id: c.id, label: c.label, count: chapterCounts.get(c.id) ?? 0 }))}
+				value={chapter}
+				onChange={(v) => setChapter(v)}
+			/>
+			{!requiresAssignmentScope && (
+				<FilterGroup
+					label="Owner"
+					options={[
+						{ id: "all" as const, label: "Everyone", count: searchScoped.length },
+						{ id: "mine" as const, label: "Mine", count: searchScoped.filter(isMine).length },
+					]}
+					value={ownerFilter}
+					onChange={setOwnerFilter}
+				/>
+			)}
+			<FilterGroup
+				label="Status"
+				options={STATUS_IDS.map((s) => ({
+					id: s,
+					label: s === "needs-handler" ? "Needs handler" : s === "All" ? "All" : (CASE_STATUS_LABELS[s] ?? s),
+					count: statusCounts.get(s) ?? 0,
+					hot: s === "needs-handler" && (statusCounts.get("needs-handler") ?? 0) > 0,
+				}))}
+				value={statusFilter}
+				onChange={setStatusFilter}
+			/>
+		</>
 	);
 
 	return (
@@ -247,27 +279,9 @@ export function EnterpriseCases() {
 							Board
 						</button>
 					</div>
-					<button className="btn btn--primary" onClick={() => setIsAddModalOpen(true)} style={{ whiteSpace: "nowrap" }}>
-						+ Add school application
-					</button>
 					{canSeeAll && <BranchScopeFilter value={branchFilter} onChange={setBranchFilter} />}
 				</div>
 			</div>
-
-			{isAddModalOpen && (
-				<AddSchoolApplicationModal
-					onClose={() => setIsAddModalOpen(false)}
-					onAdd={async (applicantId, destinationId, universityId, programId, intake) => {
-						await addApplication(applicantId, { destinationId, universityId, programId, intake });
-						setActionSuccess("School application added.");
-						setTimeout(() => setActionSuccess(null), 4000);
-					}}
-				/>
-			)}
-
-			{isScholarshipModalOpen && selectedApp && (
-				<AssignScholarshipModal applicantId={selectedApp.applicantId} onClose={() => setIsScholarshipModalOpen(false)} />
-			)}
 
 			{casesError ? <p className="ops-modal__error" role="alert">{casesError}</p> : null}
 
@@ -295,22 +309,14 @@ export function EnterpriseCases() {
 						</span>
 					</>
 				)}
-				{!requiresAssignmentScope && (
-					<>
-						<span className="dash-day__sep">·</span>
-						<button type="button" className="dash-day__cut" style={{ background: "none", border: 0, padding: 0, cursor: "pointer", font: "inherit", textTransform: "inherit", letterSpacing: "inherit" }} onClick={() => setOwnerFilter(ownerFilter === "mine" ? "all" : "mine")}>
-							{ownerFilter === "mine" ? <strong>My cases · on</strong> : "My cases"}
-						</button>
-					</>
-				)}
 			</div>
 
 			{view === "board" ? (
 				<>
 					<div className="cn-scaffold__filters" style={{ marginBottom: "0.75rem", border: "1px solid var(--border-light)" }}>
-						{chapterPills}
+						<div className="cn-scaffold__chips">{filterChips}</div>
 						<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
-							<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="cn-search" style={{ flex: "1 1 14rem", width: "auto" }} />
+							<input type="search" placeholder="Search case ID, client, university…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value || null)} className="cn-search" style={{ flex: "1 1 14rem", width: "auto" }} />
 							<label className="cn-filter">
 								<span className="cn-filter__label">Order</span>
 								<select className="cn-filter__select" value={boardOrder} onChange={(e) => setBoardOrder(e.target.value as BoardOrder)}>
@@ -335,29 +341,41 @@ export function EnterpriseCases() {
 				<CaseScaffold
 					onClose={closeDetail}
 					emptyHint="Select a case from the list to review it and take action."
+					rail={
+						<div style={{ padding: "0.75rem 0.9rem" }}>
+							<p className="ops-dsec">Queue — nothing selected</p>
+							<div className="ops-dkv"><span className="ops-dkv__k">Needs handler</span><span>{unassignedCases} {unassignedCases > 0 && `— oldest ${quietDays(roleScopedApps.filter(needsHandler).sort((a, b) => Date.parse(a.submittedDate) - Date.parse(b.submittedDate))[0] ?? roleScopedApps[0], now)}d`}</span></div>
+							<div className="ops-dkv"><span className="ops-dkv__k">Stalled 7d+</span><span>{roleScopedApps.filter((a) => a.stage !== "completed" && quietDays(a, now) >= 7).length}</span></div>
+							<div className="ops-dkv"><span className="ops-dkv__k">Awaiting client</span><span>{roleScopedApps.filter((a) => a.status === "Action Required").length}</span></div>
+							<p className="ops-dsec" style={{ marginTop: "0.9rem" }}>By chapter</p>
+							{CHAPTER_FILTERS.filter((c) => c.id !== "all").map((c) => (
+								<div className="ops-dkv" key={c.id}>
+									<span className="ops-dkv__k">{c.label}</span>
+									<span>{chapterCounts.get(c.id) ?? 0}</span>
+								</div>
+							))}
+							<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.9rem" }}>Select a case to work it.</p>
+						</div>
+					}
 					list={
 						<>
 							<div className="cn-scaffold__filters">
-								{chapterPills}
+								<div className="cn-scaffold__chips">{filterChips}</div>
 								<input
 									type="search"
 									placeholder="Search case ID, client, university…"
 									value={searchQuery}
-									onChange={(e) => setSearchQuery(e.target.value)}
+									onChange={(e) => setSearchQuery(e.target.value || null)}
 									className="cn-search"
 									aria-label="Search cases"
 								/>
 								<div className="cn-scaffold__filter-row">
 									<label className="cn-filter">
-										<span className="cn-filter__label">Status</span>
-										<select
-											className="cn-filter__select"
-											value={statusFilter}
-											onChange={(e) => setStatusFilter(e.target.value)}
-										>
-											{STATUS_FILTERS.map((s) => (
+										<span className="cn-filter__label">Sort</span>
+										<select className="cn-filter__select" value={sort} onChange={(e) => setSort(e.target.value as SortId)}>
+											{SORT_IDS.map((s) => (
 												<option key={s} value={s}>
-													{s === "All" ? "Any" : (CASE_STATUS_LABELS[s] ?? s)} · {statusCounts.get(s) ?? 0}
+													{SORT_LABELS[s]}
 												</option>
 											))}
 										</select>
@@ -365,13 +383,14 @@ export function EnterpriseCases() {
 								</div>
 							</div>
 							<div className="cn-scaffold__rows">
-								{filteredApps.length === 0 ? (
+								{sortedApps.length === 0 ? (
 									<div className="cn-scaffold__none">No cases match your filter.</div>
 								) : (
-									filteredApps.map((app) => {
-										const isSelected = selectedApp?.appId === app.appId;
-										const need = assignmentNeeded(app, handoffs);
-										const todo = tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices }).length;
+									sortedApps.map((app) => {
+										const isSelected = liveSelected?.id === app.id;
+										const need = needsHandler(app);
+										const tasks = tasksForApplication(app, { handoffs, travelRequests, invoices: allInvoices });
+										const quiet = app.stage === "completed" ? 0 : quietDays(app, now);
 										return (
 											<div
 												key={app.id}
@@ -386,6 +405,7 @@ export function EnterpriseCases() {
 												<div className="cn-row__main">
 													<div className="cn-row__top">
 														<span className="cn-row__ref">{app.appId}</span>
+														{need && <StatusPill tone="waiting">Needs handler</StatusPill>}
 														<StatusPill tone={app.status === "Accepted" ? "done" : app.status === "Rejected" ? "blocked" : "current"}>
 															{CASE_STATUS_LABELS[app.status] ?? app.status}
 														</StatusPill>
@@ -393,6 +413,7 @@ export function EnterpriseCases() {
 													<p className="cn-row__name">{app.applicantName}</p>
 													<p className="cn-row__sub">
 														{app.university} · {app.program}
+														{tasks.length > 0 && <span> — <strong>{tasks[0].subtitle || taskActionLabel(tasks[0])}</strong></span>}
 													</p>
 													<div className="cn-row__meta">
 														{app.assignedStaff ? (
@@ -400,12 +421,15 @@ export function EnterpriseCases() {
 														) : (
 															<span className="cn-row__unassigned">No handler</span>
 														)}
+														{canSeeAll && <span> · {branchName(app.branch)}</span>}
 														<span> · </span>
 														<RowMeta app={app} chapter={chapter} invoices={allInvoices} taStatus={taStatusOf(app)} />
+														{app.journeyCoordinatorName && <span> · → {app.journeyCoordinatorName}</span>}
+														{quiet >= 3 && <span> · quiet {quiet}d</span>}
+														{tasks.length > 1 && <span className="cn-row__needs">· +{tasks.length - 1} more</span>}
 														{canAssignWork && need && (
 															<AssignChip label="Handler…" onClick={() => setAssignFor(app)} />
 														)}
-														{todo > 0 && <span className="cn-row__needs">· {todo} to do</span>}
 													</div>
 												</div>
 												<span className="cn-row__arrow" aria-hidden>

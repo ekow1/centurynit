@@ -36,7 +36,11 @@ export function useCaseTab<T extends string>(
 		setSearchParams(
 			(prev) => {
 				const p = new URLSearchParams(prev);
-				p.set("tab", next);
+				// Landing on the tab the case would open anyway removes the
+				// param — clean URLs stay clean, and the record keeps driving
+				// the default as it moves through the journey.
+				if (next === (preset ?? fallback())) p.delete("tab");
+				else p.set("tab", next);
 				return p;
 			},
 			{ replace: true },

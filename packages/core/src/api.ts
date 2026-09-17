@@ -499,11 +499,22 @@ export const staffApi = {
 			mfaEnabled: boolean;
 			lastSeenAt: string | null;
 			ownedConversations: number;
+			ownedCases: number;
+			bookingsThisWeek: number;
 			canCoordinate: boolean;
 			grantExpiresAt: string | null;
 		}[];
+		unownedConversations: number;
 	}> {
 		return request(`${API_PREFIX}/staff`);
+	},
+
+	revokeSession(sessionId: string): Promise<{ success: boolean }> {
+		return request(`${API_PREFIX}/staff/sessions/${sessionId}/revoke`, { method: "POST" });
+	},
+
+	revokeAllSessions(id: string): Promise<{ success: boolean; revokedCount: number }> {
+		return request(`${API_PREFIX}/staff/${id}/revoke-sessions`, { method: "POST" });
 	},
 
 	coordinationGrant(id: string): Promise<{

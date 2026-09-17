@@ -24,6 +24,7 @@ import {
 	type JourneyStage,
 	type PackageCode,
 	type UpdateSchoolStatus,
+	type OpsAddSchoolApplication,
 	type StageHandoff,
 	type StageHandoffDecision,
 	type TravelAssistanceRequest,
@@ -484,7 +485,7 @@ export function useCasesApi() {
 			const app = applications.find((a) => a.appId === appId);
 			if (!app) return;
 			await schoolsApi.updateStatus(schoolId, {
-				status: (app.schoolApplications?.find((s) => s.id === schoolId)?.status ?? "Preparing Application") as any,
+				status: (app.schoolApplications?.find((s) => s.id === schoolId)?.status ?? "Preparing Application") as UpdateSchoolStatus["status"],
 				...patch,
 			});
 			await refresh();
@@ -558,6 +559,10 @@ export function useCasesApi() {
 		refreshConsultation: async (id: string) => {
 			replaceConsultation(await consultationsApi.get(id));
 		},
+		/** Re-fetch one application — a detail opened from the cached list can be stale. */
+		refreshApplication: async (id: string) => {
+			replaceApplication(await applicationsApi.get(id));
+		},
 		confirmConsultationSlot: async (id: string) =>
 			replaceConsultation(await consultationsApi.confirmSlot(id)),
 		startConsultationAssessment: async (id: string) =>
@@ -590,7 +595,7 @@ export function useCasesApi() {
 			apiFetch(`${API_PREFIX}/schools/${applicantId}/scholarships/${scholarshipId}`, {
 				method: "DELETE",
 			}),
-		addApplication: async (applicantId: string, input: any) =>
+		addApplication: async (applicantId: string, input: Omit<OpsAddSchoolApplication, "applicantId">) =>
 			applicationsApi.addForApplicant(applicantId, input),
 		assignApplication: async (
 			id: string,

@@ -684,12 +684,13 @@ function TeamLoad({ applications, consultations }: { applications: ViewProps["sc
 	return (
 		<Panel title="Team load" link={{ to: "/workspace?tab=caseload", label: "Caseload →" }}>
 			{canAssignWork && dutyBranches.length > 0 && (
-				<div className="dash-trow" style={{ marginBottom: "0.4rem" }}>
+				<div className="dash-duty">
 					<span className="cn-filter__label">Duty · today</span>
-					<span className="dash-trow__n">
-						{dutyBranches.map((b, i) => (
-							<span key={b.id}>
-								{i > 0 && " · "}
+					{/* Each branch is its own inline unit — the row wraps between
+					    branches, never mid-name, and can't blow the rail open. */}
+					<span className="dash-duty__branches">
+						{dutyBranches.map((b) => (
+							<span key={b.id} className="dash-duty__branch">
 								{b.name}:{" "}
 								{duty[b.id] ? (
 									duty[b.id]

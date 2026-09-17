@@ -1074,7 +1074,9 @@ a.dash-kpi--on:hover {
 
 .dash-grid {
 	display: grid;
-	grid-template-columns: 2fr 1fr;
+	/* minmax(0,·) — a bare fr is minmax(auto,fr) and lets one wide child
+	   (the old nowrap duty chain) stretch the track past the viewport. */
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 	gap: 1rem;
 }
 
@@ -1279,6 +1281,31 @@ a.dash-kpi--on:hover {
 	display: block;
 	height: 100%;
 	background: var(--foreground);
+}
+
+/* Duty line: the branch chain must wrap inside the rail — a single nowrap
+   span was ~600px of unbreakable text and pushed the whole page sideways. */
+.dash-duty {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.2rem 0.75rem;
+	padding: 0.45rem 0;
+	border-bottom: 1px solid var(--border-light);
+	font-size: var(--text-sm);
+}
+
+.dash-duty__branches {
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.2rem 0.9rem;
+}
+
+.dash-duty__branch {
+	white-space: nowrap;
 }
 
 @media (max-width: 959.98px) {

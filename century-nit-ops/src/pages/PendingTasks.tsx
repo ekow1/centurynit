@@ -344,10 +344,11 @@ function taskSections(items: PendingTask[], now: Date): TaskSection[] {
 		return Number.isNaN(d) ? max : Math.max(max, now.getTime() - d);
 	}, 0);
 	const oldestDays = Math.floor(oldestMs / 86_400_000);
+	// Overdue leads — the stalest work ages worst, so it heads the day.
 	return (
 		[
-			{ band: "today", count: by.today.length, note: live > 0 ? `${live} live now` : undefined, rows: by.today },
 			{ band: "overdue", count: by.overdue.length, note: oldestDays >= 1 ? `oldest ${oldestDays} day${oldestDays === 1 ? "" : "s"}` : undefined, rows: by.overdue },
+			{ band: "today", count: by.today.length, note: live > 0 ? `${live} live now` : undefined, rows: by.today },
 			{ band: "rest", count: by.rest.length, rows: by.rest },
 		] as TaskSection[]
 	).filter((s) => s.count > 0);
@@ -456,7 +457,7 @@ export function PendingTaskRows({
 				<div className="ops-bands" style={{ padding: 0 }}>
 					{sections.map((section) => (
 						<div key={section.band}>
-							<div className={`ops-band${section.band === "today" ? " ops-band--now" : ""}`}>
+							<div className={`ops-band${section.band === "overdue" ? " ops-band--hot" : ""}`}>
 								<span className="ops-band__name">
 									{QUEUE_BAND_LABEL[section.band]} · {section.count}
 								</span>

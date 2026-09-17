@@ -13,6 +13,7 @@ import { invoiceBalance, invoiceAgeDays, branchName } from "century-nit-core/ops
 import { LEAD_STAGE_LABELS, type Lead, type LeadStage } from "century-nit-core";
 import { ApiError, getInvoice, type ApiInvoice } from "../lib/api";
 import { ApproveInvoiceSheet } from "./case/ApproveInvoiceSheet";
+import { DelegateSheet } from "./case/DelegateSheet";
 import { useJoinMeeting } from "./case/ConsultationCall";
 import { AssignSheet, type HandlerPlacement } from "./case/AssignSheet";
 import { JOURNEY_STAGE_LABELS, type Booking, type JourneyStage, type StageHandoff, type TravelAssistanceRequest } from "century-nit-shared";
@@ -89,6 +90,9 @@ export function PreviewPane({
 	const [loadingInvoice, setLoadingInvoice] = useState(false);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [actionOk, setActionOk] = useState<string | null>(null);
+	// Delegation lives on the record being steered — the toolbar button was
+	// a row action pretending to be a page control.
+	const [delegateOpen, setDelegateOpen] = useState(false);
 
 	// Which stage the picker is staffing — decides which roles are offered.
 	const stageForRoles =
@@ -211,8 +215,15 @@ export function PreviewPane({
 				</div>
 			)}
 
-			{/* Bottom actions — the thing the task exists for, then the door to the record. */}
+			{/* Bottom actions — the thing the task exists for, then the door to the record.
+			    Delegation is a steering action on this case — it sits on the
+			    record it steers, not on the queue's toolbar. */}
 			<div style={{ marginTop: "2rem", paddingTop: "1rem", borderTop: "1px solid var(--border-light)", display: "flex", justifyContent: "flex-end", gap: "0.5rem", flexWrap: "wrap" }}>
+				{item.kind === "consultation" && canAssignWork && (
+					<button type="button" className="btn btn--ghost btn--sm" onClick={() => setDelegateOpen(true)}>
+						{item.record.coordinatorId ? "Reassign coordinator…" : "Delegate…"}
+					</button>
+				)}
 				{approvable && (
 					<button
 						type="button"
@@ -247,6 +258,21 @@ export function PreviewPane({
 				}}
 			/>
 			{actionOk && <p className="ops-panel__ok mt-2">{actionOk}</p>}
+			{item.kind === "consultation" && (
+				<DelegateSheet
+					open={delegateOpen}
+					onClose={() => setDelegateOpen(false)}
+					consultation={item.record}
+					onToast={(type, message) => {
+						if (type === "success") {
+							setActionOk(message);
+							void onAssigned();
+						} else {
+							setActionError(message);
+						}
+					}}
+				/>
+			)}
 			<AssignSheet
 				open={handlerSheet}
 				onClose={() => setHandlerSheet(false)}

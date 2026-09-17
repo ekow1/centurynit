@@ -29,8 +29,6 @@ import { CaseTabs, useCaseTab } from "./case/CaseTabs";
 import { WorkspaceCaseload } from "./WorkspaceCaseload";
 import { FilterGroup } from "./FilterGroup";
 import { PreviewPane } from "./TaskPreview";
-import { DelegateSheet } from "./case/DelegateSheet";
-import { Toast } from "./OpsDialogs";
 
 /**
  * F-shaped workspace / mission control.
@@ -40,7 +38,7 @@ import { Toast } from "./OpsDialogs";
  * pane only appears while an item is selected — with nothing selected the
  * queue keeps the page width.
  *
- * Every filter and the open task live in the URL (`?tab=&filter=&time=&type=
+ * Every filter and the open task live in the URL (`?tab=&filter=&type=
  * &branch=&sort=&q=&open=`), so a refresh keeps the view and a notification
  * can deep-link a task straight into the preview pane.
  */
@@ -49,14 +47,15 @@ import { Toast } from "./OpsDialogs";
 const WORKSPACE_TABS: readonly WorkspaceTab[] = ["worklist", "caseload"];
 
 /**
- * Queue filters — the two time cuts first (what the day is), then the
- * backlog categories from buildPendingTasks. Each chip carries its live
- * count, so the shape of the day reads before anything is clicked.
+ * Queue filters — the triage cuts live on the main row (everything, mine,
+ * unassigned), and the occasional category cuts sit one click deep in the
+ * Filters drawer. No time chips: the list is already banded overdue / today /
+ * everything else, so a "today" chip would just hide headers.
  */
 const QUEUE_FILTERS = [
 	{ id: "all", label: "All" },
 	{ id: "mine", label: "Mine" },
-	{ id: "needs_assignment", label: "No handler" },
+	{ id: "needs_assignment", label: "Unassigned" },
 	{ id: "coordinated", label: "Coordinated" },
 	{ id: "needs_invoice", label: "Invoicing" },
 	{ id: "needs_followup", label: "Follow-up" },
@@ -64,16 +63,10 @@ const QUEUE_FILTERS = [
 type QueueFilter = (typeof QUEUE_FILTERS)[number]["id"];
 const QUEUE_IDS = QUEUE_FILTERS.map((f) => f.id);
 
-/** The time cut is a second, independent filter — "mine" + "overdue" is a
- * valid and useful cut, so it gets its own radiogroup rather than chips
- * that pretend to be alternatives to the category ones. */
-const TIME_FILTERS = [
-	{ id: "all", label: "Any time" },
-	{ id: "today", label: "Today" },
-	{ id: "overdue", label: "Overdue" },
-] as const;
-type TimeFilter = (typeof TIME_FILTERS)[number]["id"];
-const TIME_IDS = TIME_FILTERS.map((f) => f.id);
+/** The three cuts that answer "what should I touch next" stay on the bar. */
+const MAIN_FILTERS: readonly QueueFilter[] = ["all", "mine", "needs_assignment"];
+/** The occasional cuts live in the drawer. */
+const DRAWER_FILTERS: readonly QueueFilter[] = ["coordinated", "needs_invoice", "needs_followup"];
 
 const passesQueueFilter = (item: PendingTask, filter: QueueFilter, me?: { name?: string; email?: string }): boolean => {
 	if (filter === "all") return true;
@@ -87,12 +80,6 @@ const passesQueueFilter = (item: PendingTask, filter: QueueFilter, me?: { name?:
 		return item.kind === "consultation" && Boolean(item.record.coordinatorId);
 	}
 	return item.category === filter;
-};
-
-const passesTimeFilter = (item: PendingTask, time: TimeFilter): boolean => {
-	if (time === "today") return isDueToday(item);
-	if (time === "overdue") return isOverdue(item);
-	return true;
 };
 
 const TYPE_FILTERS = [
@@ -111,6 +98,7 @@ const DATE_SORTS = [
 	{ id: "desc", label: "Newest first" },
 	{ id: "asc", label: "Oldest first" },
 ] as const;
+/** Labelled SORT in the drawer — it orders, it doesn't filter. */
 const SORT_IDS = DATE_SORTS.map((f) => f.id);
 type SortId = (typeof DATE_SORTS)[number]["id"];
 
@@ -139,7 +127,6 @@ export function Workspace() {
 	// All filters live in the URL — refresh-safe, and a stale value falls
 	// back instead of silently emptying the queue.
 	const [filter, setFilter] = useUrlParam<QueueFilter>("filter", { allowed: QUEUE_IDS, fallback: "all" });
-	const [time, setTime] = useUrlParam<TimeFilter>("time", { allowed: TIME_IDS, fallback: "all" });
 	const [typeFilter, setTypeFilter] = useUrlParam<TypeFilter>("type", { allowed: TYPE_IDS, fallback: "all" });
 	const [branchFilter, setBranchFilter] = useUrlParam<string>("branch", { fallback: "all" });
 	const [dateSort, setDateSort] = useUrlParam<SortId>("sort", { allowed: SORT_IDS, fallback: "default" });
@@ -147,8 +134,17 @@ export function Workspace() {
 	// The open task is `?open=` — a deep link opens it even when the chips
 	// would have filtered it out.
 	const [openId, setOpenId] = useUrlParam("open");
-	const [delegateOpen, setDelegateOpen] = useState(false);
-	const [toast, setToast] = useState<{ type: "error" | "success"; message: string } | null>(null);
+	// The drawer auto-opens while one of its facets is set, so a deep link
+	// like ?filter=coordinated shows where the cut came from.
+	const drawerActive =
+		DRAWER_FILTERS.includes(filter) ||
+		typeFilter !== "all" ||
+		branchFilter !== "all" ||
+		dateSort !== "default";
+	const [drawerToggled, setDrawerToggled] = useState<boolean | null>(null);
+	const drawerOpen = drawerToggled ?? drawerActive;
+	const setDrawerOpen = () => setDrawerToggled(!drawerOpen);
+
 	const [leads, setLeads] = useState<Lead[]>([]);
 	const [leadsLoading, setLeadsLoading] = useState(false);
 	const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
@@ -248,7 +244,6 @@ export function Workspace() {
 		const result = items.filter((item) => {
 			if (branchFilter !== "all" && item.branch && item.branch !== branchFilter) return false;
 			if (!passesQueueFilter(item, filter, opsUser ?? undefined)) return false;
-			if (!passesTimeFilter(item, time)) return false;
 			if (typeFilter !== "all" && item.kind !== typeFilter) return false;
 			if (!q) return true;
 			const hay = `${item.title} ${item.subtitle} ${item.meta} ${item.owner}`.toLowerCase();
@@ -260,7 +255,7 @@ export function Workspace() {
 			result.sort((a, b) => (new Date(a.at || 0).getTime()) - (new Date(b.at || 0).getTime()));
 		}
 		return result;
-	}, [items, branchFilter, filter, time, typeFilter, dateSort, search]);
+	}, [items, branchFilter, filter, typeFilter, dateSort, search, opsUser]);
 
 	const stats = useMemo(() => {
 		const counts = new Map<string, number>([["all", items.length]]);
@@ -270,8 +265,10 @@ export function Workspace() {
 		const me = [opsUser?.name, opsUser?.email].filter(Boolean);
 		counts.set("mine", items.filter((i) => me.some((w) => i.owner === w)).length);
 		counts.set("coordinated", items.filter((i) => i.kind === "consultation" && Boolean(i.record.coordinatorId)).length);
+		const kindCounts = new Map<string, number>();
+		for (const i of items) kindCounts.set(i.kind, (kindCounts.get(i.kind) ?? 0) + 1);
 		const totalOutstanding = applicants.reduce((n, a) => n + money(a.financials.outstanding), 0);
-		return { counts, totalOutstanding };
+		return { counts, kindCounts, totalOutstanding };
 	}, [items, applicants, opsUser]);
 
 	const loading = casesLoading || invoicesLoading || leadsLoading;
@@ -339,98 +336,109 @@ export function Workspace() {
 				list={
 					<>
 						<div className="cn-scaffold__filters">
+							{/* One row: the three triage cuts, the drawer toggle, search.
+							    Everything else is one click deep. */}
 							<div className="cn-scaffold__chips">
 								<FilterGroup
 									label="Queue"
-									options={QUEUE_FILTERS.map((f) => ({
-										id: f.id,
-										label: f.label,
-										count: stats.counts.get(f.id) ?? 0,
-										hot: f.id === "mine" && (stats.counts.get("mine") ?? 0) > 0,
-									}))}
+									options={MAIN_FILTERS.map((id) => {
+										const f = QUEUE_FILTERS.find((q) => q.id === id)!;
+										return {
+											id: f.id,
+											label: f.label,
+											count: stats.counts.get(f.id) ?? 0,
+											hot: f.id === "needs_assignment" && (stats.counts.get(f.id) ?? 0) > 0,
+										};
+									})}
 									value={filter}
 									onChange={setFilter}
 								/>
-								<div style={{ marginLeft: "auto" }}>
-								<FilterGroup
-									label="When"
-									options={TIME_FILTERS.map((f) => ({
-										id: f.id,
-										label: f.label,
-										count: f.id === "all" ? undefined : (stats.counts.get(f.id) ?? 0),
-										hot: f.id === "overdue" && overdue > 0,
-									}))}
-									value={time}
-									onChange={setTime}
-								/>
-								</div>
-							</div>
-							<div className="cn-scaffold__filter-row" style={{ flexWrap: "wrap", gap: "1rem" }}>
-							<input
-								type="search"
-								placeholder="Search queue…"
-								value={search}
-								onChange={(e) => setSearch(e.target.value || null)}
-								className="cn-search"
-								aria-label="Search queue"
-								style={{ flex: "1 1 14rem", width: "auto" }}
-							/>
-							<label className="cn-filter">
-								<span className="cn-filter__label">Type</span>
-								<select
-									className="cn-filter__select"
-									value={typeFilter}
-									onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-								>
-									{TYPE_FILTERS.map((f) => (
-										<option key={f.id} value={f.id}>
-											{f.label}
-										</option>
-									))}
-								</select>
-							</label>
-							<label className="cn-filter">
-								<span className="cn-filter__label">Date/Time</span>
-								<select
-									className="cn-filter__select"
-									value={dateSort}
-									onChange={(e) => setDateSort(e.target.value as SortId)}
-								>
-									{DATE_SORTS.map((f) => (
-										<option key={f.id} value={f.id}>
-											{f.label}
-										</option>
-									))}
-								</select>
-							</label>
-							{canSeeAllBranches && (
-								<label className="cn-filter">
-									<span className="cn-filter__label">Branch</span>
-									<select
-										className="cn-filter__select"
-										value={branchFilter}
-										onChange={(e) => setBranchFilter(e.target.value)}
-									>
-										<option value="all">All Branches</option>
-										{OPS_BRANCHES.map(b => (
-											<option key={b.id} value={b.id}>{b.name}</option>
-										))}
-									</select>
-								</label>
-							)}
-							{canAssignWork && (
 								<button
 									type="button"
-									className="btn btn--ghost btn--sm"
-									disabled={selected?.kind !== "consultation"}
-									title={selected?.kind === "consultation" ? "Delegate this case or its journey" : "Select a consultation to delegate"}
-									onClick={() => setDelegateOpen(true)}
+									className={`ops-pill ops-pill--chip${drawerActive ? " ops-pill--hot" : ""}`}
+									style={{ borderStyle: "dashed" }}
+									aria-expanded={drawerOpen}
+									aria-controls="queue-filter-drawer"
+									onClick={setDrawerOpen}
 								>
-									Delegate…
+									Filters {drawerOpen ? "▴" : "▾"}
 								</button>
-							)}
-							{loading && <span className="cn-filter__label" style={{ marginLeft: "auto" }}>Loading…</span>}
+								<input
+									type="search"
+									placeholder="Search queue…"
+									value={search}
+									onChange={(e) => setSearch(e.target.value || null)}
+									className="cn-search"
+									aria-label="Search queue"
+									style={{ flex: "1 1 14rem", width: "auto", marginLeft: "auto" }}
+								/>
+								{loading && <span className="cn-filter__label">Loading…</span>}
 							</div>
+							{/* The occasional cuts — one quiet strip, opened on demand or
+							    automatically when a drawer facet is active. */}
+							{drawerOpen && (
+								<div
+									id="queue-filter-drawer"
+									className="cn-scaffold__filter-row"
+									style={{ flexWrap: "wrap", gap: "0.75rem 1.5rem", background: "var(--muted)" }}
+								>
+									<span style={{ display: "flex", gap: "0.35rem", alignItems: "center", flexWrap: "wrap" }}>
+										<span className="cn-filter__label">Needs</span>
+										<FilterGroup
+											label="Needs"
+											options={DRAWER_FILTERS.map((id) => {
+												const f = QUEUE_FILTERS.find((q) => q.id === id)!;
+												return { id: f.id, label: f.label, count: stats.counts.get(f.id) ?? 0 };
+											})}
+											value={filter}
+											onChange={setFilter}
+										/>
+									</span>
+									<label className="cn-filter">
+										<span className="cn-filter__label">Type</span>
+										<select
+											className="cn-filter__select"
+											value={typeFilter}
+											onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+										>
+											{TYPE_FILTERS.map((f) => (
+												<option key={f.id} value={f.id}>
+													{f.label}
+												</option>
+											))}
+										</select>
+									</label>
+									{canSeeAllBranches && (
+										<label className="cn-filter">
+											<span className="cn-filter__label">Branch</span>
+											<select
+												className="cn-filter__select"
+												value={branchFilter}
+												onChange={(e) => setBranchFilter(e.target.value)}
+											>
+												<option value="all">All Branches</option>
+												{OPS_BRANCHES.map(b => (
+													<option key={b.id} value={b.id}>{b.name}</option>
+												))}
+											</select>
+										</label>
+									)}
+									<label className="cn-filter">
+										<span className="cn-filter__label">Sort</span>
+										<select
+											className="cn-filter__select"
+											value={dateSort}
+											onChange={(e) => setDateSort(e.target.value as SortId)}
+										>
+											{DATE_SORTS.map((f) => (
+												<option key={f.id} value={f.id}>
+													{f.label}
+												</option>
+											))}
+										</select>
+									</label>
+								</div>
+							)}
 						</div>
 						<div className="cn-scaffold__rows">
 							<PendingTaskRows
@@ -471,15 +479,6 @@ export function Workspace() {
 					) : null
 				}
 			/>}
-			{selected?.kind === "consultation" && (
-				<DelegateSheet
-					open={delegateOpen}
-					onClose={() => setDelegateOpen(false)}
-					consultation={selected.record}
-					onToast={(type, message) => setToast({ type, message })}
-				/>
-			)}
-			{toast && <Toast type={toast.type} message={toast.message} onDone={() => setToast(null)} />}
 		</div>
 	);
 }

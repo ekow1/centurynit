@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useOpsAuth, ROLE_LABELS } from "./OpsAuthContext";
 import { useCases } from "../hooks/useCases";
@@ -90,8 +90,11 @@ export function EnterpriseConsultations() {
 	const canSeeAll = canSeeAllBranches;
 	const reviewCount = consultations.filter((c) => c.status === "Under Review").length;
 
-	const isMine = (c: MockConsultation) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name;
-	const roleScopedConsultations = useMemo(() => scopeRecords(consultations, isMine), [scopeRecords, consultations, opsUser]);
+	const isMine = useCallback(
+		(c: MockConsultation) => c.assignedOfficerEmail === opsUser?.email || c.assignedOfficer === opsUser?.name,
+		[opsUser],
+	);
+	const roleScopedConsultations = useMemo(() => scopeRecords(consultations, isMine), [scopeRecords, consultations, isMine]);
 
 	const matchesStatus = (c: MockConsultation, s: StatusFilter) =>
 		s === "All" ? true : s === "Reschedule asked" ? Boolean(c.rescheduleRequestedAt) : c.status === s;

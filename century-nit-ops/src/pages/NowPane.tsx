@@ -382,27 +382,40 @@ function CoverageCard() {
 		}
 	};
 
-	const uncovered = branches.filter((b) => !duty[b.id]).length;
+	const covered = branches.filter((b) => Boolean(duty[b.id]));
+	const uncovered = branches.length - covered.length;
 
 	return (
 		<>
 			<div className="card cn-now">
-				<p className="cn-detail__eyebrow">Coverage · today{uncovered > 0 ? ` — ${uncovered} uncovered` : ""}</p>
-				{branches.map((b) => {
-					const on = duty[b.id];
-					return (
-						<div key={b.id} className="cn-detail__row" style={{ cursor: "default" }}>
-							<span>
-								{b.name}
-								<br />
-								<span className="cn-detail__row-note">
-									{on ? `${on.name} — new cases route to them` : "Nobody — new cases land unassigned"}
-								</span>
+				<p className="cn-detail__eyebrow">Coverage · today</p>
+				{/* Covered branches itemize; the uncovered ones collapse into a
+				    single count — five identical "nobody" rows were noise. */}
+				{covered.map((b) => (
+					<div key={b.id} className="cn-detail__row" style={{ cursor: "default" }}>
+						<span>
+							{b.name}
+							<br />
+							<span className="cn-detail__row-note">
+								{duty[b.id]!.name} — new cases route to them
 							</span>
-							{on ? <span className="portal-pill">on duty</span> : <span className="portal-pill" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>uncovered</span>}
-						</div>
-					);
-				})}
+						</span>
+						<span className="portal-pill">on duty</span>
+					</div>
+				))}
+				<div className="cn-detail__row" style={{ cursor: "default" }}>
+					<span>
+						Coverage
+						<br />
+						<span className="cn-detail__row-note">
+							{covered.length} of {branches.length} covered
+							{uncovered > 0 ? " — uncovered branches route to unassigned" : ""}
+						</span>
+					</span>
+					<button type="button" className="link" onClick={openSheet}>
+						set →
+					</button>
+				</div>
 				{(delegated.cases > 0 || delegated.journeys > 0) && (
 					<div className="cn-detail__row" style={{ cursor: "default" }}>
 						<span>
@@ -415,9 +428,6 @@ function CoverageCard() {
 						<Link to="/workspace?filter=coordinated" className="btn btn--ghost btn--sm">Review</Link>
 					</div>
 				)}
-				<button type="button" className="btn btn--primary btn--sm" style={{ marginTop: "0.6rem", width: "100%" }} onClick={openSheet}>
-					Set coverage…
-				</button>
 			</div>
 
 			<Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Coverage · today" size="tall">

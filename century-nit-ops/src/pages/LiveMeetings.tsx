@@ -6,6 +6,7 @@ import { useOpsAuth } from "./OpsAuthContext";
 import { BranchScopeFilter } from "./BranchScopeFilter";
 import { useJoinMeeting } from "./case/ConsultationCall";
 import { useUrlParam } from "../hooks/useUrlParam";
+import { useNow } from "../hooks/useNow";
 
 /**
  * Calls today — the live-meetings board.
@@ -310,15 +311,6 @@ function WrappedRow({ booking: b }: { booking: Booking; now: number }) {
 			</span>
 		</li>
 	);
-}
-
-function useNow() {
-	const [now, setNow] = useState(() => Date.now());
-	useEffect(() => {
-		const id = window.setInterval(() => setNow(Date.now()), 15_000);
-		return () => window.clearInterval(id);
-	}, []);
-	return now;
 }
 
 function formatElapsed(ms: number): string {

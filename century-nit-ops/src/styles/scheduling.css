@@ -130,6 +130,19 @@
 	color: var(--muted-foreground);
 }
 
+/* Overdue is the only band that can demand attention — it inverts. */
+.ops-band--hot {
+	background: var(--foreground);
+	color: var(--background);
+	padding-left: 0.6rem;
+	padding-right: 0.6rem;
+}
+
+.ops-band--hot .ops-band__note {
+	color: var(--background);
+	opacity: 0.65;
+}
+
 .ops-people {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));

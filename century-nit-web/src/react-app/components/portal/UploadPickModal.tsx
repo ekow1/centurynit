@@ -6,14 +6,14 @@ import { Button } from "../ui/Button";
  *
  * Opens when the user clicks "Upload file" (or "Replace"), shows the branch-wide
  * upload restrictions up front, and accepts either a drag-and-dropped file or a
- * browsed selection. The parent owns the upload pipeline — this component only
+ * browsed selection. The parent owns the upload pipeline. This component only
  * hands back the chosen `File` and closes.
  */
 export function UploadPickModal({
 	open,
 	title,
 	subtitle,
-	acceptedFormats = "PDF, JPG, PNG, DOC, DOCX",
+	acceptedFormats = "PDF",
 	maxSizeLabel = "15 MB",
 	extraNotes,
 	onFileChosen,
@@ -149,7 +149,7 @@ export function UploadPickModal({
 				<input
 					ref={inputRef}
 					type="file"
-					accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+					accept=".pdf"
 					hidden
 					onChange={(e) => {
 						const file = e.target.files?.[0];

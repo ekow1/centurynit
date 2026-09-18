@@ -41,12 +41,14 @@
 		"pdfmake": "^0.3.11",
 		"pg": "^8.13.0",
 		"resend": "^3.2.0",
+		"web-push": "^3.6.7",
 		"zod": "^3.23.0"
 	},
 	"devDependencies": {
 		"@types/node": "^22.0.0",
 		"@types/pdfmake": "^0.3.3",
 		"@types/pg": "^8.11.0",
+		"@types/web-push": "^3.6.4",
 		"drizzle-kit": "^0.30.5",
 		"tsx": "^4.19.0",
 		"typescript": "^5.9.0",

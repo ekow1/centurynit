@@ -5,7 +5,7 @@ import { z } from "zod";
  *
  * Uploads are two steps: ask the server for a signed URL, PUT the file straight
  * to storage, then tell the server it landed. The file never passes through the
- * API — passport scans and bank statements are large and private, and routing
+ * API. Passport scans and bank statements are large and private, and routing
  * them through Node would make it the bottleneck for no benefit.
  */
 
@@ -20,22 +20,12 @@ export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 /**
  * What may be uploaded.
  *
- * An allowlist, not a blocklist: anything not named here is refused. HEIC and
- * WebP are deliberately absent — phone HEIC shots are refused as-is because the
- * vault compresses images client-side first (a HEIC that arrives here has been
- * re-encoded as JPEG or PNG), and WebP is still too unevenly supported in the
- * tools reviewers open documents with. Office formats are allowed only in their
- * DOC/DOCX forms, per the portal's requirements.
+ * An allowlist, not a blocklist: anything not named here is refused. PDF only —
+ * scans must reach reviewers as PDFs; photos and Office files are refused.
  */
-export const ALLOWED_DOCUMENT_TYPES = [
-	"application/pdf",
-	"image/jpeg",
-	"image/png",
-	"application/msword",
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-] as const;
+export const ALLOWED_DOCUMENT_TYPES = ["application/pdf"] as const;
 
-/** 15 MB — comfortably above a phone photo of a passport, well below abuse. */
+/** 15 MB. Comfortably above a phone photo of a passport, well below abuse. */
 export const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 export const requestUploadSchema = z.object({
@@ -43,14 +33,14 @@ export const requestUploadSchema = z.object({
 	documentType: z.string().min(1).max(64),
 	/**
 	 * Staff only: upload on behalf of this applicant (official agency
-	 * artifacts — visa receipts, flight bookings). The server refuses every
+	 * artifacts. Visa receipts, flight bookings). The server refuses every
 	 * other document type on another owner's record; client documents must be
 	 * uploaded by the client.
 	 */
 	ownerUserId: z.string().uuid().optional(),
 	fileName: z.string().min(1).max(255),
 	contentType: z.enum(ALLOWED_DOCUMENT_TYPES, {
-		errorMap: () => ({ message: "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX)" }),
+		errorMap: () => ({ message: "Upload a PDF document" }),
 	}),
 	sizeBytes: z
 		.number()
@@ -80,19 +70,19 @@ export const documentSchema = z.object({
 	reviewedAt: z.string().datetime().nullable(),
 	uploadedAt: z.string().datetime().nullable(),
 	createdAt: z.string().datetime(),
-	/** Owner's user ID — staff-only. */
+	/** Owner's user ID. Staff-only. */
 	ownerUserId: z.string().optional(),
-	/** Owner's email — staff-only; omitted from an applicant's own listing. */
+	/** Owner's email. Staff-only; omitted from an applicant's own listing. */
 	ownerEmail: z.string().email().optional(),
-	/** Owner's display name — staff-only, for the ops folder view. */
+	/** Owner's display name. Staff-only, for the ops folder view. */
 	ownerName: z.string().optional(),
-	/** APP-xxxx or CNS-xxxx — staff-only, for folder headings. */
+	/** APP-xxxx or CNS-xxxx. Staff-only, for folder headings. */
 	caseReference: z.string().optional(),
-	/** Applicant branch — staff-only, for branch filtering. */
+	/** Applicant branch. Staff-only, for branch filtering. */
 	branch: z.string().optional(),
-	/** Name of the assigned consultant — staff-only. */
+	/** Name of the assigned consultant. Staff-only. */
 	assignedStaffName: z.string().optional(),
-	/** Display category (IDENTITY, ACADEMIC, LANGUAGE, etc.) — staff-only. */
+	/** Display category (IDENTITY, ACADEMIC, LANGUAGE, etc.). Staff-only. */
 	documentCategory: z.string().optional(),
 });
 export type ApplicantDocument = z.infer<typeof documentSchema>;

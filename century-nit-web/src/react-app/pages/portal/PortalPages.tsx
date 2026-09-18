@@ -1377,7 +1377,7 @@ function AssessmentForm({
 			return;
 		}
 		if (!(ALLOWED_DOCUMENT_TYPES as readonly string[]).includes(file.type)) {
-			toast.error("Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).");
+			toast.error("Upload a PDF document.");
 			return;
 		}
 
@@ -1627,7 +1627,7 @@ function AssessmentForm({
 				<h3 className="assess-section__title"><span>08 · Documents</span><span className="assess-section__meta">{sectionMeta("documents", 0)}</span></h3>
 				<div>
 					<p className="muted mb-3" style={{ fontSize: "0.85rem" }}>
-						Upload scanned copies of your documents. Accepted: PDF, JPEG, PNG, DOC, DOCX (max 15 MB each).
+						Upload scanned copies of your documents. Accepted: PDF only (max 15 MB each).
 					</p>
 					<div className="form-grid form-grid--2">
 						{ASSESSMENT_DOC_FIELDS.map((doc) => {

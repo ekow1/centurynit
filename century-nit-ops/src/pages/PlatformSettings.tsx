@@ -157,7 +157,7 @@ export function PlatformSettings() {
 
 	const tabGroups = useMemo(() => {
 		if (activeTab === "integrations") {
-			return ["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings"];
+			return ["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings", "Web Push"];
 		}
 		if (activeTab === "defaults") {
 			return ["Scheduling", "General", "System"];
@@ -170,8 +170,8 @@ export function PlatformSettings() {
 			if (activeTab !== "audit") {
 				if (!tabGroups.includes(s.group) && selectedGroup === "all") {
 					// Fallback for general custom groups
-					if (activeTab === "integrations" && !["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings"].includes(s.group)) return false;
-					if (activeTab === "defaults" && ["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings"].includes(s.group)) return false;
+					if (activeTab === "integrations" && !["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings", "Web Push"].includes(s.group)) return false;
+					if (activeTab === "defaults" && ["Email", "Storage", "Google Calendar", "Google Sign-In", "Google", "Payment Gateways", "Video Meetings", "Web Push"].includes(s.group)) return false;
 				}
 				if (selectedGroup !== "all" && s.group !== selectedGroup) return false;
 			}

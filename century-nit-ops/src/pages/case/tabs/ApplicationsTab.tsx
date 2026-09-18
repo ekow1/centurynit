@@ -185,7 +185,7 @@ function SchoolRow({
 		if (!file) return;
 		const label = SCHOOL_FILE_LABELS[kind].toLowerCase();
 		if (!ALLOWED_DOCUMENT_TYPES.includes(file.type as (typeof ALLOWED_DOCUMENT_TYPES)[number])) {
-			fail(new Error("Upload a PDF, image (JPEG, PNG) or Word document."), "Unsupported file");
+			fail(new Error("Upload a PDF document."), "Unsupported file");
 			return;
 		}
 		if (file.size > MAX_DOCUMENT_BYTES) {

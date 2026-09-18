@@ -666,6 +666,13 @@
 			"when": 1789610200000,
 			"tag": "0096_admin_audit",
 			"breakpoints": true
+		},
+		{
+			"idx": 97,
+			"version": "7",
+			"when": 1789610300000,
+			"tag": "0097_push_subscriptions",
+			"breakpoints": true
 		}
 	]
 }

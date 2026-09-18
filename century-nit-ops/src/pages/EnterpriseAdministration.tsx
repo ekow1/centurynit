@@ -1432,6 +1432,31 @@ function UsersAndRoles() {
 													</button>
 												</>
 											)}
+											{selectedStaff.email !== opsUser?.email && (
+												<>
+													{" · "}
+													<button
+														type="button"
+														className="dash-link"
+														style={{ background: "none", border: 0, padding: 0, cursor: "pointer", textDecorationStyle: "wavy" }}
+														onClick={() =>
+															confirm(
+																`Delete ${selectedStaff.name}?`,
+																"Their staff record and console login are permanently removed — this cannot be undone. Cases and consultations they touched keep the work, unassigned.",
+																async () => {
+																	await staffApi.deleteStaff(selectedStaff.id);
+																	say(`${selectedStaff.name} deleted.`);
+																	setSelectedStaffId(null);
+																	await refresh();
+																},
+																true,
+															)
+														}
+													>
+														delete
+													</button>
+												</>
+											)}
 										</span>
 									</div>
 								</div>

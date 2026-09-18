@@ -230,15 +230,14 @@ export type PushJob = {
  * same logical notification collapses onto the existing job instead of
  * lighting up every browser a second time.
  */
-/**
- * Web Push is not built yet — the `push_subscriptions` table exists in the
- * schema's history but has no model, no subscribe endpoint, and no worker.
- * Enqueueing here just filled Redis with jobs nothing consumed, so this is a
- * retained no-op (same as `queueCalendar`): the `notify()` call site stays
- * ready for when the channel is implemented.
- */
-export async function queuePush(_job: PushJob): Promise<void> {
-	return;
+export async function queuePush(job: PushJob): Promise<void> {
+	const id = `push:${job.notification.id}:${job.userId}`;
+	try {
+		await pushQueue.add("send", job, { ...RETRY, jobId: toJobId(id) });
+	} catch (err) {
+		if (isDuplicateJobId(err)) return;
+		throw err;
+	}
 }
 
 /* ── Campaign ────────────────────────────────────────────────────────────── */

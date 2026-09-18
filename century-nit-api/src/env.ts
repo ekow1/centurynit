@@ -193,6 +193,14 @@ const schema = z.object({
 	PAYSTACK_SECRET_KEY: z.string().optional(),
 	/** Fallback GHS → USD exchange rate when platform_settings value is unset. */
 	PLATFORM_EXCHANGE_RATE: z.string().optional(),
+	/**
+	 * Web Push (VAPID) keys — optional.
+	 *
+	 * If unset here and in platform_settings, the API auto-generates a pair on
+	 * first use and persists it to platform_settings.
+	 */
+	VAPID_PUBLIC_KEY: z.string().optional(),
+	VAPID_PRIVATE_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

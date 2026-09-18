@@ -31,6 +31,7 @@ import { paymentsRouter } from "./routes/payments.js";
 import { rolesRouter } from "./routes/roles.js";
 import { leadsRouter } from "./routes/leads.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { pushRouter } from "./routes/push.js";
 import { clientUsersRouter } from "./routes/clientUsers.js";
 import { chatRouter } from "./routes/chat.js";
 import { meCommunicationRouter, communicationRouter } from "./routes/communication.js";
@@ -159,6 +160,7 @@ export function createApp() {
 	app.route(`${API_PREFIX}/me`, meRouter);
 	app.route(`${API_PREFIX}/me`, avatarRouter);
 	app.route(`${API_PREFIX}/notifications`, notificationsRouter);
+	app.route(`${API_PREFIX}/push`, pushRouter);
 	app.route(`${API_PREFIX}/events`, eventsRouter);
 	app.route(`${API_PREFIX}/marketing`, marketingRouter);
 	app.route(`${API_PREFIX}/newsletter`, newsletterRouter);
@@ -259,6 +261,12 @@ app.route(`${API_PREFIX}/departure`, departureRouter);
 			description:
 				"Real-time in-app notifications via Server-Sent Events. Each " +
 				"authenticated user gets a personal SSE stream at /events/stream.",
+		},
+		{
+			name: "Web Push",
+			description:
+				"Browser push notifications. Subscribe a browser, fetch the VAPID " +
+				"public key, unsubscribe.",
 		},
 	{ name: "Schools", description: "School-application management and scholarships." },
 	{ name: "Payments", description: "Paystack checkout initiation, verification and webhooks." },

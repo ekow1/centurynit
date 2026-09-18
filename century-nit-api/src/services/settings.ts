@@ -61,6 +61,8 @@ export type SettingKey =
 	| "POST_ARRIVAL_FREQUENCIES"
 	| "POST_ARRIVAL_GRACE_DAYS"
 	| "POST_ARRIVAL_REMIND_DAYS"
+	| "VAPID_PUBLIC_KEY"
+	| "VAPID_PRIVATE_KEY"
 	| string;
 
 
@@ -229,6 +231,21 @@ export const SETTING_DEFS: Record<
 		group: "Fee Schedule",
 		secret: false,
 		description: "The rate the client is charged at and receipts convert at. Default: 15.0.",
+	},
+	VAPID_PUBLIC_KEY: {
+		label: "VAPID Public Key",
+		group: "Web Push",
+		secret: false,
+		description:
+			"Voluntary Application Server Identity public key, URL-safe base64. " +
+			"Auto-generated on first use; clients pass this to pushManager.subscribe().",
+	},
+	VAPID_PRIVATE_KEY: {
+		label: "VAPID Private Key",
+		group: "Web Push",
+		secret: true,
+		description:
+			"Paired with VAPID_PUBLIC_KEY to sign push payloads. Auto-generated on first use.",
 	},
 	PRE_DEPARTURE_TEMPLATE: {
 		label: "Pre-departure checklist template",

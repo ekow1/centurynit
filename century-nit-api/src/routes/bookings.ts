@@ -506,8 +506,50 @@ bookingsRouter.openapi(
 				}).catch((err) => {
 					console.error("[bookings] Receipt delivery failed:", err);
 				});
-			} catch {
-				// Non-fatal — booking still succeeds; ops can still find the booking
+			} catch (err) {
+				// Non-fatal for the client — their booking stands — but a paid
+				// booking that failed case/invoice/receipt settlement must never
+				// disappear silently. That is exactly how a client ends up with a
+				// confirmation email and no receipt.
+				console.error(
+					`[bookings] Post-payment settlement failed for booking ${booking.reference} (ref ${reference}):`,
+					err,
+				);
+				try {
+					const { recordAdminEvent } = await import("../services/audit.js");
+					await recordAdminEvent({
+						category: "Financials",
+						action: `Booking ${booking.reference} paid but settlement failed — no invoice/receipt`,
+						actorEmail: user.email,
+						target: booking.reference,
+						detail: err instanceof Error ? err.message : String(err),
+					});
+				} catch {
+					// Auditing must never break the request either.
+				}
+				try {
+					const { notifyMany } = await import("../services/notify.js");
+					const staffRows = await db
+						.select({ userId: opsUsers.userId })
+						.from(opsUsers)
+						.where(and(eq(opsUsers.active, true), inArray(opsUsers.role, ["super_admin", "manager", "finance"])));
+					await notifyMany(
+						staffRows
+							.filter((s): s is { userId: string } => Boolean(s.userId))
+							.map((s) => ({
+								type: "payment.settlement_failed",
+								recipientUserId: s.userId,
+								title: "Paid booking needs attention",
+								body: `${booking.reference} was paid but the invoice/receipt step failed — the client has no receipt. See the audit log for the error.`,
+								link: "/bookings",
+								priority: "high",
+								entityType: "booking",
+								entityId: booking.id,
+							})),
+					);
+				} catch {
+					// The in-app alert must not break the request either.
+				}
 			}
 		}
 

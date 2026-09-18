@@ -11,7 +11,7 @@ import { useAppState, documentsReleasedFor, documentHoldReasonFor } from "../../
 import { OfficialDocuments, officialRows } from "../../components/OfficialDocuments";
 
 /**
- * The applicant's document vault — fully server-backed.
+ * The applicant's document vault. Fully server-backed.
  *
  * Every file goes through a presigned R2 URL: the browser takes a ticket from
  * the API, PUTs the bytes straight to storage, and tells the API they landed.
@@ -110,7 +110,7 @@ export function PortalDocumentVault() {
 			setAllDocs(res.documents);
 		} catch (err) {
 			// Signed-out is no longer reachable here (RequireAuth gates the
-			// portal), so a failure is operational — surface a retry.
+			// portal), so a failure is operational. Surface a retry.
 			setLiveDocs(null);
 			setLoadError(readableError(err, "Could not load your documents. Check your connection and try again."));
 		}
@@ -211,7 +211,7 @@ export function PortalDocumentVault() {
 			return;
 		}
 		if (!(ALLOWED_DOCUMENT_TYPES as readonly string[]).includes(file.type)) {
-			const msg = "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX).";
+			const msg = "Upload a PDF document.";
 			setError(msg);
 			toast.error(msg);
 			return;
@@ -285,7 +285,7 @@ export function PortalDocumentVault() {
 			});
 			toast.success(`${row.fileName ?? row.name} removed.`);
 		} catch (err) {
-			// A verified document is refused with 409 — that rule is the server's,
+			// A verified document is refused with 409. That rule is the server's,
 			// and its message already explains what to do instead.
 			const msg = readableError(err, "Could not remove that document.");
 			setError(msg);
@@ -308,7 +308,7 @@ export function PortalDocumentVault() {
 				</div>
 			</header>
 
-			{/* the count — one line of truth; the inverted cell is what needs you */}
+			{/* the count. One line of truth; the inverted cell is what needs you */}
 			<div className="dcount mt-4">
 				<div>
 					<p className="dcount__n">
@@ -432,7 +432,7 @@ export function PortalDocumentVault() {
 						);
 					})}
 
-					{/* what the milestone releases — now in your hands */}
+					{/* what the milestone releases. Now in your hands */}
 					<div className="psec mt-5">
 						<span className="psec__no">↓</span>
 						<span className="psec__title">In your hands</span>
@@ -460,7 +460,7 @@ export function PortalDocumentVault() {
 								All documents verified ✓
 							</p>
 							<p className="muted mt-1" style={{ fontSize: "var(--text-sm)" }}>
-								Your document vault is cleared — the file moves with the journey.
+								Your document vault is cleared. The file moves with the journey.
 							</p>
 						</div>
 					) : null}
@@ -491,8 +491,7 @@ export function PortalDocumentVault() {
 					<div className="sharp-card">
 						<p className="eyebrow">Formats</p>
 						<p className="muted" style={{ fontSize: "var(--text-xs)", marginTop: "0.4rem", lineHeight: 1.6 }}>
-							PDF, JPG, PNG, DOC, DOCX — max 15 MB. Clear scans; large images compress automatically.
-							Your consultant reviews every upload.
+							PDF only. Max 15 MB. Clear scans — your consultant reviews every upload.
 						</p>
 					</div>
 
@@ -551,7 +550,7 @@ export function PortalDocumentVault() {
 								<Button size="sm" onClick={pickBrowse}>
 									Browse files
 								</Button>
-								<p className="drop-zone__hint">PDF, JPG, PNG, DOC or DOCX — max 15 MB</p>
+								<p className="drop-zone__hint">PDF, JPG, PNG, DOC or DOCX. Max 15 MB</p>
 							</div>
 							<div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "1rem" }}>
 								<Button variant="ghost" size="sm" onClick={closePickModal}>

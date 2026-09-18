@@ -77,7 +77,7 @@ import { setGhsPerUsd } from "./ui/Money.js";
  *
  * Both apps are served from the same origin as `/api/*` (the Worker proxies it),
  * so requests are relative and `credentials: "include"` carries the Better Auth
- * session cookie. No token is ever read or held by the frontend — §16.
+ * session cookie. No token is ever read or held by the frontend. §16.
  */
 
 export class ApiError extends Error {
@@ -91,7 +91,7 @@ export class ApiError extends Error {
 		this.name = "ApiError";
 	}
 
-	/** The slot was taken between rendering and submitting — offer a re-pick. */
+	/** The slot was taken between rendering and submitting. Offer a re-pick. */
 	get isSlotTaken(): boolean {
 		return this.code === "SLOT_TAKEN";
 	}
@@ -138,7 +138,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 		try {
 			body = (await response.json()) as ErrorBody;
 		} catch {
-			/* non-JSON error page — fall back to the status text */
+			/* non-JSON error page. Fall back to the status text */
 		}
 		throw new ApiError(
 			response.status,
@@ -157,7 +157,7 @@ const json = (body: unknown) => ({ body: JSON.stringify(body) });
 /**
  * PUT a file to a signed storage URL, reporting upload progress.
  *
- * `fetch` only exposes download progress — the number that matters here is
+ * `fetch` only exposes download progress. The number that matters here is
  * upload progress, which is why this uses XMLHttpRequest. The signed URL is the
  * entire authorisation, so no session cookie is sent, and the response is not
  * our JSON error envelope.
@@ -241,11 +241,11 @@ async function putFileWithProgress(
 	}
 }
 
-/* ── Bookings ────────────────────────────────────────────────────────────── */
+/* Bookings */
 
 export const bookingsApi = {
 	/**
-	 * Slots for a branch and date. Advisory only — the server re-checks on
+	 * Slots for a branch and date. Advisory only. The server re-checks on
 	 * submit, so a slot shown as free here can still be refused (§10).
 	 */
 	availability(params: {
@@ -263,7 +263,7 @@ export const bookingsApi = {
 		return request(`${API_PREFIX}/bookings/availability?${query}`);
 	},
 
-	/** Open-slot counts for a run of days — lets a picker grey out days before a click. */
+	/** Open-slot counts for a run of days. Lets a picker grey out days before a click. */
 	availabilityDays(params: {
 		branchId: string;
 		from: string;
@@ -365,7 +365,7 @@ export const bookingsApi = {
 		});
 	},
 
-	/** The client withdraws their own pending reschedule request — the held slot is untouched. */
+	/** The client withdraws their own pending reschedule request. The held slot is untouched. */
 	withdrawRescheduleRequest(bookingId: string): Promise<Booking> {
 		return request(`${API_PREFIX}/bookings/${bookingId}/reschedule-request`, {
 			method: "DELETE",
@@ -430,7 +430,7 @@ export const bookingsApi = {
 	},
 
 	/**
-	 * Live (in-progress) online meetings — bookings where `meetingActive` is
+	 * Live (in-progress) online meetings. Bookings where `meetingActive` is
 	 * true, polled by the meeting-status worker. Returns the same shape as
 	 * `list()` so the dashboard widget and dedicated page can reuse the
 	 * Booking type.
@@ -444,13 +444,13 @@ export const bookingsApi = {
 	},
 };
 
-/* ── Staff identity: invitations and MFA ─────────────────────────────────── */
+/* Staff identity: invitations and MFA */
 
 export const staffApi = {
 	/**
 	 * What an invitee is shown before choosing a password.
 	 *
-	 * Public — they have no account yet. Returns only what the emailed link
+	 * Public. They have no account yet. Returns only what the emailed link
 	 * already told them, and never echoes the token back.
 	 */
 	previewInvitation(token: string): Promise<InvitationPreview> {
@@ -587,7 +587,7 @@ export const staffApi = {
 	},
 };
 
-/* ── Auth settings ───────────────────────────────────────────────────────── */
+/* Auth settings */
 
 export type AuthSettingsResponse = {
 	portal: {
@@ -671,7 +671,7 @@ export const authSettingsApi = {
 	},
 };
 
-/* ── Notification delivery log ────────────────────────────────────────────── */
+/* Notification delivery log */
 
 export type NotificationLogItem = {
 	id: string;
@@ -682,6 +682,16 @@ export type NotificationLogItem = {
 	reference: string | null;
 	errorMessage: string | null;
 	sentAt: string;
+};
+
+export type OpsNotification = {
+	id: string;
+	type: string;
+	title: string;
+	body: string;
+	link: string | null;
+	read: boolean;
+	createdAt: string;
 };
 
 export const notificationsApi = {
@@ -697,9 +707,24 @@ export const notificationsApi = {
 		const qs = params.toString() ? `?${params.toString()}` : "";
 		return request(`${API_PREFIX}/notifications/log${qs}`);
 	},
+
+	/** Ops staff: list the signed-in member's notifications. */
+	opsList(): Promise<{ notifications: OpsNotification[] }> {
+		return request(`${API_PREFIX}/notifications/ops`);
+	},
+
+	/** Ops staff: mark a single notification read. */
+	opsMarkRead(id: string): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/notifications/ops/${id}/read`, { method: "PATCH" });
+	},
+
+	/** Ops staff: mark every notification read. */
+	opsMarkAllRead(): Promise<{ ok: boolean }> {
+		return request(`${API_PREFIX}/notifications/ops/read-all`, { method: "POST" });
+	},
 };
 
-/* ── Calendar feed (iCal mirror) — staff ──────────────────────────────────── */
+/* Calendar feed (iCal mirror). Staff */
 
 export type CalendarStatus = {
 	hasFeed: boolean;
@@ -744,9 +769,9 @@ export type CalendarSubscription = {
 export const calendarApi = {
 	/**
 	 * Feed status plus working hours, merged for the Calendar page. The secret
-	 * iCal URL is never returned — the server only says *whether* a feed exists.
+	 * iCal URL is never returned. The server only says *whether* a feed exists.
 	 */
-	/** Every staff member's hours — the scheduling page's "who can take these slots". */
+	/** Every staff member's hours. The scheduling page's "who can take these slots". */
 	staffWorkingHours(): Promise<{ staff: { opsUserId: string; name: string; email: string; branch: string | null; hours: CalendarStatus["workingHours"] }[] }> {
 		return request(`${API_PREFIX}/calendar/working-hours/staff`);
 	},
@@ -786,7 +811,7 @@ export const calendarApi = {
 
 	/**
 	 * Replace the signed-in staff member's weekly hours. `days` is the complete
-	 * set — omit a day to mark it non-working. The target is the session user;
+	 * set. Omit a day to mark it non-working. The target is the session user;
 	 * there is no id to pass, and none is accepted.
 	 */
 	updateWorkingHours(input: UpdateWorkingHours): Promise<WorkingHoursResponse> {
@@ -796,7 +821,7 @@ export const calendarApi = {
 		});
 	},
 
-	/* Outbound subscription — the company calendar as a one-way, read-only iCal
+	/* Outbound subscription. The company calendar as a one-way, read-only iCal
 	 * feed into a staff member's personal calendar. Independent of the inbound
 	 * mirror above; revocable and regenerable. */
 	getSubscription(): Promise<CalendarSubscription> {
@@ -816,12 +841,12 @@ export const calendarApi = {
 	},
 };
 
-/* ── Documents ───────────────────────────────────────────────────────────── */
+/* Documents */
 
 export const documentsApi = {
 	/**
 	 * Applicants get their own; staff with the documents module get the review
-	 * queue. Passing `ownerUserId` as an applicant is refused by the server — the
+	 * queue. Passing `ownerUserId` as an applicant is refused by the server. The
 	 * scope is decided from the session, not from this argument.
 	 */
 	list(params: { ownerUserId?: string } = {}): Promise<{ documents: ApplicantDocument[] }> {
@@ -865,7 +890,7 @@ export const documentsApi = {
 	 * take a ticket, PUT the bytes straight to storage, then tell the server they
 	 * landed. Stopping after the PUT leaves a document stuck at PENDING_UPLOAD
 	 * that no listing will ever show, so getting this wrong is invisible rather
-	 * than loud — which is exactly why it lives here instead of in each screen.
+	 * than loud. Which is exactly why it lives here instead of in each screen.
 	 *
 	 * The PUT goes to storage, not to us, so it deliberately bypasses `request`:
 	 * no session cookie should be sent to a third-party host, the signed URL is
@@ -903,7 +928,7 @@ export const documentsApi = {
 				throw new ApiError(
 					err.status,
 					"UPLOAD_FAILED",
-					`Could not upload ${file.name}. The link may have expired — try again.`,
+					`Could not upload ${file.name}. The link may have expired. Try again.`,
 				);
 			}
 			throw err;
@@ -913,7 +938,7 @@ export const documentsApi = {
 	},
 };
 
-/* ── Cases: consultations, applications, applicants ──────────────────────── */
+/* Cases: consultations, applications, applicants */
 
 export const consultationsApi = {
 	list(): Promise<{ consultations: ApiConsultation[]; total: number }> {
@@ -932,7 +957,7 @@ export const consultationsApi = {
 			...json({ employeeId, scope: opts?.scope, branch: opts?.branch }),
 		});
 	},
-	/** Refer the consultation to another handling branch — no handler picked. */
+	/** Refer the consultation to another handling branch. No handler picked. */
 	refer(id: string, body: { branch: string; note?: string }): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/refer`, {
 			method: "POST",
@@ -972,7 +997,7 @@ export const consultationsApi = {
 			body: JSON.stringify({ reason: reason ?? "" }),
 		});
 	},
-	/** Issue a free rebooking on a cancelled case — next checkout skips payment. */
+	/** Issue a free rebooking on a cancelled case. Next checkout skips payment. */
 	rebookCredit(id: string): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/rebook-credit`, { method: "POST" });
 	},
@@ -985,11 +1010,11 @@ export const consultationsApi = {
 			...json(body),
 		});
 	},
-	/** Roll an in-progress assessment back to confirmed — the undo for a misclick. */
+	/** Roll an in-progress assessment back to confirmed. The undo for a misclick. */
 	backToConfirmed(id: string): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/back-to-confirmed`, { method: "POST" });
 	},
-	/** Take back coordination of a delegated case — the manager break-glass. */
+	/** Take back coordination of a delegated case. The manager break-glass. */
 	reclaim(id: string): Promise<ApiConsultation> {
 		return request(`${API_PREFIX}/consultations/${id}/reclaim`, { method: "POST" });
 	},
@@ -1067,7 +1092,7 @@ export const applicationsApi = {
 			...json({ employeeId, scope: opts?.scope, branch: opts?.branch }),
 		});
 	},
-	/** Refer the case to another handling branch — no handler picked. */
+	/** Refer the case to another handling branch. No handler picked. */
 	refer(id: string, body: { branch: string; note?: string }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/refer`, {
 			method: "POST",
@@ -1106,16 +1131,16 @@ export const applicationsApi = {
 	setReleaseOverride(id: string, input: { reason?: string; revoke?: boolean }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/release-override`, { method: "POST", ...json(input) });
 	},
-	/** Set the client's post-arrival schedule on their behalf — the reason goes on the case. */
+	/** Set the client's post-arrival schedule on their behalf. The reason goes on the case. */
 	setPostArrivalSchedule(id: string, input: { months: number; frequency: string; reason: string }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/post-arrival-schedule`, { method: "POST", ...json(input) });
 	},
-	/** Record Departure facts — report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
+	/** Record Departure facts. Report-by date, briefing, pickup, accommodation, emergency contact, arrival. */
 	setDepartureDetails(id: string, details: DepartureDetails): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/applications/${id}/departure-details`, { method: "PATCH", ...json(details) });
 	},
 	/**
-	 * Staff-side package selection — binds `packageId`/`fundingTrack`, sets the
+	 * Staff-side package selection. Binds `packageId`/`fundingTrack`, sets the
 	 * school allowance, voids prior unpaid agency proformas and raises a fresh
 	 * one. Same service as the applicant's own `/me/application/package`.
 	 */
@@ -1124,7 +1149,7 @@ export const applicationsApi = {
 	},
 	/**
 	 * Correct patchable case facts. The package (`fundingTrack`) is not
-	 * patchable — changing it re-prices invoices, so it goes through
+	 * patchable. Changing it re-prices invoices, so it goes through
 	 * `choosePackage` only.
 	 */
 	patch(
@@ -1151,7 +1176,7 @@ export const applicationsApi = {
 		});
 	},
 
-	/* ── Travel Assistance (Ops side) ──────────────────────────────── */
+	/* Travel Assistance (Ops side) */
 
 	listTravelAssistance(): Promise<TravelAssistanceRequest[]> {
 		return request(`${API_PREFIX}/applications/travel-assistance`);
@@ -1193,14 +1218,14 @@ export const applicantsApi = {
 	get(id: string): Promise<ApiApplicant> {
 		return request(`${API_PREFIX}/applicants/${id}`);
 	},
-	/** Journey scope — every case this applicant opens inherits the coordinator. */
+	/** Journey scope. Every case this applicant opens inherits the coordinator. */
 	delegateCoordination(id: string, coordinatorOpsUserId: string): Promise<{ ok: boolean }> {
 		return request(`${API_PREFIX}/applicants/${id}/delegate-coordination`, {
 			method: "POST",
 			...json({ coordinatorOpsUserId }),
 		});
 	},
-	/** Release the journey coordinator — in-flight cases keep whoever holds them. */
+	/** Release the journey coordinator. In-flight cases keep whoever holds them. */
 	releaseCoordination(id: string): Promise<{ ok: boolean }> {
 		return request(`${API_PREFIX}/applicants/${id}/release-coordination`, { method: "POST" });
 	},
@@ -1216,7 +1241,7 @@ export const meApi = {
 		return request(`${API_PREFIX}/me/application/pre-departure/${taskId}`, { method: "POST", ...json({ done }) });
 	},
 
-	/** The fee schedule as the portal reads it — see `feesApi.schedule`. */
+	/** The fee schedule as the portal reads it. See `feesApi.schedule`. */
 	fees(): Promise<FeeSchedule & { catalogue: FeeCatalogue }> {
 		return feesApi.schedule();
 	},
@@ -1245,7 +1270,7 @@ export const meApi = {
 	},
 
 	/**
-	 * Stage consent — the applicant's explicit decision to start, hold, or opt
+	 * Stage consent. The applicant's explicit decision to start, hold, or opt
 	 * out of a major journey stage. Only "continue" sends the case to Ops for
 	 * handler assignment.
 	 */
@@ -1269,7 +1294,7 @@ export const meApi = {
 	/**
 	 * Update the signed-in applicant's own profile. The server resolves the
 	 * applicant from the session, so no id is sent. `branch` is not accepted
-	 * here — that's an ops placement decision.
+	 * here. That's an ops placement decision.
 	 */
 	updateProfile(input: UpdateMyProfile): Promise<ApiApplicant> {
 		return request(`${API_PREFIX}/me/application`, { method: "PATCH", ...json(input) });
@@ -1302,7 +1327,7 @@ export const meApi = {
 			...json(input),
 		});
 	},
-	/** How to spread the post-arrival remainder — months and frequency from the catalogue. */
+	/** How to spread the post-arrival remainder. Months and frequency from the catalogue. */
 	choosePostArrivalSchedule(input: { months: number; frequency: string }): Promise<ApiApplication> {
 		return request(`${API_PREFIX}/me/application/post-arrival-schedule`, {
 			method: "POST",
@@ -1312,9 +1337,9 @@ export const meApi = {
 
 
 	/**
-	 * Complete the journey from Payment Execution. The gate is per-plan — full
+	 * Complete the journey from Payment Execution. The gate is per-plan. Full
 	 * plans need the agency service fee settled in full, installment plans only
-	 * their first installment — plus the ticketing fee, travel clearance, and
+	 * their first installment. Plus the ticketing fee, travel clearance, and
 	 * the finished pre-departure checklist.
 	 */
 	completeApplication(): Promise<ApiApplication> {
@@ -1372,7 +1397,7 @@ export const meApi = {
 	/**
 	 * Open Paystack hosted checkout for the applicant's agency service fee
 	 * (Stage IV settlement). The server resolves the agency invoice and amount
-	 * from the session — no invoice id is sent. Returns the hosted checkout
+	 * from the session. No invoice id is sent. Returns the hosted checkout
 	 * URL to redirect the browser to, like `paystackCheckout`.
 	 */
 	agencyPayment(): Promise<{ authorizationUrl: string }> {
@@ -1400,7 +1425,7 @@ export const meApi = {
 	},
 
 	/**
-	 * The whole photo upload, as one call — ticket, PUT straight to storage with
+	 * The whole photo upload, as one call. Ticket, PUT straight to storage with
 	 * progress, then complete. `onProgress` receives 0–100 as bytes go up.
 	 */
 	async uploadAvatar(
@@ -1425,7 +1450,7 @@ export const meApi = {
 				throw new ApiError(
 					err.status,
 					"UPLOAD_FAILED",
-					`Could not upload your photo. The link may have expired — try again.`,
+					`Could not upload your photo. The link may have expired. Try again.`,
 				);
 			}
 			throw err;
@@ -1439,7 +1464,7 @@ export const meApi = {
 	 * `currentStage` is the coarse `JourneyStage` enum value stored on
 	 * `applications.stage` (e.g. "visa_processing"). `portalStage` is the
 	 * fine-grained `ProcessStageId` `deriveJourney` produced from it plus the
-	 * invoice/school signals — the display position the UI should use. */
+	 * invoice/school signals. The display position the UI should use. */
 	journey(): Promise<DerivedJourney> {
 		return request(`${API_PREFIX}/me/journey`);
 	},
@@ -1533,7 +1558,7 @@ export const meApi = {
 		});
 	},
 
-	/* ── Context-Aware Case Communication (services/communication.ts) ── */
+	/* Context-Aware Case Communication (services/communication.ts) */
 
 	/** The full payload the portal Communication Center renders. */
 	getCommunicationContext(): Promise<CommunicationContext> {
@@ -1577,7 +1602,7 @@ export const meApi = {
 		});
 	},
 
-	/** Stage an attachment upload against a conversation — returns a presigned PUT URL. */
+	/** Stage an attachment upload against a conversation. Returns a presigned PUT URL. */
 	stageCommunicationAttachment(
 		conversationId: string,
 		meta: { fileName: string; contentType: string; sizeBytes: number },
@@ -1648,10 +1673,10 @@ export const invoicesApi = {
 	},
 };
 
-/* ── Fee Schedule ────────────────────────────────────────────────────────── */
+/* Fee Schedule */
 
 export const feesApi = {
-	/** The live fee catalogue — items, destination tariffs, the exchange rate, the service-fee split. */
+	/** The live fee catalogue. Items, destination tariffs, the exchange rate, the service-fee split. */
 	async catalogue(): Promise<FeeCatalogue> {
 		const cat = await request<FeeCatalogue>(`${API_PREFIX}/fees`);
 		setGhsPerUsd(cat.exchangeRate);
@@ -1660,7 +1685,7 @@ export const feesApi = {
 	/**
 	 * The catalogue in the shape the portal grew up with. Century's only
 	 * per-case fees are the consultation and the extra-school add-on; the
-	 * other keys are zero because those charges are no longer Century's —
+	 * other keys are zero because those charges are no longer Century's,
 	 * a university's application fee and a destination's visa costs come
 	 * from `catalogue` and are only known once a school or a country is.
 	 */
@@ -1681,14 +1706,14 @@ export const feesApi = {
 	},
 };
 
-/** A destination's visa costs from the catalogue, in cents — 0 until the country is known or priced. */
+/** A destination's visa costs from the catalogue, in cents. 0 until the country is known or priced. */
 export function visaCostsCentsFor(catalogue: FeeCatalogue | null | undefined, destinationId: string | null | undefined): number {
 	const d = catalogue?.destinations.find((x) => x.id === destinationId);
 	return d ? d.visaFeeCents + d.biometricsFeeCents : 0;
 }
 
 
-/* ── Schools & Applications ──────────────────────────────────────────────── */
+/* Schools & Applications */
 
 export const schoolsApi = {
 	/** List the signed-in applicant's school applications. */
@@ -1711,7 +1736,7 @@ export const schoolsApi = {
 		return request(`${API_PREFIX}/me/schools/${id}`, { method: "DELETE" });
 	},
 
-	/** Lock school selections — raises Stage II application invoice on server. */
+	/** Lock school selections. Raises Stage II application invoice on server. */
 	lock(input: LockSchools = {}): Promise<SchoolApplicationList> {
 		return request(`${API_PREFIX}/me/schools/lock`, { method: "POST", ...json(input) });
 	},
@@ -1778,7 +1803,7 @@ export const schoolsApi = {
 		return request(`${API_PREFIX}/me/schools/${id}/admission-letter/download`);
 	},
 
-	/* ── Files on a school row, by kind: the offer letter or the submission proof ── */
+	/* Files on a school row, by kind: the offer letter or the submission proof */
 
 	requestFileUpload(
 		id: string,
@@ -1801,7 +1826,7 @@ export const schoolsApi = {
 	},
 
 	/**
-	 * Staff: the whole upload of one file on a school row, as one call —
+	 * Staff: the whole upload of one file on a school row, as one call,
 	 * ticket, PUT straight to storage with progress, then complete.
 	 * `onProgress` receives 0–100 as bytes go up. Returns the updated row.
 	 */
@@ -1828,7 +1853,7 @@ export const schoolsApi = {
 				throw new ApiError(
 					err.status,
 					"UPLOAD_FAILED",
-					`Could not upload ${file.name}. The link may have expired — try again.`,
+					`Could not upload ${file.name}. The link may have expired. Try again.`,
 				);
 			}
 			throw err;
@@ -1837,19 +1862,19 @@ export const schoolsApi = {
 		return schoolsApi.completeFileUpload(id, kind, ticket.storageKey);
 	},
 
-	/** Staff: the offer letter upload — `uploadFile` for the "offer-letter" kind. */
+	/** Staff: the offer letter upload. `uploadFile` for the "offer-letter" kind. */
 	uploadAdmissionLetter(id: string, file: File, onProgress?: (percent: number) => void): Promise<SchoolApplication> {
 		return schoolsApi.uploadFile(id, "offer-letter", file, onProgress);
 	},
 };
 
-/** URL segment per file kind — the offer letter keeps its historical path. */
+/** URL segment per file kind. The offer letter keeps its historical path. */
 const SCHOOL_FILE_PATH: Record<SchoolFileKind, string> = {
 	"offer-letter": "admission-letter",
 	"submission-proof": "submission-proof",
 };
 
-/* ── CRM Leads ─────────────────────────────────────────────────────────── */
+/* CRM Leads */
 
 export const leadsApi = {
 	list(params?: { stage?: string; search?: string }): Promise<{
@@ -1927,7 +1952,7 @@ export const leadsApi = {
 	},
 };
 
-/* ── Payments Gateway (Paystack / Stripe) ────────────────────────────────── */
+/* Payments Gateway (Paystack / Stripe) */
 
 export const paymentsApi = {
 	/** Initialize a real payment intent for an invoice (Paystack or Stripe). */
@@ -1941,7 +1966,7 @@ export const paymentsApi = {
 	}
 };
 
-/* ── Service Packages API ─────────────────────────────────────────────────── */
+/* Service Packages API */
 
 export const packagesApi = {
 	/** List all active service packages. */

@@ -398,7 +398,7 @@ opsSchoolsRouter.openapi(
 const admissionLetterUploadBody = z.object({
 	fileName: z.string().min(1).max(255),
 	contentType: z.enum(ALLOWED_DOCUMENT_TYPES, {
-		errorMap: () => ({ message: "Upload a PDF, image (JPEG, PNG), or Word document (DOC, DOCX)" }),
+		errorMap: () => ({ message: "Upload a PDF document" }),
 	}),
 });
 

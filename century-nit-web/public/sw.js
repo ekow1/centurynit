@@ -1,4 +1,4 @@
-/* Century NIT — offline shell for the PWA.
+/* Century NIT. Offline shell for the PWA.
  *
  * Two rules this file exists to enforce:
  *
@@ -27,7 +27,7 @@ function isBypassed(url) {
 	return (
 		url.pathname === "/api" ||
 		url.pathname.startsWith("/api/") ||
-		// /ops is the Operations Center — a different application on this origin,
+		// /ops is the Operations Center. A different application on this origin,
 		// with its own build and its own deploy cadence. This worker is registered
 		// by the public app and must not cache or shell-substitute another app's
 		// routes, or staff get served a stale admin bundle after an ops-only deploy.
@@ -65,7 +65,7 @@ self.addEventListener("activate", (event) => {
 });
 
 async function handleFetch(request) {
-	// Rule 2 — navigations are network-first so deploys land immediately.
+	// Rule 2. Navigations are network-first so deploys land immediately.
 	// Offline: fall back to this document, then to the app shell, then to a
 	// synthetic Response so respondWith never gets undefined.
 	if (request.mode === "navigate") {
@@ -81,7 +81,7 @@ async function handleFetch(request) {
 		}
 	}
 
-	// Static assets — cache-first, revalidating in the background. Build output
+	// Static assets. Cache-first, revalidating in the background. Build output
 	// is content-hashed, so a stale hit here is a hit on a file that never changes.
 	const cached = await caches.match(request);
 	const fetched = fetch(request)
@@ -105,7 +105,7 @@ self.addEventListener("fetch", (event) => {
 	// Cross-origin requests are none of our business.
 	if (url.origin !== self.location.origin) return;
 
-	// Rule 1 — the API is never cached, in either direction.
+	// Rule 1. The API is never cached, in either direction.
 	if (isBypassed(url)) return;
 
 	// Final line of defence: handleFetch can theoretically still reject, so the
@@ -113,5 +113,51 @@ self.addEventListener("fetch", (event) => {
 	// unhandled FetchEvent error.
 	event.respondWith(
 		handleFetch(request).catch(() => new Response("Offline", { status: 503, statusText: "Offline" })),
+	);
+});
+
+/* ── Web Push ────────────────────────────────────────────────────────────── */
+
+self.addEventListener("push", (event) => {
+	let payload;
+	try {
+		payload = event.data ? event.data.json() : {};
+	} catch {
+		payload = { title: "Century NIT", body: event.data ? event.data.text() : "" };
+	}
+
+	const title = payload.title || "Century NIT";
+	const options = {
+		body: payload.body || "",
+		icon: "/favicon.svg",
+		badge: "/favicon.svg",
+		tag: payload.id || undefined,
+		data: {
+			link: payload.link || "/",
+		},
+	};
+
+	event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+	event.notification.close();
+
+	const link = event.notification.data?.link || "/";
+
+	event.waitUntil(
+		self.clients
+			.matchAll({ type: "window", includeUncontrolled: true })
+			.then((clientList) => {
+				for (const client of clientList) {
+					if (client.url.includes(self.location.origin) && "focus" in client) {
+						client.navigate(link);
+						return client.focus();
+					}
+				}
+				if (self.clients.openWindow) {
+					return self.clients.openWindow(link);
+				}
+			}),
 	);
 });

@@ -355,7 +355,7 @@ export async function listConversations(
 			sql`${messages.id} = ANY (
 				SELECT DISTINCT ON (conversation_id) id
 				FROM ${messages}
-				WHERE conversation_id = ANY(${conversationIds})
+				WHERE ${inArray(messages.conversationId, conversationIds)}
 				ORDER BY conversation_id, created_at DESC
 			)`,
 		);
@@ -375,7 +375,7 @@ export async function listConversations(
 			sql`${messages.id} = ANY (
 				SELECT DISTINCT ON (conversation_id) id
 				FROM ${messages}
-				WHERE conversation_id = ANY(${conversationIds})
+				WHERE ${inArray(messages.conversationId, conversationIds)}
 				AND visibility = 'public'
 				ORDER BY conversation_id, created_at DESC
 			)`,

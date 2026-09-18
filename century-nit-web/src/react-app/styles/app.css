@@ -9227,3 +9227,238 @@ a.portal-ch--on:hover {
 		grid-column: 2 / -1;
 	}
 }
+
+/* ---------- Notification panel (bell dropdown) ---------- */
+
+.notif-panel__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.9rem 1.1rem;
+	border-bottom: 1px solid #e4e4e7;
+}
+
+.notif-panel__title {
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: #18181b;
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin: 0;
+}
+
+.notif-panel__chip {
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	font-weight: 700;
+	background: #18181b;
+	color: #ffffff;
+	padding: 0.1rem 0.4rem;
+}
+
+.notif-panel__link {
+	font-size: 0.72rem;
+	font-weight: 600;
+	color: #71717a;
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+}
+
+.notif-panel__link:hover {
+	color: #18181b;
+	text-decoration: underline;
+}
+
+.notif-panel__filters {
+	display: flex;
+	border-bottom: 1px solid #e4e4e7;
+	overflow-x: auto;
+}
+
+.notif-panel__filter {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	padding: 0.55rem 0.7rem;
+	border: none;
+	background: none;
+	color: #71717a;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	white-space: nowrap;
+}
+
+.notif-panel__filter--on {
+	color: #18181b;
+	border-bottom-color: #18181b;
+	font-weight: 700;
+}
+
+.notif-panel__fnum {
+	font-weight: 400;
+	opacity: 0.6;
+	margin-left: 0.2rem;
+}
+
+.notif-panel__day {
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: #71717a;
+	padding: 0.7rem 1.1rem 0.35rem;
+	margin: 0;
+}
+
+.notif-item {
+	display: flex;
+	gap: 0.75rem;
+	padding: 0.8rem 1.1rem;
+	border-bottom: 1px solid #f4f4f5;
+	cursor: pointer;
+	position: relative;
+	text-align: left;
+	width: 100%;
+	background: none;
+	border-top: none;
+	border-left: none;
+	border-right: none;
+}
+
+.notif-item:hover {
+	background: #fafafa;
+}
+
+.notif-item--unread {
+	border-left: 3px solid #18181b;
+	padding-left: calc(1.1rem - 3px);
+}
+
+.notif-item__ic {
+	width: 26px;
+	height: 26px;
+	border: 1.5px solid #18181b;
+	display: grid;
+	place-items: center;
+	flex: none;
+	margin-top: 0.1rem;
+	color: #18181b;
+}
+
+.notif-item--read .notif-item__ic {
+	border-color: #e4e4e7;
+	color: #71717a;
+}
+
+.notif-item__t {
+	font-size: 0.82rem;
+	font-weight: 700;
+	line-height: 1.3;
+	color: #18181b;
+	margin: 0;
+}
+
+.notif-item--read .notif-item__t {
+	font-weight: 500;
+	color: #52525b;
+}
+
+.notif-item__b {
+	font-size: 0.76rem;
+	color: #71717a;
+	line-height: 1.45;
+	margin: 0.15rem 0 0;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.notif-item__meta {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-top: 0.4rem;
+}
+
+.notif-item__when {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	color: #71717a;
+}
+
+.notif-item__act {
+	font-family: var(--font-mono);
+	font-size: 0.6rem;
+	font-weight: 700;
+	color: #18181b;
+}
+
+.notif-item__tick {
+	position: absolute;
+	top: 0.8rem;
+	right: 1rem;
+	font-family: var(--font-mono);
+	font-size: 0.58rem;
+	color: #71717a;
+	border: 1px solid #e4e4e7;
+	padding: 0.15rem 0.4rem;
+	background: #ffffff;
+	display: none;
+	cursor: pointer;
+}
+
+.notif-item--unread:hover .notif-item__tick {
+	display: block;
+}
+
+.notif-item__tick:hover {
+	border-color: #18181b;
+	color: #18181b;
+}
+
+.notif-panel__push {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	padding: 0.8rem 1.1rem;
+	border-top: 1px solid #e4e4e7;
+	background: #f4f4f5;
+}
+
+.notif-panel__dot {
+	width: 8px;
+	height: 8px;
+	flex: none;
+}
+
+.notif-panel__dot--off {
+	border: 1.5px solid #71717a;
+}
+
+.notif-panel__dot--on {
+	background: #18181b;
+}
+
+.notif-panel__push p {
+	font-size: 0.72rem;
+	color: #71717a;
+	flex: 1;
+	margin: 0;
+}
+
+.notif-panel__push strong {
+	color: #18181b;
+	font-weight: 600;
+}
+
+.notif-panel__empty {
+	padding: 2.5rem 1rem;
+	text-align: center;
+	color: #71717a;
+	font-size: 0.8rem;
+}

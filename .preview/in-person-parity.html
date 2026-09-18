@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>In-person parity — confirm, office &amp; map, reschedule</title>
+<style>
+  :root{
+    --background:#ffffff; --foreground:#0a0a0a;
+    --muted:#f5f5f5; --muted-foreground:#52525b;
+    --border:#0a0a0a; --border-light:#d4d4d8;
+    --ok:#0d7a3f;
+    --font-display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --text-xs:.72rem; --text-sm:.875rem;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{font-family:var(--font-display);background:#fafafa;color:var(--foreground);font-size:var(--text-sm)}
+  .page{max-width:1240px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .eyebrow{font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted-foreground)}
+  .page-title{font-size:1.9rem;font-weight:700;letter-spacing:-.02em}
+  .lead{color:var(--muted-foreground);max-width:48rem;line-height:1.6}
+  .mono{font-family:var(--font-mono)}
+  .muted{color:var(--muted-foreground)}
+
+  .head{margin-bottom:2rem}
+  .sec{margin:2.75rem 0 1rem}
+  .sec h2{font-size:1.15rem;font-weight:700}
+  .sec .sub{font-size:var(--text-xs);color:var(--muted-foreground);margin-top:.2rem;max-width:50rem;line-height:1.6}
+
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;margin-top:1rem}
+  @media (max-width:1020px){.compare{grid-template-columns:1fr}}
+  .variant-label{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--muted-foreground);margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .variant-label b{color:var(--foreground)}
+  .variant-label .tag{border:1px solid var(--border-light);padding:.1rem .45rem;font-size:.58rem}
+  .variant-label .tag--new{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+
+  .frame{border:1.5px solid var(--border);background:var(--background);overflow:hidden}
+  .callouts{list-style:none;margin-top:.75rem;padding:0;font-size:var(--text-xs);color:var(--muted-foreground)}
+  .callouts li{padding:.35rem 0 .35rem 1.4rem;position:relative;line-height:1.5}
+  .callouts li::before{content:attr(data-n);position:absolute;left:0;top:.3rem;font-family:var(--font-mono);
+    font-size:.6rem;border:1px solid var(--border-light);width:1.05rem;height:1.05rem;display:flex;
+    align-items:center;justify-content:center}
+  .callouts code{font-family:var(--font-mono);font-size:.62rem;background:var(--muted);padding:.05rem .3rem}
+
+  /* ══ portal chrome ══ */
+  .psec__h{display:flex;align-items:baseline;gap:.6rem;border-bottom:1.5px solid var(--border);padding-bottom:.4rem}
+  .psec__no{font-family:var(--font-mono);font-size:.65rem;border:1.5px solid var(--border);width:1.2rem;height:1.2rem;
+    display:inline-flex;align-items:center;justify-content:center;transform:translateY(-1px)}
+  .psec__no--done{background:var(--foreground);color:var(--background)}
+  .psec__title{font-weight:700;font-size:.95rem}
+  .psec__hint{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-left:auto}
+  .sharp-card{border:1.5px solid var(--border);background:var(--background);padding:1.1rem 1.25rem}
+  .sharp-card--key{border-width:2px}
+  .sharp-card--invert{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+  .pkv{display:flex;justify-content:space-between;gap:1rem;padding:.45rem 0;border-bottom:1px solid var(--border-light);font-size:.85rem}
+  .pkv:last-child{border-bottom:0}
+  .pkv__k{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);padding-top:.15rem}
+  .pkv__v{font-weight:600;text-align:right}
+  .pkv__v .sub{display:block;font-weight:400;font-size:.75rem;color:var(--muted-foreground)}
+  .pill{display:inline-block;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;
+    padding:.15rem .55rem;border:1px solid var(--border)}
+  .pill--solid{background:var(--foreground);color:var(--background)}
+  .pill--ok{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn{display:inline-block;font-family:var(--font-display);font-size:.8rem;font-weight:600;padding:.55rem 1.1rem;
+    border:1.5px solid var(--border);background:var(--background);color:var(--foreground);cursor:pointer;text-decoration:none}
+  .btn--primary{background:var(--foreground);color:var(--background)}
+  .btn--ghost{border-color:var(--border-light);color:var(--muted-foreground)}
+  .btn--sm{font-size:.72rem;padding:.4rem .8rem}
+  .mt-2{margin-top:.5rem}.mt-3{margin-top:.75rem}.mt-4{margin-top:1rem}
+  .dead-note{font-size:.85rem;color:var(--muted-foreground);line-height:1.6}
+  .strike{opacity:.45}
+
+  /* office block — the new piece */
+  .office{margin-top:.9rem;border:1.5px solid var(--border)}
+  .office__map{height:6.5rem;position:relative;background:
+      repeating-linear-gradient(0deg,transparent 0,transparent 11px,rgba(0,0,0,.06) 11px,rgba(0,0,0,.06) 12px),
+      repeating-linear-gradient(90deg,transparent 0,transparent 11px,rgba(0,0,0,.06) 11px,rgba(0,0,0,.06) 12px),
+      var(--muted);border-bottom:1.5px solid var(--border)}
+  .office__map::after{content:"";position:absolute;inset:0;background:
+      linear-gradient(35deg,transparent 46%,rgba(0,0,0,.14) 46%,rgba(0,0,0,.14) 50%,transparent 50%),
+      linear-gradient(-55deg,transparent 60%,rgba(0,0,0,.10) 60%,rgba(0,0,0,.10) 64%,transparent 64%)}
+  .office__pin{position:absolute;left:50%;top:44%;transform:translate(-50%,-100%);z-index:1;
+    width:1.15rem;height:1.15rem;background:var(--foreground);border-radius:50% 50% 50% 0;rotate:-45deg;
+    box-shadow:0 0 0 .3rem rgba(10,10,10,.15)}
+  .office__pin::after{content:"";position:absolute;inset:.33rem;background:var(--background);border-radius:50%}
+  .office__maptag{position:absolute;left:.5rem;bottom:.4rem;z-index:1;font-family:var(--font-mono);font-size:.55rem;
+    text-transform:uppercase;letter-spacing:.1em;background:var(--background);border:1px solid var(--border-light);padding:.1rem .4rem}
+  .office__body{padding:.75rem .9rem}
+  .office__name{font-weight:700;font-size:.9rem}
+  .office__addr{font-size:.8rem;color:var(--muted-foreground);margin-top:.1rem}
+  .office__meta{font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted-foreground);margin-top:.4rem}
+  .office__acts{display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}
+
+  /* next-appointment hero */
+  .pnext{display:flex;gap:1.1rem;border:2px solid var(--border);background:var(--background);padding:1.1rem 1.25rem;align-items:flex-start}
+  .pnext__date{width:3.4rem;text-align:center;border-right:1.5px solid var(--border);padding-right:1rem;flex-shrink:0}
+  .pnext__date b{display:block;font-size:1.7rem;line-height:1}
+  .pnext__date span{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground)}
+  .pnext__title{font-size:1.05rem;font-weight:700;margin-top:.15rem}
+  .pnext__facts{display:flex;gap:.9rem;flex-wrap:wrap;font-size:.8rem;color:var(--muted-foreground);margin-top:.35rem}
+  .pnext__facts b{color:var(--foreground)}
+  .pnext__ref{font-family:var(--font-mono);font-size:.62rem;color:var(--muted-foreground);margin-top:.4rem}
+  .pnext__acts{display:flex;flex-direction:column;gap:.45rem;margin-left:auto;flex-shrink:0}
+
+  /* reschedule form */
+  .appt-slots{display:grid;grid-template-columns:repeat(4,1fr);gap:.4rem;max-width:22rem}
+  .appt-slot{font-family:var(--font-mono);font-size:.72rem;padding:.45rem 0;border:1.5px solid var(--border);
+    background:var(--background);cursor:pointer;text-align:center}
+  .appt-slot--on{background:var(--foreground);color:var(--background)}
+  .appt-slot[disabled]{opacity:.3;cursor:not-allowed;text-decoration:line-through}
+  .field label{display:block;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:.3rem}
+  .select{width:100%;max-width:22rem;font-size:.85rem;padding:.5rem .6rem;border:1.5px solid var(--border);background:var(--background)}
+  .req-note{border:1.5px dashed var(--border);background:var(--muted);padding:.55rem .8rem;font-size:.78rem;line-height:1.5}
+
+  .truth{display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1rem;margin-top:1rem}
+  .truth>div{border:1px solid var(--border-light);padding:.8rem .9rem;font-size:.78rem;line-height:1.55}
+  .truth b{display:block;font-size:.82rem;margin-bottom:.2rem}
+  .truth .ok{color:var(--ok);font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em}
+  .truth .gap{color:#a33;font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="head">
+  <p class="eyebrow">Portal · Consultation · Booking parity</p>
+  <h1 class="page-title mt-1">In-person gets the same journey as online — office, map &amp; reschedule</h1>
+  <p class="lead mt-2">
+    The plumbing is already symmetric: <code class="mono" style="font-size:.75rem">confirmConsultationSlot</code>,
+    <code class="mono" style="font-size:.75rem">requestRescheduleBooking</code> and the ops reschedule panel are
+    type-agnostic — only online carries the extra "needs a meeting link" gate. What's missing is
+    <b>portal rendering</b>: the consultation page dead-ends in-person bookings on a message about a meeting
+    link that will never exist, and nothing shows the office or a map. This mock is the fix.
+  </p>
+</header>
+
+<!-- ══════════════════ WHAT'S TRUE TODAY ══════════════════ -->
+<section class="sec">
+  <h2>What's already true — and what actually gaps</h2>
+  <p class="sub">Verified against the code, not assumed.</p>
+  <div class="truth">
+    <div><span class="ok">already works</span><b>Confirm slot</b>Ops "Confirm slot" + <code>confirmConsultationSlot</code> handle both types. In-person skips the meeting-link gate and confirms the same way.</div>
+    <div><span class="ok">already works</span><b>Reschedule</b>Portal "Move", <code>RescheduleForm</code>, <code>requestRescheduleBooking</code>, ops <code>ReschedulePanel</code> — all type-agnostic. Type is preserved.</div>
+    <div><span class="ok">already works</span><b>Ops location strip</b>In-person cases show "Office location · Get Directions →" from <code>consultation.mapsUrl</code>.</div>
+    <div><span class="gap">the bug</span><b>Portal consultation page</b><code>PortalPages.tsx:2527</code> — in-person renders "The meeting link appears here once your consultant is seated." forever. No address, no map.</div>
+    <div><span class="gap">the bug</span><b>Appointments hero</b><code>PortalAppointments.tsx:503</code> — in-person shows bare "In person". No office, no directions.</div>
+    <div><span class="gap">dead code</span><b>ConsultationAppointmentCard</b>Already has the complete office block (address, phone, hours, mapsUrl, ICS location) — but nothing imports it.</div>
+  </div>
+</section>
+
+<!-- ══════════════════ SCREEN 1 ══════════════════ -->
+<section class="sec">
+  <h2>1 · Consultation page — "Your appointment" card</h2>
+  <p class="sub">The page every in-person applicant stares at. Today it waits for a meeting link that can never exist. After: the office, a map pin, and the actions that matter — directions, calendar, reschedule.</p>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> live today — <b>dead end</b></div>
+      <div class="frame">
+        <div style="padding:1.1rem 1.25rem">
+          <div class="psec__h"><span class="psec__no">1</span><span class="psec__title">Your appointment</span><span class="psec__hint">confirmed · CN-2026-0417</span></div>
+          <div class="sharp-card sharp-card--key mt-3">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <p class="eyebrow">In person · Accra HQ</p>
+              <span class="pill pill--solid">Confirmed</span>
+            </div>
+            <div class="mt-2">
+              <div class="pkv"><span class="pkv__k">When</span><span class="pkv__v">Tue 22 Sep 2026 · 10:00</span></div>
+              <div class="pkv"><span class="pkv__k">Consultant</span><span class="pkv__v">Ekow Firmino</span></div>
+            </div>
+            <p class="dead-note mt-3 strike">The meeting link appears here once your consultant is seated.</p>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><code>meetingUrl</code> is always null for in-person — this sentence is permanent. It reads like something is still loading.</li>
+        <li data-n="2">No address, no map, no phone. The applicant knows "Accra HQ" but not where it is.</li>
+        <li data-n="3">No reschedule affordance on the page — they must guess it's under Appointments.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> proposed — <b>office + map + actions</b></div>
+      <div class="frame">
+        <div style="padding:1.1rem 1.25rem">
+          <div class="psec__h"><span class="psec__no">1</span><span class="psec__title">Your appointment</span><span class="psec__hint">confirmed · CN-2026-0417</span></div>
+          <div class="sharp-card sharp-card--key mt-3" style="padding:0;overflow:hidden">
+            <div style="padding:1rem 1.1rem 0">
+              <div style="display:flex;justify-content:space-between;align-items:baseline">
+                <p class="eyebrow">In person · Accra HQ</p>
+                <span class="pill pill--ok">Confirmed</span>
+              </div>
+              <div class="mt-2">
+                <div class="pkv"><span class="pkv__k">When</span><span class="pkv__v">Tue 22 Sep 2026 · 10:00<span class="sub">45 min · branch local time</span></span></div>
+                <div class="pkv"><span class="pkv__k">Consultant</span><span class="pkv__v">Ekow Firmino</span></div>
+              </div>
+            </div>
+            <div class="office" style="border:0;border-top:1.5px solid var(--border);margin-top:.2rem">
+              <div class="office__map"><span class="office__pin"></span><span class="office__maptag">map preview</span></div>
+              <div class="office__body">
+                <p class="office__name">Century NIT — Accra HQ</p>
+                <p class="office__addr">Airport Residential Area, Accra</p>
+                <p class="office__meta">Mon–Fri 09:00–17:00 GMT · +233 30 000 0000 · Ask at reception for your consultant</p>
+                <div class="office__acts">
+                  <a class="btn btn--primary btn--sm" href="#">Get directions →</a>
+                  <a class="btn btn--ghost btn--sm" href="#">Add to calendar</a>
+                  <a class="btn btn--ghost btn--sm" href="#">Reschedule</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1"><code>getBranch(branchId)</code> already returns <code>address / phone / hours / mapsUrl</code> — pure render change, no new API.</li>
+        <li data-n="2">Map block is a static-styled preview linking to <code>mapsUrl</code> (no Maps SDK key needed); the button opens Google Maps.</li>
+        <li data-n="3">"Reschedule" deep-links to <code>/portal/appointments#next</code> — the existing Move flow, no new logic.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SCREEN 2 ══════════════════ -->
+<section class="sec">
+  <h2>2 · Booking flow — the "Booking confirmed" state</h2>
+  <p class="sub">After Paystack returns, both types hit the same generic card. For in-person it should confirm the office on the spot, so the location is locked in the applicant's head before they leave the page.</p>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> both types get this</div>
+      <div class="frame">
+        <div class="sharp-card--invert" style="padding:1.1rem 1.25rem">
+          <p class="eyebrow" style="color:rgba(255,255,255,.6)">Booking confirmed</p>
+          <p class="mono mt-2" style="font-size:.75rem">Ref: CN-2026-0417</p>
+          <p class="mt-2" style="opacity:.85;font-size:.85rem">A branch coordinator will review and assign your consultant shortly.</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Correct for online — nothing else to know yet.</li>
+        <li data-n="2">For in-person the applicant paid to visit a physical office and leaves without being told where it is.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> in-person variant</div>
+      <div class="frame">
+        <div class="sharp-card--invert" style="padding:1.1rem 1.25rem">
+          <p class="eyebrow" style="color:rgba(255,255,255,.6)">Booking confirmed · in person</p>
+          <p class="mono mt-2" style="font-size:.75rem">Ref: CN-2026-0417</p>
+          <p class="mt-2" style="opacity:.85;font-size:.85rem">Tue 22 Sep · 10:00 at <b>Accra HQ</b>, Airport Residential Area, Accra.</p>
+          <div class="office__acts" style="margin-top:.7rem">
+            <a class="btn btn--sm" href="#" style="border-color:rgba(255,255,255,.5);color:#fff;background:transparent">Open in Maps →</a>
+          </div>
+          <p class="mono mt-3" style="font-size:.62rem;opacity:.6">Consultant assignment + directions are emailed. Bring your passport.</p>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Same card, type-aware body — office name + one-line address + Maps link.</li>
+        <li data-n="2">The confirmation email (<code>bookingSlotConfirmedForClient</code>) gains the same office block for in-person — today it only carries the join link for online.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ SCREEN 3 ══════════════════ -->
+<section class="sec">
+  <h2>3 · Appointments — "Next appointment" hero + reschedule</h2>
+  <p class="sub">Online gets a Join button and a "link being prepared" note. In-person gets… the words "In person". The office becomes the join-link equivalent: always visible, directions one tap away, Move works exactly the same.</p>
+
+  <div class="compare">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> in-person hero today</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="pnext">
+          <div class="pnext__date"><b>22</b><span>Sep</span></div>
+          <div>
+            <p class="eyebrow">Next appointment</p>
+            <p class="pnext__title">Consultation</p>
+            <div class="pnext__facts">
+              <span><b>Tue 22 Sep 2026</b> · 10:00</span>
+              <span>45 min</span>
+              <span>In person</span>
+              <span>with <b>Ekow Firmino</b></span>
+            </div>
+            <p class="pnext__ref">REF CN-2026-0417</p>
+          </div>
+          <div class="pnext__acts">
+            <a class="btn btn--ghost btn--sm" href="#">Reschedule</a>
+            <a class="btn btn--ghost btn--sm" href="#">Cancel</a>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">"In person" is the whole location story. Which office? Where?</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> office line + directions</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="pnext">
+          <div class="pnext__date"><b>22</b><span>Sep</span></div>
+          <div>
+            <p class="eyebrow">Next appointment</p>
+            <p class="pnext__title">Consultation</p>
+            <div class="pnext__facts">
+              <span><b>Tue 22 Sep 2026</b> · 10:00</span>
+              <span>45 min</span>
+              <span>In person</span>
+              <span>with <b>Ekow Firmino</b></span>
+            </div>
+            <div class="pnext__facts" style="margin-top:.3rem">
+              <span>📍 <b>Accra HQ</b> · Airport Residential Area, Accra</span>
+            </div>
+            <p class="pnext__ref">REF CN-2026-0417</p>
+          </div>
+          <div class="pnext__acts">
+            <a class="btn btn--primary btn--sm" href="#">Directions →</a>
+            <a class="btn btn--ghost btn--sm" href="#">Reschedule</a>
+            <a class="btn btn--ghost btn--sm" href="#">Cancel</a>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">"Directions →" takes the primary slot Join occupies for online — same visual weight, different destination.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> in-person reschedule — same flow, office context kept</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="req-note" style="margin-bottom:.8rem">
+          <span class="mono" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;display:block;margin-bottom:.15rem">Rescheduling · in person at Accra HQ</span>
+          Pick a new time at the same office. The current slot holds until your consultant confirms the move.
+        </div>
+        <div class="field"><label>Date</label>
+          <select class="select"><option>Thu 24 Sep 2026</option></select>
+        </div>
+        <div class="field mt-3"><label>Time — Accra HQ</label>
+          <div class="appt-slots">
+            <button class="appt-slot" disabled>09:00</button>
+            <button class="appt-slot">10:00</button>
+            <button class="appt-slot appt-slot--on">11:30</button>
+            <button class="appt-slot">13:00</button>
+          </div>
+        </div>
+        <div class="office__acts mt-3">
+          <a class="btn btn--primary btn--sm" href="#">Request reschedule</a>
+          <a class="btn btn--ghost btn--sm" href="#">Keep current time</a>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">The existing <code>RescheduleForm</code> already works for in-person — this adds only the header note naming the office, so the applicant knows the venue isn't changing.</li>
+        <li data-n="2">On approval the backend already re-runs <code>syncConsultationRescheduled</code> → confirmation resets → consultant re-confirms → <code>booking.slot_confirmed</code> fires again. Same as online.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> approved — confirmation re-issued with office</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <div class="sharp-card sharp-card--key" style="padding:0;overflow:hidden">
+          <div style="padding:1rem 1.1rem">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <p class="eyebrow">In person · Accra HQ</p>
+              <span class="pill pill--ok">Confirmed</span>
+            </div>
+            <div class="pkv mt-2"><span class="pkv__k">When</span><span class="pkv__v">Thu 24 Sep 2026 · 11:30<span class="sub">moved from Tue 22 · 10:00</span></span></div>
+          </div>
+          <div class="office" style="border:0;border-top:1.5px solid var(--border)">
+            <div class="office__body">
+              <p class="office__name">Century NIT — Accra HQ</p>
+              <p class="office__addr">Airport Residential Area, Accra · Mon–Fri 09:00–17:00 GMT</p>
+              <div class="office__acts"><a class="btn btn--primary btn--sm" href="#">Get directions →</a><a class="btn btn--ghost btn--sm" href="#">Add to calendar</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Office never leaves the card — the venue survives the move.</li>
+        <li data-n="2">Email + in-app <code>booking.rescheduled</code> / re-confirm already fire; for in-person they gain the address + maps link instead of a meeting URL.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════ CHANGE LIST ══════════════════ -->
+<section class="sec">
+  <h2>The actual change list</h2>
+  <p class="sub">No backend schema or endpoint changes — everything needed is already returned.</p>
+  <div class="truth">
+    <div><span class="gap">web</span><b>PortalPages.tsx ~2523</b>Type-aware action block: online → join/link-pending; in-person → office card (map strip, address, hours, phone, Get directions, Add to calendar, Reschedule link).</div>
+    <div><span class="gap">web</span><b>PortalAppointments.tsx ~503</b>In-person hero: office name + address fact line; "Directions →" as primary action.</div>
+    <div><span class="gap">web</span><b>PortalPages.tsx ~2035</b>"Booking confirmed" card gains in-person variant: office + "Open in Maps".</div>
+    <div><span class="gap">web</span><b>RescheduleForm header</b>Optional one-line venue context ("at Accra HQ — the office stays the same").</div>
+    <div><span class="gap">api · email</span><b>bookingSlotConfirmedForClient / bookingRescheduled</b>In-person variant carries office address + mapsUrl instead of meeting link.</div>
+    <div><span class="ok">option</span><b>ConsultationAppointmentCard</b>Either delete as dead code or reuse its office block markup for the consultation page — don't leave two divergent cards.</div>
+  </div>
+</section>
+
+<!-- ══════════════════ INVOICE APPROVAL ══════════════════ -->
+<section class="sec">
+  <h2>+ Consultant can't approve invoices — the actual gate</h2>
+  <p class="sub">Checked against the live roles table. This is a permission gap, not a bug — and it's a one-row fix.</p>
+
+  <div class="truth">
+    <div><span class="ok">has</span><b>"invoices" module</b>The prod <code>consultant</code> role row already lists <code>invoices</code>, <code>ledger</code>, <code>finance</code> — consultants can <i>see</i> invoices and pass <code>requireModule("invoices")</code>.</div>
+    <div><span class="gap">missing</span><b>"issue_invoices" capability</b>The same row lacks <code>issue_invoices</code>. Result: the <b>Approve &amp; issue</b> button never renders (<code>canIssueInvoices → false</code>, MoneyTab:243), and a direct call hits <code>requireCapability</code> → <code>403 "Your role cannot issue invoices"</code> (invoices.ts:307).</div>
+    <div><span class="ok">no code needed</span><b>Roles table is live</b><code>checkRoleCapability</code> reads <code>ops_roles</code>, not a hardcoded matrix — the role editor can grant this today, no deploy.</div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag">before</span> consultant's Money tab today</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">Invoices on this case</p>
+        <div class="sharp-card mt-2">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Enrolment invoice</b>
+            <span class="pill">Proforma</span>
+          </div>
+          <p class="muted mt-2" style="font-size:.78rem">Awaiting approval — the client cannot see or pay it until it is issued.</p>
+          <div class="pkv mt-2"><span class="pkv__k">Total</span><span class="pkv__v">GH₵ 4,500</span></div>
+        </div>
+        <p class="mono muted mt-3" style="font-size:.62rem">NO APPROVE BUTTON — canIssueInvoices is false</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Consultant raises the proforma, then stalls — only manager/finance/super_admin can issue it.</li>
+        <li data-n="2">Same for void and credit — all three share the one capability.</li>
+      </ul>
+    </div>
+
+    <div>
+      <div class="variant-label"><span class="tag tag--new">after</span> capability granted</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">Invoices on this case</p>
+        <div class="sharp-card mt-2">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <b style="font-size:.9rem">Enrolment invoice</b>
+            <span class="pill">Proforma</span>
+          </div>
+          <p class="muted mt-2" style="font-size:.78rem">Awaiting approval — the client cannot see or pay it until it is issued.</p>
+          <div class="pkv mt-2"><span class="pkv__k">Total</span><span class="pkv__v">GH₵ 4,500</span></div>
+          <div class="mt-3"><a class="btn btn--primary btn--sm" href="#">Approve &amp; issue</a></div>
+        </div>
+        <p class="mono mt-3" style="font-size:.62rem;color:var(--ok)">BUTTON RENDERS — hasCapability("issue_invoices") → true</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Opens the existing <code>ApproveInvoiceSheet</code> — review lines, set terms, issue. The raiser stays on the record.</li>
+        <li data-n="2">Consultants also join <code>getInvoiceApproverContacts</code> — they're notified when a proforma is raised.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="compare mt-4">
+    <div>
+      <div class="variant-label"><span class="tag tag--new">the fix</span> role editor — one toggle</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">Platform → Roles → consultant</p>
+        <p class="muted mt-2" style="font-size:.78rem">Money</p>
+        <div style="display:flex;align-items:center;gap:.7rem;border:1.5px solid var(--border);padding:.6rem .8rem;margin-top:.4rem">
+          <span style="width:2.2rem;height:1.2rem;background:var(--foreground);border-radius:1rem;position:relative;flex-shrink:0">
+            <span style="position:absolute;right:.15rem;top:.15rem;width:.9rem;height:.9rem;background:#fff;border-radius:50%"></span>
+          </span>
+          <div>
+            <b style="font-size:.82rem">Issue invoices</b>
+            <p class="muted" style="font-size:.72rem">Issue, void and credit invoices; raising a proforma needs only the chapter</p>
+          </div>
+        </div>
+        <div class="mt-3"><a class="btn btn--primary btn--sm" href="#">Save role</a></div>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Path A — zero code: super_admin flips this in the console, consultant can approve within the permission-cache TTL.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="variant-label"><span class="tag tag--new">the fix</span> defaults — so a reset keeps it</div>
+      <div class="frame" style="padding:1.1rem 1.25rem">
+        <p class="eyebrow">packages/shared/src/schemas/ops.ts</p>
+        <pre class="mono" style="font-size:.7rem;background:var(--muted);padding:.7rem .8rem;margin-top:.5rem;overflow:auto">consultant: [
+  "own:consult", "own:apply",
+  "own:visa", "own:depart",
+  "issue_invoices",   // ← add
+]</pre>
+        <p class="muted mt-2" style="font-size:.75rem">DB row still wins — the data fix is needed either way. This just stops "Reset to defaults" from stripping it.</p>
+      </div>
+      <ul class="callouts">
+        <li data-n="1">Blast radius to note: <code>issue_invoices</code> covers <b>issue + void + credit</b> together. If consultants should approve but not void, that needs a second capability — say the word.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>

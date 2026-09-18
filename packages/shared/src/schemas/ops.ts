@@ -154,6 +154,7 @@ export const ROLE_PERMISSIONS: Record<SystemRole, OpsModule[]> = {
 	consultant: [
 		"dashboard", "applications", "consultations", "applicants", "leads", "crm", "helpdesk", "marketing", "workflow",
 		"visa", "travel", "documents", "appointments", "universities", "programs", "packages", "reports", "chat",
+		"invoices",
 	],
 	finance: [
 		"dashboard", "finance", "invoices", "ledger", "payments", "payment-config", "packages", "reports", "helpdesk", "chat",
@@ -226,7 +227,7 @@ export const ROLE_CAPABILITIES: Record<SystemRole, Capability[]> = {
 	manager: ["assign_work", "see_all_cases", "see_all_branches", "invite_staff", "manage_clients", "edit_packages", "edit_universities", "issue_invoices", "own:consult", "own:apply", "own:visa", "own:depart"],
 	coordinator: ["assign_work", "see_all_cases", "see_all_branches", "own:consult", "own:apply", "own:visa", "own:depart"],
 	customer_service: ["assign_work", "see_all_branches"],
-	consultant: ["own:consult", "own:apply", "own:visa", "own:depart"],
+	consultant: ["own:consult", "own:apply", "own:visa", "own:depart", "issue_invoices"],
 	finance: ["see_all_branches", "edit_packages", "issue_invoices"],
 	admin: ["see_all_cases", "see_all_branches", "invite_staff", "manage_roles", "manage_clients", "manage_settings"],
 };

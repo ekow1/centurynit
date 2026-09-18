@@ -6219,3 +6219,198 @@ input[type="time"].input {
 	cursor: pointer;
 	padding: 0.25rem 0.5rem;
 }
+
+/* ========== Ops · shared auth controls ========== */
+
+/* Password field: input + eye toggle */
+.ops-login__pw {
+	position: relative;
+}
+
+.ops-login__input--pw {
+	padding-right: 2.6rem;
+}
+
+.ops-login__pw-toggle {
+	position: absolute;
+	right: 0.45rem;
+	top: 50%;
+	transform: translateY(-50%);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.9rem;
+	height: 1.9rem;
+	border: none;
+	background: transparent;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	transition: color var(--t-instant);
+}
+
+.ops-login__pw-toggle:hover {
+	color: var(--foreground);
+}
+
+/* Strength meter — four ink bars, weakest to strongest */
+.pw-meter {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	margin-top: 0.15rem;
+}
+
+.pw-meter__bar {
+	height: 3px;
+	flex: 0 0 2.25rem;
+	background: var(--border-light);
+	transition: background var(--t-instant);
+}
+
+.pw-meter__bar--on {
+	background: var(--foreground);
+}
+
+.pw-meter__label {
+	margin-left: 0.4rem;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--muted-foreground);
+}
+
+.ops-login__hint--ok {
+	color: var(--foreground);
+}
+
+/* Divider between password form and SSO */
+.ops-login__divider {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	color: var(--muted-foreground);
+}
+
+.ops-login__divider::before,
+.ops-login__divider::after {
+	content: "";
+	flex: 1;
+	border-top: 1px solid var(--border-light);
+}
+
+/* Google SSO button — same ink treatment as the primary submit */
+.ops-login__sso {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.6rem;
+	width: 100%;
+	padding: 0.85rem;
+	font-size: var(--text-sm);
+	font-weight: 500;
+	border: 1px solid var(--foreground);
+	background: var(--background);
+	color: var(--foreground);
+	cursor: pointer;
+	transition: background var(--t-instant), color var(--t-instant);
+}
+
+.ops-login__sso:hover:not(:disabled) {
+	background: var(--foreground);
+	color: var(--background);
+}
+
+.ops-login__sso:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.ops-login__sso svg {
+	flex-shrink: 0;
+}
+
+/* Remember-me row under the password field */
+.ops-login__meta-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	font-size: var(--text-xs);
+}
+
+.ops-login__remember {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
+	color: var(--muted-foreground);
+	cursor: pointer;
+	font-family: var(--font-mono);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.ops-login__remember input {
+	accent-color: var(--foreground);
+}
+
+/* MFA method cards — method selection and challenge screens */
+.auth-method {
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 1rem;
+	border: 1px solid var(--border-light);
+	background: var(--background);
+	cursor: pointer;
+	text-align: left;
+	transition: border-color var(--t-instant), background var(--t-instant);
+	width: 100%;
+}
+
+.auth-method:hover:not(:disabled) {
+	border-color: var(--foreground);
+	background: var(--muted);
+}
+
+.auth-method:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+
+.auth-method__icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border: 1px solid var(--border-light);
+	flex-shrink: 0;
+}
+
+.auth-method__name {
+	font-weight: 600;
+	font-size: var(--text-sm);
+}
+
+.auth-method__desc {
+	font-size: var(--text-xs);
+	color: var(--muted-foreground);
+	line-height: 1.45;
+	margin-top: 0.15rem;
+}
+
+/* Compact notice inside auth cards */
+.ops-login__notice {
+	border: 1px solid var(--border-light);
+	background: var(--muted);
+	padding: 0.75rem 0.9rem;
+	font-size: var(--text-sm);
+	color: var(--muted-foreground);
+	line-height: 1.5;
+}

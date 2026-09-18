@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { twoFactor } from "better-auth/plugins/two-factor";
 import { phoneNumber } from "better-auth/plugins/phone-number";
@@ -20,6 +20,7 @@ import { captureLeadFromUser } from "../services/leads.js";
 import { welcomeEmail } from "../services/notifications.js";
 import { rateLimit } from "../middleware/rate-limit.js";
 import { deleteClientUser } from "../services/clientUsers.js";
+import { getAuthSettings, markMfaSessionPending } from "../services/auth-settings.js";
 
 /**
  * Exported so middleware can read the session Better Auth already issues,
@@ -56,9 +57,18 @@ function configuredHosts(callbackUrl: string | undefined): string[] {
 	return [...hosts];
 }
 
+/**
+ * Whether the live instance carries usable Google credentials. Read by the
+ * public `/ops-methods` route so the console only offers Google sign-in when
+ * the provider would actually work — a configured-off toggle and a missing
+ * credential look identical to the user otherwise.
+ */
+let googleProviderConfigured = false;
+
 function createAuth(config: GoogleSocialConfig) {
 	const socialHost = callbackHost(config.callbackUrl);
 	const googleConfigured = Boolean(config.clientId && config.clientSecret && socialHost);
+	googleProviderConfigured = googleConfigured;
 
 	return betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
@@ -92,6 +102,43 @@ function createAuth(config: GoogleSocialConfig) {
 			twoFactor: schema.twoFactors,
 		},
 	}),
+	/*
+	 * The sign-in method toggles in Settings -> Authentication hold here, not
+	 * only in the UI. A hidden button is a suggestion; this is the control.
+	 * Which setting governs a password sign-in depends on whose account it is:
+	 * an active staff email answers to ops.email_password, every other address
+	 * to portal.email_password.
+	 */
+	hooks: {
+		before: createAuthMiddleware(async (ctx) => {
+			if (ctx.path !== "/sign-in/email") return;
+			const email =
+				typeof (ctx.body as { email?: unknown } | undefined)?.email === "string"
+					? (ctx.body as { email: string }).email.trim().toLowerCase()
+					: "";
+			if (!email) return;
+			const [staff] = await db
+				.select({ active: schema.opsUsers.active })
+				.from(schema.opsUsers)
+				.where(eq(schema.opsUsers.email, email))
+				.limit(1);
+			const settings = await getAuthSettings();
+			if (staff?.active) {
+				if (!settings["ops.email_password"]) {
+					throw APIError.from("FORBIDDEN", {
+						code: "METHOD_DISABLED",
+						message:
+							"Password sign-in is turned off for staff accounts. Use the method your administrator enabled, or ask them to re-enable it.",
+					});
+				}
+			} else if (!settings["portal.email_password"]) {
+				throw APIError.from("FORBIDDEN", {
+					code: "METHOD_DISABLED",
+					message: "Password sign-in is turned off. Use a code or Google to sign in.",
+				});
+			}
+		}),
+	},
 	databaseHooks: {
 		user: {
 			create: {
@@ -131,7 +178,45 @@ function createAuth(config: GoogleSocialConfig) {
 		},
 		session: {
 			create: {
-				after: async (session) => {
+				/*
+				 * Google sign-in is a per-surface toggle: ops.google_sso for staff
+				 * accounts, portal.social_google for everyone else. Enforced at
+				 * session creation on the OAuth callback path so it holds for new
+				 * and previously linked accounts alike — an account.create hook
+				 * would only ever see the first link.
+				 */
+				before: async (session, ctx) => {
+					const path = (ctx as { path?: string } | null | undefined)?.path ?? "";
+					if (!path.startsWith("/callback/")) return;
+					const provider = path.split("/")[2];
+					if (provider !== "google") return;
+					const [u] = await db
+						.select({ email: schema.users.email })
+						.from(schema.users)
+						.where(eq(schema.users.id, session.userId))
+						.limit(1);
+					const email = u?.email?.toLowerCase() ?? "";
+					const [staff] = email
+						? await db
+								.select({ active: schema.opsUsers.active })
+								.from(schema.opsUsers)
+								.where(eq(schema.opsUsers.email, email))
+								.limit(1)
+						: [undefined];
+					const settings = await getAuthSettings();
+					const disabled = staff?.active
+						? !settings["ops.google_sso"]
+						: !settings["portal.social_google"];
+					if (disabled) {
+						throw APIError.from("FORBIDDEN", {
+							code: "METHOD_DISABLED",
+							message: staff?.active
+								? "Google sign-in is turned off for staff accounts. Sign in with your staff credentials."
+								: "Google sign-in is turned off.",
+						});
+					}
+				},
+				after: async (session, ctx) => {
 					try {
 						const u = await db.query.users.findFirst({
 							where: eq(schema.users.id, session.userId),
@@ -167,6 +252,23 @@ function createAuth(config: GoogleSocialConfig) {
 						}
 					} catch (err) {
 						console.error("[CRM] Error in session create hook:", err);
+					}
+
+					/*
+					 * OAuth sessions owe a second factor. The plugin's challenge only
+					 * fires on credential paths — a Google callback mints the session
+					 * without asking — so sessions created there are flagged
+					 * mfa-pending, and requireAuth's staff gate refuses data until the
+					 * challenge endpoint clears it. Credential sessions are never
+					 * flagged: they either passed the challenge or had none to pass.
+					 */
+					try {
+						const path = (ctx as { path?: string } | null | undefined)?.path ?? "";
+						if (path.startsWith("/callback/")) {
+							await markMfaSessionPending(session.token, session.expiresAt);
+						}
+					} catch (err) {
+						console.error("[auth] mfa-pending session mark failed:", err);
 					}
 				},
 			},
@@ -519,6 +621,23 @@ auth.post("/check-staff-email", async (c) => {
 		.where(eq(schema.opsUsers.email, email))
 		.limit(1);
 	return c.json({ isStaff: Boolean(staff && staff.active) });
+});
+
+/**
+ * Which sign-in methods the console should offer — public, like the portal's
+ * `/auth-settings/portal`, because the login page needs the answer before any
+ * session exists. Reports only what the page renders: password (always on for
+ * staff by policy) and Google (the toggle AND real credentials — a toggle
+ * without keys must not produce a button that fails at the redirect).
+ */
+auth.get("/ops-methods", async (c) => {
+	const settings = await getAuthSettings();
+	await getAuthInstance(); // refreshes googleProviderConfigured from live settings
+	return c.json({
+		email_password: Boolean(settings["ops.email_password"]),
+		google_sso: Boolean(settings["ops.google_sso"]) && googleProviderConfigured,
+		mfa_required: Boolean(settings["ops.mfa_required"]),
+	});
 });
 
 /**

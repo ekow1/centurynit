@@ -139,4 +139,45 @@ export async function markMfaSessionOk(sessionToken: string, expiresAt: Date): P
 		value: "1",
 		expiresAt,
 	});
+	// Passing the gate also settles a pending OAuth challenge on this session.
+	await clearMfaSessionPending(sessionToken);
+}
+
+/* ── OAuth MFA gate ────────────────────────────────────────────────────────
+ *
+ * The twoFactor plugin's challenge only fires on credential sign-in paths —
+ * an OAuth callback mints a session with no second factor asked. Sessions
+ * created on `/callback/*` are therefore marked `mfa-pending`, and requireAuth
+ * refuses staff data until the challenge endpoint clears it. Gating on the
+ * marker's presence — rather than the absence of an mfa-ok record — means
+ * sessions minted before this existed, and every credential sign-in, are
+ * untouched: only OAuth-arriving sessions ever owe a factor.
+ */
+
+const mfaPendingIdentifier = (sessionToken: string) => `mfa-pending:${sessionToken}`;
+
+/** Whether this session was minted by OAuth and still owes a factor. */
+export async function mfaSessionPending(sessionToken: string): Promise<boolean> {
+	const [row] = await db
+		.select({ expiresAt: verifications.expiresAt })
+		.from(verifications)
+		.where(eq(verifications.identifier, mfaPendingIdentifier(sessionToken)))
+		.limit(1);
+	return Boolean(row && new Date(row.expiresAt) > new Date());
+}
+
+/** Flag an OAuth-created session as owing a second factor. */
+export async function markMfaSessionPending(sessionToken: string, expiresAt: Date): Promise<void> {
+	await db.delete(verifications).where(eq(verifications.identifier, mfaPendingIdentifier(sessionToken)));
+	await db.insert(verifications).values({
+		id: crypto.randomUUID(),
+		identifier: mfaPendingIdentifier(sessionToken),
+		value: "1",
+		expiresAt,
+	});
+}
+
+/** Clear the pending flag — the session answered its challenge. */
+export async function clearMfaSessionPending(sessionToken: string): Promise<void> {
+	await db.delete(verifications).where(eq(verifications.identifier, mfaPendingIdentifier(sessionToken)));
 }

@@ -3,6 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, staffApi } from "century-nit-core/api";
 import type { InvitationPreview } from "century-nit-shared";
 import { useOpsAuth } from "./OpsAuthContext";
+import { AuthShell } from "./AuthShell";
+import { PasswordField, PASSWORD_MIN_LENGTH } from "./PasswordField";
 
 /**
  * Where an invitation link lands.
@@ -79,9 +81,15 @@ export function AcceptInvite() {
 		};
 	}, [token]);
 
+	// Prefill once the preview arrives — the input is controlled, so a
+	// defaultValue would never apply. Staff can still correct it.
+	useEffect(() => {
+		if (preview?.name) setName((current) => (current ? current : (preview.name ?? "")));
+	}, [preview]);
+
 	// Checked here so the mismatch is visible as you type; the server checks too.
 	const mismatch = confirmPassword.length > 0 && password !== confirmPassword;
-	const tooShort = password.length > 0 && password.length < 12;
+	const tooShort = password.length > 0 && password.length < PASSWORD_MIN_LENGTH;
 
 	async function submit(e: React.FormEvent) {
 		e.preventDefault();
@@ -91,12 +99,23 @@ export function AcceptInvite() {
 		try {
 			const result = await staffApi.acceptInvitation({ token, name: name || (preview?.name ?? ""), password, confirmPassword });
 			// The staff profile and password are now live. Sign in right away
-			// so the invitee never has to type the password a second time.
-			const signIn = await opsSignInWithCredentials(result.email, password);
-			if (signIn.twoFactorRequired || result.mfaRequired) {
-				navigate("/mfa-setup");
-			} else {
-				navigate("/");
+			// so the invitee never has to type the password a second time. If
+			// that fails — e.g. password sign-in was turned off for staff — the
+			// account still exists; send them to the login page to use whatever
+			// method is enabled.
+			try {
+				const signIn = await opsSignInWithCredentials(result.email, password);
+				if (signIn.twoFactorRequired) {
+					// The pending challenge is already armed — the login page
+					// resumes it from the signed two_factor cookie.
+					navigate("/login");
+				} else if (result.mfaRequired) {
+					navigate("/mfa-setup");
+				} else {
+					navigate("/");
+				}
+			} catch {
+				navigate("/login");
 			}
 		} catch (err) {
 			const code = err instanceof ApiError ? err.code : "";
@@ -113,100 +132,97 @@ export function AcceptInvite() {
 
 	if (loading) {
 		return (
-			<div className="invite-page">
-				<p className="ops-panel__muted">Checking your invitation…</p>
-			</div>
+			<AuthShell>
+				<div className="route-loading" role="status" aria-live="polite">
+					<span className="route-loading__spinner" aria-hidden="true" />
+				</div>
+			</AuthShell>
 		);
 	}
 
 	if (failure) {
 		return (
-			<div className="invite-page">
-				<div className="invite-card">
-					<h1 className="invite-card__title">{failure.title}</h1>
-					<p className="invite-card__body">{failure.body}</p>
-					<Link className="btn btn--ghost btn--sm" to="/login">
-						Go to sign in
-					</Link>
+			<AuthShell>
+				<div className="ops-login__head">
+					<h1 className="ops-login__title">{failure.title}</h1>
+					<p className="ops-login__subtitle">{failure.body}</p>
 				</div>
-			</div>
+				<Link className="btn btn--ghost btn--sm" to="/login">
+					Go to sign in
+				</Link>
+			</AuthShell>
 		);
 	}
 
 	return (
-		<div className="invite-page">
-			<div className="invite-card">
-				<p className="invite-card__eyebrow">{preview?.organisation}</p>
-				<h1 className="invite-card__title">
-					{preview?.hasExistingLogin ? "Confirm your password" : "Set your password"}
+		<AuthShell>
+			<div className="ops-login__head">
+				<span className="ops-login__badge">{preview?.organisation ?? "Invitation"}</span>
+				<h1 className="ops-login__title">
+					{preview?.hasExistingLogin ? "Join the team" : "Set your password"}
 				</h1>
-				<p className="invite-card__body">
+				<p className="ops-login__subtitle">
 					You have been invited as{" "}
 					<strong>{ROLE_LABEL[preview?.role ?? ""] ?? preview?.role}</strong>
 					{preview?.branch ? ` at ${preview.branch}` : ""}.
 				</p>
-				<p className="invite-card__meta">{preview?.email}</p>
-
-				<form onSubmit={submit} className="invite-form">
-					<div className="field">
-						<label htmlFor="invite-name">Your name</label>
-						<input
-							id="invite-name"
-							type="text"
-							className="input input--full-border"
-							autoComplete="name"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							placeholder="Enter your full name"
-							defaultValue={preview?.name ?? ""}
-							required
-						/>
-					</div>
-					<div className="field">
-						<label htmlFor="invite-password">
-							{preview?.hasExistingLogin ? "Your existing password" : "Choose a password"}
-						</label>
-						<input
-							id="invite-password"
-							type="password"
-							className="input input--full-border"
-							autoComplete={preview?.hasExistingLogin ? "current-password" : "new-password"}
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							required
-						/>
-						<p className={`invite-hint ${tooShort ? "invite-hint--bad" : ""}`}>
-							{preview?.hasExistingLogin
-								? "This email already has a login. Enter the password you already use."
-								: "At least 12 characters. Nobody else — including whoever invited you — ever sees it."}
-						</p>
-					</div>
-
-					<div className="field">
-						<label htmlFor="invite-confirm">Confirm password</label>
-						<input
-							id="invite-confirm"
-							type="password"
-							className="input input--full-border"
-							autoComplete="new-password"
-							value={confirmPassword}
-							onChange={(e) => setConfirmPassword(e.target.value)}
-							required
-						/>
-						{mismatch && <p className="invite-hint invite-hint--bad">Passwords do not match.</p>}
-					</div>
-
-					{error && <p className="ops-modal__error">{error}</p>}
-
-					<button
-						type="submit"
-						className="btn btn--primary"
-						disabled={submitting || tooShort || mismatch || password.length === 0}
-					>
-						{submitting ? "Creating your account…" : "Create account"}
-					</button>
-				</form>
+				<p className="ops-login__subtitle mono" style={{ fontSize: "var(--text-xs)" }}>{preview?.email}</p>
 			</div>
-		</div>
+
+			<form onSubmit={submit} className="ops-login__form">
+				<div className="ops-login__field">
+					<label className="ops-login__label" htmlFor="invite-name">Your name</label>
+					<input
+						id="invite-name"
+						type="text"
+						className="ops-login__input"
+						autoComplete="name"
+						value={name}
+						onChange={(e) => setName(e.target.value)}
+						placeholder="Enter your full name"
+						required
+					/>
+				</div>
+				<PasswordField
+					id="invite-password"
+					label={preview?.hasExistingLogin ? "Your existing password" : "Choose a password"}
+					autoComplete={preview?.hasExistingLogin ? "current-password" : "new-password"}
+					value={password}
+					onChange={setPassword}
+					showStrength={!preview?.hasExistingLogin}
+					hint={
+						preview?.hasExistingLogin
+							? "This email already has a login. Enter the password you already use."
+							: `At least ${PASSWORD_MIN_LENGTH} characters. Nobody else — including whoever invited you — ever sees it.`
+					}
+				/>
+				<PasswordField
+					id="invite-confirm"
+					label="Confirm password"
+					autoComplete="new-password"
+					value={confirmPassword}
+					onChange={setConfirmPassword}
+					matchWith={password}
+				/>
+
+				{error && <p className="ops-login__error" role="alert">{error}</p>}
+
+				<button
+					type="submit"
+					className="btn btn--primary ops-login__submit"
+					disabled={submitting || tooShort || mismatch || password.length === 0}
+				>
+					{submitting
+						? "Setting up…"
+						: preview?.hasExistingLogin
+							? "Accept invitation"
+							: "Create account"}
+				</button>
+
+				<Link to="/login" className="ops-login__back" style={{ margin: 0 }}>
+					Already have access? Sign in
+				</Link>
+			</form>
+		</AuthShell>
 	);
 }

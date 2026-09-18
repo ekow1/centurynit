@@ -131,7 +131,7 @@ interface OpsAuthContextValue {
 	/** True until the initial session check completes. */
 	authInitializing: boolean;
 	/** Sign in with real credentials via Better Auth. Returns MFA method if 2FA is required. */
-	opsSignInWithCredentials: (email: string, password: string) => Promise<{
+	opsSignInWithCredentials: (email: string, password: string, rememberMe?: boolean) => Promise<{
 		user?: OpsUser;
 		twoFactorRequired?: boolean;
 		mfaMethod?: string | null;
@@ -279,8 +279,8 @@ export function OpsAuthProvider({ children }: { children: ReactNode }) {
 		return () => { cancelled = true; };
 	}, [refreshPermissions]);
 
-	const opsSignInWithCredentials = useCallback(async (email: string, password: string) => {
-		const res = await apiSignIn(email, password);
+	const opsSignInWithCredentials = useCallback(async (email: string, password: string, rememberMe?: boolean) => {
+		const res = await apiSignIn(email, password, rememberMe);
 		if (res?.twoFactorRedirect) {
 			/*
 			 * Resolve which MFA method was enrolled. There is no session yet —

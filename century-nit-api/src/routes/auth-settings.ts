@@ -6,7 +6,7 @@ import {
 import { requireAuth, requireModule, requireStaff } from "../middleware/auth.js";
 import { HttpError, validationHook } from "../middleware/error.js";
 import { db } from "../db/index.js";
-import { accounts, users } from "../db/schema.js";
+import { accounts, twoFactors, users } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { getAuthInstance } from "./auth.js";
 import {
@@ -14,9 +14,13 @@ import {
 	updateAuthSetting,
 	markMfaSessionOk,
 	mfaSessionOk,
+	mfaSessionPending,
 } from "../services/auth-settings.js";
 import { sendEmail } from "../lib/resend.js";
 import { renderOtpEmail } from "../lib/email-templates.js";
+import { symmetricDecrypt } from "better-auth/crypto";
+import { createOTP } from "@better-auth/utils/otp";
+import { env } from "../env.js";
 
 const authSettings = new OpenAPIHono({ defaultHook: validationHook });
 
@@ -186,15 +190,26 @@ authSettings.get(
 			.where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")));
 		const hasPassword = credentials.some((a) => Boolean(a.password));
 
-		// A passwordless email-otp enrolment is challenged per session by the
-		// mfa-ok gate — the plugin's own challenge never fires on OAuth
-		// callbacks, so "enrolled" alone doesn't mean "verified this session".
+		/*
+		 * Whether this session still owes a second factor.
+		 *
+		 * Two kinds of sessions arrive unproven, because the plugin's challenge
+		 * only fires on credential sign-in paths: a passwordless email-otp
+		 * enrolment must answer its code per session (mfa-ok), and an enrolled
+		 * STAFF session minted by an OAuth callback carries the mfa-pending
+		 * flag written at session creation until a challenge clears it.
+		 * requireAuth enforces the same gates server-side.
+		 */
 		let challengeRequired = false;
-		if (enrolled && method === "email_otp" && !hasPassword) {
+		if (enrolled && (isStaff || (method === "email_otp" && !hasPassword))) {
 			const auth = await getAuthInstance();
 			const sess = await auth.api.getSession({ headers: c.req.raw.headers });
 			const token = sess?.session?.token;
-			challengeRequired = token ? !(await mfaSessionOk(token)) : false;
+			challengeRequired = token
+				? isStaff
+					? await mfaSessionPending(token)
+					: !(await mfaSessionOk(token))
+				: false;
 		}
 
 		return c.json({
@@ -227,6 +242,25 @@ authSettings.post(
 		}
 
 		const { method, password } = parsed.data;
+
+		/*
+		 * The method list is an admin control, not a suggestion: enroll only in
+		 * methods the platform allows for this account's surface. Verification
+		 * endpoints are deliberately not gated the same way — disabling a
+		 * method must not lock out people who already use it.
+		 */
+		const staffCtx = c.get("staff");
+		const mfaSettings = await getAuthSettings();
+		const allowedMethods = (staffCtx
+			? mfaSettings["ops.mfa_methods"]
+			: mfaSettings["portal.mfa_methods"]) as string[];
+		if (!allowedMethods.includes(method)) {
+			throw new HttpError(
+				400,
+				"MFA_METHOD_DISABLED",
+				"That verification method is not enabled for this account. Contact your administrator.",
+			);
+		}
 
 		// Verify password by attempting a Better Auth operation
 		const authInstance = await getAuthInstance();
@@ -477,6 +511,53 @@ authSettings.post(
 		// Code verified — delete it and mark this session as having passed the
 		// passwordless MFA gate, for as long as the session itself lives.
 		await db.delete(verifications).where(eq(verifications.identifier, identifier));
+
+		const auth = await getAuthInstance();
+		const sess = await auth.api.getSession({ headers: c.req.raw.headers });
+		if (sess?.session?.token) {
+			await markMfaSessionOk(sess.session.token, sess.session.expiresAt);
+		}
+
+		return c.json({ success: true });
+	},
+);
+
+/* ── POST /auth-settings/mfa/verify-totp — session-mode TOTP challenge ──────
+ *
+ * The plugin's own /two-factor/verify-totp serves the pending sign-in window.
+ * This serves the other case: an established session that must still prove
+ * the factor — a staff member who arrived through Google SSO, which never
+ * passes through the credential challenge. Verifying against the stored
+ * secret and marking the session mfa-ok are done together, so there is no
+ * endpoint that marks a session without a code ever being checked.
+ */
+authSettings.post(
+	"/mfa/verify-totp",
+	requireAuth,
+	async (c) => {
+		const user = c.get("user");
+		const body = await c.req.json().catch(() => null);
+		const code = typeof body?.code === "string" ? body.code.trim().replace(/\s+/g, "") : "";
+
+		if (!/^\d{6}$/.test(code)) {
+			throw new HttpError(400, "VALIDATION_ERROR", "Enter the 6-digit code from your authenticator app");
+		}
+
+		const [tf] = await db
+			.select({ secret: twoFactors.secret })
+			.from(twoFactors)
+			.where(eq(twoFactors.userId, user.id))
+			.limit(1);
+
+		if (!tf?.secret) {
+			throw new HttpError(400, "TOTP_NOT_ENABLED", "No authenticator is enrolled on this account.");
+		}
+
+		const secret = await symmetricDecrypt({ key: env.BETTER_AUTH_SECRET, data: tf.secret });
+		const valid = await createOTP(secret, { digits: 6, period: 30 }).verify(code);
+		if (!valid) {
+			throw new HttpError(400, "MFA_FAILED", "Incorrect code. Check your authenticator app and try again.");
+		}
 
 		const auth = await getAuthInstance();
 		const sess = await auth.api.getSession({ headers: c.req.raw.headers });

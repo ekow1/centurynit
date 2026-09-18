@@ -20,6 +20,7 @@ import {
 	canAccessApplication,
 	getApplicantByUserId,
 	latestApplicationForApplicant,
+	visaCostLinesFor,
 	listApplications,
 	serializeApplication,
 	setApplicationPackage,
@@ -33,7 +34,7 @@ import {
 import { getApplicationActivity } from "./applicationActivity.js";
 import { releaseOfficerCases } from "./caseOwnership.js";
 import { pendingHandoffForApplication, resolveStageHandoff } from "./handoffs.js";
-import { issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
+import { createProforma, issueProformaByOps, listInvoices, recordPayment, serializeInvoice } from "./invoice.js";
 import { journeyForApplicant } from "./journey.js";
 import { acceptOffer, addSchoolForApplicant, lockSchoolsForApplicant, removeSchoolByStaff, updateSchoolStatus } from "./schools.js";
 import { activeFeeItem } from "./fees.js";
@@ -218,7 +219,10 @@ describe("the applicant journey, end to end", () => {
 		const [handoffRow] = await db.select().from(stageHandoffs).where(eq(stageHandoffs.applicationId, appId));
 
 		// ── Manager assigns the handler ──────────────────────────────────
-		await resolveStageHandoff({ handoffId: handoffRow.id, decision: "assign", opsUserId: staff.handler, actor: ACTOR });
+		// Coverage "all" seats them as the whole-case owner — assignedStaffId,
+		// the applicant's point of contact and the carry-through at the visa
+		// and travel gates all follow from that choice.
+		await resolveStageHandoff({ handoffId: handoffRow.id, decision: "assign", opsUserId: staff.handler, scope: "all", actor: ACTOR });
 		expect(await stage()).toBe("school_select");
 		const [afterHandler] = await db.select().from(applications).where(eq(applications.id, appId));
 		expect(afterHandler.stage).toBe("school_submission");
@@ -249,7 +253,7 @@ describe("the applicant journey, end to end", () => {
 		expect(proforma.row.subtotalCents).toBe(12_000);
 		expect(proforma.api.lines[0].label).toContain("application fee");
 		// The trail: raised by the client from the portal, not yet approved.
-		expect(proforma.api.raisedByName).toContain("client");
+		expect(proforma.api.raisedByName).toBe("Ama Mensah");
 		expect(proforma.api.reviewedByName).toBeNull();
 
 		// ── The draft follows the school list ───────────────────────────
@@ -286,7 +290,7 @@ describe("the applicant journey, end to end", () => {
 		const issued = (await invoiceOfType("application"))!;
 		// …approved by the handler; the raiser stays on record.
 		expect(issued.api.issuedByName).toBe("Handler");
-		expect(issued.api.raisedByName).toContain("client");
+		expect(issued.api.raisedByName).toBe("Ama Mensah");
 		await recordPayment({ invoiceId: issued.row.id, amountCents: issued.api.balanceCents, method: "card", actor: ACTOR });
 		expect(await stage()).toBe("school_tracking");
 		const [afterAppFee] = await db.select().from(applications).where(eq(applications.id, appId));
@@ -400,7 +404,7 @@ describe("the applicant journey, end to end", () => {
 		expect(types).toContain("payment_recorded");
 		expect(types).toContain("school_admitted");
 		expect(types).toContain("consent_decided");
-		expect(types).toContain("stage_assigned");
+		expect(types).toContain("owner_assigned");
 		// Newest first.
 		for (let i = 1; i < events.length; i++) expect(events[i - 1].at >= events[i].at).toBe(true);
 
@@ -423,7 +427,23 @@ describe("the applicant journey, end to end", () => {
 		);
 		expect(pendingVisa).toBeTruthy();
 		await resolveStageHandoff({ handoffId: pendingVisa!.id, decision: "assign", opsUserId: staff.visa, actor: ACTOR });
-		// Assigning the officer raises the visa draft: the destination's tariffs, at cost — nothing of Century's in it.
+		// The visa officer raises the visa draft from the case — the
+		// destination's tariffs, at cost; nothing of Century's in it. (The
+		// console posts these lines to /raise-visa-invoice.)
+		const visaLines = await visaCostLinesFor(app);
+		await createProforma({
+			data: {
+				applicantName: applicant.name,
+				applicantEmail: applicant.email,
+				clientUserId: CLIENT_ID,
+				applicationId: app.id,
+				type: "visa",
+				status: "proforma",
+				lines: visaLines,
+				note: "Visa costs paid on your behalf, at cost.",
+			},
+			raisedBy: { opsUserId: staff.visa, name: "Visa Specialist", email: `visa${SUFFIX}` },
+		});
 		const visaDraft = (await invoiceOfType("visa"))!;
 		expect(visaDraft.row.status).toBe("proforma");
 		expect(visaDraft.api.lines.map((l) => l.amountCents).sort()).toEqual([15_000, 8_500].sort());

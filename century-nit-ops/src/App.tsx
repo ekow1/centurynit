@@ -23,6 +23,7 @@ const Workspace = lazyNamed(() => import("./pages/Workspace"), "Workspace");
 const CalendarSettings = lazyNamed(() => import("./pages/CalendarSettings"), "CalendarSettings");
 const AcceptInvite = lazyNamed(() => import("./pages/AcceptInvite"), "AcceptInvite");
 const MfaSetup = lazyNamed(() => import("./pages/MfaSetup"), "MfaSetup");
+const MfaChallenge = lazyNamed(() => import("./pages/MfaChallenge"), "MfaChallenge");
 const EnterpriseLeads = lazyNamed(() => import("./pages/EnterpriseLeads"), "EnterpriseLeads");
 const EnterpriseCases = lazyNamed(() => import("./pages/EnterpriseCases"), "EnterpriseCases");
 const EnterpriseDocuments = lazyNamed(() => import("./pages/EnterpriseDocuments"), "EnterpriseDocuments");
@@ -130,6 +131,16 @@ export default function App() {
 									element={
 										<OpsRequireAuth>
 											<MfaSetup />
+										</OpsRequireAuth>
+									}
+								/>
+								{/* Post-sign-in second-factor challenge — sessions minted
+								    outside the credential flow (Google SSO) still owe a factor. */}
+								<Route
+									path="/mfa-challenge"
+									element={
+										<OpsRequireAuth>
+											<MfaChallenge />
 										</OpsRequireAuth>
 									}
 								/>

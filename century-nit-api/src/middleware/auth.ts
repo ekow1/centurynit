@@ -11,7 +11,7 @@ import { accounts, opsUsers, users } from "../db/schema.js";
 import { getAuthInstance } from "../routes/auth.js";
 import { HttpError } from "./error.js";
 import { checkRoleCapability, checkRolePermission, permissionsOfRole } from "../services/roles.js";
-import { mfaSessionOk } from "../services/auth-settings.js";
+import { mfaSessionOk, mfaSessionPending } from "../services/auth-settings.js";
 
 /**
  * Authentication and authorisation for the scheduling API.
@@ -63,7 +63,7 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 	}
 
 	const [dbUser] = await db
-		.select({ banned: users.banned, banReason: users.banReason, mfaEnrolled: users.mfaEnrolled, mfaMethod: users.mfaMethod })
+		.select({ banned: users.banned, banReason: users.banReason, mfaEnrolled: users.mfaEnrolled, mfaMethod: users.mfaMethod, twoFactorEnabled: users.twoFactorEnabled })
 		.from(users)
 		.where(eq(users.id, session.user.id))
 		.limit(1);
@@ -120,21 +120,39 @@ export const requireAuth: MiddlewareHandler<{ Variables: AuthVariables }> = asyn
 	);
 
 	/*
-	 * Passwordless MFA gate. A social-only account (no credential row) enrolled
-	 * in email-otp MFA is never challenged by the twoFactor plugin — its
-	 * sign-in hook only matches credential paths, never OAuth callbacks — so
-	 * the session itself must prove it passed a code. Password accounts are
-	 * skipped entirely: the plugin already challenged their credential
-	 * sign-in, and challenging them again here would demand a second code.
-	 * Staff are skipped too — ops sign-ins go through the plugin challenge.
-	 * The /auth-settings/mfa subtree stays reachable or the gate could never
-	 * be answered.
+	 * Per-session MFA gates. Two enrolments can arrive with an unproven
+	 * session, because the twoFactor plugin's challenge only fires on
+	 * credential sign-in paths — never OAuth callbacks:
+	 *
+	 *  - STAFF (any method): a session minted on an OAuth callback is flagged
+	 *    mfa-pending at creation (see session.create in routes/auth.ts), and
+	 *    an enrolled staff member cannot reach staff data until the challenge
+	 *    endpoint clears it. Credential sessions are never flagged, so
+	 *    password sign-ins and every session minted before this gate existed
+	 *    are untouched.
+	 *  - CLIENTS (email_otp, no credential row): a social-only account
+	 *    enrolled in email-otp must prove the session with a code.
+	 *    Password-holding clients are skipped — the plugin already challenged
+	 *    their credential sign-in.
+	 *
+	 * The /auth-settings/mfa subtree stays reachable or neither gate could
+	 * ever be answered.
 	 */
-	if (
+	const mfaExemptPath = c.req.path.includes("/auth-settings/mfa");
+	if (staff && (dbUser?.mfaEnrolled || dbUser?.twoFactorEnabled) && !mfaExemptPath) {
+		const token = session.session?.token;
+		if (token && (await mfaSessionPending(token))) {
+			throw new HttpError(
+				403,
+				"MFA_CHALLENGE_REQUIRED",
+				"Verify your second factor to continue.",
+			);
+		}
+	} else if (
 		!staff &&
 		dbUser?.mfaEnrolled &&
 		dbUser.mfaMethod === "email_otp" &&
-		!c.req.path.includes("/auth-settings/mfa")
+		!mfaExemptPath
 	) {
 		const credentialRows = await db
 			.select({ password: accounts.password })

@@ -29,19 +29,25 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 	 * flash the dashboard before bouncing, which looks like a bug and briefly
 	 * shows data the user is not yet cleared for.
 	 */
-	const [mfaOk, setMfaOk] = useState<boolean | null>(null);
+	const [mfaState, setMfaState] = useState<{ ok: boolean; challenge: boolean } | null>(null);
 
 	useEffect(() => {
 		if (!opsUser) return;
 		let active = true;
 		getMfaEnrollment()
-			.then((s) => active && setMfaOk(!s.required || s.enrolled))
+			.then((s) =>
+				active &&
+				setMfaState({
+					ok: !s.required || s.enrolled,
+					challenge: Boolean(s.challengeRequired),
+				}),
+			)
 			.catch(() => {
 				staffApi
 					.mfaStatus()
-					.then((s) => active && setMfaOk(!s.required || s.enabled))
+					.then((s) => active && setMfaState({ ok: !s.required || s.enabled, challenge: false }))
 					.catch(() => {
-						if (active) setMfaOk(false);
+						if (active) setMfaState({ ok: false, challenge: false });
 					});
 			});
 		return () => {
@@ -55,14 +61,16 @@ export function OpsRequireAuth({ children }: { children: ReactNode }) {
 		return <Navigate to="/login" replace />;
 	}
 
-	// The setup route is itself protected, so exempt it or enrolment is
-	// unreachable for exactly the people who need it.
-	if (location.pathname === "/mfa-setup") {
+	// The setup and challenge routes are themselves protected, so exempt them
+	// or enrolment and post-SSO verification are unreachable for exactly the
+	// people who need them.
+	if (location.pathname === "/mfa-setup" || location.pathname === "/mfa-challenge") {
 		return <>{children}</>;
 	}
 
-	if (mfaOk === null) return <Spinner />;
-	if (!mfaOk) return <Navigate to="/mfa-setup" replace />;
+	if (mfaState === null) return <Spinner />;
+	if (!mfaState.ok) return <Navigate to="/mfa-setup" replace />;
+	if (mfaState.challenge) return <Navigate to="/mfa-challenge" replace />;
 
 	return <>{children}</>;
 }

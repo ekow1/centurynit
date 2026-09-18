@@ -79,10 +79,37 @@ export type SignInResponse = {
 	session?: unknown;
 };
 
-export function signIn(email: string, password: string): Promise<SignInResponse> {
+export function signIn(email: string, password: string, rememberMe?: boolean): Promise<SignInResponse> {
 	return apiFetch<SignInResponse>("/api/auth/sign-in/email", {
 		method: "POST",
-		body: JSON.stringify({ email, password }),
+		body: JSON.stringify({ email, password, rememberMe }),
+	});
+}
+
+/**
+ * Which sign-in methods the console may offer — public endpoint, answered
+ * before any session exists. `google_sso` is already AND-ed server-side with
+ * real provider credentials, so a true here means the button will work.
+ */
+export type OpsMethods = {
+	email_password: boolean;
+	google_sso: boolean;
+	mfa_required: boolean;
+};
+
+export function getOpsMethods(): Promise<OpsMethods> {
+	return apiFetch<OpsMethods>("/api/auth/ops-methods");
+}
+
+/** Kick off Google SSO. Returns the provider URL to redirect to. */
+export function signInWithGoogle(callbackURL: string): Promise<{ url?: string }> {
+	return apiFetch<{ url?: string }>("/api/auth/sign-in/social", {
+		method: "POST",
+		body: JSON.stringify({
+			provider: "google",
+			callbackURL,
+			errorCallbackURL: `${window.location.origin}/login?sso=error`,
+		}),
 	});
 }
 
@@ -201,6 +228,12 @@ export type MfaEnrollmentStatus = {
 	method: string | null;
 	required: boolean;
 	availableMethods: string[];
+	/** Account holds a credential (password) row — TOTP enrolment needs one. */
+	hasPassword: boolean;
+	/** Session exists but has not proven its second factor (e.g. Google SSO). */
+	challengeRequired: boolean;
+	/** Whether this account can enrol at all (password or email_otp allowed). */
+	applicable: boolean;
 };
 
 export function getAuthSettings(): Promise<AuthSettingsResponse> {
@@ -248,6 +281,18 @@ export function sendMfaOtp(): Promise<{ sent: boolean }> {
 
 export function verifyMfaOtp(code: string): Promise<{ success: boolean }> {
 	return apiFetch(`${API_PREFIX}/auth-settings/mfa/verify-otp`, {
+		method: "POST",
+		body: JSON.stringify({ code }),
+	});
+}
+
+/**
+ * Verify a TOTP code against an ESTABLISHED session — the challenge that
+ * follows a Google SSO sign-in, where the plugin's pending-cookie flow never
+ * ran. Marks the session mfa-ok on success.
+ */
+export function verifySessionTotp(code: string): Promise<{ success: boolean }> {
+	return apiFetch(`${API_PREFIX}/auth-settings/mfa/verify-totp`, {
 		method: "POST",
 		body: JSON.stringify({ code }),
 	});

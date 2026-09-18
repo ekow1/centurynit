@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ops auth — redesign mock</title>
+<style>
+	:root {
+		--ink: #18181b;
+		--paper: #ffffff;
+		--line: #e4e4e7;
+		--line-soft: #f4f4f5;
+		--muted: #71717a;
+		--mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+	}
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+	body {
+		font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+		background: #fafafa;
+		color: var(--ink);
+		padding: 2rem;
+	}
+	h1 { font-size: 1.3rem; font-weight: 750; letter-spacing: -.01em; }
+	.mock-note { font-size: .8rem; color: var(--muted); margin-top: .4rem; max-width: 52rem; line-height: 1.55; }
+
+	/* ── settings simulator ── */
+	.sim {
+		display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;
+		margin-top: 1.25rem; padding: .8rem 1rem; border: 1px solid var(--line);
+		background: var(--paper); max-width: 52rem;
+	}
+	.sim .lab { font-family: var(--mono); font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+	.sim label { display: flex; align-items: center; gap: .45rem; font-size: .74rem; cursor: pointer; }
+	.sim input { accent-color: var(--ink); }
+
+	/* ── screen tabs ── */
+	.tabs { display: flex; gap: 0; margin-top: 1.75rem; border-bottom: 1px solid var(--line); max-width: 52rem; }
+	.tabs button {
+		font-family: var(--mono); font-size: .62rem; letter-spacing: .06em; text-transform: uppercase;
+		padding: .6rem .9rem; border: none; background: none; color: var(--muted); cursor: pointer;
+		border-bottom: 2px solid transparent;
+	}
+	.tabs button.on { color: var(--ink); border-bottom-color: var(--ink); font-weight: 700; }
+
+	/* ── auth screen frame ── */
+	.screen { display: none; margin-top: 1.5rem; }
+	.screen.on { display: block; }
+	.auth {
+		display: flex; width: 920px; max-width: 100%; min-height: 560px;
+		border: 1px solid var(--line); background: var(--paper);
+		box-shadow: 0 10px 40px -10px rgba(0,0,0,.15);
+	}
+	.auth__aside {
+		flex: 1; background: var(--ink); color: #fff; padding: 2.5rem 2rem;
+		display: flex; flex-direction: column; justify-content: space-between;
+	}
+	.auth__logo { font-size: 1.5rem; letter-spacing: -.02em; }
+	.auth__tag { font-family: var(--mono); font-size: .62rem; letter-spacing: .15em; text-transform: uppercase; opacity: .7; margin-top: .3rem; }
+	.auth__feats { display: flex; flex-direction: column; gap: 1.5rem; }
+	.auth__feat { display: flex; gap: .8rem; align-items: flex-start; }
+	.auth__feat .ic { width: 32px; height: 32px; border: 1px solid rgba(255,255,255,.2); display: grid; place-items: center; flex: none; }
+	.auth__feat .ic svg { width: 14px; height: 14px; }
+	.auth__feat .t { font-family: var(--mono); font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; margin-bottom: .15rem; }
+	.auth__feat .d { font-size: .76rem; opacity: .6; line-height: 1.5; }
+	.auth__copy { font-family: var(--mono); font-size: .62rem; opacity: .6; letter-spacing: .05em; }
+
+	.auth__main { flex: 1.1; display: flex; flex-direction: column; justify-content: center; padding: 3rem; }
+	.auth__card { max-width: 24rem; width: 100%; margin: 0 auto; }
+	.eyebrow { font-family: var(--mono); font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: .6rem; }
+	.auth__title { font-size: 1.45rem; font-weight: 600; letter-spacing: -.02em; }
+	.auth__sub { font-size: .8rem; color: var(--muted); line-height: 1.55; margin-top: .4rem; }
+	.auth__form { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1.1rem; }
+	.field { display: flex; flex-direction: column; gap: .4rem; }
+	.field label { font-family: var(--mono); font-size: .62rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: .4rem; }
+	.field input {
+		padding: .75rem .85rem; border: 1px solid var(--line); background: #fff;
+		font: inherit; font-size: .9rem; outline: none; width: 100%;
+	}
+	.field input:focus { border-color: var(--ink); }
+	.field .hint { font-size: .72rem; color: var(--muted); }
+	.field .hint--ok { color: var(--ink); }
+	.field .hint--bad { color: #b00020; }
+	.pw-wrap { position: relative; }
+	.pw-wrap input { padding-right: 3rem; }
+	.pw-eye {
+		position: absolute; right: .5rem; top: 50%; transform: translateY(-50%);
+		background: none; border: none; font-family: var(--mono); font-size: .58rem;
+		letter-spacing: .08em; color: var(--muted); cursor: pointer; padding: .3rem .4rem;
+	}
+	.pw-eye:hover { color: var(--ink); }
+
+	.btn {
+		display: flex; align-items: center; justify-content: center; gap: .5rem;
+		width: 100%; padding: .8rem; font: inherit; font-size: .85rem; font-weight: 600;
+		cursor: pointer; border: 1px solid var(--ink);
+	}
+	.btn--primary { background: var(--ink); color: #fff; }
+	.btn--ghost { background: #fff; color: var(--ink); }
+	.btn--sso { display: flex; gap: .6rem; align-items: center; justify-content: center; }
+	.btn--sso .g { width: 16px; height: 16px; border: 1.5px solid var(--ink); border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: .55rem; font-weight: 700; }
+	.divider { display: flex; align-items: center; gap: .8rem; font-family: var(--mono); font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+	.divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+	.err { font-size: .78rem; color: #b00020; }
+	.mlink { font-size: .74rem; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0; text-align: left; }
+	.mlink:hover { color: var(--ink); text-decoration: underline; }
+	.row { display: flex; justify-content: space-between; align-items: center; }
+	.check { display: flex; align-items: center; gap: .5rem; font-size: .74rem; color: var(--muted); cursor: pointer; }
+	.check input { accent-color: var(--ink); }
+
+	/* strength meter */
+	.meter { display: flex; gap: .25rem; margin-top: .45rem; }
+	.meter span { height: 3px; flex: 1; background: var(--line); }
+	.meter.s1 span:nth-child(-n+1), .meter.s2 span:nth-child(-n+2), .meter.s3 span:nth-child(-n+3), .meter.s4 span:nth-child(-n+4) { background: var(--ink); }
+
+	/* method picker */
+	.method {
+		display: flex; gap: .9rem; align-items: flex-start; padding: .95rem 1rem;
+		border: 1.5px solid var(--line); background: #fff; cursor: pointer; text-align: left; font: inherit; width: 100%;
+	}
+	.method:hover { border-color: var(--ink); }
+	.method.on { border-color: var(--ink); }
+	.method .ic { width: 30px; height: 30px; border: 1.5px solid var(--ink); display: grid; place-items: center; flex: none; }
+	.method .ic svg { width: 15px; height: 15px; }
+	.method .t { font-weight: 650; font-size: .85rem; }
+	.method .d { font-size: .74rem; color: var(--muted); margin-top: .15rem; line-height: 1.45; }
+	.method .rec { font-family: var(--mono); font-size: .54rem; letter-spacing: .1em; text-transform: uppercase; border: 1px solid var(--ink); padding: .12rem .4rem; margin-left: auto; flex: none; }
+	.method--off { opacity: .45; cursor: not-allowed; }
+	.method--off:hover { border-color: var(--line); }
+
+	/* step rail */
+	.steps { display: flex; gap: .35rem; margin-bottom: 1.4rem; }
+	.steps span { height: 3px; flex: 1; background: var(--line); }
+	.steps span.done { background: var(--ink); }
+
+	/* backup codes */
+	.codes { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; border: 1px solid var(--line); padding: .9rem; margin-top: .8rem; }
+	.codes code { font-family: var(--mono); font-size: .72rem; }
+
+	/* QR */
+	.qr { width: 130px; height: 130px; border: 1px solid var(--ink); display: grid; place-items: center; background: repeating-conic-gradient(#000 0% 25%, #fff 0% 50%) 0 0/16px 16px; }
+	.qr-wrap { display: flex; gap: 1.4rem; align-items: flex-start; margin-top: 1rem; }
+
+	/* invite summary */
+	.inv-sum { border: 1px solid var(--line); margin-top: 1.2rem; }
+	.inv-sum div { display: flex; justify-content: space-between; padding: .55rem .9rem; border-bottom: 1px solid var(--line-soft); font-size: .78rem; }
+	.inv-sum div:last-child { border-bottom: none; }
+	.inv-sum .k { font-family: var(--mono); font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+
+	/* annotation */
+	.flag { display: inline-block; font-family: var(--mono); font-size: .55rem; letter-spacing: .08em; text-transform: uppercase; background: var(--ink); color: #fff; padding: .15rem .45rem; vertical-align: middle; margin-left: .5rem; }
+	.note-strip { margin-top: 1rem; border-left: 3px solid var(--ink); padding: .6rem .9rem; background: var(--line-soft); font-size: .76rem; line-height: 1.55; max-width: 24rem; }
+
+	.legend { max-width: 26rem; font-size: .78rem; line-height: 1.7; color: #3f3f46; margin-top: 1.5rem; }
+	.legend h2 { font-size: .9rem; font-weight: 750; margin-bottom: .8rem; }
+	.legend li { margin-bottom: .55rem; margin-left: 1.1rem; }
+	.legend b { font-family: var(--mono); font-size: .72rem; }
+</style>
+</head>
+<body>
+	<h1>Ops auth — proposed</h1>
+	<p class="mock-note">
+		Sign-in, invite acceptance, password reset and MFA, rebuilt on one split-screen shell and wired to the
+		auth-settings store. The toggles below are the same ones admins flip under Settings → Authentication —
+		try switching Google SSO or turning password sign-in off: the screens respond, which today they don't.
+	</p>
+
+	<div class="sim">
+		<span class="lab">Settings → Authentication (ops)</span>
+		<label><input type="checkbox" id="sim-pw" checked> email_password</label>
+		<label><input type="checkbox" id="sim-sso"> google_sso</label>
+		<label><input type="checkbox" id="sim-mfa" checked> mfa_required</label>
+		<label><input type="checkbox" id="sim-totp" checked> method: totp</label>
+		<label><input type="checkbox" id="sim-otp" checked> method: email_otp</label>
+	</div>
+
+	<div class="tabs">
+		<button class="on" data-s="signin">Sign in</button>
+		<button data-s="mfa">MFA challenge</button>
+		<button data-s="invite">Accept invite</button>
+		<button data-s="mfa-setup">MFA setup</button>
+		<button data-s="reset">Forgot / reset</button>
+	</div>
+
+	<!-- ══ SIGN IN ══ -->
+	<div class="screen on" id="s-signin">
+		<div class="auth">
+			<div class="auth__aside">
+				<div><p class="auth__logo">Century NIT</p><p class="auth__tag">Operations Center</p></div>
+				<div class="auth__feats">
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><div><p class="t">Secure access</p><p class="d">Role-based permissions across every module</p></div></div>
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span><div><p class="t">Unified workspace</p><p class="d">CRM, workflow, finance, and cases in one place</p></div></div>
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span><div><p class="t">Real-time pipeline</p><p class="d">Track every application from lead to enrolment</p></div></div>
+				</div>
+				<p class="auth__copy">Century NIT © 2026 · Operations Center</p>
+			</div>
+			<div class="auth__main">
+				<div class="auth__card">
+					<h2 class="auth__title">Welcome back</h2>
+					<p class="auth__sub">Sign in to your operations account</p>
+
+					<div class="auth__form">
+						<button class="btn btn--ghost btn--sso" id="sso-btn" style="display:none"><span class="g">G</span> Continue with Google</button>
+						<div class="divider" id="sso-div" style="display:none">or</div>
+
+						<div id="pw-form">
+							<div class="field">
+								<label>Email</label>
+								<input type="email" value="a.nkrumah@centurynit.com">
+							</div>
+							<div class="field">
+								<label>Password</label>
+								<div class="pw-wrap">
+									<input type="password" value="correct-horse-battery" id="pw1">
+									<button class="pw-eye" onclick="togglePw('pw1',this)">show</button>
+								</div>
+							</div>
+							<div class="row">
+								<label class="check"><input type="checkbox"> Keep me signed in</label>
+								<button class="mlink">Forgot password?</button>
+							</div>
+							<button class="btn btn--primary">Sign in →</button>
+						</div>
+
+						<div id="pw-off" style="display:none">
+							<div class="note-strip">Password sign-in is disabled for the console. Use Google SSO with your staff account.</div>
+						</div>
+
+						<div class="note-strip" id="signin-note">
+							<b>Fixed:</b> the live page reads <b>ops.email_password</b> and <b>ops.google_sso</b> on mount and renders what they allow. The debounced staff-email oracle is gone from this form — a wrong password already says no — and it stays only on forgot-password, where it prevents a dead send.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ══ MFA CHALLENGE ══ -->
+	<div class="screen" id="s-mfa">
+		<div class="auth">
+			<div class="auth__aside">
+				<div><p class="auth__logo">Century NIT</p><p class="auth__tag">Operations Center</p></div>
+				<div class="auth__feats">
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><div><p class="t">Second factor</p><p class="d">Your password is only half the key. Staff accounts always complete this step.</p></div></div>
+				</div>
+				<p class="auth__copy">Century NIT © 2026 · Operations Center</p>
+			</div>
+			<div class="auth__main">
+				<div class="auth__card">
+					<p class="eyebrow">Step 2 of 2 · a.nkrumah@centurynit.com</p>
+					<h2 class="auth__title">Verify it's you</h2>
+					<p class="auth__sub">Enter the current 6-digit code from your authenticator app.</p>
+
+					<div class="auth__form">
+						<div class="field">
+							<label>Authenticator code</label>
+							<input type="text" placeholder="000000" inputmode="numeric" maxlength="6" style="font-family:var(--mono);letter-spacing:.4em;font-size:1.1rem;text-align:center">
+						</div>
+						<label class="check"><input type="checkbox"> Trust this device for 30 days</label>
+						<button class="btn btn--primary">Verify &amp; sign in →</button>
+						<div class="row">
+							<button class="mlink">Use a backup code</button>
+							<button class="mlink">← Use a different account</button>
+						</div>
+						<div class="note-strip">
+							<b>Fixed:</b> a pending challenge now survives refresh — the page checks the two-factor cookie on load and resumes here instead of silently resetting to the password form. Email-OTP enrollees get a send/resend with a 30s cooldown on this same screen.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ══ ACCEPT INVITE ══ -->
+	<div class="screen" id="s-invite">
+		<div class="auth">
+			<div class="auth__aside">
+				<div><p class="auth__logo">Century NIT</p><p class="auth__tag">Operations Center</p></div>
+				<div class="auth__feats">
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg></span><div><p class="t">You're invited</p><p class="d">One password is all it takes. Your role and branch are already decided by whoever invited you.</p></div></div>
+				</div>
+				<p class="auth__copy">Century NIT © 2026 · Operations Center</p>
+			</div>
+			<div class="auth__main">
+				<div class="auth__card">
+					<p class="eyebrow">Invitation · Century NIT</p>
+					<h2 class="auth__title">Set your password</h2>
+
+					<div class="inv-sum">
+						<div><span class="k">Email</span><span>spexdev95@gmail.com</span></div>
+						<div><span class="k">Role</span><span>Consultant</span></div>
+						<div><span class="k">Branch</span><span>Accra</span></div>
+					</div>
+
+					<div class="auth__form">
+						<div class="field">
+							<label>Your name</label>
+							<input type="text" value="Ekow Firmino">
+						</div>
+						<div class="field">
+							<label>Choose a password</label>
+							<div class="pw-wrap">
+								<input type="password" value="correct-horse" id="pw2" oninput="meter(this)">
+								<button class="pw-eye" onclick="togglePw('pw2',this)">show</button>
+							</div>
+							<div class="meter s2" id="pw2-meter"><span></span><span></span><span></span><span></span></div>
+							<p class="hint" id="pw2-hint">12+ characters. A passphrase beats a password.</p>
+						</div>
+						<div class="field">
+							<label>Confirm password</label>
+							<div class="pw-wrap">
+								<input type="password" value="correct-horse" id="pw3">
+								<button class="pw-eye" onclick="togglePw('pw3',this)">show</button>
+							</div>
+							<p class="hint hint--ok">Passwords match.</p>
+						</div>
+						<button class="btn btn--primary">Create account →</button>
+						<button class="mlink" style="text-align:center">Already have access? Sign in</button>
+						<div class="note-strip">
+							<b>Fixed:</b> invite acceptance gets the same branded shell as sign-in (today it's a bare white card on an empty page), the name field is prefilled from the invitation (today it renders empty even though the server knows it), and a show/strength/match treatment makes the 12-char rule visible before submit.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ══ MFA SETUP ══ -->
+	<div class="screen" id="s-mfa-setup">
+		<div class="auth">
+			<div class="auth__aside">
+				<div><p class="auth__logo">Century NIT</p><p class="auth__tag">Operations Center</p></div>
+				<div class="auth__feats">
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><div><p class="t" id="mfa-req-copy">Required for staff</p><p class="d">Every case, invoice and client record sits behind this. You set it up once.</p></div></div>
+				</div>
+				<p class="auth__copy">Century NIT © 2026 · Operations Center</p>
+			</div>
+			<div class="auth__main">
+				<div class="auth__card">
+					<div class="steps"><span class="done"></span><span></span><span></span></div>
+					<p class="eyebrow">Security setup · step 1 of 3</p>
+					<h2 class="auth__title">Choose your second factor</h2>
+					<p class="auth__sub" id="mfa-sub">Staff accounts require two-factor authentication. Pick how you want to receive codes.</p>
+
+					<div class="auth__form">
+						<button class="method on" id="m-totp">
+							<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+							<span><span class="t">Authenticator app</span><span class="d" style="display:block">Google Authenticator, Authy, 1Password. Works offline, most secure.</span></span>
+							<span class="rec">recommended</span>
+						</button>
+						<button class="method" id="m-otp">
+							<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+							<span><span class="t">Email code</span><span class="d" style="display:block">A 6-digit code sent to your inbox at each sign-in.</span></span>
+						</button>
+						<div class="note-strip" id="mfa-off-note" style="display:none">
+							This method is disabled in Settings → Authentication. The setup page honours <b>ops.mfa_methods</b> — today it always offers both and the API never checks either, so the setting is decorative.
+						</div>
+						<div class="note-strip">
+							<b>Fixed:</b> the method list is filtered by <b>ops.mfa_methods</b> (and enrolment is rejected server-side for a method that's off), the "required" claim follows <b>ops.mfa_required</b> instead of being hardcoded, and "Continue" routes to the role's home, not a hardcoded /dashboard.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- ══ FORGOT / RESET ══ -->
+	<div class="screen" id="s-reset">
+		<div class="auth">
+			<div class="auth__aside">
+				<div><p class="auth__logo">Century NIT</p><p class="auth__tag">Operations Center</p></div>
+				<div class="auth__feats">
+					<div class="auth__feat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span><div><p class="t">Reset link</p><p class="d">Sent only to a live staff inbox. One use, short expiry, and it signs every device out.</p></div></div>
+				</div>
+				<p class="auth__copy">Century NIT © 2026 · Operations Center</p>
+			</div>
+			<div class="auth__main">
+				<div class="auth__card">
+					<h2 class="auth__title">Set a new password</h2>
+					<p class="auth__sub">Choose a new password for your operations account.</p>
+					<div class="auth__form">
+						<div class="field">
+							<label>New password</label>
+							<div class="pw-wrap">
+								<input type="password" value="correct-horse-battery" id="pw4" oninput="meter(this)">
+								<button class="pw-eye" onclick="togglePw('pw4',this)">show</button>
+							</div>
+							<div class="meter s3" id="pw4-meter"><span></span><span></span><span></span><span></span></div>
+						</div>
+						<div class="field">
+							<label>Confirm password</label>
+							<div class="pw-wrap">
+								<input type="password" value="correct-horse-battery" id="pw5">
+								<button class="pw-eye" onclick="togglePw('pw5',this)">show</button>
+							</div>
+							<p class="hint hint--ok">Passwords match.</p>
+						</div>
+						<button class="btn btn--primary">Reset password →</button>
+						<button class="mlink" style="text-align:center">← Back to sign in</button>
+						<div class="note-strip">
+							<b>Fixed:</b> reset gets the same live mismatch + strength hints as invite acceptance (today errors only appear after submit), the forgot form keeps its staff-email check (it's the one place it earns its keep), and a client-side resend cooldown stops repeat sends before the 429 does.
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="legend">
+		<h2>What changes vs today</h2>
+		<ul>
+			<li><b>Settings honoured.</b> The login page reads /auth-settings: Google button appears when ops.google_sso is on (today it never exists), password form disappears when ops.email_password is off (today it always shows, and sign-in still works — the toggle is decorative end to end).</li>
+			<li><b>Staff-email check moved.</b> The debounced "is this email staff" call is an enumeration oracle that also scolds typos pre-submit. It stays on forgot-password (prevents a dead send), leaves sign-in.</li>
+			<li><b>MFA challenge resumes.</b> A pending two-factor cookie on load jumps straight to the code screen. Today refresh resets you to the password form mid-challenge.</li>
+			<li><b>Invite acceptance branded + prefilled.</b> Same split shell as sign-in; name prefilled from the invitation (today the controlled input ignores defaultValue and renders empty); "Already have access? Sign in" escape; correct verb for existing-login accounts ("Join" not "Create account").</li>
+			<li><b>MFA setup honest.</b> Method list filtered by ops.mfa_methods (enforced server-side too), "required" copy follows ops.mfa_required, done routes to ROLE_HOME not hardcoded /dashboard, and already-enrolled users get a manage state instead of a misleading "You're all set".</li>
+			<li><b>One shell, one password UX.</b> Show/hide eye, strength meter, live match hint, 12-char rule stated once, identically across invite, reset and any future credential screen. Forgot/reset get the features aside back; © year computed, not hardcoded 2026.</li>
+		</ul>
+	</div>
+
+<script>
+	const $ = (id) => document.getElementById(id);
+
+	// tabs
+	document.querySelectorAll(".tabs button").forEach((b) => {
+		b.onclick = () => {
+			document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+			document.querySelectorAll(".screen").forEach((s) => s.classList.remove("on"));
+			$("s-" + b.dataset.s).classList.add("on");
+		};
+	});
+
+	// settings simulator
+	function sim() {
+		const pw = $("sim-pw").checked, sso = $("sim-sso").checked;
+		$("sso-btn").style.display = sso ? "flex" : "none";
+		$("sso-div").style.display = sso && pw ? "flex" : "none";
+		$("pw-form").style.display = pw ? "block" : "none";
+		$("pw-off").style.display = !pw && sso ? "block" : "none";
+		$("pw-off").style.display = !pw ? "block" : "none";
+		// mfa methods
+		$("m-totp").classList.toggle("method--off", !$("sim-totp").checked);
+		$("m-otp").classList.toggle("method--off", !$("sim-otp").checked);
+		$("mfa-off-note").style.display = (!$("sim-totp").checked || !$("sim-otp").checked) ? "block" : "none";
+		$("mfa-sub").textContent = $("sim-mfa").checked
+			? "Staff accounts require two-factor authentication. Pick how you want to receive codes."
+			: "Two-factor is optional on this console. Turn it on now, or skip and do it later from Settings.";
+		$("mfa-req-copy").textContent = $("sim-mfa").checked ? "Required for staff" : "Recommended for staff";
+	}
+	["sim-pw","sim-sso","sim-mfa","sim-totp","sim-otp"].forEach((id) => ($(id).onchange = sim));
+	sim();
+
+	function togglePw(id, btn) {
+		const i = $(id);
+		i.type = i.type === "password" ? "text" : "password";
+		btn.textContent = i.type === "password" ? "show" : "hide";
+	}
+	function meter(input) {
+		const m = $(input.id + "-meter");
+		if (!m) return;
+		const v = input.value;
+		let s = 0;
+		if (v.length >= 12) s++;
+		if (v.length >= 16) s++;
+		if (/[A-Z]/.test(v) && /[a-z]/.test(v)) s++;
+		if (/\d|\W/.test(v)) s++;
+		m.className = "meter s" + Math.max(1, s);
+	}
+</script>
+</body>
+</html>

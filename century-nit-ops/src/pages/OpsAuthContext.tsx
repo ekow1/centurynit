@@ -46,8 +46,8 @@ export { ROLE_PERMISSIONS };
 
 /** Where each role lands when they open the console. */
 export const ROLE_HOME: Record<OpsRole, string> = {
-	// Oversight roles land on mission control.
-	super_admin: "/system",
+	// Oversight roles land on the dashboard — the day's picture first.
+	super_admin: "/dashboard",
 	manager: "/dashboard",
 	finance: "/dashboard",
 	admin: "/system",
